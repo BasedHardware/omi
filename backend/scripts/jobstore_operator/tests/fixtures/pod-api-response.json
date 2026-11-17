@@ -1,0 +1,91 @@
+{
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+    "name": "jobstore-readiness-a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4",
+    "namespace": "prod-omi-backend",
+    "uid": "e14da721-ef35-4e91-a986-6e7a62c06f02",
+    "resourceVersion": "123",
+    "creationTimestamp": "2026-11-16T00:00:00Z",
+    "labels": {
+      "omi/readiness-token": "a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4",
+      "topology.kubernetes.io/region": "us-central1",
+      "topology.kubernetes.io/zone": "us-central1-a"
+    },
+    "annotations": {
+      "omi/source-sha": "97074e78defa1a84b9d39c021e28aa70cf4f2e4e",
+      "omi/supervisor-sha256": "1b6a0a1ed5ca8dbc7f8087ae51441539a8aa9b4f4da2171932e2f08af9de699f",
+      "omi/scope": "READINESS_PROBE_ONLY_NO_STATE_OR_SERVING"
+    }
+  },
+  "spec": {
+    "nodeName": "gke-existing-amd64-node",
+    "hostname": "jobstore-reconcile-0",
+    "serviceAccountName": "batch-pipeline-worker",
+    "serviceAccount": "batch-pipeline-worker",
+    "schedulerName": "default-scheduler",
+    "priority": 0,
+    "preemptionPolicy": "PreemptLowerPriority",
+    "tolerations": [
+      {"key": "node.kubernetes.io/not-ready", "operator": "Exists", "effect": "NoExecute", "tolerationSeconds": 300},
+      {"key": "node.kubernetes.io/unreachable", "operator": "Exists", "effect": "NoExecute", "tolerationSeconds": 300}
+    ],
+    "restartPolicy": "Never",
+    "activeDeadlineSeconds": 90,
+    "terminationGracePeriodSeconds": 15,
+    "dnsPolicy": "ClusterFirst",
+    "enableServiceLinks": false,
+    "automountServiceAccountToken": true,
+    "securityContext": {
+      "runAsUser": 1000,
+      "runAsGroup": 1000,
+      "runAsNonRoot": true,
+      "seccompProfile": {"type": "RuntimeDefault"}
+    },
+    "containers": [{
+      "name": "readiness",
+      "image": "gcr.io/based-hardware/jobstore-reconcile-operator@sha256:a79982bb85f0d612c256041493339c147d50869d6734f0862e4082d184e82d99",
+      "imagePullPolicy": "IfNotPresent",
+      "terminationMessagePath": "/dev/termination-log",
+      "terminationMessagePolicy": "File",
+      "command": ["/opt/operator-venv/bin/python", "/opt/runner/process_guard.py", "--readiness"],
+      "securityContext": {
+        "allowPrivilegeEscalation": false,
+        "readOnlyRootFilesystem": true,
+        "capabilities": {"drop": ["ALL"]}
+      },
+      "resources": {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"cpu": "500m", "memory": "512Mi"}},
+      "env": [
+        {"name": "HOME", "value": "/home/ubuntu"},
+        {"name": "PYTHONDONTWRITEBYTECODE", "value": "1"},
+        {"name": "GIT_OPTIONAL_LOCKS", "value": "0"},
+        {"name": "BATCH_JOBSTORE_MODE", "value": "firestore"},
+        {"name": "JOBSTORE_SHADOW_WRITES", "value": "off"},
+        {"name": "JOBSTORE_PRODUCTION_MIRROR", "value": "off"},
+        {"name": "JOBSTORE_PRODUCTION_MIRROR_SAMPLE_BPS", "value": "0"},
+        {"name": "JOBSTORE_INDEX_READS", "value": "off"}
+      ],
+      "volumeMounts": [
+        {"name": "tmp", "mountPath": "/tmp"},
+        {"name": "kube-api-access-fixture", "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount", "readOnly": true}
+      ]
+    }],
+    "volumes": [
+      {"name": "tmp", "emptyDir": {"sizeLimit": "64Mi"}},
+      {"name": "kube-api-access-fixture", "projected": {"defaultMode": 420, "sources": [
+        {"serviceAccountToken": {"expirationSeconds": 3607, "path": "token"}},
+        {"configMap": {"name": "kube-root-ca.crt", "items": [{"key": "ca.crt", "path": "ca.crt"}]}},
+        {"downwardAPI": {"items": [{"path": "namespace", "fieldRef": {"apiVersion": "v1", "fieldPath": "metadata.namespace"}}]}}
+      ]}}
+    ]
+  },
+  "status": {
+    "phase": "Succeeded",
+    "containerStatuses": [{
+      "name": "readiness",
+      "imageID": "gcr.io/based-hardware/jobstore-reconcile-operator@sha256:a79982bb85f0d612c256041493339c147d50869d6734f0862e4082d184e82d99",
+      "restartCount": 0,
+      "state": {"terminated": {"exitCode": 0}}
+    }]
+  }
+}

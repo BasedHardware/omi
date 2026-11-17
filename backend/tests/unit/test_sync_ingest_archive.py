@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from google.api_core.exceptions import PreconditionFailed
@@ -97,6 +98,8 @@ class Bucket:
 def buckets(monkeypatch):
     result = {'canonical': Bucket('canonical'), 'regional': Bucket('regional'), 'staging': Bucket('staging')}
     monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: result[name]))
+    # Live commits persist projection debt before acknowledging durable custody.
+    monkeypatch.setattr(live_audio_archive.record_projection_rebuild, 'mark_due', MagicMock())
     monkeypatch.setattr(storage, 'private_cloud_sync_bucket', 'canonical')
     monkeypatch.setattr(storage, 'syncing_local_bucket', 'staging')
     monkeypatch.setattr(storage.users_db, 'get_data_protection_level', lambda uid: 'standard')

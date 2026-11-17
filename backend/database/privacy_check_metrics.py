@@ -62,6 +62,11 @@ COMPARISONS = Counter(
     ],
 )
 SHADOW_CHECKS = Counter('privacy_shadow_checks_total', 'Privacy shadow comparisons', ['family', 'result'])
+OWNER_COMPARISONS = Counter(
+    'privacy_owner_comparison_total',
+    'Owner candidate comparisons by bounded transactional call shape',
+    ['shape', 'result', 'candidate_source'],
+)
 MEMO_REQUESTS = Counter('privacy_memo_requests_total', 'Candidate decision reuse', ['family', 'result'])
 NEGATIVE_LOOKUPS = Counter(
     'privacy_negative_lookup_total',
@@ -274,7 +279,11 @@ def comparison_labels(live, candidate):
         'true' if any(live.markers[k] != candidate.markers[k] for k in common) else ('false' if common else 'unknown')
     )
     return (
-        candidate.source if candidate.source in {'ttl_hit', 'token_hit', 'session_hit', 'fresh_read'} else 'unknown',
+        (
+            candidate.source
+            if candidate.source in {'ttl_hit', 'token_hit', 'session_hit', 'owner_hit', 'fresh_read'}
+            else 'unknown'
+        ),
         age_bucket(candidate.age),
         version_relation(live.token, candidate.token) if observed else 'unknown',
         version_relation(live.generation, candidate.generation) if observed else 'unknown',
@@ -564,3 +573,14 @@ def with_session_census(plane):
         return wrapped
 
     return decorate
+
+
+def owner_comparison(shape, result, source):
+    """Counts only: evidence that each newly eligible path actually compared."""
+    shape = shape if shape in {'attempt', 'no_attempt', 'snapshots'} else 'other'
+    result = result if result in {'match', 'mismatch', 'error'} else 'error'
+    source = source if source in {'owner_hit', 'fresh_read', 'session_hit', 'ttl_hit'} else 'unknown'
+    try:
+        OWNER_COMPARISONS.labels(shape, result, source).inc()
+    except Exception:
+        pass

@@ -16,10 +16,46 @@ spec:
     - port: http
       path: /metrics
       interval: {{ .Values.podMonitoring.interval }}
+      {{- if .Values.podMonitoring.bulkInterval }}
+      metricRelabeling:
+        - action: keep
+          sourceLabels: [__name__]
+          regex: {{ required "podMonitoring.fastMetrics is required with bulkInterval" .Values.podMonitoring.fastMetrics | quote }}
+      {{- end }}
       authorization:
         type: Bearer
         credentials:
           secret:
             name: metrics-scrape-token
             key: token
+{{- if .Values.podMonitoring.bulkInterval }}
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: {{ include "pusher.fullname" . }}-bulk
+  labels:
+    {{- include "pusher.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "pusher.selectorLabels" . | nindent 6 }}
+  targetLabels:
+    fromPod:
+      - {from: service_name, to: service_name}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.podMonitoring.bulkInterval }}
+      metricRelabeling:
+        - action: drop
+          sourceLabels: [__name__]
+          regex: {{ .Values.podMonitoring.fastMetrics | quote }}
+      authorization:
+        type: Bearer
+        credentials:
+          secret:
+            name: metrics-scrape-token
+            key: token
+{{- end }}
 {{- end }}

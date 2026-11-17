@@ -63,8 +63,10 @@ enum OmiBleDiscoveryNaming {
 }
 struct TestDeliveryError: Error { let code = "test" }
 final class TestFlutterApi {
+    var disconnectReasons: [String?] = []
     func onPeripheralDiscovered(peripheral: BlePeripheral, completion: (Bool) -> Void) { completion(true) }
     func onPeripheralDisconnected(peripheralUuid: String, error: String?, completion: (Result<Void, TestDeliveryError>) -> Void) {
+        disconnectReasons.append(error)
         completion(.success(()))
     }
 }
@@ -183,6 +185,16 @@ final class ManagerHarness {
             manager.centralManager(manager.centralManager, didDisconnectPeripheral: peripheral, error: nil)
             precondition(manager.centralManager.connects == 1, "saved link was not reissued")
             precondition(manager.centralManager.startDelays[0] == OmiBleConnectionPolicy.savedRetryDelay(attempt: 1), "OS retry delay missing")
+        }
+        // Real manager callback forwards stable capture policy, with manual
+        // intent taking precedence over a concurrent platform error.
+        for manual in [false, true] {
+            let (manager, peripheral, uuid) = fixture()
+            if manual { manager.manuallyDisconnected.insert(uuid) }
+            manager.centralManager(manager.centralManager, didDisconnectPeripheral: peripheral,
+                error: NSError(domain: "synthetic", code: 8,
+                               userInfo: [NSLocalizedDescriptionKey: "localized timeout prose"]))
+            precondition(manager.flutterApi!.disconnectReasons.last! == (manual ? "manual" : "test"))
         }
         // Each capture down path must submit an OS request before ANY timer runs.
         for failToConnect in [false, true] {

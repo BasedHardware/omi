@@ -4,6 +4,8 @@
 # See README.md for the qualified scope, train order, ramp and rollback.
 schema_version: 2
 environment_shared:
+  conversations_v3_stage: beta
+  conversations_v3_first_app_build: ''
   llm_gateway:
     namespace: '{env}-omi-backend'
     release_name: '{env}-omi-llm-gateway'
@@ -2844,6 +2846,9 @@ firestore_read_lever_policy:
       lifecycle_record_pending_head:
         value: 5
         expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
     runtime/prod/gke/backend-listen:
       lifecycle_record_pending_head:
         value: 5
@@ -2859,6 +2864,9 @@ firestore_read_lever_policy:
     runtime/prod/cloud_run/services/backend-sync-backfill:
       lifecycle_record_pending_head:
         value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
         expires: '2026-11-17'
     runtime/prod/cloud_run/jobs/notifications-job:
       lifecycle_record_pending_head:
@@ -2891,4 +2899,32 @@ firestore_read_lever_policy:
     chart/prod/pusher:
       lifecycle_record_pending_head:
         value: 5
+        expires: '2026-11-17'
+    overlay/prod/cloud_run/services/backend:
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    overlay/prod/cloud_run/services/backend-sync:
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    overlay/prod/cloud_run/services/backend-integration:
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/services/backend:
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/services/backend-sync:
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/services/backend-integration:
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    chart/prod/batch-pipeline-worker:
+      privacy_checks_shadow:
+        value: 10
         expires: '2026-11-17'

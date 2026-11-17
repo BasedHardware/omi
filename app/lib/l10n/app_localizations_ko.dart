@@ -1955,6 +1955,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get memoryHistory => '기록';
 
   @override
+  String get recordingWithYourPhone => '휴대폰으로 녹음 중';
+
+  @override
+  String get wrapUp => '마무리';
+
+  @override
+  String get recordingDiscarded => '녹음을 삭제했습니다';
+
+  @override
   String get undo => '실행 취소';
 
   @override
@@ -15242,4 +15251,88 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => '처리 중인 목록이 변경되었습니다. 목록을 확인하고 다시 시도하세요.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return '이번 달 $minutes분을 모두 사용했습니다';
+  }
+
+  @override
+  String get freeCapBody => 'Omi는 계속 녹음 중입니다. 전사를 이어갈 방법을 선택하세요.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => '무제한 클라우드 전사';
+
+  @override
+  String get freeCapProAccuracy => '최고의 정확도';
+
+  @override
+  String get freeCapProWaiting => '대기 중인 녹음을 전사합니다';
+
+  @override
+  String get freeCapPhoneSubtitle => '무료. 다시 전환할 때까지 유지됩니다.';
+
+  @override
+  String get transcribingOnThisPhone => '이 휴대폰에서 전사 중';
+
+  @override
+  String get getPro => 'Pro 받기';
+
+  @override
+  String get unlock => '잠금 해제';
+
+  @override
+  String get transcribeWith => '전사 방식';
+
+  @override
+  String get omiCloud => 'Omi 클라우드';
+
+  @override
+  String get thisPhone => '이 휴대폰';
+
+  @override
+  String get onDeviceReady => '준비됨';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit분 남음 · $date 초기화';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '클라우드 $minutes분 사용 가능';
+  }
+
+  @override
+  String get switchBack => '다시 전환';
+
+  @override
+  String get setUpThisPhone => '이 휴대폰 설정';
+
+  @override
+  String get speechRecognition => '음성 인식';
+
+  @override
+  String get audioStaysOnPhone => '오디오는 휴대폰에만 남습니다';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '${size}MB 다운로드';
+  }
+
+  @override
+  String get downloadNow => '지금 다운로드';
+
+  @override
+  String get onWifiLater => '나중에 Wi-Fi로';
+
+  @override
+  String get conversationWritingSummary => '요약을 작성하는 중…';
 }

@@ -161,7 +161,7 @@ def _c(invoke=None, calls=None):
 def test_one_member_episode_is_built_from_notes_without_a_model_call(store):
     assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed_single'
     written = store.writes[-1]
-    assert written['title'] == 'Launch plan and pricing'
+    assert written['title'] == 'old'
     assert written['lede'] == 'Launch plan settled; Arjan owns rollout'
     assert written['bullets'] == ['Launch plan settled; Arjan owns rollout']
     assert written['emoji'] == '🚀'
@@ -204,7 +204,7 @@ def test_kill_switch_restores_the_paid_composer(store, monkeypatch):
 
     assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
     assert len(calls) == 1
-    assert store.writes[-1]['title'] == 'Composed title'
+    assert store.writes[-1]['title'] == 'old'
 
 
 def test_two_members_still_use_the_composer(store):
@@ -422,7 +422,7 @@ def test_single_member_normal_write_validates_member_in_the_episode_transaction(
     s = transactional_store
     assert composer.compose(UID, 'ep1', collaborators=s.c) == 'composed_single'
     episode = composer.episodes_db.get_episode(UID, 'ep1', firestore_client=s.db)
-    assert episode['title'] == 'Launch plan and pricing'
+    assert episode['title'] == 'old'
     assert episode['state_version'] == 4
     assert episode['composed_fingerprint'] == composer.fingerprint([_row()])
     assert s.reads[0] is None

@@ -18,9 +18,13 @@ construction): those must not re-buy anything.
 
 from __future__ import annotations
 
-NOTES_PROMPT_VERSION = 'notes-4'
-# The scaled-detail change leaves short and switch-off packets byte-identical.
-# Accept their notes-3 checkpoints with identical routing, dependencies and inputs.
+NOTES_PROMPT_VERSION = 'notes-6'
+# notes-6 adds the v3 (recordings and conversations) notes path: its own model,
+# low effort and bounded personal context, all behind v3_models.active(). Output
+# for every non-v3 conversation is unchanged, so notes-5 checkpoints stay reusable.
+# Unchanged notes-4 checkpoints are filtered locally, not invalidated by the
+# quality prompt. Retain the earlier unscaled notes-3 alias.
+NOTES_REUSABLE_PREVIOUS_VERSIONS = ('notes-5', 'notes-4')
 NOTES_UNSCALED_PREVIOUS_VERSION = 'notes-3'
 L1_PROMPT_VERSION = 'l1-1'
 

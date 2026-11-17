@@ -1987,6 +1987,15 @@ class AppLocalizationsBn extends AppLocalizations {
   String get memoryHistory => 'ইতিহাস';
 
   @override
+  String get recordingWithYourPhone => 'আপনার ফোনে রেকর্ড হচ্ছে';
+
+  @override
+  String get wrapUp => 'শেষ করুন';
+
+  @override
+  String get recordingDiscarded => 'রেকর্ডিং বাতিল হয়েছে';
+
+  @override
   String get undo => 'পূর্বাবস্থা';
 
   @override
@@ -15458,4 +15467,88 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'প্রক্রিয়াধীন তালিকা বদলেছে। তালিকাটি দেখে আবার চেষ্টা করুন।';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'এই মাসের $minutes মিনিট ব্যবহার হয়ে গেছে';
+  }
+
+  @override
+  String get freeCapBody => 'Omi এখনও রেকর্ড করছে। কীভাবে ট্রান্সক্রিপশন চালিয়ে যাবেন বেছে নিন।';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'সীমাহীন ক্লাউড ট্রান্সক্রিপশন';
+
+  @override
+  String get freeCapProAccuracy => 'সেরা নির্ভুলতা';
+
+  @override
+  String get freeCapProWaiting => 'আপনার অপেক্ষমাণ রেকর্ডিং ট্রান্সক্রাইব করে';
+
+  @override
+  String get freeCapPhoneSubtitle => 'বিনামূল্যে। ফিরে না যাওয়া পর্যন্ত চালু থাকবে।';
+
+  @override
+  String get transcribingOnThisPhone => 'এই ফোনে ট্রান্সক্রাইব হচ্ছে';
+
+  @override
+  String get getPro => 'Pro নিন';
+
+  @override
+  String get unlock => 'আনলক';
+
+  @override
+  String get transcribeWith => 'যেটি দিয়ে ট্রান্সক্রাইব হবে';
+
+  @override
+  String get omiCloud => 'Omi ক্লাউড';
+
+  @override
+  String get thisPhone => 'এই ফোন';
+
+  @override
+  String get onDeviceReady => 'প্রস্তুত';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit মিনিট বাকি · $date রিসেট হবে';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes ক্লাউড মিনিট উপলব্ধ';
+  }
+
+  @override
+  String get switchBack => 'ফিরে যান';
+
+  @override
+  String get setUpThisPhone => 'এই ফোন সেট আপ করুন';
+
+  @override
+  String get speechRecognition => 'স্পিচ রিকগনিশন';
+
+  @override
+  String get audioStaysOnPhone => 'অডিও আপনার ফোনেই থাকে';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB ডাউনলোড';
+  }
+
+  @override
+  String get downloadNow => 'এখনই ডাউনলোড করুন';
+
+  @override
+  String get onWifiLater => 'পরে Wi-Fi-তে';
+
+  @override
+  String get conversationWritingSummary => 'আপনার সারাংশ লেখা হচ্ছে…';
 }

@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "உங்கள் ஃபோனில் பதிவாகிறது",
+    "wrapUp": "முடி",
+    "recordingDiscarded": "பதிவு நிராகரிக்கப்பட்டது",
     "undo": "மறுசெய்க",
     "@undo": {
         "description": "Undo button text"
@@ -12213,5 +12216,30 @@
     "monthlySwitchUnavailable": "இப்போது மாற்ற இயலாது. அதற்குப் பதிலாக கார்டைப் புதுப்பிக்கவும்.",
     "monthlySwitchDoneTitle": "நீங்கள் இப்போது மாதாந்திரத் திட்டத்தில் உள்ளீர்கள்",
     "monthlySwitchDoneBody": "இன்று {price} செலுத்தப்பட்டது. மாதந்தோறும் புதுப்பிக்கப்படும்.",
-    "processingDeleteScopeChanged": "செயலாக்கப் பட்டியல் மாறிவிட்டது. பட்டியலைச் சரிபார்த்து மீண்டும் முயலவும்."
+    "processingDeleteScopeChanged": "செயலாக்கப் பட்டியல் மாறிவிட்டது. பட்டியலைச் சரிபார்த்து மீண்டும் முயலவும்.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "இந்த மாதத்தின் {minutes} நிமிடங்களைப் பயன்படுத்திவிட்டீர்கள்",
+    "freeCapBody": "Omi இன்னும் பதிவு செய்கிறது. எப்படி எழுத்துப்படியைத் தொடர்வது என்பதைத் தேர்வுசெய்க.",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "வரம்பற்ற கிளவுட் எழுத்துப்படி",
+    "freeCapProAccuracy": "சிறந்த துல்லியம்",
+    "freeCapProWaiting": "காத்திருக்கும் பதிவுகளை எழுத்துப்படியாக்குகிறது",
+    "freeCapPhoneSubtitle": "இலவசம். நீங்கள் மீண்டும் மாற்றும் வரை இயங்கும்.",
+    "transcribingOnThisPhone": "இந்தத் தொலைபேசியில் எழுத்துப்படியாக்குகிறது",
+    "getPro": "Pro பெறுக",
+    "unlock": "திறக்கவும்",
+    "transcribeWith": "இதன் மூலம் எழுத்துப்படியாக்கு",
+    "omiCloud": "Omi கிளவுட்",
+    "thisPhone": "இந்தத் தொலைபேசி",
+    "onDeviceReady": "தயார்",
+    "cloudMinutesLeft": "{left}/{limit} நிமிடம் மீதம் · {date} அன்று மீட்டமைப்பு",
+    "cloudMinutesAvailable": "{minutes} கிளவுட் நிமிடங்கள் கிடைக்கின்றன",
+    "switchBack": "மீண்டும் மாற்று",
+    "setUpThisPhone": "இந்தத் தொலைபேசியை அமைக்கவும்",
+    "speechRecognition": "பேச்சு அறிதல்",
+    "audioStaysOnPhone": "ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்",
+    "onDeviceModelDownloadSize": "{size} MB பதிவிறக்கம்",
+    "downloadNow": "இப்போது பதிவிறக்கு",
+    "onWifiLater": "பின்னர் Wi-Fi இல்",
+    "conversationWritingSummary": "உங்கள் சுருக்கம் எழுதப்படுகிறது…"
 }

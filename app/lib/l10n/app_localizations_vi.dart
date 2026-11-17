@@ -1998,6 +1998,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String get memoryHistory => 'Lịch sử';
 
   @override
+  String get recordingWithYourPhone => 'Đang ghi âm bằng điện thoại';
+
+  @override
+  String get wrapUp => 'Kết thúc';
+
+  @override
+  String get recordingDiscarded => 'Đã hủy bản ghi';
+
+  @override
   String get undo => 'Hoàn tác';
 
   @override
@@ -15464,4 +15473,88 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Bạn đã dùng hết $minutes phút của tháng này';
+  }
+
+  @override
+  String get freeCapBody => 'Omi vẫn đang ghi âm. Chọn cách tiếp tục chép lời.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Chép lời trên đám mây không giới hạn';
+
+  @override
+  String get freeCapProAccuracy => 'Độ chính xác cao nhất';
+
+  @override
+  String get freeCapProWaiting => 'Chép lời các bản ghi đang chờ';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Miễn phí. Giữ nguyên cho đến khi bạn chuyển lại.';
+
+  @override
+  String get transcribingOnThisPhone => 'Đang chép lời trên điện thoại này';
+
+  @override
+  String get getPro => 'Nâng cấp Pro';
+
+  @override
+  String get unlock => 'Mở khóa';
+
+  @override
+  String get transcribeWith => 'Chép lời bằng';
+
+  @override
+  String get omiCloud => 'Đám mây Omi';
+
+  @override
+  String get thisPhone => 'Điện thoại này';
+
+  @override
+  String get onDeviceReady => 'Sẵn sàng';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Còn $left/$limit phút · đặt lại vào $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Có $minutes phút đám mây';
+  }
+
+  @override
+  String get switchBack => 'Chuyển lại';
+
+  @override
+  String get setUpThisPhone => 'Thiết lập điện thoại này';
+
+  @override
+  String get speechRecognition => 'Nhận dạng giọng nói';
+
+  @override
+  String get audioStaysOnPhone => 'Âm thanh ở lại trên điện thoại';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Tải xuống $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Tải ngay';
+
+  @override
+  String get onWifiLater => 'Sau, qua Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Đang viết bản tóm tắt của bạn…';
 }

@@ -111,6 +111,7 @@ class PostgresTransaction:
         self.store = store
         self.conn = conn
         self.cache: dict[tuple[str, str], dict] = {}
+        self.exists: dict[tuple[str, str], bool] = {}
         self.writes: dict[tuple[str, str], dict] = {}
         self.patches: dict[tuple[str, str], dict] = {}
         # Documents this transaction holds a lock on (row lock or, when missing, the key's advisory lock).
@@ -119,13 +120,14 @@ class PostgresTransaction:
     # -- locking --------------------------------------------------------------------------
     def _lock_read(self, table: str, key: str) -> dict:
         """The newest committed document, locked until this transaction ends ({} if missing, key locked)."""
-        found = self.store.read_doc(self.conn, table, key, lock=True)
-        if not found:
+        found = self.store.read_existing_doc(self.conn, table, key, lock=True)
+        if found is None:
             self.store.lock_name(self.conn, table, key)
             # Re-read under the key lock: an insert that committed before we took it is visible now.
-            found = self.store.read_doc(self.conn, table, key, lock=True)
+            found = self.store.read_existing_doc(self.conn, table, key, lock=True)
         self.locked.add((table, key))
-        return found
+        self.exists[(table, key)] = found is not None
+        return found if found is not None else {}
 
     def _locked_query_row(self, key: str, doc: dict) -> dict:
         """Lock a job row a transactional query returned; restart if it changed before the lock."""
@@ -145,6 +147,11 @@ class PostgresTransaction:
         if address not in self.cache:
             self.cache[address] = self._lock_read(table, key)
         return deepcopy({**self.writes.get(address, self.cache[address]), **self.patches.get(address, {})})
+
+    def get_existing(self, table: str, key: str) -> dict | None:
+        row = self.get(table, key)
+        address = (table, key)
+        return row if address in self.writes or address in self.patches or self.exists[address] else None
 
     def put(self, table: str, key: str, value: dict) -> None:
         if table == 'conversations':
@@ -676,6 +683,10 @@ class PostgresStore:
             raise RuntimeError(f'{table} documents live in Firestore; Postgres holds them only in harness mode (A4)')
 
     def read_doc(self, conn: Any, table: str, key: str, *, lock: bool = False) -> dict:
+        found = self.read_existing_doc(conn, table, key, lock=lock)
+        return found if found is not None else {}
+
+    def read_existing_doc(self, conn: Any, table: str, key: str, *, lock: bool = False) -> dict | None:
         suffix = ' FOR UPDATE' if lock else ''
         if table in _TYPED:
             psycopg_sql = sql()
@@ -689,7 +700,7 @@ class PostgresStore:
                 (self.namespace, table, key),
             )
         found = row.fetchone()
-        return found[0] if found else {}
+        return found[0] if found else None
 
     def lock_name(self, conn: Any, table: str, key: str) -> None:
         """Hold one document's advisory lock until the transaction ends (the key may not exist yet)."""

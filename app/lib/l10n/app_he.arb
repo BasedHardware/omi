@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "מקליט בטלפון שלך",
+    "wrapUp": "סכם",
+    "recordingDiscarded": "ההקלטה בוטלה",
     "undo": "בטל",
     "@undo": {
         "description": "Undo button text"
@@ -12213,5 +12216,30 @@
     "monthlySwitchUnavailable": "המעבר אינו זמין כרגע. עדכנו את הכרטיס במקום.",
     "monthlySwitchDoneTitle": "עברת לתשלום חודשי",
     "monthlySwitchDoneBody": "{price} שולמו היום. מתחדש מדי חודש.",
-    "processingDeleteScopeChanged": "רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב."
+    "processingDeleteScopeChanged": "רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "ניצלת את {minutes} הדקות של החודש",
+    "freeCapBody": "Omi ממשיך להקליט. בחרו איך להמשיך בתמלול.",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "תמלול בענן ללא הגבלה",
+    "freeCapProAccuracy": "הדיוק הטוב ביותר",
+    "freeCapProWaiting": "מתמלל את ההקלטות הממתינות שלך",
+    "freeCapPhoneSubtitle": "חינם. נשאר פעיל עד שתחזרו.",
+    "transcribingOnThisPhone": "מתמלל בטלפון הזה",
+    "getPro": "קבלו Pro",
+    "unlock": "ביטול נעילה",
+    "transcribeWith": "תמלול באמצעות",
+    "omiCloud": "הענן של Omi",
+    "thisPhone": "הטלפון הזה",
+    "onDeviceReady": "מוכן",
+    "cloudMinutesLeft": "נותרו {left} מתוך {limit} דק׳ · מתאפס ב-{date}",
+    "cloudMinutesAvailable": "{minutes} דקות ענן זמינות",
+    "switchBack": "חזרה",
+    "setUpThisPhone": "הגדרת הטלפון הזה",
+    "speechRecognition": "זיהוי דיבור",
+    "audioStaysOnPhone": "השמע נשאר בטלפון שלך",
+    "onDeviceModelDownloadSize": "הורדה של {size} MB",
+    "downloadNow": "הורדה עכשיו",
+    "onWifiLater": "מאוחר יותר ב-Wi-Fi",
+    "conversationWritingSummary": "כותבים את הסיכום שלך…"
 }

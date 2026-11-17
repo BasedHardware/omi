@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "Запіс на тэлефон",
+    "wrapUp": "Завяршыць",
+    "recordingDiscarded": "Запіс адменены",
     "undo": "Адмяніць",
     "@undo": {
         "description": "Undo button text"
@@ -12213,5 +12216,30 @@
     "monthlySwitchUnavailable": "Пераход зараз недаступны. Замест гэтага абнавіце картку.",
     "monthlySwitchDoneTitle": "Цяпер у вас штомесячная аплата",
     "monthlySwitchDoneBody": "Сёння аплачана {price}. Падаўжаецца штомесяц.",
-    "processingDeleteScopeChanged": "Спіс апрацоўкі змяніўся. Праверце яго і паспрабуйце зноў."
+    "processingDeleteScopeChanged": "Спіс апрацоўкі змяніўся. Праверце яго і паспрабуйце зноў.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "Вы выкарысталі {minutes} хвілін гэтага месяца",
+    "freeCapBody": "Omi працягвае запіс. Выберыце, як працягнуць транскрыпцыю.",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "Неабмежаваная воблачная транскрыпцыя",
+    "freeCapProAccuracy": "Найлепшая дакладнасць",
+    "freeCapProWaiting": "Транскрыбуе вашы запісы, якія чакаюць",
+    "freeCapPhoneSubtitle": "Бясплатна. Застаецца ўключаным, пакуль не пераключыце назад.",
+    "transcribingOnThisPhone": "Транскрыпцыя на гэтым тэлефоне",
+    "getPro": "Атрымаць Pro",
+    "unlock": "Разблакаваць",
+    "transcribeWith": "Транскрыбаваць праз",
+    "omiCloud": "Воблака Omi",
+    "thisPhone": "Гэты тэлефон",
+    "onDeviceReady": "Гатова",
+    "cloudMinutesLeft": "Засталося {left} з {limit} хв · абнаўленне {date}",
+    "cloudMinutesAvailable": "Даступна {minutes} хв у воблаку",
+    "switchBack": "Вярнуцца",
+    "setUpThisPhone": "Наладзіць гэты тэлефон",
+    "speechRecognition": "Распазнаванне маўлення",
+    "audioStaysOnPhone": "Аўдыя застаецца на вашым тэлефоне",
+    "onDeviceModelDownloadSize": "Спампоўка {size} МБ",
+    "downloadNow": "Спампаваць зараз",
+    "onWifiLater": "Пазней праз Wi-Fi",
+    "conversationWritingSummary": "Пішам ваша рэзюмэ…"
 }

@@ -1994,6 +1994,15 @@ class AppLocalizationsNl extends AppLocalizations {
   String get memoryHistory => 'Geschiedenis';
 
   @override
+  String get recordingWithYourPhone => 'Opnemen met je telefoon';
+
+  @override
+  String get wrapUp => 'Afronden';
+
+  @override
+  String get recordingDiscarded => 'Opname verwijderd';
+
+  @override
   String get undo => 'Ongedaan maken';
 
   @override
@@ -15503,4 +15512,88 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'De verwerkingslijst is gewijzigd. Controleer de lijst en probeer het opnieuw.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Je hebt de $minutes minuten van deze maand gebruikt';
+  }
+
+  @override
+  String get freeCapBody => 'Omi neemt nog steeds op. Kies hoe je verder wilt transcriberen.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Onbeperkte cloudtranscriptie';
+
+  @override
+  String get freeCapProAccuracy => 'Beste nauwkeurigheid';
+
+  @override
+  String get freeCapProWaiting => 'Transcribeert je wachtende opnames';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Gratis. Blijft aan tot je terugschakelt.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transcriberen op deze telefoon';
+
+  @override
+  String get getPro => 'Pro nemen';
+
+  @override
+  String get unlock => 'Ontgrendelen';
+
+  @override
+  String get transcribeWith => 'Transcriberen met';
+
+  @override
+  String get omiCloud => 'Omi-cloud';
+
+  @override
+  String get thisPhone => 'Deze telefoon';
+
+  @override
+  String get onDeviceReady => 'Klaar';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Nog $left van $limit min · reset op $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes cloudminuten beschikbaar';
+  }
+
+  @override
+  String get switchBack => 'Terugschakelen';
+
+  @override
+  String get setUpThisPhone => 'Deze telefoon instellen';
+
+  @override
+  String get speechRecognition => 'Spraakherkenning';
+
+  @override
+  String get audioStaysOnPhone => 'Audio blijft op je telefoon';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB downloaden';
+  }
+
+  @override
+  String get downloadNow => 'Nu downloaden';
+
+  @override
+  String get onWifiLater => 'Later via wifi';
+
+  @override
+  String get conversationWritingSummary => 'Je samenvatting wordt geschreven…';
 }

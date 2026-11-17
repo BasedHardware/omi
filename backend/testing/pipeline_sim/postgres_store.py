@@ -76,6 +76,9 @@ class _Recording:
     def get(self, table: str, key: str) -> dict:
         return self._tx.get(table, key)
 
+    def get_existing(self, table: str, key: str) -> dict | None:
+        return self._tx.get_existing(table, key)
+
     def put(self, table: str, key: str, value: dict) -> None:
         self._tx.get(table, key)  # first touch caches the committed row (the observers' "previous")
         self._tx.put(table, key, value)

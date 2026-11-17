@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "آپ کے فون سے ریکارڈنگ ہو رہی ہے",
+    "wrapUp": "ختم کریں",
+    "recordingDiscarded": "ریکارڈنگ رد کر دی گئی",
     "undo": "واپس لیں",
     "@undo": {
         "description": "Undo button text"
@@ -12213,5 +12216,30 @@
     "monthlySwitchUnavailable": "اس وقت تبدیلی دستیاب نہیں۔ اس کے بجائے کارڈ اپ ڈیٹ کریں۔",
     "monthlySwitchDoneTitle": "اب آپ ماہانہ پلان پر ہیں",
     "monthlySwitchDoneBody": "آج {price} ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔",
-    "processingDeleteScopeChanged": "پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔"
+    "processingDeleteScopeChanged": "پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "آپ نے اس مہینے کے {minutes} منٹ استعمال کر لیے ہیں",
+    "freeCapBody": "Omi اب بھی ریکارڈ کر رہا ہے۔ منتخب کریں کہ ٹرانسکرپشن کیسے جاری رکھیں۔",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "لامحدود کلاؤڈ ٹرانسکرپشن",
+    "freeCapProAccuracy": "بہترین درستگی",
+    "freeCapProWaiting": "آپ کی منتظر ریکارڈنگز ٹرانسکرائب کرتا ہے",
+    "freeCapPhoneSubtitle": "مفت۔ واپس تبدیل کرنے تک آن رہتا ہے۔",
+    "transcribingOnThisPhone": "اس فون پر ٹرانسکرائب ہو رہا ہے",
+    "getPro": "Pro حاصل کریں",
+    "unlock": "ان لاک کریں",
+    "transcribeWith": "اس کے ساتھ ٹرانسکرائب کریں",
+    "omiCloud": "Omi کلاؤڈ",
+    "thisPhone": "یہ فون",
+    "onDeviceReady": "تیار",
+    "cloudMinutesLeft": "{left}/{limit} منٹ باقی · {date} کو ری سیٹ",
+    "cloudMinutesAvailable": "{minutes} کلاؤڈ منٹ دستیاب ہیں",
+    "switchBack": "واپس جائیں",
+    "setUpThisPhone": "یہ فون سیٹ اپ کریں",
+    "speechRecognition": "اسپیچ ریکگنیشن",
+    "audioStaysOnPhone": "آڈیو آپ کے فون پر ہی رہتا ہے",
+    "onDeviceModelDownloadSize": "{size} MB ڈاؤن لوڈ",
+    "downloadNow": "ابھی ڈاؤن لوڈ کریں",
+    "onWifiLater": "بعد میں Wi-Fi پر",
+    "conversationWritingSummary": "آپ کا خلاصہ لکھا جا رہا ہے…"
 }

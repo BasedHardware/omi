@@ -6,6 +6,7 @@ import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 
+part 'capture_phone_discard_policy.dart';
 part 'capture_silence_policy.dart';
 
 /// Capture ownership coordinator: the single admission and ordering authority
@@ -29,7 +30,7 @@ enum CaptureSource { pendant, phone }
 enum CaptureTransport { live, batch }
 
 /// Who suspended a capture.
-enum SuspendReason { phone, call }
+enum SuspendReason { phone, call, reconnect }
 
 /// The single explicit capture phase. The reducer is the only writer.
 enum CapturePhase {
@@ -76,6 +77,7 @@ class ActiveCaptureSession {
     this.recordingId,
     this.deviceId,
     this.deviceType,
+    this.accountId,
   });
 
   final CaptureSource source;
@@ -92,9 +94,11 @@ class ActiveCaptureSession {
 
   final String? deviceId;
   final DeviceType? deviceType;
+  final String? accountId;
 
-  ActiveCaptureSession copyWith({String? recordingId, String? deviceId, DeviceType? deviceType}) =>
+  ActiveCaptureSession copyWith({String? recordingId, String? deviceId, DeviceType? deviceType, String? accountId}) =>
       ActiveCaptureSession(
+        accountId: accountId ?? this.accountId,
         source: source,
         mode: mode,
         sessionKey: sessionKey,
@@ -109,11 +113,13 @@ class ActiveCaptureSession {
         'sessionKey': sessionKey,
         'recordingId': recordingId,
         'deviceId': deviceId,
+        'accountId': accountId,
         'deviceType': deviceType?.name,
       };
 
   factory ActiveCaptureSession.fromJson(Map<String, dynamic> json) {
     return ActiveCaptureSession(
+      accountId: json['accountId'] as String?,
       source: _parseSource(json['source']),
       mode: _parseTransport(json['mode']),
       sessionKey: _parseString(json['sessionKey'], 'sessionKey'),
@@ -136,6 +142,9 @@ class SuspendedCapture {
     this.recordingId,
     this.deviceId,
     this.deviceType,
+    this.reconnectDeadline,
+    this.accountId,
+    this.reconnectResumePending = false,
   });
 
   final CaptureSource source;
@@ -155,7 +164,17 @@ class SuspendedCapture {
   final String? deviceId;
   final DeviceType? deviceType;
 
+  /// Process-local identity grace; never proof that gap audio survived.
+  final DateTime? reconnectDeadline;
+  final String? accountId;
+
+  /// The link returned during a call; observe resume only when capture returns.
+  final bool reconnectResumePending;
+
   SuspendedCapture withReason(SuspendReason next) => SuspendedCapture(
+        accountId: accountId,
+        reconnectResumePending:
+            next == SuspendReason.call && (reason == SuspendReason.reconnect || reconnectResumePending),
         source: source,
         reason: next,
         wasPaused: wasPaused,
@@ -169,6 +188,9 @@ class SuspendedCapture {
   Map<String, Object?> toJson() => {
         'source': source.name,
         'reason': reason.name,
+        'reconnectDeadlineMs': reconnectDeadline?.millisecondsSinceEpoch,
+        'accountId': accountId,
+        'reconnectResumePending': reconnectResumePending,
         'wasPaused': wasPaused,
         'mode': mode.name,
         'sessionKey': sessionKey,
@@ -181,6 +203,11 @@ class SuspendedCapture {
     return SuspendedCapture(
       source: _parseSource(json['source']),
       reason: _parseSuspendReason(json['reason']),
+      accountId: json['accountId'] as String?,
+      reconnectResumePending: _parseBool(json['reconnectResumePending'] ?? false, 'reconnectResumePending'),
+      reconnectDeadline: json['reconnectDeadlineMs'] == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(json['reconnectDeadlineMs'] as int, isUtc: true),
       wasPaused: _parseBool(json['wasPaused'], 'wasPaused'),
       mode: _parseTransport(json['mode']),
       sessionKey: json['sessionKey'] as String?,
@@ -527,6 +554,7 @@ class CaptureEnvironment {
     required this.socketConnected,
     required this.deviceServiceReady,
     required this.callActive,
+    this.callEpoch = 0,
     required this.deviceRecording,
     required this.micCapturing,
     this.silencePaused = false,
@@ -538,9 +566,14 @@ class CaptureEnvironment {
     this.appSuspended = false,
     this.appSuspendedAt,
     this.appResumedAt,
+    this.now = DateTime.now,
+    this.accountId,
   });
 
   /// `_preferences.capturePolicy.muted`.
+  final DateTime Function() now;
+  final String? accountId;
+
   final bool policyMuted;
   final bool silencePaused;
   final bool uplinkSilenceExpired;
@@ -566,6 +599,9 @@ class CaptureEnvironment {
   /// `recordingDeviceServiceReady` — device present or a mic lane active.
   final bool deviceServiceReady;
   final bool callActive;
+
+  /// Synchronous call activation evidence, including calls ending during an await.
+  final int callEpoch;
 
   /// `recordingState == deviceRecord`.
   final bool deviceRecording;
@@ -673,8 +709,21 @@ class DeviceStopRequested extends CaptureEvent {
 
 /// `updateRecordingDevice` — connect, disconnect (null), or identity update.
 class DeviceUpdated extends CaptureEvent {
-  const DeviceUpdated(this.device);
+  const DeviceUpdated(this.device, {this.reconnectDeviceId});
   final BtDevice? device;
+
+  /// Only an unexpected link loss for this exact device may hold identity.
+  /// Null means intentional, unknown, account reset, or device removal.
+  final String? reconnectDeviceId;
+}
+
+/// A wake only: the reducer checks the authoritative deadline on every event.
+class ReconnectGraceElapsed extends CaptureEvent {
+  const ReconnectGraceElapsed();
+}
+
+class CaptureIdentityChanged extends CaptureEvent {
+  const CaptureIdentityChanged();
 }
 
 /// `startPhoneMicBatchForTesting` — a direct batch start without the
@@ -802,8 +851,9 @@ class CheckPhonePermission extends CaptureEffect {
 /// Write the shared capture policy (CAPTURE_POLICY.md). The port returns the
 /// committed revision and whether a newer intent superseded this write.
 class PolicyWrite extends CaptureEffect {
-  const PolicyWrite(this.muted);
+  const PolicyWrite(this.muted, {this.unlessCallActive = false});
   final bool muted;
+  final bool unlessCallActive;
 }
 
 /// Stop the pendant's Dart BLE stream (and optionally the native background
@@ -836,8 +886,9 @@ class SocketOpen extends CaptureEffect {
 }
 
 class SocketClose extends CaptureEffect {
-  const SocketClose(this.reason);
+  const SocketClose(this.reason, {this.userStop = false});
   final String reason;
+  final bool userStop; // The user stopped: the server finalizes now instead of awaiting a reconnect.
 }
 
 /// Native phone mic start for a transport: live resumes the existing mic
@@ -901,6 +952,11 @@ sealed class CaptureStage {
   const CaptureStage();
 }
 
+class ReconnectObservationStage extends CaptureStage {
+  const ReconnectObservationStage(this.outcome);
+  final String outcome;
+}
+
 class UpdateRecordingDeviceStage extends CaptureStage {
   const UpdateRecordingDeviceStage(this.device);
   final BtDevice? device;
@@ -921,9 +977,11 @@ class DeviceMuteResolved {
 /// reset and streaming init. [promptLocation] mirrors the old
 /// `promptIfDenied: device != null`.
 class StartDeviceSessionStage extends CaptureStage {
-  const StartDeviceSessionStage({required this.deviceRequested, this.promptLocation = false});
+  const StartDeviceSessionStage(
+      {required this.deviceRequested, this.promptLocation = false, this.deferForCall = false});
   final bool deviceRequested;
   final bool promptLocation;
+  final bool deferForCall;
 }
 
 class StopDeviceSessionStage extends CaptureStage {
@@ -1171,8 +1229,8 @@ class CaptureEffectPorts {
   /// `_initiateWebsocket` (ensure-aware).
   final Future<void> Function(SocketOpen spec) openSocket;
 
-  /// `_socket?.stop(reason:)`.
-  final Future<void> Function(String reason) closeSocket;
+  /// `_socket?.stop(reason:, userStop:)`.
+  final Future<void> Function(String reason, {bool userStop}) closeSocket;
 
   /// Live: `_resumeMicRecording`; batch: `_startPhoneMicBatch`.
   final Future<void> Function(PhoneMicSessionMode mode) startNativeMic;
@@ -1504,6 +1562,34 @@ class CaptureCoordinator {
         : null;
     final restoreHeldDebtPolicy = preserveDebt != null ? env.policyMuted : null;
 
+    final restoringReconnect = priorDebt != null &&
+        (priorDebt.reason == SuspendReason.reconnect || priorDebt.reconnectResumePending) &&
+        working.active?.source == CaptureSource.pendant &&
+        working.active?.sessionKey == priorDebt.sessionKey;
+    Future<bool> deferReconnectForCall() async {
+      final current = _readEnvironment();
+      if (!restoringReconnect || working.callActive || (!current.callActive && current.callEpoch == env.callEpoch)) {
+        return false;
+      }
+      final debt = priorDebt.withReason(SuspendReason.call);
+      working = working.copyWith(
+        phase: CapturePhase.callActive,
+        active: () => null,
+        suspended: [...working.suspended.where((entry) => entry.source != CaptureSource.pendant), debt],
+        callActive: true,
+      );
+      _staged = working;
+      for (final effect in <CaptureEffect>[
+        if (debt.mode == CaptureTransport.batch) const PolicyWrite(true),
+        const NativeWriterGate(source: CaptureSource.pendant, admitted: false),
+        const BleStreamStop(disableNativeBackground: true),
+        RunStage(SuspendPendantStage(reason: SuspendReason.call, wasPaused: debt.wasPaused)),
+      ]) {
+        await _execute(effect);
+      }
+      return true;
+    }
+
     try {
       Object? result = transition.result;
       for (var i = 0; i < transition.effects.length; i++) {
@@ -1511,6 +1597,10 @@ class CaptureCoordinator {
           // Resume may arrive while a WAL boundary awaits disk. Revalidate
           // before the next effect, especially before restarting the mic.
           var effect = transition.effects[i];
+          // Publish rich device identity even when the call won admission;
+          // the call-release stage needs that device to restart capture.
+          final updatesDevice = effect is RunStage && effect.stage is UpdateRecordingDeviceStage;
+          if (restoringReconnect && !updatesDevice && await deferReconnectForCall()) break;
           if (event is CaptureLivenessFailure) {
             final currentEnvironment = _readEnvironment();
             if (!_livenessFailureIsCurrent(_state, event, currentEnvironment)) {
@@ -1521,12 +1611,13 @@ class CaptureCoordinator {
             }
           }
           final value = await _execute(effect);
+          if (restoringReconnect && value is! CaptureStageFailure && await deferReconnectForCall()) break;
           if (transition.effects[i] is CheckPhonePermission) {
             if (value != true) {
               return CaptureDispatchOutcome.completed(state: _state, result: false);
             }
           } else if (value is _MintedRecordingId) {
-            working = _foldMintedId(working, value);
+            working = _foldMintedId(working, value, env.accountId);
             _staged = working;
           } else if (value is DeviceMuteResolved) {
             final active = working.active;
@@ -1741,19 +1832,21 @@ class CaptureCoordinator {
     _onCommit?.call(next);
   }
 
-  CaptureCoordinatorState _foldMintedId(CaptureCoordinatorState working, _MintedRecordingId minted) {
+  CaptureCoordinatorState _foldMintedId(CaptureCoordinatorState working, _MintedRecordingId minted, String? accountId) {
     final active = working.active;
     if (active == null || active.sessionKey != minted.sessionKey) return working;
-    return working.copyWith(active: () => active.copyWith(recordingId: minted.recordingId));
+    return working.copyWith(active: () => active.copyWith(recordingId: minted.recordingId, accountId: accountId));
   }
 
   Future<Object?> _execute(CaptureEffect effect) => switch (effect) {
         CheckPhonePermission() => _ports.checkPhonePermission(),
-        PolicyWrite() => _ports.writePolicy(effect.muted),
+        PolicyWrite() => effect.unlessCallActive && _readEnvironment().callActive
+            ? Future<Object?>.value(null)
+            : _ports.writePolicy(effect.muted),
         BleStreamStop() => _ports.stopBleStream(disableNativeBackground: effect.disableNativeBackground),
         BleStreamStart() => _ports.startBleStream(),
         SocketOpen() => _ports.openSocket(effect),
-        SocketClose() => _ports.closeSocket(effect.reason),
+        SocketClose() => _ports.closeSocket(effect.reason, userStop: effect.userStop),
         NativeMicStart() => _ports.startNativeMic(effect.mode),
         NativeMicStop() => _ports.stopNativeMic(),
         NativeWriterGate() => _ports.setNativeWriterGate(effect.source, effect.admitted),
@@ -1773,17 +1866,67 @@ class CaptureCoordinator {
 // Reducer — pure: (state, event, env) -> (next state, ordered effects)
 // -------------------------------------------------------------------------
 
-CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent event, CaptureEnvironment env) =>
+CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent event, CaptureEnvironment env) {
+  final prefix = <CaptureEffect>[];
+  var ignoreExpiredSilenceResume = false;
+  final grace = state.pendantSuspension;
+  if (grace?.reason == SuspendReason.reconnect || grace?.reconnectResumePending == true) {
+    final awaitingLink = grace!.reason == SuspendReason.reconnect;
+    final expired = awaitingLink && (grace.reconnectDeadline == null || !env.now().isBefore(grace.reconnectDeadline!));
+    final nextDeviceId = switch (event) {
+      DeviceUpdated() => event.device?.id,
+      DeviceStartRequested() => event.device?.id,
+      _ => null,
+    };
+    // Ask the existing pure admission reducer before retiring the old owner.
+    // A refused batch handoff or muted no-resume request is not a takeover.
+    final phoneTakingOver = awaitingLink &&
+        event is PhoneStartRequested &&
+        _reducePhoneStart(state, event, env).effects.any((effect) => effect is CheckPhonePermission);
+    final invalidated = event is DeviceStopRequested ||
+        (event is FinishRequested && _rejectStaleTarget(state, event.target, env) == null) ||
+        event is CaptureIdentityChanged ||
+        phoneTakingOver ||
+        (awaitingLink && event is PhoneBatchStartRequested) ||
+        event is BatchModeSetRequested ||
+        event is OnboardingBatchChanged ||
+        (event is DeviceUpdated && event.device == null && event.reconnectDeviceId == null) ||
+        (nextDeviceId != null && nextDeviceId != grace.deviceId);
+    if (expired || invalidated || !env.signedIn() || grace.accountId != env.accountId) {
+      state = state.copyWith(suspended: List.of(state.suspended)..remove(grace));
+      if (expired) prefix.add(const RunStage(ReconnectObservationStage('reconnect_grace_expired_fresh')));
+      if (expired && grace.wasPaused) {
+        prefix.add(const RunStage(SilencePauseMarkerStage(false)));
+        ignoreExpiredSilenceResume = event is ResumeSilencePaused;
+      }
+      prefix.add(const RunStage(DeviceStopTelemetryStage(cleanDevice: true)));
+    }
+  }
+  final transition =
+      ignoreExpiredSilenceResume ? CaptureTransition(state, const []) : _transitionCapture(state, event, env);
+  // A denied phone permission must leave the previous capture untouched.
+  // Run the admission check before retiring its reconnect identity.
+  if (prefix.isNotEmpty && transition.effects.isNotEmpty && transition.effects.first is CheckPhonePermission) {
+    return CaptureTransition(transition.state, [transition.effects.first, ...prefix, ...transition.effects.skip(1)],
+        result: transition.result);
+  }
+  return CaptureTransition(transition.state, [...prefix, ...transition.effects], result: transition.result);
+}
+
+CaptureTransition _transitionCapture(CaptureCoordinatorState state, CaptureEvent event, CaptureEnvironment env) =>
     switch (event) {
       PhoneStartRequested() => _reducePhoneStart(state, event, env),
       PhoneStopRequested() => _reducePhoneStop(state, event),
+      PhoneDiscardRequested() => _reducePhoneDiscard(state),
       FinishRequested() => _rejectStaleTarget(state, event.target, env) ?? _reduceFinish(state),
       PauseCaptureRequested() => _rejectStaleTarget(state, event.target, env) ?? _reducePause(state, env),
       ResumeCaptureRequested() => _rejectStaleTarget(state, event.target, env) ?? _reduceResume(state, env),
       OfflineMuteToggled() => _reduceOfflineMuteToggle(state, env),
       DeviceStartRequested() => _reduceDeviceStart(state, event, env),
       DeviceStopRequested() => _reduceDeviceStop(state, event),
-      DeviceUpdated() => _reduceDeviceUpdated(state, event),
+      DeviceUpdated() => _reduceDeviceUpdated(state, event, env),
+      ReconnectGraceElapsed() => CaptureTransition(state, const []),
+      CaptureIdentityChanged() => CaptureTransition(state, const []),
       PhoneBatchStartRequested() => _reducePhoneBatchStart(state, event),
       UplinkSilenceElapsed() => _reduceUplinkSilence(state, event, env),
       ResumeSilencePaused() => _reduceSilenceResume(state, env),
@@ -1866,6 +2009,7 @@ CaptureTransition _reducePhoneStart(CaptureCoordinatorState state, PhoneStartReq
         mode: state.active?.mode ?? CaptureTransport.live,
         sessionKey: state.active?.sessionKey,
         recordingId: state.active?.recordingId,
+        accountId: state.active?.accountId,
         deviceId: state.active?.deviceId ?? state.connectedDevice?.id,
         deviceType: state.active?.deviceType ?? state.connectedDevice?.type,
       ),
@@ -2281,6 +2425,12 @@ CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
 }
 
 CaptureTransition _reducePause(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (state.pendantSuspension?.reason == SuspendReason.reconnect) {
+    return CaptureTransition(state.copyWith(suspended: _withPendantWasPaused(state.suspended, true)), [
+      if (env.silencePaused) const RunStage(SilencePauseMarkerStage(false)),
+      if (!state.callActive) const PolicyWrite(true, unlessCallActive: true),
+    ]);
+  }
   if (env.silencePaused) {
     return CaptureTransition(state, [
       if (state.connectedDevice != null && !state.phoneOwns && !state.callActive)
@@ -2333,6 +2483,10 @@ CaptureTransition _reducePause(CaptureCoordinatorState state, CaptureEnvironment
 }
 
 CaptureTransition _reduceResume(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (state.pendantSuspension?.reason == SuspendReason.reconnect) {
+    return CaptureTransition(state.copyWith(suspended: _withPendantWasPaused(state.suspended, false)),
+        [if (!state.callActive) const PolicyWrite(false, unlessCallActive: true)]);
+  }
   if (env.silencePaused) return _reduceSilenceResume(state, env);
   return switch (state.phase) {
     CapturePhase.phonePaused => CaptureTransition(state.copyWith(phase: CapturePhase.phoneLive), const [
@@ -2370,6 +2524,7 @@ void _refreshPendantSuspensionDevice(List<SuspendedCapture> suspended, Connected
   final index = suspended.lastIndexWhere((e) => e.source == CaptureSource.pendant);
   if (index < 0) return;
   final entry = suspended[index];
+  if (entry.reason == SuspendReason.reconnect) return;
   suspended[index] = SuspendedCapture(
     source: entry.source,
     reason: entry.reason,
@@ -2377,6 +2532,8 @@ void _refreshPendantSuspensionDevice(List<SuspendedCapture> suspended, Connected
     mode: entry.mode,
     sessionKey: entry.sessionKey,
     recordingId: entry.recordingId,
+    accountId: entry.accountId,
+    reconnectResumePending: entry.reconnectResumePending,
     deviceId: connected.id,
     deviceType: connected.type,
   );
@@ -2391,6 +2548,9 @@ List<SuspendedCapture> _withPendantWasPaused(List<SuspendedCapture> suspended, b
         source: entry.source,
         reason: entry.reason,
         wasPaused: wasPaused,
+        reconnectDeadline: entry.reconnectDeadline,
+        accountId: entry.accountId,
+        reconnectResumePending: entry.reconnectResumePending,
         mode: entry.mode,
         sessionKey: entry.sessionKey,
         recordingId: entry.recordingId,
@@ -2430,6 +2590,15 @@ CaptureTransition _reduceDeviceStart(
   }
   final suspended = List<SuspendedCapture>.of(state.suspended);
 
+  // Orphan-audio recovery and the connect callback may both request this
+  // start. Once one restored the owner, the second must not mint another id.
+  if (state.pendantOwns &&
+      connected != null &&
+      state.active?.deviceId == connected.id &&
+      state.active?.accountId == env.accountId) {
+    return CaptureTransition(state, const []);
+  }
+
   if (state.phoneOwns || state.callActive) {
     // The phone or a call has the capture: remember the pendant and start it
     // when that ends. Its transcript and session stay intact.
@@ -2448,7 +2617,12 @@ CaptureTransition _reduceDeviceStart(
       } else {
         // No duplicate debt: a repeated start only refreshes the resume target
         // to the device the user actually asked for.
-        _refreshPendantSuspensionDevice(suspended, connected);
+        final entry = state.pendantSuspension!;
+        if (entry.reason == SuspendReason.reconnect && state.callActive) {
+          suspended[suspended.indexOf(entry)] = entry.withReason(SuspendReason.call);
+        } else {
+          _refreshPendantSuspensionDevice(suspended, connected);
+        }
       }
     }
     return CaptureTransition(state.copyWith(suspended: suspended, connectedDevice: () => connected), effects);
@@ -2478,11 +2652,40 @@ CaptureTransition _reduceDeviceStart(
     suspended.removeAt(index);
     // A call suspension preserves its conversation; a phone suspension's
     // conversation already ended at takeover, so it starts fresh.
+    if (entry.reason == SuspendReason.reconnect && entry.sessionKey != null && entry.recordingId != null) {
+      // Physical start still flushes/rebinds the WAL and reinstalls ingress.
+      // Only the logical recording identity survives; no gap recovery is claimed.
+      effects
+        ..add(RunStage(PersistDeviceMuteStage(entry.wasPaused)))
+        ..add(PolicyWrite(entry.wasPaused, unlessCallActive: true))
+        ..add(const RunStage(StartDeviceSessionStage(deviceRequested: true, promptLocation: false, deferForCall: true)))
+        ..add(const RunStage(ReconnectObservationStage('reconnect_resumed')));
+      return CaptureTransition(
+          state.copyWith(
+            phase: _pendantResumePhase(entry.mode, entry.wasPaused),
+            active: () => ActiveCaptureSession(
+                source: CaptureSource.pendant,
+                mode: entry.mode,
+                sessionKey: entry.sessionKey!,
+                recordingId: entry.recordingId,
+                accountId: entry.accountId,
+                deviceId: connected.id,
+                deviceType: connected.type),
+            suspended: suspended,
+            connectedDevice: () => connected,
+            awaitingPhoneResume: false,
+            lastFailure: () => null,
+          ),
+          effects);
+    }
     if (entry.reason == SuspendReason.call && entry.sessionKey != null) {
       if (entry.wasPaused != env.policyMuted) {
         effects.add(PolicyWrite(entry.wasPaused));
       }
       effects.add(RunStage(ResumeSuspendedPendantStage(wasPaused: entry.wasPaused)));
+      if (entry.reconnectResumePending) {
+        effects.add(const RunStage(ReconnectObservationStage('reconnect_resumed')));
+      }
       return CaptureTransition(
         state.copyWith(
           phase: _pendantResumePhase(entry.mode, entry.wasPaused),
@@ -2491,12 +2694,14 @@ CaptureTransition _reduceDeviceStart(
             mode: entry.mode,
             sessionKey: entry.sessionKey!,
             recordingId: entry.recordingId,
+            accountId: entry.accountId,
             deviceId: connected.id,
             deviceType: connected.type,
           ),
           suspended: suspended,
           connectedDevice: () => connected,
           awaitingPhoneResume: false,
+          lastFailure: () => null,
         ),
         effects,
       );
@@ -2553,13 +2758,13 @@ CaptureTransition _reduceDeviceStop(CaptureCoordinatorState state, DeviceStopReq
     ),
     [
       RunStage(StopDeviceSessionStage(cleanDevice: event.cleanDevice)),
-      const SocketClose('stop stream device recording'),
+      SocketClose('stop stream device recording', userStop: !event.cleanDevice),
       RunStage(DeviceStopTelemetryStage(cleanDevice: event.cleanDevice)),
     ],
   );
 }
 
-CaptureTransition _reduceDeviceUpdated(CaptureCoordinatorState state, DeviceUpdated event) {
+CaptureTransition _reduceDeviceUpdated(CaptureCoordinatorState state, DeviceUpdated event, CaptureEnvironment env) {
   final device = event.device;
   final connected = device == null ? null : ConnectedDevice(id: device.id, type: device.type);
   final suspended = List<SuspendedCapture>.of(state.suspended);
@@ -2572,12 +2777,31 @@ CaptureTransition _reduceDeviceUpdated(CaptureCoordinatorState state, DeviceUpda
     final index = suspended.lastIndexWhere((e) => e.source == CaptureSource.pendant && e.reason == SuspendReason.phone);
     if (index >= 0) suspended.removeAt(index);
     if (state.pendantOwns) {
+      final session = state.active!;
+      final retain = event.reconnectDeviceId == session.deviceId &&
+          session.deviceId != null &&
+          session.recordingId != null &&
+          session.accountId == env.accountId &&
+          env.signedIn();
+      if (retain) {
+        suspended.add(SuspendedCapture(
+            source: CaptureSource.pendant,
+            reason: SuspendReason.reconnect,
+            wasPaused: state.phase == CapturePhase.pendantPaused || state.phase == CapturePhase.pendantBatchPaused,
+            mode: session.mode,
+            sessionKey: session.sessionKey,
+            recordingId: session.recordingId,
+            deviceId: session.deviceId,
+            deviceType: session.deviceType,
+            accountId: session.accountId,
+            reconnectDeadline: env.now().add(const Duration(seconds: 120))));
+      }
       phase = CapturePhase.idle;
       active = null;
       // No per-source native gate exists: a batch pendant's writer is only
       // deniable through the shared policy mute (honest limitation — the gate
       // call below is a no-op until a native gate lands).
-      if (state.phase == CapturePhase.pendantBatchLive || state.phase == CapturePhase.pendantBatchPaused) {
+      if (!retain && (state.phase == CapturePhase.pendantBatchLive || state.phase == CapturePhase.pendantBatchPaused)) {
         effects.add(const PolicyWrite(true));
       }
       // The full pendant teardown (BLE streams, WAL finalize, recording state,
@@ -2586,13 +2810,13 @@ CaptureTransition _reduceDeviceUpdated(CaptureCoordinatorState state, DeviceUpda
       effects
         ..add(const NativeWriterGate(source: CaptureSource.pendant, admitted: false))
         ..add(const RunStage(StopDeviceSessionStage(cleanDevice: true)))
-        ..add(const SocketClose('device disconnected'))
-        ..add(const RunStage(DeviceStopTelemetryStage(cleanDevice: true)));
+        ..add(const SocketClose('device disconnected'));
+      if (!retain) effects.add(const RunStage(DeviceStopTelemetryStage(cleanDevice: true)));
     } else {
       effects.add(RunStage(UpdateRecordingDeviceStage(device)));
     }
   } else {
-    if (active != null && active.source == CaptureSource.pendant) {
+    if (active != null && active.source == CaptureSource.pendant && active.deviceId == connected.id) {
       active = active.copyWith(deviceId: connected.id, deviceType: connected.type);
     }
     _refreshPendantSuspensionDevice(suspended, connected);
@@ -2612,6 +2836,7 @@ CaptureTransition _reduceDeviceUpdated(CaptureCoordinatorState state, DeviceUpda
 }
 
 CaptureTransition _reduceDeviceResume(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (state.pendantSuspension?.reason == SuspendReason.reconnect) return _reduceResume(state, env);
   if (env.silencePaused) return _reduceSilenceResume(state, env);
   if (state.phase == CapturePhase.phonePaused || state.phase == CapturePhase.phoneBatchPaused) {
     return _reduceResume(state, env);
@@ -2632,7 +2857,7 @@ CaptureTransition _reduceDeviceResume(CaptureCoordinatorState state, CaptureEnvi
   if (state.pendantSuspension != null) {
     return CaptureTransition(state.copyWith(suspended: _withPendantWasPaused(state.suspended, false)), const []);
   }
-  return CaptureTransition(state, const []);
+  return _reduceResume(state, env); // Idle muted pendant: unmute like the app's Resume, never a dead end.
 }
 
 CaptureTransition _reduceCall(CaptureCoordinatorState state, CaptureEnvironment env) {
@@ -2655,6 +2880,7 @@ CaptureTransition _reduceCall(CaptureCoordinatorState state, CaptureEnvironment 
           mode: state.active?.mode ?? CaptureTransport.live,
           sessionKey: state.active?.sessionKey,
           recordingId: state.active?.recordingId,
+          accountId: state.active?.accountId,
           deviceId: state.active?.deviceId ?? state.connectedDevice?.id,
           deviceType: state.active?.deviceType ?? state.connectedDevice?.type,
         ),
@@ -2740,12 +2966,16 @@ CaptureTransition _reduceCall(CaptureCoordinatorState state, CaptureEnvironment 
         mutedBeforePhone: () => null,
         awaitingPhoneResume: false,
         sessionSeq: seq,
+        lastFailure: () => null,
       ),
       effects,
     );
   }
 
   effects.add(RunStage(ResumeSuspendedPendantStage(wasPaused: entry.wasPaused)));
+  if (entry.reconnectResumePending) {
+    effects.add(const RunStage(ReconnectObservationStage('reconnect_resumed')));
+  }
   return CaptureTransition(
     state.copyWith(
       phase: _pendantResumePhase(entry.mode, entry.wasPaused),
@@ -2754,6 +2984,7 @@ CaptureTransition _reduceCall(CaptureCoordinatorState state, CaptureEnvironment 
         mode: entry.mode,
         sessionKey: entry.sessionKey!,
         recordingId: entry.recordingId,
+        accountId: entry.accountId,
         deviceId: entry.deviceId ?? state.connectedDevice?.id,
         deviceType: entry.deviceType ?? state.connectedDevice?.type,
       ),
@@ -2761,6 +2992,7 @@ CaptureTransition _reduceCall(CaptureCoordinatorState state, CaptureEnvironment 
       callActive: false,
       mutedBeforePhone: () => null,
       awaitingPhoneResume: false,
+      lastFailure: () => null,
     ),
     effects,
   );
@@ -2895,6 +3127,7 @@ CaptureTransition _reduceBatchMode(CaptureCoordinatorState state, BatchModeSetRe
           mode: event.enabled ? CaptureTransport.batch : CaptureTransport.live,
           sessionKey: active.sessionKey,
           recordingId: active.recordingId,
+          accountId: active.accountId,
           deviceId: active.deviceId,
           deviceType: active.deviceType,
         );
@@ -2954,6 +3187,7 @@ CaptureTransition _reduceOnboardingBatch(
           mode: toBatch ? CaptureTransport.batch : CaptureTransport.live,
           sessionKey: active.sessionKey,
           recordingId: active.recordingId,
+          accountId: active.accountId,
           deviceId: active.deviceId,
           deviceType: active.deviceType,
         );
@@ -2967,6 +3201,7 @@ CaptureTransition _reduceOnboardingBatch(
           mode: toBatch ? CaptureTransport.batch : CaptureTransport.live,
           sessionKey: active.sessionKey,
           recordingId: active.recordingId,
+          accountId: active.accountId,
           deviceId: active.deviceId,
           deviceType: active.deviceType,
         );

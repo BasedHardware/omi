@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-durable-terminal-projection",
+  "family": "state-single-owner",
   "violated_contract": "Every accepted capture-finalization job must persist one bounded terminal outcome in its authoritative Firestore transition, and backend-listen must project that durable state without relying on process-local emission.",
   "canonical_prevention": "Write the terminal outcome in the lease-fenced completion, stale-fence, and dead-letter transactions; aggregate the closed outcome set from Firestore; and verify the transition plus detached listener/Pusher/worker stack.",
   "canonical_prevention_artifact": [

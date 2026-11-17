@@ -1977,6 +1977,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String get memoryHistory => 'ประวัติ';
 
   @override
+  String get recordingWithYourPhone => 'กำลังบันทึกด้วยโทรศัพท์ของคุณ';
+
+  @override
+  String get wrapUp => 'สรุป';
+
+  @override
+  String get recordingDiscarded => 'ทิ้งการบันทึกแล้ว';
+
+  @override
   String get undo => 'เลิกทำ';
 
   @override
@@ -15389,4 +15398,88 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'คุณใช้ $minutes นาทีของเดือนนี้ครบแล้ว';
+  }
+
+  @override
+  String get freeCapBody => 'Omi ยังบันทึกอยู่ เลือกวิธีถอดเสียงต่อ';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'ถอดเสียงบนคลาวด์ไม่จำกัด';
+
+  @override
+  String get freeCapProAccuracy => 'แม่นยำที่สุด';
+
+  @override
+  String get freeCapProWaiting => 'ถอดเสียงไฟล์บันทึกที่รออยู่';
+
+  @override
+  String get freeCapPhoneSubtitle => 'ฟรี เปิดใช้ไว้จนกว่าคุณจะเปลี่ยนกลับ';
+
+  @override
+  String get transcribingOnThisPhone => 'กำลังถอดเสียงบนโทรศัพท์เครื่องนี้';
+
+  @override
+  String get getPro => 'รับ Pro';
+
+  @override
+  String get unlock => 'ปลดล็อก';
+
+  @override
+  String get transcribeWith => 'ถอดเสียงด้วย';
+
+  @override
+  String get omiCloud => 'คลาวด์ Omi';
+
+  @override
+  String get thisPhone => 'โทรศัพท์เครื่องนี้';
+
+  @override
+  String get onDeviceReady => 'พร้อม';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'เหลือ $left จาก $limit นาที · รีเซ็ต $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'มีนาทีคลาวด์ $minutes นาที';
+  }
+
+  @override
+  String get switchBack => 'เปลี่ยนกลับ';
+
+  @override
+  String get setUpThisPhone => 'ตั้งค่าโทรศัพท์เครื่องนี้';
+
+  @override
+  String get speechRecognition => 'การรู้จำเสียงพูด';
+
+  @override
+  String get audioStaysOnPhone => 'เสียงอยู่ในโทรศัพท์ของคุณ';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'ดาวน์โหลด $size MB';
+  }
+
+  @override
+  String get downloadNow => 'ดาวน์โหลดเลย';
+
+  @override
+  String get onWifiLater => 'ภายหลังผ่าน Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'กำลังเขียนสรุปของคุณ…';
 }

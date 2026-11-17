@@ -2004,6 +2004,15 @@ class AppLocalizationsTl extends AppLocalizations {
   String get memoryHistory => 'Kasaysayan';
 
   @override
+  String get recordingWithYourPhone => 'Nagre-record gamit ang iyong phone';
+
+  @override
+  String get wrapUp => 'Tapusin';
+
+  @override
+  String get recordingDiscarded => 'Itinapon ang recording';
+
+  @override
   String get undo => 'Undo';
 
   @override
@@ -15586,4 +15595,88 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Nagamit mo na ang $minutes minuto ngayong buwan';
+  }
+
+  @override
+  String get freeCapBody => 'Nagre-record pa rin ang Omi. Piliin kung paano magpapatuloy ang transcription.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Walang limitasyong cloud transcription';
+
+  @override
+  String get freeCapProAccuracy => 'Pinakamataas na katumpakan';
+
+  @override
+  String get freeCapProWaiting => 'Itina-transcribe ang mga naghihintay mong recording';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Libre. Mananatiling naka-on hanggang ibalik mo.';
+
+  @override
+  String get transcribingOnThisPhone => 'Nagta-transcribe sa phone na ito';
+
+  @override
+  String get getPro => 'Kumuha ng Pro';
+
+  @override
+  String get unlock => 'I-unlock';
+
+  @override
+  String get transcribeWith => 'Mag-transcribe gamit ang';
+
+  @override
+  String get omiCloud => 'Omi cloud';
+
+  @override
+  String get thisPhone => 'Ang phone na ito';
+
+  @override
+  String get onDeviceReady => 'Handa na';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left sa $limit min ang natitira · magre-reset sa $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes cloud minuto ang available';
+  }
+
+  @override
+  String get switchBack => 'Ibalik';
+
+  @override
+  String get setUpThisPhone => 'I-set up ang phone na ito';
+
+  @override
+  String get speechRecognition => 'Speech recognition';
+
+  @override
+  String get audioStaysOnPhone => 'Nananatili ang audio sa phone mo';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB na download';
+  }
+
+  @override
+  String get downloadNow => 'I-download Ngayon';
+
+  @override
+  String get onWifiLater => 'Mamaya sa Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Isinusulat ang iyong buod…';
 }

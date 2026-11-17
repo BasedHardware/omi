@@ -1988,6 +1988,15 @@ class AppLocalizationsLt extends AppLocalizations {
   String get memoryHistory => 'Istorija';
 
   @override
+  String get recordingWithYourPhone => 'Įrašoma telefonu';
+
+  @override
+  String get wrapUp => 'Užbaigti';
+
+  @override
+  String get recordingDiscarded => 'Įrašas atmestas';
+
+  @override
   String get undo => 'Atšaukti';
 
   @override
@@ -15487,4 +15496,88 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Apdorojimo sąrašas pasikeitė. Peržiūrėkite jį ir bandykite dar kartą.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Išnaudojote šio mėnesio $minutes min.';
+  }
+
+  @override
+  String get freeCapBody => 'Omi vis dar įrašinėja. Pasirinkite, kaip tęsti transkribavimą.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Neribotas transkribavimas debesyje';
+
+  @override
+  String get freeCapProAccuracy => 'Didžiausias tikslumas';
+
+  @override
+  String get freeCapProWaiting => 'Transkribuoja laukiančius įrašus';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Nemokama. Lieka įjungta, kol perjungsite atgal.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transkribuojama šiame telefone';
+
+  @override
+  String get getPro => 'Gauti Pro';
+
+  @override
+  String get unlock => 'Atrakinti';
+
+  @override
+  String get transcribeWith => 'Transkribuoti naudojant';
+
+  @override
+  String get omiCloud => 'Omi debesis';
+
+  @override
+  String get thisPhone => 'Šis telefonas';
+
+  @override
+  String get onDeviceReady => 'Paruošta';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Liko $left iš $limit min. · atsinaujina $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Galima $minutes debesies min.';
+  }
+
+  @override
+  String get switchBack => 'Grįžti';
+
+  @override
+  String get setUpThisPhone => 'Nustatykite šį telefoną';
+
+  @override
+  String get speechRecognition => 'Kalbos atpažinimas';
+
+  @override
+  String get audioStaysOnPhone => 'Garsas lieka jūsų telefone';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB atsisiuntimas';
+  }
+
+  @override
+  String get downloadNow => 'Atsisiųsti dabar';
+
+  @override
+  String get onWifiLater => 'Vėliau per Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Rašoma jūsų santrauka…';
 }

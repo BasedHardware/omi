@@ -1996,6 +1996,15 @@ class AppLocalizationsBg extends AppLocalizations {
   String get memoryHistory => 'История';
 
   @override
+  String get recordingWithYourPhone => 'Записва с телефона ви';
+
+  @override
+  String get wrapUp => 'Приключи';
+
+  @override
+  String get recordingDiscarded => 'Записът е отхвърлен';
+
+  @override
   String get undo => 'Отмени';
 
   @override
@@ -15514,4 +15523,88 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Списъкът за обработка се промени. Прегледайте го и опитайте отново.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Използвахте $minutes минути за този месец';
+  }
+
+  @override
+  String get freeCapBody => 'Omi продължава да записва. Изберете как да продължи транскрипцията.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Неограничена облачна транскрипция';
+
+  @override
+  String get freeCapProAccuracy => 'Най-добра точност';
+
+  @override
+  String get freeCapProWaiting => 'Транскрибира чакащите ви записи';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Безплатно. Остава включено, докато не превключите обратно.';
+
+  @override
+  String get transcribingOnThisPhone => 'Транскрибира се на този телефон';
+
+  @override
+  String get getPro => 'Вземете Pro';
+
+  @override
+  String get unlock => 'Отключване';
+
+  @override
+  String get transcribeWith => 'Транскрибиране чрез';
+
+  @override
+  String get omiCloud => 'Облак на Omi';
+
+  @override
+  String get thisPhone => 'Този телефон';
+
+  @override
+  String get onDeviceReady => 'Готово';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Остават $left от $limit мин · нулиране на $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Налични са $minutes облачни минути';
+  }
+
+  @override
+  String get switchBack => 'Превключване обратно';
+
+  @override
+  String get setUpThisPhone => 'Настройване на този телефон';
+
+  @override
+  String get speechRecognition => 'Разпознаване на реч';
+
+  @override
+  String get audioStaysOnPhone => 'Аудиото остава на телефона ви';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Изтегляне $size МБ';
+  }
+
+  @override
+  String get downloadNow => 'Изтегляне сега';
+
+  @override
+  String get onWifiLater => 'По-късно през Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Пишем вашето резюме…';
 }

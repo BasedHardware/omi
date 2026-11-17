@@ -1995,6 +1995,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String get memoryHistory => 'Geçmiş';
 
   @override
+  String get recordingWithYourPhone => 'Telefonunla kaydediliyor';
+
+  @override
+  String get wrapUp => 'Bitir';
+
+  @override
+  String get recordingDiscarded => 'Kayıt silindi';
+
+  @override
   String get undo => 'Geri Al';
 
   @override
@@ -15474,4 +15483,88 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Bu ayın $minutes dakikasını kullandınız';
+  }
+
+  @override
+  String get freeCapBody => 'Omi kayda devam ediyor. Transkripsiyona nasıl devam edileceğini seçin.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Sınırsız bulut transkripsiyonu';
+
+  @override
+  String get freeCapProAccuracy => 'En iyi doğruluk';
+
+  @override
+  String get freeCapProWaiting => 'Bekleyen kayıtlarınızı yazıya döker';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Ücretsiz. Geri dönene kadar açık kalır.';
+
+  @override
+  String get transcribingOnThisPhone => 'Bu telefonda yazıya dökülüyor';
+
+  @override
+  String get getPro => 'Pro\'ya Geç';
+
+  @override
+  String get unlock => 'Kilidi Aç';
+
+  @override
+  String get transcribeWith => 'Şununla yazıya dök';
+
+  @override
+  String get omiCloud => 'Omi bulutu';
+
+  @override
+  String get thisPhone => 'Bu telefon';
+
+  @override
+  String get onDeviceReady => 'Hazır';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit dk kaldı · $date tarihinde yenilenir';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes bulut dakikası kullanılabilir';
+  }
+
+  @override
+  String get switchBack => 'Geri Dön';
+
+  @override
+  String get setUpThisPhone => 'Bu telefonu ayarlayın';
+
+  @override
+  String get speechRecognition => 'Konuşma tanıma';
+
+  @override
+  String get audioStaysOnPhone => 'Ses telefonunuzda kalır';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB indirme';
+  }
+
+  @override
+  String get downloadNow => 'Şimdi İndir';
+
+  @override
+  String get onWifiLater => 'Sonra Wi-Fi\'da';
+
+  @override
+  String get conversationWritingSummary => 'Özetiniz yazılıyor…';
 }

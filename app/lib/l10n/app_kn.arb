@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "ನಿಮ್ಮ ಫೋನ್‌ನಿಂದ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ",
+    "wrapUp": "ಮುಗಿಸಿ",
+    "recordingDiscarded": "ರೆಕಾರ್ಡಿಂಗ್ ತ್ಯಜಿಸಲಾಗಿದೆ",
     "undo": "ರದ್ದುಗೊಳಿಸಿ",
     "@undo": {
         "description": "Undo button text"
@@ -12213,5 +12216,30 @@
     "monthlySwitchUnavailable": "ಈಗ ಬದಲಾವಣೆ ಲಭ್ಯವಿಲ್ಲ. ಬದಲಿಗೆ ಕಾರ್ಡ್ ನವೀಕರಿಸಿ.",
     "monthlySwitchDoneTitle": "ನೀವು ಈಗ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ",
     "monthlySwitchDoneBody": "ಇಂದು {price} ಪಾವತಿಸಲಾಗಿದೆ. ಪ್ರತಿ ತಿಂಗಳು ನವೀಕರಿಸಲಾಗುತ್ತದೆ.",
-    "processingDeleteScopeChanged": "ಪ್ರಕ್ರಿಯೆಯ ಪಟ್ಟಿ ಬದಲಾಗಿದೆ. ಪಟ್ಟಿಯನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
+    "processingDeleteScopeChanged": "ಪ್ರಕ್ರಿಯೆಯ ಪಟ್ಟಿ ಬದಲಾಗಿದೆ. ಪಟ್ಟಿಯನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "ಈ ತಿಂಗಳ {minutes} ನಿಮಿಷಗಳನ್ನು ಬಳಸಿದ್ದೀರಿ",
+    "freeCapBody": "Omi ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ. ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಷನ್ ಮುಂದುವರಿಸುವ ವಿಧಾನವನ್ನು ಆರಿಸಿ.",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "ಅನಿಯಮಿತ ಕ್ಲೌಡ್ ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಷನ್",
+    "freeCapProAccuracy": "ಅತ್ಯುತ್ತಮ ನಿಖರತೆ",
+    "freeCapProWaiting": "ನಿಮ್ಮ ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡುತ್ತದೆ",
+    "freeCapPhoneSubtitle": "ಉಚಿತ. ನೀವು ಹಿಂದಕ್ಕೆ ಬದಲಿಸುವವರೆಗೆ ಆನ್ ಆಗಿರುತ್ತದೆ.",
+    "transcribingOnThisPhone": "ಈ ಫೋನ್‌ನಲ್ಲಿ ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಆಗುತ್ತಿದೆ",
+    "getPro": "Pro ಪಡೆಯಿರಿ",
+    "unlock": "ಅನ್‌ಲಾಕ್",
+    "transcribeWith": "ಇದರೊಂದಿಗೆ ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಿ",
+    "omiCloud": "Omi ಕ್ಲೌಡ್",
+    "thisPhone": "ಈ ಫೋನ್",
+    "onDeviceReady": "ಸಿದ್ಧ",
+    "cloudMinutesLeft": "{left}/{limit} ನಿಮಿಷ ಉಳಿದಿದೆ · {date} ರಂದು ಮರುಹೊಂದಿಕೆ",
+    "cloudMinutesAvailable": "{minutes} ಕ್ಲೌಡ್ ನಿಮಿಷಗಳು ಲಭ್ಯವಿವೆ",
+    "switchBack": "ಹಿಂದಕ್ಕೆ ಬದಲಿಸಿ",
+    "setUpThisPhone": "ಈ ಫೋನ್ ಹೊಂದಿಸಿ",
+    "speechRecognition": "ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ",
+    "audioStaysOnPhone": "ಆಡಿಯೋ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಉಳಿಯುತ್ತದೆ",
+    "onDeviceModelDownloadSize": "{size} MB ಡೌನ್‌ಲೋಡ್",
+    "downloadNow": "ಈಗ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ",
+    "onWifiLater": "ನಂತರ Wi-Fi ನಲ್ಲಿ",
+    "conversationWritingSummary": "ನಿಮ್ಮ ಸಾರಾಂಶವನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…"
 }

@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-phase-budget-cancellation-kills-shard",
+  "family": "work-bounded-resumable",
   "violated_contract": "A maintenance phase's budget cancellation must end only that phase; it must not escape an Exception-only handler and kill an independent shard's primary work. Overall or discovery budget stops must report incomplete work without fabricating completed seals, and must retain custody gates.",
   "canonical_prevention": "Give the prepass one bounded timer, retain its completed aggregate dispositions on interruption, explicitly assign its shard, recheck the enclosing deadline before sealing, and distinguish cancellation from shutdown and real errors. Prove every partition still reaches sealing under local prepass exhaustion and all custody/lease gates still run.",
   "canonical_prevention_artifact": ["backend/tests/unit/test_record_seal_repair_job_budget.py"],

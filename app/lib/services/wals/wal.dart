@@ -197,6 +197,9 @@ const int liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 /// Build/patch rollback for clock-priority scheduling; never changes stored time.
 const walClockPriorityOff = bool.fromEnvironment('OMI_WAL_CLOCK_PRIORITY_OFF');
 
+/// Restores legacy display totals without changing recording custody.
+const catchUpStaleHandleOff = bool.fromEnvironment('OMI_CATCH_UP_STALE_HANDLE_OFF');
+
 /// Roll back indefinite clock-refusal probes to the ordinary seven-day policy.
 const invalidCaptureTimeRecoveryOff = bool.fromEnvironment('OMI_INVALID_CAPTURE_TIME_RECOVERY_OFF');
 
@@ -838,6 +841,24 @@ class Wal {
 
   bool refusalReported(int nowSeconds) =>
       status == WalStatus.uploadRejected && uploadRejectedAt > 0 && nowSeconds >= uploadRejectedAt + 7 * 86400;
+
+  /// Display-only expiry: an old uploaded handle needs a recent server wait.
+  /// Never retires the WAL or authorizes deleting any audio.
+  int? get pendingWorkExpiresAt => status == WalStatus.uploaded && !catchUpStaleHandleOff
+      ? max(uploadedAt + 86401, jobPendingConfirmedAt + 301)
+      : null;
+
+  bool countsAsPendingWork({int? nowSeconds}) {
+    if (status == WalStatus.uploaded) {
+      final expires = pendingWorkExpiresAt;
+      return expires == null || (nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) < expires;
+    }
+    return status == WalStatus.miss &&
+        !onDeviceOnly &&
+        (syncDisplayState == WalSyncDisplayState.waiting ||
+            syncDisplayState == WalSyncDisplayState.retrying ||
+            syncDisplayState == WalSyncDisplayState.syncing);
+  }
 
   String get id => '${device}_$timerStart';
 

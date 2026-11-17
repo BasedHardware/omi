@@ -102,6 +102,35 @@ def span_contained(donor: dict, target: dict, *, tolerance_seconds: float = 0.0)
     return donor_start >= target_start + tolerance and donor_end <= target_end - tolerance
 
 
+def batch_target_contains(row: dict, incoming: dict) -> bool:
+    """A sealed batch recording cannot own earlier/later sync speech.
+
+    Its recording origin stays pinned for playback and its immutable batch
+    units. Adjacency and a phone's current socket stamp are not containment.
+    Keep a non-contained input standalone rather than invent negative offsets
+    or enlarge a short recording with an earlier chapter. Open recordings have
+    no authoritative end yet, but their start is already pinned.
+    """
+    if row.get('record_lane_owner') != 'batch_live_v1':
+        return True
+    start, end = incoming.get('started_at'), incoming.get('finished_at')
+    lower, upper = row.get('started_at'), row.get('finished_at')
+    if start is None or end is None or lower is None or end < start:
+        return False
+    segments = incoming.get('transcript_segments')
+    if isinstance(segments, list) and segments:
+        if not segment_span_is_exact(incoming):
+            return False
+        speech = segment_span(incoming)
+        if speech is not None:
+            start, end = min(start, speech[0]), max(end, speech[1])
+    if start < lower:
+        return False
+    if row.get('record_audio_closed') is True and (upper is None or end > upper):
+        return False
+    return True
+
+
 def live_overlap_seconds(row: dict, incoming: dict) -> float:
     if not (
         ((row.get('capture_evidence') or {}).get('origin') == 'live' or row.get('sync_live_target'))
@@ -124,6 +153,7 @@ def discoverable_live_overlap(row: dict, incoming: dict) -> bool:
     """
     if (
         not compatible_capture(row, incoming)
+        or row.get('v3_derived')
         or row.get('deleted')
         or row.get('sync_merged_into')
         or row.get('status') not in ('completed', 'in_progress', 'processing')
@@ -141,7 +171,7 @@ def discoverable_live_overlap(row: dict, incoming: dict) -> bool:
 
 
 def _legacy_choose_live_overlap(rows: list[dict], incoming: dict) -> str | None:
-    eligible = [(live_overlap_seconds(row, incoming), row) for row in rows]
+    eligible = [(live_overlap_seconds(row, incoming), row) for row in rows if batch_target_contains(row, incoming)]
     eligible = [(seconds, row) for seconds, row in eligible if seconds > 0]
     if not eligible:
         return None
@@ -168,7 +198,11 @@ def choose_live_overlap(
     legacy = _legacy_choose_live_overlap(rows, incoming)
     if not refactor_modes.shadow_or_serve('CAPTURE_COVERAGE_MODE'):
         return legacy
-    eligible = [(seconds, row) for row in rows if (seconds := _live_binding_score(row, incoming)) > 0]
+    eligible = [
+        (seconds, row)
+        for row in rows
+        if batch_target_contains(row, incoming) and (seconds := _live_binding_score(row, incoming)) > 0
+    ]
     proposed = (
         min(eligible, key=lambda pair: (-pair[0], pair[1]['started_at'], pair[1]['id']))[1]['id'] if eligible else None
     )

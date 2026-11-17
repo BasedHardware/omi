@@ -75,7 +75,10 @@ def test_recovery_queue_provisioning_is_bounded_and_inventory_errors_fail_closed
     step = steps[index]
     # The integration-only profile must leave the existing recovery queue alone;
     # ordinary production deploys retain the same bounded reconciliation below.
-    assert step['if'] == "${{ inputs.integration_only != 'true' && (inputs.runtime_env == 'prod') }}"
+    assert (
+        step['if']
+        == "${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && (inputs.runtime_env == 'prod')) }}"
+    )
     assert index < next(i for i, s in enumerate(steps) if s.get('id') == 'deploy-backend-integration')
     script = (
         step['run']

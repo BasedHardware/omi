@@ -18,6 +18,7 @@ import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
@@ -2099,6 +2100,8 @@ class ConversationProvider extends ChangeNotifier {
     if (convo == null) return false;
     if (convo.isLocked) return false;
     if (mergingConversationIds.contains(conversationId)) return false;
+    // A v3 conversation still in progress: capture is still writing it.
+    if (convo.v3?.tileState == ConversationTileState.live) return false;
 
     return true;
   }

@@ -94,6 +94,8 @@ def enqueue_in_transaction(
     revision fence and late-capture watermark, but never touches queues or
     control shards, so no GPU pull can lease it.
     """
+    if getattr(item, 'source_alias_of', None):
+        raise ValueError('source aliases cannot enter paid queues')
     if route.stt_route != 'provider':
         raise ValueError('only provider routes bypass the GPU ring')
     if item.requires_compute_admission:

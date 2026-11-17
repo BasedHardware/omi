@@ -10,7 +10,14 @@ from google.cloud.firestore_v1 import _helpers
 from database import conversations as db
 from models.conversation_enums import ConversationStatus as Status
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.conversations import lifecycle
+from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.relevance import RelevanceDecision
 from utils.conversations.relevance_rules import RULES_VERSION
+
+# persist_processed_conversation lazily imports speaker_resolution_inputs on its
+# first call; load it at collection so the first case's CPU guard measures the test.
+import utils.conversations.speaker_resolution_inputs  # noqa: E402,F401
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 
 PATH = ('users', 'synthetic', 'conversations', 'capture')
@@ -213,7 +220,15 @@ def test_flag_off_persist_write_golden(store, monkeypatch, existing):
     monkeypatch.setattr(tx, 'set', lambda ref, data, **kwargs: captured.append((ref.path, data, kwargs)))
     store.rows[PATH].update(existing)
     assert persist({'status': 'completed', 'structured': {'title': 'legacy'}})
-    golden = {'id': 'capture', 'status': 'completed', 'structured': {'title': 'legacy'}}
+    changed_at = captured[0][1]['title_changed_at']
+    assert isinstance(changed_at, datetime) and changed_at.tzinfo is not None
+    golden = {
+        'id': 'capture',
+        'status': 'completed',
+        'structured': {'title': 'legacy'},
+        'title_change_reason': 'initial_title',
+        'title_changed_at': changed_at,
+    }
     if existing.get('sync_relevance_user_kept'):
         golden.update(sync_relevance_user_kept=True, discarded=False, sync_relevance='keep')
     assert captured == [(PATH, golden, {'merge': True})]
@@ -267,10 +282,6 @@ def test_user_reprocess_commits_restore_authority_with_completion(store):
 @pytest.mark.parametrize('trigger', ['server_recovery', 'silent_backfill', 'user_reprocess', 'backlog_choice'])
 @pytest.mark.parametrize('restored', [False, True])
 def test_retry_triggers_never_replace_explicit_restore_authority(store, trigger, restored):
-    from utils.conversations.relevance import RelevanceDecision
-    from utils.conversations.processing_trigger import ProcessingTrigger
-    from utils.conversations import lifecycle
-
     store.rows[PATH].update(status='failed', discarded=True)
     decision = RelevanceDecision('keep', 'policy', 'explicit_retry', ProcessingTrigger(trigger)).as_record()
     payload = {'id': 'capture', 'status': 'completed', 'discarded': False, 'relevance_decision': decision}

@@ -941,6 +941,8 @@ public enum OmiAPI {
     public let id: String
     public let playbackStart: Double?
     public let provider: String?
+    public let recordingFileId: String?
+    public let recordingId: String?
     public let sourceFingerprint: String?
     public let startedAt: String?
     public let uid: String
@@ -953,6 +955,8 @@ public enum OmiAPI {
       case id
       case playbackStart = "playback_start"
       case provider
+      case recordingFileId = "recording_file_id"
+      case recordingId = "recording_id"
       case sourceFingerprint = "source_fingerprint"
       case startedAt = "started_at"
       case uid
@@ -967,12 +971,14 @@ public enum OmiAPI {
       id = try c.decode(String.self, forKey: .id)
       playbackStart = try c.decodeIfPresent(Double.self, forKey: .playbackStart)
       provider = try c.decodeIfPresent(String.self, forKey: .provider)
+      recordingFileId = try c.decodeIfPresent(String.self, forKey: .recordingFileId)
+      recordingId = try c.decodeIfPresent(String.self, forKey: .recordingId)
       sourceFingerprint = try c.decodeIfPresent(String.self, forKey: .sourceFingerprint)
       startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
       uid = try c.decode(String.self, forKey: .uid)
     }
 
-    public init(chunkSpans: [ChunkSpan]? = nil, chunkTimestamps: [Double], conversationId: String, duration: Double, id: String, playbackStart: Double? = nil, provider: String? = nil, sourceFingerprint: String? = nil, startedAt: String? = nil, uid: String) {
+    public init(chunkSpans: [ChunkSpan]? = nil, chunkTimestamps: [Double], conversationId: String, duration: Double, id: String, playbackStart: Double? = nil, provider: String? = nil, recordingFileId: String? = nil, recordingId: String? = nil, sourceFingerprint: String? = nil, startedAt: String? = nil, uid: String) {
       self.chunkSpans = chunkSpans
       self.chunkTimestamps = chunkTimestamps
       self.conversationId = conversationId
@@ -980,6 +986,8 @@ public enum OmiAPI {
       self.id = id
       self.playbackStart = playbackStart
       self.provider = provider
+      self.recordingFileId = recordingFileId
+      self.recordingId = recordingId
       self.sourceFingerprint = sourceFingerprint
       self.startedAt = startedAt
       self.uid = uid
@@ -1844,11 +1852,15 @@ public enum OmiAPI {
     public let folderId: String?
     public let geolocation: Geolocation?
     public let geolocationScope: String?
+    public let homeHidden: Bool?
+    public let homeHiddenReason: String?
     public let id: String
     public let imported: Bool?
     public let isCall: Bool?
     public let isLocked: Bool?
+    public let kind: String?
     public let language: String?
+    public let manualEnd: Bool?
     public let meetingDedupSpeechS: Double?
     public let meetingDurationS: Double?
     public let meetingTreatmentEligible: Bool?
@@ -1864,6 +1876,8 @@ public enum OmiAPI {
     public let recordAudioPartial: RecordAudioPartial?
     public let recordedEnd: String?
     public let recordedStart: String?
+    public let recording: Bool?
+    public let recordingPieces: [RecordingPiece]?
     public let screenshotSharingEnabled: Bool?
     public let source: ConversationSource?
     public let speakerResolution: ConversationSpeakers?
@@ -1872,9 +1886,12 @@ public enum OmiAPI {
     public let status: ConversationStatus?
     public let structured: Structured
     public let suggestedSummarizationApps: [String]?
+    public let summaryCoversThrough: String?
     public let summaryRetryable: Bool?
     public let syncContentRevision: Int?
     public let syncRelevance: String?
+    public let tileState: String?
+    public let titleLocked: Bool?
     public let transcriptSegments: [TranscriptSegment]?
     public let transcriptSegmentsCompressed: Bool?
     public let updatedAt: String?
@@ -1914,11 +1931,15 @@ public enum OmiAPI {
       case folderId = "folder_id"
       case geolocation
       case geolocationScope = "geolocation_scope"
+      case homeHidden = "home_hidden"
+      case homeHiddenReason = "home_hidden_reason"
       case id
       case imported
       case isCall = "is_call"
       case isLocked = "is_locked"
+      case kind
       case language
+      case manualEnd = "manual_end"
       case meetingDedupSpeechS = "meeting_dedup_speech_s"
       case meetingDurationS = "meeting_duration_s"
       case meetingTreatmentEligible = "meeting_treatment_eligible"
@@ -1934,6 +1955,8 @@ public enum OmiAPI {
       case recordAudioPartial = "record_audio_partial"
       case recordedEnd = "recorded_end"
       case recordedStart = "recorded_start"
+      case recording
+      case recordingPieces = "recording_pieces"
       case screenshotSharingEnabled = "screenshot_sharing_enabled"
       case source
       case speakerResolution = "speaker_resolution"
@@ -1942,9 +1965,12 @@ public enum OmiAPI {
       case status
       case structured
       case suggestedSummarizationApps = "suggested_summarization_apps"
+      case summaryCoversThrough = "summary_covers_through"
       case summaryRetryable = "summary_retryable"
       case syncContentRevision = "sync_content_revision"
       case syncRelevance = "sync_relevance"
+      case tileState = "tile_state"
+      case titleLocked = "title_locked"
       case transcriptSegments = "transcript_segments"
       case transcriptSegmentsCompressed = "transcript_segments_compressed"
       case updatedAt = "updated_at"
@@ -1986,11 +2012,15 @@ public enum OmiAPI {
       folderId = try c.decodeIfPresent(String.self, forKey: .folderId)
       geolocation = try c.decodeIfPresent(Geolocation.self, forKey: .geolocation)
       geolocationScope = try c.decodeIfPresent(String.self, forKey: .geolocationScope)
+      homeHidden = try c.decodeIfPresent(Bool.self, forKey: .homeHidden)
+      homeHiddenReason = try c.decodeIfPresent(String.self, forKey: .homeHiddenReason)
       id = try c.decode(String.self, forKey: .id)
       imported = try c.decodeIfPresent(Bool.self, forKey: .imported)
       isCall = try c.decodeIfPresent(Bool.self, forKey: .isCall)
       isLocked = try c.decodeIfPresent(Bool.self, forKey: .isLocked)
+      kind = try c.decodeIfPresent(String.self, forKey: .kind)
       language = try c.decodeIfPresent(String.self, forKey: .language)
+      manualEnd = try c.decodeIfPresent(Bool.self, forKey: .manualEnd)
       meetingDedupSpeechS = try c.decodeIfPresent(Double.self, forKey: .meetingDedupSpeechS)
       meetingDurationS = try c.decodeIfPresent(Double.self, forKey: .meetingDurationS)
       meetingTreatmentEligible = try c.decodeIfPresent(Bool.self, forKey: .meetingTreatmentEligible)
@@ -2006,6 +2036,8 @@ public enum OmiAPI {
       recordAudioPartial = try c.decodeIfPresent(RecordAudioPartial.self, forKey: .recordAudioPartial)
       recordedEnd = try c.decodeIfPresent(String.self, forKey: .recordedEnd)
       recordedStart = try c.decodeIfPresent(String.self, forKey: .recordedStart)
+      recording = try c.decodeIfPresent(Bool.self, forKey: .recording)
+      recordingPieces = try c.decodeIfPresent([RecordingPiece].self, forKey: .recordingPieces)
       screenshotSharingEnabled = try c.decodeIfPresent(Bool.self, forKey: .screenshotSharingEnabled)
       source = try c.decodeIfPresent(ConversationSource.self, forKey: .source)
       speakerResolution = try c.decodeIfPresent(ConversationSpeakers.self, forKey: .speakerResolution)
@@ -2014,9 +2046,12 @@ public enum OmiAPI {
       status = try c.decodeIfPresent(ConversationStatus.self, forKey: .status)
       structured = try c.decode(Structured.self, forKey: .structured)
       suggestedSummarizationApps = try c.decodeIfPresent([String].self, forKey: .suggestedSummarizationApps)
+      summaryCoversThrough = try c.decodeIfPresent(String.self, forKey: .summaryCoversThrough)
       summaryRetryable = try c.decodeIfPresent(Bool.self, forKey: .summaryRetryable)
       syncContentRevision = try c.decodeIfPresent(Int.self, forKey: .syncContentRevision)
       syncRelevance = try c.decodeIfPresent(String.self, forKey: .syncRelevance)
+      tileState = try c.decodeIfPresent(String.self, forKey: .tileState)
+      titleLocked = try c.decodeIfPresent(Bool.self, forKey: .titleLocked)
       transcriptSegments = try c.decodeIfPresent([TranscriptSegment].self, forKey: .transcriptSegments)
       transcriptSegmentsCompressed = try c.decodeIfPresent(Bool.self, forKey: .transcriptSegmentsCompressed)
       updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
@@ -2026,7 +2061,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, appsResults: [AppResult]? = nil, arrivalAt: String? = nil, audioFiles: [AudioFile]? = nil, audioTimeline: AudioTimelineProvenance? = nil, calendarEvent: CalendarEventLink? = nil, calendarEventId: String? = nil, callId: String? = nil, callPlatform: String? = nil, captureCoverage: String? = nil, captureGroup: CaptureGroup? = nil, captureTimeTrust: String? = nil, captureTimezone: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, clock: RecordedClock? = nil, contentKind: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, episodeId: String? = nil, excludedSpeakers: [Int]? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, geolocationScope: String? = nil, id: String, imported: Bool? = nil, isCall: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, otherParticipantsLocation: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingDeferred: Bool? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, recordAudioPartial: RecordAudioPartial? = nil, recordedEnd: String? = nil, recordedStart: String? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, speakerResolution: ConversationSpeakers? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, summaryRetryable: Bool? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, userCorrections: [[String: OmiAnyCodable]]? = nil, userOverview: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, arrivalAt: String? = nil, audioFiles: [AudioFile]? = nil, audioTimeline: AudioTimelineProvenance? = nil, calendarEvent: CalendarEventLink? = nil, calendarEventId: String? = nil, callId: String? = nil, callPlatform: String? = nil, captureCoverage: String? = nil, captureGroup: CaptureGroup? = nil, captureTimeTrust: String? = nil, captureTimezone: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, clock: RecordedClock? = nil, contentKind: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, episodeId: String? = nil, excludedSpeakers: [Int]? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, geolocationScope: String? = nil, homeHidden: Bool? = nil, homeHiddenReason: String? = nil, id: String, imported: Bool? = nil, isCall: Bool? = nil, isLocked: Bool? = nil, kind: String? = nil, language: String? = nil, manualEnd: Bool? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, otherParticipantsLocation: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingDeferred: Bool? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, recordAudioPartial: RecordAudioPartial? = nil, recordedEnd: String? = nil, recordedStart: String? = nil, recording: Bool? = nil, recordingPieces: [RecordingPiece]? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, speakerResolution: ConversationSpeakers? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, summaryCoversThrough: String? = nil, summaryRetryable: Bool? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, tileState: String? = nil, titleLocked: Bool? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, userCorrections: [[String: OmiAnyCodable]]? = nil, userOverview: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.arrivalAt = arrivalAt
@@ -2057,11 +2092,15 @@ public enum OmiAPI {
       self.folderId = folderId
       self.geolocation = geolocation
       self.geolocationScope = geolocationScope
+      self.homeHidden = homeHidden
+      self.homeHiddenReason = homeHiddenReason
       self.id = id
       self.imported = imported
       self.isCall = isCall
       self.isLocked = isLocked
+      self.kind = kind
       self.language = language
+      self.manualEnd = manualEnd
       self.meetingDedupSpeechS = meetingDedupSpeechS
       self.meetingDurationS = meetingDurationS
       self.meetingTreatmentEligible = meetingTreatmentEligible
@@ -2077,6 +2116,8 @@ public enum OmiAPI {
       self.recordAudioPartial = recordAudioPartial
       self.recordedEnd = recordedEnd
       self.recordedStart = recordedStart
+      self.recording = recording
+      self.recordingPieces = recordingPieces
       self.screenshotSharingEnabled = screenshotSharingEnabled
       self.source = source
       self.speakerResolution = speakerResolution
@@ -2085,9 +2126,12 @@ public enum OmiAPI {
       self.status = status
       self.structured = structured
       self.suggestedSummarizationApps = suggestedSummarizationApps
+      self.summaryCoversThrough = summaryCoversThrough
       self.summaryRetryable = summaryRetryable
       self.syncContentRevision = syncContentRevision
       self.syncRelevance = syncRelevance
+      self.tileState = tileState
+      self.titleLocked = titleLocked
       self.transcriptSegments = transcriptSegments
       self.transcriptSegmentsCompressed = transcriptSegmentsCompressed
       self.updatedAt = updatedAt
@@ -5160,6 +5204,36 @@ public enum OmiAPI {
       }
       let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
       self = RecordedClock(rawValue: unqualified) ?? ._unknown
+    }
+  }
+
+
+  public struct RecordingPiece: Codable {
+    public let audioFileId: String
+    public let end: Double
+    public let recordingId: String
+    public let start: Double
+
+    private enum CodingKeys: String, CodingKey {
+      case audioFileId = "audio_file_id"
+      case end
+      case recordingId = "recording_id"
+      case start
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      audioFileId = try c.decode(String.self, forKey: .audioFileId)
+      end = try c.decode(Double.self, forKey: .end)
+      recordingId = try c.decode(String.self, forKey: .recordingId)
+      start = try c.decode(Double.self, forKey: .start)
+    }
+
+    public init(audioFileId: String, end: Double, recordingId: String, start: Double) {
+      self.audioFileId = audioFileId
+      self.end = end
+      self.recordingId = recordingId
+      self.start = start
     }
   }
 
@@ -9980,6 +10054,31 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func getLiveConversationV1ConversationsLiveGet(client: OmiApiClient, xOmiAppChannel: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/conversations/live"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let xOmiAppChannel { req.setValue(String(xOmiAppChannel), forHTTPHeaderField: "X-Omi-App-Channel") }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func mergeConversationsV1ConversationsMergePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/merge"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -13534,7 +13633,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func prepareHomeFeedV1HomeFeedPreparePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+  public static func prepareHomeFeedV1HomeFeedPreparePost(client: OmiApiClient, xOmiAppChannel: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/home/feed/prepare"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -13546,6 +13645,7 @@ public enum OmiAPI {
     if let token = client.token {
       req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
     }
+    if let xOmiAppChannel { req.setValue(String(xOmiAppChannel), forHTTPHeaderField: "X-Omi-App-Channel") }
     if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
@@ -14465,6 +14565,37 @@ public enum OmiAPI {
     }
     if let timezone {
       queryItems.append(URLQueryItem(name: "timezone", value: String(timezone)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode([OmiAnyCodable].self, from: data)
+  }
+
+  public static func getDeletedConversationsV1McpConversationsDeletedGet(client: OmiApiClient, deletedSince: String? = nil, limit: Int? = nil, cursor: String? = nil) async throws -> [OmiAnyCodable] {
+    let _path = "/v1/mcp/conversations/deleted"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    if let deletedSince {
+      queryItems.append(URLQueryItem(name: "deleted_since", value: String(deletedSince)))
+    }
+    if let limit {
+      queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -17199,6 +17330,54 @@ public enum OmiAPI {
     if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
     req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func deleteAiProfileV1UsersAiProfileDelete(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Void {
+    let _path = "/v1/users/ai-profile"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "DELETE"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return
+  }
+
+  public static func refreshAiProfileV1UsersAiProfileRefreshPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/users/ai-profile/refresh"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
     let (data, resp) = try await URLSession.shared.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
     guard (200..<300).contains(http.statusCode) else {
@@ -21601,5 +21780,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 550 Swift client methods generated.
+  // Total: 554 Swift client methods generated.
 }

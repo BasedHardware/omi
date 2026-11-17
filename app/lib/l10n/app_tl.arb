@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "Nagre-record gamit ang iyong phone",
+    "wrapUp": "Tapusin",
+    "recordingDiscarded": "Itinapon ang recording",
     "undo": "Undo",
     "@undo": {
         "description": "Undo button text"
@@ -12213,5 +12216,30 @@
     "monthlySwitchUnavailable": "Hindi pa available ang paglipat ngayon. I-update na lang ang card mo.",
     "monthlySwitchDoneTitle": "Buwanan ka na",
     "monthlySwitchDoneBody": "Nabayaran ang {price} ngayon. Nire-renew buwan-buwan.",
-    "processingDeleteScopeChanged": "Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli."
+    "processingDeleteScopeChanged": "Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "Nagamit mo na ang {minutes} minuto ngayong buwan",
+    "freeCapBody": "Nagre-record pa rin ang Omi. Piliin kung paano magpapatuloy ang transcription.",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "Walang limitasyong cloud transcription",
+    "freeCapProAccuracy": "Pinakamataas na katumpakan",
+    "freeCapProWaiting": "Itina-transcribe ang mga naghihintay mong recording",
+    "freeCapPhoneSubtitle": "Libre. Mananatiling naka-on hanggang ibalik mo.",
+    "transcribingOnThisPhone": "Nagta-transcribe sa phone na ito",
+    "getPro": "Kumuha ng Pro",
+    "unlock": "I-unlock",
+    "transcribeWith": "Mag-transcribe gamit ang",
+    "omiCloud": "Omi cloud",
+    "thisPhone": "Ang phone na ito",
+    "onDeviceReady": "Handa na",
+    "cloudMinutesLeft": "{left} sa {limit} min ang natitira · magre-reset sa {date}",
+    "cloudMinutesAvailable": "{minutes} cloud minuto ang available",
+    "switchBack": "Ibalik",
+    "setUpThisPhone": "I-set up ang phone na ito",
+    "speechRecognition": "Speech recognition",
+    "audioStaysOnPhone": "Nananatili ang audio sa phone mo",
+    "onDeviceModelDownloadSize": "{size} MB na download",
+    "downloadNow": "I-download Ngayon",
+    "onWifiLater": "Mamaya sa Wi-Fi",
+    "conversationWritingSummary": "Isinusulat ang iyong buod…"
 }

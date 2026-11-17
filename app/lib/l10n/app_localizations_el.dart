@@ -2008,6 +2008,15 @@ class AppLocalizationsEl extends AppLocalizations {
   String get memoryHistory => 'Ιστορικό';
 
   @override
+  String get recordingWithYourPhone => 'Εγγραφή με το τηλέφωνό σας';
+
+  @override
+  String get wrapUp => 'Ολοκλήρωση';
+
+  @override
+  String get recordingDiscarded => 'Η εγγραφή απορρίφθηκε';
+
+  @override
   String get undo => 'Αναίρεση';
 
   @override
@@ -15565,4 +15574,88 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Η λίστα επεξεργασίας άλλαξε. Ελέγξτε τη και δοκιμάστε ξανά.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Χρησιμοποιήσατε τα $minutes λεπτά αυτού του μήνα';
+  }
+
+  @override
+  String get freeCapBody => 'Το Omi συνεχίζει την εγγραφή. Επιλέξτε πώς θα συνεχιστεί η μεταγραφή.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Απεριόριστη μεταγραφή στο cloud';
+
+  @override
+  String get freeCapProAccuracy => 'Κορυφαία ακρίβεια';
+
+  @override
+  String get freeCapProWaiting => 'Μεταγράφει τις εγγραφές σας σε αναμονή';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Δωρεάν. Παραμένει ενεργό μέχρι να επιστρέψετε.';
+
+  @override
+  String get transcribingOnThisPhone => 'Μεταγραφή σε αυτό το τηλέφωνο';
+
+  @override
+  String get getPro => 'Αποκτήστε Pro';
+
+  @override
+  String get unlock => 'Ξεκλείδωμα';
+
+  @override
+  String get transcribeWith => 'Μεταγραφή με';
+
+  @override
+  String get omiCloud => 'Cloud του Omi';
+
+  @override
+  String get thisPhone => 'Αυτό το τηλέφωνο';
+
+  @override
+  String get onDeviceReady => 'Έτοιμο';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Απομένουν $left από $limit λεπτά · ανανέωση $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Διαθέσιμα $minutes λεπτά cloud';
+  }
+
+  @override
+  String get switchBack => 'Επιστροφή';
+
+  @override
+  String get setUpThisPhone => 'Ρύθμιση αυτού του τηλεφώνου';
+
+  @override
+  String get speechRecognition => 'Αναγνώριση ομιλίας';
+
+  @override
+  String get audioStaysOnPhone => 'Ο ήχος μένει στο τηλέφωνό σας';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Λήψη $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Λήψη τώρα';
+
+  @override
+  String get onWifiLater => 'Αργότερα μέσω Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Γράφεται η σύνοψή σας…';
 }

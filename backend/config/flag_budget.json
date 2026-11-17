@@ -6,6 +6,7 @@
     "diarizer/batch_pipeline*.py",
     "config/batch_pipeline*.py",
     "config/batch_language_recovery.py",
+    "config/listen_reconnect.py",
     "utils/sync/**/*.py",
     "utils/stt/**/*.py",
     "parakeet/language_gate.py",
@@ -25,6 +26,16 @@
   "seed_review_by": "2026-11-15",
   "budget": 161,
   "names": {
+    "BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED": {
+      "owner": "Goal: Margin / Sol",
+      "review_by": "2026-12-12",
+      "reason": "David R9 explicitly requires a reversible silence read optimization; SCA-1757"
+    },
+    "MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS": {
+      "owner": "quality-lead / q12-mcp-paging",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED": {
       "owner": "Goal: Pipeline",
       "review_by": "2026-12-14"
@@ -76,6 +87,30 @@
       "owner": "SCA-2015",
       "review_by": "2026-12-14",
       "registry": "config/feature-flags.yaml"
+    },
+    "BATCH_PIPELINE_BACKLOG_RELEASE_MODE": {
+      "owner": "quality-12h/Q12-BB",
+      "review_by": "2026-12-16"
+    },
+    "BATCH_PIPELINE_BACKLOG_RELEASE_OWNER_KEYS": {
+      "owner": "quality-12h/Q12-BB",
+      "review_by": "2026-12-16"
+    },
+    "BATCH_PIPELINE_BACKLOG_RELEASE_RATE_PER_HOUR": {
+      "owner": "quality-12h/Q12-BB",
+      "review_by": "2026-12-16"
+    },
+    "BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS": {
+      "owner": "quality-12h/Q12-BB",
+      "review_by": "2026-12-16"
+    },
+    "BATCH_PIPELINE_BACKLOG_RELEASE_STATE": {
+      "owner": "quality-12h/Q12-BB",
+      "review_by": "2026-12-16"
+    },
+    "BATCH_PIPELINE_BACKLOG_RELEASE_WRITER": {
+      "owner": "quality-12h/Q12-BB",
+      "review_by": "2026-12-16"
     },
     "BATCH_PIPELINE_CONTENTION_RETRY_ENABLED": {
       "owner": "batch record lane / rollout lead",
@@ -262,10 +297,6 @@
       "owner": "provider-stt drain",
       "review_by": "2026-12-12"
     },
-    "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {
-      "owner": "omi-pipeline",
-      "review_by": "2026-11-30"
-    },
     "BATCH_PIPELINE_PUBLISH_CONCURRENCY": {
       "seeded": "2026-10-25"
     },
@@ -438,6 +469,11 @@
       "owner": "pinecone2 / batch rollout lead",
       "review_by": "2026-12-05"
     },
+    "BATCH_SOURCE_REUSE_ENABLED": {
+      "owner": "quality-lead",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED": {
       "owner": "omi-pipeline",
       "review_by": "2026-12-08",
@@ -472,6 +508,10 @@
       "review_by": "2026-11-29"
     },
     "BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS": {
+      "owner": "overflow / two-lane lead",
+      "review_by": "2026-11-29"
+    },
+    "BATCH_VENDOR_OVERFLOW_PRIORITIES": {
       "owner": "overflow / two-lane lead",
       "review_by": "2026-11-29"
     },
@@ -1177,6 +1217,24 @@
     },
     "VAD_GATE_MODE": {
       "seeded": "2026-10-25"
+    },
+    "BATCH_ORIGINAL_IDENTITY_EVIDENCE_ENABLED": {
+      "owner": "q12-speaker-evidence",
+      "review_by": "2026-11-30",
+      "registry": "config/feature-flags.yaml"
+    },
+    "LISTEN_BATCH_RECONNECT_ENABLED": {
+      "owner": "capture-quality / Release",
+      "review_by": "2026-11-20"
+    },
+    "LISTEN_BATCH_RECONNECT_GRACE_SECONDS": {
+      "owner": "capture-quality / Release",
+      "review_by": "2026-11-30"
+    },
+    "EPISODE_LIVE_MEMBER_CLOSE_ENABLED": {
+      "owner": "quality-lead",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
     }
   },
   "retired_history": "docs/history/retired-pipeline-flags.json",
@@ -1211,6 +1269,10 @@
     },
     "MENTOR_PIPELINE": {
       "on": "2026-10-26",
+      "replaced_by": null
+    },
+    "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {
+      "on": "2026-11-16",
       "replaced_by": null
     }
   }

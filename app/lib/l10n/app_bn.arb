@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "আপনার ফোনে রেকর্ড হচ্ছে",
+    "wrapUp": "শেষ করুন",
+    "recordingDiscarded": "রেকর্ডিং বাতিল হয়েছে",
     "undo": "পূর্বাবস্থা",
     "@undo": {
         "description": "Undo button text"
@@ -12213,5 +12216,30 @@
     "monthlySwitchUnavailable": "এই মুহূর্তে পরিবর্তন করা যাচ্ছে না। এর বদলে কার্ডটি আপডেট করুন।",
     "monthlySwitchDoneTitle": "আপনি এখন মাসিক প্ল্যানে",
     "monthlySwitchDoneBody": "আজ {price} পরিশোধ হয়েছে। প্রতি মাসে নবায়ন হয়।",
-    "processingDeleteScopeChanged": "প্রক্রিয়াধীন তালিকা বদলেছে। তালিকাটি দেখে আবার চেষ্টা করুন।"
+    "processingDeleteScopeChanged": "প্রক্রিয়াধীন তালিকা বদলেছে। তালিকাটি দেখে আবার চেষ্টা করুন।",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "এই মাসের {minutes} মিনিট ব্যবহার হয়ে গেছে",
+    "freeCapBody": "Omi এখনও রেকর্ড করছে। কীভাবে ট্রান্সক্রিপশন চালিয়ে যাবেন বেছে নিন।",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "সীমাহীন ক্লাউড ট্রান্সক্রিপশন",
+    "freeCapProAccuracy": "সেরা নির্ভুলতা",
+    "freeCapProWaiting": "আপনার অপেক্ষমাণ রেকর্ডিং ট্রান্সক্রাইব করে",
+    "freeCapPhoneSubtitle": "বিনামূল্যে। ফিরে না যাওয়া পর্যন্ত চালু থাকবে।",
+    "transcribingOnThisPhone": "এই ফোনে ট্রান্সক্রাইব হচ্ছে",
+    "getPro": "Pro নিন",
+    "unlock": "আনলক",
+    "transcribeWith": "যেটি দিয়ে ট্রান্সক্রাইব হবে",
+    "omiCloud": "Omi ক্লাউড",
+    "thisPhone": "এই ফোন",
+    "onDeviceReady": "প্রস্তুত",
+    "cloudMinutesLeft": "{left}/{limit} মিনিট বাকি · {date} রিসেট হবে",
+    "cloudMinutesAvailable": "{minutes} ক্লাউড মিনিট উপলব্ধ",
+    "switchBack": "ফিরে যান",
+    "setUpThisPhone": "এই ফোন সেট আপ করুন",
+    "speechRecognition": "স্পিচ রিকগনিশন",
+    "audioStaysOnPhone": "অডিও আপনার ফোনেই থাকে",
+    "onDeviceModelDownloadSize": "{size} MB ডাউনলোড",
+    "downloadNow": "এখনই ডাউনলোড করুন",
+    "onWifiLater": "পরে Wi-Fi-তে",
+    "conversationWritingSummary": "আপনার সারাংশ লেখা হচ্ছে…"
 }

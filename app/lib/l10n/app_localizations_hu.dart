@@ -2006,6 +2006,15 @@ class AppLocalizationsHu extends AppLocalizations {
   String get memoryHistory => 'Előzmények';
 
   @override
+  String get recordingWithYourPhone => 'Felvétel a telefonnal';
+
+  @override
+  String get wrapUp => 'Lezárás';
+
+  @override
+  String get recordingDiscarded => 'Felvétel elvetve';
+
+  @override
   String get undo => 'Visszavonás';
 
   @override
@@ -15522,4 +15531,88 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'A feldolgozási lista megváltozott. Ellenőrizd, és próbáld újra.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Felhasználtad a havi $minutes percet';
+  }
+
+  @override
+  String get freeCapBody => 'Az Omi továbbra is rögzít. Válaszd ki, hogyan folytatódjon az átírás.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Korlátlan felhőalapú átírás';
+
+  @override
+  String get freeCapProAccuracy => 'Legjobb pontosság';
+
+  @override
+  String get freeCapProWaiting => 'Átírja a várakozó felvételeidet';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Ingyenes. Bekapcsolva marad, amíg vissza nem váltasz.';
+
+  @override
+  String get transcribingOnThisPhone => 'Átírás ezen a telefonon';
+
+  @override
+  String get getPro => 'Pro beszerzése';
+
+  @override
+  String get unlock => 'Feloldás';
+
+  @override
+  String get transcribeWith => 'Átírás ezzel';
+
+  @override
+  String get omiCloud => 'Omi felhő';
+
+  @override
+  String get thisPhone => 'Ez a telefon';
+
+  @override
+  String get onDeviceReady => 'Kész';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit perc maradt · újraindul: $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes felhőperc érhető el';
+  }
+
+  @override
+  String get switchBack => 'Visszaváltás';
+
+  @override
+  String get setUpThisPhone => 'Telefon beállítása';
+
+  @override
+  String get speechRecognition => 'Beszédfelismerés';
+
+  @override
+  String get audioStaysOnPhone => 'A hang a telefonodon marad';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB letöltés';
+  }
+
+  @override
+  String get downloadNow => 'Letöltés most';
+
+  @override
+  String get onWifiLater => 'Később Wi-Fin';
+
+  @override
+  String get conversationWritingSummary => 'Összefoglaló írása…';
 }

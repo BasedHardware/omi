@@ -1986,6 +1986,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get memoryHistory => 'History';
 
   @override
+  String get recordingWithYourPhone => 'Recording with your phone';
+
+  @override
+  String get wrapUp => 'Wrap Up';
+
+  @override
+  String get recordingDiscarded => 'Recording discarded';
+
+  @override
   String get undo => 'Undo';
 
   @override
@@ -15447,4 +15456,88 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Processing changed. Review the list and try again.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'You\'ve used this month\'s $minutes minutes';
+  }
+
+  @override
+  String get freeCapBody => 'Omi is still recording. Choose how to keep transcribing.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Unlimited cloud transcription';
+
+  @override
+  String get freeCapProAccuracy => 'Best accuracy';
+
+  @override
+  String get freeCapProWaiting => 'Transcribes your waiting recordings';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Free. Stays on until you switch back.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transcribing on this phone';
+
+  @override
+  String get getPro => 'Get Pro';
+
+  @override
+  String get unlock => 'Unlock';
+
+  @override
+  String get transcribeWith => 'Transcribe with';
+
+  @override
+  String get omiCloud => 'Omi cloud';
+
+  @override
+  String get thisPhone => 'This phone';
+
+  @override
+  String get onDeviceReady => 'Ready';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left of $limit min left · resets $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes cloud minutes available';
+  }
+
+  @override
+  String get switchBack => 'Switch Back';
+
+  @override
+  String get setUpThisPhone => 'Set up this phone';
+
+  @override
+  String get speechRecognition => 'Speech recognition';
+
+  @override
+  String get audioStaysOnPhone => 'Audio stays on your phone';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB download';
+  }
+
+  @override
+  String get downloadNow => 'Download Now';
+
+  @override
+  String get onWifiLater => 'On Wi-Fi Later';
+
+  @override
+  String get conversationWritingSummary => 'Writing your summary…';
 }

@@ -1991,6 +1991,15 @@ class AppLocalizationsCs extends AppLocalizations {
   String get memoryHistory => 'Historie';
 
   @override
+  String get recordingWithYourPhone => 'Nahrává se telefonem';
+
+  @override
+  String get wrapUp => 'Uzavřít';
+
+  @override
+  String get recordingDiscarded => 'Nahrávka zahozena';
+
+  @override
   String get undo => 'Vrátit zpět';
 
   @override
@@ -15463,4 +15472,88 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Seznam zpracování se změnil. Zkontrolujte jej a zkuste to znovu.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Využili jste letošních měsíčních $minutes minut';
+  }
+
+  @override
+  String get freeCapBody => 'Omi stále nahrává. Vyberte, jak pokračovat v přepisu.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Neomezený přepis v cloudu';
+
+  @override
+  String get freeCapProAccuracy => 'Nejvyšší přesnost';
+
+  @override
+  String get freeCapProWaiting => 'Přepíše vaše čekající nahrávky';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Zdarma. Zůstane zapnuté, dokud se nepřepnete zpět.';
+
+  @override
+  String get transcribingOnThisPhone => 'Přepis v tomto telefonu';
+
+  @override
+  String get getPro => 'Získat Pro';
+
+  @override
+  String get unlock => 'Odemknout';
+
+  @override
+  String get transcribeWith => 'Přepisovat pomocí';
+
+  @override
+  String get omiCloud => 'Cloud Omi';
+
+  @override
+  String get thisPhone => 'Tento telefon';
+
+  @override
+  String get onDeviceReady => 'Připraveno';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Zbývá $left z $limit min · obnoví se $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'K dispozici $minutes cloudových minut';
+  }
+
+  @override
+  String get switchBack => 'Přepnout zpět';
+
+  @override
+  String get setUpThisPhone => 'Nastavit tento telefon';
+
+  @override
+  String get speechRecognition => 'Rozpoznávání řeči';
+
+  @override
+  String get audioStaysOnPhone => 'Zvuk zůstává v telefonu';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Stažení $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Stáhnout nyní';
+
+  @override
+  String get onWifiLater => 'Později přes Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Píšeme vaše shrnutí…';
 }
