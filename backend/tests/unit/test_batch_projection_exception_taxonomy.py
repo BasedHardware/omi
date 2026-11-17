@@ -59,6 +59,8 @@ TAXONOMY = {
     'ProjectionReplay': 'replay (receipt is progress; resume obligations)',
     'ProjectionPredecessorPending': 'predecessor wait (ordered chain, observable)',
     'ProjectionBlocked': 'blocked wait (claim busy / evidence / fences; observable, not dispositioned)',
+    'ProjectionSourceMarkerMissing': 'wait 900 seconds from first refusal, then fenced quarantine_held',
+    'ProjectionHoldNotApplicable': 'quiet no-op for stale protocol-hold scheduling hints',
     'StepDeadline': 'resume next walk step (multipart budget)',
     # Payload-contract violations quarantine-hold via payload_contract_violation;
     # Firestore contention-shaped ValueError stays retryable. A tampered

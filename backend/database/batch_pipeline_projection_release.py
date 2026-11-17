@@ -20,7 +20,9 @@ from typing import Any, TypeGuard
 
 from google.cloud import firestore
 
-from database.batch_pipeline_projection_protocol import normalized_binding
+from database.batch_pipeline_projection_protocol import normalized_binding, source_reader_marked
+from database.batch_pipeline_projection_protocol_hold import PROTOCOL_HOLD_REASON
+from database.batch_pipeline_source_reuse import receipt_id as source_receipt_id
 from database.batch_pipeline_projection_finish import projection_finish_state_fields
 from database.batch_pipeline_projection import assignment_held_without_recovery, OPERATOR_INTENTS
 from database.batch_pipeline_shadow_hook import mirror_refresh
@@ -225,6 +227,28 @@ class ProjectionReleaseStore:
                 return False
             binding = normalized_binding(job['projection_binding']) if job.get('projection_binding') else None
             receipt = entry.get('projection') or {}
+            protocol_hold = entry.get('projection_protocol_hold_reason') == PROTOCOL_HOLD_REASON
+            # Administrative hold/release markers cannot prove reader support
+            # for the original source protocol; do not cycle a refused row.
+            if protocol_hold and not source_reader_marked(entry, job):
+                return False
+            if protocol_hold:
+                source_key = job.get('source_reuse_key')
+                if not source_key:
+                    return False
+                source = (
+                    self.store.ref('projections', source_receipt_id(source_key)).get(transaction=transaction).to_dict()
+                    or {}
+                )
+                # Another canonical upload may have claimed this range while
+                # this result was held. Preserve the hold until ordinary source
+                # ownership permits assignment; expiry alone is not that proof.
+                if source and (
+                    source.get('owner_id') != job.get('owner_id')
+                    or source.get('privacy_generation') != job.get('privacy_generation')
+                    or source.get('segment_id') != segment_id
+                ):
+                    return False
             # Multipart summaries can remain ambiguous holds after a privacy
             # refusal. Fence every receipt before either expiry path or release.
             if projection_restorable_cap_expiry_enabled() and (
@@ -337,7 +361,7 @@ class ProjectionReleaseStore:
                 expired_at = entry.get('held_expired_at')
                 if not expired or not finite_timestamp(expired_at) or expired_at >= dead_before:
                     return False
-            restorable = self._target_restorable(transaction, binding)
+            restorable = protocol_hold or self._target_restorable(transaction, binding)
             if not restorable:
                 if self._expire_assignment(transaction, segment_id, entry, now, expired, attempts) == 'expired':
                     return 'expired'
@@ -356,6 +380,7 @@ class ProjectionReleaseStore:
                 'projection': {},
                 'projection_blocked_since': None,
                 'projection_block_type': None,
+                **({'projection_protocol_hold_reason': None} if protocol_hold else {}),
             }
             if 'held_deadline_at' in entry and (expired or batch_held_dead_letter_enabled()):
                 reset['held_deadline_at'] = None
