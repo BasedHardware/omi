@@ -310,7 +310,7 @@ def test_legal_hold_between_group_units_preserves_all_obligations(monkeypatch, w
     def place_hold(client, namespace, table, key, **kwargs):
         rows = page(client, namespace, table, key, **kwargs)
         if table == 'artifacts' and not placed:
-            legal_holds.place_legal_hold(world.uid, issuer='synthetic', active=True)
+            legal_holds.place_legal_hold(world.uid, issuer='admin', active=True)
             placed.append(True)
         return rows
 
@@ -319,7 +319,7 @@ def test_legal_hold_between_group_units_preserves_all_obligations(monkeypatch, w
     for job in (leader, follower):
         assert world.client.collection(jobs.COLLECTION).document(job).get().exists
         assert jobs.segment_records(job, purge.NAMESPACES[0], firestore_client=world.client)
-    legal_holds.place_legal_hold(world.uid, issuer='synthetic', active=False)
+    legal_holds.place_legal_hold(world.uid, issuer='admin', active=False)
     assert _run(world, leader, generation) == 'purged'
     _assert_erased(world, cids)
 

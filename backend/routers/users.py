@@ -145,8 +145,7 @@ from utils.cloud_tasks import (
     verify_account_deletion_cloud_tasks_oidc,
     verify_conversation_batch_purge_cloud_tasks_oidc,
 )
-from database import batch_pipeline_conversation_purge_scans
-from database import conversation_batch_purge_jobs
+from database import batch_pipeline_conversation_purge_scans, conversation_batch_purge_jobs
 from utils.executors import db_executor, erasure_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
