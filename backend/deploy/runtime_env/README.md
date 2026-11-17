@@ -115,10 +115,12 @@ establishes no realized savings.
 
 Batch worker control-loop settings are declared in the worker chart (including
 explicit prod values): candidate fanout 16, parallel admission true, idle max 10s,
-and `firestoreReadLevers: '{}'` outside prod. Prod uses backend-integration's
-complete lever map except `usage_month_cache:0` and `usage_month_total:0`,
-including `bpp_decision_cache:100` and `batch_timeliness_leader:100`, and enables held-poll
-skip; its kill switch is setting `heldPollSkipEnabled` to false.
+and `firestoreReadLevers: '{}'` outside prod. Prod keeps integration's non-privacy map except `usage_month_cache:0` and
+`usage_month_total:0`. The API-only O2b admission below does not move the worker:
+its source retains `bpp_decision_cache:100`, `privacy_checks_shadow:10` and
+`bpp_owner_memo_enforce:0`, plus `batch_timeliness_leader:100` and held-poll skip.
+The offline parity check requires exactly that named role split and still rejects
+other divergence. Its kill switch is setting `heldPollSkipEnabled` to false.
 Projection finish backoff remains at its code default, off (SCA-2024).
 The three control knobs
 also have matching base declarations on serving batch hosts; pusher does not run
@@ -173,3 +175,35 @@ whose `firestore_read_lever_policy` contains only `lever_expiry`. The offline gu
 extracts each historical train claim and compares it with every base declaration.
 It rejects missing or ambiguous claims, agreement with a stale UNRESOLVED note,
 and a missing note while the sources disagree.
+
+## API owner-memo source carry (O2b, 2026-11-17)
+
+The margin lead's stage-2 order and Release's completed 5xx qualification/apply
+admit owner-memo enforcement only on prod Cloud Run `backend`, `backend-sync`
+and `backend-integration`. Their canonical `prod.overlay.yaml` maps now carry
+`bpp_owner_memo_enforce:100`, `privacy_checks_shadow:0`, `bpp_decision_cache:0`,
+`privacy_negative_lookup_cache:0` and `privacy_ttl60:0`. All unrelated entries
+are preserved. Integration cadence/classification remain separately ops-owned.
+
+Backfill is excluded: its existing O4 decision-cache OFF state is now durable
+with enforcement 0 and shadow 10. The worker chart, GKE, jobs, desktop and dev
+source remain unchanged. This supersedes the older shadow/negative-cache values
+in the historical SCA-2173 paragraph above, without widening its monthly readers.
+Only the six obsolete API shadow-10 expiry entries are removed; no other expiry
+is renewed and expiry never authorizes a rollout.
+
+These complete literals are source replacements, not live-map patches. Edit the
+prod overlay and run both canonical generators; never run the one-time source
+splitter or hand-edit the derived runtime/read-lever manifests. The normal
+renderer must preserve each literal, and Release reads back each actual receiver.
+The integration canary can preserve an authenticated live map instead of the
+source map, so its output is not proof that source values were deployed.
+
+Runtime rollback remains Release's current-map change to enforcement 0/shadow 10
+or the existing `ops_kill_switches/privacy_decision_cache` kill path. Reconcile
+source before a later train after an inverse; a source revert alone neither
+changes serving config nor restores a deleted predecessor. With shadow 0 there
+is no mismatch stream: the lead's guard is a manual-trip backstop, while existing
+per-decision transactional token checks remain the privacy fence. Source checks
+do not prove guard acceptance, writer coverage, a clean post-overlap hour,
+causal savings or settled/all-in billing. The existing lead retains measurement.

@@ -1407,19 +1407,19 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         # on backend-integration, backend-sync and backend — monthly readers on
         # (usage_month_cache/total=100), pending head 100, timeliness leader 100 (fleet
         # sampler election and capped backlog counts on).
-        # SCA-2190 comparison preparation pins all four callers to shadow=10,
-        # negative-cache=0, TTL60=0 and explicit owner enforcement=0.
+        # O2b admits only the three API roles; backfill remains excluded (O4).
+        # The full literal preserves the existing monthly/lifecycle scope.
         # backend-sync-backfill keeps its other ec191a row 3 pins.
         if enabled:
             wanted.update(
-                bpp_decision_cache=100,
-                privacy_checks_shadow=10,
+                bpp_decision_cache=0,
+                privacy_checks_shadow=0,
                 privacy_negative_lookup_cache=0,
                 privacy_ttl60=0,
-                bpp_owner_memo_enforce=0,
+                bpp_owner_memo_enforce=100,
             )
             if name == 'cloud_run/backend-sync-backfill':
-                wanted.update(batch_timeliness_leader=0)
+                wanted.update(batch_timeliness_leader=0, bpp_owner_memo_enforce=0, privacy_checks_shadow=10)
             else:
                 wanted.update(
                     usage_month_cache=100,
