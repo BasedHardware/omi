@@ -269,3 +269,87 @@ def test_placeholder_title_beside_real_notes_is_a_finished_row_not_a_transcripti
     wire = transcribing_hold.project(home_step.project(row))
     assert wire['structured'] == notes and wire['status'] == 'completed'
     assert home_step.classify(capture(status='processing', structured=notes)) == home_step.WRITING_NOTES
+
+
+@pytest.mark.parametrize(
+    'structured,protected',
+    [
+        ({'title': FALLBACK}, False),
+        ({'title': 'Discussion 3'}, False),
+        ({'title': 'Transcribing…'}, False),
+        ({'title': ''}, False),
+        ({'title': 'Pilot budget'}, True),
+        ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, True),
+        ({'title': FALLBACK, 'overview': 'The transcript is unavailable.'}, True),
+        # A gist is content the minimum would drop, so it protects the row.
+        ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, True),
+        ({'title': FALLBACK, 'participants': [{'name': 'Alex'}]}, False),
+        ({'title': FALLBACK, 'insights': [{'text': 'The budget is tight.'}]}, False),
+        ({'title': FALLBACK, 'meeting_type': 'meeting'}, False),
+        ({'title': FALLBACK, 'salience': 'highlight'}, False),
+    ],
+)
+def test_protected_content_does_not_count_a_placeholder_as_a_title(structured, protected):
+    """Recovery may replace a row that only carries the fallback label, never a real title."""
+    from utils.conversations.recovery import structured_has_protected_content
+
+    assert structured_has_protected_content(structured) is protected
+    assert structured_has_protected_content(structured, user_title='My chat') is True
+
+
+@pytest.mark.parametrize(
+    'structured,replaceable',
+    [
+        ({'title': FALLBACK}, True),
+        ({'title': 'Discussion 3'}, True),
+        ({'title': 'Transcribing…'}, True),
+        ({'title': ''}, True),
+        ({'title': 'Recording · 3:00 PM', 'title_provenance': 'server_minimum'}, True),
+        ({'title': 'Pilot budget'}, False),
+        ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, False),
+        ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, False),
+        ({'title': FALLBACK, 'sections': [{'heading': '', 'body_markdown': 'Approval is due Friday.'}]}, False),
+        ({'title': FALLBACK, 'action_items': [{'description': 'Send the budget'}]}, False),
+        # Enrichment-only fields are not part of the protected set: a row that
+        # carries only those is still replaceable.
+        ({'title': FALLBACK, 'participants': [{'name': 'Alex'}]}, True),
+        ({'title': FALLBACK, 'insights': [{'text': 'The budget is tight.'}]}, True),
+        ({'title': FALLBACK, 'meeting_type': 'meeting'}, True),
+        ({'title': FALLBACK, 'salience': 'highlight'}, True),
+        ({'title': FALLBACK, 'category': 'business'}, True),
+        ({'title': FALLBACK, 'emoji': '🚀'}, True),
+    ],
+)
+def test_stored_structure_is_replaceable_only_without_a_real_title_or_notes(structured, replaceable):
+    """The recovery guard and the post-enrichment eligibility share this one rule."""
+    from utils.conversations.recovery import stored_structure_is_replaceable
+
+    assert stored_structure_is_replaceable(structured) is replaceable
+
+
+def test_stored_structure_is_replaceable_reads_sections_on_the_model():
+    """Both call sites pass a Structured model, not a dict; sections must still count."""
+    from models.structured import Structured
+    from utils.conversations.recovery import stored_structure_is_replaceable
+
+    with_sections = Structured(title=FALLBACK, sections=[{'heading': 'Plan', 'body_markdown': 'Ship it Friday.'}])
+    assert stored_structure_is_replaceable(with_sections) is False
+    without_sections = Structured(title=FALLBACK)
+    assert stored_structure_is_replaceable(without_sections) is True
+
+
+@pytest.mark.parametrize(
+    'structured,would_lose',
+    [
+        ({'title': FALLBACK}, False),
+        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, True),
+        ({'title': 'Pilot budget'}, True),
+        ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, True),
+    ],
+)
+def test_recovery_discard_refuses_anything_the_minimum_would_keep(structured, would_lose):
+    """The discard commit writes the empty discard structure, so it must not erase notes."""
+    from utils.conversations.recovery import recovery_discard_would_lose_content
+
+    assert recovery_discard_would_lose_content(structured) is would_lose
+    assert recovery_discard_would_lose_content(structured, user_title='My chat') is True

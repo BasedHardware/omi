@@ -338,6 +338,7 @@ def test_structured_has_protected_content_boundaries():
     assert structured_has_protected_content({'title': 'A title'}) is True
     assert structured_has_protected_content({'overview': 'notes'}) is True
     assert structured_has_protected_content({'sections': [{'title': 'x'}]}) is True
+    assert structured_has_protected_content({'gist': 'Pilot budget approval'}) is True
     assert structured_has_protected_content({'action_items': [{'description': 'd'}]}) is True
     assert structured_has_protected_content({'events': [{'title': 'e'}]}) is True
     assert structured_has_protected_content({}, user_title='Renamed') is True

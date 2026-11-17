@@ -2,7 +2,7 @@
 
 Narrower than the typed refusal it replaces: only a kept, decoded, non-empty plain
 conversation whose stored structure is replaceable. Every other case keeps the
-refusal, so rich or titled stored content is never overwritten.
+refusal, so contentful or titled stored content is never overwritten.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from utils.conversations.processing_trigger import ProcessingTrigger, is_recover
 from utils.conversations.recovery import (
     recovery_empty_structure_minimum_enabled,
     recovery_transcript_word_count,
+    stored_structure_is_replaceable,
     structured_is_rich,
 )
 from utils.conversations.relevance import content_free_rule, final_relevance
@@ -67,10 +68,7 @@ def _eligible(
     if conversation.photos or has_explicit_reminder(conversation.transcript_segments):
         return False
     stored = conversation.structured
-    stored_title = (getattr(stored, 'title', '') or '').strip()
-    return not structured_is_rich(stored) and (
-        not stored_title or getattr(stored, 'title_provenance', None) == 'server_minimum'
-    )
+    return stored_structure_is_replaceable(stored)
 
 
 def apply_empty_structure_minimum(

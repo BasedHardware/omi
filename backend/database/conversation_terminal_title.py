@@ -96,9 +96,11 @@ def _title_update(
     structured = conversation.get('structured')
     fields = dict(structured) if isinstance(structured, Mapping) else {'title': '', 'overview': ''}
     title = fields.get('title')
-    if conversations_db.effective_user_title(conversation.get('user_title')) is None and not (
-        isinstance(title, str) and title.strip()
-    ):
+    # A blank title always gets the deterministic one: there is nothing to keep.
+    # A placeholder label ("Discussion notes") is not a title either (2026-11-16
+    # incident), but beside real notes it keeps its notes and its headline.
+    untitled = (not isinstance(title, str) or not title.strip()) or not structured_has_protected_content(fields)
+    if conversations_db.effective_user_title(conversation.get('user_title')) is None and untitled:
         started_at = conversation.get('started_at')
         if not isinstance(started_at, datetime):
             started_at = conversation.get('created_at')

@@ -1596,7 +1596,7 @@ def persist_processing_result_with_lifecycle(
         if write_data.get('discarded') is True and recovery_discard_payload(write_data):
             from utils.conversations.recovery import (
                 RecoveryStructureUnavailableError,
-                structured_has_protected_content,
+                recovery_discard_would_lose_content,
             )
 
             try:
@@ -1614,7 +1614,7 @@ def persist_processing_result_with_lifecycle(
             # restore. Refuse before writing any verdict/content: the existing
             # typed-minimum terminal path preserves a visible row and selfheal
             # reports dead_letter rather than a contradictory completed discard.
-            if existing.get('sync_relevance_user_kept') or structured_has_protected_content(
+            if existing.get('sync_relevance_user_kept') or recovery_discard_would_lose_content(
                 existing.get('structured'), existing.get('user_title')
             ):
                 raise RecoveryStructureUnavailableError('server recovery discard lost to protected content')
