@@ -7,6 +7,12 @@ The roster is operational attestation, not inferred from advertisements: an old
 binary cannot advertise. The owner must inventory every serving drainer AND
 completion writer, including worker images, before publishing the roster. No
 producer may publish/renew it. Unknown, expired or incomplete evidence uses 60s.
+
+Read budget: default-60 offers add zero capability reads. An extended offer
+reads one roster and at most 64 source advertisements (65 point reads, no
+query); quota saturation exits before these reads. Advertisement costs one
+point read and at most one write per process/namespace/release, then is cached.
+Include transaction retries and these reads in total intake cost qualification.
 """
 
 import math

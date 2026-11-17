@@ -142,3 +142,11 @@ def test_worker_actual_health_registry_exposes_both_collectors():
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_sync_default_registry_serves_the_created_and_latency_families():
+    from utils.metrics import metrics_response
+
+    response = metrics_response()
+    assert b'omi_batch_pipeline_created_units_total' in response.body
+    assert b'omi_batch_pipeline_upload_to_transcript_seconds_bucket' in response.body
