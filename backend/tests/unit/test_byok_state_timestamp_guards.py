@@ -112,7 +112,7 @@ def test_validated_byok_keys_guards_none_and_timestamps():
         },
     }
 
-    with patch('utils.byok.get_cached_byok_state', return_value=state_payload), patch.object(byok_util.logger, 'warning') as mock_warn:
+    with patch.object(byok_util, 'get_cached_byok_state', return_value=state_payload), patch.object(byok_util.logger, 'warning') as mock_warn:
         validated, err = byok_util._validated_byok_keys('u1', {'anthropic': key_val})
         assert err is None
         assert validated == {'anthropic': key_val}
@@ -129,13 +129,13 @@ def test_validated_byok_keys_guards_none_and_timestamps():
         'last_seen_at': recent_naive,
         'fingerprints': None,
     }
-    with patch('utils.byok.get_cached_byok_state', return_value=state_none_fps):
+    with patch.object(byok_util, 'get_cached_byok_state', return_value=state_none_fps):
         validated, err = byok_util._validated_byok_keys('u1', {'anthropic': key_val})
         assert err is None
         assert validated == {}
 
     # 3. Cached state itself is None or empty
-    with patch('utils.byok.get_cached_byok_state', return_value=None):
+    with patch.object(byok_util, 'get_cached_byok_state', return_value=None):
         validated, err = byok_util._validated_byok_keys('u1', {'anthropic': key_val})
         assert err is None
         assert validated == {}

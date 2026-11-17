@@ -237,10 +237,22 @@ class BYOKMiddleware(BaseHTTPMiddleware):
 
 
 def _coerce_utc_datetime(value: Any) -> datetime | None:
-    """Coerce a datetime or ISO timestamp string to UTC using database.users helper."""
-    import database.users as users_db
+    """Coerce a datetime or ISO timestamp string to a timezone-aware UTC datetime."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    else:
+        return None
 
-    return users_db._coerce_utc_datetime(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _validated_byok_keys(uid: str, request_keys: Dict[str, str]) -> tuple[Dict[str, str], Optional[str]]:
