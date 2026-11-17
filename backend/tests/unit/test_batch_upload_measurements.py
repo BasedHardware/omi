@@ -24,8 +24,6 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore
     ],
 )
 def test_effective_allowance_plan_without_usage_reads(monkeypatch, plan, status, expected):
-    from utils.stt import allowance_watch
-
     sub = SimpleNamespace(plan=plan, status=status)
     users = SimpleNamespace(get_user_valid_subscription=Mock(return_value=sub))
     policy = SimpleNamespace(
@@ -34,15 +32,13 @@ def test_effective_allowance_plan_without_usage_reads(monkeypatch, plan, status,
         is_paid_plan=lambda p: p == 'plus',
         transcription_allowance_seconds=lambda _: 1200,
     )
-    monkeypatch.setattr(allowance_watch, '_policy', lambda: (users, policy))
+    monkeypatch.setattr(upload_entitlement, 'subscription_policy', lambda: (users, policy))
     assert upload_entitlement.classify('synthetic') == expected
     users.get_user_valid_subscription.assert_called_once_with('synthetic', provision=False)
 
 
 def test_entitlement_failure_stays_unknown(monkeypatch):
-    from utils.stt import allowance_watch
-
-    monkeypatch.setattr(allowance_watch, '_policy', Mock(side_effect=RuntimeError('unavailable')))
+    monkeypatch.setattr(upload_entitlement, 'subscription_policy', Mock(side_effect=RuntimeError('unavailable')))
     assert upload_entitlement.classify('synthetic') == 'unknown'
 
 

@@ -643,9 +643,7 @@ async def accept_upload(
         user, target = _coalescing_language(user, target, _coalescing_group)
         from utils.batch_pipeline import upload_metrics, upload_entitlement
 
-        intake_context = dict(intake_context or {})
-        if _coalescing_group is None:
-            intake_context['upload_entitlement'] = await run_blocking(db_executor, upload_entitlement.classify, uid)
+        intake_context = await upload_entitlement.prepare_context(uid, intake_context, _coalescing_group)
         # Privacy authorization already loaded this row. Rollback may drain a
         # native owner here without adding an ownership-discovery read to dark
         # uploads, or accidentally admitting a second GPU job.
@@ -1079,10 +1077,10 @@ async def accept_upload(
                 'repair_lineage': lineage_record(intake_context),
                 'repair_languages': repair_languages,
                 **upload_metrics.clock_fields(
-                    (intake_context or {}).get('upload_arrived_at'),
-                    (intake_context or {}).get('upload_entitlement'),
+                    intake_context.get('upload_arrived_at'),
+                    intake_context.get('upload_entitlement'),
                 ),
-                'upload_entitlement': upload_metrics.bounded_class((intake_context or {}).get('upload_entitlement')),
+                'upload_entitlement': upload_metrics.bounded_class(intake_context.get('upload_entitlement')),
                 # Funded period the owner's choice was made in (cap-hold re-entry); projection
                 # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
                 **({'usage_period': usage_period} if usage_period else {}),

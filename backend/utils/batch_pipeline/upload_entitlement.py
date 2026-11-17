@@ -3,6 +3,22 @@
 import math
 
 
+def subscription_policy():
+    from database import users
+    from utils import subscription
+
+    return users, subscription
+
+
+async def prepare_context(uid, context, group):
+    from utils.executors import db_executor, run_blocking
+
+    context = dict(context or {})
+    if group is None:
+        context['upload_entitlement'] = await run_blocking(db_executor, classify, uid)
+    return context
+
+
 def classify(uid):
     """Same effective plan/reviewer/probe rules as allowance, without usage reads.
 
@@ -11,9 +27,7 @@ def classify(uid):
     Never infer free from a lookup error, an exempt user, or an unknown plan.
     """
     try:
-        from utils.stt.allowance_watch import _policy
-
-        users, policy = _policy()
+        users, policy = subscription_policy()
         if not uid or policy.is_marketplace_reviewer(uid) or uid == policy.RELEASE_PROBE_UID:
             return 'unknown'
         subscription = users.get_user_valid_subscription(uid, provision=False)

@@ -266,7 +266,7 @@ def admit(
     outcome = store.run(commit)
     from utils.batch_pipeline.upload_metrics import CREATED, bounded_class
 
-    created_units = outcome.pop('_created_units', 0)
+    created_units = int(outcome.pop('_created_units', 0) or 0)
     if created_units:
         CREATED.labels(bounded_class((intake or {}).get('upload_entitlement'))).inc(created_units)
     policy_id = str(outcome.pop('_policy_id', policy.policy_id))
