@@ -57,6 +57,90 @@ def recording_input(uid, snapshot):
     return {**raw, 'id': snapshot.id, '_v3_revision': snapshot.update_time, '_v3_unreadable': True}
 
 
+def speech_end(row):
+    """Late text on a completed recording appends segments without moving finished_at."""
+    end = row.get('finished_at') or row['started_at']
+    for segment in row.get('transcript_segments') or []:
+        try:
+            end = max(end, row['started_at'] + timedelta(seconds=float(segment.get('end') or 0)))
+        except (TypeError, ValueError):
+            continue
+    return end
+
+
+def adoptable(uid, ids, *, firestore_client=None):
+    """Derived rows that already own a planned id but were outside the loaded closure.
+
+    Only live derived rows qualify: a deleted or tombstoned target keeps raising, so a rebuild can
+    never resurrect a window the user deleted.
+    """
+    client = firestore_client or get_firestore_client()
+    coll = user_conversations(client, uid)
+    found = {}
+    for cid in ids:
+        snapshot = coll.document(cid).get()
+        raw = snapshot.to_dict() or {} if snapshot.exists else {}
+        if not raw.get('v3_derived') or raw.get('deleted') or raw.get('recording'):
+            continue
+        tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(cid).get()
+        if tombstone.exists:
+            continue
+        row = decode_row(uid, snapshot)
+        if row:
+            found[cid] = row
+    return found
+
+
+def save_outline(uid, token, fingerprint, entries, *, firestore_client=None):
+    """Keep a paid outline even when this pass's projection commit later conflicts."""
+    client = firestore_client or get_firestore_client()
+    ref = leases.lease_ref(client, uid, 'builder')
+
+    @firestore.transactional
+    def save(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        if row.get('token') != token or row.get('until', datetime.min.replace(tzinfo=timezone.utc)) <= datetime.now(
+            timezone.utc
+        ):
+            raise Conflict('lease_lost')
+        cache = json.loads(decrypt(row['outline_cache'], uid)) if row.get('outline_cache') else []
+        cache = [c for c in cache if c.get('fingerprint') != fingerprint]
+        cache.append({'fingerprint': fingerprint, 'entries': entries})
+        tx.update(ref, {'outline_cache': encrypt(json.dumps(cache[-128:], default=str), uid)})
+
+    save(client.transaction())
+
+
+BLOCKED_BACKOFF_MAX = timedelta(hours=1)
+
+
+def record_blocked(uid, token, reason, *, firestore_client=None):
+    """Deterministic conflicts back off per owner instead of retrying through the shared queue.
+
+    Fenced by the builder token: a stale pass must not park an owner after a successor committed.
+    """
+    client = firestore_client or get_firestore_client()
+    ref = leases.lease_ref(client, uid, 'builder')
+
+    @firestore.transactional
+    def park(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        now = datetime.now(timezone.utc)
+        if row.get('token') != token or row.get('until', datetime.min.replace(tzinfo=timezone.utc)) <= now:
+            return False
+        count = int(row.get('v3_blocked_count') or 0) + 1
+        delay = min(BLOCKED_BACKOFF_MAX, timedelta(minutes=5) * (2 ** min(count - 1, 6)))
+        tx.update(ref, {'v3_blocked_count': count, 'v3_blocked_reason': reason, 'v3_backoff_until': now + delay})
+        return True
+
+    return park(client.transaction())
+
+
+def backoff_until(uid, *, firestore_client=None):
+    client = firestore_client or get_firestore_client()
+    return (leases.lease_ref(client, uid, 'builder').get().to_dict() or {}).get('v3_backoff_until')
+
+
 def load(uid, *, conversation_id=None, firestore_client=None):
     client = firestore_client or get_firestore_client()
     if account_deletion_blocks_user_work(uid):
@@ -109,7 +193,9 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         if opened:
             existing[opened['id']] = opened
     queried = set()
-    for _round in range(4):
+    # Follow linked recordings until the closure converges. Each round adds at least one recording and
+    # derived rows stay bounded by LIMIT; a fixed hop depth failed the same owner on every retry.
+    for _round in range(LIMIT + 1):
         ids = {rid for row in existing.values() for rid in row.get('v3_recording_ids') or []}
         ids.update(
             p['recording_id']
@@ -132,7 +218,7 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         intervals = []
         for row in sorted(fresh, key=lambda r: r['started_at']):
             left = row['started_at'] - timedelta(minutes=20)
-            right = (row.get('finished_at') or row['started_at']) + timedelta(minutes=20)
+            right = min(speech_end(row), datetime.now(timezone.utc) + timedelta(minutes=5)) + timedelta(minutes=20)
             if intervals and left <= intervals[-1][1]:
                 intervals[-1] = (intervals[-1][0], max(intervals[-1][1], right))
             else:
@@ -280,6 +366,7 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
         tx.update(
             held,
             {
+                **({'v3_blocked_count': 0, 'v3_backoff_until': None, 'v3_blocked_reason': None} if final else {}),
                 'outline_cache': encrypted_cache,
                 'open_id': (
                     open_ids[0]
