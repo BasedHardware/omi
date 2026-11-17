@@ -12,6 +12,9 @@ import time
 
 from prometheus_client import Counter, Gauge, REGISTRY
 
+from database.batch_pipeline_store import FirestoreStore
+from database.jobstore.dual_store import DualStore
+
 WINDOW_SECONDS = 600
 REGISTERS = 64
 NAMESPACES = frozenset({'batch_pipeline_dev', 'batch_pipeline_prod'})
@@ -133,14 +136,10 @@ def observe_page(namespace: str, rows: list[str], mode: str) -> None:
 
 def observer_for_store(store):
     """Observe direct Firestore or its known mirror-only wrapper; exclude index/PG discovery."""
-    from database.batch_pipeline_store import FirestoreStore
-
     if isinstance(store, FirestoreStore):
         return lambda rows, mode: observe_page(store.namespace, rows, mode)
     # DualStore delegates all serving reads to its primary. IndexStore does not
     # subclass it and is deliberately excluded: its discovery may come from PG.
-    from database.jobstore.dual_store import DualStore
-
     if type(store) is DualStore and isinstance(store.primary, FirestoreStore):
         return lambda rows, mode: observe_page(store.primary.namespace, rows, mode)
     return None
