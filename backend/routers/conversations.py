@@ -1589,6 +1589,13 @@ def delete_conversation(
     http_request: Request = None,  # type: ignore[assignment]
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    # A tombstone plus an absent primary row proves this request is already satisfied.
+    # Leave any existing erasure obligation to its runner; never re-arm it on a retry.
+    if (
+        conversation_tombstones.is_deleted(uid, conversation_id)
+        and conversations_db.get_conversation_raw_snapshot(uid, conversation_id, field_paths=['id']) is None
+    ):
+        return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'already_deleted'})
     db_client = getattr(db_client_module, 'db', None) if cascade else None
     memory_service = MemoryService(db_client=db_client) if cascade else None
     # Acquire before recording delete intent, so a delete that can neither run nor be
@@ -1621,9 +1628,10 @@ def delete_conversation(
                     raise
                 return _accept_conversation_delete(uid, conversation_id, http_request)
             held.enter_context(deferred_batch_purges(uid))
-            return _delete_conversation_under_gate(
+            _delete_conversation_under_gate(
                 conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client
             )
+            return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'tombstoned'})
     except RuntimeError as error:
         if type(error).__name__ not in {
             'DestructiveGateTakeover',
@@ -1660,7 +1668,7 @@ def _gate_busy_with_same_account_delete(error: BaseException, uid: str, db_clien
         return False
 
 
-def _accept_conversation_delete(uid: str, conversation_id: str, http_request: Request) -> None:
+def _accept_conversation_delete(uid: str, conversation_id: str, http_request: Request) -> Response:
     # Hide + tombstone + owe the cascade in one commit; the obligation runner erases it.
     conversation_tombstones.accept_deletion(uid, conversation_id)
     # Mode change, not a failure: the user's delete is done; derived-data erasure is deferred.
@@ -1674,6 +1682,7 @@ def _accept_conversation_delete(uid: str, conversation_id: str, http_request: Re
     )
     record_product_event('conversation_deleted', request=http_request)
     # 204, no body: released mobile clients gate delete success on exactly 204.
+    return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'accepted_deferred'})
 
 
 class _DeferredCleanup:
