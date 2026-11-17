@@ -16,7 +16,7 @@ KEY = ('batch_pipeline_dev_results', 'head')
 
 
 def _store(state='pending', **row):
-    client = StrictFirestore({KEY: {'projection_state': state, **row}})
+    client = StrictFirestore({KEY: {'projection_state': state, **row}}, require_begun=True)
     return client, ProjectionStore(SimpleNamespace(client=client, namespace='batch_pipeline_dev'))
 
 
@@ -28,6 +28,19 @@ def test_stamp_lands_once_per_episode_through_a_real_transaction():
     assert row[projection.PROJECTION_HEAD_BLOCK_TYPE] == 'SyncAssignmentConflict'
     assert store.note_head_blocked('head', 2000.0, 'TimeoutError') is False
     assert row[projection.PROJECTION_HEAD_BLOCKED_SINCE] == 1000.0
+
+
+def test_an_undecorated_callable_fails_as_the_sdk_does():
+    """The pre-fix shape: ``run`` hands a plain callable an unbegun transaction."""
+    import pytest
+
+    client, store = _store()
+
+    def plain(transaction):
+        return store.ref('results', 'head').get(transaction=transaction).to_dict()
+
+    with pytest.raises(ValueError, match='Transaction not in progress'):
+        store.run(plain)
 
 
 def test_stamp_never_touches_a_row_that_left_the_assignment_states():
@@ -66,9 +79,7 @@ def test_projector_never_runs_store_transactions_itself():
     assert direct == [], f'store.run called from utils/batch_pipeline/projection.py lines {direct}'
 
 
-def test_old_backfill_head_awaiting_a_live_target_holds_and_frees_the_chain(monkeypatch):
-    """A live target listen never created must not wedge an owner whose head is
-    an hours-old backfill capture: the generic poison-head rule holds it."""
+def _live_target_chain(monkeypatch, fail_first_n):
     from tests.unit.test_batch_pipeline_owner_chain_projection import (
         BURST,
         ResultLog,
@@ -76,16 +87,48 @@ def test_old_backfill_head_awaiting_a_live_target_holds_and_frees_the_chain(monk
         patch_conversation_assignment,
         projector_for,
     )
-    from utils.batch_pipeline.scheduler import owner_key
     from utils.sync.assignment_errors import SyncAssignmentConflictReason
 
-    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_DRAIN_LIVE_TARGET_BACKOFF_ENABLED', 'true')
     log = ResultLog()
     ids = [f'lt-{n}' for n in range(3)]
     for sid in ids:
+        # ResultLog stamps capture_at from its clock (1, 2, 3) with a 1 s duration.
         log.commit(BURST, 'lt', sid, [sid], fresh_capture=False, outcome='success')
-    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.LIVE_TARGET_NOT_PERSISTED, fail_first_n=1)
-    projector = projector_for(log, lambda item, uri: dict(SUCCESS_PAYLOAD))
+    patch_conversation_assignment(
+        monkeypatch, SyncAssignmentConflictReason.LIVE_TARGET_NOT_PERSISTED, fail_first_n=fail_first_n
+    )
+    return log, ids, projector_for(log, lambda item, uri: dict(SUCCESS_PAYLOAD))
+
+
+def test_old_backfill_head_awaiting_a_live_target_holds_on_the_age_gate(monkeypatch):
+    """An awaiting-writer head captured over 6 h ago holds on first failure."""
+    from tests.unit.test_batch_pipeline_owner_chain_projection import BURST
+    from utils.batch_pipeline.projection_hold_policy import AWAITING_WRITER_AGE_SECONDS
+    from utils.batch_pipeline.scheduler import owner_key
+
+    log, ids, projector = _live_target_chain(monkeypatch, fail_first_n=1)
+    projector.clock = lambda: 10 + AWAITING_WRITER_AGE_SECONDS
+    projector.project_owner(BURST)
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.projection_watermark(owner_key(BURST)) == ids[-1]
+
+
+def test_recent_head_awaiting_a_live_target_is_stamped_then_held_after_the_bound(monkeypatch):
+    """The path this PR repairs: a recent awaiting-writer head waits, is stamped
+    on its first failure, and the 24 h bound later holds it and frees the chain."""
+    from tests.unit.test_batch_pipeline_owner_chain_projection import BURST
+    from utils.batch_pipeline.projection import PROJECTION_HEAD_BLOCKED_SINCE, PROJECTION_HEAD_RETRY_SECONDS
+    from utils.batch_pipeline.scheduler import owner_key
+
+    log, ids, projector = _live_target_chain(monkeypatch, fail_first_n=2)
+    now = {'t': 100.0}
+    projector.clock = lambda: now['t']
+    projector.project_owner(BURST)
+    head = log.results[ids[0]]
+    assert head['projection_state'] == 'pending'
+    assert head[PROJECTION_HEAD_BLOCKED_SINCE] == 100.0
+    assert log.projection_watermark(owner_key(BURST)) != ids[-1]
+    now['t'] = 100.0 + PROJECTION_HEAD_RETRY_SECONDS + 1
     projector.project_owner(BURST)
     assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
     assert log.projection_watermark(owner_key(BURST)) == ids[-1]

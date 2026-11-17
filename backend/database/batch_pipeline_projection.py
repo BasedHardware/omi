@@ -51,6 +51,8 @@ from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.processing_hold import MAX_HOLD_SECONDS
 from utils.sync import capture_end, processing_hold
 from database.batch_pipeline_projection_protocol import (
+    PROJECTION_HEAD_BLOCK_TYPE,
+    PROJECTION_HEAD_BLOCKED_SINCE,
     ProjectionBlocked as ProjectionBlocked,
     ProjectionReplay as ProjectionReplay,
     normalized_binding,
@@ -328,7 +330,6 @@ class ProjectionStore:
         ``ValueError('Transaction not in progress')`` and the 24 h head bound
         (``projection_blocked_since``) never started.
         """
-        from utils.batch_pipeline.projection import PROJECTION_HEAD_BLOCKED_SINCE, PROJECTION_HEAD_BLOCK_TYPE
 
         @firestore.transactional
         def commit(transaction):

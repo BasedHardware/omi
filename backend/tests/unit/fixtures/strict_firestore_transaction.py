@@ -317,8 +317,11 @@ class StrictFirestoreIdQuery:
 
 
 class StrictFirestoreTransaction:
-    def __init__(self, database: StrictFirestore, *, allow_reads_after_writes: bool = False):
+    def __init__(
+        self, database: StrictFirestore, *, allow_reads_after_writes: bool = False, require_begun: bool = False
+    ):
         self._database = database
+        self._require_begun = require_begun
         self._allow_reads_after_writes = allow_reads_after_writes
         self.lock = database.lock
         self.creates: list[tuple[tuple[str, ...], dict[str, Any]]] = []
@@ -350,6 +353,9 @@ class StrictFirestoreTransaction:
             raise ReadAfterWriteError('Firestore transactions must complete all reads before the first write')
 
     def _assert_reference_belongs(self, ref: StrictFirestoreDocument) -> None:
+        # The SDK refuses an unbegun transaction; only @firestore.transactional begins one.
+        if self._require_begun and self._id is None:
+            raise ValueError('Transaction not in progress, cannot be used in API requests.')
         if ref._database is not self._database:
             raise ForeignTransactionError('Firestore transaction and document reference must belong to the same store')
 
@@ -428,6 +434,8 @@ class StrictFirestore:
     ``allow_reads_after_writes`` is an explicit, greppable opt-out for tests
     that intentionally do not exercise Firestore transaction semantics. It
     defaults to ``False`` and must not be used by production-boundary tests.
+    ``require_begun`` rejects an unbegun transaction as the SDK does, for tests
+    that drive a full ``run`` path rather than an inner transaction body.
     """
 
     def __init__(
@@ -435,8 +443,10 @@ class StrictFirestore:
         rows: dict[tuple[str, ...], dict[str, Any]] | None = None,
         *,
         allow_reads_after_writes: bool = False,
+        require_begun: bool = False,
     ):
         self.rows = deepcopy(rows or {})
+        self._require_begun = require_begun
         self.lock = RLock()
         self._allow_reads_after_writes = allow_reads_after_writes
         self.transactions: list[StrictFirestoreTransaction] = []
@@ -451,7 +461,9 @@ class StrictFirestore:
         return StrictFirestoreDocument(self, segments)
 
     def transaction(self, max_attempts: int | None = None) -> StrictFirestoreTransaction:
-        transaction = StrictFirestoreTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
+        transaction = StrictFirestoreTransaction(
+            self, allow_reads_after_writes=self._allow_reads_after_writes, require_begun=self._require_begun
+        )
         if max_attempts is not None:
             transaction._max_attempts = max_attempts
         self.transactions.append(transaction)

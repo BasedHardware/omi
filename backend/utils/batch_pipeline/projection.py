@@ -35,6 +35,8 @@ from config.record_latency import recent_native_record
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
+from database.batch_pipeline_projection_protocol import PROJECTION_HEAD_BLOCK_TYPE as PROJECTION_HEAD_BLOCK_TYPE
+from database.batch_pipeline_projection_protocol import PROJECTION_HEAD_BLOCKED_SINCE
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
@@ -176,11 +178,6 @@ def projection_block_reason(error: BaseException) -> str:
 # once a head has failed for this long it takes the held disposition so the
 # chain can advance (audio retained; a reviewed redrive owns the unit).
 PROJECTION_HEAD_RETRY_SECONDS = 24 * 3600.0
-
-# Result-row fields stamping a bounded-retry head's first failure. Written
-# once per failure episode; the release redrive clears them with the receipt.
-PROJECTION_HEAD_BLOCKED_SINCE = 'projection_blocked_since'
-PROJECTION_HEAD_BLOCK_TYPE = 'projection_block_type'
 
 
 def projection_exception_transient(error: BaseException) -> bool:

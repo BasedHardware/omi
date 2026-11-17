@@ -162,6 +162,9 @@ def merge_ready(tx, job, now):
         source_reuse_version=1,
         projection_redriven_at=now,
         projection_state='pending',
+        # A redriven slot starts a new head-wait episode, as the release reset does.
+        projection_blocked_since=None,
+        projection_block_type=None,
     )
     entry.pop('source_alias_version', None)
     job.update(state='committed', merge_pending=False)

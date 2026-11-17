@@ -29,6 +29,11 @@ def normalized_binding(raw: dict[str, Any]) -> ProjectionBinding:
 
 _SOURCE_MARKERS = ('source_reuse_version', 'source_alias_version')
 
+# Result-row fields stamping a bounded-retry head's first failure. Written
+# once per failure episode; every re-pending path clears them.
+PROJECTION_HEAD_BLOCKED_SINCE = 'projection_blocked_since'
+PROJECTION_HEAD_BLOCK_TYPE = 'projection_block_type'
+
 
 def source_reader_marked(entry: dict[str, Any], job: dict[str, Any]) -> bool:
     """Whether a protocol-2 result row is a source-reuse row this reader may project.
