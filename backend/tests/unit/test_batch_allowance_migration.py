@@ -5,7 +5,7 @@ fixture; real commit/rollback/retry behavior is covered by the emulator suite.
 """
 
 from collections import Counter
-from concurrent.futures import Future
+from concurrent.futures import Future, ThreadPoolExecutor
 from copy import deepcopy
 from threading import Barrier, Event, Lock, Thread
 from types import SimpleNamespace
@@ -51,6 +51,12 @@ class Page:
             snapshot.reference = self.store.client.collection(collection).document(key)
             rows.append(snapshot)
         return iter(rows[: self.size])
+
+
+@pytest.fixture
+def pool():
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        yield executor
 
 
 @pytest.fixture
@@ -100,7 +106,7 @@ def test_default_order_and_checkpoint_cursor(h, monkeypatch):
     assert h.client.rows[h.marker]['after'] is None
 
 
-def test_concurrent_owners_serialize_through_commit_and_checkpoint_waits(h, monkeypatch):
+def test_concurrent_owners_serialize_through_commit_and_checkpoint_waits(pool, h, monkeypatch):
     for key, owner in [('a', 'one'), ('b', 'two'), ('c', 'one'), ('d', 'two')]:
         h.seed(key, owner)
     first_rows = Barrier(2, timeout=5)
@@ -134,15 +140,16 @@ def test_concurrent_owners_serialize_through_commit_and_checkpoint_waits(h, monk
                     active[owner[0]] -= 1
 
     monkeypatch.setattr(h.store, 'run', run)
-    report = migration.apply_page(h.store, 10, size=4, concurrency=2)
+    report = migration.apply_page(h.store, 10, size=4, executor=pool, concurrency=2)
     assert report == {'examined': 4, 'parked': 4, 'fenced': 0, 'complete': False}
+    assert pool.submit(lambda: 'still owned by caller').result(timeout=1) == 'still owned by caller'
     assert seen.index('a') < seen.index('c') and seen.index('b') < seen.index('d')
     assert h.client.rows[h.marker]['after'] == 'd'
     for owner in ('one', 'two'):
         assert h.client.rows['batch_pipeline_dev_allowance_holds', owner]['held_count'] == 2
 
 
-def test_first_error_stops_new_rows_drains_inflight_and_never_checkpoints(h, monkeypatch):
+def test_first_error_stops_new_rows_drains_inflight_and_never_checkpoints(pool, h, monkeypatch):
     for key in ('a', 'b', 'c', 'd'):
         h.seed(key, key)
     entered = Barrier(2, timeout=5)
@@ -167,7 +174,7 @@ def test_first_error_stops_new_rows_drains_inflight_and_never_checkpoints(h, mon
     def apply():
         try:
             with pytest.raises(RuntimeError, match='synthetic failure'):
-                migration.apply_page(h.store, 10, concurrency=2)
+                migration.apply_page(h.store, 10, executor=pool, concurrency=2)
             finished.set_result(None)
         except BaseException as error:
             finished.set_exception(error)
@@ -186,11 +193,11 @@ def test_first_error_stops_new_rows_drains_inflight_and_never_checkpoints(h, mon
     assert h.marker not in h.client.rows
 
 
-def test_fenced_rows_still_report_and_advance(h, monkeypatch):
+def test_fenced_rows_still_report_and_advance(pool, h, monkeypatch):
     h.seed('a', 'one')
     h.seed('b', 'two')
     h.client.rows['account_deletions', 'one'] = {'wipe_status': 'pending'}
-    assert migration.apply_page(h.store, 10, concurrency=2) == {
+    assert migration.apply_page(h.store, 10, executor=pool, concurrency=2) == {
         'examined': 2,
         'parked': 1,
         'fenced': 1,
@@ -200,25 +207,25 @@ def test_fenced_rows_still_report_and_advance(h, monkeypatch):
     assert ('batch_pipeline_dev_allowance_holds', 'one') not in h.client.rows
 
 
-def test_replaying_already_committed_rows_is_a_noop(h):
+def test_replaying_already_committed_rows_is_a_noop(pool, h):
     h.seed('a')
     h.seed('b')
     snapshots = list(Page(h.store).limit(100).select(['owner_key']).stream())
     limiter = migration.RowRateLimiter()
-    assert migration._apply_rows(h.store, snapshots, 10, 2, limiter) == (2, 0)
+    assert migration._apply_rows(h.store, snapshots, 10, 2, limiter, pool) == (2, 0)
     before = deepcopy(h.client.rows)
-    assert migration._apply_rows(h.store, snapshots, 11, 2, limiter) == (0, 0)
+    assert migration._apply_rows(h.store, snapshots, 11, 2, limiter, pool) == (0, 0)
     assert h.client.rows == before
     assert h.client.rows['batch_pipeline_dev_allowance_holds', 'owner']['held_count'] == 2
     assert all(h.client.rows['batch_pipeline_dev_jobs', key]['state'] == STATE for key in ('a', 'b'))
 
 
-def test_discovery_owner_is_only_a_hint_and_is_rechecked(h):
+def test_discovery_owner_is_only_a_hint_and_is_rechecked(pool, h):
     h.seed('a', 'one')
     snapshots = list(Page(h.store).limit(100).select(['owner_key']).stream())
     h.client.rows['batch_pipeline_dev_jobs', 'a']['owner_key'] = 'two'
     with pytest.raises(RuntimeError, match='owner changed'):
-        migration._apply_rows(h.store, snapshots, 10, 2, migration.RowRateLimiter())
+        migration._apply_rows(h.store, snapshots, 10, 2, migration.RowRateLimiter(), pool)
     assert h.marker not in h.client.rows
     assert h.client.rows['batch_pipeline_dev_jobs', 'a']['state'] == 'retry'
 
@@ -260,7 +267,7 @@ def test_rate_bucket_is_shared_across_pages_retries_and_has_no_idle_burst(h):
     assert clock[0] - previous == pytest.approx(1 / 50)
 
 
-def test_each_transaction_retry_takes_a_permit(h, monkeypatch):
+def test_each_transaction_retry_takes_a_permit(pool, h, monkeypatch):
     h.seed('a')
     limiter = migration.RowRateLimiter()
     starts = []
@@ -274,7 +281,7 @@ def test_each_transaction_retry_takes_a_permit(h, monkeypatch):
         return original(body, **options)
 
     monkeypatch.setattr(h.store, 'run', retry)
-    assert migration.apply_page(h.store, 10, concurrency=2, rate_limiter=limiter)['parked'] == 1
+    assert migration.apply_page(h.store, 10, executor=pool, concurrency=2, rate_limiter=limiter)['parked'] == 1
     assert len(starts) == 2
 
 
@@ -356,3 +363,11 @@ def test_invalid_rate(rate):
 def test_invalid_concurrency(h, concurrency):
     with pytest.raises(ValueError, match='concurrency'):
         migration.apply_page(h.store, 10, concurrency=concurrency)
+
+
+def test_concurrent_rows_require_caller_executor_before_any_mutation(h):
+    h.seed('a')
+    before = deepcopy(h.client.rows)
+    with pytest.raises(ValueError, match='requires an executor'):
+        migration.apply_page(h.store, 10, concurrency=2)
+    assert h.client.rows == before

@@ -28,6 +28,9 @@ def harness(monkeypatch):
         (['--max-rows-per-second', '0'], 'ro-prod'),
         (['--max-rows-per-second', 'nan'], 'ro-prod'),
         (['--max-rows-per-second', 'inf'], 'ro-prod'),
+        (['--max-rows-per-second', '0.099'], 'ro-prod'),
+        (['--max-rows-per-second', '1e-300'], 'ro-prod'),
+        (['--max-rows-per-second', '5e-324'], 'ro-prod'),
     ],
 )
 def test_rejected_before_any_store_access(harness, monkeypatch, arguments, tier):
@@ -70,12 +73,15 @@ def test_apply_shares_limiter_across_pages_and_drains_executor(harness, monkeypa
         ],
     )
     apply = Mock(side_effect=[{'complete': False}, {'complete': True}])
+    executor = Mock()
+    monkeypatch.setattr(cli, 'db_executor', executor)
     shutdown = Mock()
     monkeypatch.setattr(cli, 'apply_page', apply)
     monkeypatch.setattr(cli, 'shutdown_executors', shutdown)
     cli.main()
     assert apply.call_count == 2
     first, second = (call.kwargs for call in apply.call_args_list)
+    assert first['executor'] is second['executor'] is executor
     assert first['concurrency'] == 32
     assert first['rate_limiter'] is second['rate_limiter']
     assert first['rate_limiter'].rate == 50
@@ -93,3 +99,16 @@ def test_default_apply_is_sequential_and_unlimited(harness, monkeypatch):
     cli.main()
     assert apply.call_args.kwargs['concurrency'] == 1
     assert apply.call_args.kwargs['rate_limiter'].rate is None
+    assert apply.call_args.kwargs['executor'] is None
+
+
+def test_minimum_rate_is_accepted(harness, monkeypatch):
+    monkeypatch.setattr(
+        cli.sys,
+        'argv',
+        ['migration', '--stage', 'dev', '--apply', '--confirm-reviewed-rollout-go', '--max-rows-per-second', '0.1'],
+    )
+    apply = Mock(return_value={'complete': True})
+    monkeypatch.setattr(cli, 'apply_page', apply)
+    cli.main()
+    assert apply.call_args.kwargs['rate_limiter'].rate == 0.1

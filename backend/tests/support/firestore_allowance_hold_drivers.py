@@ -47,6 +47,7 @@ def entries():
                 'now': (3000000.0, 'checkpoint clock only'),
                 'size': (100, 'page bound only'),
                 'rate_limiter': (None, 'attempt pacing does not affect the query shape'),
+                'executor': (None, 'worker scheduling does not affect queries; recording pages are empty'),
             },
             trials=2,
             setup=seed_checkpoint,

@@ -106,7 +106,7 @@ Run **one driver process only**, after stopping/waiting for any earlier driver.
 limits concurrent owner groups. Within each page, rows sharing `owner_key` run
 in document-ID order, including commit; different owners can finish out of order.
 The shared DB executor can impose a lower worker ceiling if configured below 32.
-`--max-rows-per-second` defaults to unlimited; a positive finite value sets a
+`--max-rows-per-second` defaults to unlimited; a finite value of at least 0.1 sets a
 single process-wide token bucket shared across pages and workers. Every row
 transaction **attempt**, including SDK/contention retries and fenced/no-op rows,
 takes a token before BeginTransaction, so low rates never wait with a transaction

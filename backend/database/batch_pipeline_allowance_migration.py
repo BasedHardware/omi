@@ -1,7 +1,7 @@
 """Resumable CAS migration of current allowance decisions; no content reads."""
 
 from collections import defaultdict
-from concurrent.futures import FIRST_COMPLETED, wait
+from concurrent.futures import FIRST_COMPLETED, Executor, wait
 from contextvars import copy_context
 import math
 import threading
@@ -11,7 +11,6 @@ from google.cloud import firestore
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_allowance_hold import OWNERS, STATE, enabled, park
-from utils.executors import db_executor
 
 KEY = 'allowance_parking_v1'
 
@@ -74,7 +73,7 @@ def _prefetch_row(tx, segment_id, owner):
         raise RuntimeError('incomplete migration transactional prefetch')
 
 
-def _apply_rows(store, rows, now, concurrency, limiter):
+def _apply_rows(store, rows, now, concurrency, limiter, executor):
     stopped = threading.Event()
 
     def process(group, owner=None):
@@ -115,6 +114,8 @@ def _apply_rows(store, rows, now, concurrency, limiter):
         if not isinstance(owner, str) or not owner:
             raise RuntimeError('migration candidate has no owner key')
         groups[owner].append(snapshot)
+    if groups and executor is None:
+        raise ValueError('concurrent migration requires an executor')
     remaining = iter(groups.items())
     pending = set()
     parked, fenced = 0, 0
@@ -125,7 +126,7 @@ def _apply_rows(store, rows, now, concurrency, limiter):
             owner, group = entry
             # These futures are observed synchronously. Keep context propagation
             # without the fire-and-forget helper's unrelated BYOK error handling.
-            pending.add(db_executor.submit(copy_context().run, process, group, owner))
+            pending.add(executor.submit(copy_context().run, process, group, owner))
 
     try:
         for _ in range(min(concurrency, len(groups))):
@@ -169,8 +170,15 @@ def counts(store) -> dict:
 
 
 def apply_page(
-    store, now: float, *, size: int = 100, concurrency: int = 1, rate_limiter: RowRateLimiter | None = None
+    store,
+    now: float,
+    *,
+    size: int = 100,
+    concurrency: int = 1,
+    rate_limiter: RowRateLimiter | None = None,
+    executor: Executor | None = None,
 ) -> dict:
+    """Apply one page; the caller owns the executor required for concurrency."""
     if not enabled():
         raise ValueError('parking switch is off')
     if not 1 <= concurrency <= 32:
@@ -185,7 +193,7 @@ def apply_page(
     # Same candidate filters, ordering, cursor and bound; the concurrent path
     # projects only owner metadata, at the same one discovery read per row.
     rows = list(query.limit(size).select(['owner_key'] if concurrency > 1 else []).stream())
-    parked, fenced = _apply_rows(store, rows, now, concurrency, rate_limiter or RowRateLimiter())
+    parked, fenced = _apply_rows(store, rows, now, concurrency, rate_limiter or RowRateLimiter(), executor)
     # A crash before this write replays only this bounded page. park's state
     # predicate makes that replay idempotent. A failure never advances it.
     complete = len(rows) < size
