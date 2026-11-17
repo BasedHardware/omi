@@ -159,7 +159,7 @@ _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
     'database.batch_pipeline_conversation_purge_scans._claim': '435f4f88bff9fdc29b90c7b7fceacd1f60a808be9e2036b5ef5fdbb57ce1cef9',
-    'database.batch_pipeline_conversation_purge_scans.run_job': 'c8a5a8d874fa939d8a4945b8f6bcbd0cb07c482c289abd60034f0b5d2e1c506f',
+    'database.batch_pipeline_conversation_purge_scans.run_job': '0224853b65b8b9abda37fc1571a3fe290ded7f9253030b3dff59f4fa9a4e34ee',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
     'database.batch_census_export._filtered': '6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',

@@ -302,6 +302,10 @@ class ScanProgress(jobs.RunProgress):
             if not ref.get(transaction=transaction).exists:
                 raise jobs.RunSuperseded()
 
+    def check_authority(self) -> None:
+        # Revalidate before the traversal's data-plane tombstone/storage probes.
+        _in_transaction(self.client, self._owned)
+
     def _renew_all(self, transaction: Any) -> None:
         renewal = self._renewal()
         for job in self.scan['members']:
@@ -467,6 +471,7 @@ def run_job(
         )
         logger.info('event=conversation_batch_purge_owner_scan_started members=%d count=1', len(scan['members']))
         try:
+            progress.check_authority()
             legal_holds.assert_account_deletion_permitted(scan['uid'])
             members = {
                 member['conversation_id']: _MemberProgress(progress, key) for key, member in scan['members'].items()

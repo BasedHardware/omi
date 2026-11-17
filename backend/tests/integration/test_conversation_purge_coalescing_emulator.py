@@ -459,3 +459,28 @@ def test_handback_emits_shared_fallback_telemetry_once(monkeypatch, world):
     assert not scans.handback(world.client, leader, scan['epoch'], scan['token'])
     event.assert_called_once()
     assert event.call_args.kwargs['outcome'] == 'degraded'
+
+
+def test_tombstone_loss_after_seal_hands_back_without_a_failed_task(monkeypatch, world):
+    from unittest.mock import Mock
+
+    leader, follower = world.arm('one'), world.arm('two')
+    generation = _dispatch(world, leader)
+    claim = scans._claim
+
+    def wipe_after_seal(*args, **kwargs):
+        status, scan = claim(*args, **kwargs)
+        if status == 'run':
+            for member in scan['members'].values():
+                world.client.document(f"users/{world.uid}/deleted_conversations/{member['conversation_id']}").delete()
+        return status, scan
+
+    monkeypatch.setattr(scans, '_claim', wipe_after_seal)
+    traverse = Mock(side_effect=AssertionError('missing intent must stop before traversal'))
+    monkeypatch.setattr(scans, 'purge_conversations', traverse)
+    assert _run(world, leader, generation) == 'superseded'
+    traverse.assert_not_called()
+    for job in (leader, follower):
+        row = world.client.collection(jobs.COLLECTION).document(job).get().to_dict()
+        assert not row.get('scan_epoch') and row.get('last_outcome') != 'failed'
+        assert jobs.run_job(job, row['generation'], firestore_client=world.client) == 'no_tombstone'
