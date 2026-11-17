@@ -233,7 +233,7 @@ def test_other_binding_protocol_refusals_never_advance(incident, field, value):
     assert f.row('head')['projection_state'] == 'pending'
 
 
-@pytest.mark.parametrize('fence', ['privacy', 'ledger', 'predecessor', 'changed_result'])
+@pytest.mark.parametrize('fence', ['privacy', 'ledger', 'predecessor', 'changed_result', 'source_owner'])
 def test_hold_rechecks_all_fences_at_bound(incident, fence):
     f = incident
     assert walk(f).advanced == []
@@ -245,8 +245,10 @@ def test_hold_rechecks_all_fences_at_bound(incident, fence):
         f.client.rows[sync_content_ledger_ref(f.client, OWNER, binding.content_id).path]['job_id'] = 'foreign'
     elif fence == 'predecessor':
         f.row('head')['previous_segment_id'] = 'missing'
-    else:
+    elif fence == 'changed_result':
         f.row('head')['result'] = {'outcome': 'silence'}
+    else:
+        f.store.ref('projections', 'source-synthetic-key').create({'owner_id': 'foreign', 'privacy_generation': 0})
     with pytest.raises((ProjectionBlocked, BatchPrivacyBlocked)):
         bound_protocol_head(f.store, 'head', job, entry, binding, f.now[0])
     assert f.watermark() is None
@@ -271,3 +273,28 @@ def test_reader_fix_before_bound_prevents_stale_hold(incident, monkeypatch):
     with pytest.raises(ProjectionBlocked, match='protocol refusal no longer applies'):
         bound_protocol_head(f.store, 'head', job, entry, binding, f.now[0])
     assert f.row('head')['projection_state'] == 'pending'
+
+
+def test_sweep_also_bounds_the_refused_head(incident):
+    f = incident
+    f.projector.assignment_discovery = SimpleNamespace(next=lambda **_: ['head'])
+    f.projector._sweep_finish = lambda *a: False
+    assert f.projector.sweep()['blocked'] == 1
+    f.now[0] += PROTOCOL_REFUSAL_SECONDS
+    assert f.projector.sweep()['blocked'] == 1
+    assert f.watermark() == 'head'
+    assert walk(f).advanced == ['next', 'tail']
+
+
+def test_post_commit_observation_uses_fresh_age_despite_stale_hint_and_shadow_failure(incident, monkeypatch, caplog):
+    f = incident
+    job, stale_entry, binding = f.store.read('head')
+    assert walk(f).advanced == []
+    f.now[0] += PROTOCOL_REFUSAL_SECONDS
+    monkeypatch.setattr(f.store, '_mirror', Mock(side_effect=RuntimeError('synthetic shadow failure')))
+    counter = PROTOCOL_HOLDS.labels(reason=PROTOCOL_HOLD_REASON)
+    before = counter._value.get()
+    assert bound_protocol_head(f.store, 'head', job, stale_entry, binding, f.now[0])
+    assert counter._value.get() == before + 1
+    assert f.watermark() == 'head'
+    assert 'reason=missing_source_marker age_seconds=900' in caplog.text

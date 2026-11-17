@@ -64,16 +64,19 @@ def bound_protocol_head(store, segment_id, job, entry, binding, now) -> bool:
             return False
         session.persist(transaction, quarantined=True)
         transaction.update(session.result_ref, {'projection_protocol_hold_reason': PROTOCOL_HOLD_REASON})
-        return True
+        return age
 
-    changed = store.run(commit, policy=policy)
-    if changed:
-        store._mirror(binding)
+    committed_age = store.run(commit, policy=policy)
+    if committed_age is not False:
+        try:
+            store._mirror(binding)
+        except Exception:
+            logger.warning('event=jobstore_shadow op=refresh outcome=hook_error site=protocol_head_bound')
         PROTOCOL_HOLDS.labels(reason=PROTOCOL_HOLD_REASON).inc()
         logger.warning(
             'event=batch_projection action=protocol_head_bound outcome=quarantine_held reason=%s age_seconds=%.0f',
             PROTOCOL_HOLD_REASON,
-            age,
+            committed_age,
         )
         record_fallback(
             component='sync_dispatch',
@@ -82,4 +85,4 @@ def bound_protocol_head(store, segment_id, job, entry, binding, now) -> bool:
             reason='capability_mismatch',
             outcome='degraded',
         )
-    return changed
+    return committed_age is not False
