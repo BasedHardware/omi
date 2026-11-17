@@ -310,8 +310,10 @@ David's superseding ruling (2026-11-17): recovered rows enter plain `miss`
 for automatic upload only with single-owner proof, no `onDeviceOnly` or
 `holdForUser` row in any current, backup, temporary or quarantined generation
 or live/retired/foreign memory bucket, and an account preference permitting cloud
-upload. Otherwise `holdForUser=true`. Missing/unknown history fails closed to a
-hold. Offline auto-sync off, any durable Custom STT choice (including the pinned
+upload. Otherwise `holdForUser=true`. An unavailable history snapshot fails closed to a hold. Optional legacy WAL
+policy fields retain the same false defaults as `Wal.fromJson`; a missing/null
+optional flag does not assert local-only history. Present non-null invalid flag
+types are treated conservatively as local-only. Offline auto-sync off, any durable Custom STT choice (including the pinned
 on-device choice), malformed/unknown STT settings, keep-everything-on-device, save-live-hours, active
 on-device overflow or the selected local capture route all preserve the hold.
 Preferences, memory policy and the kill switch are checked again after budget I/O at admission.
@@ -380,3 +382,10 @@ never exports paths, basenames, account IDs or per-file entries.
 Guard: `test/unit/wal_orphan_recovery_test.dart`; startup admission's existing
 no-orphan-discovery contract remains separately guarded by
 `test/unit/wal_startup_admission_test.dart`.
+
+Consent/custody preference quarantine is an observation of the current store,
+not a permanent historical marker: the shared preference-quarantine subsystem
+prunes archives after seven days. While an archive exists, it holds consent or
+invalidates reference completeness. After pruning, the defined current setting
+defaults apply; this pass adds no durable unknown-consent marker. Indexed local-only
+or held rows still preserve phone-wide history regardless of preference pruning.

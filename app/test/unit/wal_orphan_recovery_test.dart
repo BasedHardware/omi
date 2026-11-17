@@ -14,6 +14,8 @@ import 'package:omi/models/local_recording.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/pendant_ring_custody.dart';
+import 'package:omi/services/capture/local_stt_custody.dart';
 import 'package:omi/services/wals/device_capture_clock.dart';
 import 'package:omi/services/wals/recording_inventory.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -325,6 +327,7 @@ void main() {
       bool foreground = true,
       bool Function()? foregroundProbe,
       bool realCensus = false,
+      bool realPersistence = false,
       Future<void> Function(List<Wal>)? persist,
       List<Map<String, Object?>>? events}) async {
     final sync = LocalWalSyncImpl(_Listener(),
@@ -337,10 +340,13 @@ void main() {
       events?.add(v);
       onEvent?.call(v);
     },
-        persistWals: persist ??
-            (rows) async {
-              await WalFileManager.saveWals(rows);
-            });
+        deltaIndexAllowed: realPersistence ? () async => true : null,
+        persistWals: realPersistence
+            ? null
+            : persist ??
+                (rows) async {
+                  await WalFileManager.saveWals(rows);
+                });
     sync.start();
     await sync.walReady;
     addTearDown(() async {
@@ -685,6 +691,52 @@ void main() {
     expect(events.single['result'], 'completed');
     expect((events.single['counts'] as Map)['adopted'], 1);
     expect((await WalFileManager.loadIndexedWals()).where((w) => w.status == WalStatus.miss).length, 1);
+  });
+
+  test('production delta worker rolls back failed orphan publication and retries', () async {
+    final file = await audio(name(now));
+    final bytes = await file.readAsBytes();
+    final events = <Map<String, Object?>>[];
+    final sync = await ledger(realPersistence: true, events: events);
+    final tmp = await Directory('${dir.path}/wals.json.tmp').create();
+    await sync.recoverOrphanAudio();
+    expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
+    expect((events.last['counts'] as Map)['adopted'] ?? 0, 0);
+    expect(events.last['result'], 'failed', reason: 'exercise worker failure rather than an earlier census fence');
+    expect(await sync.indexWorkerForTesting, isNotNull);
+    expect(await file.readAsBytes(), bytes);
+    await tmp.delete();
+    await sync.recoverOrphanAudio();
+    expect(sync.testWals.where((w) => w.status == WalStatus.miss).length, 1);
+    expect((await WalFileManager.loadIndexedWals()).where((w) => w.filePath == name(now)).length, 1);
+    expect(await file.readAsBytes(), bytes);
+  });
+
+  test('selected local capture route holds otherwise clean-phone recovery', () async {
+    await json('wals.json', {
+      'wals': [row('existing.bin')]
+    });
+    await audio(name(now));
+    LocalSttCustody.selectedLocalRoute = true;
+    addTearDown(() => LocalSttCustody.selectedLocalRoute = false);
+    final sync = await ledger(realCensus: true);
+    await sync.recoverOrphanAudio();
+    expect(sync.testWals.singleWhere((w) => w.status == WalStatus.miss).holdForUser, isTrue);
+  });
+
+  test('persisted ring store envelope is compatible with read-only census', () async {
+    final ring = await Directory('${dir.path}/pendant_ring_custody').create();
+    final checkpoint = RingCustodyCheckpoint(deviceId: 'device');
+    expect(checkpoint.toJson().containsKey('version'), isFalse);
+    final store = PendantCustodyStore(directoryProvider: () async => ring);
+    await store.saveJson('device', checkpoint.toJson());
+    final persisted = jsonDecode(await File('${ring.path}/custody_device.json').readAsString());
+    expect(persisted['version'], 1);
+    expect((await store.load('device'))?.deviceId, 'device');
+    expect((await census()).complete, isTrue);
+    final legacy = Wal.fromJson(row('legacy.bin'));
+    expect(legacy.onDeviceOnly, isFalse);
+    expect(legacy.holdForUser, isFalse);
   });
 
   test('failed index save rolls back unpublished held rows and a later pass retries them', () async {

@@ -865,7 +865,6 @@ ignore:
 
 
 
-
 retired:
   - {"key":"AUDIO_ARCHIVE_UID_ALLOWLIST","aliases":[],"kind":"env","retired":"2026-11-09","reason":"David flag docket 2026-11-09 (ruling 2): retire ; prod nonempty one-member allowlist (moved to injected cohort) on every reader at 2026-11-09 03:20Z"}
   - {"key":"AUDIO_CANONICAL_PACKING_ENABLED","aliases":[],"kind":"env","retired":"2026-11-09","reason":"David flag docket 2026-11-09 (ruling 2): retire ; prod unset (code default) on every reader at 2026-11-09 03:20Z"}
