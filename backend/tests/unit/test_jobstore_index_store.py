@@ -220,7 +220,7 @@ class PollingConnection:
         yield
 
     def execute(self, statement):
-        self.statements.append(statement)
+        self.statements.append(statement.as_string(None) if hasattr(statement, 'as_string') else statement)
         if self.stall:
             self.wait(self.stalled())
 

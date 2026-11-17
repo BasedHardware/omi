@@ -236,6 +236,7 @@ def test_postgres_async_lower_bound_only_applies_to_finish_ordering(clock):
     store._read_conn.return_value.__enter__.return_value = connection
     assert store.projection_page(10, exclude_async=True, **{clock: 10.0}) == ([], None)
     statement, _ = connection.execute.call_args.args
+    statement = statement.as_string(None)
     assert ('>= 0' in statement) is (clock == 'due_before')
 
 
@@ -252,12 +253,13 @@ def test_postgres_selected_clock_governs_filter_order_and_cursor(clock, field, a
     store._read_conn.return_value.__enter__.return_value = connection
     assert store.projection_page(1, after=after, states=('ready',), **{clock: 10.0}) == (['b'], (10.0, 3.0, 'b'))
     statement, params = connection.execute.call_args.args
+    statement = statement.as_string(None)
     selected = f"(doc->>'{field}')::float8"
     other = 'projection_finish_due_at' if clock == 'followup_due_before' else 'projection_followup_due_at'
     assert f'{selected} <= %s' in statement and other not in statement
-    assert f'ORDER BY {selected}, committed_at, key COLLATE "C"' in statement
+    assert f'ORDER BY {selected}, "committed_at", key COLLATE "C"' in statement
     assert (
-        f'{selected} >= %s' if len(after) == 1 else f'({selected}, committed_at, key COLLATE "C") > (%s, %s, %s)'
+        f'{selected} >= %s' if len(after) == 1 else f'({selected}, "committed_at", key COLLATE "C") > (%s, %s, %s)'
     ) in statement
     assert params == (store.namespace, ['ready'], 10.0, *expected_params, 1)
 
