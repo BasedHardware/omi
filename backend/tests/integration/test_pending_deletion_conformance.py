@@ -10,7 +10,7 @@ from copy import deepcopy
 import pytest
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from testing.store_fixtures import store_backend  # noqa: F401
+from testing.store_fixtures import ClientCustomerData, store_backend  # noqa: F401
 from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 
@@ -21,7 +21,7 @@ pytestmark = pytest.mark.integration
 def h(store_backend, request, monkeypatch):
     monkeypatch.setenv('BATCH_SHARD_SPREAD_ENABLED', str(request.param).lower())
     store_backend.seed_user('o')
-    if store_backend.name == 'emulator':
+    if isinstance(store_backend.customer, ClientCustomerData):
         reference = store_backend.customer.client.collection('account_deletions').document(store_backend.uid('o'))
 
         def cleanup():
@@ -34,10 +34,10 @@ def h(store_backend, request, monkeypatch):
 
 
 def marker(h, status):
-    # CustomerData uses strict synthetic Firestore for sim/Postgres, while the
-    # old Store's customer authority is the real loopback emulator.
+    # Full local qualification uses actual Firestore customer authority for
+    # Postgres too. The simulator (and optional PG-only fixture) uses rows.
     row = {'wipe_status': status}
-    if h.name == 'emulator':
+    if isinstance(h.customer, ClientCustomerData):
         h.customer.client.collection('account_deletions').document(h.uid('o')).set(row)
     else:
         h.customer.client.rows['account_deletions', h.uid('o')] = row

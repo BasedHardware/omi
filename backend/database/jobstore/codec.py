@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 _DATETIME = '$datetime'
@@ -44,4 +44,13 @@ def loads(text: str | bytes) -> Any:
 
 def canonical(value: Any) -> str:
     """Key-order-independent encoding, for comparing a Firestore document with its Postgres copy."""
-    return json.dumps(value, default=_default, sort_keys=True, separators=(',', ':'))
+
+    def canonical_default(item):
+        if isinstance(item, datetime):
+            # Firestore normalizes timestamps to UTC; PG can return another
+            # session offset for the same instant. Hash the instant consistently.
+            stamp = item.replace(tzinfo=timezone.utc) if item.tzinfo is None else item.astimezone(timezone.utc)
+            return {_DATETIME: stamp.isoformat()}
+        return _default(item)
+
+    return json.dumps(value, default=canonical_default, sort_keys=True, separators=(',', ':'))

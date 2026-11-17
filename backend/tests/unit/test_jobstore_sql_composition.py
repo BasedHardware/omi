@@ -280,3 +280,18 @@ import {module}
 assert "psycopg" not in sys.modules
 '''
     subprocess.run([sys.executable, '-c', script], cwd=backend, check=True)
+
+
+def test_authority_import_does_not_load_enrichment_outbox():
+    backend = Path(__file__).resolve().parents[2]
+    script = '''
+import sys
+from database.jobstore.authority import Epoch
+assert Epoch('batch_pipeline_dev', 0).value == 0
+assert 'database.jobstore.outbox_pg' not in sys.modules
+assert 'utils.conversations.process_conversation' not in sys.modules
+from database.jobstore import PostgresStore
+from database.jobstore.postgres_store import PostgresStore as implementation
+assert PostgresStore is implementation
+'''
+    subprocess.run([sys.executable, '-c', script], cwd=backend, check=True)

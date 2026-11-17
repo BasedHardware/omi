@@ -5,6 +5,7 @@ The transaction callback must be pure; it may be retried by Firestore.
 """
 
 from copy import deepcopy
+from contextlib import nullcontext
 import hashlib
 import logging
 import math
@@ -311,7 +312,7 @@ class FirestoreStore:
             query = query.start_after({'capture_at': after[0], 'segment_id': after[1]})
         return [doc.id for doc in query.limit(max(1, min(limit, 100))).stream()]
 
-    def __init__(self, namespace: str, *, firestore_client: Any = None):
+    def __init__(self, namespace: str, *, firestore_client: Any = None, queue_authority: Any = None):
         # Require a stage-qualified name; never infer dev from the customer project.
         if namespace not in {'batch_pipeline_prod', 'batch_pipeline_dev'} and not re.fullmatch(
             r'batch_pipeline_test_[a-z0-9_]{1,40}', namespace
@@ -319,6 +320,9 @@ class FirestoreStore:
             raise ValueError('explicit batch_pipeline_{prod,dev,test_<id>} namespace required')
         self.namespace = namespace
         self._client = firestore_client
+        if queue_authority is not None and queue_authority.ticket.namespace != namespace:
+            raise ValueError('queue authority must match the store namespace')
+        self.queue_authority = queue_authority
         self._require_stage()
 
     def _require_stage(self):
@@ -336,6 +340,8 @@ class FirestoreStore:
     @property
     def client(self):
         self._require_stage()
+        if self.queue_authority is not None:
+            self.queue_authority.check()  # discovery/hint reads never fall back to a cold FS copy
         return self._client if self._client is not None else get_data_plane_firestore_client()
 
     def run(self, body, *, before_attempt=None):
@@ -344,6 +350,8 @@ class FirestoreStore:
 
         @firestore.transactional
         def commit(transaction):
+            if self.queue_authority is not None:
+                self.queue_authority.check(transaction)
             view = FirestoreTransaction(client, self.namespace, transaction)
             _note_direct_reads(view)
             last_view[:] = [view]
@@ -351,20 +359,21 @@ class FirestoreStore:
             view.flush()
             return result
 
-        if before_attempt is None:
-            result = self._run_committed(client, commit, last_view)
-        else:
-            result = self._run_committed(client, commit, last_view, before_attempt=before_attempt)
-        for key, priority in sorted(last_view[0].hinted_activations) if last_view else ():
-            try:
-                reseed_hinted_activation(client, self.namespace, key, priority)
-            except Exception as error:  # Best effort: the admission already committed.
-                logger.warning(
-                    'event=batch_frontier_reseed outcome=failed priority=%s exception_type=%s',
-                    priority,
-                    type(error).__name__,
-                )
-        return result
+        with self.queue_authority.writers() if self.queue_authority is not None else nullcontext():
+            if before_attempt is None:
+                result = self._run_committed(client, commit, last_view)
+            else:
+                result = self._run_committed(client, commit, last_view, before_attempt=before_attempt)
+            for key, priority in sorted(last_view[0].hinted_activations) if last_view else ():
+                try:
+                    reseed_hinted_activation(client, self.namespace, key, priority)
+                except Exception as error:  # Best effort: the admission already committed.
+                    logger.warning(
+                        'event=batch_frontier_reseed outcome=failed priority=%s exception_type=%s',
+                        priority,
+                        type(error).__name__,
+                    )
+            return result
 
     def _run_committed(self, client, commit, last_view, *, before_attempt=None):
         if not contention_retry_enabled():

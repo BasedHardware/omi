@@ -13,10 +13,12 @@ import threading
 from contextlib import contextmanager
 from typing import Any, Callable, Iterator
 
+import database.jobstore.codec as codec
+
 MAX_POOL_SIZE = 4
 
 
-def _psycopg():
+def _psycopg() -> Any:
     try:
         # psycopg joins the lockfile separately; until then pyright cannot resolve it.
         import psycopg  # pyright: ignore[reportMissingImports]
@@ -28,6 +30,11 @@ def _psycopg():
 def sql() -> Any:
     """Return psycopg's SQL composition helpers without making the driver a package import requirement."""
     return _psycopg().sql  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def jsonb(value):
+    """Adapt a JSON value while keeping the driver optional until actual use."""
+    return _psycopg().types.json.Jsonb(value, dumps=codec.dumps)
 
 
 def configure(conn: Any) -> Any:

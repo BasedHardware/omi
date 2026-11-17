@@ -34,6 +34,27 @@ def test_local_storage_round_trip_and_http_url(monkeypatch: pytest.MonkeyPatch, 
     assert (storage_root / 'speech-profiles' / 'user-1' / 'speech profile.wav').read_bytes() == b'voice-bytes'
 
 
+def test_local_file_upload_preserves_stream_position_exact_size_and_create_only(tmp_path):
+    import io
+
+    client = LocalStorageClient(tmp_path)
+    blob = client.bucket('audio').blob('owner/file')
+    stream = io.BytesIO(b'prefixaudio')
+    stream.seek(6)
+    blob.upload_from_file(stream, size=5, if_generation_match=0)
+    assert blob.download_as_bytes() == b'audio'
+    with pytest.raises(PreconditionFailed):
+        blob.upload_from_file(io.BytesIO(b'other'), if_generation_match=0)
+    assert blob.download_as_bytes() == b'audio'
+    missing = client.bucket('audio').blob('owner/short')
+    with pytest.raises(ValueError, match='size differs'):
+        missing.upload_from_file(io.BytesIO(b'short'), size=6, if_generation_match=0)
+    assert not missing.exists()
+    stream.seek(6)
+    missing.upload_from_file(stream, rewind=True, size=6, if_generation_match=0)
+    assert missing.download_as_bytes() == b'prefix'
+
+
 def test_local_archive_create_only_metadata_and_generation_survive_client_restart(monkeypatch, tmp_path):
     root = _configure(monkeypatch, tmp_path)
     client = LocalStorageClient(root)

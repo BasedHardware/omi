@@ -140,6 +140,18 @@ class LocalBlob:
             raise PreconditionFailed('local storage create-only object exists') from error
         self.patch()
 
+    def upload_from_file(self, file_obj, *, rewind=False, size=None, content_type=None, **kwargs):
+        """Offline SDK file seam; preserve create-only/generation semantics.
+
+        This is a local fixture transport, not resumable GCS terminal proof.
+        """
+        if rewind:
+            file_obj.seek(0)
+        body = file_obj.read() if size is None else file_obj.read(size)
+        if size is not None and len(body) != size:
+            raise ValueError('local upload size differs from its source')
+        self.upload_from_string(body, content_type=content_type, **kwargs)
+
     def _set_properties(self, properties):
         self.metadata = properties.get('metadata')
         self.content_type = properties.get('contentType')
@@ -286,6 +298,7 @@ class _LocalSessionHTTP:
             fcntl.flock(file, fcntl.LOCK_EX)
             state = json.load(file)
             status = state['http_status']
+            properties = state.get('properties')
             if method == 'DELETE':
                 if status == 308:
                     state['http_status'] = status = 499
@@ -318,7 +331,14 @@ class _LocalSessionHTTP:
                 elif status == 200:
                     status = 400  # A finalized capability cannot create again.
             file.seek(0)
-            json.dump(state if state['http_status'] == 308 else {'http_status': state['http_status']}, file)
+            json.dump(
+                (
+                    state
+                    if state['http_status'] == 308
+                    else {'http_status': state['http_status'], 'properties': properties}
+                ),
+                file,
+            )
             file.truncate()
         response = _LocalSessionResponse(status, properties)
         if self.after_request is not None:

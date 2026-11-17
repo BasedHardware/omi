@@ -1,6 +1,10 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Typed private publication joins all original siblings in one FS COMMIT.
+    'database/jobstore/provider_projection.py': [
+        ('ProviderProjection.prepare.publish', 'projection_state', "'pending'", ('projection_state',)),
+    ],
     # R40: own retained-audio fallback preserves its committed owner-log slot.
     'database/batch_pipeline_source_fallback.py': [
         (

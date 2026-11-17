@@ -720,13 +720,13 @@ def stuck_remote_erasure(uid: str, *, kind: str, firestore_client: Any) -> tuple
 
 @transactional
 def _settle_remote_erasure_transaction(
-    transaction: Any, client: Any, uid: str, kind: str, token: str, now: datetime
+    transaction: Any, client: Any, uid: str, kind: str, token: str, now: datetime, target: str
 ) -> bool:
     gate_ref = _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}")
     gate = _validated_gate(gate_ref.get(transaction=transaction))
     if gate is None or gate["state"] != "running" or gate["kind"] != kind or gate["token"] != token:
         return False
-    if not gate.get("remote_inflight"):
+    if not gate.get("remote_inflight") or gate.get("remote_target") != target:
         return False
     transaction.set(
         gate_ref,
@@ -735,10 +735,14 @@ def _settle_remote_erasure_transaction(
     return True
 
 
-def settle_stuck_remote_erasure(uid: str, *, kind: str, token: str, firestore_client: Any) -> bool:
-    """Release a stuck unit gate once its remote erasure is proven settled (same gate token, still in flight)."""
+def settle_stuck_remote_erasure(uid: str, *, kind: str, token: str, target: str, firestore_client: Any) -> bool:
+    """Release only the observed token AND target after definitive proof.
+
+    A unit can advance from an object request to PG progress under one token.
+    Slow proof for the earlier request must not clear the newer unknown one.
+    """
     return _settle_remote_erasure_transaction(
-        firestore_client.transaction(), firestore_client, uid, kind, token, datetime.now(timezone.utc)
+        firestore_client.transaction(), firestore_client, uid, kind, token, datetime.now(timezone.utc), target
     )
 
 

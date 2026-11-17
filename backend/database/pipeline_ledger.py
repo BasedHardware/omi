@@ -18,6 +18,8 @@ titles, transcript or overview text, audio paths, secrets or raw content;
 
 from __future__ import annotations
 
+from database.batch_pipeline_privacy import assert_batch_write_allowed
+
 import hashlib
 import logging
 import math
@@ -407,6 +409,11 @@ def _commit(
             source = source_ref.get(transaction=transaction)
             if not getattr(source, 'exists', False) or (source.to_dict() or {}).get('deleted'):
                 return 'deleted'
+        # C1 observers run after their source transaction and may resume after
+        # deletion. Re-read authority inside THIS committing transaction. A
+        # concurrent marker/tombstone/token change conflicts with this write.
+
+        assert_batch_write_allowed(client, transaction, uid, conversation_ids=(ref.id,), snapshots={})
         snapshot = ref.get(transaction=transaction)
         current = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
         if preserve_same_stage_clock and current and current.get('stage') == stage:

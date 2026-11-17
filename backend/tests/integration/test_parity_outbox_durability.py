@@ -24,26 +24,13 @@ class CommittedEnqueueReportedAsFailed(AssertionError):
 
 @pytest.mark.parametrize('transactional', [False, True], ids=['own-transaction', 'caller-transaction'])
 @pytest.mark.parametrize('delivery', ['push', 'pull'])
-def test_pl042_committed_work_survives_task_create_failure(
-    outbox_backend, transactional, delivery, request
-):  # noqa: F811
+def test_pl042_committed_work_survives_task_create_failure(outbox_backend, transactional, delivery):  # noqa: F811
     ob = outbox_backend
     ob.store_harness.seed_user('o')
     owner = ob.store_harness.uid('o')
     payload = ob.payload('retained')
     leaked_wake_error = False
     queued = None
-
-    # Strict xfail matches only the known no-raise defect, not an assertion,
-    # import/setup failure, or a regression in the recovery path below.
-    if ob.name == 'emulator' and not transactional:
-        request.node.add_marker(
-            pytest.mark.xfail(
-                strict=True,
-                raises=CommittedEnqueueReportedAsFailed,
-                reason='PL-042: https://github.com/BasedHardware/omi/issues/23559',
-            )
-        )
 
     def enqueue(tx=None):
         return ob.outbox.enqueue(

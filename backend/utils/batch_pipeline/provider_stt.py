@@ -616,7 +616,9 @@ def vendor_turns(words: list[dict], duration: float, *, fallback: bool = False) 
     return turns
 
 
-async def transcribe_async(item: WorkItem, language: str | None, inspected: tuple, *, service: str) -> dict:
+async def transcribe_async(
+    item: WorkItem, language: str | None, inspected: tuple, *, service: str, fence_ticket=None
+) -> dict:
     """One vendor call, awaited on the event loop: Velma batch has no submit/poll mode, so the
     open request holds a socket, never an executor thread. No client retry (one paid POST)."""
     from utils.batch_pipeline.word_validation import validate_words
@@ -631,7 +633,12 @@ async def transcribe_async(item: WorkItem, language: str | None, inspected: tupl
     try:
         async with track(scope):
             await scope.reserve_async(service)
-            response = await _vendor_words(service, _wav(pcm), duration, language)
+            wav = _wav(pcm)
+            if fence_ticket is not None:
+                from utils.executors import db_executor, run_blocking
+
+                await run_blocking(db_executor, fence_ticket.start, item, service)
+            response = await _vendor_words(service, wav, duration, language)
     except (RecoveryFailure, BatchPrivacyBlocked):
         raise
     except Exception:
@@ -669,9 +676,9 @@ async def transcribe_async(item: WorkItem, language: str | None, inspected: tupl
     return payload
 
 
-def transcribe(item: WorkItem, language: str | None, inspected: tuple, *, service: str) -> dict:
+def transcribe(item: WorkItem, language: str | None, inspected: tuple, *, service: str, fence_ticket=None) -> dict:
     """Synchronous seam for callers without an event loop (pull consumers, offline tools)."""
-    return asyncio.run(transcribe_async(item, language, inspected, service=service))
+    return asyncio.run(transcribe_async(item, language, inspected, service=service, fence_ticket=fence_ticket))
 
 
 UnitOutcomeName = Literal['done', 'deferred', 'discarded', 'retry']
@@ -688,7 +695,7 @@ class UnitOutcome:
 
 
 @dataclass(frozen=True)
-class _Call:
+class ProviderCall:
     """A minted attempt awaiting its one vendor call (between ``prepare`` and ``finish``)."""
 
     segment_id: str
@@ -700,6 +707,7 @@ class _Call:
     failure: dict | None  # inspection failed: no vendor call, settle terminal
     failover_to: tuple[str, ...]
     allowance_period: str | None = None
+    fence_ticket: Any = None
     # Decided once in ``_prepare`` and recorded on the intent as ``vendor_skipped``.
     skip_vendor: bool = False
 
@@ -857,7 +865,7 @@ class ProviderSttStage:
             self._log('superseded', 'projection_blocked')
             return UnitOutcome('discarded', 'superseded')
 
-    def _call_sync(self, plan: _Call) -> dict | RecoveryFailure:
+    def _call_sync(self, plan: ProviderCall) -> dict | RecoveryFailure:
         if plan.failure is not None or plan.inspected is None:
             failure = plan.failure or {'stage': 'provider', 'reason': 'operation_failed'}
             return RecoveryFailure(failure['stage'], failure['reason'])
@@ -874,7 +882,8 @@ class ProviderSttStage:
         )
         scope_token = current.set(scope)
         try:
-            return self.stt(plan.item, plan.route.language, plan.inspected, service=plan.service)
+            kwargs = {'fence_ticket': plan.fence_ticket} if plan.fence_ticket is not None else {}
+            return self.stt(plan.item, plan.route.language, plan.inspected, service=plan.service, **kwargs)
         except BatchPrivacyBlocked:
             raise
         except RecoveryFailure as error:
@@ -885,7 +894,7 @@ class ProviderSttStage:
             scope.closed = True
             current.reset(scope_token)
 
-    async def _call_async(self, plan: _Call) -> dict | RecoveryFailure:
+    async def _call_async(self, plan: ProviderCall) -> dict | RecoveryFailure:
         if (
             self.stt_async is None
             or plan.failure is not None
@@ -905,7 +914,8 @@ class ProviderSttStage:
         )
         scope_token = current.set(scope)
         try:
-            return await self.stt_async(plan.item, plan.route.language, plan.inspected, service=plan.service)
+            kwargs = {'fence_ticket': plan.fence_ticket} if plan.fence_ticket is not None else {}
+            return await self.stt_async(plan.item, plan.route.language, plan.inspected, service=plan.service, **kwargs)
         except BatchPrivacyBlocked:
             raise
         except RecoveryFailure as error:
@@ -918,7 +928,7 @@ class ProviderSttStage:
 
     # -- phases -----------------------------------------------------------------------------------
 
-    def _prepare(self, segment_id: str) -> UnitOutcome | _Call:
+    def _prepare(self, segment_id: str) -> UnitOutcome | ProviderCall:
         job = self.protocol.read(segment_id)
         if job.get('state') not in STAGE_STATES:
             return UnitOutcome('done', 'superseded')
@@ -991,7 +1001,7 @@ class ProviderSttStage:
             service = self._healthy(segment_id, job, open_services, refused)
             if isinstance(service, UnitOutcome):
                 return service
-        token = uuid4().hex
+        token = self._attempt_token()
         try:
             started = self.protocol.start(
                 segment_id,
@@ -1018,7 +1028,7 @@ class ProviderSttStage:
             return tx.get('intakes', binding.get('job_id', 'missing')) or {}
 
         intake = self.protocol.store.run(read_intake)
-        return _Call(
+        return ProviderCall(
             segment_id,
             item,
             route,
@@ -1031,7 +1041,9 @@ class ProviderSttStage:
             skip_vendor=skip_vendor,
         )
 
-    def _finish(self, plan: _Call, response: dict | RecoveryFailure, latency: float | None = None) -> UnitOutcome:
+    def _finish(
+        self, plan: ProviderCall, response: dict | RecoveryFailure, latency: float | None = None
+    ) -> UnitOutcome:
         segment_id, item, route, token = plan.segment_id, plan.item, plan.route, plan.token
         duration = item.duration_seconds
         if isinstance(response, dict):
@@ -1107,6 +1119,9 @@ class ProviderSttStage:
         return UnitOutcome('done', 'processed' if settled else 'superseded', provider_reason=route.provider_reason)
 
     # -- helpers ----------------------------------------------------------------------------------
+
+    def _attempt_token(self) -> str:
+        return uuid4().hex
 
     def _candidates(self, route: SttRoute) -> list[str]:
         """The admitted vendor first, then the table's other vendors when failover is on."""

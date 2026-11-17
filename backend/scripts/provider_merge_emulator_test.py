@@ -297,6 +297,94 @@ def test_pl584_a_predecessor_settled_before_fresh_commit_cannot_be_skipped(h, mo
     assert second['previous_segment_id'] == 'earlier' and second['log_sequence'] == 2
 
 
+def test_pl585_transactional_gate_rechecks_privacy_after_strict_transaction(h, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'true')
+    admit(h, 'backlog', capture=CAPTURE - 100, lag=90_000)
+    settle(h, 'backlog')
+    admit(h, 'fresh')
+    settle(h, 'fresh')
+    original = row(h, 'fresh')
+    run, raced = h.store.run, []
+
+    def interleave(body):
+        result = run(body)
+        if not raced:
+            assert result is None
+            raced.append(True)
+            h.customer.block_privacy(h.uid('owner'))
+        return result
+
+    monkeypatch.setattr(h.store, 'run', interleave)
+    monkeypatch.setattr(h.store, 'fresh_pending', lambda *_: pytest.fail('transactional gate used legacy probe'))
+    assert OrderedMerge(h.store).commit_next(h.uid('owner'), SETTLED + 100) is None
+    assert raced == [True]
+    assert row(h, 'fresh') == original
+    assert not run(lambda tx: tx.get('results', 'fresh'))
+
+
+def test_pl584_transactional_gate_observes_newly_settled_predecessor(h, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'true')
+    admit(h, 'backlog', capture=CAPTURE - 100, lag=90_000)
+    settle(h, 'backlog')
+    admit(h, 'earlier', capture=CAPTURE + 10)
+    admit(h, 'later', capture=CAPTURE + 20)
+    settle(h, 'later')
+    run, raced = h.store.run, []
+
+    def interleave(body):
+        result = run(body)
+        if not raced:
+            assert result is None
+            raced.append(True)
+            settle(h, 'earlier', now=SETTLED + 30)
+        return result
+
+    monkeypatch.setattr(h.store, 'run', interleave)
+    monkeypatch.setattr(h.store, 'fresh_pending', lambda *_: pytest.fail('transactional gate used legacy probe'))
+    uid = h.uid('owner')
+    merge = OrderedMerge(h.store, head_wait_seconds=60)
+    first = merge.commit_next(uid, SETTLED + 60)
+    second = merge.commit_next(uid, SETTLED + 61)
+    assert raced == [True]
+    assert [first['segment_id'], second['segment_id']] == ['earlier', 'later']
+    assert second['previous_segment_id'] == 'earlier' and second['log_sequence'] == 2
+
+
+def test_pl585_transactional_fresh_reads_and_result_share_actual_store_transaction(h, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'true')
+    admit(h, 'backlog', capture=CAPTURE - 100, lag=90_000)
+    settle(h, 'backlog')
+    admit(h, 'fresh')
+    settle(h, 'fresh')
+    tx_type = h.store.run(type)
+    first_query = tx_type.fresh_first_pending
+    ready_query = tx_type.fresh_first_ready_pending
+    put = tx_type.put
+    firsts, ready, writes = [], [], []
+
+    def first(tx, key):
+        firsts.append(tx)
+        return first_query(tx, key)
+
+    def read(tx, key):
+        ready.append(tx)
+        return ready_query(tx, key)
+
+    def write(tx, table, key, value):
+        if table == 'results':
+            writes.append(tx)
+        return put(tx, table, key, value)
+
+    monkeypatch.setattr(tx_type, 'fresh_first_pending', first)
+    monkeypatch.setattr(tx_type, 'fresh_first_ready_pending', read)
+    monkeypatch.setattr(tx_type, 'put', write)
+    monkeypatch.setattr(h.store, 'fresh_pending', lambda *_: pytest.fail('transactional gate used legacy probe'))
+    entry = OrderedMerge(h.store).commit_next(h.uid('owner'), SETTLED + 100)
+    assert entry['segment_id'] == 'fresh' and entry['fresh_first'] is True
+    assert len(firsts) == len(ready) == len(writes) == 1
+    assert firsts[0] is ready[0] is writes[0]
+
+
 def test_meter_spends_one_token_with_the_result_and_preserves_fresh_chain(h, monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED', 'true')
     for n in range(2):

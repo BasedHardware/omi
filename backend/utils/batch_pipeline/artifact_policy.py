@@ -28,7 +28,9 @@ def artifacts_for(store: Any, *, storage_client: Any = None) -> ArtifactStore:
     )
 
 
-def create_artifact_store(store: Any, storage_client: Any, bucket: str, master_secret: bytes) -> ArtifactStore:
+def create_artifact_store(
+    store: Any, storage_client: Any, bucket: str, master_secret: bytes, *, provider_upload: Any = None
+) -> ArtifactStore:
     if len(master_secret) < 32:
         raise ValueError('batch artifact encryption secret must contain at least 32 bytes')
 
@@ -43,11 +45,16 @@ def create_artifact_store(store: Any, storage_client: Any, bucket: str, master_s
         storage_client,
         bucket=bucket,
         namespace=store.namespace,
-        authorize=partial(batch_artifact_authorize, store),
-        authorize_read=partial(batch_artifact_authorize, store),
+        authorize=(
+            provider_upload.authorize if provider_upload is not None else partial(batch_artifact_authorize, store)
+        ),
+        authorize_read=(
+            provider_upload.authorize_read if provider_upload is not None else partial(batch_artifact_authorize, store)
+        ),
         key_for_owner=key_for_owner,
         register_artifact=partial(batch_artifact_register, store),
         shadow_result=partial(shadow_result, store),
+        session_upload=provider_upload,
     )
 
 
