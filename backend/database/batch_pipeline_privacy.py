@@ -583,6 +583,9 @@ def _assert_batch_write_allowed_live(
     choosing another target must never revive a deleted source. Unknown accounts
     are denied even if their deletion marker has disappeared.
     """
+    evidence = metrics.current_evidence()
+    if evidence is not None:
+        evidence.source = 'fresh_read'
     key = privacy_owner_key(uid)
 
     def live_read(reference):

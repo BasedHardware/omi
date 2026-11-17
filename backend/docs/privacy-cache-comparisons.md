@@ -45,13 +45,16 @@ produces `unknown`. TTL enforcement uses the existing monotonic cache clock and
 Redis expiry. Missing legacy age/marker metadata is `unknown`.
 
 External shadow reads run after live authority using independent snapshots.
-When the candidate is `fresh_read` and a common observed marker changed,
-the disagreement uses `reason=fresh_authority_change` in
-`privacy_decision_mismatch_total`. Both comparison counters still count a
-mismatch. This also covers equal observed tokens: the writer can commit after
-both token reads and before the candidate's authority read. Without marker
-change evidence the existing conservative reasons remain. Cached candidates
-always retain the existing reasons, including `stale_allow` within TTL.
+Only actual authority-read call sites explicitly record `fresh_read`; default,
+legacy `cached_age` and unknown evidence do not establish that provenance.
+A live BLOCK followed by an explicitly fresh candidate ALLOW uses
+`reason=fresh_authority_change` in `privacy_decision_mismatch_total`, independent
+of marker changes. This covers both authority writes and gate expiry between
+reads; equal tokens or markers do not prove equal authority at different times.
+The reverse live ALLOW/candidate BLOCK direction retains `stale_block`.
+Both comparison counters still count every mismatch. Cached, synthesized and
+unknown candidates retain conservative reasons, including `stale_allow` within
+TTL, so the fresh classification cannot hide a reused stale ALLOW.
 Shadow always preserves the original live result or exception.
 
 ## Merge gate

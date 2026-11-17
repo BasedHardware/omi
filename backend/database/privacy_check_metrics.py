@@ -195,7 +195,7 @@ def _plan_label(family, uid):
 @dataclass
 class DecisionEvidence:
     # Private, request-scoped observations. Only closed relations leave compare().
-    source: str = 'fresh_read'
+    source: str = 'unknown'
     age: float | None = None
     certification: str = 'not_used'
     token_seen: bool = False
@@ -477,12 +477,12 @@ def compare(family, live, candidate, *, cached_age=None, live_evidence=None, can
         SHADOW_CHECKS.labels(family, 'mismatch' if mismatch else 'match').inc()
         if mismatch:
             reason = 'stale_allow' if candidate == 'allow' else 'stale_block' if live == 'allow' else 'block_reason'
-            if family == 'external' and labels[0] == 'fresh_read' and labels[4] == 'true':
+            if family == 'external' and candidate == 'allow' and labels[0] == 'fresh_read':
                 # External shadow runs after live with independent snapshots.
-                # A gate finishing (or a marker restoring access) between reads
-                # changes fresh authority, not a cached decision. Keep the
-                # disagreement visible without calling that ALLOW stale. Token
-                # observations can still match if the writer commits after both.
+                # Only actual live-read call sites explicitly record fresh_read;
+                # default/legacy evidence is unknown. A later fresh ALLOW can
+                # follow a writer or time-based gate expiry without a marker
+                # change. Preserve the reverse direction as stale_block.
                 reason = 'fresh_authority_change'
             DECISION_MISMATCH.labels(family, reason).inc()
             # Preserve at most one fixed-size line per family per minute.

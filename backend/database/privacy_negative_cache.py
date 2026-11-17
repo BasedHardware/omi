@@ -72,6 +72,7 @@ def _candidate(family, uid, client, variant, live, cache_family, *, shadow, reus
     if certificate is None:
         metrics.memo_result(family, 'ineligible')
         evidence.certification = 'unavailable'
+        evidence.source = 'fresh_read'
         return live()
     version = certificate['version']
     holder = metrics.session_memo()
@@ -96,6 +97,7 @@ def _candidate(family, uid, client, variant, live, cache_family, *, shadow, reus
         live_started = ttl_cache.DECISIONS.clock()
         metrics.memo_result(family, 'miss')
         observed_at = time.time()
+        evidence.source = 'fresh_read'
         clear = live()
         return _envelope(clear, certificate, reuse_allowed, evidence, observed_at)
 
@@ -161,6 +163,7 @@ def _ttl_candidate(family, uid, client, variant, live, reuse_allowed, *, evidenc
     ttl_cache.DECISIONS.forget(key)
     metrics.ttl_result(family, 'miss')
     started, observed_at = ttl_cache.DECISIONS.clock(), time.time()
+    evidence.source = 'fresh_read'
     clear = live()
     envelope = _envelope(clear, certificate, reuse_allowed, evidence, observed_at)
     if envelope['reusable'] and ttl_cache.DECISIONS.put(key, envelope, started=started):
