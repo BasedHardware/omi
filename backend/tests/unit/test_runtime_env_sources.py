@@ -57,6 +57,9 @@ def test_conversations_v3_stage_is_shared_across_creator_finalizer_readers():
     for env in manifest['environments'].values():
         for service in env['cloud_run']['services'].values():
             assert service['env']['CONVERSATIONS_V3_STAGE']['value'] == 'cohort'
+        for job in env['cloud_run'].get('jobs', {}).values():
+            if isinstance(job, dict):
+                assert job['env']['CONVERSATIONS_V3_STAGE']['value'] == 'cohort'
         for name in ('backend-listen', 'pusher'):
             assert env['gke'][name]['env']['CONVERSATIONS_V3_STAGE']['config_map']['key'] == 'CONVERSATIONS_V3_STAGE'
         assert env['gke']['config_map']['entries']['CONVERSATIONS_V3_STAGE']['value'] == 'cohort'
@@ -69,6 +72,11 @@ def test_one_stage_source_moves_all_runtime_roles(tmp_path):
     manifest = COMPOSER['compose_manifest'](base_path=expanded)
     for env in manifest['environments'].values():
         assert all(s['env']['CONVERSATIONS_V3_STAGE']['value'] == 'all' for s in env['cloud_run']['services'].values())
+        assert all(
+            j['env']['CONVERSATIONS_V3_STAGE']['value'] == 'all'
+            for j in env['cloud_run'].get('jobs', {}).values()
+            if isinstance(j, dict)
+        )
         assert env['gke']['config_map']['entries']['CONVERSATIONS_V3_STAGE']['value'] == 'all'
 
 
