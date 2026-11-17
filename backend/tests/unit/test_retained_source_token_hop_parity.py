@@ -143,9 +143,17 @@ def test_hop_the_token_rides_the_reason_vocabulary_growth():
     # refusal's typed custody handoff; decode_payload_invalid joined for
     # the fetch_decode bare-ValueError poison's typed custody handoff;
     # persist_privacy_refused joined for the persist tail's privacy
-    # fence's deterministic refusal.
+    # fence's deterministic refusal; decode_artifact_missing joined for
+    # the fetch_decode generation-pinned storage 404 (a gone object never
+    # comes back at the pinned generation).
     # The delta grows WITH the closed vocabulary in the same diff: a new
     # custody token always lands together with the family rule that
     # admits it.
-    assert current - legacy == {TOKEN, 'persist_payload_invalid', 'decode_payload_invalid', 'persist_privacy_refused'}
+    assert current - legacy == {
+        TOKEN,
+        'persist_payload_invalid',
+        'decode_payload_invalid',
+        'persist_privacy_refused',
+        'decode_artifact_missing',
+    }
     assert legacy - current == set()

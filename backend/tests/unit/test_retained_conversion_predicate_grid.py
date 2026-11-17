@@ -2129,6 +2129,12 @@ def test_unconditional_demotion_family_is_exact():
             'retained_audio_invalid',
             'decoded_duration_mismatch',
             'decode_payload_invalid',
+            # decode_artifact_missing joined for the fetch_decode
+            # generation-pinned storage 404 (a gone object never comes
+            # back at the pinned generation; the chain ends at its first
+            # occurrence with custody retained for the fenced recovery
+            # lane).
+            'decode_artifact_missing',
         }
     )
 

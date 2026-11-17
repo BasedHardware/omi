@@ -167,6 +167,12 @@ VALIDATION_DISPOSITION_UNCONDITIONAL_REASONS = frozenset(
         WorkerValidationReason.RETAINED_AUDIO_INVALID.value,
         WorkerValidationReason.DECODED_DURATION_MISMATCH.value,
         WorkerValidationReason.DECODE_PAYLOAD_INVALID.value,
+        # The generation-pinned storage 404 joins its fetch_decode siblings:
+        # a deleted object never comes back at the pinned generation, the
+        # pinned re-read reproduces the loss on every attempt, and the chain
+        # ends at its first occurrence with custody retained (see
+        # ``diarizer.batch_pipeline.decode_artifact_loss_is_deterministic``).
+        WorkerValidationReason.DECODE_ARTIFACT_MISSING.value,
     }
 )
 # The persist tail's deterministic refusal is the persist sibling of the
@@ -219,8 +225,9 @@ def validation_disposition_failure(failure: object, *, disposition_enabled: bool
 
     Accepts exactly the closed shapes the scheduler stores on a job: the
     two-key ``{'stage', 'reason'}`` dicts the store validators admit. The
-    unconditional fetch_decode family — the typed trio and the bare
-    ValueError poison — answers only at the stage its classes raise; the
+    unconditional fetch_decode family — the typed trio, the bare
+    ValueError poison and the generation-pinned storage 404 — answers only
+    at the stage its classes raise; the
     persist refusal answers only at the persist stage its API raises at; the
     flagged verdicts answer at any
     closed worker stage, mirroring the boundary's stage-agnostic flag-gated

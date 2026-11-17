@@ -234,11 +234,16 @@ TRIO = {'staged_audio_invalid', 'retained_audio_invalid', 'decoded_duration_mism
 # fetch_decode arm as the trio: the pinned bytes' own parse failure, no
 # retry can repair it, both flags demote together.
 POISON = {'decode_payload_invalid'}
+# The fetch_decode generation-pinned storage 404 joins the same arm: a
+# deleted object never comes back at the pinned generation, so the pinned
+# re-read reproduces the loss on every attempt and the chain ends at its
+# first occurrence with custody retained.
+ARTIFACT_MISSING = {'decode_artifact_missing'}
 FLAGGED = {'vad_nonfinite', 'vad_order', 'vad_bounds', 'word_shape', 'word_clock', 'word_sequence'}
 
 
 def _expected_disposition(stage, reason, disposition_enabled):
-    if stage == 'fetch_decode' and (reason in TRIO or reason in POISON):
+    if stage == 'fetch_decode' and (reason in TRIO or reason in POISON or reason in ARTIFACT_MISSING):
         return True
     # The persist pair: the 400-class payload refusal and the privacy
     # fence's refusal both end the chain as typed custody handoffs.

@@ -652,6 +652,29 @@ class WorkerValidationReason(StrEnum):
     #
     # Failure-Class: FC-fetch-decode-valueerror-poison-walks-gpu-ladder-as-anonymous-per-attempt
     DECODE_PAYLOAD_INVALID = 'decode_payload_invalid'
+    # A generation-pinned storage read the fetch_decode arm lost for good:
+    # the staged or retained object this unit's manifest names is gone from
+    # the bucket (retention sweep, staging GC, the raw-audio discard sweep,
+    # an expired staging window), so the generation-pinned GET/DOWNLOAD
+    # answers 404. The generation is pinned in the manifest, the path and
+    # bucket are pinned with it, and a deleted object never comes back —
+    # identical input reproduces the fault on every attempt, so the boundary
+    # ends the chain with this typed token and retains custody for the
+    # fenced recovery lane instead of walking the GPU ladder on a read that
+    # cannot change — five anonymous
+    # ``batch_worker_failed error_class=NotFound stage=fetch_decode
+    # reason=unclassified`` ERROR lines per drive plus the anonymous
+    # ``stage=unknown worker_reason=unclassified`` terminal quarantine (the
+    # sensor's NotFound cohort at fetch_decode, feeding the attempt=5
+    # unclassified family). The verdict reads the exception type only, so
+    # the split cannot drift with storage wording. The typed decode family
+    # keeps its own tokens, the transport families (Aborted /
+    # ServiceUnavailable / DeadlineExceeded) stay retryable by design, and
+    # contention keeps the shared classifier's verdict; only the
+    # storage-not-found loss joins the closed vocabulary.
+    #
+    # Failure-Class: FC-fetch-decode-artifact-notfound-walks-gpu-ladder-as-unclassified-worker-fault
+    DECODE_ARTIFACT_MISSING = 'decode_artifact_missing'
 
 
 class RecoveryFailureStage(StrEnum):

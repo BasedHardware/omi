@@ -327,15 +327,17 @@ def test_reason_token_frozenset_includes_the_named_member():
     assert 'outside_admitted_source' in WORKER_VALIDATION_REASON_TOKENS
 
 
-def test_the_token_count_grew_by_exactly_two():
+def test_the_token_count_grew_by_exactly_three():
     # 13 historical tokens (including the evidence-only unknown) plus
     # outside_admitted_source and persist_payload_invalid: the vocabulary
     # grew by exactly two named members.
-    # The token vocabulary rides the enum's own growth: 17 members now —
+    # The token vocabulary rides the enum's own growth: 18 members now —
     # decode_payload_invalid joined for the fetch_decode bare-ValueError
     # poison's typed custody handoff, persist_privacy_refused joined for
-    # the persist tail's privacy fence's deterministic refusal.
-    assert len(WORKER_VALIDATION_REASON_TOKENS) == 17
+    # the persist tail's privacy fence's deterministic refusal, and
+    # decode_artifact_missing joined for the fetch_decode generation-pinned
+    # storage 404 (a gone object never comes back at the pinned generation).
+    assert len(WORKER_VALIDATION_REASON_TOKENS) == 18
 
 
 # --- Docs deep parity ----------------------------------------------------------------------

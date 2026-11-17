@@ -70,7 +70,7 @@ from utils.batch_pipeline.errors import (
     error_site_field,
     validation_disposition_failure,
 )
-from google.api_core.exceptions import GoogleAPIError, InvalidArgument
+from google.api_core.exceptions import GoogleAPIError, InvalidArgument, NotFound
 from utils.batch_pipeline.word_validation import (
     BatchValidationError,
     ValidationReason,
@@ -428,6 +428,66 @@ def decode_payload_failure_reason(error: BaseException, stage: str, untyped_reas
     if not decode_payload_is_deterministic(error):
         return None
     return WorkerValidationReason.DECODE_PAYLOAD_INVALID.value
+
+
+def decode_artifact_loss_is_deterministic(error: BaseException) -> bool:
+    """True for a generation-pinned storage read the fetch arm lost for good.
+
+    ``NotFound`` is the storage APIs' 404 class, and the fetch_decode reads
+    are generation-pinned: the staged or retained manifest names a bucket,
+    path and generation, ``read_reference`` pins the same generation on both
+    its GET (``blob.reload``) and its DOWNLOAD (``download_as_bytes``), and
+    neither call keeps an internal retry (``retry=None``). A deleted object
+    never comes back at the pinned generation — the retention sweep, the
+    staging GC and the raw-audio discard sweep all remove objects one way —
+    so the pinned re-read every ladder attempt performs reproduces the fault
+    exactly: same bucket, same path, same generation, same 404. Walking the
+    bounded GPU ladder on it re-runs the full pipeline per attempt only to
+    book one more anonymous
+    ``batch_worker_failed error_class=NotFound stage=fetch_decode
+    reason=unclassified`` ERROR line before the anonymous
+    ``stage=unknown worker_reason=unclassified`` terminal quarantine.
+
+    The verdict reads the exception type only — never an exception message —
+    so the split cannot drift with storage wording, mirroring the decode
+    poison verdict and the persist tail's deterministic refusal verdict. The
+    typed decode family keeps its own tokens: ``StagedAudioInvalid`` /
+    ``StagedArtifactInvalid`` / ``RetainedAudioInvalid`` (whose
+    ``InvalidRetainedManifest`` subclass rides the same verdict) /
+    ``RetainedAudioOutsideAdmittedSource`` / ``DecodedDurationMismatch`` /
+    ``BatchValidationError`` all answer False here — the boundary's typed
+    arms claim them before this verdict is consulted, and a gone object that
+    a validator already typed must not be rebooked under two tokens. The
+    transport families — ``Aborted`` / ``ServiceUnavailable`` /
+    ``DeadlineExceeded`` — and the shared contention classifier's verdicts
+    answer False and keep their deliberately-retryable attribution: a
+    transient storage storm must keep walking the ladder it is shaped for.
+    The same class raised at a later stage is that stage's fault, not a
+    fetch read loss — the boundary arms are stage-scoped. Everything else
+    at every other stage answers False.
+
+    Failure-Class: FC-fetch-decode-artifact-notfound-walks-gpu-ladder-as-unclassified-worker-fault
+    """
+    return isinstance(error, NotFound)
+
+
+def decode_artifact_failure_reason(error: BaseException, stage: str, untyped_reason: str) -> str | None:
+    """The typed artifact-missing token for a fetch_decode storage 404, else None.
+
+    The worker's ``fail()`` boundary consults this after its typed decode
+    arms have claimed their classes: only a fault still carrying the
+    anonymous ``unclassified`` attribution at the ``fetch_decode`` stage can
+    join the artifact-missing arm, so the typed classes, the persist tail's
+    verdicts, the decode poison and every other stage's attribution are
+    untouched. Stage-scoped like the typed trio: the same exception class
+    raised by a persist upload at a later stage is that stage's fault, not a
+    fetch read loss.
+    """
+    if stage != WorkerValidationStage.FETCH_DECODE.value or untyped_reason != 'unclassified':
+        return None
+    if not decode_artifact_loss_is_deterministic(error):
+        return None
+    return WorkerValidationReason.DECODE_ARTIFACT_MISSING.value
 
 
 def transient_failure_evidence(stage: str, reason: str) -> dict | None:
@@ -1158,6 +1218,26 @@ class PipelineWorker:
                 )
                 if decode_payload_invalid:
                     reason = WorkerValidationReason.DECODE_PAYLOAD_INVALID.value
+                # A generation-pinned storage read the fetch/decode arm lost
+                # for good: the staged or retained object this unit's manifest
+                # names (bucket, path, generation) is gone from the bucket, a
+                # deleted object never comes back at the pinned generation,
+                # and the pinned re-read every attempt performs reproduces the
+                # 404 exactly — so it must end the chain with the typed
+                # custody handoff instead of walking the bounded GPU ladder on
+                # a read that cannot change — five anonymous
+                # ``error_class=NotFound stage=fetch_decode`` worker-fault
+                # ERROR lines per drive plus an anonymous terminal quarantine.
+                # The verdict reads the type — never an exception message —
+                # and the boundary books the same terminal route the decode
+                # trio and the poison ride.
+                #
+                # Failure-Class: FC-fetch-decode-artifact-notfound-walks-gpu-ladder-as-unclassified-worker-fault
+                decode_artifact_missing = (
+                    stage == WorkerValidationStage.FETCH_DECODE.value and decode_artifact_loss_is_deterministic(exc)
+                )
+                if decode_artifact_missing:
+                    reason = WorkerValidationReason.DECODE_ARTIFACT_MISSING.value
                 state = states.get(item.segment_id, {})
                 measured_vad = state.get('speech_seconds', strict_measurements.get(item.segment_id))
                 receipt = (
@@ -1195,6 +1275,7 @@ class PipelineWorker:
                     or persist_payload_invalid
                     or persist_privacy_refused
                     or decode_payload_invalid
+                    or decode_artifact_missing
                     or (
                         isinstance(exc, BatchValidationError)
                         and (reason == 'unsupported_language' or worker_validation_disposition_enabled())

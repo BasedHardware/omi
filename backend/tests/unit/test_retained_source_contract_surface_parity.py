@@ -104,7 +104,9 @@ def test_matrix_covers_fifteen_distinct_reasons_plus_unknown():
     # poison's typed custody handoff; the matrix grows with the vocabulary.
     # persist_privacy_refused joined for the persist tail's privacy fence
     # (the transactional privacy authority's deterministic refusal).
-    assert len(_matrix_reasons()) == 17
+    # decode_artifact_missing joined for the fetch_decode generation-pinned
+    # storage 404 (a gone object never comes back at the pinned generation).
+    assert len(_matrix_reasons()) == 18
 
 
 def test_the_unknown_reason_stays_evidence_only_in_the_matrix():
