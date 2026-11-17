@@ -22,6 +22,7 @@ fullnameOverride: "prod-omi-cloud-run-sync-metrics-exporter"
 #   omi_held_content_*                  held-content ramp gates (#22840 runbook)
 #   omi_stt_cap_recovery_reconciliation_total  cap-hold recovery outcomes
 #   omi_queue_oldest_ready_*            resilience queue-age alert
+#   omi_conversations_v3_{reconciles,summary_writes}_total  health tick v3 builder surface (SCA-2803)
 # A trailing slash pins one family (types are prometheus.googleapis.com/<name>/<kind>).
 # Measured 2026-10-16 with the omi_sync_ blanket prefix: 43 types, ~6.1k series
 # per collection; the omi_sync_ pin above removed omi_sync_phase_* (13.2k live
@@ -88,6 +89,13 @@ stackdriver:
       # clocks. Consumers: the per-state age alarms and the omi-batch-stuck-census
       # dashboard. One scheduled pass on backend-sync publishes them.
       - 'prometheus.googleapis.com/omi_batch_pipeline_census_'
+      # v3 builder outcomes and summary writes (SCA-2803). The builder runs on
+      # backend-sync, so these are born here; the health tick's surface line reads
+      # them so a present family reports committed 0 instead of UNREAD. Bounded: outcome has five
+      # values (committed/busy/error/dispatch_error/outline_fallback), kind two,
+      # at most seven series per service.
+      - 'prometheus.googleapis.com/omi_conversations_v3_reconciles_total/'
+      - 'prometheus.googleapis.com/omi_conversations_v3_summary_writes_total/'
     filters:
       - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend-sync","backend-sync-backfill","backend-integration")'
     interval: '10m'

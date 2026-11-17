@@ -20,6 +20,8 @@ fullnameOverride: "prod-omi-cloud-run-metrics-exporter"
 # A trailing slash pins exactly one family (type suffix excluded). Add a family
 # here only together with the consumer that reads it from these namespaces, and
 # keep tests/unit/test_monitoring_telemetry_contract.py in step.
+# v3 builder outcomes (SCA-2803): the health tick's surface line reads
+# omi_conversations_v3_{reconciles,summary_writes}_total from these namespaces.
 stackdriver:
   projectIds:
     - "based-hardware"
@@ -57,6 +59,13 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_client_telemetry_rejected_total/'
       - 'prometheus.googleapis.com/omi_conversation_duration_seconds/'
       - 'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/'
+      # v3 builder outcomes and summary writes (SCA-2803). The on-open reconcile
+      # runs on backend, so these are born here too; the health tick's surface line
+      # reads them so a present family reports committed 0 instead of UNREAD. Bounded: outcome has
+      # five values (committed/busy/error/dispatch_error/outline_fallback), kind two,
+      # at most seven series per service.
+      - 'prometheus.googleapis.com/omi_conversations_v3_reconciles_total/'
+      - 'prometheus.googleapis.com/omi_conversations_v3_summary_writes_total/'
       - 'prometheus.googleapis.com/omi_daily_summary_resumed_cohort_age_seconds/'
       - 'prometheus.googleapis.com/omi_fallback_total/'
       - 'prometheus.googleapis.com/omi_firestore_documents_per_operation/'

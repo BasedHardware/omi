@@ -323,6 +323,8 @@ CLOUD_RUN_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_client_telemetry_rejected_total/',
     'prometheus.googleapis.com/omi_conversation_duration_seconds/',
     'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/',
+    'prometheus.googleapis.com/omi_conversations_v3_reconciles_total/',
+    'prometheus.googleapis.com/omi_conversations_v3_summary_writes_total/',
     'prometheus.googleapis.com/omi_daily_summary_resumed_cohort_age_seconds/',
     'prometheus.googleapis.com/omi_fallback_total/',
     'prometheus.googleapis.com/omi_firestore_documents_per_operation/',
@@ -402,6 +404,8 @@ CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_stt_cap_recovery_reconciliation_total/',
     'prometheus.googleapis.com/omi_queue_oldest_ready_',
     'prometheus.googleapis.com/omi_batch_pipeline_census_',
+    'prometheus.googleapis.com/omi_conversations_v3_reconciles_total/',
+    'prometheus.googleapis.com/omi_conversations_v3_summary_writes_total/',
 ]
 
 
