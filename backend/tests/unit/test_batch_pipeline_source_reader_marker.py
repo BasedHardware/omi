@@ -91,9 +91,9 @@ def test_unmarked_protocol_two_row_without_a_job_marker_stays_refused():
 
 def test_inherited_marker_is_counted_and_marked_rows_are_not(monkeypatch):
     calls = []
-    import utils.observability.fallback as fallback
+    from database import batch_pipeline_projection_protocol as protocol
 
-    monkeypatch.setattr(fallback, 'record_fallback', lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(protocol, 'record_fallback', lambda **kwargs: calls.append(kwargs))
     assert source_reader_marked({'protocol_version': 2, 'source_reuse_version': 1}, {'source_reuse_key': KEY})
     assert calls == []
     assert source_reader_marked({'protocol_version': 2}, {'source_reuse_key': KEY, 'source_reuse_version': 1})

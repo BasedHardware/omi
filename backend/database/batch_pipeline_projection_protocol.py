@@ -3,6 +3,8 @@
 from typing import Any
 
 from utils.batch_pipeline.contracts import ProjectionBinding
+from utils.batch_pipeline.result_protocol import SOURCE_MARKERS, REQUIRED, supported, requirements
+from utils.observability.fallback import record_fallback
 
 
 class ProjectionBlocked(RuntimeError):
@@ -27,7 +29,7 @@ def normalized_binding(raw: dict[str, Any]) -> ProjectionBinding:
     return ProjectionBinding(**values)
 
 
-_SOURCE_MARKERS = ('source_reuse_version', 'source_alias_version')
+_SOURCE_MARKERS = SOURCE_MARKERS
 
 
 def source_reader_marked(entry: dict[str, Any], job: dict[str, Any]) -> bool:
@@ -45,22 +47,40 @@ def source_reader_marked(entry: dict[str, Any], job: dict[str, Any]) -> bool:
       every non-null marker must be 1 (a present-but-wrong marker is refused,
       never inherited from the job);
     - no marker field on the row: inherit the immutable job's marker, and
-      count it, so the residual pre-reuse merger output is observable.
+      count it. This is the permanent compatibility path for independently
+      deployed metadata copiers, not a temporary rollout allowance.
     """
+    if REQUIRED in job:
+        if not supported(job):
+            return False
+        required = requirements(job)
+        # Explicit disagreements are corruption, never a compatibility miss.
+        if any(
+            field in entry and (type(entry[field]) is not int or entry[field] != required.get(field))
+            for field in SOURCE_MARKERS
+        ):
+            return False
+        if any(field not in entry for field in required):
+            _observe_inheritance()
+        return bool(required)
     if not job.get('source_reuse_key'):
         return False
     if any(field in entry for field in _SOURCE_MARKERS):
         values = [entry.get(field) for field in _SOURCE_MARKERS if entry.get(field) is not None]
-        return bool(values) and all(value == 1 for value in values)
-    inherited = any(job.get(field) == 1 for field in _SOURCE_MARKERS)
+        return bool(values) and all(type(value) is int and value == 1 for value in values)
+    inherited = any(type(job.get(field)) is int and job[field] == version for field, version in _SOURCE_MARKERS.items())
+    if any(field in job and job[field] != version for field, version in _SOURCE_MARKERS.items()):
+        return False
     if inherited:
-        from utils.observability.fallback import record_fallback
-
-        record_fallback(
-            component='sync_dispatch',
-            from_mode='row_source_marker',
-            to_mode='job_source_marker',
-            reason='capability_mismatch',
-            outcome='recovered',
-        )
+        _observe_inheritance()
     return inherited
+
+
+def _observe_inheritance():
+    record_fallback(
+        component='sync_dispatch',
+        from_mode='row_source_marker',
+        to_mode='job_source_marker',
+        reason='capability_mismatch',
+        outcome='recovered',
+    )

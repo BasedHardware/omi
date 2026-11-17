@@ -181,7 +181,9 @@ def test_health_and_readiness_are_distinct_and_shutdown_closes_admission():
         state.stopping = True
         with pytest.raises(urllib.error.HTTPError):
             urllib.request.urlopen(base + '/ready')
-        assert urllib.request.urlopen(base + '/metrics').status == 200
+        with urllib.request.urlopen(base + '/metrics') as response:
+            assert response.status == 200
+            assert b'omi_batch_result_protocol_refused_total' in response.read()
         state.ticked_at -= 61
         with pytest.raises(urllib.error.HTTPError):
             urllib.request.urlopen(base + '/health')
