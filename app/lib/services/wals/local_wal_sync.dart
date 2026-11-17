@@ -522,7 +522,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   void start() {
-    _initialIndexAdmissionPending = true;
+    // Boot recovery can start the same singleton again while its init tail saves.
+    if (_flushingTimer?.isActive ?? false) return;
+    if (_initializationInFlight == null) _initialIndexAdmissionPending = true;
     _headlessIndexLoad = false;
     _initializeWals();
     BleBridge.instance.addBatchRecordingFinalizedListener(_onNativeRecordingFinalized);
@@ -633,7 +635,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   Future<void> _initializeWalsOnce() async {
     final generation = _sessionGeneration;
-    final List<Wal> loaded;
+    List<Wal> loaded;
     try {
       await WalFileManager.init();
       loaded = !_headlessIndexLoad && _loadWalsOverride != null
@@ -642,6 +644,19 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       if (!_isCurrent(generation)) {
         if (!_walReady.isCompleted) _walReady.complete();
         return;
+      }
+      // This migration writes a full snapshot from loaded. Keep all other
+      // index writers fenced until its reload can merge pending capture rows.
+      if (!_headlessIndexLoad) {
+        final migratedCount = await WalFileManager.migrateLegacyLimitlessFiles(loaded);
+        if (migratedCount > 0) {
+          loaded = _loadWalsOverride != null ? await _loadWalsOverride!() : await WalFileManager.loadWals();
+          DebugLogManager.logInfo('WAL migration completed', {'migratedCount': migratedCount});
+        }
+        if (!_isCurrent(generation)) {
+          if (!_walReady.isCompleted) _walReady.complete();
+          return;
+        }
       }
       _admitLoadedWals(loaded);
       _initialIndexAdmissionPending = false;
@@ -666,22 +681,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       'synced': syncedCount,
     });
 
-    // Run migrations for legacy Limitless files
-    final migratedCount = await WalFileManager.migrateLegacyLimitlessFiles(loaded);
-    if (!_isCurrent(generation)) {
-      if (!_walReady.isCompleted) _walReady.complete();
-      return;
-    }
-    if (migratedCount > 0) {
-      // Reload WALs after migration
-      _admitLoadedWals(_loadWalsOverride != null ? await _loadWalsOverride!() : await WalFileManager.loadWals());
-      if (!_isCurrent(generation)) {
-        if (!_walReady.isCompleted) _walReady.complete();
-        return;
-      }
-      Logger.debug("wal service after migration: ${_wals.length}");
-      DebugLogManager.logInfo('WAL migration completed', {'migratedCount': migratedCount, 'totalAfter': _wals.length});
-    }
     if (!await _purgeDeletedAccountWalsAtLoad(generation)) return;
 
     // Fix any inconsistent WAL states from old implementations
@@ -1190,6 +1189,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
         Logger.debug("_flush file ${wal.filePath}");
         flushedCount++;
+        durableWals.add(wal);
+      } else if (wal.storage == WalStorage.disk && wal.data.isNotEmpty) {
+        // An earlier flush fsynced these bytes while index admission failed.
+        // Release their RAM copy only after a later index save succeeds.
         durableWals.add(wal);
       }
     }

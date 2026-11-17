@@ -149,10 +149,84 @@ void main() {
       expect(await File('${documents.path}/${old.filePath}').readAsBytes(), [1, 2, 3]);
       expect(await File('${documents.path}/${captured.filePath}').readAsBytes(), capturedBytes);
       expect(await sync.hasDurableWal(captured, admittedGeneration: sync.sessionGeneration), isTrue);
+      expect(captured.data, isEmpty, reason: 'a recovered index save must release the fsynced payload');
+      expect(sync.isFrameDurable(frame), isTrue);
       // A fresh ledger sees both rows after recovery; no directory scan adopts or deletes orphans.
       final restarted = LocalWalSyncImpl(_Listener());
       await restarted.loadForOnDeviceWorker();
       expect(restarted.testWals.map((w) => w.filePath).toSet(), {old.filePath, captured.filePath});
     });
   }
+  test('legacy migration reload stays fenced until pending rows can be merged', () async {
+    final old = await seedOldRow();
+    final legacy = File('${documents.path}/audio_limitless_opus_16000_1_fs320_r1_1794870000000.bin');
+    await legacy.writeAsBytes([4, 5, 6]);
+    SharedPreferencesUtil().saveStringList('flash_page_pending_uploads', [legacy.path]);
+    final enteredReload = Completer<void>();
+    final releaseReload = Completer<void>();
+    var loads = 0;
+    final sync = LocalWalSyncImpl(_Listener(),
+        deltaIndexAllowed: () async => true,
+        loadWals: () async {
+          final rows = await WalFileManager.loadWals();
+          if (++loads == 2) {
+            enteredReload.complete();
+            await releaseReload.future;
+          }
+          return rows;
+        });
+    sync.start();
+    await enteredReload.future;
+    final added = Wal(
+        timerStart: 2,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        filePath: 'audio_during_migration.bin');
+    await File('${documents.path}/${added.filePath}').writeAsBytes([7, 8, 9]);
+    final adding = sync.addExternalWal(added, admittedGeneration: sync.sessionGeneration);
+    try {
+      await pumpEventQueue(times: 100);
+      expect(sync.indexWorkerForTesting, isNull, reason: 'migration still owns the startup snapshot');
+    } finally {
+      releaseReload.complete();
+      await adding;
+      await sync.walReady;
+      await sync.stop();
+      (await sync.indexWorkerForTesting)?.close();
+    }
+    expect((await WalFileManager.loadIndexedWals()).map((w) => w.filePath).toSet(),
+        {old.filePath, legacy.uri.pathSegments.last, added.filePath});
+  });
+
+  test('a repeated start during an initialization save cannot re-arm its own fence', () async {
+    final old = await seedOldRow();
+    old.storage = WalStorage.flashPage;
+    old.status = WalStatus.synced;
+    old.syncedAt = 1;
+    await WalFileManager.saveWals([old]);
+    SharedPreferencesUtil().autoRemoveSyncedCopies = true;
+    final timers = <_TestTimer>[];
+    var saves = 0;
+    late LocalWalSyncImpl sync;
+    sync = LocalWalSyncImpl(_Listener(), periodic: (_, callback) {
+      final timer = _TestTimer(callback);
+      timers.add(timer);
+      return timer;
+    }, persistWals: (rows) async {
+      if (++saves == 1) sync.start(); // Re-enter after admission, before the startup tail finishes.
+      await WalFileManager.saveWals(rows);
+    });
+    addTearDown(() {
+      for (final timer in timers) {
+        timer.cancel();
+      }
+    });
+    sync.start();
+    await sync.walReady.timeout(const Duration(seconds: 2));
+    expect(saves, 2, reason: 'inconsistent-state repair and expiry must both finish');
+    expect(timers, hasLength(3), reason: 'repeated start must not duplicate capture timers');
+    await sync.stop();
+  });
 }
