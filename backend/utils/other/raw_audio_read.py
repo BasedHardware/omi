@@ -102,7 +102,7 @@ def list_packs(
     timeout=10,
     max_count=10000,
     strict=False,
-    listed_after=None,
+    listed_after: float | None = None,
 ):
     key = (getattr(bucket, 'name', ''), uid, conversation_id)
     gapped_enabled = raw_live_gapped_packs_enabled()

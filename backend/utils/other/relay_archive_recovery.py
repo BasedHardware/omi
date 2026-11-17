@@ -58,7 +58,7 @@ def validated_uncovered_packs(bucket, uid, cid, chunks):
         deadline=deadline,
         max_count=4096,
         strict=True,
-        **({'listed_after': scope.started} if reuse else {}),
+        listed_after=scope.started if scope is not None and reuse else None,
     )
     candidates = raw_audio_read.uncovered_raw_packs(packs, chunks)
     decoded_bytes = new_packs = 0
