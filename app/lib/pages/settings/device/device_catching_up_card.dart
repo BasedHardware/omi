@@ -130,19 +130,19 @@ class DeviceCatchUpSummary {
       if (local.start != null && local.end != null) (local.start!, local.end!),
     ];
     final ids = {if (local.targetIds.isNotEmpty) ...local.targetIds.split('\n')};
-    // The same audio On the Way totals: a processing conversation whose recordings are still
-    // listed locally is counted once, by its recordings, and a server sync job the phone is
-    // running itself is already covered by them.
+    // Prefer the shared WAL amount whenever local work exists. Server rows
+    // without WAL identities can overlap it and must never inflate that total.
+    // A server-only tile still opens the separately labelled server section.
     var seconds = local.pendingSeconds;
     final processingIds = {for (final c in processing) c.id};
     for (final conversation in processing) {
-      if (!ids.contains(conversation.id)) seconds += max(0, conversation.getDurationInSeconds());
+      if (!local.hasPending && !ids.contains(conversation.id)) seconds += max(0, conversation.getDurationInSeconds());
     }
     final phoneSyncing = local.hasPending || serverProcessing;
     for (final work in pending) {
       if (work.conversationIds.any(processingIds.contains)) continue;
       if (work.kind == 'sync_job' && phoneSyncing) continue;
-      seconds += max(0, work.durationSeconds ?? 0);
+      if (!local.hasPending) seconds += max(0, work.durationSeconds ?? 0);
     }
     void include(DateTime? from, int seconds, String id) {
       if (from == null || seconds <= 0) return;

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_derived_views.dart';
 import 'package:omi/utils/sync/offline_sync_amounts.dart';
@@ -24,6 +25,16 @@ void main() {
     expect(views.pendingSeconds, deviceCatchUpLocal(rows).pendingSeconds);
     expect(stale.status, WalStatus.uploaded);
     expect(walDeletionAllowed(stale), isFalse);
+  });
+
+  test('server-only work never inflates the card WAL amount', () {
+    final local = deviceCatchUpLocal([_row(1700000000, WalStatus.miss)]);
+    const server = PendingWorkItem(
+        id: 'synthetic', kind: 'conversation', state: 'transcribing', conversationIds: [], durationSeconds: 7200);
+    DeviceCatchUpSummary? card(DeviceCatchUpLocal local) => DeviceCatchUpSummary.from(
+        local: local, serverProcessing: false, status: '', pending: [server], conversations: [], processing: []);
+    expect(card(local)!.seconds, local.pendingSeconds);
+    expect(card(deviceCatchUpLocal([]))!.seconds, 7200);
   });
 
   test('pending inventory expires at its exact deadline and recovers on confirmation', () {

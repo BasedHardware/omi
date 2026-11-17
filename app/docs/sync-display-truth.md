@@ -10,7 +10,8 @@ rollback restores legacy expiry behavior; it grants no audio custody rights.
 The sheet, banner, On the Way WAL rows and Catching up WAL contribution read this
 inventory. On the Way lists server-reported work separately because a server row
 can describe the same audio without a WAL identity. Its duration is not added to
-WAL day totals. The active banner remembers the audio its run set out to move;
+WAL day totals. The device tile prefers the WAL amount while local work exists;
+server-only work retains its own tile and details section. The active banner remembers the audio its run set out to move;
 its progress snapshot intentionally holds steady as uploads finish.
 
 Expired handles remain uploaded in the custody ledger. On the Way offers Offline
