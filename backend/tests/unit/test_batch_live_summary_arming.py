@@ -144,6 +144,28 @@ def test_acceptance_clock_alone_is_receipt_metadata_not_armed_debt():
         delivery.ACCEPT_CONTEXT.reset(token)
 
 
+def test_expired_pending_clock_is_not_armed_even_when_created_at_is_recent():
+    now = datetime.now(timezone.utc).timestamp()
+    row = dict(
+        status='completed',
+        created_at=datetime.fromtimestamp(now, timezone.utc),
+        summary_first_pending_at=now - 4 * 86400,
+        structured={'title': ''},
+    )
+    assert not delivery.stamp_projection_debt(row, now=now)
+    assert row.get('summary_due_at') is None
+    assert row['summary_first_pending_at'] == now - 4 * 86400
+
+
+@pytest.mark.parametrize('pending', [None, False, 'invalid', float('nan'), float('inf'), 0, -1])
+def test_invalid_pending_clock_gets_a_finite_projection_acceptance(pending):
+    now = datetime.now(timezone.utc).timestamp()
+    row = dict(status='completed', summary_first_pending_at=pending, structured={'title': ''})
+    assert delivery.stamp_projection_debt(row, now=now)
+    assert row['summary_first_pending_at'] == now
+    assert row['summary_due_at'] == now + delivery.deadline_seconds()
+
+
 def test_repair_does_not_dispatch_over_the_projection_enrichment_lease(batch_projection, monkeypatch):
     from services import summary_debt_repair as repair
     from utils.sync import reprocess

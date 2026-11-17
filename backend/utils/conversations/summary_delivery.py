@@ -282,8 +282,15 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     if _past_age_gate(write.get('created_at'), now=current):
         return False
     accepted = write.get('summary_first_pending_at')
-    if not isinstance(accepted, (float, int)) or isinstance(accepted, bool) or not math.isfinite(accepted):
+    if (
+        not isinstance(accepted, (float, int))
+        or isinstance(accepted, bool)
+        or not math.isfinite(accepted)
+        or accepted <= 0
+    ):
         accepted = current
+    if _past_age_gate(accepted, now=current):
+        return False
     write['summary_first_pending_at'] = accepted
     write['summary_due_at'] = accepted + deadline_seconds()
     write.setdefault('summary_lane', lane(write))
