@@ -315,8 +315,9 @@ def test_protected_content_does_not_count_a_placeholder_as_a_title(structured, p
         ({'title': FALLBACK, 'participants': [{'name': 'Alex'}]}, False),
         ({'title': FALLBACK, 'insights': [{'text': 'The budget is tight.'}]}, False),
         ({'title': FALLBACK, 'note_claims': [{'text': 'budget'}], 'overview': ''}, False),
-        ({'title': FALLBACK, 'meeting_type': 'meeting'}, False),
-        ({'title': FALLBACK, 'salience': 'highlight'}, False),
+        ({'title': FALLBACK, 'meeting_type': 'meeting'}, True),
+        ({'title': FALLBACK, 'salience': 'highlight'}, True),
+        ({'title': FALLBACK, 'sections': 'not-a-list'}, False),
         ({'title': FALLBACK, 'overview': 'The transcript is unavailable.'}, True),
     ],
 )

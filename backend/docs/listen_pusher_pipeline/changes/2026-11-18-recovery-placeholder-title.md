@@ -27,6 +27,9 @@ Changed, all on by default with no new flag and no provider call of their own:
   row is admitted instead: it either regenerates its notes or dead-letters with the gist intact. A
   discarded row keeps its stored structure too; only the minimum replacement would drop it, and
   that is blocked.
+- `meeting_type` and `salience` do not block the free minimum: they are metadata whose
+  minimum value the presentation already handles, and blocking them would send a metadata-only row
+  to a paid notes call.
 - `conversation_terminal_title._title_update` keeps its promise that a kept visible terminal row
   leaves titled: a blank title is always replaced, and a placeholder label is replaced unless real
   notes sit beside it (that row keeps its notes and its headline).

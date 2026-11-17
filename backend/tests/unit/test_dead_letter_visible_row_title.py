@@ -261,6 +261,26 @@ def test_blank_title_beside_real_notes_still_gets_the_deterministic_title():
     assert patch['structured']['overview'] == 'The pilot budget is approved.'
 
 
+@pytest.mark.parametrize(
+    'structured,retitled',
+    [
+        ({'title': '', 'overview': 'The pilot budget is approved.'}, True),
+        ({'title': 'Discussion notes', 'overview': ''}, True),
+        ({'title': 'Discussion notes', 'overview': 'The pilot budget is approved.'}, False),
+        ({'title': 'Pilot budget'}, False),
+    ],
+)
+def test_title_update_is_the_same_rule_for_every_terminal(structured, retitled):
+    """Kept-row and dead-letter terminals share ``_title_update``."""
+    update = terminal_title._title_update(
+        _UID,
+        {'structured': structured, 'started_at': _STARTED_AT, 'transcript_segments': _segments('Hello there')},
+        ['Hello there'],
+        lambda uid: 'UTC',
+    )
+    assert ('structured' in update) is retitled
+
+
 def test_enhanced_encrypted_compressed_transcript_is_decoded_for_the_title():
     compressed_hex = zlib.compress(json.dumps(_segments('Encrypted words matter here. Tail.')).encode()).hex()
     conversation = _conversation(

@@ -2,9 +2,10 @@
 
 No Firestore, model clients, or clock: ``database/conversation_finalization_jobs``
 evaluates these inside its outbox transaction, so nothing here may touch those.
-The one project import, ``utils.summary_quality.valid_title``, is pure policy
-with no side effects. Firestore document dicts and ``Structured`` models go
-through the same definitions so admission and verification cannot drift.
+The one project import, ``utils.summary_quality.valid_title``/``safe_body``, is
+pure policy with no side effects. Firestore document dicts and ``Structured``
+models go through the same definitions so admission and verification cannot
+drift.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ _PROTECTED_STRUCTURED_TEXT_FIELDS = ('overview',)
 # Content the deterministic minimum would drop. It blocks replacement but not
 # admission: a refusal retires the quiet obligation without closing the row, so
 # only content the summary contract already respects may refuse admission.
-_REPLACE_BLOCKING_STRUCTURED_FIELDS = ('participants', 'insights', 'note_claims', 'meeting_type', 'salience')
+_REPLACE_BLOCKING_STRUCTURED_FIELDS = ('participants', 'insights', 'note_claims')
 
 TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
 
@@ -127,16 +128,20 @@ def structured_is_rich(structured: Any) -> bool:
 
 
 def _has_stored_text_content(structured: Any) -> bool:
-    """Content the summary contract respects: a note body or a generated list.
+    """Content the summary contract respects: a note body, a task or an event.
 
     Overview and section bodies use the note policy's narration filter, so a row
     whose only text is "the transcript is unavailable" has no content here.
+    Tasks and events count by presence, as the Home reader counts them.
     """
     for name in _PROTECTED_STRUCTURED_TEXT_FIELDS:
         value = _field(structured, name)
         if isinstance(value, str) and safe_body(value).strip():
             return True
     sections = _field(structured, 'sections')
+    if sections and not isinstance(sections, (list, tuple)):
+        # A malformed stored shape is still content: never replace over it.
+        return True
     if isinstance(sections, (list, tuple)) and any(
         safe_body(_field(section, 'body_markdown')).strip() for section in sections
     ):
@@ -150,7 +155,9 @@ def _has_replace_blocking_content(structured: Any) -> bool:
     A gist counts here but not for admission: a gist-only row that is refused
     admission would retire its quiet obligation without any path closing it,
     while a gist-only row that reaches enrichment either regenerates the gist or
-    dead-letters with it intact.
+    dead-letters with it intact. ``meeting_type`` and ``salience`` are metadata
+    whose minimum value the presentation already handles, so they do not block
+    the free minimum.
     """
     if _has_stored_text_content(structured):
         return True
