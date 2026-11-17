@@ -13,12 +13,14 @@ from __future__ import annotations
 import audioop
 import logging
 import math
+import time
 from datetime import datetime
 from typing import Any, Optional
 
 import numpy as np
 
 from utils.observability.fallback import record_fallback
+from utils.observability.listen_loop import listen_loop_metrics_enabled, record_vad_windows
 from utils.stt.local_vad import VAD_SAMPLE_RATE, VAD_WINDOW_SAMPLES, make_fresh_state, run_vad_window
 
 logger = logging.getLogger(__name__)
@@ -46,6 +48,7 @@ class SpeechClock:
             return
         if self.started_at is None:
             self.started_at = at
+        started, windows = time.perf_counter(), 0
         try:
             data = self._remainder + pcm16
             self._remainder = data[-1:] if len(data) % 2 else b''
@@ -65,7 +68,10 @@ class SpeechClock:
                 if self._run >= MIN_SPEECH_WINDOWS:
                     self.last_speech_at = at
                 offset += VAD_WINDOW_SAMPLES
+                windows += 1
             self._samples = samples[offset:].copy()
+            if listen_loop_metrics_enabled():
+                record_vad_windows(windows, time.perf_counter() - started)
         except Exception as error:
             self.failed = True
             record_fallback(

@@ -152,3 +152,26 @@ async def test_all_silent_row_is_not_closed(monkeypatch):
 @pytest.mark.asyncio
 async def test_without_a_speech_clock_the_audio_clock_still_rules(monkeypatch):
     assert await _one_pass(monkeypatch, _batch_row(NOW - timedelta(minutes=20)), None) == 0
+
+
+@pytest.mark.asyncio
+async def test_a_failed_clock_falls_back_to_the_audio_clock(monkeypatch):
+    opened = NOW - timedelta(minutes=40)
+    clock = _clock(opened=opened, started=opened, speech=NOW - timedelta(seconds=150))
+    clock.failed = True
+    assert await _one_pass(monkeypatch, _batch_row(NOW - timedelta(minutes=20)), clock) == 0
+
+
+@pytest.mark.asyncio
+async def test_a_calendar_meeting_keeps_a_silent_batch_row_open_until_its_window(monkeypatch):
+    opened = NOW - timedelta(minutes=40)
+    clock = _clock(opened=opened, started=opened, speech=NOW - timedelta(seconds=150))
+    row = _batch_row(NOW - timedelta(minutes=20))
+    row['has_content'] = True
+    row['external_data']['calendar_meeting_context'] = {
+        'calendar_event_id': 'evt-1',
+        'calendar_source': 'google',
+        'start_time': (NOW - timedelta(minutes=25)).isoformat(),
+        'end_time': (NOW + timedelta(minutes=30)).isoformat(),
+    }
+    assert await _one_pass(monkeypatch, row, clock) == 0
