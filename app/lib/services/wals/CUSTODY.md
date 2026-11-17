@@ -304,9 +304,10 @@ for automatic upload only with single-owner proof, no `onDeviceOnly` or
 `holdForUser` row in any current, backup, temporary or quarantined generation
 or live/retired/foreign memory bucket, and an account preference permitting cloud
 upload. Otherwise `holdForUser=true`. Missing/unknown history fails closed to a
-hold. Offline auto-sync off, keep-everything-on-device, save-live-hours, active
+hold. Offline auto-sync off, any durable Custom STT choice (including the pinned
+on-device choice), malformed/unknown STT settings, keep-everything-on-device, save-live-hours, active
 on-device overflow or the selected local capture route all preserve the hold.
-Preferences and memory policy are checked again after budget I/O at admission.
+Preferences, memory policy and the kill switch are checked again after budget I/O at admission.
 The ruling is recorded in the lane evidence `ruling-2026-11-17-orphans.md`. The hold also overrides the daily
 `uploadRejected` retry lane after a refused manual request; a refusal cannot
 create automatic consent. `holdForUser` (rather than

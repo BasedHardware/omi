@@ -153,6 +153,10 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         await budgetFile.writeAsString(jsonEncode(budget), flush: true);
         result = fence() ?? 'completed';
         if (result != 'completed') return;
+        // A flag response can settle while the durable budget write awaits.
+        final commitOff = await (_orphanRecoveryOffOverride ?? OrphanAudioRecoveryPolicy.isOff)();
+        result = fence() ?? (commitOff ? 'kill_switch' : 'completed');
+        if (result != 'completed') return;
         if (!snapshot.sourcesUnchanged()) {
           result = 'sources_changed';
           return;
@@ -207,11 +211,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
               // await before publication. Held rows keep explicit user actions.
               holdForUser: snapshot.hasLocalOnlyHistory ||
                   buckets.any((r) => r.onDeviceOnly || r.holdForUser) ||
-                  !SharedPreferencesUtil().autoSyncOfflineRecordings ||
-                  SharedPreferencesUtil().getBool('onDeviceTranscription.keepEverythingOnDevice') ||
-                  SharedPreferencesUtil().getBool('onDeviceTranscription.saveLiveHours') ||
-                  SharedPreferencesUtil().getBool('onDeviceOverflowActive') ||
-                  LocalSttCustody.keepsPhoneAudio,
+                  _orphanUploadNeedsHold(),
               filePath: path.basename(candidate.filePath),
               device: info.marker,
               ownerUid: uid,
@@ -247,6 +247,29 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
     } finally {
       _emitOrphanRecovery(census, counts, result);
     }
+  }
+
+  bool _orphanUploadNeedsHold() {
+    final prefs = SharedPreferencesUtil();
+    final raw = prefs.getString('customSttConfig');
+    if (raw.isNotEmpty) {
+      try {
+        // The normal settings reader repairs invalid configs to cloud defaults.
+        // Consent cannot use that fallback: unknown policy preserves a hold.
+        final config = jsonDecode(raw);
+        if (config is! Map ||
+            config['provider'] != 'omi' ||
+            (config['send_raw_audio_to_omi'] != null && config['send_raw_audio_to_omi'] != true)) return true;
+      } catch (_) {
+        return true;
+      }
+    }
+    return !prefs.autoSyncOfflineRecordings ||
+        prefs.useCustomStt ||
+        prefs.getBool('onDeviceTranscription.keepEverythingOnDevice') ||
+        prefs.getBool('onDeviceTranscription.saveLiveHours') ||
+        prefs.getBool('onDeviceOverflowActive') ||
+        LocalSttCustody.keepsPhoneAudio;
   }
 
   int _orphanPendingCount() =>

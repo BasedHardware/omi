@@ -377,6 +377,34 @@ void main() {
     });
   }
 
+  for (final config in [
+    '{"provider":"onDeviceWhisper","send_raw_audio_to_omi":false}',
+    '{"provider":"deepgram","send_raw_audio_to_omi":true}',
+    '{"provider":"omi","send_raw_audio_to_omi":false}',
+    '{"provider":"unknown"}',
+    '{}',
+    '{',
+  ]) {
+    test('durable STT choice $config holds recovery on a cold start', () async {
+      await json('wals.json', {
+        'wals': [row('existing.bin')]
+      });
+      await SharedPreferencesUtil().saveString('customSttConfig', config);
+      await audio(name(now));
+      final sync = await ledger(realCensus: true);
+      await sync.recoverOrphanAudio();
+      expect(sync.testWals.singleWhere((w) => w.status == WalStatus.miss).holdForUser, isTrue);
+    });
+  }
+
+  test('a kill switch settling during the budget write fences publication', () async {
+    await audio(name(now));
+    var reads = 0;
+    final sync = await ledger(off: () async => ++reads >= 3);
+    await sync.recoverOrphanAudio();
+    expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
+  });
+
   test('preference changed during census is rechecked before admission', () async {
     await json('wals.json', {
       'wals': [row('existing.bin')]
