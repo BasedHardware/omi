@@ -47,7 +47,8 @@ Batch memo entries belong to one sync/pump attempt, including inline sync, and
 close on every exit. The pull worker opens its attempt before its first await,
 including preflight/convergence/cleanup; the shared coordinator opens a nested
 attempt for both Cloud Tasks and pull execution. The worker supervisor exposes
-the privacy counter families at `/metrics`, preserving child counters
+the privacy counter families in [`COUNTERS`](../../utils/sync/worker_privacy_metrics.py)
+at `/metrics`, preserving child counters
 across exit/SIGKILL via Prometheus mmap files and removing each child's files
 only after the process group is reaped. The worker chart enables PodMonitoring
 by default. Include that installed worker target in all-plane coverage before

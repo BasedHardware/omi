@@ -410,6 +410,24 @@ def test_owner_shadow_metrics_fault_is_not_a_candidate_error_or_live_failure(wor
     )
 
 
+def kept(name, rules, component=''):
+    labels = {'__name__': name, 'component': component}
+    for rule in rules:
+        matched = re.fullmatch(rule['regex'], ';'.join(labels.get(k, '') for k in rule['sourceLabels']))
+        if rule['action'] == 'keep' and not matched or rule['action'] == 'drop' and matched:
+            return False
+    return True
+
+
+@pytest.mark.parametrize('action,pattern', [('keep', 'other_metric'), ('drop', 'privacy_.*')])
+def test_scrape_rule_evaluation_rejects_later_rule_drops(action, pattern):
+    rules = [
+        {'action': 'keep', 'sourceLabels': ['__name__'], 'regex': 'privacy_.*'},
+        {'action': action, 'sourceLabels': ['__name__', 'component'], 'regex': pattern + ';worker'},
+    ]
+    assert not kept('privacy_owner_shadow_error_total', rules, component='worker')
+
+
 @pytest.mark.parametrize('config_name', ['cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'])
 def test_owner_shadow_error_classes_are_closed_and_kept_by_cloud_run(config_name):
 
@@ -433,18 +451,13 @@ def test_owner_shadow_error_classes_are_closed_and_kept_by_cloud_run(config_name
     rendered = repr(list(metrics.OWNER_SHADOW_ERRORS.collect()))
     assert 'private' not in rendered.lower()
     config = yaml.safe_load((Path(__file__).parents[2] / 'deploy' / config_name).read_text())
-    keeps = [
-        rule['regex']
-        for endpoint in config['spec']['endpoints']
-        for rule in endpoint['metricRelabeling']
-        if rule['action'] == 'keep' and rule['sourceLabels'] == ['__name__']
-    ]
-    for metric in (
-        'privacy_owner_shadow_error_total',
-        'privacy_ttl_cache_disabled',
-        'privacy_ttl_cache_switch_reads_total',
-    ):
-        assert any(re.fullmatch(pattern, metric) for pattern in keeps)
+    for endpoint in config['spec']['endpoints']:
+        for metric in (
+            'privacy_owner_shadow_error_total',
+            'privacy_ttl_cache_disabled',
+            'privacy_ttl_cache_switch_reads_total',
+        ):
+            assert kept(metric, endpoint['metricRelabeling'])
 
 
 def test_owner_candidate_can_exhaust_shared_artifact_deadline_after_live_allow(world, monkeypatch):
