@@ -426,17 +426,22 @@ proof: multiple accounts do not prohibit reclaim, but any account's reference do
 The census runs off the capture queue. A pass considers at most 200 candidates, in
 five-file buffer-queue turns with a yield between turns. Each turn checks session
 UID/generation, admission, headless/foreground state, raw legacy preferences, every
-source/directory stamp, fresh memory references and file type/size/mtime/ctime. More
+source/directory stamp, fresh memory references and file type/size/mtime/ctime.
+Legacy pending-file basenames remain reserved across directory/container aliases,
+so path-string differences cannot grant deletion. More
 than 512 sources/four directories defers. Sources remain immutable; only the Documents
 directory stamp is advanced synchronously after our own unlinks. One batch intent is flushed asynchronously before entering the capture queue;
-a fresh final fence and second revalidation have no await through unlink. Completion
+a fresh final revalidation has no await through unlink. Completion
 is flushed asynchronously after leaving the queue.
 
 Device-local `Documents/orphan_audio_reclaim/tombstones.json` is a flushed, atomically
 replaced ring of the latest 200 attempts (hashed local file/stamp key, bytes, mtime,
 attempt time and pending/completed state). It survives account changes and is never
-exported. A non-blocking OS lock serializes reclaim engines; malformed/oversized
-journals stop the pass. An interrupted temp never grants permission. Intent is
+exported. A non-blocking advisory OS lock serializes cooperating processes; the foreground
+singleton coalesces calls and headless engines skip reclaim. OS locks do not
+serialize isolates in the same process; malformed/oversized
+journals stop the pass. Capture-committed lists use the canonical receipt parser
+and reject malformed rows or unknown fields before the census can be complete. An interrupted temp never grants permission. Intent is
 persisted before either unlink; sidecar is removed before audio, so an interruption
 after audio unlink leaves no geolocation sidecar. A pending entry does not authorize
 replay: a fresh census and unchanged-file fences are always required. Repeating the

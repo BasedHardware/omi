@@ -353,6 +353,22 @@ void main() {
     expect(await file.exists(), isTrue);
     expect(await sidecar.exists(), isTrue);
   });
+  test('in-pass error stays failed when the ledger also stops', () async {
+    final file = await audio(name(old));
+    final events = <Map<String, Object?>>[];
+    Future<dynamic>? stopped;
+    late LocalWalSyncImpl sync;
+    sync = await ledger(
+        event: events.add,
+        afterTombstone: () {
+          stopped = sync.stop();
+          throw StateError('simulated unlink failure');
+        });
+    await sync.reclaimOrphanAudio();
+    await stopped;
+    expect(await file.exists(), isTrue);
+    expect(events.single['result'], 'failed');
+  });
   test('crash after unlinks before completion is idempotent on a new ledger', () async {
     final file = await audio(name(old));
     final sidecar = File('${file.path}.geolocation.json');
@@ -377,8 +393,37 @@ void main() {
     final file = File('${other.path}/${name(old)}');
     await file.writeAsBytes([1, 0, 0, 0, 7]);
     await file.setLastModified(DateTime.fromMillisecondsSinceEpoch(old * 1000));
-    await (await SharedPreferences.getInstance()).setString('batchAudioDir', other.path);
+    var scans = 0;
+    final events = <Map<String, Object?>>[];
+    final sync = await ledger(
+        event: events.add,
+        scan: () {
+          scans++;
+          return captureRecordingCensus(
+              documents: dir.path,
+              additionalDirectories: [other.path],
+              memoryBuckets: {'active': []},
+              phoneSeconds: now,
+              currentOwner: 'owner-a');
+        });
+    await sync.reclaimOrphanAudio();
+    expect(await file.exists(), isTrue);
+    expect(scans, 1);
+    expect(events.single['census_complete'], isTrue);
+    expect((events.single['skips'] as Map)['outside_documents'], 1);
+  });
+  test('legacy pending reference through a directory alias retains the same audio', () async {
     final sync = await ledger();
+    final file = await audio(name(old));
+    final parent = await Directory.systemTemp.createTemp('orphan-reference-alias-');
+    final alias = Link('${parent.path}/documents');
+    await alias.create(dir.path);
+    addTearDown(() async {
+      await alias.delete();
+      await parent.delete();
+    });
+    await (await SharedPreferences.getInstance())
+        .setStringList('flash_page_pending_uploads', ['${alias.path}/${name(old)}']);
     await sync.reclaimOrphanAudio();
     expect(await file.exists(), isTrue);
   });
@@ -391,16 +436,92 @@ void main() {
   });
   test('unknown flag deletes nothing', () async {
     final file = await audio(name(old));
+    var scans = 0;
+    final events = <Map<String, Object?>>[];
     final sync = LocalWalSyncImpl(_Listener(),
         orphanForeground: () => true,
+        orphanRecoveryOff: () async => true,
+        orphanCensus: () {
+          scans++;
+          return census();
+        },
         now: () => DateTime.fromMillisecondsSinceEpoch(now * 1000),
-        orphanReclaimTelemetry: (_) {});
+        orphanReclaimTelemetry: events.add);
     sync.start();
     await sync.walReady;
     await sync.reclaimOrphanAudio();
     expect(await file.exists(), isTrue);
+    expect(scans, 0);
+    expect(events.single['result'], 'kill_switch');
     await sync.stop();
     (await sync.indexWorkerForTesting)?.close();
+  });
+  test('reclaim refreshes the framing cache while recovery is switched off', () async {
+    final sync = await ledger();
+    await audio(name(now - 86400));
+    await sync.reclaimOrphanAudio();
+    final observed = await captureRecordingCensus(
+        documents: dir.path,
+        memoryBuckets: {'active': []},
+        phoneSeconds: now,
+        currentOwner: 'owner-a',
+        frameCache: sync.orphanFrameCache);
+    expect((observed.summary['orphan_classification'] as Map)['frame_cache_hits'], 1);
+    expect((observed.summary['orphan_classification'] as Map)['frame_files_read'], 0);
+  });
+  const receipt = <String, Object?>{
+    'type': 'capture_committed',
+    'conversation_id': 'fixture-conversation',
+    'capture_root': 'fixture-root',
+    'source_start': 0,
+    'source_end': 50,
+    'channel': 'mono',
+    'clock_epoch': '0',
+    'recording_session_id': null,
+  };
+  for (final bad in <Object>[
+    [1, 2, 3],
+    [{}],
+    [
+      {...receipt, 'future_file_ref': 'unknown.bin'}
+    ]
+  ]) {
+    test('malformed capture journal $bad makes reclaim incomplete', () async {
+      final sync = await ledger();
+      final file = await audio(name(old));
+      await json('capture_committed_foreign.json', bad);
+      await sync.reclaimOrphanAudio();
+      expect(await file.exists(), isTrue);
+    });
+  }
+  for (final valid in <Object>[
+    [],
+    [receipt]
+  ]) {
+    test('valid capture journal $valid does not require single-owner reclaim', () async {
+      final sync = await ledger();
+      final file = await audio(name(old));
+      await json('capture_committed_foreign.json', valid);
+      await sync.reclaimOrphanAudio();
+      expect(await file.exists(), isFalse);
+    });
+  }
+  test('stopping inside a queued batch fences every unlink', () async {
+    for (var i = 0; i < 8; i++) {
+      await audio(name(old - i));
+    }
+    Future<dynamic>? stopped;
+    final events = <Map<String, Object?>>[];
+    late LocalWalSyncImpl sync;
+    sync = await ledger(
+        event: events.add,
+        afterTombstone: () {
+          stopped ??= sync.stop();
+        });
+    await sync.reclaimOrphanAudio();
+    await stopped;
+    expect(events.single['deleted_files'], 0);
+    expect((await census()).orphans.length, 8);
   });
   for (final change in ['size', 'mtime', 'rereference', 'preference', 'generation']) {
     test('commit revalidation catches $change', () async {

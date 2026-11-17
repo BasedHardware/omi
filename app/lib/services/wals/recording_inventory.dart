@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:path/path.dart' as path;
 import 'package:crypto/crypto.dart';
+import 'package:omi/backend/schema/capture_committed_event.dart';
 import 'package:omi/utils/batch_recording.dart';
 
 import 'package:omi/utils/off_ui_isolate.dart';

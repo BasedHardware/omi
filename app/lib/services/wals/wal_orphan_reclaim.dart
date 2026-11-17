@@ -53,8 +53,9 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
         result = reason;
         return;
       }
-      // Non-blocking OS lease: only one reclaim writer, including other engines.
-      // Never impose a stale-timeout takeover on a live writer.
+      // Non-blocking advisory lease for cooperating processes. The foreground
+      // singleton coalesces calls; headless engines are excluded above. This OS
+      // lock does not serialize isolates within one process.
       lease = await File('${journalDirectory.path}/writer.lock').open(mode: FileMode.append);
       await lease.lock(FileLock.exclusive);
       if (fence() case final reason?) {
@@ -90,6 +91,11 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
       }
       final prefs = await SharedPreferences.getInstance();
       final preferences = RecordingInventoryPreferences.capture(prefs.getKeys(), prefs.get);
+      final legacyReferenceNames = await preferences.fileReferenceNames();
+      if (fence() case final reason?) {
+        result = reason;
+        return;
+      }
       census = await (_orphanCensusOverride?.call() ??
           captureRecordingCensus(
               documents: documents.path,
@@ -113,6 +119,7 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
         result = 'incomplete_census';
         return;
       }
+      _orphanFrameCache = snapshot.frameCache;
       final candidates = <OrphanAudioFile>[];
       for (final file in snapshot.orphans) {
         final reason = !snapshot.isDocumentsFile(file) ? 'outside_documents' : file.reclaimSkipReason(_now());
@@ -169,6 +176,11 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
                   !snapshot.sourcesUnchanged()) {
                 return 'sources_changed';
               }
+              // Legacy pending paths can use a container/directory alias. Reserve
+              // their basenames conservatively even when census path strings differ.
+              if (legacyReferenceNames.contains(path.basename(file.filePath).toLowerCase())) {
+                return 'referenced';
+              }
               if (recordingInventorySnapshot.values
                   .expand((rows) => rows)
                   .any((row) => row.filePath != null && path.basename(row.filePath!) == path.basename(file.filePath))) {
@@ -178,12 +190,6 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
               return file.reclaimSkipReason(_now());
             }
 
-            var reason = changed();
-            if (reason != null) {
-              skip(reason);
-              result = reason == 'sources_changed' ? reason : result;
-              continue;
-            }
             final sidecar = File(nativeBatchGeolocationSidecarPath(file.filePath));
             // omi-perf-allow: sync-file-io -- One sidecar type check per candidate; never follow a link for deletion.
             final sidecarType = FileSystemEntity.typeSync(sidecar.path, followLinks: false);
@@ -192,9 +198,9 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
               continue;
             }
             _orphanReclaimAfterTombstone?.call();
-            // Revalidate again AFTER the durable write. No await through either
+            // Revalidate AFTER the durable write. No await through either
             // unlink, so another queued producer cannot register in this gap.
-            reason = changed();
+            final reason = changed();
             if (reason != null) {
               skip(reason);
               if (reason == 'sources_changed') result = reason;
@@ -222,7 +228,8 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
         await Future<void>.delayed(Duration.zero);
       }
     } catch (_) {
-      result = fence() ?? 'failed';
+      // A concurrent lifecycle fence must not hide an actual I/O/transaction failure.
+      result = 'failed';
     } finally {
       await lease?.close();
       final fields = <String, Object?>{
