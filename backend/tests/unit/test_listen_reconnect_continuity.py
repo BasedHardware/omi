@@ -424,7 +424,7 @@ async def test_calendar_meeting_reconnect_and_lifecycle_continue_until_scheduled
     reconnect.host.wait = AsyncMock(side_effect=[False, True])
     await reconnect.lifecycle_loop()
     assert reconnect.host.state.current_conversation_id != cid
-    reconnect.process_conversation.assert_awaited_once_with(cid, displaced=True)
+    reconnect.process_conversation.assert_awaited_once_with(cid)
 
 
 @pytest.mark.parametrize(
@@ -722,7 +722,7 @@ async def test_meeting_that_runs_over_its_scheduled_end_keeps_the_silence_bounda
     controller.host.wait = AsyncMock(side_effect=[False, True])
     await controller.lifecycle_loop()
     assert controller.host.state.current_conversation_id != cid
-    controller.process_conversation.assert_awaited_once_with(cid, displaced=True)
+    controller.process_conversation.assert_awaited_once_with(cid)
 
 
 @pytest.mark.anyio

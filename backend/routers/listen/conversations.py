@@ -7,7 +7,6 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from functools import partial
 from typing import Any, Awaitable, Callable, Optional
 
 from fastapi import WebSocketException
@@ -74,22 +73,6 @@ logger = logging.getLogger(__name__)
 # conversation within the ~2-minute conversation timeout, so an hour of silence
 # proves no session owns the row — including one on another device.
 STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS = 3600
-
-
-def stale_server_batch_row(row: dict[str, Any], cutoff: datetime) -> bool:
-    """A producer-less server-batch row that has received no committed audio since ``cutoff``."""
-    if not server_batch_owned(row) or listen_reconnect.producer(row) or row.get('status') != 'in_progress':
-        return False
-    finished = row.get('finished_at')
-    if not isinstance(finished, datetime):
-        return False
-    finished = finished if finished.tzinfo else finished.replace(tzinfo=timezone.utc)
-    end = row.get('server_batch_audio_end')
-    if end is not None and not (isinstance(end, (int, float)) and end < cutoff.timestamp()):
-        return False
-    return finished < cutoff
-
-
 RECORDING_SESSION_LEASE_RENEW_INTERVAL = timedelta(minutes=1)
 
 
@@ -553,9 +536,7 @@ class LiveConversationController:
             and getattr(self.host.state, 'first_audio_byte_timestamp', None) is None
         )
 
-    async def process_conversation(
-        self, conversation_id: str, *, displaced: bool = False, stale_cutoff: datetime | None = None
-    ) -> bool:
+    async def process_conversation(self, conversation_id: str) -> bool:
         data = await self.host.persistence.call(
             conversations_db.get_conversation,
             self.host.request.uid,
@@ -565,13 +546,6 @@ class LiveConversationController:
         if not data:
             logger.info('Listen finalization skipped conversation=%s outcome=missing', conversation_id)
             return False
-        if stale_cutoff is not None and conversation_id != self.host.state.current_conversation_id:
-            # Stale recovery runs on a live socket, so without this a server-batch
-            # row it claims is refused as "still live" forever. A row whose last
-            # committed window (or, with none, whose finish) is older than the
-            # cutoff has no producer writing to it: treat it as displaced so its
-            # barrier is published and it is finalized or cleaned as empty.
-            displaced = displaced or stale_server_batch_row(data, stale_cutoff)
         # Discarded empty generations are intentionally protected by the delete
         # transaction. Detect that refusal before its write/reread round trip.
         for guard in ('deleted', 'discarded', 'is_locked', 'deferred'):
@@ -583,18 +557,16 @@ class LiveConversationController:
             if producer and producer.get('token') != self.batch_producer_token(conversation_id):
                 return False
             # Commit the silence/partial-window tail before creating a batch obligation.
-            data = await close_batch_archive(self.host, conversation_id, data, displaced=displaced)
+            data = await close_batch_archive(self.host, conversation_id, data)
             if not data:
                 return False
             if server_batch_has_audio(data):
                 return await self.schedule_finalization(conversation_id)
         if data.get('transcript_segments') or data.get('photos'):
             return await self.schedule_finalization(conversation_id)
-        if server_batch_owned(data) and getattr(self.host.state, 'active', False) is True and not displaced:
+        if server_batch_owned(data) and getattr(self.host.state, 'active', False) is True:
             # Rollover runs concurrently with receive_data. It cannot certify
             # no input while another first frame can still enter this generation.
-            # A displaced generation is no longer the capture target, so the
-            # live session cannot admit input to it and cleanup may proceed.
             return False
         recording_session_id = recording_session_id_for_lifecycle_event(
             self.host.recording_session_ids_by_conversation, conversation_id
@@ -764,9 +736,7 @@ class LiveConversationController:
                         )
                     ):
                         await self._finalize_isolated(
-                            partial(self.process_conversation, displaced=True),
-                            conversation_id,
-                            stage='reconnect_rollover',
+                            self.process_conversation, conversation_id, stage='reconnect_rollover'
                         )
                     await self.create_new_in_progress_conversation(rollover=True)
                     return
@@ -994,11 +964,7 @@ class LiveConversationController:
         finally:
             if previous_id and self.host.state.current_conversation_id != previous_id:
                 start_background_task(
-                    self._finalize_isolated(
-                        partial(self.process_conversation, displaced=True),
-                        previous_id,
-                        stage='transcript_decode_rollover',
-                    ),
+                    self._finalize_isolated(self.process_conversation, previous_id, stage='transcript_decode_rollover'),
                     name='listen_transcript_decode_finalization',
                 )
 
@@ -1061,9 +1027,7 @@ class LiveConversationController:
             # This runs before STT initialization: an outage cannot indefinitely
             # defer empty-generation cleanup. The transaction still lets content win.
             if not (existing.get('transcript_segments') or existing.get('photos') or existing.get('has_content')):
-                await self._finalize_isolated(
-                    partial(self.process_conversation, displaced=True), existing['id'], stage='prepare_rollover'
-                )
+                await self._finalize_isolated(self.process_conversation, existing['id'], stage='prepare_rollover')
             await self.create_new_in_progress_conversation()
             return existing['id']
         binding = await self.host.persistence.call(
@@ -1204,9 +1168,12 @@ class LiveConversationController:
         """Recover one durable page; refusals never pin the reconnect queue."""
         if os.getenv('STALE_IN_PROGRESS_RECOVERY_ENABLED', 'true').strip().lower() in {'0', 'false', 'off'}:
             return
-        cutoff = self.clock() - timedelta(seconds=STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS)
         try:
-            stale = await self.host.persistence.call(get_stale_recovery_page, self.host.request.uid, cutoff=cutoff)
+            stale = await self.host.persistence.call(
+                get_stale_recovery_page,
+                self.host.request.uid,
+                cutoff=self.clock() - timedelta(seconds=STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS),
+            )
         except Exception as error:
             # Recovery failure must not become a supervised-task socket crash.
             logger.warning('Listen stale recovery scan failed type=%s', type(error).__name__)
@@ -1216,9 +1183,7 @@ class LiveConversationController:
                 record_stale_recovery_outcome('current_session')
                 logger.info('Listen stale recovery outcome=current_session conversation=%s', conversation['id'])
                 continue
-            await self._finalize_isolated(
-                partial(self.process_conversation, stale_cutoff=cutoff), conversation['id'], stage='stale_in_progress'
-            )
+            await self._finalize_isolated(self.process_conversation, conversation['id'], stage='stale_in_progress')
 
     def _occasion_span_exceeded(self, conversation: dict[str, Any]) -> bool:
         if not getattr(self.host, 'occasion_mode', False):
@@ -1307,9 +1272,7 @@ class LiveConversationController:
                 await self.create_new_in_progress_conversation(rollover=True)
             elif action == ConversationLifecycleAction.process_and_create_new:
                 await self.host.transcripts.flush_speaker_assignments(conversation_id)
-                await self._finalize_isolated(
-                    partial(self.process_conversation, displaced=True), conversation_id, stage='lifecycle_rollover'
-                )
+                await self._finalize_isolated(self.process_conversation, conversation_id, stage='lifecycle_rollover')
                 await self.create_new_in_progress_conversation(rollover=True)
 
     async def send_last_conversation(self) -> None:

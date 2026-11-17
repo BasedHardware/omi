@@ -172,7 +172,7 @@ async def test_failing_reconnect_client_id_cleanup_still_rolls_over():
             super().__init__(host_obj, clock=lambda: now)
             self.process_calls: list[str] = []
 
-        async def process_conversation(self, conversation_id: str, **_kwargs) -> bool:
+        async def process_conversation(self, conversation_id: str) -> bool:
             self.process_calls.append(conversation_id)
             raise _OversizedDocument('document exceeds the maximum allowed size')
 

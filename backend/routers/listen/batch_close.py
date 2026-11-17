@@ -35,33 +35,12 @@ async def resumable_after_drop(host: Any, conversation_id: str, row: dict | None
     return bool(latest and latest.get('status') == 'in_progress' and has_audio(latest))
 
 
-async def close_batch_archive(
-    host: Any, conversation_id: str, data: dict[str, Any], *, displaced: bool = False
-) -> dict[str, Any] | None:
-    """Seal this generation's archive and publish the close barrier.
-
-    ``displaced`` says the caller is finalizing a generation the session has
-    already left (a rollover), not the capture target it is still writing. A
-    live session says nothing about whether more audio can enter a displaced
-    generation, so the barrier must be published here: otherwise the row keeps
-    ``server_batch_audio_received`` without ``server_batch_audio_closed`` and no
-    later actor can seal it (the quiet check only closes producer rows, and the
-    producer protocol is off by default).
-    """
+async def close_batch_archive(host: Any, conversation_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
     receiver = getattr(host, 'receiver', None)
     archive = getattr(receiver, 'raw_archive', None)
-    current = conversation_id == host.state.current_conversation_id
-    if archive is not None and (current or displaced):
-        if current:
-            await archive.close()
-        else:
-            # The session already moved on: commit only this generation's own
-            # packs, never a continuing successor's in-flight window.
-            finish = getattr(archive, 'finish_recording', None)
-            if finish is None:
-                return data
-            await finish(conversation_id)
-        if (displaced or getattr(host.state, 'active', False) is not True) and not await host.persistence.call(
+    if conversation_id == host.state.current_conversation_id and archive is not None:
+        await archive.close()
+        if getattr(host.state, 'active', False) is not True and not await host.persistence.call(
             close_server_batch_audio,
             host.request.uid,
             conversation_id,
