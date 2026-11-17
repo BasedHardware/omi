@@ -159,7 +159,15 @@ def classify(row: Mapping[str, Any]) -> str | None:
             anchor = transcribing_hold.wait_started_at(row)
         else:
             seconds = LEGACY_TRANSCRIPTION_SECONDS
-            anchor = row.get('finished_at')
+            # created_at bounds a row that never recorded its finish, as in the
+            # processing branch.
+            anchor = next(
+                (row.get(key) for key in ('finished_at', 'created_at') if isinstance(row.get(key), datetime)), None
+            )
+        if anchor is None:
+            # No server clock at all is not a wait: keep the row visible as ready
+            # instead of an unbounded transcribing row.
+            return READY
         return FAILED if _older_than(anchor, seconds) else TRANSCRIBING
     return READY
 

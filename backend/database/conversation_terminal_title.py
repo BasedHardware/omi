@@ -98,8 +98,13 @@ def _title_update(
     fields = dict(structured) if isinstance(structured, Mapping) else {'title': '', 'overview': ''}
     title = fields.get('title')
     # A placeholder label ("Discussion notes") is not a title: the row is still
-    # untitled and gets the deterministic one (2026-11-16 incident).
-    if conversations_db.effective_user_title(conversation.get('user_title')) is None and not valid_title(title):
+    # untitled and gets the deterministic one (2026-11-16 incident). A row that
+    # keeps real notes keeps its headline; only an untitled row is retitled.
+    if (
+        conversations_db.effective_user_title(conversation.get('user_title')) is None
+        and not valid_title(title)
+        and not structured_has_protected_content(fields)
+    ):
         started_at = conversation.get('started_at')
         if not isinstance(started_at, datetime):
             started_at = conversation.get('created_at')

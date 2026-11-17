@@ -302,6 +302,18 @@ def test_legacy_completed_row_with_notes_and_no_title_stays_ready(notes):
     assert home_step.classify(row) == home_step.READY
 
 
+def test_legacy_placeholder_row_without_an_anchor_or_finish_is_bounded():
+    """No finished_at falls back to created_at, and no anchor at all stays ready."""
+    row = capture(
+        structured={'title': FALLBACK, 'overview': ''},
+        home_transcription_pending_at=None,
+        home_transcription_deadline_at=None,
+    )
+    late = NOW - timedelta(days=3)
+    assert home_step.classify({**row, 'created_at': late, 'finished_at': None}) == home_step.FAILED
+    assert home_step.classify({**row, 'created_at': None, 'finished_at': None}) == home_step.READY
+
+
 @pytest.mark.parametrize(
     'structured,protected',
     [

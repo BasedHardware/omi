@@ -15,7 +15,7 @@ import unicodedata
 from collections.abc import Mapping
 from typing import Any
 
-from utils.summary_quality import valid_title
+from utils.summary_quality import safe_body, valid_title
 
 RECOVERY_MAX_AUDIO_FILE_IDS = 256
 RECOVERY_QUIET_MINIMUM_MAX_WORDS = 12
@@ -179,8 +179,10 @@ def structured_has_protected_content(structured: Any, user_title: Any = None) ->
         value = _field(structured, name)
         if not isinstance(value, str):
             continue
-        # A placeholder label is not a real title; every other text field is content.
-        if valid_title(value) if name == 'title' else value.strip():
+        # A placeholder label is not a real title; every other text field is
+        # content, minus the availability narration the note policy drops, so
+        # this reader and ``home_titles.notes_pending`` agree on the same row.
+        if valid_title(value) if name == 'title' else safe_body(value).strip():
             return True
     for name in _PROTECTED_STRUCTURED_LIST_FIELDS:
         if _field(structured, name):

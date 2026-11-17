@@ -212,6 +212,40 @@ def test_missing_structured_is_created_with_the_deterministic_title():
     assert patch['structured'] == {'title': 'Hello there', 'overview': ''}
 
 
+def test_placeholder_title_only_gets_the_deterministic_title():
+    conversation = _conversation(
+        {
+            'structured': {'title': 'Discussion notes', 'overview': '', 'category': 'other'},
+            'transcript_segments': _segments('', 'We picked the venue for Friday. Then lunch.'),
+        }
+    )
+
+    patch = _dead_letter(conversation)
+
+    assert patch['structured'] == {
+        'title': 'We picked the venue for Friday.',
+        'overview': '',
+        'category': 'other',
+    }
+
+
+def test_placeholder_title_beside_real_notes_is_untouched():
+    conversation = _conversation(
+        {
+            'structured': {
+                'title': 'Discussion notes',
+                'overview': 'The pilot budget is approved.',
+                'category': 'other',
+            },
+            'transcript_segments': _segments('We picked the venue for Friday.'),
+        }
+    )
+
+    patch = _dead_letter(conversation)
+
+    assert 'structured' not in patch
+
+
 def test_enhanced_encrypted_compressed_transcript_is_decoded_for_the_title():
     compressed_hex = zlib.compress(json.dumps(_segments('Encrypted words matter here. Tail.')).encode()).hex()
     conversation = _conversation(
