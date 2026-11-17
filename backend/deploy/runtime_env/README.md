@@ -152,15 +152,20 @@ in-memory composed surface; `chart/<env>/` includes Helm default inheritance;
 `code/defaults` covers partial defaults even if an explicit literal overrides them.
 No broad exception grants expiry coverage to another surface or percentage.
 
-RESOLVED (SCA-2173, 2026-11-14): the prod worker and the prod Cloud Run
-services pin `batch_timeliness_leader:100` and `lifecycle_record_pending_head:100`,
-and set `privacy_checks_shadow:0`; `backend-sync-backfill` keeps its ec191a row 3
-pins (`batch_timeliness_leader:0`, `privacy_checks_shadow:100`,
-`lifecycle_record_pending_head:5`). `privacy_ttl60` remains 0. Integration, sync
-and backend pin both `usage_month_cache` and `usage_month_total` to 100 (SCA-2222
-Train 1); backfill and the worker keep both at 0. Every other lever and epoch is
-unchanged.
-These source values ride each surface's next train; no worker roll is requested.
+Current source supersedes the 2026-11-14 privacy comparison pins: prod Cloud
+Run backend, sync and integration use owner enforcement 100/shadow 0/decision
+cache 0 under the API admission below. Backfill retains enforcement 0/shadow 10
+with decision cache 0; the prod worker retains enforcement 0/shadow 10/decision
+cache 100. Staging retains its prior enforcement 0/shadow 10/decision cache 100
+on all four Cloud Run services. Its explicit maps preserve that independent
+scope; `staging-mirrors-prod` checks those exact three retained values and strict
+parity of every other JSON key. No worker roll or staging privacy activation is
+requested. `privacy_ttl60` remains 0 everywhere.
+Prod worker and the three API services still pin `batch_timeliness_leader:100`
+and `lifecycle_record_pending_head:100`; backfill retains its separate row-3
+pins. Backend, sync and integration keep both monthly-reader levers at 100;
+backfill and the worker keep both at 0. Every other lever and epoch is unchanged.
+These source values ride each surface's next train.
 The generator's `REVIEWED_INHERITANCE` constant preserves `{}` on default/dev
 worker surfaces and enumerates the remaining unresolved inherited differences.
 The pending 5% monthly-reader proposal is not a compose input; its refreshed

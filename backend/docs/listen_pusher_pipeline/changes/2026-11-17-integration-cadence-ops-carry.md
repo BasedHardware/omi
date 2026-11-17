@@ -9,6 +9,11 @@ existing prod/staging parity contract.
 Until a separately authorized staging config train applies the keys, staging
 source/live or staging/prod drift reports may still show them as missing. This
 source merge is not proof that staging already carries the values.
+The staging deploy path replaces the complete environment from its runtime
+manifest and does not merge this ops file. A subsequent staging deploy therefore
+drops these ops-only keys and restores code defaults (100/20/classification 8)
+until a later staging config train reapplies them. This source carry does not
+change that deployment path or authorize staging classification 16.
 
 This changes config source only. A merge does not dispatch a config train,
 create a revision, establish a clean guard window or prove monetary savings.

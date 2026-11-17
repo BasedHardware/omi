@@ -164,7 +164,26 @@ Unresolved shadow errors or missing candidate coverage block qualification.
 Compare each plane against its own lifecycle baseline; pusher's first complete
 interval includes setup checks, while listen resets its census after bootstrap.
 
-### Owner-level decision memo (candidate on; enforcement admission off)
+## Current API owner-memo admission (2026-11-17)
+
+The margin-40 lead's O2b stage-2 order supersedes the historical calendar gate
+and owner-candidate packet below only for prod Cloud Run backend, backend-sync and backend-integration.
+It follows the recorded 100% live-shadow qualification under David's 2026-11-04
+evidence-based privacy gate and Release's stage-1/native-5xx disposition.
+The durable source for those three APIs is owner enforcement 100, shadow 0,
+decision cache 0, negative cache 0 and TTL60 0; see the
+[runtime-source contract](../../deploy/runtime_env/README.md#api-owner-memo-source-carry-o2b-2026-11-17).
+Backfill remains owner enforcement 0/shadow 10/decision cache 0. Other role and
+family admissions remain separate; no worker/GKE/global default expands here.
+
+Existing transactional per-decision token re-reads and writer fences remain.
+With shadow 0 there is no mismatch stream, so the lead's stage guard is a
+manual-trip backstop; retain the authority-unavailable/audio/5xx stop conditions.
+Release's runtime inverse is enforcement 0 with shadow 10, or the existing
+privacy kill document. Reconcile source before the next train after an inverse.
+Source merge is not runtime acceptance, writer coverage or measured savings.
+
+### Historical owner-level decision memo packet (before the API admission above)
 
 SCA-2190 re-land: candidates remain on (`bpp_owner_memo:100`), but serving an owner memo also requires the separate `bpp_owner_memo_enforce` admission lever (default 0). Old, missing or malformed config therefore cannot admit a new image to owner enforcement. This packet explicitly keeps admission at 0; only the cost lead may authorize a later reviewed config change after qualification. One entry per (client, uid) holds the
 token version, generation, the conversation-id union a walk certified and the
@@ -216,25 +235,6 @@ Shadow window to run before any owner-memo enforcement admission:
   candidate misses. The unsampled cohort returns to baseline live reads. At
   10% sampling that is about +0.5 read per check across the fleet, plus the
   baseline (no-saving) reads for the unsampled 90% until the window ends.
-
-## Current API owner-memo admission (2026-11-17)
-
-The margin-40 lead's O2b stage-2 order supersedes the historical calendar gate
-below only for prod Cloud Run backend, backend-sync and backend-integration.
-It follows the recorded 100% live-shadow qualification under David's 2026-11-04
-evidence-based privacy gate and Release's stage-1/native-5xx disposition.
-The durable source for those three APIs is owner enforcement 100, shadow 0,
-decision cache 0, negative cache 0 and TTL60 0; see the
-[runtime-source contract](../../deploy/runtime_env/README.md#api-owner-memo-source-carry-o2b-2026-11-17).
-Backfill remains owner enforcement 0/shadow 10/decision cache 0. Other role and
-family admissions remain separate; no worker/GKE/global default expands here.
-
-Existing transactional per-decision token re-reads and writer fences remain.
-With shadow 0 there is no mismatch stream, so the lead's stage guard is a
-manual-trip backstop; retain the authority-unavailable/audio/5xx stop conditions.
-Release's runtime inverse is enforcement 0 with shadow 10, or the existing
-privacy kill document. Reconcile source before the next train after an inverse.
-Source merge is not runtime acceptance, writer coverage or measured savings.
 
 ## Deploy and ramp (historical general policy)
 
