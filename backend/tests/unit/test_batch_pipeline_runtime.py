@@ -699,6 +699,15 @@ def test_pod_probes_need_every_child_and_metrics_carry_each_child_once(monkeypat
         )
         negative.labels('conversations', 'shadow', 'hit').inc(index + 1)
         monkeypatch.setattr(runtime, 'NEGATIVE_LOOKUPS', negative)
+        errors = Counter('privacy_owner_shadow_error_total', 'synthetic', ['shape', 'error_class'], registry=None)
+        errors.labels('attempt', 'timeout').inc(index + 1)
+        monkeypatch.setattr(runtime, 'OWNER_SHADOW_ERRORS', errors)
+        kill = Gauge('privacy_ttl_cache_disabled', 'synthetic', registry=None)
+        kill.set(index)
+        monkeypatch.setattr(runtime, 'TTL_KILL', kill)
+        switch_reads = Counter('privacy_ttl_cache_switch_reads_total', 'synthetic', ['result'], registry=None)
+        switch_reads.labels('disabled' if index else 'clear').inc(index + 1)
+        monkeypatch.setattr(runtime, 'TTL_SWITCH_READS', switch_reads)
         if index == 0:  # Only the sampling child exports queue gauges.
             Gauge('omi_batch_pipeline_ready_units', 'ready', ['priority'], registry=registry).labels('fresh').set(7)
         server = runtime.health_server(state, registry, 0, '127.0.0.1')
@@ -724,6 +733,23 @@ def test_pod_probes_need_every_child_and_metrics_carry_each_child_once(monkeypat
             family.name: family
             for family in text_string_to_metric_families(urllib.request.urlopen(base + '/metrics').read().decode())
         }
+        assert sorted(
+            (s.labels['worker_process'], s.value) for s in families['privacy_ttl_cache_disabled'].samples
+        ) == [
+            ('0', 0.0),
+            ('1', 1.0),
+        ]
+        assert sorted(
+            (s.labels['worker_process'], s.labels['result'], s.value)
+            for s in families['privacy_ttl_cache_switch_reads'].samples
+            if s.name.endswith('_total')
+        ) == [('0', 'clear', 1.0), ('1', 'disabled', 2.0)]
+        errors = families['privacy_owner_shadow_error'].samples
+        assert sorted((s.labels['worker_process'], s.value) for s in errors if s.name.endswith('_total')) == [
+            ('0', 1.0),
+            ('1', 2.0),
+        ]
+        assert all(s.labels['shape'] == 'attempt' and s.labels['error_class'] == 'timeout' for s in errors)
         events = families['omi_batch_pipeline_synthetic_events'].samples
         lookups = families['privacy_negative_lookup'].samples
         assert sorted((s.labels['worker_process'], s.value) for s in lookups if s.name.endswith('_total')) == [

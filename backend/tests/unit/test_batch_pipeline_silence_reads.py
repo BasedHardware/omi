@@ -9,6 +9,7 @@ import pytest
 
 from config.batch_pipeline import silence_read_skip_enabled
 from config.policy import ProjectionPolicy
+from database import pipeline_ledger
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionReplay
@@ -231,8 +232,6 @@ def test_silence_completion_rechecks_privacy_after_assignment(lane, fence):
 
 
 def test_silent_completion_keeps_zero_usage_observers_and_replay_generation(lane, monkeypatch):
-    from database import pipeline_ledger
-
     lane.binding = replace(lane.binding, target_conversation_id='capture')
     lane.user.collection('conversations').document('capture').create({'id': 'capture'})
     for sid in lane.binding.segment_ids:
