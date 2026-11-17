@@ -633,9 +633,7 @@ def test_prod_train_leaves_the_backfill_queue_to_the_ops_file(tmp_path):
     import subprocess
 
     action = yaml.safe_load((ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text())
-    # C10 (lane 10): the lifecycle no longer reconciles any backfill queue; only the
-    # update-only sync-jobs attempt cap remains.
-    step = next(s for s in action['runs']['steps'] if s.get('name') == 'Reconcile sync-jobs attempt contract')
+    step = next(s for s in action['runs']['steps'] if s.get('name') == 'Reconcile bounded sync backfill queue')
     gcloud = tmp_path / 'gcloud'
     gcloud.write_text('#!/bin/sh\necho "$@" >> "$CALLS"\n')
     gcloud.chmod(0o755)
@@ -656,9 +654,7 @@ def test_prod_train_leaves_the_backfill_queue_to_the_ops_file(tmp_path):
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert 'sync-backfill' not in (
-        calls.read_text() if calls.exists() else ''
-    ), 'a prod train must not create or update the ops-owned backfill queue'
+    assert not calls.exists(), 'a prod train must not create or update the ops-owned backfill queue'
 
 
 @pytest.fixture(scope='module')

@@ -481,7 +481,6 @@ and an overlapping context for the same entrypoint.
 | `modal/frame_request_retention_job.py:main` | `@read_origin('job:frame_request_retention')` |
 | `modal/day3_reengagement_email_job.py:main` | `@read_origin('job:day3_reengagement_email')` |
 | `modal/conversation_selfheal_job.py:main` | `@read_origin('job:conversation_selfheal')` |
-| `routers/sync.py:sweep_sync_backfill_sequencer` (`/v2/sync-backfill-sequencer/sweep`) | `@read_origin('job:sync_backfill_sequencer')` |
 | `routers/dream_sweep.py:canary_dream_agent` (`/v2/dream-agent/canary`) | `@read_origin('job:dream_agent_canary')` |
 | `routers/dream_sweep.py:sweep_dream_agent` (`/v2/dream-agent/sweep`) | `@read_origin('job:dream_agent_sweep')` |
 | `routers/candidate_integration_sweep.py:sweep_candidate_integrations` (`/v2/candidate-integrations/sweep`) | `@read_origin('job:candidate_integration_sweep')` |

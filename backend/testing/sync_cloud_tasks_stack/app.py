@@ -1,9 +1,9 @@
 """Role-configured ASGI entrypoint for the local Sync Cloud Tasks gauntlet.
 
 The admission process keeps the real public Sync route and production task
-protobuf construction.  The worker process keeps the protected worker route,
-lease/ledger transitions, and provider-independent leaves.  They share only
-isolated Redis, Firestore, and filesystem-backed staged blobs.
+protobuf construction.  The legacy transcription worker role was deleted with
+legacy sync (C11, 2026-11-17); the remaining roles share only isolated Redis,
+Firestore, and filesystem-backed staged blobs.
 """
 
 from __future__ import annotations
