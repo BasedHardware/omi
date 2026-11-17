@@ -109,13 +109,7 @@ true, stable is on only when the enable flag is true.
 
 ## Running experiments
 
-Every running experiment links its preregistration doc. `decision: kill`
-entries are exempt: they are queued for removal, not running.
-
-| key | terminal | owner | prereg | review_by |
-| --- | --- | --- | --- | --- |
-| `onboarding-variant` | undecided | uicleanup | [product/experiments/onboarding-variant.md](../../product/experiments/onboarding-variant.md) | 2026-11-13 |
-| `paywall-variant` | undecided | uicleanup | [product/experiments/paywall-variant.md](../../product/experiments/paywall-variant.md) | 2026-11-12 |
+(none)
 
 ## Overdue for a decision
 
@@ -136,8 +130,8 @@ and an explicit empty literal renders as `''`.
 | key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | terminal | review_by | owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `DAY3_REENGAGEMENT_EMAIL_ENABLED` | Send randomized day-three re-engagement email | backend | env | closed | declared | false | true | — | kill | off | 2026-11-07 | auditfix |
-| `onboarding-variant` | Mobile first-run onboarding A/B/C/D after sign-in and consent: control (native steps unchanged) / reid (device-first onboarding rendered from a web page, OTA; payload names it) / yinka (onboarding ending in a first conversation, PR #21445, native) / pocket (Pocket's order and trial mechanics, native). Client-evaluated multivariate flag; an unread flag, an unknown variant or a reid payload without an https URL is control; the page never owns completion | mobile | posthog | closed | — | — | — | expected (exposure) | pending | undecided | 2026-11-13 | uicleanup |
-| `paywall-variant` | Mobile paywall A/B test: control (current PlansSheet) / outline (PR #21412 soft paywall, native) / web (webview paywall whose page is the variant) / trial (native free-trial paywall shown once right after sign-up, Stripe checkout with trial_days). Client-evaluated multivariate flag; control collapses to the shipped sheet, paid readers and App Review builds never see a variant | mobile | posthog | closed | — | — | — | expected (exposure) | pending | undecided | 2026-11-12 | uicleanup |
+| `onboarding-variant` | Mobile first-run onboarding A/B/C/D after sign-in and consent: control (native steps unchanged) / reid (device-first onboarding rendered from a web page, OTA; payload names it) / yinka (onboarding ending in a first conversation, PR #21445, native) / pocket (Pocket's order and trial mechanics, native). Client-evaluated multivariate flag; an unread flag, an unknown variant or a reid payload without an https URL is control; the page never owns completion | mobile | posthog | closed | — | — | — | expected (exposure) | kill | off | 2026-11-13 | uicleanup |
+| `paywall-variant` | Mobile paywall A/B test: control (current PlansSheet) / outline (PR #21412 soft paywall, native) / web (webview paywall whose page is the variant) / trial (native free-trial paywall shown once right after sign-up, Stripe checkout with trial_days). Client-evaluated multivariate flag; control collapses to the shipped sheet, paid readers and App Review builds never see a variant | mobile | posthog | closed | — | — | — | expected (exposure) | kill | off | 2026-11-12 | uicleanup |
 
 ### rollout
 
