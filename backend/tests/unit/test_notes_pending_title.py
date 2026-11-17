@@ -18,7 +18,8 @@ from tests.unit.test_home_transcribing_hold import capture
 from tests.unit.test_stale_empty_capture import placeholder
 from utils.batch_pipeline.live_projection import replace_record
 from utils.conversations import empty_capture, home_step, home_titles, summary_delivery, transcribing_hold
-from utils.summary_quality import is_fallback_title, notes_pending, title_or_fallback
+from utils.conversations.home_titles import is_fallback_title, notes_pending
+from utils.summary_quality import title_or_fallback
 
 NOW = datetime.now(timezone.utc)
 FALLBACK = title_or_fallback('')
@@ -55,7 +56,9 @@ def store(monkeypatch):
 
 def test_fallback_label_is_what_the_incident_rows_carry():
     assert FALLBACK == 'Discussion notes'
-    assert is_fallback_title(FALLBACK) and is_fallback_title(' discussion  3 ')
+    # The reader's matcher must follow the writer's labels.
+    assert is_fallback_title(FALLBACK) and is_fallback_title(title_or_fallback('', index=3))
+    assert is_fallback_title(' discussion  3 ')
     # Other placeholders are wire labels or model junk, never this writer's output.
     assert not any(is_fallback_title(value) for value in ('Transcribing…', 'Untitled', '', None, 'Discussion notes Q3'))
 

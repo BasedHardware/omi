@@ -1,5 +1,6 @@
 """Presentation-only replacement of transcript-echo minimum titles."""
 
+import re
 from datetime import datetime
 from collections.abc import Mapping
 from typing import Any, Callable, Optional
@@ -8,7 +9,7 @@ from config.episodes import home_neutral_minimum_titles_enabled
 
 from utils.conversations.deterministic_minimum import fallback_title, first_sentence, truncate_on_word_boundary
 from utils.conversations.summary_delivery import field, present
-from utils.summary_quality import is_fallback_title, notes_pending
+from utils.summary_quality import safe_body, valid_title
 
 
 def apply_user_title(row: dict[str, Any], user_title: str | None) -> None:
@@ -32,6 +33,41 @@ def summary_owed(row: Mapping[str, Any]) -> bool:
         and not row.get('summary_completed_at')
         and not row.get('summary_output_present')
     )
+
+
+# The two labels ``summary_quality.title_or_fallback`` produces. Kept here, not in
+# the note policy module, because that file's source is part of the notes prompt
+# fingerprint and these readers are not prompt policy.
+_FALLBACK_TITLE = re.compile(r'^discussion (?:notes|\d+)$', re.I)
+
+
+def is_fallback_title(value: Any) -> bool:
+    """Exactly the deterministic fallback labels, never another placeholder."""
+    return isinstance(value, str) and bool(_FALLBACK_TITLE.fullmatch(re.sub(r'\s+', ' ', value).strip()))
+
+
+def notes_pending(structured: Any) -> bool:
+    """True when no notes exist yet: no usable title, note body, task or event.
+
+    A capture stub and a raw-capture completion carry an empty structure. The
+    deterministic fallback title belongs to generated notes whose headline is
+    unusable; on a row with no notes it reads as a finished conversation, so
+    Home stops presenting the wait and the batch projection stops registering
+    the first-summary obligation (2026-11-16 incident).
+    """
+    if not isinstance(structured, Mapping):
+        return True
+    if valid_title(structured.get('title')):
+        return False
+    if any(safe_body(structured.get(key)).strip() for key in ('overview', 'gist')):
+        return False
+    sections = structured.get('sections')
+    if any(
+        isinstance(section, Mapping) and safe_body(section.get('body_markdown')).strip()
+        for section in (sections if isinstance(sections, list) else [])
+    ):
+        return False
+    return not any(structured.get(key) for key in ('action_items', 'events'))
 
 
 def placeholder_title_wire(row: dict[str, Any]) -> dict[str, Any]:

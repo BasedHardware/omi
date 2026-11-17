@@ -19,7 +19,7 @@ Three effects followed for a stamped batch capture:
 Changes, all on by default with no new flag, read or provider call:
 
 - `database/conversations.py:_quality_processing_notes` leaves the title empty when
-  `summary_quality.notes_pending` holds (no usable title, overview, gist, section body, task or
+  `home_titles.notes_pending` holds (no usable title, overview, gist, section body, task or
   event) and neither a user title nor a stored valid title exists. A stored stand-in title is kept;
   a stored placeholder is cleared. Generated notes with an unusable headline still get the label.
 - `summary_delivery.stamp_projection_debt` treats a placeholder as untitled, so rows stamped before

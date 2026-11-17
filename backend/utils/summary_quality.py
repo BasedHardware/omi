@@ -130,38 +130,6 @@ def valid_title(value: Any) -> str:
     return '' if not text or _PLACEHOLDER.fullmatch(text) else text
 
 
-_FALLBACK_TITLE = re.compile(r'^discussion (?:notes|\d+)$', re.I)
-
-
-def is_fallback_title(value: Any) -> bool:
-    """Exactly the labels ``title_or_fallback`` produces, never another placeholder."""
-    return isinstance(value, str) and bool(_FALLBACK_TITLE.fullmatch(re.sub(r'\s+', ' ', value).strip()))
-
-
-def notes_pending(structured: Any) -> bool:
-    """True when no notes exist yet: no usable title, note body, task or event.
-
-    A capture stub and a raw-capture completion carry an empty structure. The
-    deterministic fallback title belongs to generated notes whose headline is
-    unusable; on a row with no notes it reads as a finished conversation, so
-    Home stops presenting the wait and the batch projection stops registering
-    the first-summary obligation (2026-11-16 incident).
-    """
-    if not isinstance(structured, Mapping):
-        return True
-    if valid_title(structured.get('title')):
-        return False
-    if any(safe_body(structured.get(key)).strip() for key in ('overview', 'gist')):
-        return False
-    sections = structured.get('sections')
-    if any(
-        isinstance(section, Mapping) and safe_body(section.get('body_markdown')).strip()
-        for section in (sections if isinstance(sections, list) else [])
-    ):
-        return False
-    return not any(structured.get(key) for key in ('action_items', 'events'))
-
-
 def title_or_fallback(value: Any, *, index: int | None = None) -> str:
     # Do not promote generated bullet text into a factual headline. Neutral
     # numbered labels are deterministic even when every model field is unsafe.

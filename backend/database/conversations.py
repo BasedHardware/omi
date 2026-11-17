@@ -39,14 +39,7 @@ from threading import Lock
 import utils.other.hume as hume
 from models.audio_file import AudioFile
 from models.structured import Structured
-from utils.summary_quality import (
-    clean_structured,
-    stable_title,
-    content_units,
-    title_basis,
-    notes_pending,
-    valid_title,
-)
+from utils.summary_quality import clean_structured, stable_title, content_units, title_basis, valid_title
 from utils.conversations.llm_input_dedupe import NOTES_OUTPUT_HASH, output_fingerprint
 from database.audio_file_projection import finalize_audio_file_group as _finalize_audio_file_group
 from models.note_claims import claim_references_segment
@@ -81,7 +74,13 @@ from utils.manual_speaker_assignments import (
     normalize_rejection,
     remap_absorbed_receipt,
 )
-from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS, apply_user_title, project_home, title_for_stability
+from utils.conversations.home_titles import (
+    SUMMARY_DEBT_FIELDS,
+    apply_user_title,
+    notes_pending,
+    project_home,
+    title_for_stability,
+)
 from utils.conversations import transcribing_hold
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
