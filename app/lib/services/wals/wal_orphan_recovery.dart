@@ -162,6 +162,14 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
           return;
         }
         final refs = buckets.where((r) => r.filePath != null).map((r) => path.basename(r.filePath!)).toSet();
+        final admitted = Set<Wal>.identity();
+        void rollbackUnpublished() {
+          if (_isCurrent(generation) && uid == SharedPreferencesUtil().uid) {
+            _wals.removeWhere(admitted.contains);
+          }
+          counts['adopted'] = 0;
+        }
+
         var room = min(reserved, max(0, maxRetainedCaptureWalCount - _orphanPendingCount()));
         for (final candidate in candidates.take(reserved)) {
           if (room <= 0) break;
@@ -200,12 +208,24 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
               storageTotalBytes: candidate.bytes)
             ..frameSize = info.frameSize;
           _wals.add(wal);
+          admitted.add(wal);
           refs.add(path.basename(candidate.filePath));
           counts['adopted'] = (counts['adopted'] ?? 0) + 1;
           room--;
         }
         if ((counts['adopted'] ?? 0) == 0) return;
-        await _saveWalsToFile(generation);
+        try {
+          if (!await _saveWalsToFile(generation)) {
+            rollbackUnpublished();
+            result = fence() ?? 'failed';
+            return;
+          }
+        } catch (_) {
+          // Keep the conservative reservation, but let the next census retry
+          // rows that never reached publication. No audio bytes are removed.
+          rollbackUnpublished();
+          rethrow;
+        }
         result = fence() ?? 'completed';
         if (result != 'completed') return;
         heldRevision.value++;

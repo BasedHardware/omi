@@ -321,6 +321,9 @@ without adoption, conservatively delaying the next pass. A torn budget blocks
 adoption; logout cannot clear this budget with account preferences. Each nonempty pass
 makes one index save. Generation, foreground, admission, kill switch, references,
 source metadata, file size and mtime/ctime are rechecked before committing rows.
+An unsuccessful save rolls back unpublished rows by object identity within the
+same session; a later pass can retry them. The daily reservation remains spent,
+and audio remains untouched. Only successful publication advances `heldRevision`.
 Configured directories outside Documents are classified but retained in place,
 and excluded before reserving pass/daily budget so they cannot starve eligible
 Documents files.

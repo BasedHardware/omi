@@ -344,6 +344,39 @@ void main() {
     expect((await WalFileManager.loadIndexedWals()).length, 206);
   });
 
+  test('failed index save rolls back unpublished held rows and a later pass retries them', () async {
+    final file = await audio(name(now));
+    final bytes = await file.readAsBytes();
+    var fail = false, saves = 0;
+    final events = <Map<String, Object?>>[];
+    final sync = await ledger(
+        events: events,
+        persist: (rows) async {
+          saves++;
+          if (fail) throw const FileSystemException('synthetic index failure');
+          await WalFileManager.saveWals(rows);
+        });
+    final revision = sync.heldRevision.value;
+    addTearDown(() {
+      fail = false;
+    });
+    saves = 0;
+    fail = true;
+    await sync.recoverOrphanAudio();
+    expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
+    expect(sync.heldRevision.value, revision);
+    expect(events.single['result'], 'failed');
+    expect((events.single['counts'] as Map)['adopted'], 0);
+    expect(saves, 1);
+    expect(await file.readAsBytes(), bytes);
+    fail = false;
+    await sync.recoverOrphanAudio();
+    expect(sync.testWals.singleWhere((w) => w.status == WalStatus.miss).holdForUser, isTrue);
+    expect(sync.heldRevision.value, revision + 1);
+    expect(saves, 2);
+    expect(await file.readAsBytes(), bytes);
+  });
+
   SyncUploadGate uploadGate(SyncFilesUploader uploader) => SyncUploadGate(
       limiter: SyncRateLimiter.instance, fairUseStatusLoader: () async => {'stage': 'none'}, uploader: uploader);
 
