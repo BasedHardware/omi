@@ -3,7 +3,7 @@
 import math
 import os
 
-from config.batch_pipeline_coalescing_protocol import MAX_COMPLETION_MEMBERS as EXTENDED_MAX_MEMBERS
+from config.batch_pipeline_coalescing_protocol import MAX_COMPLETION_MEMBERS
 
 HOLD_SECONDS = 60.0
 MAX_GROUPS = 64
@@ -15,6 +15,7 @@ MAX_GROUP_BYTES = 8 * 1024 * 1024
 MAX_AUDIO_SECONDS = 300.0
 DRAIN_PAGE = 8
 LEASE_SECONDS = 120.0
+EXTENDED_MAX_MEMBERS = MAX_COMPLETION_MEMBERS
 EXTENDED_MAX_AUDIO_SECONDS = 600.0
 
 
