@@ -371,3 +371,56 @@ def test_developer_api_preserves_joinable_ids_and_real_owner_name(monkeypatch, d
     ]
     assert [row['speaker_id'] for row in body['transcript_segments']] == [0, 379, 380]
     assert [row['speaker_name'] for row in body['transcript_segments']] == ['David Zhang', 'Phong', 'Speaker A']
+
+
+def _v3_stored_row(cid='v3'):
+    """A v3 row as stored before its summary: no category, participants without source."""
+    return {
+        'id': cid,
+        'created_at': _NOW,
+        'started_at': _NOW,
+        'finished_at': _NOW,
+        'status': 'completed',
+        'source': 'omi',
+        'structured': {
+            'title': 'A v3 title',
+            'overview': 'A v3 overview',
+            'emoji': '🛠',
+            'sections': [{'heading': 'Plan', 'body_markdown': ''}],
+            'participants': [{'name': 'Alex'}],
+        },
+        'transcript_segments': [{'text': 'hello', 'start': 0, 'end': 1, 'is_user': True}],
+    }
+
+
+@pytest.mark.parametrize('detail', [False, True])
+def test_developer_api_serves_a_v3_row_without_participant_source(monkeypatch, detail):
+    # #25588 made the app's Conversation model default a participant's missing source, but the
+    # developer response model still required structured.category, which a v3 row written before
+    # its summary does not carry: the detail route 500'd and the list route silently dropped it.
+    from dependencies import get_auth_with_conversation_detail_read
+
+    conversation = _v3_stored_row()
+    monkeypatch.setattr(developer_module, 'populate_folder_names', lambda *a, **k: None)
+    monkeypatch.setattr(developer_module, 'populate_speaker_names', lambda *a, **k: None)
+    client = _build()
+    client.app.dependency_overrides[get_auth_with_conversation_detail_read] = _read_auth
+    if detail:
+        monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a, **k: dict(conversation))
+        response = client.get('/v1/dev/user/conversations/v3?include_transcript=true')
+    else:
+        monkeypatch.setattr(conversations_db, 'get_conversations_without_photos', lambda *a, **k: [dict(conversation)])
+        response = client.get('/v1/dev/user/conversations?include_transcript=true')
+    assert response.status_code == 200, response.text
+    body = response.json() if detail else response.json()[0]
+    assert body['id'] == 'v3'
+    assert body['structured']['title'] == 'A v3 title'
+    assert body['structured']['category'] == 'other'
+
+
+def test_app_conversation_model_keeps_a_participant_without_source():
+    # The app's own list/detail model is the disposition the developer route now matches.
+    from models.conversation import Conversation as AppConversation
+
+    conversation = AppConversation(**_v3_stored_row())
+    assert [(p.name, p.source) for p in conversation.structured.participants] == [('Alex', 'transcript')]

@@ -8,8 +8,35 @@ outcomes stay shared by origin and cache paths.
 from utils.conversations.layer import read_product as read_product_conversation
 from fastapi import HTTPException
 from typing import Any, Callable
+from models.conversation_enums import CategoryEnum
 from utils import external_polling_cache as polling_cache
 from utils.conversations import transcribing_hold
+
+
+def project_developer_structured(row: dict[str, Any]) -> dict[str, Any]:
+    """Fill the structured fields the developer response model requires.
+
+    A v3 row written before its summary carries no ``category``, and a legacy row may carry no
+    ``title``/``overview``. The app's own ``Conversation`` model defaults all three (and tolerates a
+    participant with no ``source``), so the developer detail route 500'd on rows the app serves while
+    the list route silently dropped them. Fill the same defaults before validation; the stored
+    document is never rewritten.
+    """
+    structured = row.get('structured')
+    if not isinstance(structured, dict):
+        return row
+    category = structured.get('category')
+    try:
+        category = CategoryEnum(category) if category is not None else CategoryEnum.other
+    except ValueError:
+        category = CategoryEnum.other
+    row['structured'] = {
+        **structured,
+        'title': structured.get('title') or '',
+        'overview': structured.get('overview') or '',
+        'category': category,
+    }
+    return row
 
 
 def read_conversation_item(
@@ -59,6 +86,7 @@ def read_conversation_item(
         conversation['transcript_included'] = include_transcript
 
         conversation = transcribing_hold.project(conversation)
+        conversation = project_developer_structured(conversation)
 
         # Remove transcript_segments if not requested
         if not include_transcript:
