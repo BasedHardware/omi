@@ -27,10 +27,8 @@ Covers round 3:
 - utils/retrieval/tools/perplexity_tools.py: requests → httpx async for web search
 """
 
-import inspect
 import os
 import re
-import pytest
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -160,16 +158,16 @@ class TestSyncHttpxMigration:
     """Verify sync pipeline uses httpx, not requests."""
 
     def test_sync_uses_httpx(self):
-        src = _read_source('utils/sync/pipeline.py')
+        src = _read_source('utils/sync/legacy_segment_core.py')
         assert 'import httpx' in src
         assert 'import requests' not in src
 
     def test_download_audio_uses_httpx_get(self):
-        src = _read_source('utils/sync/pipeline.py')
+        src = _read_source('utils/sync/legacy_segment_core.py')
         assert 'httpx.get(' in src
 
     def test_download_audio_has_float_timeout(self):
-        src = _read_source('utils/sync/pipeline.py')
+        src = _read_source('utils/sync/legacy_segment_core.py')
         assert 'timeout=60.0' in src
 
 

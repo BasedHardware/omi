@@ -21,7 +21,8 @@ from tests.unit.test_sync_cross_job_assignment import chunk, conversations, inta
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import capture_decode
 from utils.batch_pipeline.contracts import WorkItem, Priority
-from utils.sync import capture_clock, lanes, pipeline
+from utils.sync import capture_clock, lanes
+from utils.sync import legacy_segment_core as pipeline
 from utils.sync.live_overlap import compatible_capture
 from utils.observability.reasons import SyncCaptureTimeReason
 from utils.sync.files import get_timestamp_from_path
@@ -211,7 +212,6 @@ def test_future_upload_cannot_fall_through_to_legacy(client, monkeypatch):
         files=[('files', (NAME, b'\x00' * 32, 'application/octet-stream'))],
     )
     assert response.status_code == 400 and response.json()['code'] == 'invalid_capture_time'
-    router.create_sync_job.assert_not_called()
 
 
 def test_requeued_estimate_cannot_fall_through_to_legacy(client, monkeypatch):
@@ -222,10 +222,13 @@ def test_requeued_estimate_cannot_fall_through_to_legacy(client, monkeypatch):
     stamp = int(router.time.time()) - 10
     response = _post_sync(client, f'audio_omi_pcm16_16000_clkerequeued_{stamp}.bin')
     assert response.status_code == 503 and response.json()['code'] == 'sync_batch_unavailable'
-    router.create_sync_job.assert_not_called()
 
 
-def test_requeued_estimate_ignores_explicit_target_without_legacy_fallback(client):
+def test_requeued_estimate_ignores_explicit_target_without_legacy_fallback(client, monkeypatch):
+    async def declined(**kwargs):
+        return None
+
+    monkeypatch.setattr(router, 'accept_batch_upload', declined)
     stamp = int(router.time.time()) - 10
     response = client.post(
         '/v2/sync-local-files',
@@ -235,4 +238,3 @@ def test_requeued_estimate_ignores_explicit_target_without_legacy_fallback(clien
         ],
     )
     assert response.status_code == 503 and response.json()['code'] == 'sync_batch_unavailable'
-    router.create_sync_job.assert_not_called()

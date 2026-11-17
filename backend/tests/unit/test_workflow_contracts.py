@@ -99,7 +99,7 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
         "backend/routers/conversations.py": "tests/unit/test_conversation_lifecycle_contract.py",
         "backend/services/users/account_deletion.py": "tests/services/users/test_account_deletion.py",
         "backend/routers/sync.py": "tests/unit/test_sync_v2.py",
-        "backend/utils/sync/pipeline.py": "tests/unit/test_sync_v2.py",
+        "backend/utils/sync/legacy_segment_core.py": "tests/unit/test_sync_v2.py",
         "backend/routers/transcribe.py": "tests/unit/test_listen_pipeline.py",
         "backend/config/prerecorded_stt.py": "tests/unit/test_parakeet_prerecorded.py",
         "backend/config/plan_catalog.json": "tests/unit/test_plan_catalog_contract.py",

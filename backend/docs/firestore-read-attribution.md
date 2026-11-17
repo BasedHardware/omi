@@ -47,8 +47,7 @@ GKE `DD_SERVICE` names the JSON ledger, not Prometheus samples. The workload
 charts set a static `service_name` pod label. GMP PodMonitoring and the
 in-cluster Prometheus scrape jobs copy that label onto their samples. Seal
 CronJobs carry their own pod identity for Alloy logs only; their pods are not
-scraped. The sync-backfill-worker pilot carries the label and GMP mapping for
-its future deployment.
+scraped.
 
 The checked-in production seal-worker values set `runtimeEnabled: false`.
 That worker serves its private metrics registry but performs no discovery or

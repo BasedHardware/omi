@@ -21,12 +21,6 @@ def _route(router, path: str) -> APIRoute:
     'router,path,dependency_name,dependency',
     [
         (
-            sync.router,
-            '/v2/sync-backfill-sequencer/sweep',
-            '_retry_count',
-            verify_cloud_tasks_oidc,
-        ),
-        (
             dream_sweep.router,
             '/v2/dream-agent/canary',
             '_retry_count',

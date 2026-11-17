@@ -110,11 +110,10 @@ worker download and delete of a synthetic object before switching traffic.
    finish every pending document (or operator-verify the queue is empty)
    before declaring the drain complete.
    **Failed/partial backfill jobs keep their staged blobs** (terminal-ack does
-   not delete raw paths) and `backend/scripts/recover_dev_failed_sync_backfill.py`
-   requeues those original paths, checking object existence only in the
-   *currently configured* `BUCKET_TEMPORAL_SYNC_LOCAL` — see
-   `sync-backfill-sequencer-env-isolation.md`: that recovery is valid only
-   while the one-day lifecycle still holds the objects. Requeue and finish
+   not delete raw paths). The legacy sequencer recovery script was deleted with
+   legacy sync (plan C C10/C11, 2026-11-17); any recovery must check object
+   existence in the *currently configured* `BUCKET_TEMPORAL_SYNC_LOCAL` while the
+   one-day lifecycle still holds the objects. Requeue and finish
    recoverable failed/partial jobs before the flip (no-copy), or copy their
    objects to the new bucket; do not treat them as already finished.
    Require no nonterminal job and no recoverable failed/partial job referencing

@@ -12,7 +12,7 @@
     "backend/utils/sync/capture_clock.py",
     "backend/utils/request_validation.py",
     "backend/utils/sync/lanes.py",
-    "backend/utils/sync/pipeline.py"
+    "backend/utils/sync/legacy_segment_core.py"
   ],
   "status": "open"
 }

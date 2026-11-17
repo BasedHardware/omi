@@ -25,7 +25,6 @@ def test_claim_outage_is_acked_without_consuming_attempt_or_queue_hot_loop(ready
     from routers import enrichment, sync
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
-    monkeypatch.setattr(sync.uid_sequencer, 'production_fence_mode', lambda: sync.SyncLedgerFenceMode.LEGACY)
     retry.enqueue(UID, ready.lane.conversation)
     key, token = next_wake(ready.state)
     before_rows, before_wakes = deepcopy(ready.state.rows), len(ready.state.wakes)

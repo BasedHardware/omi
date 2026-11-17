@@ -28,7 +28,10 @@ from utils.capture_evidence import (
     sync_segment_receipt,
 )
 from utils.sync.files import decode_files_to_wav
-from utils.sync import pipeline
+from utils.sync import legacy_segment_core as pipeline
+
+# Imported at collection: the listen stack's import graph is setup, not per-test CPU (pipeline.py used to pull it in).
+from tests.unit.test_listen_audio_timeline_stack import _Stack, _run_receiver_frames, _disconnect_frame
 
 ROOT = '12345678-1234-4234-8234-123456789abc'
 NAME = 'audio_phonemic_pcm16_16000_1_fs160_1710000000.bin'

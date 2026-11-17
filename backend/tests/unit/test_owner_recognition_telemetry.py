@@ -20,7 +20,7 @@ import routers.listen.speakers as speakers_mod
 from routers.listen import speaker_audio
 import utils.conversations.process_conversation as process_conversation_mod
 from models.client_processing import ClientProcessing, ProjectedStructure, ProjectionProvenance
-from models.conversation import Conversation, CreateConversation
+from models.conversation import CreateConversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -574,7 +574,7 @@ def _sync_incoming(key: str, timestamp: int, segment: dict) -> dict:
 def _wire_sync_store(monkeypatch, store):
     from database import conversations as conversations_db
     from utils.conversations import lifecycle
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     assign = conversations_db.assign_sync_conversation
     monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *args, **kwargs: None)
