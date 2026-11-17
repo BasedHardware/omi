@@ -43,6 +43,16 @@ or infer savings simply by multiplying the observed ratio by a bill.
 
 ## Coverage and cost acceptance
 
+`BATCH_PIPELINE_PROJECTION_OVERLAP_DIAGNOSTICS` defaults on; `0`, `off`, `false`
+or `no` disable observer wiring when the follow-up drain is constructed. If
+headroom is not qualified, Release can set it off on the ordinary candidate
+before startup, without changing discovery. To remove already-registered series,
+replace the affected processes/revisions with the same artifact and this switch
+off, and verify the new receiving targets: changing an env value cannot erase
+old multiprocess metric files or historical ingested samples. Do not call that
+historical metric disappearance instantaneous. Inverse: restore the prior switch
+value only after target sample-cap and telemetry-budget qualification.
+
 Use existing scrape infrastructure. The API Cloud Run keep rule already admits
 `omi_batch_pipeline_*`; no keep-list or production mutation is added here.
 Dedicated pump/private endpoints still need independent export/identity proof.

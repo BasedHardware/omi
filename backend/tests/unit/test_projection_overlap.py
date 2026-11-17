@@ -1,11 +1,18 @@
 """Synthetic fleet overlap, bounded telemetry and unchanged discovery semantics."""
 
+from pathlib import Path
+import re
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+import yaml
 from prometheus_client import CollectorRegistry, generate_latest
 
+from database.batch_pipeline_store import FirestoreStore
+from database.jobstore.dual_store import DualStore
+from database.jobstore.index_store import IndexStore
+from utils.batch_pipeline import projection_discovery as discovery
 from utils.batch_pipeline import projection_overlap as overlap
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 
@@ -118,23 +125,23 @@ def test_labels_memory_and_clock_regression_are_bounded():
 
 
 @pytest.mark.parametrize('pagination', [False, True])
-def test_discovery_observer_failure_preserves_query_result_cursor_and_scope(monkeypatch, pagination):
-    from utils.batch_pipeline import projection_discovery as discovery
-
+def test_discovery_observer_failure_preserves_query_result_cursor_and_scope(monkeypatch, pagination, caplog):
     monkeypatch.setattr(discovery, 'projection_pagination_enabled', lambda: pagination)
     monkeypatch.setattr(discovery, 'projection_striping_enabled', lambda: False)
     store = SimpleNamespace(projection_page=Mock(return_value=(['already-read'], None)))
     callback = Mock(side_effect=RuntimeError('not a discovery failure'))
     page = ProjectionDiscovery(store, on_page=callback)
+    caplog.set_level('DEBUG', logger=discovery.__name__)
     assert page.next(followup_due_before=123.0) == ['already-read']
     store.projection_page.assert_called_once_with(limit=100, after=None, followup_due_before=123.0)
     callback.assert_called_once_with(['already-read'], 'due')
     assert page.after is None
+    assert 'Projection discovery observer failed' in caplog.text
+    assert 'not a discovery failure' not in caplog.text
+    assert 'already-read' not in caplog.text
 
 
 def test_legacy_nonpaginated_observes_without_extra_queries(monkeypatch):
-    from utils.batch_pipeline import projection_discovery as discovery
-
     monkeypatch.setattr(discovery, 'projection_pagination_enabled', lambda: False)
     store = SimpleNamespace(projection_pending=Mock(return_value=['a', 'a']), projection_page=Mock())
     callback = Mock()
@@ -152,10 +159,6 @@ def test_observer_wrapper_never_raises_or_logs_identifiers(monkeypatch):
 
 
 def test_only_known_firestore_read_adapters_are_observed(monkeypatch):
-    from database.batch_pipeline_store import FirestoreStore
-    from database.jobstore.dual_store import DualStore
-    from database.jobstore.index_store import IndexStore
-
     primary = object.__new__(FirestoreStore)
     primary.namespace = 'batch_pipeline_prod'
     mirror = object.__new__(DualStore)
@@ -172,10 +175,6 @@ def test_only_known_firestore_read_adapters_are_observed(monkeypatch):
 
 
 def test_new_families_survive_existing_cloud_run_keep_filter():
-    from pathlib import Path
-    import re
-    import yaml
-
     backend = Path(__file__).resolve().parents[2]
     rules = yaml.safe_load((backend / 'deploy/cloud_run_gmp_sync.yaml').read_text())['spec']['endpoints'][0][
         'metricRelabeling'
@@ -193,3 +192,20 @@ def test_new_families_survive_existing_cloud_run_keep_filter():
                     assert matched
                 elif rule['action'] == 'drop':
                     assert not matched
+
+
+@pytest.mark.parametrize('missing', [None, True, '0', float('inf'), float('nan')])
+def test_decode_rejects_missing_or_nonnumeric_samples(missing):
+    with pytest.raises(ValueError):
+        overlap.decode([missing] + [0] * 63, 0)
+
+
+@pytest.mark.parametrize('disabled', ['0', 'off', 'false', 'no'])
+def test_disabled_observer_is_unwired_and_creates_no_metrics(monkeypatch, disabled):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_OVERLAP_DIAGNOSTICS', disabled)
+    primary = object.__new__(FirestoreStore)
+    primary.namespace = 'batch_pipeline_prod'
+    constructor = Mock(side_effect=AssertionError('diagnostic metrics must remain unconstructed'))
+    monkeypatch.setattr(overlap, 'OverlapObserver', constructor)
+    assert overlap.observer_for_store(primary) is None
+    constructor.assert_not_called()

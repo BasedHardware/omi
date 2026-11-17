@@ -12,6 +12,7 @@ import time
 
 from prometheus_client import Counter, Gauge, REGISTRY
 
+from config.batch_pipeline import projection_overlap_diagnostics_enabled
 from database.batch_pipeline_store import FirestoreStore
 from database.jobstore.dual_store import DualStore
 
@@ -33,7 +34,9 @@ def estimate(registers) -> float:
 
 def decode(values, epoch: int) -> list[int]:
     """Reject partial/stale/reused-slot sketches rather than mixing epochs."""
-    if len(values) != REGISTERS or any(not math.isfinite(value) or value != int(value) for value in values):
+    if len(values) != REGISTERS or any(
+        type(value) not in (int, float) or not math.isfinite(value) or value != int(value) for value in values
+    ):
         raise ValueError('incomplete or invalid sketch')
     ranks = [int(value) % REGISTERS for value in values]
     if any(int(value) // REGISTERS != epoch for value in values) or any(rank > 59 for rank in ranks):
@@ -136,6 +139,8 @@ def observe_page(namespace: str, rows: list[str], mode: str) -> None:
 
 def observer_for_store(store):
     """Observe direct Firestore or its known mirror-only wrapper; exclude index/PG discovery."""
+    if not projection_overlap_diagnostics_enabled():
+        return None
     if isinstance(store, FirestoreStore):
         return lambda rows, mode: observe_page(store.namespace, rows, mode)
     # DualStore delegates all serving reads to its primary. IndexStore does not

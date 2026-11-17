@@ -122,7 +122,7 @@ class ProjectionDiscovery:
             try:
                 self.on_page(rows, 'due' if 'followup_due_before' in scope else 'legacy')
             except Exception:
-                pass
+                logger.debug('Projection discovery observer failed; page and cursor unchanged')
 
     def read_page(self, **scope):
         rows, cursor = self.store.projection_page(**scope)

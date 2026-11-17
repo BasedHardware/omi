@@ -743,6 +743,16 @@ def owner_drain_admission_diagnostics_enabled() -> bool:
     }
 
 
+def projection_overlap_diagnostics_enabled() -> bool:
+    """Default-on diagnostics; disable before startup without changing discovery."""
+    return os.getenv('BATCH_PIPELINE_PROJECTION_OVERLAP_DIAGNOSTICS', '1').strip().lower() not in {
+        '0',
+        'off',
+        'false',
+        'no',
+    }
+
+
 def serving_projection_sweep_enabled() -> bool:
     """Only ``off`` disables serving-instance discovery; owner wakes still run."""
     from config.policy import kill_switch
