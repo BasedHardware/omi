@@ -42,7 +42,16 @@ intakes and merged completion. Entitlement labels are only paid/trial/free/unkno
 `omi_batch_pipeline_created_units_total` counts first non-shadow unit admission;
 `omi_batch_pipeline_upload_to_transcript_seconds` measures each accepted original
 request through first durable transcript publication, not pre-accept retries,
-client receipt or notes. Privacy/binding/erasure checks and retention remain the
+client receipt or notes. `omi_batch_pipeline_inter_upload_gap_seconds` records
+request-arrival gaps between accepted originals sharing the exact owner/session/
+coalescing key, using already-read predecessor rows. Its closed labels are
+`entitlement=paid|trial|free|unknown`, `freshness=fresh|backlog` and
+`boundary=within_group|between_groups`. It emits only after commit; replays,
+bypasses, missing/reordered clocks and final pauses without a next upload are
+unmeasured. Between-group samples use the previous completed group's members;
+retired/missing heads cannot supply history. It adds no database operations or
+packing behavior. Both Cloud Run profiles and worker/sync forwarding retain it.
+Privacy/binding/erasure checks and retention remain the
 existing authority. See the [change note](listen_pusher_pipeline/changes/2026-11-17-tiered-upload-coalescing.md)
 and [rollout/capability schema](runbooks/batch-upload-coalescing.md).
 

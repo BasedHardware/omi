@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from config import batch_pipeline_coalescing as config
 from database.batch_coalescing_capabilities import extended_ready
+from utils.batch_pipeline import upload_metrics
 
 
 def digest(value):
@@ -31,7 +32,10 @@ def enqueue(store, member, key, now):
     retain the existing retryable response; callers never fall through on error.
     """
 
+    observation = [None, 'within_group']
+
     def commit(tx):
+        observation[0] = None  # Firestore may retry; emit only after the winning commit.
         candidate = dict(member)
         authorize(tx, member)
         prior = tx.get('content', f"{member['owner_id']}/{member['content_id']}")
@@ -83,6 +87,10 @@ def enqueue(store, member, key, now):
             group['scan_at'] = now
             tx.put('coalesce_groups', group['id'], group)
             return 'wait'
+        observation[:] = [
+            upload_metrics.inter_upload_gap(candidate, group.get('members', ())),
+            'within_group' if join else 'between_groups',
+        ]
         if not join:
             group_id = digest([key, member['content_id']])
             group = {k: member[k] for k in ('owner_id', 'owner_key', 'conversation_id', 'privacy_generation')}
@@ -128,7 +136,9 @@ def enqueue(store, member, key, now):
         )
         return member['job_id']
 
-    return store.run(commit)
+    result = store.run(commit)
+    upload_metrics.observe_gap(member, *observation)
+    return result
 
 
 def claim(store, group_id, now, *, producer_enabled, scan=None):

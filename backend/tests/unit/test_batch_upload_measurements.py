@@ -98,10 +98,12 @@ def test_upload_metrics_forward_through_worker_multiprocess_exposition():
         registry.register(collector)
     upload_metrics.CREATED.labels('free').inc()
     upload_metrics.DELIVERED.labels('free').observe(360)
+    upload_metrics.INTER_UPLOAD_GAP.labels('paid', 'fresh', 'within_group').observe(65)
     page = generate_latest(registry)
     merged = merge_metrics([(0, page), (1, page)])
     assert b'omi_batch_pipeline_created_units_total{entitlement="free",worker_process="0"}' in merged
     assert b'omi_batch_pipeline_upload_to_transcript_seconds_bucket' in merged
+    assert b'omi_batch_pipeline_inter_upload_gap_seconds_bucket' in merged
     assert b'worker_process="1"' in merged
 
 
@@ -113,6 +115,9 @@ def test_upload_metrics_forward_through_worker_multiprocess_exposition():
         'omi_batch_pipeline_upload_to_transcript_seconds_bucket',
         'omi_batch_pipeline_upload_to_transcript_seconds_sum',
         'omi_batch_pipeline_upload_to_transcript_seconds_count',
+        'omi_batch_pipeline_inter_upload_gap_seconds_bucket',
+        'omi_batch_pipeline_inter_upload_gap_seconds_sum',
+        'omi_batch_pipeline_inter_upload_gap_seconds_count',
     ],
 )
 def test_class_metrics_survive_every_cloud_run_relabel_rule(profile, metric):
@@ -135,6 +140,7 @@ def test_worker_actual_health_registry_exposes_both_collectors():
         samples = generate_latest(registry)
         assert b'omi_batch_pipeline_created_units_total' in samples
         assert b'omi_batch_pipeline_upload_to_transcript_seconds_bucket' in samples
+        assert b'omi_batch_pipeline_inter_upload_gap_seconds_bucket' in samples
     finally:
         server.shutdown()
         server.server_close()
@@ -146,3 +152,4 @@ def test_sync_default_registry_serves_the_created_and_latency_families():
     response = metrics_response()
     assert b'omi_batch_pipeline_created_units_total' in response.body
     assert b'omi_batch_pipeline_upload_to_transcript_seconds_bucket' in response.body
+    assert b'omi_batch_pipeline_inter_upload_gap_seconds_bucket' in response.body

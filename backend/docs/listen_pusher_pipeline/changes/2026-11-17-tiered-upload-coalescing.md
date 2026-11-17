@@ -31,3 +31,12 @@ serving/projection imports. Its response/queue contracts and strict timing guard
 are preserved. Part B's content-completion trigger is design only.
 
 No deploy, merge or production configuration/data change. No saving is claimed.
+
+Paid-packing design follow-up adds only a same-key accepted-original inter-upload
+gap histogram, split by closed entitlement, freshness and within/between-group
+boundary labels. It uses existing reads, emits after a winning commit, excludes
+replays/invalid clocks, and adds no storage operations or packing behavior.
+Final pauses are right-censored; bypassed uploads and missing/old histories are
+outside coverage. Scrape profiles, real worker/multiprocess and sync exporters
+are tested. The chart-selection contract's cases are isolated individually after
+hosted CI exceeded its unchanged per-test CPU limit; every path assertion stays.

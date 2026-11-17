@@ -200,26 +200,33 @@ def test_diff_chain_rule_is_a_closed_reviewed_addition():
             expected_config(broken)
 
 
-def test_hpa_and_adapter_changes_select_this_contract():
-    sources = [ADAPTER] + list(CHARTS.glob('*/prod*values.yaml'))
-    sources += list(CHARTS.glob('*/templates/hpa.yaml'))
-    owned = {
-        'parakeet',
-        'backend-listen',
-        'pusher',
-        'vad',
-        'diarizer',
-        'nllb-translation',
-        'monitoring',
-        'batch-pipeline-worker',
-    }
-    all_tests = selector.discover_all_tests()
-    for source in sources:
-        if source.relative_to(CHARTS).parts[0] not in owned:
-            continue
-        path = str(source.relative_to(CHARTS.parents[1]))
-        selected, _ = selector.tests_for_changed_paths([path], all_tests)
-        assert 'tests/unit/test_monitoring_adapter_hpa_contract.py' in selected, path
+@pytest.fixture(scope='module')
+def all_backend_tests():
+    return selector.discover_all_tests()
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        path
+        for path in [ADAPTER, *CHARTS.glob('*/prod*values.yaml'), *CHARTS.glob('*/templates/hpa.yaml')]
+        if path.relative_to(CHARTS).parts[0]
+        in {
+            'parakeet',
+            'backend-listen',
+            'pusher',
+            'vad',
+            'diarizer',
+            'nllb-translation',
+            'monitoring',
+            'batch-pipeline-worker',
+        }
+    ],
+)
+def test_hpa_and_adapter_changes_select_this_contract(source, all_backend_tests):
+    path = str(source.relative_to(CHARTS.parents[1]))
+    selected, _ = selector.tests_for_changed_paths([path], all_backend_tests)
+    assert 'tests/unit/test_monitoring_adapter_hpa_contract.py' in selected, path
 
 
 def _comparison_inputs():
