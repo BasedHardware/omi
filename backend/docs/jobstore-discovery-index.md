@@ -130,10 +130,13 @@ reviewed producer/coverage prerequisite outside this index-only change:
    proof must return the same full Firestore answer. No env boolean is a proof.
 
 A concrete future reader sampling contract to review with that prerequisite
-is a versioned hash of `[namespace, query, UTC minute]`, modulo 10000, selecting
-buckets `< 100`. Its unit is **eligible caller-minutes**, with a common UTC
-epoch and fixed hash domain/encoding, never replica ID, process randomness or
-restart time. All replicas and restarts agree for the same minute. Unselected
+is SHA256 of `omi:jobstore-discovery-reader:v1:` followed by compact ASCII JSON
+`[namespace, role, query, floor(unix_time / 60)]`, interpreted as an unsigned
+big-endian integer modulo 10000, selecting buckets `< 100`. The semantic role
+is `pump_recovery` or `serving_maintenance`, never a random lease-holder ID.
+Its unit is **eligible caller-minutes**, with a common UTC epoch, never replica
+ID, process randomness or restart time. All replicas and restarts agree for
+the same role/minute. Unselected
 calls still execute the full primary query; selected calls may use PG only
 with complete coverage, after the first primary read and within the safety
 interval. This is a proposal, not an implemented selector: no new percentage
@@ -141,12 +144,15 @@ flag is added here. Time buckets do not promise exactly 1% of calls or reads;
 actual selected-call and read counts must bound exposure before expansion.
 
 For this head, eligible production PG calls are **0**: every production due
-call uses Firestore. Count denominator `N` as all discovery invocations for
-the bound caller/query/roster/window, using the sum of
+call uses Firestore. The measurable denominator `N` is instrumented
+`IndexStore.due()` invocations for the bound query/roster/window, using the sum of
 `omi_jobstore_index_reads_total` over sources/reasons/outcomes. Each completed
 invocation records one terminal answer or primary error; a PG error followed
 by a successful primary answer counts once here and separately in shared
-fallback telemetry. This is a call denominator, not scanned/billed rows,
+fallback telemetry. Factory bypasses (Firestore mode or an empty/invalid
+query allowlist) are outside this counter, so it cannot establish an all-caller
+denominator across those modes. That requires caller-entry instrumentation
+before factory routing. This is a call denominator, not scanned/billed rows,
 distinct jobs or audio-hours. A future selector needs separate eligible and
 selected counts; PG-return counters alone cannot establish its denominator.
 
