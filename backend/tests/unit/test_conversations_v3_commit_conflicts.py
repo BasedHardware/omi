@@ -10,6 +10,8 @@ from utils.conversations.v3 import Conflict, service
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, builder, source  # noqa: F401
 from tests.unit.test_conversations_v3_transactions import L, R, strict  # noqa: F401
 
+REAL_COMMIT = service._commit
+
 
 @pytest.mark.asyncio
 async def test_planned_id_outside_the_closure_is_adopted_as_prior(builder, monkeypatch):
@@ -298,3 +300,37 @@ def test_open_loop_blob_is_reprotected_on_a_level_change(strict, monkeypatch):
     )
     assert decoded == [('stored-protected-blob', True)]
     assert strict.rows[('users', 'synthetic', 'conversations', 'c')]['open_loop_extractions'] == {'loops': []}
+
+
+@pytest.mark.asyncio
+async def test_oversized_document_parks_the_owner_instead_of_retrying(builder, monkeypatch):
+    from google.api_core.exceptions import InvalidArgument
+
+    from utils.conversations import lifecycle
+
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': source()}, {}, []))
+    monkeypatch.setattr(service, '_commit', REAL_COMMIT)
+
+    def too_large(*a, **kw):
+        raise InvalidArgument(
+            "Document 'x' cannot be written because its size (1,048,630 bytes) exceeds the maximum allowed size of 1,048,576 bytes."
+        )
+
+    monkeypatch.setattr(lifecycle, 'commit_v3_projection', too_large)
+    blocked = []
+    monkeypatch.setattr(store, 'record_blocked', lambda uid, token, why: blocked.append(why))
+    assert await service.reconcile('u') == 'blocked'
+    assert blocked == ['document_too_large']
+
+
+def test_other_invalid_arguments_still_raise(monkeypatch):
+    from google.api_core.exceptions import InvalidArgument
+
+    from utils.conversations import lifecycle
+
+    def bad(*a, **kw):
+        raise InvalidArgument('some other invalid write')
+
+    monkeypatch.setattr(lifecycle, 'commit_v3_projection', bad)
+    with pytest.raises(InvalidArgument):
+        REAL_COMMIT('u', 't', {}, {}, [], [])
