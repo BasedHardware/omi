@@ -196,11 +196,12 @@ maintenance (`utils/batch_pipeline/serving.py:start_serving_from_env.run`).
 | `batch:ready` | `J:Scheduler.enqueue_in_transaction`, `J:Scheduler.requeue_quarantined_in_transaction` | `J:Scheduler._pull_shard.commit` | none | T | T | No held-specific switch | Existing queue/ownership fences |
 | `batch:leased` | `J:Scheduler._pull_shard.commit` | `J:Scheduler.complete`, `J:Scheduler.recover` | `lease_until` | T | T | No held-specific switch | Token-fenced lease expiry |
 | `batch:retry` | `utils/batch_pipeline/scheduler.py:_defer`, `J:Scheduler.defer` | `J:Scheduler.recover`, then `J:Scheduler._pull_shard.commit` | `available_at` retry schedule; no total dwell deadline | T | T | No held-specific switch | Retain attempts and custody |
+| `batch:allowance_held` | `database/batch_pipeline_allowance_hold.py:park` via scheduler/migration | `utils/batch_pipeline/allowance_hold.py:AllowanceHolds.tick`, then normal admission | none; no expiry of held recording or obligation | `omi_batch_allowance_held_units` | Separate policy stock, never a late-work alarm | `BATCH_ALLOWANCE_PARK_ENABLED` | Off returns retained rows to legacy retry gradually; keep a new controller until drained. Effective plan/grant or usage-period changes trigger owner release. |
 | `batch:result_ready` | `J:Scheduler.complete`, `R:RecoveryStore.settle`, `V:ProviderSttStore.settle` | `M:OrderedMerge.commit_next` | none | T | T | No held-specific switch | Retain result, ordered merge |
 | `batch:vendor_held` | `V:ProviderSttStore.hold` | `V:ProviderSttStore.redrive` via `V:ProviderSttStage._held` | `vendor_hold.redrive_at` retry schedule | T; `omi_batch_pipeline_vendor_held_oldest_age_seconds` | T | `BATCH_VENDOR_HELD_REDRIVE_ENABLED` | False parks holds; rollback past vendor failover requires route-table removal and drain (see provider module); never put provider work on GPU ring |
 | `batch:quarantined` | `Q:quarantine_job`; provider `V:ProviderSttStore.settle`, `V:ProviderSttStore.terminal` | `R:RecoveryStore.prepare/start/settle`; dormant GPU expiry `R:expire_held_in_transaction` via `H:HeldDeadLetter.tick` | `held_deadline_at` for enabled GPU path; provider entry paths remain unstamped | T | T | `BATCH_HELD_DEAD_LETTER_ENABLED` | False stops new stamps/automatic GPU maintenance; manual requeue survives |
 | `batch:dead` | `R:expire_held_in_transaction` for `dead_letter_reason=held_expired`; historical dead reasons predate this expiry writer | `R:RecoveryStore.requeue_quarantined` → `J:Scheduler.requeue_quarantined_in_transaction`; legacy `J:Scheduler.redrive_dead` | `held_deadline_at`, retained after expiry | `omi_batch_held_expired_units` (stock, not dwell) | `omi-batch-held-expired-volume` (agent) | `BATCH_HELD_DEAD_LETTER_ENABLED` for new held expiry/nightly GPU requeue | `merge_pending=true` keeps pre-4a re-drive possible; unrelated dead reasons excluded. Record reason `record_barrier_aged` retains `merge_pending=false`; private OIDC requeue-record, separate record inflow/stock alert. |
-| `batch:dead/input_expiring` | `R:expire_input_in_transaction` via existing held sweep; GPU-quarantined or assignment-held staging input | Manual `RecoveryStore.requeue_quarantined` (GPU), target-restorable `ProjectionReleaseStore.release(operator=True)` (assignment), or existing exact-bundle client re-upload (GPU uploads) | `audio_staged_at + 29d`, else legacy `enqueued_at + 29d`; repair stamps the current object | `omi_batch_held_oldest_age_seconds{leg="staged_input"}` before terminal | `omi-batch-staged-input-age` warning above 21d | `BATCH_INPUT_EXPIRING_ENABLED` default on, plus existing held-sweep kill | Retained audio/results/paid history. No polling/nightly resurrection; no lifecycle change. [Runbook](../../docs/runbooks/held-staging-inputs.md). |
+| `batch:dead/input_expiring` | `R:expire_input_in_transaction` via existing held sweep; GPU-quarantined or assignment-held staging input | Manual `RecoveryStore.requeue_quarantined` (GPU), target-restorable `ProjectionReleaseStore.release(operator=True)` (assignment), or existing exact-bundle client re-upload (GPU uploads) | `audio_staged_at + 59d`, else legacy `enqueued_at + 59d`; repair stamps the current object | `omi_batch_held_oldest_age_seconds{leg="staged_input"}` before terminal | `omi-batch-staged-input-age` warning above 51d | `BATCH_INPUT_EXPIRING_ENABLED` default on, plus existing held-sweep kill | Retained audio/results/paid history. No polling/nightly resurrection; no lifecycle change. [Runbook](../../docs/runbooks/held-staging-inputs.md). |
 | `batch:privacy_blocked` | `database/batch_pipeline_recovery.py:quarantine_fenced.revoke`; `database/jobstore/postgres_store.py:PostgresStore.quarantine_fenced` privacy fence | Terminal; privacy owner only | none | none | none | No held switch bypasses privacy | Retain fence; no held requeue |
 | `batch:partial_retired` | `database/record_partial.py:update_run` | Terminal placeholder; replacement units own work | none | none | none | `RECORD_AUDIO_PARTIAL_ENABLED` | Retain partial inventory lineage |
 | `batch:committed` | `M:OrderedMerge.commit_next` | Job terminal; P/S still owe projection | none | none | none | No held-specific switch | Job commit is not conversation/finalization completion |
@@ -695,3 +696,46 @@ queries have no ratio; stale counts/ratios expire at 120 s. The default-on
 `BATCH_PIPELINE_FRESH_GUARD_ENABLED` kill switch suppresses queries and all guard
 gauges when off. Reader inventory and rollout proof requirements are recorded in
 `docs/listen_pusher_pipeline/changes/2026-11-13-fresh-delivery-guard.md`.
+
+The guard has an independent 20s supervised timer using the **same maintenance
+lease**, with bounded count RPCs on the DB executor so a slow general pass cannot
+delay its refresh. Opportunistic maintenance calls share the guard's 60s cadence
+and overlap lock. `omi_batch_pipeline_fresh_guard_sample_timestamp_seconds`
+exports the query window anchor only with valid counts; compare that exact
+inclusive window using `scripts/fresh_guard_cohort.py` (stored `fresh_capture`,
+never `fresh_first` or capture age). Scrapes still perform no IO.
+
+The projection acknowledge also stamps `jobs.delivered_at` and
+`jobs.delivered_in_target` in the transaction that sets
+`projection_state=completed`. The only semantic reader is the delivered-share
+sampler: the maintenance leader walks one bounded job-metadata page (admitted
+20 to 5 minutes ago, capped at 5,000 rows) every 300 s and publishes
+`omi_batch_pipeline_delivered_share_{ratio,admitted_units,units,truncated,sample_age_seconds}`
+per route and language. A unit is delivered in target when its first
+acknowledge is at most 300 s after `enqueued_at`; the stamp is sticky on replay.
+Missing or failed samples never publish a healthy ratio. The default-on
+`BATCH_PIPELINE_DELIVERED_SHARE_ENABLED` kill switch suppresses the page and all
+gauges. See `docs/listen_pusher_pipeline/changes/2026-11-14-delivered-share.md`.
+
+
+### Live close abort and ended-worker ownership
+
+Close v3 may advertise `abort_to_legacy=true` in its per-connection capability ACK.
+A peer without that additive capability receives no abort. After the 30-second
+close window, listen has a separate 30-second abort window (5 seconds per attempt).
+Abort reuses source retirement, in-flight frame settlement, original archive drain,
+ordered relay flush and exact received-byte watermark checks. The pusher transfers
+its current PCM tail into durable custody before the atomic commit-or-abort choice.
+Abort only removes the prepared protocol fence: ordinary rollover, legacy close or
+EOF still supplies the close request, and the drain retains all custody checks.
+No proof or ACK by the abort deadline keeps the fence for actual EOF/proven-dead
+repair; a live timer is never abandonment proof.
+
+Eviction and prepared-only EOF share one abandonment owner per socket worker;
+all-token eviction scope subsumes the prepared subset. Four active owners remain
+the default. A FIFO holds at most 256 further workers for at most 60 seconds,
+then each admitted owner has at most 30 seconds for worker/future settlement and
+metadata attestation. Count overflow, queue expiry and unsettled/metadata deadline
+all keep the producer token fenced. The queue holds no extra drain slot or PCM
+copy. The 256 entries cover eight default 32-drain budgets for scale-down bursts;
+this is a bounded admission choice, not a measured fleet burst guarantee.

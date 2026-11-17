@@ -11,8 +11,8 @@ import math
 from google.cloud import firestore
 
 from database.batch_pipeline_privacy import assert_batch_write_allowed
-from database.batch_privacy_attempt import TOKEN_FIELD, token_version
-from database.jobstore.authority import AuthorityRefused, fingerprint
+from database.jobstore.authority import AuthorityRefused, acquire, fingerprint
+from database.privacy_fence.protocol import lock
 from database.jobstore import codec
 
 
@@ -70,22 +70,13 @@ class FenceTicket:
         @firestore.transactional
         def authority(transaction):
             self.handoff.authority.check(transaction, phases=('PG_OPEN',))
-            token = (
-                self.handoff.client.collection('batch_pipeline_privacy')
-                .document(self.owner)
-                .get(transaction=transaction)
-            )
-            if (
-                token_version(token) is None
-                or (token.to_dict() or {}).get(TOKEN_FIELD) != self.admission['privacy_token']
-            ):
-                raise AuthorityRefused('provider dispatch token changed')
+            # Benign F-token rotation invalidates E1, not provider START.
             assert_batch_write_allowed(
                 self.handoff.client,
                 transaction,
                 item.owner_id,
                 conversation_ids=self.conversation_ids,
-                expected_generation=item.privacy_generation,
+                expected_generation=self.admission['fs_privacy_generation'],
                 snapshots={},
             )
 
@@ -100,6 +91,12 @@ class FenceTicket:
     def complete(self, result, *, now, partial_wait):
         """WorkResult's durable reference and all terminal SQL share COMPLETE."""
         with self.units.pool.connection() as conn, conn.transaction():
+            # Match START's owner -> namespace -> unit -> effect lock order.
+            # Do not check work permission here: COMPLETE must retire a refused
+            # effect even after close; fence.complete performs that decision.
+            lock(conn, self.owner)
+            acquire(conn, self.units.ticket)
+            self.units._unit(conn, self.identity)
 
             def persist(connection):
                 job = self._job(connection)

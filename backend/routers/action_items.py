@@ -1,3 +1,4 @@
+from utils.conversations.layer import read_product as read_product_conversation
 import asyncio
 import logging
 import uuid
@@ -970,7 +971,7 @@ def batch_delete_action_items(
 )
 def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get all action items for a specific conversation."""
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
@@ -997,7 +998,7 @@ def get_conversation_action_items_count(conversation_id: str, uid: str = Depends
 
     A task-progress badge (e.g. 2 of 3 done) for a conversation without paging its items.
     """
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
@@ -1017,7 +1018,7 @@ class ConversationActionItemsDeleteResponse(BaseModel):
 )
 def delete_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete all action items for a specific conversation."""
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):

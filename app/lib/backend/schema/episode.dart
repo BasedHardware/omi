@@ -230,11 +230,13 @@ class Episode {
               createdAt: m.startedAt.toLocal(),
               startedAt: m.startedAt.toLocal(),
               finishedAt: m.finishedAt?.toLocal(),
-              structured: Structured(m.title, '', emoji: m.emoji),
+              // The member gist is a lightweight preview, not a full notes body.
+              structured: Structured(m.title, m.gist, emoji: m.emoji),
               status: ConversationStatus.values.firstWhere(
                 (s) => s.name == m.status,
                 orElse: () => ConversationStatus.completed,
               ),
+              homeStep: m.homeStep,
             ),
         ],
         bullets: e.bullets ?? const [],

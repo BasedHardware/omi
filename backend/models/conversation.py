@@ -432,6 +432,21 @@ class ConversationSpeakers(BaseModel):
     status: Literal['resolved', 'capture', 'unavailable']
     version: int = 1
     participant_speaker_ids: List[int] = []
+    input_membership_sha256: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
+
+    @model_serializer(mode='wrap')
+    def _serialize_membership(self, handler, info):
+        data = handler(self)
+        excluded = info.exclude if isinstance(info.exclude, (dict, set, frozenset)) else ()
+        included = info.include
+        if (
+            info.mode != 'json'
+            and self.input_membership_sha256 is not None
+            and 'input_membership_sha256' not in excluded
+            and (included is None or 'input_membership_sha256' in included)
+        ):
+            data['input_membership_sha256'] = self.input_membership_sha256
+        return data
 
 
 class CaptureEvidenceMetadata(BaseModel):
@@ -463,7 +478,16 @@ class RecordAudioPartial(BaseModel):
     applied_generation: int = 0
 
 
+class RecordingPiece(BaseModel):
+    recording_id: str
+    audio_file_id: str
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
+
+
 class Conversation(BaseModel):
+    title_content_units: float = Field(default=0, exclude=True)
+    notes_quality_filter_input_hash: Optional[str] = Field(default=None, exclude=True)
     notes_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
     notes_llm_output_hash: Optional[str] = Field(default=None, exclude=True)
     l1_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
@@ -478,11 +502,30 @@ class Conversation(BaseModel):
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     capture_timezone: Optional[str] = Field(default=None, max_length=128)
+    capture_time_trust: Optional[Literal['untrusted']] = None
     recorded_start: Optional[datetime] = None
     recorded_end: Optional[datetime] = None
     arrival_at: Optional[datetime] = None
     clock: Optional[RecordedClock] = None
     episode_id: Optional[str] = None
+
+    # Server-authored; absent on pre-v3 documents. Never trusted on create requests.
+    recording: Optional[bool] = None
+    kind: Optional[Literal['conversation', 'voice_work', 'media', 'background']] = None
+    home_hidden: Optional[bool] = None
+    home_hidden_reason: Optional[str] = None
+    outline_kind: SkipJsonSchema[Optional[str]] = None
+    tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done', 'failed']] = None
+    title_locked: Optional[bool] = None
+    recording_pieces: Optional[List[RecordingPiece]] = None
+    manual_end: Optional[bool] = None
+    summary_covers_through: Optional[datetime] = None
+    v3_pending: SkipJsonSchema[Optional[bool]] = Field(default=None, exclude=True)
+    v3_derived: SkipJsonSchema[Optional[bool]] = None
+    v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
+    v3_process_pending: SkipJsonSchema[Optional[bool]] = None
+    v3_rewrites: SkipJsonSchema[Optional[int]] = None
+    backfilled: SkipJsonSchema[Optional[bool]] = None
 
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
@@ -1077,3 +1120,18 @@ class ConversationAnalytics(BaseModel):
     words_per_minute: float
     speaker_count: int
     speakers: List[SpeakerAnalytics] = []
+
+
+class LiveConversation(BaseModel):
+    id: str
+    structured: Structured
+    started_at: datetime
+    finished_at: Optional[datetime]
+    created_at: datetime
+    status: ConversationStatus
+    tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done', 'failed']] = None
+
+
+class ConversationsLiveResponse(BaseModel):
+    v3: bool
+    conversation: Optional[LiveConversation] = None

@@ -8,7 +8,7 @@ positions are preserved. Install in every writer process before enabling readers
 import functools
 import hashlib
 import inspect
-import asyncio
+from utils.executors import db_executor, run_blocking
 from contextvars import ContextVar
 from typing import Any, cast
 from uuid import uuid4
@@ -29,6 +29,7 @@ from google.cloud.firestore_v1.types import (
     WriteResult,
 )
 from google.rpc import status_pb2
+from database.home_feed_writer import augment_home_writes, affects_home, bulk_erasure_scope
 from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS, TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
 
 # Protobuf builds this class dynamically; the installed module has no typed declaration.
@@ -155,10 +156,13 @@ def token_write(path: str) -> Write:
 def augment_commit(request: Any) -> tuple[Any, int]:
     writes = (request.get('writes') if isinstance(request, dict) else request.writes) or ()
     count = len(writes)
+    home_writes = augment_home_writes(writes)
     tokens = authority_tokens(writes)
-    if not tokens:
+    if not tokens and len(home_writes) == count:
         return request, count
     prepared = CommitRequest(request)
+    del prepared.writes[:]
+    prepared.writes.extend(home_writes)
     # Appending after source writes also handles authority field updates.
     # Authority deletion is rejected above; account-subtree erasure retains it.
     # The final token is unique after source wipe/recreation;
@@ -197,12 +201,12 @@ def _wrap_commit(original: Any) -> Any:
             queue_guarded = False
             if queue is not None:
                 prepared = CommitRequest(prepared)
-                queue_guarded = await asyncio.to_thread(queue.prepare, prepared)
+                queue_guarded = await run_blocking(db_executor, queue.prepare, prepared)
             coordinator = g2_coordinator.get()
             receipts = []
             if coordinator is not None:
                 prepared = CommitRequest(prepared)
-                receipts = await asyncio.to_thread(coordinator.prepare, prepared)
+                receipts = await run_blocking(db_executor, coordinator.prepare, prepared)
             try:
                 result = await original(client, request=prepared, **kwargs)
             except (FailedPrecondition, AlreadyExists) as error:
@@ -212,7 +216,7 @@ def _wrap_commit(original: Any) -> Any:
                     raise Aborted('privacy guard changed; retry the complete authority transaction') from error
                 raise
             if coordinator is not None:
-                await asyncio.to_thread(coordinator.acknowledge, receipts)
+                await run_blocking(db_executor, coordinator.acknowledge, receipts)
             return response(result, count)
 
         wrapped = async_wrapped
@@ -263,7 +267,7 @@ def _bulk_parts(request, kwargs):
     indices = [
         i
         for i, write in enumerate(prepared.writes)
-        if authority_tokens([write]) or queue is not None and queue.covers(write)
+        if authority_tokens([write]) or affects_home(write) or queue is not None and queue.covers(write)
     ]
     return supplied, prepared, indices
 
@@ -349,6 +353,7 @@ def _wrap_bulk(original: Any) -> Any:
 
         wrapped = sync_wrapped
 
+    wrapped = bulk_erasure_scope(wrapped)
     setattr(wrapped, '_omi_batch_privacy_fence', True)
     return wrapped
 

@@ -529,6 +529,8 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
             'model_dump',
         ),
         DumpSite('utils/conversations/process_conversation.py', '_get_conversation_obj', 'dict'),
+        # Structured-only note cleanup; this receiver is never a Conversation/display projection.
+        DumpSite('utils/conversations/process_conversation.py', '_get_conversation_obj', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', 'execute_app', 'dict'),
         DumpSite(
             'utils/conversations/process_conversation.py',
@@ -629,6 +631,8 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # Server-computed recording and episode metadata, not display projections.
         'recorded_start',
         'recorded_end',
+        # Server-authored receipt-clock provenance, not client display projection.
+        'capture_time_trust',
         # Source-clock timezone metadata, not client-authored display text.
         'capture_timezone',
         'arrival_at',
@@ -733,6 +737,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # the successful-output persistence seams own these stamps.
         'notes_llm_input_hash',
         'notes_llm_output_hash',
+        # Server-only numeric title basis and filtered-checkpoint digest, excluded from all dumps.
+        # The fenced writer computes the basis from speech and the notes seam owns the digest.
+        'title_content_units',
+        'notes_quality_filter_input_hash',
         'l1_llm_input_hash',
         # Server-authored cross-surface event membership (#3244): member ids,
         # sources, and windows only, written solely by database.capture_groups.
@@ -758,6 +766,25 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # projection-family — it must survive the integration redactor so
         # clients receive it; the model serializer omits it when unset.
         'home_step',
+        # Recordings and conversations (v3): written only by the server-side builder,
+        # planner and processing settle (utils/conversations/v3/), never client-authored.
+        # NOT projection-family: clients need them (Home visibility and tile state).
+        'backfilled',
+        'home_hidden',
+        'home_hidden_reason',
+        'kind',
+        'manual_end',
+        'outline_kind',
+        'recording',
+        'recording_pieces',
+        'summary_covers_through',
+        'tile_state',
+        'title_locked',
+        'v3_derived',
+        'v3_pending',
+        'v3_process_pending',
+        'v3_recording_ids',
+        'v3_rewrites',
     }
 )
 
@@ -2357,3 +2384,8 @@ def test_llm_checkpoints_are_server_only_and_survive_projection_invalidation(ren
         assert {field: snapshot[field] for field in checkpoints} == checkpoints
     projection_sink_fns['drop'](conv)
     assert {field: getattr(conv, field) for field in checkpoints} == checkpoints
+
+
+def test_note_quality_metadata_is_excluded_from_client_and_integration_dumps():
+    assert Conversation.model_fields['title_content_units'].exclude is True
+    assert Conversation.model_fields['notes_quality_filter_input_hash'].exclude is True

@@ -2000,6 +2000,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get memoryHistory => 'Istoric';
 
   @override
+  String get recordingWithYourPhone => 'Se înregistrează cu telefonul';
+
+  @override
+  String get wrapUp => 'Încheie';
+
+  @override
+  String get recordingDiscarded => 'Înregistrare renunțată';
+
+  @override
   String get undo => 'Anulează';
 
   @override
@@ -7061,6 +7070,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get authFailedToSignInWithApple => 'Autentificarea cu Apple a eșuat, vă rugăm încercați din nou.';
+
+  @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Conectarea cu Apple nu a reușit. Încearcă din nou sau continuă cu Google.';
 
   @override
   String get authFailedToRetrieveToken => 'Nu s-a putut obține tokenul Firebase, vă rugăm încercați din nou.';
@@ -13459,6 +13472,9 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Ai un cod Omi Pro? Introdu-l pe ecranul următor.';
+
+  @override
   String get paywallTrialCancelNote => 'Anulează oricând. Fără taxe, fără penalități.';
 
   @override
@@ -15462,6 +15478,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get paymentDeclinedTitle => 'Cardul dvs. a fost refuzat';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Actualizați cardul sau recuperați $plan pentru $price pe lună';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Actualizați cardul pentru a recupera $plan';
   }
@@ -15486,4 +15507,118 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Treci la lunar';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price pe lună';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Înlocuiește plata anuală neachitată de $yearly. Se reînnoiește lunar. Anulezi oricând.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Plată refuzată. Planul tău nu s-a schimbat.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Trecerea nu este disponibilă acum. Actualizează cardul în schimb.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Acum plătești lunar';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price plătiți azi. Se reînnoiește lunar.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Lista de procesare s-a schimbat. Verifică lista și încearcă din nou.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Ai folosit cele $minutes minute din această lună';
+  }
+
+  @override
+  String get freeCapBody => 'Omi înregistrează în continuare. Alege cum continui transcrierea.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Transcriere în cloud nelimitată';
+
+  @override
+  String get freeCapProAccuracy => 'Cea mai bună acuratețe';
+
+  @override
+  String get freeCapProWaiting => 'Transcrie înregistrările în așteptare';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Gratuit. Rămâne activ până revii.';
+
+  @override
+  String get transcribingOnThisPhone => 'Se transcrie pe acest telefon';
+
+  @override
+  String get getPro => 'Obține Pro';
+
+  @override
+  String get unlock => 'Deblochează';
+
+  @override
+  String get transcribeWith => 'Transcrie cu';
+
+  @override
+  String get omiCloud => 'Cloud Omi';
+
+  @override
+  String get thisPhone => 'Acest telefon';
+
+  @override
+  String get onDeviceReady => 'Gata';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Au rămas $left din $limit min · se resetează pe $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes minute în cloud disponibile';
+  }
+
+  @override
+  String get switchBack => 'Revino';
+
+  @override
+  String get setUpThisPhone => 'Configurează acest telefon';
+
+  @override
+  String get speechRecognition => 'Recunoaștere vocală';
+
+  @override
+  String get audioStaysOnPhone => 'Sunetul rămâne pe telefon';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Descărcare de $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Descarcă acum';
+
+  @override
+  String get onWifiLater => 'Mai târziu pe Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Se scrie rezumatul tău…';
 }

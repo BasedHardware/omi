@@ -7,6 +7,14 @@ not the historical document mirror. Neither command provisions or uses staging.
 
 from __future__ import annotations
 
+from psycopg.conninfo import conninfo_to_dict
+import testing.pipeline_sim._env  # noqa: F401 -- hermetic import constants, not a CustomerData simulator
+from database.jobstore.connection import Pool
+from database.jobstore.authority import transition
+from database.jobstore.units import Units
+from database.privacy_fence import Fence, owner_key
+from testing.store_fixtures import postgres_connect, _emulator_client, ClientCustomerData
+
 import argparse
 import json
 import os
@@ -38,7 +46,6 @@ def local_only():
         raise RuntimeError('remote PostgreSQL forbidden in this local harness')
     dsn = os.environ.get('OMI_TEST_POSTGRES_DSN', '')
     if dsn:
-        from psycopg.conninfo import conninfo_to_dict
 
         host = conninfo_to_dict(dsn).get('host', '')
         if host not in {'127.0.0.1', 'localhost', '::1'} and not host.startswith('/'):
@@ -46,12 +53,6 @@ def local_only():
 
 
 def corrected_w4(args):
-    import testing.pipeline_sim._env  # noqa: F401 -- hermetic import constants, not a CustomerData simulator
-    from database.jobstore.connection import Pool
-    from database.jobstore.authority import transition
-    from database.jobstore.units import Units
-    from database.privacy_fence import Fence, owner_key
-    from testing.store_fixtures import postgres_connect, _emulator_client, ClientCustomerData
 
     pool = Pool('', size=args.pool, connect=postgres_connect())
     client = _emulator_client()

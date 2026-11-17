@@ -74,6 +74,12 @@ class DeviceDiagnosticsContractTest {
         }
     }
 
+    @Test fun `manual intent wins over a simultaneous timeout or remote termination`() {
+        for (status in listOf(0, 8, 19, 34)) {
+            assertEquals("manual", BleDisconnectReason.connectionErrorFromStatus(status, isManual = true))
+        }
+    }
+
     @Test fun `local host termination does not claim another phone paired`() {
         // HCI 0x16 reports local termination, not the reason the host requested it.
         assertEquals("gatt_error_22", BleDisconnectReason.fromStatus(0x16))

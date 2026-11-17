@@ -14,6 +14,7 @@ import 'package:omi/pages/onboarding/find_device/pairing_failure_card.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/devices/pairing_failure.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -178,6 +179,87 @@ void main() {
     addTearDown(() => binding.defaultBinaryMessenger.setMockMethodCallHandler(permissions, null));
     provider.hasBluetoothPermission = false;
     await expectDelayedHelpAfterBlockedScan(tester, Reason.bluetoothPermissionDenied);
+  });
+
+  group('Bluetooth permission blocked in Settings', () {
+    const permissions = MethodChannel('flutter.baseflow.com/permissions/methods');
+    // What both the status read and the request answer: 0 denied, 1 granted, 4 permanently denied.
+    late int status;
+    late List<String> calls;
+    int count(String method) => calls.where((call) => call == method).length;
+    Future<void> backInApp(WidgetTester tester) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump();
+    }
+
+    setUp(() {
+      status = 4;
+      calls = [];
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(permissions, (call) async {
+        calls.add(call.method);
+        if (call.method == 'requestPermissions') return {for (final p in call.arguments as List) p as int: status};
+        if (call.method == 'openAppSettings') return true;
+        return status;
+      });
+      provider.hasBluetoothPermission = false;
+    });
+    tearDown(() => binding.defaultBinaryMessenger.setMockMethodCallHandler(permissions, null));
+
+    testWidgets('leads with Open Settings, and coming back allowed searches again without a tap', (tester) async {
+      await pumpConnect(tester);
+      expect(provider.pairingFailureReason, Reason.bluetoothPermissionDenied);
+      expect(provider.pairingBlockNeedsSettings, isTrue);
+      final openSettings = find.byKey(const Key('pairing_failure_open_settings'));
+      expect(tester.widget<OmiButton>(openSettings).variant, OmiButtonVariant.primary);
+      expect(
+          tester.widget<OmiButton>(find.byKey(const Key('pairing_failure_retry'))).variant, OmiButtonVariant.secondary);
+      await tester.ensureVisible(openSettings);
+      await tester.tap(openSettings);
+      await tester.pump();
+      expect(count('openAppSettings'), 1);
+      await AnalyticsManager.flushPending(force: true);
+      expect(adapter.names.where((name) => name == 'Device Pairing Settings Opened'), hasLength(1));
+
+      // Allowed in Settings, then back in the app: re-read without a prompt, then search.
+      status = 1;
+      final requests = count('requestPermissions');
+      await backInApp(tester);
+      expect(count('requestPermissions'), requests);
+      expect(provider.hasBluetoothPermission, isTrue);
+      expect(provider.pairingFailureReason, isNull);
+      expect(provider.pairingBlockNeedsSettings, isFalse);
+      expect(find.byType(PairingFailureCard), findsNothing);
+      expect(find.text(AppLocalizationsEn().searchingForDevices), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('coming back still denied keeps the card and never prompts', (tester) async {
+      await pumpConnect(tester);
+      final requests = count('requestPermissions');
+      await AnalyticsManager.flushPending(force: true);
+      final blocked = adapter.names.where((name) => name == 'Device Pairing Blocked').length;
+      await backInApp(tester);
+      expect(count('requestPermissions'), requests);
+      expect(count('checkPermissionStatus'), greaterThan(0));
+      expect(provider.pairingFailureReason, Reason.bluetoothPermissionDenied);
+      expect(find.byKey(const Key('pairing_failure_open_settings')), findsOneWidget);
+      await AnalyticsManager.flushPending(force: true);
+      expect(adapter.names.where((name) => name == 'Device Pairing Blocked'), hasLength(blocked));
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a denial the OS can still ask about again keeps Try Again first', (tester) async {
+      status = 0;
+      await pumpConnect(tester);
+      expect(provider.pairingFailureReason, Reason.bluetoothPermissionDenied);
+      expect(provider.pairingBlockNeedsSettings, isFalse);
+      expect(find.byKey(const Key('pairing_failure_open_settings')), findsNothing);
+      expect(
+          tester.widget<OmiButton>(find.byKey(const Key('pairing_failure_retry'))).variant, OmiButtonVariant.primary);
+      await tester.pumpWidget(const SizedBox());
+    });
   });
 
   test('saved visible devices clear reachability, but stale-bond recovery is retained', () async {

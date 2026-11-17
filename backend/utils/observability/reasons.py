@@ -51,8 +51,16 @@ class MemoryL1Reason(StrEnum):
     UNKNOWN = 'unknown'
 
 
+class NotesQualityRepairReason(StrEnum):
+    UNKNOWN = 'unknown'
+    CAPTURE_AVAILABILITY = 'capture_availability'
+    EMPTY_HEADING = 'empty_heading'
+
+
 class ReasonFamily(StrEnum):
+    AUDIO_RAW = 'audio_raw'
     MEMORY_L1 = 'memory_l1'
+    OWNER_RECOGNITION = 'owner_recognition'
     PUSHER_PCM = 'pusher_pcm'
     LIVE_STT = 'live_stt'
     WORKER_VALIDATION = 'worker_validation'
@@ -72,10 +80,12 @@ class ReasonFamily(StrEnum):
     SPEAKER_EVIDENCE = 'speaker_evidence'
     NOTES_AGENT_FORCE = 'notes_agent_force'
     NOTES_AGENT_TRANSPORT = 'notes_agent_transport'
+    NOTES_QUALITY_REPAIR = 'notes_quality_repair'
     SYNC_DISPATCH = 'sync_dispatch'
     SYNC_CAPTURE_TIME = 'sync_capture_time'
     SYNC_BRIDGE_CONTAINMENT = 'sync_bridge_containment'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
+    APP_REVIEW_CONFIG = 'app_review_config'
     ADMISSION_HOLD = 'admission_hold'
     LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
     RECORD_PARTIAL_RERUN = 'record_partial_rerun'
@@ -86,9 +96,89 @@ class ReasonFamily(StrEnum):
     RECORD_GAP_FILL = 'record_gap_fill'
     RECORD_RETAINED_ACK = 'record_retained_ack'
     PIPELINE_LEDGER = 'pipeline_ledger'
+    CAPTURE_END = 'capture_end'
     JOURNEY_FAILURE = 'journey_failure'
     LISTEN_NO_AUDIO_CLOSE = 'listen_no_audio_close'
     DUE_MARKER_SWEEP = 'due_marker_sweep'
+    RECORD_SEAL_REPAIR = 'record_seal_repair'
+
+
+class OwnerRecognitionProofReason(StrEnum):
+    """Original-unit proof refusals; never identifiers or exception text."""
+
+    UNKNOWN = 'unknown'
+    NO_JOB = 'no_job'
+    NO_RESULT = 'no_result'
+    JOB_OWNER_MISMATCH = 'job_owner_mismatch'
+    JOB_UNIT_MISMATCH = 'job_unit_mismatch'
+    BINDING_OWNER_MISMATCH = 'binding_owner_mismatch'
+    RECEIPT_MISSING = 'receipt_missing'
+    ARTIFACT_ROW_MISSING = 'artifact_row_missing'
+    ARTIFACT_CLEANED = 'artifact_cleaned'
+    ARTIFACT_KIND_MISMATCH = 'artifact_kind_mismatch'
+    ARTIFACT_OWNER_MISMATCH = 'artifact_owner_mismatch'
+    ARTIFACT_UNIT_MISMATCH = 'artifact_unit_mismatch'
+    GENERATION_MISMATCH = 'generation_mismatch'
+    ERASURE = 'erasure'
+    URI_MISMATCH = 'uri_mismatch'
+    SKIPPED_EXPIRED = 'skipped_expired'
+    SKIPPED_MERGED = 'skipped_merged'
+    SKIPPED_SHARED_UNIT = 'skipped_shared_unit'
+    PROJECTION_SEGMENT_MISSING = 'projection_segment_missing'
+    PROJECTION_TEXT_MISMATCH = 'projection_text_mismatch'
+    PROJECTION_POINT_WORDS = 'projection_point_words'
+    PROJECTION_UNASSIGNED_WORDS = 'projection_unassigned_words'
+    UNIT_PCM_FORMAT = 'unit_pcm_format'
+    UNIT_DURATION = 'unit_duration'
+    ENDPOINT_UNCONFIGURED = 'endpoint_unconfigured'
+    PRIVATE_CLOUD_DISABLED = 'private_cloud_disabled'
+    INVENTORY_PAIR_MISMATCH = 'inventory_pair_mismatch'
+    INVENTORY_COUNT_MISMATCH = 'inventory_count_mismatch'
+    DECODED_COVERAGE_HOLE = 'decoded_coverage_hole'
+    DECODED_OVERLAP = 'decoded_overlap'
+    DECODED_DURATION_MISMATCH = 'decoded_duration_mismatch'
+    MANIFEST_UNVALIDATED = 'manifest_unvalidated'
+    NO_PROVEN_WINDOW = 'no_proven_window'
+    UNCOVERED_WINDOW = 'uncovered_window'
+    GLOBAL_MANIFEST_AMBIGUITY = 'global_manifest_ambiguity'
+    STALE_GENERATION = 'stale_generation'
+    READ_BUDGET = 'read_budget'
+    OTHER = 'other'
+
+
+class OwnerRecognitionFinalPassOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    DISABLED = 'disabled'
+    INELIGIBLE = 'ineligible'
+    ADMITTED = 'admitted'
+    DEPENDENCY_UNAVAILABLE = 'dependency_unavailable'
+
+
+class OwnerRecognitionBatchEmbeddingOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    ATTEMPTED = 'attempted'
+    SUCCESSFUL = 'successful'
+    CACHED = 'cached'
+
+
+class RecordSealRepairRunOutcome(StrEnum):
+    """Terminal coordinator outcome, independent of individual row proof refusals."""
+
+    UNKNOWN = 'unknown'
+    COMPLETE = 'complete'
+    INCOMPLETE = 'incomplete'
+
+
+class RecordSealRepairRunStage(StrEnum):
+    """Primary unfinished repair phase; overall also identifies a completed run."""
+
+    UNKNOWN = 'unknown'
+    PREPASS = 'prepass'
+    SETUP = 'setup'
+    DISCOVERY = 'discovery'
+    ROWS = 'rows'
+    CHECKPOINT = 'checkpoint'
+    OVERALL = 'overall'
 
 
 class PusherPcmStage(StrEnum):
@@ -97,11 +187,41 @@ class PusherPcmStage(StrEnum):
     TAIL = 'tail'
 
 
+class RawPackExclusionReason(StrEnum):
+    UNKNOWN = 'unknown'
+    ARRIVAL_CLOCK = 'arrival_clock'
+    DISABLED = 'disabled'
+    BOUNDS = 'bounds'
+    CHANNELS = 'channels'
+    CODEC = 'codec'
+    LAYOUT = 'layout'
+    MISSING_MANIFEST = 'missing_manifest'
+    AMBIGUOUS_MANIFEST = 'ambiguous_manifest'
+    INVALID = 'invalid'
+
+
 class PusherPcmErrorReason(StrEnum):
     UNKNOWN = 'unknown'
     ACQUIRE = 'acquire'
     RELEASE = 'release'
     LATE_STORAGE = 'late_storage'
+
+
+class AppReviewConfigReason(StrEnum):
+    UNKNOWN = 'unknown'
+    CREDENTIALS_UNAVAILABLE = 'credentials_unavailable'
+    STORE_API_ERROR = 'store_api_error'
+    RECONCILIATION_REPAIR = 'reconciliation_repair'
+    LIVE_HIDE_CLEARED = 'live_hide_cleared'
+    SUBMISSION_TOKEN_UNAVAILABLE = 'submission_token_unavailable'
+    SUBMISSION_TOKEN_REJECTED = 'submission_token_rejected'
+
+
+class AppReviewConfigOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    OK = 'ok'
+    PARTIAL = 'partial'
+    ERROR = 'error'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -163,11 +283,53 @@ class DeliveryOutcome(StrEnum):
     FAILED = 'failed'
 
 
+class CaptureEndOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    STORED = 'stored'
+    DUPLICATE = 'duplicate'
+    STALE = 'stale'
+    UNBOUND = 'unbound'
+    DISABLED = 'disabled'
+    INVALID = 'invalid'
+
+
+class CaptureEndTypeReason(StrEnum):
+    UNKNOWN = 'unknown'
+    USER_INITIATED = 'user_initiated'
+    SILENCE_BACKSTOP = 'silence_backstop'
+
+
+class CaptureEndProofOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    PROVEN = 'proven'
+    ABSENT = 'absent'
+    PENDING = 'pending'
+    CONTENT_BEHIND = 'content_behind'
+    NO_SPEECH_CLOCK = 'no_speech_clock'
+    RESUMED = 'resumed'
+    CLOCK_UNKNOWN = 'clock_unknown'
+    SEALED = 'sealed'
+
+
+class UploadTraceGateReason(StrEnum):
+    UNKNOWN = 'unknown'
+    NONE = 'none'
+    RATE_LIMITED = 'rate_limited'
+    AUTO_UPLOAD_OFF = 'auto_upload_off'
+    BACKGROUND = 'background'
+    RETRIES_EXHAUSTED = 'retries_exhausted'
+    IN_FLIGHT = 'in_flight'
+    OFFLINE = 'offline'
+    SERVER_HOLD = 'server_hold'
+    OTHER = 'other'
+
+
 class SyncProcessingHoldOutcome(StrEnum):
     UNKNOWN = 'unknown'
     QUIET_WAIT = 'quiet_wait'
     WATERMARK_WAIT = 'watermark_wait'
     READY = 'ready'
+    END_PROOF = 'end_proof'
     MAX_HOLD = 'max_hold'
     UNCHANGED = 'unchanged'
     IMMATERIAL = 'immaterial'
@@ -698,6 +860,7 @@ class FallbackReason(StrEnum):
     """Every reason `record_fallback` may emit (superset of LiveSttReason)."""
 
     UNKNOWN = 'unknown'
+    INPUT_MISSING = 'input_missing'
     INITIALIZATION_FAILED = 'initialization_failed'
     CONNECTION_LOST = 'connection_lost'
     SEND_FAILED = 'send_failed'
@@ -772,6 +935,8 @@ class FallbackReason(StrEnum):
     ACQUIRE_UNSETTLED = 'acquire_unsettled'
     MARKER_TIMEOUT = 'marker_timeout'
     PREAMBLE_TIMEOUT = 'preamble_timeout'
+    STORE_CREDENTIALS_UNAVAILABLE = 'store_credentials_unavailable'
+    STORE_API_ERROR = 'store_api_error'
 
 
 class NotesAgentForceReason(StrEnum):
@@ -866,6 +1031,8 @@ class PipelineLedgerOutcome(StrEnum):
     STALE = 'stale'
     ILLEGAL = 'illegal'
     TERMINAL = 'terminal'
+    DELETED = 'deleted'
+    MISSING = 'missing'
 
 
 class PipelineLedgerFailureReason(StrEnum):

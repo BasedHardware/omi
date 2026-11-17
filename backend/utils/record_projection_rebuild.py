@@ -24,13 +24,15 @@ PRESSURE_BLOCKED = Gauge(
 )
 
 
-def run(*, mode='apply', budget, firestore_client=None):
+def run(*, mode='apply', budget, firestore_client=None, report=None):
     if mode not in {'apply', 'plan'}:
         raise ValueError('invalid projection repair mode')
     if not durable_debt_enabled():
         return {'event': 'record_projection_rebuild', 'outcome': 'disabled'}
     client = firestore_client if firestore_client is not None else get_firestore_client()
     counts = Counter()
+    report = report if report is not None else {}
+    report.update(event='record_projection_rebuild', dispositions=counts, attempted=0)
     # One ordered field uses Firestore's automatic single-field index. Rotate
     # refused work to the tail so chronic failures cannot starve later markers.
     query = client.collection(jobs.COLLECTION).order_by('requested_at').limit(MAX_COLLECTION_MARKERS + 1)
@@ -47,12 +49,15 @@ def run(*, mode='apply', budget, firestore_client=None):
         'oldest_age_seconds': max(ages.values(), default=0),
         'at_capacity': at_capacity,
     }
+    report['gauges'] = gauges
+    report['selected'] = min(len(page), MAX_PER_PASS)
     BACKLOG.set(len(page))
     OLDEST.set(gauges['oldest_age_seconds'])
     AT_CAPACITY.set(at_capacity)
     PRESSURE_BLOCKED.set(0)
     for doc in page[:MAX_PER_PASS]:
         budget.check()
+        report['attempted'] += 1
         data = doc.to_dict() or {}
         uid, cid = data.get('owner_id'), data.get('conversation_id')
         try:
@@ -103,15 +108,11 @@ def run(*, mode='apply', budget, firestore_client=None):
     gauges['pressure_fenced_count'] = counts['producer_fenced'] if at_capacity else 0
     gauges['pressure_blocked'] = bool(at_capacity and counts['producer_fenced'] and not counts['retired_no_objects'])
     PRESSURE_BLOCKED.set(gauges['pressure_blocked'])
-    return {
-        'event': 'record_projection_rebuild',
-        'outcome': 'error' if counts['error'] else 'capacity_exceeded' if at_capacity else 'ok',
-        'gauges': gauges,
-        'dispositions': dict(counts),
-    }
+    report['outcome'] = 'error' if counts['error'] else 'capacity_exceeded' if at_capacity else 'ok'
+    return report
 
 
-def run_job():
+def run_job(*, seconds=60):
     from config import record_seal_repair as config
     from utils.batch_pipeline.record_seal_budget import SweepBudget, BudgetExhausted
 
@@ -119,9 +120,14 @@ def run_job():
         return {'event': 'record_projection_rebuild', 'outcome': 'disabled'}
     config.require_runtime()
     mode = config.settings()[3]
-    budget = SweepBudget(60)
+    budget = SweepBudget(seconds)
+    report = {}
     try:
         with budget.interrupt_io():
-            return run(mode=mode, budget=budget)
+            return run(mode=mode, budget=budget, report=report)
     except BudgetExhausted:
-        return {'event': 'record_projection_rebuild', 'outcome': 'budget_exhausted'}
+        report.update(event='record_projection_rebuild', outcome='budget_exhausted')
+        # Only terminal dispositions count as completed. An interrupted marker remains debt.
+        report['interrupted'] = report.get('attempted', 0) - sum(report.get('dispositions', {}).values())
+        report['unattempted'] = report['selected'] - report.get('attempted', 0) if 'selected' in report else None
+        return report

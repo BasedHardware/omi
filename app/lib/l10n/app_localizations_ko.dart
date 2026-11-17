@@ -1955,6 +1955,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get memoryHistory => '기록';
 
   @override
+  String get recordingWithYourPhone => '휴대폰으로 녹음 중';
+
+  @override
+  String get wrapUp => '마무리';
+
+  @override
+  String get recordingDiscarded => '녹음을 삭제했습니다';
+
+  @override
   String get undo => '실행 취소';
 
   @override
@@ -6926,6 +6935,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get authFailedToSignInWithApple => 'Apple로 로그인하지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get authAppleSignInFailedUseGoogle => 'Apple로 로그인하지 못했습니다. 다시 시도하거나 Google로 계속하세요.';
 
   @override
   String get authFailedToRetrieveToken => 'Firebase 토큰을 가져오지 못했습니다. 다시 시도해 주세요.';
@@ -13218,6 +13230,9 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro 코드가 있나요? 다음 화면에서 입력하세요.';
+
+  @override
   String get paywallTrialCancelNote => '언제든지 취소 가능. 수수료나 위약금 없음.';
 
   @override
@@ -15177,6 +15192,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get paymentDeclinedTitle => '카드가 거절되었습니다';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return '카드를 업데이트하거나 $plan을 월 $price에 다시 이용하세요';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan을 다시 이용하려면 카드를 업데이트하세요';
   }
@@ -15201,4 +15221,118 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => '월간 결제로 전환';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, 월 $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '미결제된 연간 요금 $yearly을 대신합니다. 매월 갱신됩니다. 언제든지 해지할 수 있습니다.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => '결제가 거절되었습니다. 플랜은 변경되지 않았습니다.';
+
+  @override
+  String get monthlySwitchUnavailable => '지금은 전환할 수 없습니다. 대신 카드를 업데이트하세요.';
+
+  @override
+  String get monthlySwitchDoneTitle => '월간 결제로 전환되었습니다';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '오늘 $price이 결제되었습니다. 매월 갱신됩니다.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => '처리 중인 목록이 변경되었습니다. 목록을 확인하고 다시 시도하세요.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return '이번 달 $minutes분을 모두 사용했습니다';
+  }
+
+  @override
+  String get freeCapBody => 'Omi는 계속 녹음 중입니다. 전사를 이어갈 방법을 선택하세요.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => '무제한 클라우드 전사';
+
+  @override
+  String get freeCapProAccuracy => '최고의 정확도';
+
+  @override
+  String get freeCapProWaiting => '대기 중인 녹음을 전사합니다';
+
+  @override
+  String get freeCapPhoneSubtitle => '무료. 다시 전환할 때까지 유지됩니다.';
+
+  @override
+  String get transcribingOnThisPhone => '이 휴대폰에서 전사 중';
+
+  @override
+  String get getPro => 'Pro 받기';
+
+  @override
+  String get unlock => '잠금 해제';
+
+  @override
+  String get transcribeWith => '전사 방식';
+
+  @override
+  String get omiCloud => 'Omi 클라우드';
+
+  @override
+  String get thisPhone => '이 휴대폰';
+
+  @override
+  String get onDeviceReady => '준비됨';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit분 남음 · $date 초기화';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '클라우드 $minutes분 사용 가능';
+  }
+
+  @override
+  String get switchBack => '다시 전환';
+
+  @override
+  String get setUpThisPhone => '이 휴대폰 설정';
+
+  @override
+  String get speechRecognition => '음성 인식';
+
+  @override
+  String get audioStaysOnPhone => '오디오는 휴대폰에만 남습니다';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '${size}MB 다운로드';
+  }
+
+  @override
+  String get downloadNow => '지금 다운로드';
+
+  @override
+  String get onWifiLater => '나중에 Wi-Fi로';
+
+  @override
+  String get conversationWritingSummary => '요약을 작성하는 중…';
 }

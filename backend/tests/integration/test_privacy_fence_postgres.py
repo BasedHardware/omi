@@ -253,6 +253,25 @@ def test_g2_16b_restore_cannot_adopt_pre_restore_effect(context):
         assert not fence.complete(conn, owner, effect, restored, lambda _: pytest.fail('old effect adopted'))
 
 
+def test_unresolved_gcs_first_page_does_not_starve_later_effects(context):
+    fence, _, _, owner = context
+    admission = admit(context)
+    with fence.pool.connection() as conn, conn.transaction():
+        for index in range(101):
+            fence.register(
+                conn, owner, f'sticky-{index}', admission, 'gcs_put', lease_seconds=120, sink={'session': str(index)}
+            )
+    seen = set()
+
+    def unresolved(sink):
+        seen.add(sink['session'])
+        return False
+
+    assert fence.drain_pass(owner, fence_gcs=unresolved) == 101
+    assert fence.drain_pass(owner, fence_gcs=unresolved) == 101
+    assert len(seen) == 101
+
+
 def test_g2_17_seed_race_does_not_upgrade_shared_lock(context):
     fence, _, _, owner = context
     before = fence.snapshot(owner)

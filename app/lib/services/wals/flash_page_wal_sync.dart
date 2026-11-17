@@ -11,6 +11,7 @@ import 'package:omi/services/devices/connectors/limitless_clock_drift.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -42,7 +43,9 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   IWalSyncListener listener;
 
-  FlashPageWalSyncImpl(this.listener);
+  final DateTime Function() _clock;
+
+  FlashPageWalSyncImpl(this.listener, {DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
 
   @visibleForTesting
   set testWals(List<Wal> wals) => _wals = wals;
@@ -410,11 +413,20 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           // connect-time drift so filenames/session gaps match real-time conversations (#5734).
           // Only correct when a real page timestamp was parsed — DateTime.now() fallback
           // is already phone time and must not be double-corrected.
-          final timestampMs = LimitlessClockDrift.correctedFlashPageTimestampMs(
-            pageTimestampMs: pageData['timestamp_ms'] as int?,
+          final rawTimestampMs = pageData['timestamp_ms'] as int?;
+          final phoneNowMs = _clock().millisecondsSinceEpoch;
+          var timestampMs = LimitlessClockDrift.correctedFlashPageTimestampMs(
+            pageTimestampMs: rawTimestampMs,
             clockDriftOffsetMs: limitlessConnection.clockDriftOffsetMs,
-            phoneNowMs: DateTime.now().millisecondsSinceEpoch,
+            phoneNowMs: phoneNowMs,
           );
+          if (!deviceCaptureClockRepairOff &&
+              (!LimitlessClockDrift.isUsableDeviceTimestamp(rawTimestampMs) ||
+                  !useDeviceCaptureTime(timestampMs ~/ 1000, phoneNowMs ~/ 1000))) {
+            // Unknown time is not a recording gap. Estimate from this batch's
+            // decoded duration at persistence, with its own clock-run token.
+            timestampMs = 0;
+          }
           final maxIndex = pageData['max_index'] as int?;
 
           if (maxIndex != null && (lastProcessedIndex == null || maxIndex > lastProcessedIndex)) {
@@ -726,11 +738,20 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       List<List<int>> frames, int timestampMs, Wal sourceWal, int admittedGeneration) async {
     final localSync = _localSync;
     if (localSync == null) throw StateError('LocalWalSync unavailable; batch cannot be proven durable');
+    // A Limitless drift correction is still device-derived time. Guard the
+    // final persisted batch, using decoded audio duration if it is impossible.
+    final captureClock = deviceFileCaptureClock(
+      deviceSeconds: timestampMs ~/ 1000,
+      durationSeconds: (frames.length / 50).ceil(),
+      nowSeconds: _clock().millisecondsSinceEpoch ~/ 1000,
+    );
+    final persistedTimestampMs = captureClock.run == null ? timestampMs : captureClock.start * 1000;
     var seq = 0;
     final saved = await localSync.persistDeviceChunk(
         source: sourceWal,
         frames: frames,
-        timerStart: timestampMs ~/ 1000,
+        timerStart: captureClock.start,
+        clockRun: captureClock.run,
         admittedGeneration: admittedGeneration,
         nextCollisionSequence: () => seq++,
         originalStorage: WalStorage.flashPage,
@@ -741,7 +762,8 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
         deviceModel: sourceWal.deviceModel ?? 'Limitless',
         fileName: () {
           final random = DateTime.now().microsecondsSinceEpoch % 10000;
-          return 'audio_limitless_opus_16000_1_fs320_r${random}_${seq++}_$timestampMs.bin';
+          final run = captureClock.run == null ? '' : '_clke${captureClock.run}';
+          return 'audio_limitless_opus_16000_1_fs320_r${random}_${seq++}${run}_$persistedTimestampMs.bin';
         });
     return (await Wal.getFilePath(saved.filePath))!;
   }

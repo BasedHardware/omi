@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
+from copy import deepcopy
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -22,6 +24,8 @@ from scripts.runtime_env_capability_contracts import (
     validate_voice_transcription_storage,
 )  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
+from scripts.sync_backfill_routing import compose_expected_routing, read_routing
+from scripts.runtime_env_canary_ops import compose  # noqa: E402
 from scripts.validate_object_lake_bucket_contract import validate_write_admission  # noqa: E402
 from scripts.render_backend_runtime_env import validate_sync_lineage_rollout  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
@@ -665,9 +669,27 @@ def validate_runtime_env(
     check_workflows: bool = False,
     workflow_root: Path | None = None,
     strict_provisional: bool = False,
+    integration_canary_state: Path | None = None,
+    integration_canary_source: str | None = None,
+    cloud_run_service: str = 'all',
+    sync_routing_env_path: Path | None = None,
 ) -> list[ValidationError]:
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
+    integration_only = False
+    if integration_canary_state or integration_canary_source:
+        if env != 'prod' or not (integration_canary_state and integration_canary_source):
+            return [ValidationError(env, 'integration canary requires bound prod source/state')]
+        try:
+            snapshot = json.loads(integration_canary_state.read_text())
+            integration_only = snapshot.get('profile') == 'integration-only'
+            env_config = compose(env_config, snapshot, integration_canary_source)
+            # Workflow reconstruction must validate the same effective manifest
+            # as the rendered candidate, including serving-ops composition.
+            manifest = deepcopy(manifest)
+            manifest['environments'][env] = env_config
+        except (ValueError, KeyError, TypeError, OSError):
+            return [ValidationError(env, 'integration canary ops evidence invalid')]
     errors = _validate_manifest_shape(env_config, env)
     errors.extend(_validate_directory_routing_bindings(env, env_config))
     errors.extend(validate_mentor_pipeline(scope=env, config=env_config))
@@ -696,16 +718,49 @@ def validate_runtime_env(
                 manifest_path=manifest_path,
                 manifest=manifest,
                 workflow_root=workflow_root,
+                integration_canary_source=integration_canary_source,
             )
         )
 
     cloud_run_state = None
+    live_config = env_config
+    from scripts.cloud_run_scope import selected
+
+    try:
+        service_scope = selected(cloud_run_service)
+    except ValueError:
+        return [ValidationError(env, 'invalid Cloud Run selector')]
+    if integration_only and cloud_run_service not in ('all', 'backend-integration'):
+        return [ValidationError(env, 'integration-only selector mismatch')]
+    if cloud_run_service != 'all':
+        if any(name not in env_config['cloud_run']['services'] for name in service_scope):
+            return [ValidationError(env, 'manifest lacks selected Cloud Run service')]
+        live_config = deepcopy(env_config)
+        live_config['cloud_run']['services'] = {
+            name: env_config['cloud_run']['services'][name] for name in service_scope
+        }
+    if integration_only:
+        if 'backend-integration' not in env_config['cloud_run']['services']:
+            return [ValidationError(env, 'manifest lacks selected Cloud Run service')]
+        # Static source/workflow contracts above stay full-manifest. Live
+        # comparison follows the sole service this protected profile mutates.
+        live_config = deepcopy(env_config)
+        live_config['cloud_run']['services'] = {
+            'backend-integration': env_config['cloud_run']['services']['backend-integration']
+        }
+    if sync_routing_env_path is not None:
+        if 'backend-sync' not in service_scope or integration_only:
+            return [ValidationError(env, 'sync routing overlay outside selected service scope')]
+        try:
+            live_config = compose_expected_routing(live_config, read_routing(sync_routing_env_path))
+        except (ValueError, KeyError, TypeError, OSError):
+            return [ValidationError(env, 'invalid sync routing overlay')]
     if cloud_run_state_path is not None:
         cloud_run_state = _load_json(cloud_run_state_path)
     elif check_live_cloud_run:
-        cloud_run_state = _fetch_live_cloud_run_state(env_config)
+        cloud_run_state = _fetch_live_cloud_run_state(live_config)
 
     if cloud_run_state is not None:
-        errors.extend(_validate_cloud_run(env_config, cloud_run_state, strict_provisional=strict_provisional))
-        errors.extend(_validate_sync_ledger_fence_mode(env_config, cloud_run_state))
+        errors.extend(_validate_cloud_run(live_config, cloud_run_state, strict_provisional=strict_provisional))
+        errors.extend(_validate_sync_ledger_fence_mode(live_config, cloud_run_state))
     return errors

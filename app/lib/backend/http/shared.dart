@@ -641,6 +641,7 @@ Future<http.Response> sendUncaughtApiCall({
   required String method,
   Duration? timeout,
   int? retries,
+  bool retryServerErrors = true,
   bool signOutOn401 = true,
   ApiExecutionSeams? execution,
   bool Function()? canSend,
@@ -696,6 +697,7 @@ Future<http.Response> sendUncaughtApiCall({
     },
     timeout: effectiveTimeout,
     retries: effectiveRetries,
+    retryServerErrors: retryServerErrors,
   );
 
   if (requireAuthCheck && response.statusCode == 401) {
@@ -741,6 +743,7 @@ Future<http.Response?> makeApiCall({
   required String method,
   Duration? timeout,
   int? retries,
+  bool retryServerErrors = true,
   bool signOutOn401 = true,
   bool Function()? canSend,
 }) async {
@@ -752,6 +755,7 @@ Future<http.Response?> makeApiCall({
       method: method,
       timeout: timeout,
       retries: retries,
+      retryServerErrors: retryServerErrors,
       signOutOn401: signOutOn401,
       canSend: canSend,
     );

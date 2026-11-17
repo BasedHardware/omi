@@ -1972,6 +1972,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryHistory => 'السجل';
 
   @override
+  String get recordingWithYourPhone => 'يسجّل بهاتفك';
+
+  @override
+  String get wrapUp => 'إنهاء';
+
+  @override
+  String get recordingDiscarded => 'تم تجاهل التسجيل';
+
+  @override
   String get undo => 'تراجع';
 
   @override
@@ -6976,6 +6985,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get authFailedToSignInWithApple => 'فشل تسجيل الدخول باستخدام Apple، يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get authAppleSignInFailedUseGoogle =>
+      'لم ينجح تسجيل الدخول باستخدام Apple. حاول مرة أخرى أو تابع باستخدام Google.';
 
   @override
   String get authFailedToRetrieveToken => 'فشل استرداد رمز Firebase، يرجى المحاولة مرة أخرى.';
@@ -13326,6 +13339,9 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'لديك رمز Omi Pro؟ أدخله في الشاشة التالية.';
+
+  @override
   String get paywallTrialCancelNote => 'يمكنك الإلغاء في أي وقت. لا توجد رسوم أو غرامات.';
 
   @override
@@ -15309,6 +15325,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get paymentDeclinedTitle => 'تم رفض بطاقتك';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'حدّثها، أو استعد $plan مقابل $price شهريًا';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'حدّث بطاقتك لاستعادة $plan';
   }
@@ -15333,4 +15354,118 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'التبديل إلى الاشتراك الشهري';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan، $price شهريًا';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'يحل محل الرسوم السنوية غير المدفوعة البالغة $yearly. يتجدد شهريًا. يمكنك الإلغاء في أي وقت.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'تم رفض الدفع. لم تتغير خطتك.';
+
+  @override
+  String get monthlySwitchUnavailable => 'التبديل غير متاح حاليًا. حدّث بطاقتك بدلًا من ذلك.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'أصبحت على الدفع الشهري';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'تم دفع $price اليوم. يتجدد شهريًا.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'تغيّرت قائمة المعالجة. راجع القائمة وحاول مرة أخرى.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'لقد استخدمت $minutes دقيقة هذا الشهر';
+  }
+
+  @override
+  String get freeCapBody => 'لا يزال Omi يسجّل. اختر كيف تواصل التفريغ.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'تفريغ سحابي غير محدود';
+
+  @override
+  String get freeCapProAccuracy => 'أفضل دقة';
+
+  @override
+  String get freeCapProWaiting => 'يفرّغ تسجيلاتك المنتظرة';
+
+  @override
+  String get freeCapPhoneSubtitle => 'مجاني. يبقى مفعّلًا حتى تعود.';
+
+  @override
+  String get transcribingOnThisPhone => 'يتم التفريغ على هذا الهاتف';
+
+  @override
+  String get getPro => 'احصل على Pro';
+
+  @override
+  String get unlock => 'فتح';
+
+  @override
+  String get transcribeWith => 'التفريغ باستخدام';
+
+  @override
+  String get omiCloud => 'سحابة Omi';
+
+  @override
+  String get thisPhone => 'هذا الهاتف';
+
+  @override
+  String get onDeviceReady => 'جاهز';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'متبقٍ $left من $limit دقيقة · تتجدد في $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes دقيقة سحابية متاحة';
+  }
+
+  @override
+  String get switchBack => 'العودة';
+
+  @override
+  String get setUpThisPhone => 'إعداد هذا الهاتف';
+
+  @override
+  String get speechRecognition => 'التعرف على الكلام';
+
+  @override
+  String get audioStaysOnPhone => 'يبقى الصوت على هاتفك';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'تنزيل $size ميغابايت';
+  }
+
+  @override
+  String get downloadNow => 'التنزيل الآن';
+
+  @override
+  String get onWifiLater => 'لاحقًا عبر Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'جارٍ كتابة ملخصك…';
 }

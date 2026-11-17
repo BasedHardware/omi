@@ -26,6 +26,20 @@ def paid(context, monkeypatch):
     return adapter, unit, ticket, item
 
 
+def test_benign_token_rotation_does_not_refuse_registered_start(paid):
+    from uuid import uuid4
+
+    adapter, unit, ticket, item = paid
+    ticket.handoff.client.collection('batch_pipeline_privacy').document(ticket.owner).update(
+        {'memo_token': uuid4().hex}
+    )
+    ticket.start(item, ticket.source['stt_route']['provider_service'])
+    with adapter.units.pool.connection() as conn:
+        assert conn.execute(
+            'SELECT state FROM privacy_effect_inflight WHERE effect_id=%s', (ticket.effect,)
+        ).fetchone() == ('started',)
+
+
 def test_actual_paid_boundary_reserves_before_start_and_sends_once(paid, monkeypatch):
     from utils.batch_pipeline import provider_stt
     from utils.stt import allowance_session

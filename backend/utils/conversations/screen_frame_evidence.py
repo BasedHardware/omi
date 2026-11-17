@@ -16,6 +16,7 @@ Rejected frames were never persisted, so they contribute nothing.
 """
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 import base64
 import io
@@ -147,7 +148,8 @@ def load_capture_group_frame_evidence(uid: str, conversation: Any) -> tuple[Scre
     ]
     for member_id in members[:MAX_GROUP_MEMBER_FRAME_READS]:
         try:
-            member_row = conversations_db.get_conversation_raw_snapshot(
+            member_row = read_product_conversation(
+                conversations_db.get_conversation_raw_snapshot,
                 uid,
                 member_id,
                 field_paths=['external_data', 'visibility', 'deleted', 'screenshot_sharing_enabled'],

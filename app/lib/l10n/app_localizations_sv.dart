@@ -1993,6 +1993,15 @@ class AppLocalizationsSv extends AppLocalizations {
   String get memoryHistory => 'Historik';
 
   @override
+  String get recordingWithYourPhone => 'Spelar in med telefonen';
+
+  @override
+  String get wrapUp => 'Avsluta';
+
+  @override
+  String get recordingDiscarded => 'Inspelningen har slängts';
+
+  @override
   String get undo => 'Ångra';
 
   @override
@@ -7031,6 +7040,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get authFailedToSignInWithApple => 'Kunde inte logga in med Apple, försök igen.';
+
+  @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Det gick inte att logga in med Apple. Försök igen eller fortsätt med Google.';
 
   @override
   String get authFailedToRetrieveToken => 'Kunde inte hämta Firebase-token, försök igen.';
@@ -13408,6 +13421,9 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Har du en Omi Pro-kod? Ange den på nästa skärm.';
+
+  @override
   String get paywallTrialCancelNote => 'Avbryt när som helst. Inga avgifter, inga påföljder.';
 
   @override
@@ -15406,6 +15422,11 @@ class AppLocalizationsSv extends AppLocalizations {
   String get paymentDeclinedTitle => 'Ditt kort nekades';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Uppdatera kortet, eller få tillbaka $plan för $price i månaden';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Uppdatera kortet för att få tillbaka $plan';
   }
@@ -15430,4 +15451,118 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Byt till månadsvis';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price i månaden';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Ersätter den obetalda årsavgiften på $yearly. Förnyas varje månad. Avsluta när du vill.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Betalningen nekades. Ditt abonnemang har inte ändrats.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Bytet är inte tillgängligt just nu. Uppdatera kortet i stället.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Du betalar nu månadsvis';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price betalt i dag. Förnyas varje månad.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Bearbetningslistan har ändrats. Granska listan och försök igen.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Du har använt månadens $minutes minuter';
+  }
+
+  @override
+  String get freeCapBody => 'Omi spelar fortfarande in. Välj hur du vill fortsätta transkribera.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Obegränsad transkribering i molnet';
+
+  @override
+  String get freeCapProAccuracy => 'Bästa noggrannhet';
+
+  @override
+  String get freeCapProWaiting => 'Transkriberar dina väntande inspelningar';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Gratis. Förblir på tills du byter tillbaka.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transkriberar på den här telefonen';
+
+  @override
+  String get getPro => 'Skaffa Pro';
+
+  @override
+  String get unlock => 'Lås upp';
+
+  @override
+  String get transcribeWith => 'Transkribera med';
+
+  @override
+  String get omiCloud => 'Omi-molnet';
+
+  @override
+  String get thisPhone => 'Den här telefonen';
+
+  @override
+  String get onDeviceReady => 'Klar';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left av $limit min kvar · återställs $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes molnminuter tillgängliga';
+  }
+
+  @override
+  String get switchBack => 'Byt tillbaka';
+
+  @override
+  String get setUpThisPhone => 'Konfigurera den här telefonen';
+
+  @override
+  String get speechRecognition => 'Taligenkänning';
+
+  @override
+  String get audioStaysOnPhone => 'Ljudet stannar på telefonen';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB nedladdning';
+  }
+
+  @override
+  String get downloadNow => 'Ladda ned nu';
+
+  @override
+  String get onWifiLater => 'Senare via Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Skriver din sammanfattning…';
 }

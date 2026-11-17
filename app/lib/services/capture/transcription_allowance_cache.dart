@@ -10,16 +10,33 @@ import 'package:omi/utils/logger.dart';
 /// known basic user onto a billed socket.
 class TranscriptionAllowanceCache {
   static const prefsKey = 'transcriptionAllowanceLastKnown';
+  static const savedAtPrefsKey = 'transcriptionAllowanceLastKnownAtMs';
 
   static TranscriptionAllowanceSnapshot? _memory;
+
+  /// When the last snapshot was stored, or null for a snapshot saved before this was tracked.
+  static DateTime? get savedAt {
+    final ms = SharedPreferencesUtil().getInt(savedAtPrefsKey);
+    return ms <= 0 ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  /// [current] when it was stored within [maxAge] of [now]; null otherwise.
+  static TranscriptionAllowanceSnapshot? currentWithin(Duration maxAge, {DateTime? now}) {
+    final snapshot = current;
+    final at = savedAt;
+    if (snapshot == null || at == null) return null;
+    return (now ?? DateTime.now()).difference(at) <= maxAge ? snapshot : null;
+  }
 
   static TranscriptionAllowanceSnapshot? get current {
     if (_memory != null) return _memory;
     return _readPersisted();
   }
 
-  static void replace(TranscriptionAllowanceSnapshot? value) {
+  static void replace(TranscriptionAllowanceSnapshot? value, {DateTime? now}) {
     _memory = value;
+    SharedPreferencesUtil()
+        .saveInt(savedAtPrefsKey, value == null ? 0 : (now ?? DateTime.now()).millisecondsSinceEpoch);
     if (value == null) {
       SharedPreferencesUtil().saveString(prefsKey, '');
       return;
@@ -29,6 +46,7 @@ class TranscriptionAllowanceCache {
 
   static void clear() {
     _memory = null;
+    SharedPreferencesUtil().saveInt(savedAtPrefsKey, 0);
     SharedPreferencesUtil().saveString(prefsKey, '');
   }
 

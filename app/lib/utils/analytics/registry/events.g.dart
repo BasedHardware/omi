@@ -161,6 +161,61 @@ final class SignInFailed extends RegisteredEvent {
   Map<String, Object> get properties => {"provider": provider.wireName, "error_class": errorClass.wireName};
 }
 
+enum SignInFailureDetailProvider {
+  apple("apple"),
+  google("google");
+  const SignInFailureDetailProvider(this.wireName);
+  final String wireName;
+}
+
+enum SignInFailureDetailErrorCode {
+  appleCanceled("apple_canceled"),
+  appleFailed("apple_failed"),
+  appleInvalidResponse("apple_invalid_response"),
+  appleNotHandled("apple_not_handled"),
+  appleNotInteractive("apple_not_interactive"),
+  appleUnknown("apple_unknown"),
+  appleCredentialExport("apple_credential_export"),
+  appleCredentialImport("apple_credential_import"),
+  appleMatchedExcludedCredential("apple_matched_excluded_credential"),
+  appleNotSupported("apple_not_supported"),
+  appleCredentialsError("apple_credentials_error"),
+  applePlatformError("apple_platform_error"),
+  appleMissingIdentityToken("apple_missing_identity_token"),
+  firebaseInvalidCredential("firebase_invalid_credential"),
+  firebaseInvalidCredentialAudience("firebase_invalid_credential_audience"),
+  firebaseInvalidCredentialStale("firebase_invalid_credential_stale"),
+  firebaseInvalidIdpResponse("firebase_invalid_idp_response"),
+  firebaseMissingOrInvalidNonce("firebase_missing_or_invalid_nonce"),
+  firebaseAccountExistsWithDifferentCredential("firebase_account_exists_with_different_credential"),
+  firebaseCredentialAlreadyInUse("firebase_credential_already_in_use"),
+  firebaseEmailAlreadyInUse("firebase_email_already_in_use"),
+  firebaseOperationNotAllowed("firebase_operation_not_allowed"),
+  firebaseAdminRestrictedOperation("firebase_admin_restricted_operation"),
+  firebaseUserDisabled("firebase_user_disabled"),
+  firebaseAppNotAuthorized("firebase_app_not_authorized"),
+  firebaseInvalidApiKey("firebase_invalid_api_key"),
+  firebaseTooManyRequests("firebase_too_many_requests"),
+  firebaseNetworkRequestFailed("firebase_network_request_failed"),
+  firebaseInternalError("firebase_internal_error"),
+  firebaseOther("firebase_other"),
+  network("network"),
+  timeout("timeout"),
+  other("other");
+  const SignInFailureDetailErrorCode(this.wireName);
+  final String wireName;
+}
+
+final class SignInFailureDetail extends RegisteredEvent {
+  const SignInFailureDetail({required this.provider, required this.errorCode});
+  final SignInFailureDetailProvider provider;
+  final SignInFailureDetailErrorCode errorCode;
+  @override
+  String get wireName => "Sign In Failure Detail";
+  @override
+  Map<String, Object> get properties => {"provider": provider.wireName, "error_code": errorCode.wireName};
+}
+
 enum OnboardingPermissionResultPermission {
   notifications("notifications"),
   location("location"),
@@ -238,6 +293,31 @@ final class DeviceConnectFailureShown extends RegisteredEvent {
   final DeviceConnectFailureShownPlatform platform;
   @override
   String get wireName => "Device Connect Failure Shown";
+  @override
+  Map<String, Object> get properties => {"failure_reason": failureReason.wireName, "platform": platform.wireName};
+}
+
+enum DevicePairingSettingsOpenedFailureReason {
+  bluetoothPermissionDenied("bluetooth_permission_denied"),
+  nearbyDevicesDenied("nearby_devices_denied");
+  const DevicePairingSettingsOpenedFailureReason(this.wireName);
+  final String wireName;
+}
+
+enum DevicePairingSettingsOpenedPlatform {
+  ios("ios"),
+  android("android"),
+  other("other");
+  const DevicePairingSettingsOpenedPlatform(this.wireName);
+  final String wireName;
+}
+
+final class DevicePairingSettingsOpened extends RegisteredEvent {
+  const DevicePairingSettingsOpened({required this.failureReason, required this.platform});
+  final DevicePairingSettingsOpenedFailureReason failureReason;
+  final DevicePairingSettingsOpenedPlatform platform;
+  @override
+  String get wireName => "Device Pairing Settings Opened";
   @override
   Map<String, Object> get properties => {"failure_reason": failureReason.wireName, "platform": platform.wireName};
 }
@@ -2455,7 +2535,8 @@ enum PaywallOpenedSource {
   budget80("budget_80"),
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
-  freeCap("free_cap");
+  freeCap("free_cap"),
+  onPhoneBanner("on_phone_banner");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2480,6 +2561,23 @@ final class PaywallOpened extends RegisteredEvent {
   String get wireName => "Paywall Opened";
   @override
   Map<String, Object> get properties => {"source": source.wireName, "current_plan": currentPlan.wireName};
+}
+
+enum FreeCapSheetChoiceChoice {
+  upgrade("upgrade"),
+  transcribeOnPhone("transcribe_on_phone"),
+  dismissed("dismissed");
+  const FreeCapSheetChoiceChoice(this.wireName);
+  final String wireName;
+}
+
+final class FreeCapSheetChoice extends RegisteredEvent {
+  const FreeCapSheetChoice({required this.choice});
+  final FreeCapSheetChoiceChoice choice;
+  @override
+  String get wireName => "Free Cap Sheet Choice";
+  @override
+  Map<String, Object> get properties => {"choice": choice.wireName};
 }
 
 enum UpgradePlanSelectedPlan {
@@ -2527,7 +2625,8 @@ enum UpgradePlanSelectedSource {
   budget80("budget_80"),
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
-  freeCap("free_cap");
+  freeCap("free_cap"),
+  onPhoneBanner("on_phone_banner");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }
@@ -3001,7 +3100,8 @@ enum PaywallVariantShownSource {
   budget80("budget_80"),
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
-  freeCap("free_cap");
+  freeCap("free_cap"),
+  onPhoneBanner("on_phone_banner");
   const PaywallVariantShownSource(this.wireName);
   final String wireName;
 }
@@ -3412,4 +3512,60 @@ final class SubscriptionPaymentIssuePortalOpened extends RegisteredEvent {
   String get wireName => "Subscription Payment Issue Portal Opened";
   @override
   Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueMonthlyShown extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlyShown();
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueMonthlyTapped extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlyTapped();
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Tapped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueMonthlySwitched extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlySwitched();
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Switched";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum SubscriptionPaymentIssueMonthlyFailedReason {
+  declined("declined"),
+  refused("refused"),
+  error("error");
+  const SubscriptionPaymentIssueMonthlyFailedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionPaymentIssueMonthlyFailed extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlyFailed({required this.reason});
+  final SubscriptionPaymentIssueMonthlyFailedReason reason;
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Failed";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName};
+}
+
+final class MobileDeviceHealthDailyRingRead extends RegisteredEvent {
+  const MobileDeviceHealthDailyRingRead({required this.disconnectsDuringRingRead, required this.disconnectsWithRingReadState, required this.rssiBelowMinus90, required this.rssiMinus90ToMinus80, required this.rssiMinus80ToMinus60, required this.rssiAtLeastMinus60, required this.rssiUnknown});
+  final int disconnectsDuringRingRead;
+  final int disconnectsWithRingReadState;
+  final int rssiBelowMinus90;
+  final int rssiMinus90ToMinus80;
+  final int rssiMinus80ToMinus60;
+  final int rssiAtLeastMinus60;
+  final int rssiUnknown;
+  @override
+  String get wireName => "Mobile Device Health Daily";
+  @override
+  Map<String, Object> get properties => {"disconnects_during_ring_read": disconnectsDuringRingRead, "disconnects_with_ring_read_state": disconnectsWithRingReadState, "ring_read_disconnect_rssi_below_minus90": rssiBelowMinus90, "ring_read_disconnect_rssi_minus90_to_minus80": rssiMinus90ToMinus80, "ring_read_disconnect_rssi_minus80_to_minus60": rssiMinus80ToMinus60, "ring_read_disconnect_rssi_at_least_minus60": rssiAtLeastMinus60, "ring_read_disconnect_rssi_unknown": rssiUnknown};
 }

@@ -7,12 +7,16 @@ is returned to be persisted by the caller in the SAME committing transaction.
 
 from __future__ import annotations
 
+from google.cloud import firestore
+from database.batch_pipeline_privacy import assert_batch_write_allowed, mint_token, STRUCTURAL_REASONS
+from database.batch_privacy_attempt import TOKEN_FIELD, token_version
+
 import hashlib
 from datetime import timedelta
 from uuid import uuid4
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
-from database.jobstore.postgres_store import jsonb
+from database.jobstore.connection import jsonb
 
 owner_key = privacy_owner_key
 
@@ -77,9 +81,6 @@ class Fence:
         The returned generation here is PG's generation; the walk generation is
         recorded separately and never substituted for a Postgres fence check.
         """
-        from google.cloud import firestore
-        from database.batch_pipeline_privacy import assert_batch_write_allowed, mint_token, STRUCTURAL_REASONS
-        from database.batch_privacy_attempt import TOKEN_FIELD, token_version
 
         owner = owner_key(uid)
         cids = tuple(conversation_ids)
@@ -383,15 +384,23 @@ class Fence:
         `fence_gcs(sink)` must cancel/query the C4 session and verify absence, and
         returns True ONLY on that proof. An absent adapter preserves custody.
         """
-        with self.pool.connection() as conn:
+        with self.pool.connection() as conn, conn.transaction():
             rows = conn.execute(
                 'SELECT effect_id,sink,kind FROM privacy_effect_inflight WHERE owner_key=%s '
                 'AND (%s::text IS NULL OR %s=ANY(conversation_keys)) '
                 'AND (%s::bigint IS NULL OR change_seq<%s) '
                 'AND (NOT %s OR lease_until<=now()) '
-                "ORDER BY (state='registered') DESC,lease_until,effect_id LIMIT 100",
+                "ORDER BY drain_after,(state='registered') DESC,lease_until,effect_id LIMIT 100",
                 (owner, conversation, conversation, before_seq, before_seq, janitor),
             ).fetchall()
+            # Rotate unresolved rows behind untouched rows, without holding Lx
+            # across polling or losing custody of a sticky GCS session.
+            if rows:
+                conn.execute(
+                    "UPDATE privacy_effect_inflight SET drain_after=now()+interval '5 seconds' "
+                    'WHERE owner_key=%s AND effect_id=ANY(%s::uuid[])',
+                    (owner, [row[0] for row in rows]),
+                )
         for effect, sink, kind in rows:
             terminal = kind == 'gcs_put' and fence_gcs is not None and fence_gcs(sink)
             with self.pool.connection() as conn, conn.transaction():

@@ -35,6 +35,7 @@ import routers.integration as integration_router
 import routers.search as search_router
 import routers.support as support_router
 import routers.users as users_router
+import utils.ai_profile_refresh as ai_profile_refresh
 import utils.apps as apps_utils
 import utils.conversations.meeting_context_pack as meeting_context_pack
 import utils.imports.limitless as limitless
@@ -169,6 +170,11 @@ _SOURCES_QUERY = (None, 'omi', 'friend,omi')
 _DISCARDED = (False, True)
 _FOLDER = (None, 'folder-1')
 _STARRED = (None, False, True)
+
+
+def _run_v3_live(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    _stub(monkeypatch, conversations_router, 'conversations_v3_enabled', lambda uid: True)
+    trial(capture, conversations_router.get_live_conversation, uid='u1', channel=None)
 
 
 def _run_main_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
@@ -388,6 +394,10 @@ def _run_prior_meetings(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture)
     )
 
 
+def _run_ai_profile_conversations(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    trial(capture, ai_profile_refresh._conversations, 'u1', FROZEN_NOW)
+
+
 def _run_limitless_lookup(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     trial(capture, limitless.find_legacy_limitless_conversation_id, 'u1', FROZEN_NOW)
 
@@ -546,6 +556,14 @@ WITNESSES: dict[str, CallerWitness] = {
     witness.key: witness
     for witness in (
         CallerWitness(
+            'routers/conversations.py:get_live_conversation:database.conversations.get_conversations_without_photos',
+            'database.conversations.get_conversations_without_photos',
+            'database.conversations.get_conversations_without_photos',
+            ('v3-live-conversation',),
+            1,
+            _run_v3_live,
+        ),
+        CallerWitness(
             'routers/support.py:trace_support_recordings:database.conversations.get_conversations',
             'database.conversations.get_conversations',
             'database.conversations.get_conversations',
@@ -665,6 +683,14 @@ WITNESSES: dict[str, CallerWitness] = {
             ('persona-update',),
             1,
             _run_persona_update,
+        ),
+        CallerWitness(
+            'utils/ai_profile_refresh.py:_conversations:database.conversations.get_conversations_without_photos',
+            'database.conversations.get_conversations_without_photos',
+            'database.conversations.get_conversations_without_photos',
+            ('ai-profile-recent',),
+            1,
+            _run_ai_profile_conversations,
         ),
         CallerWitness(
             'utils/conversations/meeting_context_pack.py:_gather_prior_meetings:database.conversations.get_conversations_without_photos',

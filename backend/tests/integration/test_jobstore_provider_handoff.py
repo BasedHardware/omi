@@ -81,6 +81,48 @@ def rows(handoff):
         }
 
 
+def test_readmission_updates_full_unsealed_recording_and_original_custody(context, monkeypatch):
+    adapter, binding, store, _ = upload(context, monkeypatch)
+    adapter.deliver(binding.job_id)
+    handoff = adapter.handoff
+    with handoff.pool.connection() as conn, conn.transaction():
+        adapter.units._guarded_unit(conn, 'segment-0')
+        conn.execute("UPDATE units SET hold_reason='privacy_deferred' WHERE namespace=%s", (store.namespace,))
+        before = handoff._required_row(conn, binding.job_id)
+    assert adapter.units.readmit(handoff.client, binding.owner_id, ['c'], 'segment-0')
+    with handoff.pool.connection() as conn:
+        after = handoff._required_row(conn, binding.job_id)
+        assert after['admission'] != before['admission']
+        assert after['intent'] == before['intent']
+        assert after['fingerprint'] == before['fingerprint']
+        assert conn.execute(
+            'SELECT DISTINCT admission FROM units WHERE namespace=%s', (store.namespace,)
+        ).fetchall() == [(after['admission'],)]
+        assert conn.execute(
+            'SELECT DISTINCT admission_id::text FROM queue_custody WHERE namespace=%s', (store.namespace,)
+        ).fetchall() == [(after['admission']['admission_id'],)]
+
+
+def test_readmission_refuses_partial_terminal_recording_without_mutating_admission(context, monkeypatch):
+    adapter, binding, store, _ = upload(context, monkeypatch)
+    adapter.deliver(binding.job_id)
+    claims = adapter.units.claim(2, now=201, lease_seconds=30, backlog_share=1)
+    terminal(adapter, claims[0])
+    other = claims[1]['unit_id']
+    handoff = adapter.handoff
+    with handoff.pool.connection() as conn, conn.transaction():
+        adapter.units._guarded_unit(conn, other)
+        conn.execute(
+            "UPDATE units SET hold_reason='privacy_deferred' WHERE namespace=%s AND unit_id=%s",
+            (store.namespace, other),
+        )
+        before = handoff._required_row(conn, binding.job_id)['admission']
+    with pytest.raises(AuthorityRefused, match='entirely unresolved recording'):
+        adapter.units.readmit(handoff.client, binding.owner_id, ['c'], other)
+    with handoff.pool.connection() as conn:
+        assert handoff._required_row(conn, binding.job_id)['admission'] == before
+
+
 def test_real_upload_admission_terminal_seal_and_replay(context, monkeypatch):
     adapter, binding, store, outcome = upload(context, monkeypatch)
     handoff = adapter.handoff

@@ -1994,6 +1994,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String get memoryHistory => 'Історія';
 
   @override
+  String get recordingWithYourPhone => 'Запис на телефон';
+
+  @override
+  String get wrapUp => 'Завершити';
+
+  @override
+  String get recordingDiscarded => 'Запис скасовано';
+
+  @override
   String get undo => 'Скасувати';
 
   @override
@@ -7041,6 +7050,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get authFailedToSignInWithApple => 'Не вдалося увійти через Apple, спробуйте ще раз.';
+
+  @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Не вдалося увійти через Apple. Спробуйте ще раз або продовжте з Google.';
 
   @override
   String get authFailedToRetrieveToken => 'Не вдалося отримати токен Firebase, спробуйте ще раз.';
@@ -13433,6 +13446,9 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Маєте код Omi Pro? Введіть його на наступному екрані.';
+
+  @override
   String get paywallTrialCancelNote => 'Скасувати будь-коли. Без комісій, без штрафів.';
 
   @override
@@ -15431,6 +15447,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get paymentDeclinedTitle => 'Вашу картку відхилено';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Оновіть картку або поверніть $plan за $price на місяць';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Оновіть картку, щоб повернути $plan';
   }
@@ -15455,4 +15476,118 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Перейти на щомісячний';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price на місяць';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Замінює неоплачений річний платіж $yearly. Подовжується щомісяця. Скасувати можна будь-коли.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Платіж відхилено. Ваш план не змінився.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Перехід зараз недоступний. Натомість оновіть картку.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Тепер ви платите щомісяця';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Сьогодні сплачено $price. Подовжується щомісяця.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Список обробки змінився. Перевірте його та спробуйте знову.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Ви використали $minutes хвилин цього місяця';
+  }
+
+  @override
+  String get freeCapBody => 'Omi продовжує запис. Виберіть, як продовжити транскрибування.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Необмежене хмарне транскрибування';
+
+  @override
+  String get freeCapProAccuracy => 'Найкраща точність';
+
+  @override
+  String get freeCapProWaiting => 'Транскрибує ваші записи в очікуванні';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Безкоштовно. Залишається ввімкненим, доки не переключитеся назад.';
+
+  @override
+  String get transcribingOnThisPhone => 'Транскрибування на цьому телефоні';
+
+  @override
+  String get getPro => 'Отримати Pro';
+
+  @override
+  String get unlock => 'Розблокувати';
+
+  @override
+  String get transcribeWith => 'Транскрибувати через';
+
+  @override
+  String get omiCloud => 'Хмара Omi';
+
+  @override
+  String get thisPhone => 'Цей телефон';
+
+  @override
+  String get onDeviceReady => 'Готово';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Залишилося $left з $limit хв · оновлення $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Доступно $minutes хв у хмарі';
+  }
+
+  @override
+  String get switchBack => 'Повернутися';
+
+  @override
+  String get setUpThisPhone => 'Налаштувати цей телефон';
+
+  @override
+  String get speechRecognition => 'Розпізнавання мовлення';
+
+  @override
+  String get audioStaysOnPhone => 'Аудіо залишається на телефоні';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Завантаження $size МБ';
+  }
+
+  @override
+  String get downloadNow => 'Завантажити зараз';
+
+  @override
+  String get onWifiLater => 'Пізніше через Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Пишемо ваш підсумок…';
 }

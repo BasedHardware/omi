@@ -7,6 +7,7 @@ must retain that claim for recovery; lease expiry never authorizes another POST.
 """
 
 from dataclasses import replace
+import logging
 import math
 import time
 
@@ -15,6 +16,8 @@ from database.jobstore.result_upload_rows import ResultUploadRows, uri as upload
 from utils.batch_pipeline.contracts import WorkItem, WorkResult
 from utils.batch_pipeline.provider_stt import ProviderSttStage, UnitOutcome, ProviderCall, result_outcome
 from utils.batch_pipeline.provider_stt_admission import SttRoute
+
+logger = logging.getLogger(__name__)
 
 
 class _OriginalAttempt:
@@ -257,17 +260,23 @@ class TypedProviderRunner:
         )
         ready = []
         for claim in claims:
-            outcome = await run_claimed_provider(
-                self.adapter,
-                claim,
-                self.artifacts,
-                run_sync=run_sync,
-                effect_lease_seconds=self.effect_lease_seconds,
-                partial_wait=self.partial_wait,
-                **self.options,
-            )
-            if outcome.outcome == 'done' and await run_sync(self._sealed, claim['recording_id']):
-                ready.append(claim['recording_id'])
+            try:
+                outcome = await run_claimed_provider(
+                    self.adapter,
+                    claim,
+                    self.artifacts,
+                    run_sync=run_sync,
+                    effect_lease_seconds=self.effect_lease_seconds,
+                    partial_wait=self.partial_wait,
+                    **self.options,
+                )
+                if outcome.outcome == 'done' and await run_sync(self._sealed, claim['recording_id']):
+                    ready.append(claim['recording_id'])
+            except Exception as error:
+                # Claims have already committed. Keep the failed original
+                # attempt for recovery and continue the other committed claims.
+                # Never log source identifiers, payloads or vendor errors here.
+                logger.warning('typed provider claim retained; error_type=%s', type(error).__name__)
         return list(dict.fromkeys(ready))
 
     def _sealed(self, identity):

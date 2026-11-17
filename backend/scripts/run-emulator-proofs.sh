@@ -61,6 +61,8 @@ run_proof "record custody append (committed reply loss, retries, privacy)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_record_custody_append_emulator.py
 run_proof "record nojob seal (synthetic cleanup ownership)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/unit/test_record_seal_nojob_emulator.py
+run_proof "pipeline ledger (fence, reopen, ordering, delete, erasure)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pipeline_ledger_firestore.py
 run_proof "lifecycle properties (real Firestore, named producer exits)" \
   "$PYTHON" -m testing.lifecycle_sim.run \
   --extra-test-module testing/lifecycle_properties/test_properties.py
@@ -85,6 +87,13 @@ run_proof "summary task recovery, concurrency and expiry" \
   tests/integration/test_summary_task_promotion_emulator.py \
   tests/integration/test_candidate_accept_expiry_emulator.py -q
 
+# Silent receipts can become ready at assignment; keep the paginated follow-up
+# and mixed-completion read guards in the hosted emulator acceptance suite.
+run_proof "batch projection follow-up (silent ready, rollback and mixed completion)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider \
+  tests/integration/test_batch_pipeline_projection_followup_firestore.py \
+  tests/integration/test_batch_pipeline_silence_sizing_firestore.py
+
 run_proof "projection ghost-hold release gaps and ready-hint repair follow-up" \
   "$PYTHON" -m pytest -q -rxX -p no:cacheprovider \
   tests/integration/test_batch_projection_ghost_holds_firestore.py
@@ -105,6 +114,10 @@ run_proof "job-store conformance (sim + emulator, including fenced scheduler pul
   env "OMI_REQUIRE_STORE_BACKENDS=${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_store_conformance.py \
   tests/integration/test_recovery_custody_conformance.py
+
+run_proof "allowance parking migration (owner concurrency, retry pacing, privacy and replay)" \
+  env "OMI_REQUIRE_STORE_BACKENDS=${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_batch_allowance_holds.py -k migration
 
 # Daily parity: real claims/settlement on old Firestore and new Postgres.
 # CI requires sim + emulator; local/staging qualification must require all.

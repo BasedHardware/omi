@@ -221,6 +221,67 @@
       "correlation": null
     },
     {
+      "id": "signInFailureDetail",
+      "wire_name": "Sign In Failure Detail",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "provider": {
+          "type": "enum",
+          "wire_name": "provider",
+          "values": [
+            "apple",
+            "google"
+          ]
+        },
+        "errorCode": {
+          "type": "enum",
+          "wire_name": "error_code",
+          "values": [
+            "apple_canceled",
+            "apple_failed",
+            "apple_invalid_response",
+            "apple_not_handled",
+            "apple_not_interactive",
+            "apple_unknown",
+            "apple_credential_export",
+            "apple_credential_import",
+            "apple_matched_excluded_credential",
+            "apple_not_supported",
+            "apple_credentials_error",
+            "apple_platform_error",
+            "apple_missing_identity_token",
+            "firebase_invalid_credential",
+            "firebase_invalid_credential_audience",
+            "firebase_invalid_credential_stale",
+            "firebase_invalid_idp_response",
+            "firebase_missing_or_invalid_nonce",
+            "firebase_account_exists_with_different_credential",
+            "firebase_credential_already_in_use",
+            "firebase_email_already_in_use",
+            "firebase_operation_not_allowed",
+            "firebase_admin_restricted_operation",
+            "firebase_user_disabled",
+            "firebase_app_not_authorized",
+            "firebase_invalid_api_key",
+            "firebase_too_many_requests",
+            "firebase_network_request_failed",
+            "firebase_internal_error",
+            "firebase_other",
+            "network",
+            "timeout",
+            "other"
+          ]
+        }
+      },
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
+      "correlation": null
+    },
+    {
       "id": "onboardingPermissionResult",
       "wire_name": "Onboarding Permission Result",
       "status": "active",
@@ -326,6 +387,37 @@
             "not_found_or_dropped",
             "stale_bond",
             "unknown"
+          ]
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "ios",
+            "android",
+            "other"
+          ]
+        }
+      },
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "devicePairingSettingsOpened",
+      "wire_name": "Device Pairing Settings Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "failureReason": {
+          "type": "enum",
+          "wire_name": "failure_reason",
+          "values": [
+            "bluetooth_permission_denied",
+            "nearby_devices_denied"
           ]
         },
         "platform": {
@@ -3780,7 +3872,8 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "on_phone_banner"
           ]
         },
         "currentPlan": {
@@ -3794,6 +3887,29 @@
             "operator",
             "architect",
             "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "freeCapSheetChoice",
+      "wire_name": "Free Cap Sheet Choice",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "choice": {
+          "type": "enum",
+          "wire_name": "choice",
+          "values": [
+            "upgrade",
+            "transcribe_on_phone",
+            "dismissed"
           ]
         }
       },
@@ -3860,7 +3976,8 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "on_phone_banner"
           ]
         }
       },
@@ -4499,7 +4616,8 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "on_phone_banner"
           ]
         }
       },
@@ -5096,6 +5214,110 @@
       "properties": {},
       "consumers": [
         "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyShown",
+      "wire_name": "Subscription Payment Issue Monthly Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyTapped",
+      "wire_name": "Subscription Payment Issue Monthly Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlySwitched",
+      "wire_name": "Subscription Payment Issue Monthly Switched",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyFailed",
+      "wire_name": "Subscription Payment Issue Monthly Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "declined",
+            "refused",
+            "error"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "mobileDeviceHealthDailyRingRead",
+      "wire_name": "Mobile Device Health Daily",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "disconnectsDuringRingRead": {
+          "type": "int",
+          "wire_name": "disconnects_during_ring_read"
+        },
+        "disconnectsWithRingReadState": {
+          "type": "int",
+          "wire_name": "disconnects_with_ring_read_state"
+        },
+        "rssiBelowMinus90": {
+          "type": "int",
+          "wire_name": "ring_read_disconnect_rssi_below_minus90"
+        },
+        "rssiMinus90ToMinus80": {
+          "type": "int",
+          "wire_name": "ring_read_disconnect_rssi_minus90_to_minus80"
+        },
+        "rssiMinus80ToMinus60": {
+          "type": "int",
+          "wire_name": "ring_read_disconnect_rssi_minus80_to_minus60"
+        },
+        "rssiAtLeastMinus60": {
+          "type": "int",
+          "wire_name": "ring_read_disconnect_rssi_at_least_minus60"
+        },
+        "rssiUnknown": {
+          "type": "int",
+          "wire_name": "ring_read_disconnect_rssi_unknown"
+        }
+      },
+      "consumers": [
+        "pendant-ring-read-disconnects"
       ],
       "correlation": null
     }

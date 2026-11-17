@@ -35,6 +35,9 @@ from utils.batch_pipeline.serving import Serving
 
 SWITCH = 'BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED'
 RELEASE = 'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED'
+# With the meter on (the default) the legacy switch alone releases nothing; these tests set the
+# meter off where they describe the legacy unmetered release.
+METER = 'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED'
 # admit() runs at 100.0 with 5 s units, so a capture at 10 is fresh.
 FRESH_CAPTURE = 10
 STALE = 90_000.0  # More than a day after FRESH_CAPTURE: catch-up under the provider bar.
@@ -225,6 +228,7 @@ def _legacy_backlog(world, monkeypatch, count):
 def test_unstamped_ready_row_passes_an_unready_head_once_its_settle_is_a_head_wait_old(world, monkeypatch):
     """A row settled before the ready_at stamp has only its intent's settled_at to wait from."""
     monkeypatch.setenv(RELEASE, 'true')
+    monkeypatch.setenv(METER, 'false')
     _, store = world
     monkeypatch.setenv(SWITCH, 'false')
     admit(monkeypatch, store, [item('head', 10)], 'content-head', JA)
@@ -286,6 +290,7 @@ def _project_through(store, segment):
 
 def test_fresh_provider_row_passes_the_owners_unstamped_backlog(world, monkeypatch):
     monkeypatch.setenv(RELEASE, 'true')
+    monkeypatch.setenv(METER, 'false')
     store, names = _legacy_backlog(world, monkeypatch, 6)
     admit(monkeypatch, store, [item('new', 90)], 'content-new', JA)
     settle(store, 'new', now=200.0)
@@ -322,6 +327,7 @@ def test_backlog_release_is_off_by_default_and_only_fresh_rows_commit(world, mon
     assert drain(merge, 10_000.0) == []
     # Opting in releases it under the usual depth hold, appended as late captures.
     monkeypatch.setenv(RELEASE, 'true')
+    monkeypatch.setenv(METER, 'false')
     rest = drain(merge, 10_001.0)
     assert [e['segment_id'] for e in rest] == names[:4]
     assert all(e['late_capture'] is True for e in rest)
@@ -348,6 +354,7 @@ def test_a_stale_capture_admitted_now_is_backlog_too(world, monkeypatch):
     merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
     assert drain(merge, STALE + 101.0) == []
     monkeypatch.setenv(RELEASE, 'true')
+    monkeypatch.setenv(METER, 'false')
     assert [e['segment_id'] for e in drain(merge, STALE + 102.0)] == ['old']
 
 
@@ -375,6 +382,7 @@ def test_gpu_catch_up_rows_are_not_held_by_the_provider_backlog_switch(monkeypat
     monkeypatch.setenv(SWITCH, 'false')
     assert _backlog_held({'stt_route': {'stt_route': 'provider'}}) is True
     monkeypatch.setenv(RELEASE, 'true')
+    monkeypatch.setenv(METER, 'false')
     assert _backlog_held({'stt_route': {'stt_route': 'provider'}}) is False
 
 
@@ -390,6 +398,7 @@ def test_membership_switch_off_still_holds_the_backlog(world, monkeypatch):
     assert [job(store, name)['state'] for name in names] == ['result_ready'] * 6
     # With release on, switch-off is the old plain order.
     monkeypatch.setenv(RELEASE, 'true')
+    monkeypatch.setenv(METER, 'false')
     assert [e['segment_id'] for e in drain(merge, 10_001.0)] == names
 
 

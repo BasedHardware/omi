@@ -150,9 +150,14 @@ def _strip_match_scores(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Voice calibration evidence stays inside backend persistence and processing."""
     conv.pop('speaker_match_scores', None)
     conv.pop('owner_recognition_diagnostics', None)
+    conv.pop('owner_identity_observation_sha256', None)
+    resolution = conv.get('speaker_resolution')
+    if isinstance(resolution, dict):
+        resolution.pop('input_membership_sha256', None)
     for segment in conv.get('transcript_segments') or []:
         if isinstance(segment, dict):
             segment.pop('speaker_match_scores', None)
+            segment.pop('speaker_word_seconds', None)
             strip_grouping_internal_fields(segment)
     return conv
 

@@ -34,6 +34,7 @@ from utils.batch_pipeline.provider_stt import ProviderSttStage
 from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_conflict
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
 pytestmark = pytest.mark.integration
 POLICY = BatchUnitPolicy(batch_enabled=True, batch_percent=100)
@@ -112,8 +113,8 @@ def settle(h, segment, now=SETTLED):
         calls.append(item.segment_id)
         return {
             'audio_seconds': 5.0,
-            'speech_seconds': 0.5,
-            'speech_spans': [{'start': 0.5, 'end': 1.0}],
+            'speech_seconds': 2.5,
+            'speech_spans': [{'start': 0.5, 'end': 3.0}],
             'words': [{'word': 'synthetic', 'timestamp': [0.5, 1.0], 'speaker': 'SPEAKER_00'}],
             'diarization': {'turns': []},
             'words_provider': service,
@@ -126,7 +127,8 @@ def settle(h, segment, now=SETTLED):
         Artifacts(),
         stt=vendor,
         allowed=lambda *_: True,
-        inspect=lambda *_: (b'\0\0' * 80_000, 5.0, [{'start': 0.5, 'end': 1.0}]),
+        # Keep merge conformance on the paid path, above the short-speech threshold.
+        inspect=lambda *_: (b'\0\0' * 80_000, 5.0, [{'start': 0.5, 'end': 3.0}]),
         clock=lambda: now,
     )
     result = stage.run(segment)
@@ -184,6 +186,7 @@ def test_pl585_fresh_provider_passes_held_backlog_without_releasing_it(h, monkey
     assert merge.held_owners == set()
     assert not h.store.run(lambda tx: tx.get('merge_holds', owner_key(h.uid('owner')))).get('held')
     # Explicit release resumes the retained result, after the fresh log entry.
+    monkeypatch.setenv('BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED', 'false')
     monkeypatch.setenv(RELEASE, 'true')
     released = OrderedMerge(h.store, head_wait_seconds=60, catch_up_depth=depth).commit_next(
         h.uid('owner'), SETTLED + 1001
@@ -380,3 +383,58 @@ def test_pl585_transactional_fresh_reads_and_result_share_actual_store_transacti
     assert entry['segment_id'] == 'fresh' and entry['fresh_first'] is True
     assert len(firsts) == len(ready) == len(writes) == 1
     assert firsts[0] is ready[0] is writes[0]
+
+
+def test_meter_spends_one_token_with_the_result_and_preserves_fresh_chain(h, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED', 'true')
+    for n in range(2):
+        admit(h, f'old-{n}', capture=CAPTURE + n, lag=90_000)
+        settle(h, f'old-{n}')
+    heartbeat = SETTLED + 100
+    control = dict(
+        state='open',
+        rate_per_hour=1,
+        reach_seconds=0,
+        window=int(heartbeat // 3600),
+        tokens_used=0,
+        updated_at=heartbeat,
+    )
+    h.store.run(lambda tx: tx.put('backlog_release', 'gate', control))
+    merge = OrderedMerge(h.store, catch_up_depth=0)
+    first = merge.commit_next(h.uid('owner'), heartbeat)
+    assert first['segment_id'] == 'old-0' and first['backlog_release'] is True
+    spent = h.store.run(lambda tx: tx.get('backlog_release', 'gate'))
+    assert spent == {**control, 'tokens_used': 1}
+    assert merge.commit_next(h.uid('owner'), heartbeat) is None
+    admit(h, 'fresh', capture=CAPTURE + 10)
+    settle(h, 'fresh')
+    fresh = merge.commit_next(h.uid('owner'), heartbeat)
+    assert fresh['segment_id'] == 'fresh' and 'backlog_release' not in fresh
+    assert fresh['previous_segment_id'] == 'old-0'
+    assert h.store.run(lambda tx: tx.get('backlog_release', 'gate')) == spent
+    assert row(h, 'old-1')['state'] == 'result_ready'
+
+
+def test_meter_privacy_refusal_spends_no_token_or_result(h, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED', 'true')
+    admit(h, 'old', lag=90_000)
+    settle(h, 'old')
+    heartbeat = SETTLED + 100
+    control = dict(
+        state='open',
+        rate_per_hour=1,
+        reach_seconds=0,
+        window=int(heartbeat // 3600),
+        tokens_used=0,
+        updated_at=heartbeat,
+    )
+    h.store.run(lambda tx: tx.put('backlog_release', 'gate', control))
+    h.customer.block_privacy(h.uid('owner'))
+    # Privacy may fence the strict transaction before it reaches the metered lane.
+    try:
+        assert OrderedMerge(h.store, catch_up_depth=0).commit_next(h.uid('owner'), heartbeat) is None
+    except BatchPrivacyBlocked:
+        pass
+    assert h.store.run(lambda tx: tx.get('backlog_release', 'gate')) == control
+    assert not h.store.run(lambda tx: tx.get('results', 'old'))
+    assert row(h, 'old')['state'] == 'result_ready'

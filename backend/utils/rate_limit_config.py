@@ -120,6 +120,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "conversations:merge": (5, 3600),
     # Episodes: "Wrap up now" and Undo on a captured item; no model call.
     "episodes:write": (60, 3600),
+    "home:prepare": (12, 60),  # account-scoped idle preparation; three-call bursts
     # From-segments: on-device-STT upload path (segments already transcribed, so
     # cheaper than :create — no Deepgram, just LLM structuring). Used per finished
     # conversation by Parakeet/local-STT users, so a bit more headroom than :create.
@@ -239,6 +240,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "conversations:topic": (60, 3600),
     # Return-only SSOT AI user profile synthesis (once-daily desktop cadence)
     "users:ai_profile_synthesize": (8, 86400),
+    # Explicit backend-owned AI user profile refresh (Generate Now / Regenerate)
+    "users:ai_profile_refresh": (8, 86400),
     # Canonical graph reads — paginated Firestore + assertion hydration
     "knowledge_graph:canonical": (120, 3600),
     "wrapped:generate": (2, 86400),

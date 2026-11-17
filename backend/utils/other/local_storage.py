@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import base64
+import google_crc32c
 import fcntl
 import uuid
 from dataclasses import dataclass
@@ -88,6 +90,13 @@ class LocalBlob:
     @property
     def size(self) -> int | None:
         return self.path.stat().st_size if self.path.is_file() else None
+
+    @property
+    def crc32c(self) -> str | None:
+        if not self.path.is_file():
+            return None
+        checksum = google_crc32c.value(self.path.read_bytes())
+        return base64.b64encode(checksum.to_bytes(4, 'big')).decode()
 
     @property
     def public_url(self) -> str:

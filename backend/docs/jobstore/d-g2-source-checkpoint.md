@@ -5,31 +5,25 @@ reverse certificate, staging-sizing receipt, serving acceptance or savings claim
 Source delivery books $0. Continue all fixes on `sca-1697-d-g2-dark`; no second D writer.
 
 Original base: `f3902ec5435809d95ac7c15f6be7e9f056564d3d` (origin/main at checkout).
-Current main `e2c4d62a05ba9f8e45ef0473234902b2d7e48487` was merged without
-history rewriting to resolve overlapping collection-budget registrations; both
-the existing fresh-guard budget and D projection budget are retained.
+Current main `f317e02d0f32fab9ab85bd2f5efa73929d8f5bb3` is integrated by a normal merge.
+Published b9f707b and recovered local 01348656 ancestry are both preserved.
 G2 authority: Revision 3, SHA-256
 `1d9ea5dd8aae66d067e6d52c562ee3404429709e1f501d7958a96039e307b7b6`.
-Current migration mapping (2026-11-14): main at
-`c5cf5a2b3dd2c3b3b638a562d066dafd92334753` already owns
-`0007_ready_owners.sql`. That file is included byte for byte; this is a targeted
-migration import, not a merge of all current main changes. The unmerged dark
-files previously numbered 0007–0024 are now 0008–0025 with identical SQL bodies
-and checksums. The design's illustrative 0006 is actual 0008 (privacy fence);
-0009 adds D/W4, 0010 immutable handoffs, 0011 raw-SQL authority guards, 0012
-privacy lifecycle, 0013 provider handoff, 0014 grouped acknowledgement and 0015
-provider effects. The sequence ends at 0025 upload terminal receipts. Numeric
-references in older continuation entries below describe their historical heads;
-use migration filenames in the current tree for the authoritative mapping.
+Current migration mapping (2026-11-17): main owns 0001–0009, including
+`0008_allowance_holds.sql` and `0009_protected_share.sql`; those files are
+preserved byte for byte. The dark D sequence moves from 0008–0025 to
+0010–0027 with unchanged SQL bodies. G2 privacy is 0010; queue authority 0011;
+immutable handoffs 0012; raw-SQL boundary 0013; lifecycle 0014; provider handoff
+0015; grouped acknowledgement 0016; provider effects 0017; upload terminal
+receipts 0027. New source-only 0028 adds guarded, unsealed recording readmission;
+0029 separates per-effect drain rotation from owner janitor backoff.
 
-The loader refuses duplicates/gaps before executing SQL. PR #25290 separately
-adds `0007_outbox_custody_episode.sql` and must also be resequenced against the
-selected landing order: if this inventory lands first its next free version is
-0026; if #25290 lands first, this dark sequence must move again. Neither PR has
-exclusive reservation of future version numbers. The loader's applied-checksum
-guard remains unchanged: an existing synthetic DB with the old dark sequence
-is incompatible and must not be silently relabeled or replayed. No remote
-migration or database alteration was performed by this source correction.
+The loader rejects gaps/duplicates and changed applied checksums. No version
+reservation is exclusive: another landing requires another normal integration.
+Existing synthetic databases with the old dark checksums cannot be relabeled.
+No remote migration/database change was executed. The preserved local provider
+budget patch is reconciled with the published branch before this main merge.
+Original pre-loss dirty/untracked state remains UNKNOWN.
 
 G2 Rev 3 retention (§3.5.5, §8 A4): effect registry rows exist only while the
 effect is unresolved. Every terminal path deletes the row and sink capability;

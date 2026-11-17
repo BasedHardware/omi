@@ -219,35 +219,86 @@ class Units:
         def persist(conn, admission):
             # A2 already holds the owner guard, before namespace and row locks.
             acquire(conn, self.ticket)
-            current = self._unit(conn, identity)
-            if current is None or current != before:
-                raise AdmissionChanged()
-            old_targets = {t['conversation_key'] for t in before['admission']['privacy_targets']}
-            new_targets = {t['conversation_key'] for t in admission['privacy_targets']}
-            if not old_targets <= new_targets:
-                raise AuthorityRefused('restore cannot drop an original privacy target')
-            custody = row_dict(
+            recording = row_dict(
                 conn,
-                'SELECT * FROM queue_custody WHERE namespace=%s AND identity=%s FOR UPDATE',
-                (self.namespace, identity),
+                'SELECT * FROM recordings WHERE namespace=%s AND recording_id=%s FOR UPDATE',
+                (self.namespace, before['recording_id']),
             )
-            if not custody or custody['phase'] != 'admitted' or custody['owner_key'] != owner:
-                raise AuthorityRefused('restore needs unresolved original custody')
-            conn.execute(
-                'UPDATE units SET admission=%s,privacy_generation=%s,hold_reason=%s,'
-                'lease_token=NULL,lease_until=0,due_at=NULL WHERE namespace=%s AND unit_id=%s',
-                (
-                    jsonb(admission),
-                    admission['privacy_generation'],
-                    'vendor' if current['attempt_token'] else None,
-                    self.namespace,
-                    identity,
-                ),
+            if (
+                not recording
+                or recording['owner_key'] != owner
+                or recording['projection_state'] != 'pending'
+                or recording['units_final']
+            ):
+                raise AuthorityRefused('restore requires an entirely unresolved recording')
+            cursor = conn.execute(
+                'SELECT * FROM units WHERE namespace=%s AND recording_id=%s ORDER BY unit_id FOR UPDATE',
+                (self.namespace, before['recording_id']),
             )
-            conn.execute(
-                'UPDATE queue_custody SET admission_id=%s WHERE namespace=%s AND identity=%s',
-                (admission['admission_id'], self.namespace, identity),
+            names = [column.name for column in cursor.description]
+            siblings = [dict(zip(names, row)) for row in cursor.fetchall()]
+            if next((row for row in siblings if row['unit_id'] == identity), None) != before:
+                raise AdmissionChanged()
+            if len(siblings) != recording['units_total']:
+                raise AuthorityRefused('restore requires the full original recording census')
+            new_targets = {t['conversation_key'] for t in admission['privacy_targets']}
+            for current in siblings:
+                if (
+                    current['owner_key'] != owner
+                    or current['state'] != 'pending'
+                    or current['admission'] != before['admission']
+                ):
+                    raise AuthorityRefused('restore cannot adopt terminal or differently admitted siblings')
+                old_targets = {t['conversation_key'] for t in current['admission']['privacy_targets']}
+                if not old_targets <= new_targets:
+                    raise AuthorityRefused('restore cannot drop an original privacy target')
+                custody = row_dict(
+                    conn,
+                    'SELECT * FROM queue_custody WHERE namespace=%s AND identity=%s FOR UPDATE',
+                    (self.namespace, current['unit_id']),
+                )
+                if (
+                    not custody
+                    or custody['phase'] != 'admitted'
+                    or custody['owner_key'] != owner
+                    or str(custody['admission_id']) != before['admission']['admission_id']
+                ):
+                    raise AuthorityRefused('restore needs unresolved original sibling custody')
+            handoff = row_dict(
+                conn,
+                'SELECT * FROM queue_handoffs WHERE namespace=%s AND identity=%s FOR UPDATE',
+                (self.namespace, before['recording_id']),
             )
+            if handoff:
+                if (
+                    handoff['owner_key'] != owner
+                    or handoff['phase'] != 'admitted'
+                    or handoff['admission'] != before['admission']
+                ):
+                    raise AuthorityRefused('restore cannot replace a sealed handoff admission')
+                conn.execute("SELECT set_config('omi.queue_readmission',%s,true)", (admission['admission_id'],))
+                conn.execute(
+                    'UPDATE queue_handoffs SET admission=%s WHERE namespace=%s AND identity=%s',
+                    (jsonb(admission), self.namespace, before['recording_id']),
+                )
+            elif any(row['source'] for row in siblings):
+                raise AuthorityRefused('source-bound restore needs its original handoff')
+            for current in siblings:
+                conn.execute(
+                    'UPDATE units SET admission=%s,privacy_generation=%s,hold_reason=%s,'
+                    'lease_token=NULL,lease_until=0,due_at=NULL WHERE namespace=%s AND unit_id=%s',
+                    (
+                        jsonb(admission),
+                        admission['privacy_generation'],
+                        'vendor' if current['attempt_token'] else None,
+                        self.namespace,
+                        current['unit_id'],
+                    ),
+                )
+                conn.execute(
+                    'UPDATE queue_custody SET admission_id=%s WHERE namespace=%s AND identity=%s',
+                    (admission['admission_id'], self.namespace, current['unit_id']),
+                )
 
         self.fence.admit_from_authority(client, uid, conversation_ids, persist)
         return True

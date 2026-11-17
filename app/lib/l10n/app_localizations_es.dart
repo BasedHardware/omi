@@ -1978,6 +1978,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get memoryHistory => 'Historial';
 
   @override
+  String get recordingWithYourPhone => 'Grabando con tu teléfono';
+
+  @override
+  String get wrapUp => 'Terminar';
+
+  @override
+  String get recordingDiscarded => 'Grabación descartada';
+
+  @override
   String get undo => 'Deshacer';
 
   @override
@@ -7042,6 +7051,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get authFailedToSignInWithApple => 'Error al iniciar sesión con Apple, por favor inténtalo de nuevo.';
+
+  @override
+  String get authAppleSignInFailedUseGoogle =>
+      'No se pudo iniciar sesión con Apple. Inténtalo de nuevo o continúa con Google.';
 
   @override
   String get authFailedToRetrieveToken => 'Error al recuperar el token de Firebase, por favor inténtalo de nuevo.';
@@ -13441,6 +13454,9 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => '¿Tienes un código de Omi Pro? Agrégalo en la siguiente pantalla.';
+
+  @override
   String get paywallTrialCancelNote => 'Cancela en cualquier momento. Sin cargos ni penalizaciones.';
 
   @override
@@ -15441,6 +15457,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get paymentDeclinedTitle => 'Tu tarjeta fue rechazada';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Actualízala o recupera $plan por $price al mes';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Actualízala para recuperar $plan';
   }
@@ -15465,4 +15486,118 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Cambiar a mensual';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price al mes';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Sustituye el cargo anual pendiente de $yearly. Se renueva cada mes. Cancela cuando quieras.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Pago rechazado. Tu plan no ha cambiado.';
+
+  @override
+  String get monthlySwitchUnavailable => 'El cambio no está disponible ahora mismo. Actualiza tu tarjeta.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Ya pagas al mes';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price pagados hoy. Se renueva cada mes.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'La lista de procesamiento ha cambiado. Revísala e inténtalo de nuevo.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Has usado los $minutes minutos de este mes';
+  }
+
+  @override
+  String get freeCapBody => 'Omi sigue grabando. Elige cómo seguir transcribiendo.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Transcripción en la nube ilimitada';
+
+  @override
+  String get freeCapProAccuracy => 'La mejor precisión';
+
+  @override
+  String get freeCapProWaiting => 'Transcribe tus grabaciones en espera';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Gratis. Se mantiene hasta que vuelvas a cambiar.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transcribiendo en este teléfono';
+
+  @override
+  String get getPro => 'Obtener Pro';
+
+  @override
+  String get unlock => 'Desbloquear';
+
+  @override
+  String get transcribeWith => 'Transcribir con';
+
+  @override
+  String get omiCloud => 'Nube de Omi';
+
+  @override
+  String get thisPhone => 'Este teléfono';
+
+  @override
+  String get onDeviceReady => 'Listo';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Quedan $left de $limit min · se renueva el $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes minutos en la nube disponibles';
+  }
+
+  @override
+  String get switchBack => 'Volver';
+
+  @override
+  String get setUpThisPhone => 'Configurar este teléfono';
+
+  @override
+  String get speechRecognition => 'Reconocimiento de voz';
+
+  @override
+  String get audioStaysOnPhone => 'El audio se queda en tu teléfono';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Descarga de $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Descargar ahora';
+
+  @override
+  String get onWifiLater => 'Luego con Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Escribiendo tu resumen…';
 }

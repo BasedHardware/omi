@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "ನಿಮ್ಮ ಫೋನ್‌ನಿಂದ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ",
+    "wrapUp": "ಮುಗಿಸಿ",
+    "recordingDiscarded": "ರೆಕಾರ್ಡಿಂಗ್ ತ್ಯಜಿಸಲಾಗಿದೆ",
     "undo": "ರದ್ದುಗೊಳಿಸಿ",
     "@undo": {
         "description": "Undo button text"
@@ -8695,6 +8698,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Apple ಮೂಲಕ ಸೈನ್ ಇನ್ ಆಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ ಅಥವಾ Google ಮೂಲಕ ಮುಂದುವರಿಯಿರಿ.",
     "authFailedToRetrieveToken": "Firebase ಟೋಕನ್ ಪುನರುದ್ಧರಣ ವಿಫಲವಾಗಿದೆ, ದಯವಿಟ್ಟು ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -11528,6 +11532,7 @@
     "paywallTrialBilledYearly": "ವಾರ್ಷಿಕ ಬಿಲ್ ಮಾಡಲಾಗುತ್ತದೆ",
     "paywallTrialSaveAmount": "{amount} ಉಳಿಸಿ",
     "paywallTrialCta": "{price} ಗೆ ಪ್ರಾರಂಭಿಸಿ",
+    "paywallTrialCodeHint": "Omi Pro ಕೋಡ್ ಇದೆಯೇ? ಮುಂದಿನ ಪರದೆಯಲ್ಲಿ ಅದನ್ನು ನಮೂದಿಸಿ.",
     "paywallTrialCancelNote": "ಯಾವುದೇ ಸಮಯದಲ್ಲಿ ರದ್ದುಗೊಳಿಸಿ. ಯಾವುದೇ ಶುಲ್ಕಗಳಿಲ್ಲ, ಯಾವುದೇ ದಂಡಗಳಿಲ್ಲ.",
     "paywallMonthlyFallbackTitle": "ಇಡೀ ವರ್ಷಕ್ಕೆ ಇನ್ನೂ ಸಿದ್ಧವಿಲ್ಲವೇ?",
     "paywallMonthlyFallbackTrialBody": "ಬದಲಿಗೆ ಮಾಸಿಕದಿಂದ ಪ್ರಾರಂಭಿಸಿ. ಅದೇ {days} ದಿನಗಳು ಉಚಿತ, ನಂತರ ತಿಂಗಳಿಗೆ {price}. ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದು ಮಾಡಿ.",
@@ -12196,11 +12201,45 @@
     "referralRewardSecondDetail": "ಇನ್ನೂ 3 ಸ್ನೇಹಿತರು ಖರೀದಿಸಿದಾಗ",
     "referralClaimShort": "ಪಡೆಯಿರಿ",
     "paymentDeclinedTitle": "ನಿಮ್ಮ ಕಾರ್ಡ್ ನಿರಾಕರಿಸಲಾಗಿದೆ",
+    "paymentDeclinedMonthlyMessage": "ಕಾರ್ಡ್ ನವೀಕರಿಸಿ, ಅಥವಾ {plan} ಅನ್ನು ತಿಂಗಳಿಗೆ {price} ಗೆ ಮರಳಿ ಪಡೆಯಿರಿ",
     "paymentDeclinedMessage": "{plan} ಮರಳಿ ಪಡೆಯಲು ಕಾರ್ಡ್ ನವೀಕರಿಸಿ",
     "hasLinkedTasksLabel": "ಲಿಂಕ್ ಮಾಡಿದ ಕಾರ್ಯಗಳಿವೆ",
     "hasTasksFilter": "ಕಾರ್ಯಗಳಿವೆ",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "ಮಾಸಿಕಕ್ಕೆ ಬದಲಿಸಿ",
+    "monthlySwitchPlanValue": "{plan}, ತಿಂಗಳಿಗೆ {price}",
+    "monthlySwitchNote": "ಪಾವತಿಸದ {yearly} ವಾರ್ಷಿಕ ಶುಲ್ಕದ ಬದಲಿಗೆ. ಪ್ರತಿ ತಿಂಗಳು ನವೀಕರಿಸಲಾಗುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದುಗೊಳಿಸಿ.",
+    "monthlySwitchDeclined": "ಪಾವತಿ ನಿರಾಕರಿಸಲಾಗಿದೆ. ನಿಮ್ಮ ಯೋಜನೆ ಬದಲಾಗಿಲ್ಲ.",
+    "monthlySwitchUnavailable": "ಈಗ ಬದಲಾವಣೆ ಲಭ್ಯವಿಲ್ಲ. ಬದಲಿಗೆ ಕಾರ್ಡ್ ನವೀಕರಿಸಿ.",
+    "monthlySwitchDoneTitle": "ನೀವು ಈಗ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ",
+    "monthlySwitchDoneBody": "ಇಂದು {price} ಪಾವತಿಸಲಾಗಿದೆ. ಪ್ರತಿ ತಿಂಗಳು ನವೀಕರಿಸಲಾಗುತ್ತದೆ.",
+    "processingDeleteScopeChanged": "ಪ್ರಕ್ರಿಯೆಯ ಪಟ್ಟಿ ಬದಲಾಗಿದೆ. ಪಟ್ಟಿಯನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "ಈ ತಿಂಗಳ {minutes} ನಿಮಿಷಗಳನ್ನು ಬಳಸಿದ್ದೀರಿ",
+    "freeCapBody": "Omi ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ. ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಷನ್ ಮುಂದುವರಿಸುವ ವಿಧಾನವನ್ನು ಆರಿಸಿ.",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "ಅನಿಯಮಿತ ಕ್ಲೌಡ್ ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಷನ್",
+    "freeCapProAccuracy": "ಅತ್ಯುತ್ತಮ ನಿಖರತೆ",
+    "freeCapProWaiting": "ನಿಮ್ಮ ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡುತ್ತದೆ",
+    "freeCapPhoneSubtitle": "ಉಚಿತ. ನೀವು ಹಿಂದಕ್ಕೆ ಬದಲಿಸುವವರೆಗೆ ಆನ್ ಆಗಿರುತ್ತದೆ.",
+    "transcribingOnThisPhone": "ಈ ಫೋನ್‌ನಲ್ಲಿ ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಆಗುತ್ತಿದೆ",
+    "getPro": "Pro ಪಡೆಯಿರಿ",
+    "unlock": "ಅನ್‌ಲಾಕ್",
+    "transcribeWith": "ಇದರೊಂದಿಗೆ ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಿ",
+    "omiCloud": "Omi ಕ್ಲೌಡ್",
+    "thisPhone": "ಈ ಫೋನ್",
+    "onDeviceReady": "ಸಿದ್ಧ",
+    "cloudMinutesLeft": "{left}/{limit} ನಿಮಿಷ ಉಳಿದಿದೆ · {date} ರಂದು ಮರುಹೊಂದಿಕೆ",
+    "cloudMinutesAvailable": "{minutes} ಕ್ಲೌಡ್ ನಿಮಿಷಗಳು ಲಭ್ಯವಿವೆ",
+    "switchBack": "ಹಿಂದಕ್ಕೆ ಬದಲಿಸಿ",
+    "setUpThisPhone": "ಈ ಫೋನ್ ಹೊಂದಿಸಿ",
+    "speechRecognition": "ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ",
+    "audioStaysOnPhone": "ಆಡಿಯೋ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಉಳಿಯುತ್ತದೆ",
+    "onDeviceModelDownloadSize": "{size} MB ಡೌನ್‌ಲೋಡ್",
+    "downloadNow": "ಈಗ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ",
+    "onWifiLater": "ನಂತರ Wi-Fi ನಲ್ಲಿ",
+    "conversationWritingSummary": "ನಿಮ್ಮ ಸಾರಾಂಶವನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…"
 }

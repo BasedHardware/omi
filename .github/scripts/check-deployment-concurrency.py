@@ -96,7 +96,7 @@ LOCK_CONTRACTS = {
         "deploy-cloud-run-day3-reengagement-email-job-development"
     ),
     "gcp_finops_unit_cost_job.yml": LockContract(
-        "deploy-cloud-run-finops-unit-cost-job-${{ github.event.inputs.environment }}"
+        "${{ inputs.operation == 'margin_scheduler' && 'margin-scheduler-prod' || format('deploy-cloud-run-finops-unit-cost-job-{0}', github.event.inputs.environment) }}"
     ),
     "gcp_models.yml": LockContract("deploy-gke-vad-${{ github.event.inputs.environment }}"),
     "gcp_nllb_translation.yml": LockContract("deploy-gke-nllb-translation-${{ github.event.inputs.environment }}"),

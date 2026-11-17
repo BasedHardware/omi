@@ -18,6 +18,7 @@ import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
@@ -218,6 +219,17 @@ class ConversationProvider extends ChangeNotifier {
       List<ServerConversation>.unmodifiable(groupedConversations.values.expand((group) => group));
 
   Map<String, List<ServerConversation>> Function()? heldHomeEpisodes;
+  void Function(String id, bool pendingDelete)? homeCardSourceChanged;
+  // Display-only Home seeds support selection without populating/persisting detail history.
+  Map<String, ServerConversation> _homeCardSelectionSeeds = {};
+  String _homeCardOwner = '';
+  void setHomeCardSelectionSeeds(List<ServerConversation> seeds) {
+    _homeCardOwner = SharedPreferencesUtil().uid;
+    _homeCardSelectionSeeds = {for (final seed in seeds) seed.id: seed};
+  }
+
+  Map<String, ServerConversation> get _currentHomeSeeds =>
+      _homeCardOwner == SharedPreferencesUtil().uid ? _homeCardSelectionSeeds : const {};
   final ConversationListFetcher? _conversationListFetcher;
   final ConversationLifecycleFetcher _conversationLifecycleFetcher;
   final DailySummariesChecker? _dailySummariesChecker;
@@ -362,6 +374,8 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void clearUserData() {
+    _homeCardSelectionSeeds.clear();
+    homeCardSourceChanged?.call('', false);
     for (final watcher in _mergeWatchers.values) {
       watcher.cancel();
     }
@@ -1389,6 +1403,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future<void> addConversation(ServerConversation conversation, {bool preserveHomeStep = true}) async {
+    if (conversation.status == ConversationStatus.completed) homeCardSourceChanged?.call(conversation.id, false);
     conversation = _homeReplacement(conversation, preserveHomeStep);
     if (conversation.deleted || conversation.isMergedDonor || _mergedAwayConversationIds.contains(conversation.id)) {
       return;
@@ -1484,7 +1499,10 @@ class ConversationProvider extends ChangeNotifier {
 
   void _publishConversationChange() => notifyListeners();
 
-  void updateConversationInSortedList(ServerConversation conversation) => _updateConversationProjections(conversation);
+  void updateConversationInSortedList(ServerConversation conversation) {
+    homeCardSourceChanged?.call(conversation.id, false);
+    _updateConversationProjections(conversation);
+  }
 
   (int, DateTime) addConversationWithDateGrouped(ServerConversation conversation) {
     conversation = _retainingHomeStep(conversation);
@@ -1516,6 +1534,9 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void updateConversation(ServerConversation conversation, {int? index, bool preserveHomeStep = true}) {
+    if (conversation.isLocked || conversation.deleted || conversation.isMergedDonor) {
+      homeCardSourceChanged?.call(conversation.id, false);
+    }
     conversation = _homeReplacement(conversation, preserveHomeStep);
     if (conversation.deleted || conversation.isMergedDonor) {
       updateConversationInSortedList(conversation);
@@ -1585,6 +1606,7 @@ class ConversationProvider extends ChangeNotifier {
   /// Hides [conversation] now and deletes it on the server after [pendingDeleteWindow], unless
   /// [undoDeletedConversation] restores it first. The one delete path for list, bulk and detail.
   Future<void> deleteConversationLocally(ServerConversation conversation, {VoidCallback? onFailure}) async {
+    homeCardSourceChanged?.call(conversation.id, true);
     memoriesToDelete[conversation.id] = conversation;
     SiriIntegration.current.queueDelete('conversation', conversation.id);
     _pendingDeletes.remove(conversation.id)?.timer.cancel();
@@ -1711,6 +1733,7 @@ class ConversationProvider extends ChangeNotifier {
   void _clearDeleteTombstone(String conversationId) => memoriesToDelete.remove(conversationId);
 
   bool _removeConfirmedDeleteFromLists(String id) {
+    homeCardSourceChanged?.call(id, false);
     var removed = _phoneOnlyConversations.remove(id) != null;
     List<ServerConversation> withoutDeleted(List<ServerConversation> rows) {
       if (!rows.any((row) => row.id == id)) return rows;
@@ -1749,6 +1772,7 @@ class ConversationProvider extends ChangeNotifier {
     if (pending == null) return;
     pending.timer.cancel();
     await _restoreDeletedConversation(conversation);
+    homeCardSourceChanged?.call(conversation.id, false);
   }
 
   @override
@@ -2055,7 +2079,10 @@ class ConversationProvider extends ChangeNotifier {
 
   /// Get selected conversations sorted by creation date (earliest first)
   List<ServerConversation> get selectedConversations {
-    final selected = conversations.where((c) => selectedConversationIds.contains(c.id)).toList();
+    final selected = {..._currentHomeSeeds, for (final c in conversations) c.id: c}
+        .values
+        .where((c) => selectedConversationIds.contains(c.id))
+        .toList();
     selected.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     return selected;
   }
@@ -2069,12 +2096,12 @@ class ConversationProvider extends ChangeNotifier {
   /// No time gap restrictions - user can merge any conversations they want.
   bool isConversationEligibleForMerge(String conversationId) {
     // Find the conversation
-    final idx = conversations.indexWhere((c) => c.id == conversationId);
-    if (idx == -1) return false;
-
-    final convo = conversations[idx];
+    final convo = conversations.where((c) => c.id == conversationId).firstOrNull ?? _currentHomeSeeds[conversationId];
+    if (convo == null) return false;
     if (convo.isLocked) return false;
     if (mergingConversationIds.contains(conversationId)) return false;
+    // A v3 conversation still in progress: capture is still writing it.
+    if (convo.v3?.tileState == ConversationTileState.live) return false;
 
     return true;
   }
@@ -2263,6 +2290,9 @@ class ConversationProvider extends ChangeNotifier {
       return;
     }
     final removed = removedConversationIds.where((id) => id != mergedConversationId).toSet();
+    for (final id in removed) {
+      homeCardSourceChanged?.call(id, false);
+    }
     await _queueConversationPersistence(() async {
       if (!current() || _mergedAwayConversationIds.contains(target.id)) return;
       final cached = await _conversationCacheLoader();

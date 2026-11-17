@@ -1977,6 +1977,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String get memoryHistory => 'ประวัติ';
 
   @override
+  String get recordingWithYourPhone => 'กำลังบันทึกด้วยโทรศัพท์ของคุณ';
+
+  @override
+  String get wrapUp => 'สรุป';
+
+  @override
+  String get recordingDiscarded => 'ทิ้งการบันทึกแล้ว';
+
+  @override
   String get undo => 'เลิกทำ';
 
   @override
@@ -6992,6 +7001,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get authFailedToSignInWithApple => 'ไม่สามารถเข้าสู่ระบบด้วย Apple ได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get authAppleSignInFailedUseGoogle =>
+      'ลงชื่อเข้าใช้ด้วย Apple ไม่สำเร็จ ลองอีกครั้งหรือดำเนินการต่อด้วย Google';
 
   @override
   String get authFailedToRetrieveToken => 'ไม่สามารถดึงโทเคน Firebase ได้ กรุณาลองอีกครั้ง';
@@ -13335,6 +13348,9 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'มีโค้ด Omi Pro ไหม ใส่โค้ดได้ในหน้าจอถัดไป';
+
+  @override
   String get paywallTrialCancelNote => 'ยกเลิกได้ทุกเมื่อ ไม่มีค่าธรรมเนียม ไม่มีค่าปรับ';
 
   @override
@@ -15323,6 +15339,11 @@ class AppLocalizationsTh extends AppLocalizations {
   String get paymentDeclinedTitle => 'บัตรของคุณถูกปฏิเสธ';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'อัปเดตบัตร หรือกลับมาใช้ $plan ในราคา $price ต่อเดือน';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'อัปเดตบัตรเพื่อกลับมาใช้ $plan';
   }
@@ -15347,4 +15368,118 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'เปลี่ยนเป็นรายเดือน';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan $price ต่อเดือน';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'แทนที่ค่าบริการรายปี $yearly ที่ยังไม่ได้ชำระ ต่ออายุทุกเดือน ยกเลิกได้ทุกเมื่อ';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'การชำระเงินถูกปฏิเสธ แพ็กเกจของคุณไม่เปลี่ยนแปลง';
+
+  @override
+  String get monthlySwitchUnavailable => 'ตอนนี้ยังเปลี่ยนไม่ได้ อัปเดตบัตรแทน';
+
+  @override
+  String get monthlySwitchDoneTitle => 'ตอนนี้คุณจ่ายแบบรายเดือนแล้ว';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'ชำระ $price แล้ววันนี้ ต่ออายุทุกเดือน';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'คุณใช้ $minutes นาทีของเดือนนี้ครบแล้ว';
+  }
+
+  @override
+  String get freeCapBody => 'Omi ยังบันทึกอยู่ เลือกวิธีถอดเสียงต่อ';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'ถอดเสียงบนคลาวด์ไม่จำกัด';
+
+  @override
+  String get freeCapProAccuracy => 'แม่นยำที่สุด';
+
+  @override
+  String get freeCapProWaiting => 'ถอดเสียงไฟล์บันทึกที่รออยู่';
+
+  @override
+  String get freeCapPhoneSubtitle => 'ฟรี เปิดใช้ไว้จนกว่าคุณจะเปลี่ยนกลับ';
+
+  @override
+  String get transcribingOnThisPhone => 'กำลังถอดเสียงบนโทรศัพท์เครื่องนี้';
+
+  @override
+  String get getPro => 'รับ Pro';
+
+  @override
+  String get unlock => 'ปลดล็อก';
+
+  @override
+  String get transcribeWith => 'ถอดเสียงด้วย';
+
+  @override
+  String get omiCloud => 'คลาวด์ Omi';
+
+  @override
+  String get thisPhone => 'โทรศัพท์เครื่องนี้';
+
+  @override
+  String get onDeviceReady => 'พร้อม';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'เหลือ $left จาก $limit นาที · รีเซ็ต $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'มีนาทีคลาวด์ $minutes นาที';
+  }
+
+  @override
+  String get switchBack => 'เปลี่ยนกลับ';
+
+  @override
+  String get setUpThisPhone => 'ตั้งค่าโทรศัพท์เครื่องนี้';
+
+  @override
+  String get speechRecognition => 'การรู้จำเสียงพูด';
+
+  @override
+  String get audioStaysOnPhone => 'เสียงอยู่ในโทรศัพท์ของคุณ';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'ดาวน์โหลด $size MB';
+  }
+
+  @override
+  String get downloadNow => 'ดาวน์โหลดเลย';
+
+  @override
+  String get onWifiLater => 'ภายหลังผ่าน Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'กำลังเขียนสรุปของคุณ…';
 }

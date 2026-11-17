@@ -8,10 +8,12 @@ WHERE app_namespace = :app_namespace AND build_number = :build_number
     'Onboarding Get Started Tapped',
     'Sign In Started',
     'Sign In Failed',
+    'Sign In Failure Detail',
     'Onboarding Permission Result',
     'Device Pairing Blocked',
     'Device Scan Empty',
     'Device Connect Failed',
-    'Device Connect Failure Shown'
+    'Device Connect Failure Shown',
+    'Device Pairing Settings Opened'
   )
 GROUP BY event ORDER BY event;

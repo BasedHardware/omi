@@ -400,7 +400,7 @@ def test_live_route_returns_authoritative_timer_without_capture_fallback(monkeyp
     from routers import episodes as router
     from utils.other import endpoints as auth
 
-    monkeypatch.setattr(router, '_admitted', lambda *a: True)
+    monkeypatch.setattr(router, '_admitted', lambda *a, **kw: True)
     monkeypatch.setattr(router.service, 'live_episode', lambda uid: _episode('current', T0, T0, 'live'))
     monkeypatch.setattr(router.service, 'last_closed_episode', lambda *a, **kw: None)
     app = FastAPI()

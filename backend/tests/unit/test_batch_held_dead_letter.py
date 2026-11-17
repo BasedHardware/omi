@@ -6,6 +6,9 @@ from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry
 
 from config.batch_pipeline import HELD_DEAD_LETTER_SECONDS, batch_held_dead_letter_enabled, scheduler_control_key
@@ -19,6 +22,7 @@ from utils.batch_pipeline import held_dead_letter as sweep
 from utils.batch_pipeline.intake import _held_status  # pyright: ignore[reportPrivateUsage] -- unit contract seam
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from routers import batch_pipeline as router
 
 
 def row(client):
@@ -270,9 +274,6 @@ def test_crash_before_checkpoint_replays_without_duplicate_expiry(monkeypatch):
 
 
 def test_private_requeue_rpc_is_stage_bound_authenticated_and_idempotent(setup, monkeypatch):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-    from routers import batch_pipeline as router
     from types import SimpleNamespace
 
     client, store, _, _, _, _ = setup

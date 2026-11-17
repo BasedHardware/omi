@@ -4,17 +4,27 @@ import pytest
 
 from tests.integration.test_batch_pipeline_projection_firestore import lane, active_rows
 
+import asyncio
+from database import batch_pipeline_projection_claim as claims
+from database.batch_pipeline_projection import ProjectionBlocked
+from utils.batch_pipeline import projection_followup
+from utils.sync import reprocess
+import fakeredis
+from utils.batch_pipeline.projection_followup import ProjectionFollowups
+from database import batch_pipeline_projection_claim as claims, sync_jobs
+from utils.batch_pipeline.projection import publish_client_completion
+from tests.integration.test_batch_pipeline_projection_firestore import superseded_anchor
+from unittest.mock import Mock
+from database.batch_pipeline_projection_finish_backfill import backfill_ref, BACKFILL_VERSION
+from database.batch_pipeline_store import projection_page
+from utils.batch_pipeline.serving import Serving
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+
 pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
 async def test_async_followup_slow_enrichment_keeps_transcript_order_and_atomic_sibling_completion(lane, monkeypatch):
-    import asyncio
-    from database import batch_pipeline_projection_claim as claims
-    from database.batch_pipeline_projection import ProjectionBlocked
-    from utils.batch_pipeline import projection_followup
-    from utils.sync import reprocess
-    import fakeredis
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
@@ -82,9 +92,6 @@ async def test_async_followup_slow_enrichment_keeps_transcript_order_and_atomic_
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', ['account', 'conversation'])
 async def test_async_followup_rechecks_deletion_after_assignment(lane, monkeypatch, kind):
-    from database import batch_pipeline_projection_claim as claims
-    from utils.batch_pipeline.projection_followup import ProjectionFollowups
-    import fakeredis
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     monkeypatch.setattr(claims, '_redis_client', lambda: fakeredis.FakeRedis())
@@ -106,12 +113,6 @@ async def test_async_followup_rechecks_deletion_after_assignment(lane, monkeypat
 @pytest.mark.asyncio
 @pytest.mark.parametrize('committed', [False, True])
 async def test_followup_timeout_replays_enrichment_without_duplicate_debt_or_usage(lane, monkeypatch, committed):
-    import asyncio
-    from database import batch_pipeline_projection_claim as claims, sync_jobs
-    from utils.batch_pipeline.projection import publish_client_completion
-    from utils.batch_pipeline import projection_followup
-    from utils.sync import reprocess
-    import fakeredis
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     redis = fakeredis.FakeRedis()
@@ -186,12 +187,11 @@ async def test_followup_timeout_replays_enrichment_without_duplicate_debt_or_usa
 
 
 @pytest.mark.asyncio
-async def test_projection_discovery_drains_beyond_101_ready_rows_without_reprojection(lane, monkeypatch):
+@pytest.mark.parametrize('silence_skip', ['false', 'true'])
+async def test_projection_discovery_drains_beyond_101_ready_rows_without_reprojection(lane, monkeypatch, silence_skip):
     """The old first page pins forever; both real scanners must escape it."""
-    import asyncio
-    from database import batch_pipeline_projection_claim as claims
-    from utils.batch_pipeline import projection_followup
-    import fakeredis
+
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', silence_skip)
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     # Isolate paginated discovery. Newer owner-chain walking and pending-only
@@ -224,14 +224,15 @@ async def test_projection_discovery_drains_beyond_101_ready_rows_without_reproje
     lane.projector.sweep()
     assert lane.projector.store.ref('results', batch.ids[-1]).get().to_dict()['projection']
     assert lane.projector.store.ref('results', later.ids[0]).get().to_dict()['projection']
-    # The follow-up cursor starts independently at the blocked head. Its first
-    # page cannot complete content while the final sibling is only persisted.
+    # The follow-up cursor starts at the head. Enabled silence assignment is
+    # already ready, so the first page can complete the whole upload. Rollback
+    # retains the old persisted sibling and independent cursor boundary.
     runner = projection_followup.ProjectionFollowups(lane.projector)
     await runner.schedule()
     while runner.tasks:
         await asyncio.gather(*list(runner.tasks.values()))
         await asyncio.sleep(0)
-    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    assert batch.ledger.get().to_dict()['status'] == ('completed' if silence_skip == 'true' else 'processing')
     assert later.ledger.get().to_dict()['status'] == 'processing'
     await runner.schedule()
     while runner.tasks:
@@ -261,10 +262,6 @@ async def test_projection_discovery_drains_beyond_101_ready_rows_without_reproje
 
 @pytest.mark.asyncio
 async def test_async_assignment_supersession_drains_all_sibling_receipts(lane, monkeypatch):
-    from tests.integration.test_batch_pipeline_projection_firestore import superseded_anchor
-    from database import batch_pipeline_projection_claim as claims
-    from utils.batch_pipeline.projection_followup import ProjectionFollowups
-    import fakeredis
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     redis = fakeredis.FakeRedis()
@@ -285,3 +282,48 @@ async def test_async_assignment_supersession_drains_all_sibling_receipts(lane, m
     assert all(
         lane.projector.store.ref('results', sid).get().to_dict()['projection_state'] == 'completed' for sid in batch.ids
     )
+
+
+@pytest.mark.asyncio
+async def test_excluded_async_finish_rows_still_schedule_and_complete(lane, monkeypatch):
+
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
+    monkeypatch.setattr(claims, '_redis_client', lambda: fakeredis.FakeRedis())
+    batch = lane.seed()
+    lane.finish(batch)
+    sid = batch.ids[0]
+    lane.projector.persist(sid)
+    row = lane.projector.store.ref('results', sid).get().to_dict()
+    assert row['projection_finish_due_at'] == -1.0
+    # The independently stamped follow-up query must still discover async rows
+    # excluded from finish discovery, on the real loopback Firestore engine.
+    assert row['projection_followup_due_at'] == lane.clock()
+    assert sid not in projection_page(lane.client, lane.store.namespace, due_before=lane.clock(), exclude_async=True)[0]
+    assert (
+        sid
+        in projection_page(lane.client, lane.store.namespace, followup_due_before=lane.clock(), exclude_async=True)[0]
+    )
+    backfill_ref(lane.client, lane.store.namespace).set({'version': BACKFILL_VERSION, 'complete': True})
+    read = lane.projector.store.read
+    lane.projector.store.read = Mock(wraps=read)
+    counts = lane.projector.sweep()
+    assert counts == {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
+    lane.projector.store.read.assert_not_called()
+    assert lane.projector.has_async_followups
+    # Exercise the serving dispatch gate, real discovery, fenced receipt reads,
+    # enrichment, accounting, client publish and durable completion.
+    service = Serving(MemoryStore(), projector=lane.projector)
+    service.reconcile = lambda **_: []
+    try:
+        await service.reconcile_async()
+        runner = lane.projector.followups
+        assert runner is not None
+        await asyncio.wait_for(asyncio.gather(*list(runner.tasks.values())), 10)
+        assert batch.ledger.get().to_dict()['status'] == 'completed'
+        assert lane.projector.store.ref('results', sid).get().to_dict()['projection_state'] == 'completed'
+        assert len(lane.published) == 1
+    finally:
+        if lane.projector.followups:
+            await asyncio.gather(*list(lane.projector.followups.tasks.values()), return_exceptions=True)

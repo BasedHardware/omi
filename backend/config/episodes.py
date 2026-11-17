@@ -45,6 +45,8 @@ HOME_HIDE_BELOW_FLOOR_ROWS_ENV = 'HOME_HIDE_BELOW_FLOOR_ROWS'
 HOME_HIDE_EPISODE_MEMBERS_ENV = 'HOME_HIDE_EPISODE_MEMBERS'
 HOME_NEUTRAL_MINIMUM_TITLES_ENV = 'HOME_NEUTRAL_MINIMUM_TITLES'
 HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV = 'HOME_TRANSCRIPTION_PRESENTATION_GATE'
+HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED_ENV = 'HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED'
+DEFAULT_HOME_TRANSCRIPTION_MAX_AGE_SECONDS = 86400
 HOME_STEP_PROJECTION_ENV = 'HOME_STEP_PROJECTION'
 HOME_EMPTY_OUTPUT_NOISE_ENV = 'HOME_EMPTY_OUTPUT_NOISE'
 HOME_PROCESSING_MAX_AGE_SECONDS_ENV = 'HOME_PROCESSING_MAX_AGE_SECONDS'
@@ -53,6 +55,10 @@ EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_THRIFT_ENV = 'EPISODE_COMPOSER_THRIFT'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
+EPISODE_COMPOSER_CONTEXT_ENV = 'EPISODE_COMPOSER_CONTEXT_ENABLED'
+EPISODE_COMPOSER_DETAIL_ENV = 'EPISODE_COMPOSER_DETAIL_ENABLED'
+EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENV = 'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED'
+EPISODE_COMPOSE_TRANSCRIPT_READY_ENV = 'EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
 EPISODE_COMPOSE_LATE_ATTACH_ENABLED_ENV = 'EPISODE_COMPOSE_LATE_ATTACH_ENABLED'
 
@@ -142,6 +148,23 @@ def home_transcription_presentation_gate_enabled() -> bool:
     return modes_default_on(HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV)
 
 
+def home_transcription_queue_hold_enabled() -> bool:
+    """Keep queued captures transcribing up to the read-time bound; off restores stamped deadlines."""
+    return modes_default_on(HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED_ENV)
+
+
+def home_transcription_max_age_seconds() -> int:
+    """24h per revision from pending, else deadline minus its interval, else creation.
+
+    Reads never renew it; invalid/nonpositive values keep the default bound.
+    """
+    try:
+        seconds = int(os.getenv('HOME_TRANSCRIPTION_MAX_AGE_SECONDS', str(DEFAULT_HOME_TRANSCRIPTION_MAX_AGE_SECONDS)))
+    except ValueError:
+        return DEFAULT_HOME_TRANSCRIPTION_MAX_AGE_SECONDS
+    return seconds if seconds > 0 else DEFAULT_HOME_TRANSCRIPTION_MAX_AGE_SECONDS
+
+
 def home_transcription_deadline_seconds() -> int:
     """New captures get 2h (batch timeliness SLA); invalid or nonpositive values use 2h."""
     try:
@@ -172,6 +195,30 @@ def episode_composer_enabled() -> bool:
     Off keeps the live incremental notes as the final episode notes, as before.
     """
     return modes_default_on(EPISODE_COMPOSER_ENV)
+
+
+def episode_composer_context_enabled() -> bool:
+    return modes_default_on(EPISODE_COMPOSER_CONTEXT_ENV)
+
+
+def episode_composer_detail_enabled() -> bool:
+    return modes_default_on(EPISODE_COMPOSER_DETAIL_ENV)
+
+
+def episode_compose_transcript_wait_enabled() -> bool:
+    return modes_default_on(EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENV)
+
+
+def episode_compose_transcript_ready_enabled() -> bool:
+    return modes_default_on(EPISODE_COMPOSE_TRANSCRIPT_READY_ENV)
+
+
+def episode_compose_transcript_wait_seconds() -> float:
+    """A fixed deadline from the member's pending stamp; reads never renew it."""
+    try:
+        return max(0.0, min(float(os.getenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', '1200')), 86400.0))
+    except ValueError:
+        return 1200.0
 
 
 def episode_compose_settle_enabled() -> bool:
@@ -382,7 +429,19 @@ COMPOSER_TIMEOUT_SECONDS = 90.0
 # About 60k tokens. With the 4h episode cap almost every episode fits whole; beyond it the
 # densest 10-minute windows are kept in time order.
 COMPOSER_MAX_TRANSCRIPT_CHARS = 240_000
-COMPOSER_MAX_CHAPTERS = 8
+COMPOSER_MAX_CHAPTERS = 8  # Legacy ceiling when scaled detail is disabled.
+COMPOSER_DETAIL_MAX_CHAPTERS = 20  # Below the existing 48-moment storage ceiling.
+COMPOSER_DETAIL_WORDS_PER_CHAPTER = 2000
+COMPOSER_DETAIL_MIN_WORDS = 100
+COMPOSER_DETAIL_MAX_WORDS = 3500
+COMPOSER_DETAIL_WORD_RATIO = 0.10
+COMPOSER_DETAIL_WORDS_PER_MINUTE = 125
+# At most 4500 background tokens total; one bounded semantic-memory search per compose.
+COMPOSER_MEMORY_TOKENS = 3500
+COMPOSER_PROFILE_TOKENS = 1000
+COMPOSER_MEMORY_QUERY_TOKENS = 1000
+COMPOSER_CONTEXT_TIMEOUT_SECONDS = 8.0
+COMPOSER_CONTEXT_MAX_READS = 640
 # Read-side safety net: at most this many closed, uncomposed episodes queued per list read.
 COMPOSER_MAX_SCHEDULED_PER_READ = 2
 # A read-side caller re-queues the same episode at most this often per process.
@@ -395,8 +454,12 @@ COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW = 4
 COMPOSER_MAX_PAID_TURNS = 2  # initial + optional repair; L9 extends this bound
 COMPOSER_CALL_BUDGET_SECONDS = COMPOSER_TIMEOUT_SECONDS * 2 + 30
 COMPOSER_LEASE_SECONDS = COMPOSER_MAX_PAID_TURNS * COMPOSER_CALL_BUDGET_SECONDS + 60
-COMPOSER_SETTLE_SECONDS = 10 * 60
-COMPOSER_MAX_SETTLE_SECONDS = 25 * 60
+# Quiet time after the last evidence change before a background compose, and the cap since the
+# first pending change. A closed episode already waits for every member's transcript before it
+# may compose, so the quiet window only coalesces late note refreshes. At ten minutes it was the
+# largest single wait between a recording ending and its row on Home (median 599 s, 2026-11-15).
+COMPOSER_SETTLE_SECONDS = 2 * 60
+COMPOSER_MAX_SETTLE_SECONDS = 5 * 60
 # After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until
 # the evidence changes (a member finalize still composes).
 COMPOSER_RETRY_MINUTES = 10

@@ -8,6 +8,10 @@ backend, generate policies, upload bodies, or retire outstanding custody by TTL.
 
 from __future__ import annotations
 
+from google.cloud import firestore
+
+from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_privacy_attempt import TOKEN_FIELD, token_version
 from database.jobstore import codec
 from database.jobstore.authority import AuthorityRefused, acquire, fingerprint
 from database.jobstore.fs_fence import FirestoreAuthority, handoff_ref
@@ -176,11 +180,27 @@ class Handoff:
             )
             # jsonb carries tagged datetimes; decode for the FS client.
             packet = codec.loads(codec.canonical(packet))
-        from google.cloud import firestore
 
         @firestore.transactional
         def publish(transaction):
             self.authority.check(transaction, phases=('PG_OPEN',))
+            # E1 authorizes this FS commit, independently of the earlier PG read.
+            intent, admission = packet['intent'], packet['admission']
+            assert_batch_write_allowed(
+                self.client,
+                transaction,
+                intent['uid'],
+                conversation_ids=intent['conversation_ids'],
+                expected_generation=admission['fs_privacy_generation'],
+                snapshots={},
+            )
+            token = (
+                self.client.collection('batch_pipeline_privacy')
+                .document(packet['owner_key'])
+                .get(transaction=transaction)
+            )
+            if token_version(token) is None or (token.to_dict() or {}).get(TOKEN_FIELD) != admission['privacy_token']:
+                raise AuthorityRefused('completion publication admission token changed')
             ref = self.ref('completion', identity)
             previous = ref.get(transaction=transaction).to_dict()
             if previous:
@@ -200,9 +220,6 @@ class Handoff:
         receipt, even if the caller lost the original Commit response. The caller
         must resolve group/sibling completion before choosing this identity.
         """
-        from google.cloud import firestore
-        from database.batch_pipeline_privacy import assert_batch_write_allowed
-        from database.batch_privacy_attempt import TOKEN_FIELD
 
         with self.pool.connection() as conn, conn.transaction():
             expected = self._required_row(conn, identity)

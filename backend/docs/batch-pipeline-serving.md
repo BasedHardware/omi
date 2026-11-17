@@ -1457,3 +1457,34 @@ gauges. Counts use declared prod/dev indexes, cost roughly one read per 1,000
 index entries per count (minimum two reads per sample), and do not alter merge,
 projection or enrichment order. See the 2026-11-13 fresh-delivery change note
 for the complete reader inventory and release-owner live acceptance procedure.
+
+An independent 20s supervised guard timer uses the same maintenance lease and
+the DB executor, rather than waiting for the general maintenance pass and its
+sync executor. The existing lock still limits all callers together to one count
+pair per 60s. A slow pass can therefore continue without delaying guard refresh;
+query failures still remove counts/ratio and let age advance. The additional
+`omi_batch_pipeline_fresh_guard_sample_timestamp_seconds` gauge records the
+successful pair's **window anchor** (before either RPC), expires with the counts,
+and lets acceptance use the identical inclusive commit bounds. On the ro-prod
+tier run `python backend/scripts/fresh_guard_cohort.py --project based-hardware
+--stage prod --sample-time <anchor>` for two count aggregations and JSON totals,
+pending, ratio, and bounds. This replaces `projection_cohort.py` for this guard's
+comparison: that tool's `fresh_first`/capture-age cohort is different. The command
+never streams documents; empty/failed counts produce a null ratio. Compare near
+the metric sample because projection can advance between reads. No healthy hour
+or live agreement is inferred from these implementation tests.
+
+The same leader also samples the per-route, per-language delivered share at most
+every 300 s. It walks one bounded page of job metadata (states in the census
+vocabulary minus `record_pending`, admitted 20 to 5 minutes ago, ordered by
+`enqueued_at`, capped at 5,000 rows) and counts each unit as delivered in target
+when the projection acknowledge stamped `jobs.delivered_in_target` within 300 s
+of `enqueued_at`. `ProjectionStore.acknowledge` writes `delivered_at` and
+`delivered_in_target` on the job row it already reads, in the transaction that
+sets `projection_state=completed`; no other reader selects them. Gauges
+`omi_batch_pipeline_delivered_share_{ratio,admitted_units,units,truncated,sample_age_seconds}`
+carry the cells; a failed page clears counts and ratio, and both expire after
+600 s. `BATCH_PIPELINE_DELIVERED_SHARE_ENABLED=off` stops the page and hides the
+gauges. The Core Features row "Did the user get a transcript?" and the
+`omi-batch-delivered-share-language` rule read them. See the 2026-11-14
+delivered-share change note and `docs/runbooks/batch-language-delivery.md`.

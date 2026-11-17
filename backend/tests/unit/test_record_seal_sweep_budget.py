@@ -197,9 +197,20 @@ def test_runtime_composition_uses_plain_reads_and_keeps_the_seal_transaction(sou
     monkeypatch.setattr(sweeper, 'discover_pending', discover)
     result = run(source, proof, runtime_reads=True)
     assert result['outcome'] == 'ok' and result['dispositions'] == {'sealed': 1}
-    assert plain_reads == [JOB_PATH, PATH, JOB_PATH, PATH]
-    assert len(source[1].transactions) == 1
-    assert source[1].transactions[0].updates == [(PATH, {'record_audio_closed': True, 'record_upload_sessions': {}})]
+    assert plain_reads == [JOB_PATH, PATH, JOB_PATH, PATH, PATH]  # Final committed-source revision read.
+    assert len(source[1].transactions) == 2  # Seal first, then fenced fail-open ledger.
+    assert source[1].transactions[0].updates == [
+        (
+            PATH,
+            {
+                'record_audio_closed': True,
+                'record_upload_sessions': {},
+                'record_admitted_at': source[1].rows[PATH]['record_admitted_at'],
+                'record_sealed_at': 1000,
+            },
+        )
+    ]
+    assert not source[1].transactions[1].updates
     assert discover.call_args.kwargs['limit'] == sweeper.DISCOVERY_LIMIT
     assert isinstance(discover.call_args.kwargs['budget'], SweepBudget)
 

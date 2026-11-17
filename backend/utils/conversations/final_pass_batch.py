@@ -153,6 +153,10 @@ class FinalPassResult(TypedDict, total=False):
 
 
 def record_final_pass_failure(outcome: str, **details) -> FinalPassResult:
+    if details.get('reason') == 'diarizer_unconfigured':
+        from utils.observability.owner_recognition_diagnostics import final_pass_availability
+
+        final_pass_availability('dependency_unavailable')
     count_terminal(outcome)
     logger.info(
         'event=batch_final_pass outcome=%s exception_type=%s reason=%s location=%s',
@@ -222,7 +226,9 @@ def _assemble(stream):
     return pcm[:used].toreadonly(), words, checks
 
 
-def _references(store, uid, conversation, units, read_budget, diagnostics, failure_context: UnitFailureContext):
+def read_unit_references(
+    store, uid, conversation, units, read_budget, diagnostics, failure_context: UnitFailureContext
+):
     references, errors, shared, absent = {}, [], [], []
     for unit in units:
         read_budget.timeout(3)
@@ -283,7 +289,7 @@ def _units(
     read_budget.timeout(3)
     store = FirestoreStore(f'batch_pipeline_{current_stage()}')
     artifacts = artifacts_for(store)
-    references = _references(store, uid, conversation, units, read_budget, diagnostics, failure_context)
+    references = read_unit_references(store, uid, conversation, units, read_budget, diagnostics, failure_context)
     if sum(max(1, ref[0].duration_seconds) for ref in references.values()) > MAX_AUDIO_SECONDS:
         raise OverflowError('audio too long')
     if not references:
@@ -301,14 +307,14 @@ def _units(
     return UnitStream(
         origin,
         capacity,
-        _decode_units(
+        decode_unit_evidence(
             uid, conversation, references, store, artifacts, read_budget, deadline, diagnostics, failure_context
         ),
         read_budget,
     )
 
 
-def _decode_units(
+def decode_unit_evidence(
     uid,
     conversation,
     references,
@@ -318,6 +324,8 @@ def _decode_units(
     deadline,
     diagnostics,
     failure_context: UnitFailureContext,
+    *,
+    identity_turns=None,
 ):
     total_bytes = 0
     for unit, reference in references.items():
@@ -391,6 +399,8 @@ def _decode_units(
                 if reason:
                     diagnostics[sid] = reason
             words = [word for word in words if word['segment_id'] not in diagnostics]
+            if identity_turns is not None:
+                identity_turns[unit] = payload['diarization']['turns']
 
             def validate(unit=unit, reference=reference):
                 try:
@@ -456,8 +466,17 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
     Non-cohort calls and durable deferrals are outside that contract. A
     deferral records fallback telemetry; its later admitted retry owns the result.
     """
+    from utils.observability.owner_recognition_diagnostics import final_pass_availability
+    from config.batch_conversation_speakers import has_batch_authority, final_pass_switch_enabled
+
     if not final_pass_enabled_for(uid, conversation.transcript_segments):
+        final_pass_availability(
+            'disabled'
+            if has_batch_authority(conversation.transcript_segments) and not final_pass_switch_enabled()
+            else 'ineligible'
+        )
         return {'outcome': 'skipped_ineligible'}
+    final_pass_availability('admitted')
     if not _SLOTS.acquire(blocking=False):
         # The processing boundary supplies a dedicated, capped speaker-only
         # obligation. Retry deliveries settle their own existing obligation.
@@ -466,6 +485,8 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
     try:
         return _run(uid, conversation, receipt, load_prints, apply, failure_context)
     except Exception as error:
+        if transient_cause(error) is not None:
+            final_pass_availability('dependency_unavailable')
         transient = transient_cause(error)
         if transient is not None:
             return _defer(

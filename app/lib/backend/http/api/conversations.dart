@@ -24,6 +24,7 @@ import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
+import 'package:omi/services/wals/upload_trace.dart';
 
 part 'sync_job_fetch.dart';
 part 'conversation_home_list.dart';
@@ -39,17 +40,57 @@ part 'conversation_search_decode.dart';
 /// already finalized. Reporting it floods crash reporting with noise.
 bool isBenignInProgressConversationCreateStatus(int statusCode) => statusCode == 404;
 
+/// True only for the backend's typed, recoverable processing failure.
+@visibleForTesting
+bool isRetryableInProgressConversationResponse(http.Response? response) {
+  if (response?.statusCode != 503) return false;
+  try {
+    // omi-perf-allow: history-json-on-ui -- bounded typed error body, never conversation history
+    final decoded = jsonDecode(response!.body);
+    final detail = decoded is Map ? decoded['detail'] : null;
+    return detail is Map && detail['code'] == 'conversation_processing_retryable';
+  } catch (_) {
+    return false;
+  }
+}
+
+@visibleForTesting
+typedef InProgressConversationRequestSender = Future<http.Response?> Function(ApiRequest request);
+
 Future<CreateConversationResponse?> processInProgressConversation() async {
   return (await processInProgressConversationOutcome()).response;
 }
 
-Future<InProgressProcessOutcome> processInProgressConversationOutcome() async {
-  var response = await makeApiCall(
+Future<InProgressProcessOutcome> processInProgressConversationOutcome({
+  @visibleForTesting InProgressConversationRequestSender? sendRequest,
+  @visibleForTesting Future<void> Function(Duration)? waitBeforeRetry,
+  @visibleForTesting void Function(http.Response)? reportUnexpectedResponse,
+}) async {
+  final request = ApiRequest(
     url: '${Env.apiBaseUrl}v1/conversations',
-    headers: {},
+    headers: const {},
     method: 'POST',
     body: jsonEncode({}),
   );
+  Future<http.Response?> sendProductionRequest(ApiRequest request) => makeApiCall(
+        url: request.url,
+        headers: request.headers,
+        method: request.method,
+        body: request.body,
+        retries: 1,
+        retryServerErrors: false,
+      );
+
+  final send = sendRequest ?? sendProductionRequest;
+  var response = await send(request);
+  if (isRetryableInProgressConversationResponse(response)) {
+    final delay = parseApiRetryAfter(response!, DateTime.now) ?? const Duration(seconds: 2);
+    await (waitBeforeRetry ?? (duration) => Future<void>.delayed(duration))(delay);
+    // The backend rolls the failed admission back before returning this typed
+    // response. Replaying the identical empty POST therefore re-admits the same
+    // in-progress conversation; never retry other 5xx or an exhausted second try.
+    response = await send(request);
+  }
   if (response == null) return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
@@ -61,12 +102,20 @@ Future<InProgressProcessOutcome> processInProgressConversationOutcome() async {
   } else if (isBenignInProgressConversationCreateStatus(response.statusCode)) {
     Logger.debug('processInProgressConversation: no in-progress conversation (already finalized), skipping');
     return const InProgressProcessOutcome(absence: ProcessAbsence.notFound);
+  } else if (isRetryableInProgressConversationResponse(response)) {
+    Logger.debug('processInProgressConversation: bounded retry exhausted; conversation remains recoverable');
+    return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   }
-  PlatformManager.instance.crashReporter.reportCrash(
-    Exception('Failed to create conversation'),
-    StackTrace.current,
-    userAttributes: {'response': response.body},
-  );
+  final report = reportUnexpectedResponse;
+  if (report != null) {
+    report(response);
+  } else {
+    PlatformManager.instance.crashReporter.reportCrash(
+      Exception('Failed to create conversation'),
+      StackTrace.current,
+      userAttributes: {'response': response.body},
+    );
+  }
   return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
 }
 
@@ -1102,6 +1151,8 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   final work = lagWork.begin(LagWork.upload);
   try {
     assertWalSyncFilesAreFramedBins(files.map((file) => file.path));
+    // Measurement only; absent when nothing was parked for this upload.
+    final uploadTrace = files.isEmpty ? null : UploadTrace.instance.take(files.first.path);
     String? captureManifest;
     if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
       captureManifest = await _createSyncCaptureManifest(files, conversationId!);
@@ -1123,6 +1174,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
         if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
         if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
         if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
+        if (uploadTrace != null) 'X-Omi-Upload-Trace': uploadTrace,
       },
       onUploadProgress: onUploadProgress,
     );

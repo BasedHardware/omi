@@ -68,6 +68,23 @@ def seal(handoff, envelope=None):
         return handoff.complete(conn, 'recording', envelope or {'result_uri': 'encrypted://local/ref'})
 
 
+def test_export_refuses_fs_close_after_pg_snapshot(context, monkeypatch):
+    handoff, uid = context
+    stage(handoff, uid)
+    deliver(handoff)
+    seal(handoff)
+    original = handoff.authority.check
+
+    def close_before_publication(transaction, **kwargs):
+        handoff.client.collection('account_deletions').document(uid).set({'wipe_status': 'pending'})
+        return original(transaction, **kwargs)
+
+    monkeypatch.setattr(handoff.authority, 'check', close_before_publication)
+    with pytest.raises(BatchPrivacyBlocked):
+        handoff.export('recording')
+    assert not handoff.ref('completion', 'recording').get().exists
+
+
 def test_intent_and_pg_admission_replay_are_idempotent(context):
     handoff, uid = context
     digest = stage(handoff, uid, {'a': 1, 'b': 2})
