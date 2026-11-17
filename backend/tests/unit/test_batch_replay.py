@@ -248,12 +248,29 @@ def test_invalid_source_slice_is_detected(backend_tree):
     assert compare(broken, {'exceptions': {}, 'unit_issues': {}, 'chain_blocks': []})['regression']
 
 
-def test_recorded_silence_runs_the_empty_projection_branch(backend_tree):
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+@pytest.mark.parametrize('record_origin', [False, True])
+def test_recorded_silence_runs_the_empty_projection_branch(backend_tree, monkeypatch, enabled, record_origin):
+    from utils.batch_pipeline.projection import Projector
+
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', enabled)
+    expected = 'ready' if enabled == 'true' and not record_origin else 'persisted'
+    original = Projector._assign
+    states = []
+
+    def assign(self, sid, *args, **kwargs):
+        result = original(self, sid, *args, **kwargs)
+        row = self.store.results[sid]
+        states.append((row['projection']['state'], row['projection_state']))
+        return result
+
+    monkeypatch.setattr(Projector, '_assign', assign)
     corpus = json.loads((backend_tree / 'testing/batch_replay/regressions.json').read_text())
     corpus['units'] = [corpus['units'][-1]]
-    corpus['units'][0].update(outcome='silence', spans=[], speech_seconds=0.0)
+    corpus['units'][0].update(outcome='silence', spans=[], speech_seconds=0.0, record_origin=record_origin)
     result = replay(corpus, backend_tree)
     assert result['persisted'] == 1 and result['coverage']['followup_exercised'] == 1
+    assert states and all(receipt == expected and summary == expected for receipt, summary in states)
     assert not result['exceptions'] and not result['chain_blocks']
 
 

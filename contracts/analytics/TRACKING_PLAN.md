@@ -17,6 +17,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | devicePairingBlocked | Device Pairing Blocked | reason, android_sdk, ios_version | active | onboarding-activation-funnel |
 | deviceScanEmpty | Device Scan Empty | after_seconds | active | onboarding-activation-funnel |
 | deviceConnectFailureShown | Device Connect Failure Shown | failure_reason, platform | active | onboarding-activation-funnel |
+| devicePairingSettingsOpened | Device Pairing Settings Opened | failure_reason, platform | active | onboarding-activation-funnel |
 | deviceConnectFailed | Device Connect Failed | error_class | active | onboarding-activation-funnel |
 | phoneMicRecordingStarted | Phone Mic Recording Started | none | active | mobile-instrumentation-presence |
 | phoneMicRecordingStopped | Phone Mic Recording Stopped | none | active | mobile-instrumentation-presence |
@@ -223,6 +224,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | subscriptionPaymentIssueMonthlyTapped | Subscription Payment Issue Monthly Tapped | none | active | subscription-payment-recovery |
 | subscriptionPaymentIssueMonthlySwitched | Subscription Payment Issue Monthly Switched | none | active | subscription-payment-recovery |
 | subscriptionPaymentIssueMonthlyFailed | Subscription Payment Issue Monthly Failed | reason | active | subscription-payment-recovery |
+| mobileDeviceHealthDailyRingRead | Mobile Device Health Daily | disconnects_during_ring_read, disconnects_with_ring_read_state, ring_read_disconnect_rssi_below_minus90, ring_read_disconnect_rssi_minus90_to_minus80, ring_read_disconnect_rssi_minus80_to_minus60, ring_read_disconnect_rssi_at_least_minus60, ring_read_disconnect_rssi_unknown | active | pendant-ring-read-disconnects |
 
 ## App Review Opportunity decisions
 

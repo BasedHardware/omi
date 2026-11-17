@@ -1649,3 +1649,14 @@ def test_record_close_notify_renders_on_every_cloud_run_listener(environment, se
         'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S': '',
     }.items():
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
+
+
+def test_prod_silence_read_skip_is_held_off_on_projection_hosts():
+    key = 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'
+    prod = _MANIFEST['environments']['prod']
+    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        assert prod['cloud_run']['services'][name]['env'][key] == {'value': 'false', 'category': 'ops_kill'}
+    assert prod['gke']['backend-listen']['env'][key] == {'value': 'false', 'category': 'ops_kill'}
+    chart = Path(__file__).resolve().parents[2] / 'charts/backend-listen/prod_omi_backend_listen_values.yaml'
+    values = yaml.safe_load(chart.read_text())
+    assert [entry['value'] for entry in values['env'] if entry['name'] == key] == ['false']

@@ -127,11 +127,24 @@ extension _CaptureLiveRecovery on CaptureController {
   }
 
   bool _orphanAudioAdmitted(String deviceId, {bool ignoreMute = false}) {
+    if (_captureControllerDisposed) return false;
     final device = _recordingDevice;
-    if (_captureControllerDisposed || device == null || device.id != deviceId) return false;
-    if (device.type != DeviceType.omi && device.type != DeviceType.openglass) return false;
-    if ((!ignoreMute && _preferences.capturePolicy.muted) || _preferences.batchModeEnabled) return false;
-    if (_liveRecovery.deviceStoppedByCaller || _pendantSuspension != null) return false;
+    final suspension = _pendantSuspension;
+    final reconnect = suspension?.reason == SuspendReason.reconnect &&
+        suspension?.deviceId == deviceId &&
+        suspension?.accountId == _preferences.uid &&
+        _auth.isSignedIn();
+    // The physical link can return before the provider's debounced connect.
+    // Retain received frames for the exact account/device even while its
+    // recordingDevice mirror is null. Only a later start may restore identity.
+    if (device?.id != deviceId && !(device == null && reconnect)) return false;
+    final type = device?.type ?? (reconnect ? suspension?.deviceType : null);
+    if (type != DeviceType.omi && type != DeviceType.openglass) return false;
+    if ((!ignoreMute && (_preferences.capturePolicy.muted || (reconnect && suspension!.wasPaused))) ||
+        _preferences.batchModeEnabled) {
+      return false;
+    }
+    if (_liveRecovery.deviceStoppedByCaller || (suspension != null && !reconnect)) return false;
     final staged = _capture.stagedReadModel;
     return !staged.phoneOwnsCapture && !staged.callActive;
   }

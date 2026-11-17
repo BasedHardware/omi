@@ -29,6 +29,7 @@ from config.batch_pipeline import (
     projection_hold_recovery_enabled,
     sweep_owner_chain_enabled,
     serving_sweep_page_rows,
+    silence_read_skip_enabled,
 )
 from config.record_latency import recent_native_record
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
@@ -602,8 +603,14 @@ class Projector:
         if job.get('_projection_privacy_deleted'):
             persist_disposition(session, privacy_deleted=True)
             return
+        silent = (
+            silence_read_skip_enabled()
+            and entry['result']['outcome'] == 'silence'
+            and not binding.record_origin
+            and not binding.native_record
+        )
         # A walk's fresh read showed no receipt; the transaction still fences.
-        prechecked = not (hint is not None and hint.successor and not entry.get('projection'))
+        prechecked = not silent and not (hint is not None and hint.successor and not entry.get('projection'))
         if prechecked:
             try:
                 with projection_phase('predecessor', policy):
@@ -628,7 +635,12 @@ class Projector:
                 if binding.record_origin:
                     self.assign_record_silence(item, binding, session, hint=hint)
                 else:
-                    session.persist_empty()
+                    if silent:
+                        # prepare() in this transaction retains every authority,
+                        # binding and predecessor fence. No follow-up is owed.
+                        session.persist_empty(silence=True)
+                    else:
+                        session.persist_empty()
             except ProjectionReplay:
                 if prechecked and not policy.projection_contention:
                     raise
@@ -712,12 +724,39 @@ class Projector:
             sorted(parts.items(), key=lambda pair: int(pair[0])) if parts else [(None, entry['projection'])]
         ):
             self.finish_part(item, binding, receipt, int(index) if index is not None else None, policy=policy)
-        return self.complete_content(item.segment_id, binding, policy=policy)
+        return self.complete_content(
+            item.segment_id,
+            binding,
+            policy=policy,
+            silence=entry.get('result', {}).get('outcome') == 'silence',
+        )
 
-    def complete_content(self, segment_id, binding, *, policy=None):
+    def complete_content(self, segment_id, binding, *, policy=None, silence=False):
         policy = policy or self.store.policy(segment_id)
+        entries = None
+        if silence and silence_read_skip_enabled() and not binding.record_origin and not binding.native_record:
+            # Reuse ordinary accounting's result reads to rule out known mixed
+            # uploads before paying for a speculative completion transaction.
+            with projection_phase('completion_scan', policy):
+                entries = self.store.completion_entries(binding)
+            if len(entries) == len(binding.segment_ids) and all(
+                entry.get('result', {}).get('outcome') == 'silence'
+                and (entry.get('projection') or {}).get('state') == 'ready'
+                and not entry.get('projection_parts')
+                for entry in entries.values()
+            ):
+                # This hint never authorizes completion: ALL sibling identities,
+                # outcomes, privacy and accounting are verified transactionally.
+                with projection_phase('completion', policy):
+                    result = self.store.complete(segment_id, binding, self.clock(), None, policy=policy)
+                if result is not None:
+                    return self.publish_completion(binding, result, policy=policy)
         with projection_phase('accounting', policy):
-            accounting = self.store.prepare_accounting(binding, self.clock())
+            accounting = (
+                self.store.prepare_accounting(binding, self.clock(), result_entries=entries)
+                if entries is not None
+                else self.store.prepare_accounting(binding, self.clock())
+            )
         if accounting is None:
             self.store.hold_for_quarantine(segment_id, binding, self.clock(), policy=policy)
             return None
@@ -726,6 +765,9 @@ class Projector:
                 record_speech(binding, accounting, self.clock())
         with projection_phase('completion', policy):
             result = self.store.complete(segment_id, binding, self.clock(), accounting, policy=policy)
+        return self.publish_completion(binding, result, policy=policy)
+
+    def publish_completion(self, binding, result, *, policy):
         if result is not None:
             # complete() aggregated every part before setting this disposition.
             # Never call the publisher, even with empty IDs, for a deleted job.

@@ -8695,7 +8695,17 @@ export interface OmiApiPaths {
       responses: {
         "200": CreateConversationResponse;
         "401": void;
+        "404": void;
         "422": HTTPValidationError;
+        "500": {
+  detail: string;
+};
+        "503": {
+  detail: {
+  code: "conversation_processing_retryable";
+  message: string;
+};
+};
       };
     };
   };
@@ -9053,7 +9063,16 @@ export interface OmiApiPaths {
         "404": void;
         "409": void;
         "422": HTTPValidationError;
+        "500": {
+  detail: string;
+};
         "502": void;
+        "503": {
+  detail: {
+  code: "conversation_processing_retryable";
+  message: string;
+};
+};
       };
     };
   };

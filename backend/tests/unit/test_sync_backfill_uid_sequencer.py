@@ -787,6 +787,22 @@ def test_cutover_wake_uses_existing_sync_queue_and_oidc_route(monkeypatch):
     assert kwargs['schedule_at'] == 12345
 
 
+def test_cutover_wake_uses_backfill_queue_when_backfill_routing_is_on(monkeypatch):
+    """A backfill wake must not spend the fresh sync queue's dispatch budget."""
+    calls = []
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backend-sync.example/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs-fresh')
+    monkeypatch.setenv('SYNC_BACKFILL_TASKS_QUEUE', 'sync-backfill-fresh')
+    monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'true')
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', lambda *args, **kwargs: calls.append((args, kwargs)))
+    cloud_tasks.enqueue_sync_uid_wake('private-uid', 'hash123', 12345)
+    args, _ = calls[0]
+    assert args[:2] == ('sync-backfill-fresh', 'https://backend-sync.example/v2/sync-backfill-sequencer/wake')
+    monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'false')
+    cloud_tasks.enqueue_sync_uid_wake('private-uid', 'hash123', 12346)
+    assert calls[1][0][0] == 'sync-jobs-fresh'
+
+
 def test_named_wake_task_is_scheduled_for_cutover_deadline(monkeypatch):
     fake = MagicMock()
     fake.queue_path.return_value = 'projects/p/locations/l/queues/sync'

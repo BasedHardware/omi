@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-hardcoded-absolute-date-bound",
+  "family": "temporal-correctness",
   "violated_contract": "A plausibility bound on dates must be expressed relative to the data's own reference date. A hardcoded absolute year or date inverts once real time passes it: it stops rejecting implausible values and starts discarding every valid one, silently.",
   "canonical_prevention": "Bound extracted or user-supplied dates against a reference date carried with the content (e.g. utils.llm.temporal.normalize_extracted_dates, which offsets from the conversation's own date), never against a literal calendar year in code or in an LLM prompt.",
   "evidence_prs": [10864],

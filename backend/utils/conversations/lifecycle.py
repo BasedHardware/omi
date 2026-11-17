@@ -55,7 +55,10 @@ from utils.conversations.finalization_decision import (
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.terminal_relevance import stamp_terminal_decision
-from utils.llm.gateway_error_contract import is_byok_account_state_http_exception
+from utils.llm.gateway_error_contract import (
+    is_byok_account_state_http_exception,
+    is_retryable_processing_http_exception,
+)
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_intake_outcome
 from utils.other.storage import delete_conversation_audio_files
@@ -552,11 +555,20 @@ def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_fa
     thread.start()
     try:
         yield
-    except Exception as error:
+    except BaseException as error:
         # The composition boundary already logged a typed BYOK account-state halt
-        # by its bounded class; a traceback here would re-emit the chained
-        # provider error body for account state only the user can fix.
-        log_failure = logger.warning if is_byok_account_state_http_exception(error) else logger.exception
+        # or a retryable transient provider halt by its bounded class; a
+        # traceback here would re-emit the chained provider error body for a
+        # fault the caller is expected to retry.
+        log_failure = (
+            logger.warning
+            if (
+                not isinstance(error, Exception)
+                or is_byok_account_state_http_exception(error)
+                or is_retryable_processing_http_exception(error)
+            )
+            else logger.exception
+        )
         if rollback_on_failure:
             try:
                 rolled_back = rollback_processing_admission(uid, conversation_id)
