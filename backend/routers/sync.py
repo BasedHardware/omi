@@ -739,6 +739,11 @@ async def sync_local_files_v2(
     supplied_conversation_id = conversation_id  # Authenticate original custody proof before ignoring a stale target.
     repair_identity = repair_job_id if isinstance(repair_job_id, str) else None
     capture_received_at = time.time()
+    from utils.other.request_clock import started_at
+
+    upload_arrived_at = started_at.get()
+    if upload_arrived_at is None:
+        upload_arrived_at = capture_received_at  # Direct/internal adapter without HTTP middleware.
     # Measurement only: how long the oldest file waited on the phone, and why.
     capture_end.observe_trace(
         x_omi_upload_trace if isinstance(x_omi_upload_trace, str) else None, received_at=capture_received_at
@@ -1211,6 +1216,7 @@ async def sync_local_files_v2(
                 client_platform=client_device_context.platform,
                 byok_enabled=byok_enabled,
                 intake_context={
+                    'upload_arrived_at': upload_arrived_at,
                     **({'capture_source_conversation_id': recovery_source_id} if recovery_source_id else {}),
                     **({'capture_clock_policy': capture_clock_policy} if capture_clock_policy is not None else {}),
                     **(

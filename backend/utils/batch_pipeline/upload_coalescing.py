@@ -180,7 +180,10 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         EVENTS.labels(outcome='bounded_bypass').inc()
         return None
     body, size, start, end, seconds, unit_count, filenames, source_frames = packed
-    hold = config.hold_seconds(now=now, batch_pre_unit=True)
+    hold = config.window_seconds(
+        upload_context.get('upload_entitlement', 'unknown'),
+        backlog=arguments['lane'] == 'backfill' or int(seed.priority) != 0,
+    )
     if hold <= 0:
         return None
     # This source item is a deletion-outbox identity, never a scheduler job.
@@ -213,6 +216,8 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         'lane': arguments['lane'],
         'hold_seconds': hold,
         'accepted_at': now,
+        'upload_arrived_at': upload_context.get('upload_arrived_at'),
+        'upload_entitlement': upload_context.get('upload_entitlement', 'unknown'),
         'policy': policy.to_dict(),
         'language': language,
     }
