@@ -230,8 +230,9 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
 
     A row whose ``created_at`` is already past the repair age gate gets the
     provenance but no debt. That is an honest non-debt disposition: the repair
-    never sees it, so it cannot park it one-way, and Home hides it instead of
-    presenting "Writing notes" forever.
+    never sees it, so it cannot park it one-way. Home never presents it as
+    "Writing notes" forever: it keeps the row, which carries the projected
+    speech, as a finished card unless a summary block makes it noise.
     """
     if not projection_debt_enabled():
         return False

@@ -667,3 +667,20 @@ def test_a_failed_held_unit_notes_wake_never_fails_the_unit_job(recording, monke
     f.wake.assert_called_once()
     # The committed obligation stays due now for the sweep to wake.
     assert row.get().to_dict()['due_at'] == NOW
+
+
+def test_a_failed_completion_notes_wake_never_skips_the_committed_follow_ups(recording, monkeypatch):
+    f = recording
+    monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
+    monkeypatch.setattr(FirestoreEnrichmentOutbox, '_can_wake', lambda self, row, effects=False: True)
+    row = _sealed_live(f)
+    for sid in f.binding.segment_ids:
+        f.store.mark_enrichment(sid, f.binding, NOW, 'capture', 'en', policy=POLICY)
+    f.wake.reset_mock()
+    f.wake.side_effect = RuntimeError('synthetic task queue outage')
+    assert f.store.complete('last', f.binding, NOW + 5, f.accounting, policy=POLICY)
+    f.wake.assert_called_once()
+    # The commit stands: the row is due now for the sweep, and the post-commit steps still ran.
+    assert row.get().to_dict()['due_at'] == NOW + 5
+    f.store._mirror.assert_called()
+    f.store._settle_allowance.assert_called_once()

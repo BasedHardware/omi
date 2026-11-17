@@ -438,3 +438,20 @@ def test_past_age_gate_projection_stamp_stays_on_home_through_the_feed_mask():
     read = {key: value for key, value in projected.items() if key in CONVERSATION_FIELDS}
     # The feed, slim list and full-row list reads agree: a finished card, never hidden as noise.
     assert home_step.classify(read) == home_step.classify(projected) == 'ready'
+
+
+@pytest.mark.parametrize(
+    'blocked, empty_noise',
+    [('local_only', 'true'), ('blocked_byok', 'true'), ('empty_output_exhausted', 'false')],
+)
+def test_a_blocked_row_level_stand_in_stays_noise(monkeypatch, blocked, empty_noise):
+    """Only an unblocked projection stamp becomes a finished card; a terminal block keeps its disposition."""
+    monkeypatch.setenv('HOME_EMPTY_OUTPUT_NOISE', empty_noise)
+    stamped = row(
+        structured={'title': '', 'overview': ''},
+        summary_title_provenance='server_minimum',
+        summary_due_at=None,
+        summary_blocked_reason=blocked,
+    )
+    assert home_step.classify(stamped) == 'noise'
+    assert home_step.classify({**stamped, 'summary_blocked_reason': None}) == 'ready'

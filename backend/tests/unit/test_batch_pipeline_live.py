@@ -777,7 +777,7 @@ def test_projection_stamps_first_summary_debt_on_an_untitled_completed_row():
     assert home_step.classify(listed) == home_step.WRITING_NOTES
 
 
-def test_projection_does_not_stamp_debt_past_the_repair_age_gate():
+def test_projection_past_the_repair_age_gate_stamps_no_debt_and_stays_on_home():
     from utils.conversations import home_step
 
     old = recording(created_at=datetime.fromtimestamp(STAMP_NOW - 4 * 86400, timezone.utc))

@@ -126,6 +126,16 @@ class ProjectionStore:
         except Exception:
             logger.warning('event=free_allowance_lease decision=settlement_unavailable')
 
+    @staticmethod
+    def _wake_notes(outbox: FirestoreEnrichmentOutbox, row_id: str, token: str) -> None:
+        """Post-commit notes wake. The due row is durable and the outbox sweep repairs a miss: never raise."""
+        try:
+            outbox.wake(row_id, token)
+        except Exception as error:
+            logger.warning(
+                'event=batch_projection action=notes_wake outcome=error exception_type=%s', type(error).__name__
+            )
+
     def _observe_transcription(self, binding: ProjectionBinding, now: float, accounting: dict, result: dict) -> None:
         """Fail-open C1 transcript-landed write: ``sealed -> transcribed``.
 
@@ -659,12 +669,7 @@ class ProjectionStore:
 
         held = self.run(commit, policy=policy)
         for row_id, token in notes_wakes:
-            try:
-                outbox.wake(row_id, token)
-            except Exception as error:  # The due row is durable; the outbox sweep repairs a missed wake.
-                logger.warning(
-                    'event=batch_projection action=notes_wake outcome=error exception_type=%s', type(error).__name__
-                )
+            self._wake_notes(outbox, row_id, token)
         self._mirror(binding)
         return held
 
@@ -1157,7 +1162,7 @@ class ProjectionStore:
         for _ in sealed_proofs:
             capture_end.record_proof('sealed')  # Once per committed proof, never per retry.
         for outbox, row_id, token in notes_wakes:
-            outbox.wake(row_id, token)
+            self._wake_notes(outbox, row_id, token)
         self._mirror(binding, coalescing_receipts)
         if result is not None and result.get('reason_code') != 'source_deleted':
             self._settle_allowance(binding, now, completion_accounting, binding.segment_ids)

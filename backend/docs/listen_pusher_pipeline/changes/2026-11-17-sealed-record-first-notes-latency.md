@@ -32,8 +32,8 @@ late content: normal hold epoch, at most one material late run. Accepted tradeof
 (not quarantined) keeps the existing wait. Partial-record pages and non-record bindings are untouched.
 
 Ordering: the obligation moves to due now inside the completion (or held-unit) transaction; the ledger's
-`transcribed` is written after that commit and before the wake. A wake failure in the held-unit path is logged and
-left to the outbox sweep; it never fails the unit job.
+`transcribed` is written after that commit and before the wake. A wake failure on either path is logged and left to
+the outbox sweep; it never fails the unit job or skips the completion's post-commit steps.
 
 Writes: one outbox row update per qualifying completion or held-unit hold; one conversation field update the first
 time a held row's seal is stamped. Reads: one conversation and one outbox document in the held-unit transaction.
