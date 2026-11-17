@@ -576,7 +576,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _runNativeIntake();
-      unawaited(recoverOrphanAudio());
+      _maybeRecoverOrphanAudio();
       final generation = _sessionGeneration;
       unawaited(_reportStaleWalsWhenReady(generation));
     }

@@ -315,7 +315,7 @@ all bytes, owner uncertainty retains, local caps bound the backlog and existing
 server backfill pacing bounds processed-speech cost. This stage makes no storage
 reclamation or duplicate-processing outcome claim. `Orphan Audio Recovery` is
 one typed aggregate event per pass: class/age counts and bytes, adopted count,
-cap/change/reference skips and a bounded fence result. The diagnostics export's
+cap/change/reference, commit-time expiry and outside-Documents skips, and a bounded fence result. The diagnostics export's
 `local_recording_inventory.orphan_classification` uses the same summary and
 never exports paths, basenames, account IDs or per-file entries.
 

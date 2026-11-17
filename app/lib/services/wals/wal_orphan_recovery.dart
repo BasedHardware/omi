@@ -170,7 +170,10 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
             continue;
           }
           final info = candidate.info!;
-          if (now - info.timerStart > orphanRecoveryWindowSeconds) continue;
+          if (now - info.timerStart > orphanRecoveryWindowSeconds) {
+            counts['expiredSinceCensus'] = (counts['expiredSinceCensus'] ?? 0) + 1;
+            continue;
+          }
           // Same external-file admission as addExternalWal, batched under the
           // ledger queue so one durable index transaction covers the pass.
           final wal = Wal(
@@ -188,7 +191,10 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
             ..frameSize = info.frameSize;
           // Only Documents files may use the ledger's rebased relative path.
           // Configured native roots remain classified but are never adopted here.
-          if (!snapshot.isDocumentsFile(candidate)) continue;
+          if (!snapshot.isDocumentsFile(candidate)) {
+            counts['outsideDocuments'] = (counts['outsideDocuments'] ?? 0) + 1;
+            continue;
+          }
           _wals.add(wal);
           refs.add(path.basename(candidate.filePath));
           counts['adopted'] = (counts['adopted'] ?? 0) + 1;
@@ -251,6 +257,8 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         ageUnknownBytes: count('age_buckets', 'unknown', 'bytes'),
         adopted: skips['adopted'] ?? 0,
         changed: skips['changed'] ?? 0,
+        expiredSinceCensus: skips['expiredSinceCensus'] ?? 0,
+        outsideDocuments: skips['outsideDocuments'] ?? 0,
         referenced: skips['referenced'] ?? 0,
         passCap: skips['passCap'] ?? 0,
         dailyCap: skips['dailyCap'] ?? 0,

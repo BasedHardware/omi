@@ -19,7 +19,7 @@ _Decoded _decode(Uint8List bytes, String kind) {
         }
         if (value is Map) {
           if (value.containsKey('file')) {
-            if (value['file'] is! String || value['owner'] is! String) {
+            if (value['file'] is! String || (value['owner'] != null && value['owner'] is! String)) {
               throw const FormatException('invalid ring ref');
             }
             rows.add(RecordingInventoryRow(
@@ -29,7 +29,7 @@ _Decoded _decode(Uint8List bytes, String kind) {
                 indexBytes: 0,
                 disk: true,
                 filePath: value['file'] as String,
-                owner: value['owner'] as String));
+                owner: value['owner'] as String?));
           }
           for (final child in value.values) {
             visit(child);

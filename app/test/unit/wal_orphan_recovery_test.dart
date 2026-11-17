@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
@@ -21,6 +22,24 @@ class _Listener implements IWalSyncListener {
   void onWalUpdated() {}
   @override
   void onWalSynced(Wal wal, {ServerConversation? conversation}) {}
+}
+
+class _RecoveryTimer implements Timer {
+  _RecoveryTimer(this.callback);
+  final void Function(Timer) callback;
+  @override
+  bool isActive = true;
+  @override
+  int tick = 0;
+  void fire() {
+    tick++;
+    callback(this);
+  }
+
+  @override
+  void cancel() {
+    isActive = false;
+  }
 }
 
 void main() {
@@ -167,6 +186,27 @@ void main() {
     expect((await census()).orphans.single.classification, 'owner_unknown');
   });
 
+  test('legal ownerless ring refs reserve files and leave phone ownership unproven', () async {
+    await audio(name(now));
+    await audio(name(now - 1));
+    await Directory('${dir.path}/pendant_ring_custody').create();
+    await json('pendant_ring_custody/custody_device.json', {
+      'version': 1,
+      'device_id': 'device',
+      'ring_ranges': [
+        {
+          'wals': [
+            {'file': name(now), 'bytes': 250, 'frames': 50}
+          ]
+        }
+      ]
+    });
+    final result = await census();
+    expect(result.complete, isTrue);
+    expect(result.orphans.length, 1);
+    expect(result.orphans.single.classification, 'owner_unknown');
+  });
+
   test('classifier scales to 3000 files', () async {
     await Future.wait(List.generate(3000, (i) => audio(name(now - i))));
     final result = await census();
@@ -175,6 +215,8 @@ void main() {
   });
   Future<LocalWalSyncImpl> ledger(
       {DateTime Function()? clock,
+      Timer Function(Duration, void Function(Timer))? periodic,
+      void Function(Map<String, Object?>)? onEvent,
       Future<RecordingOrphanCensus> Function()? scan,
       Future<bool> Function()? off,
       bool foreground = true,
@@ -182,10 +224,14 @@ void main() {
       List<Map<String, Object?>>? events}) async {
     final sync = LocalWalSyncImpl(_Listener(),
         now: clock ?? () => DateTime.fromMillisecondsSinceEpoch(now * 1000),
+        periodic: periodic,
         orphanCensus: scan ?? census,
         orphanRecoveryOff: off ?? () async => false,
         orphanForeground: () => foreground,
-        orphanTelemetry: (v) => events?.add(v),
+        orphanTelemetry: (v) {
+          events?.add(v);
+          onEvent?.call(v);
+        },
         persistWals: persist ??
             (rows) async {
               await WalFileManager.saveWals(rows);
@@ -358,6 +404,88 @@ void main() {
     await sync.recoverOrphanAudio();
     expect(sync.testWals.where((w) => w.filePath == name(now)).length, 1);
     expect((events.single['counts'] as Map)['referenced'], 1);
+  });
+
+  test('configured non-Documents audio is classified and retained with a skip reason', () async {
+    final native = await Directory.systemTemp.createTemp('orphan-native-');
+    addTearDown(() => native.delete(recursive: true));
+    final file = await File('${native.path}/${name(now)}').writeAsBytes([1, 0, 0, 0, 7]);
+    final events = <Map<String, Object?>>[];
+    final sync = await ledger(
+        events: events,
+        scan: () => captureRecordingCensus(
+            documents: dir.path,
+            memoryBuckets: {'active': []},
+            phoneSeconds: now,
+            currentOwner: 'owner-a',
+            additionalDirectories: [native.path]));
+    await sync.recoverOrphanAudio();
+    expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
+    expect((events.single['counts'] as Map)['outsideDocuments'], 1);
+    expect(await file.readAsBytes(), [1, 0, 0, 0, 7]);
+  });
+
+  test('a large metadata archive defers the bounded commit, never the outside-queue census', () async {
+    await audio(name(now));
+    for (var i = 0; i < 513; i++) {
+      await json('wals.json.corrupt-$i', {'wals': []});
+    }
+    final snapshot = await census();
+    expect(snapshot.complete, isTrue);
+    final events = <Map<String, Object?>>[];
+    final sync = await ledger(events: events, scan: () async => snapshot);
+    await sync.recoverOrphanAudio();
+    expect(events.single['result'], 'sources_changed');
+    expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
+  });
+
+  test('expiry while waiting for adoption is counted and retains the original', () async {
+    await audio(name(now - 28 * 86400));
+    var seconds = now;
+    final events = <Map<String, Object?>>[];
+    final sync = await ledger(
+        events: events,
+        clock: () => DateTime.fromMillisecondsSinceEpoch(seconds * 1000),
+        scan: () async {
+          final snapshot = await census();
+          seconds += 86400;
+          return snapshot;
+        });
+    await sync.recoverOrphanAudio();
+    expect((events.single['counts'] as Map)['expiredSinceCensus'], 1);
+    expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
+  });
+
+  test('resume and timer wakes share one 15-minute pacing gate', () async {
+    var seconds = now, scans = 0;
+    var done = Completer<void>();
+    final timers = <_RecoveryTimer>[];
+    final sync = await ledger(
+        clock: () => DateTime.fromMillisecondsSinceEpoch(seconds * 1000),
+        periodic: (_, callback) {
+          final timer = _RecoveryTimer(callback);
+          timers.add(timer);
+          return timer;
+        },
+        scan: () {
+          scans++;
+          return census();
+        },
+        onEvent: (_) {
+          if (!done.isCompleted) done.complete();
+        });
+    sync.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await done.future;
+    expect(scans, 1);
+    timers[2].fire();
+    sync.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await pumpEventQueue(times: 100);
+    expect(scans, 1);
+    seconds += 15 * 60;
+    done = Completer<void>();
+    timers[2].fire();
+    await done.future;
+    expect(scans, 2);
   });
 
   test('incomplete census and kill switch adopt nothing', () async {

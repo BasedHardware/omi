@@ -5460,6 +5460,14 @@
         "censusComplete": {
           "type": "bool",
           "wire_name": "census_complete"
+        },
+        "expiredSinceCensus": {
+          "type": "int",
+          "wire_name": "expired_since_census"
+        },
+        "outsideDocuments": {
+          "type": "int",
+          "wire_name": "outside_documents"
         }
       },
       "consumers": [
