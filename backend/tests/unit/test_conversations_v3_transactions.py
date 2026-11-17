@@ -21,13 +21,10 @@ L = ('users', 'synthetic', 'conversation_v3_leases', 'builder')
 
 
 @pytest.fixture(scope='module', autouse=True)
-def projection_dependencies():
-    # Reconcile lazily loads these real dependencies at projection commit and
-    # speaker hydration. Prepare them in setup so the call CPU guard measures
-    # the concurrent replay, while import failures still fail the suite and
-    # their cost remains inside test.sh's whole-file wall limit.
-    importlib.import_module('utils.conversations.lifecycle')
-    importlib.import_module('utils.speakers.evidence')
+def lifecycle_owner_import():
+    # Exercise real lifecycle transactions below, but load their owner during
+    # file setup, as the call-phase CPU guard requires for shared imports.
+    return importlib.import_module('utils.conversations.lifecycle')
 
 
 @pytest.fixture
@@ -52,6 +49,13 @@ def strict(monkeypatch):
     monkeypatch.setattr(store, 'encrypt', lambda value, uid: value)
     monkeypatch.setattr(store.conversations, '_prepare_conversation_for_write', lambda row, *a, **kw: deepcopy(row))
     return client
+
+
+@pytest.fixture(scope='module', autouse=True)
+def speaker_evidence_import():
+    # Hydration's real lazy dependency is setup work; import failures still
+    # fail this suite and its cost stays inside the whole-file wall limit.
+    return importlib.import_module('utils.speakers.evidence')
 
 
 def test_two_workers_get_one_lease(strict):

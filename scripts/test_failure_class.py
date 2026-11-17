@@ -471,11 +471,11 @@ class FailureClassCliTests(unittest.TestCase):
         self.assertIn("unknown_failure_class_family", [item["code"] for item in payload["errors"]])
 
     def test_definition_without_family_is_accepted_during_migration(self) -> None:
-        # The live seed may already have migrated; construct the legacy case.
-        definition = self.root / '.github' / 'failure-classes' / 'FC-malformed-doc-read.json'
-        data = json.loads(definition.read_text())
-        data.pop('family', None)
-        definition.write_text(json.dumps(data))
+        # The real seed has migrated; this test must create its legacy input.
+        path = self.root / ".github" / "failure-classes" / "FC-malformed-doc-read.json"
+        definition = json.loads(path.read_text(encoding="utf-8"))
+        definition.pop("family", None)
+        path.write_text(json.dumps(definition), encoding="utf-8")
         payload = self.payload(self.cli("explain", "FC-malformed-doc-read"))
         self.assertTrue(payload["ok"], payload["errors"])
         self.assertIsNone(payload["family"]["key"])
