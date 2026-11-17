@@ -50,8 +50,8 @@ A root ro-prod metadata-only probe on2026-11-17 found11 distinct `instance`/`pod
 labels for the existing pump tick family on GKE; that does NOT establish the
 new family's coverage or API target identity. Prove both on the actual carrier.
 
-One active scope has128 register series after two windows, plus6 counter/time
-series. Worst case, all4 scopes use512 registers plus24 counter/time series,
+One active scope has128 register series after two windows, plus4 counter/time
+series. Worst case, all4 scopes use512 registers plus16 counter/time series,
 with up to3 skipped-reason counter/time pairs. At a15-second scrape, register
 samples alone are737,280/day/target for one scope,2,949,120/day/target for all4.
 Budget against the ACTUAL target count, scrape interval and existing sample cap;
