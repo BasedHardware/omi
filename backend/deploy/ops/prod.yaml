@@ -105,6 +105,11 @@ cloud_run:
     max_instances: {owner: redis_guard, floor: 8, ceiling: 40}
   backend-integration:
     env:
+      # Margin-40 O1 inverse, 2026-11-17: preserve restored cadence; O3 stays 16.
+      # The former 100/20 source is held. A new lead/Release ruling must supersede this.
+      BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: '200'
+      BATCH_PIPELINE_SERVING_TICK_SECONDS: '10'
+      BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: '16'
       SYNC_TASKS_QUEUE: sync-jobs-fresh
       # C4 (lane 9): enrichment-maintenance targets backend-integration.
       # 2026-11-09 David (relay 3e764e): enable until the long-term fix.
