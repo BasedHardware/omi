@@ -302,6 +302,8 @@ overlay:
           category: rollout
     pusher:
       env:
+        SYNC_TASKS_PROJECT: {value: based-hardware, category: reliability}
+        SYNC_TASKS_LOCATION: {value: us-central1, category: reliability}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
