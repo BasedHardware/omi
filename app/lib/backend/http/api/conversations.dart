@@ -225,7 +225,8 @@ bool hasSpeakerReceiptSummaryCapability(Map<String, String> headers) => headers[
 sealed class ReprocessResult {
   const ReprocessResult();
 
-  /// The reprocessed conversation, only on [ReprocessSuccess].
+  /// The server's copy of the conversation: the reprocessed one on [ReprocessSuccess], the
+  /// still-transcribing one on a 200 [ReprocessTranscriptionPending].
   ServerConversation? get conversation => null;
 
   /// Adapts a call that only knows "a conversation or nothing" (older seams, list-row retries).
@@ -246,11 +247,16 @@ final class ReprocessBusy extends ReprocessResult {
   const ReprocessBusy();
 }
 
-/// The audio has not been transcribed (HTTP 409 `transcription_pending`): a summary retry cannot
-/// transcribe it. The server also answers this for captures past their transcription deadline,
-/// so it does not promise the audio will still be transcribed.
+/// The audio has not been transcribed, so a summary retry cannot help. Two server answers mean
+/// this: HTTP 200 with the conversation back in Home step `transcribing` (still inside its
+/// transcription window; [conversation] is that copy, to apply as is), and HTTP 409
+/// `transcription_pending` (past the window; no copy). Neither promises the audio will be
+/// transcribed.
 final class ReprocessTranscriptionPending extends ReprocessResult {
-  const ReprocessTranscriptionPending();
+  const ReprocessTranscriptionPending([this.conversation]);
+
+  @override
+  final ServerConversation? conversation;
 }
 
 /// The hourly reprocess limit (HTTP 429). [retryAfter] when the server said how long.
@@ -301,8 +307,12 @@ Future<ReprocessResult> reProcessConversationServer(
   if (response == null) return const ReprocessFailed();
   Logger.debug('reProcessConversationServer: ${response.statusCode}');
   final result = reprocessResultFromResponse(response, requireSpeakerReceipt: requireSpeakerReceipt);
-  if (result is ReprocessTranscriptionPending) TranscriptionPendingConversations.mark(conversationId);
-  if (result is ReprocessSuccess) TranscriptionPendingConversations.unmark(conversationId);
+  // Only the 409 has no copy to carry the answer; a returned copy speaks for itself.
+  if (result is ReprocessTranscriptionPending && result.conversation == null) {
+    TranscriptionPendingConversations.mark(conversationId);
+  } else if (result.conversation != null) {
+    TranscriptionPendingConversations.unmark(conversationId);
+  }
   return result;
 }
 
@@ -315,18 +325,23 @@ ReprocessResult reprocessResultFromResponse(
 }) {
   switch (response.statusCode) {
     case 200:
+      final ServerConversation conversation;
+      try {
+        conversation = ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      } catch (e) {
+        Logger.debug('reProcessConversationServer decode failed: ${e.runtimeType}');
+        return const ReprocessFailed(statusCode: 200);
+      }
+      // Audio still inside its transcription window: the server ran nothing and answered with the
+      // row's waiting state. No summary path ran, so the speaker receipt does not apply.
+      if (conversation.homeStep == 'transcribing') return ReprocessTranscriptionPending(conversation);
       // A pre-fix backend can return 200 with a summary made from stale speaker
       // labels. Keep the detail page's retry action until the receipt-aware
       // processor explicitly acknowledges its summary path.
       if (requireSpeakerReceipt && !hasSpeakerReceiptSummaryCapability(response.headers)) {
         return const ReprocessFailed(statusCode: 200);
       }
-      try {
-        return ReprocessSuccess(ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>));
-      } catch (e) {
-        Logger.debug('reProcessConversationServer decode failed: ${e.runtimeType}');
-        return const ReprocessFailed(statusCode: 200);
-      }
+      return ReprocessSuccess(conversation);
     case 409:
       // 409 is busy only with the structured `conversation_processing_in_progress` detail. The same
       // route answers 409 with a string detail when the selected app is disabled or not enabled:

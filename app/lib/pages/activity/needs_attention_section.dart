@@ -281,8 +281,10 @@ class _FailedConversationRowState extends State<_FailedConversationRow> {
       switch (result) {
         case ReprocessSuccess(:final conversation):
           context.read<ConversationProvider?>()?.applyConversationReprocessResult(conversation);
+        // Not an error: the row shows the server's waiting state, or the not-transcribed status.
+        case ReprocessTranscriptionPending(conversation: final waiting?):
+          context.read<ConversationProvider?>()?.applyConversationReprocessResult(waiting);
         case ReprocessTranscriptionPending():
-          // Not an error: the row switches to the not-transcribed status.
           TranscriptionPendingConversations.mark(widget.conversation.id);
         default:
           OmiFeedback.error(context, context.l10n.somethingWentWrong);
@@ -296,7 +298,7 @@ class _FailedConversationRowState extends State<_FailedConversationRow> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<Set<String>>(
+    return ValueListenableBuilder<Map<String, DateTime>>(
       valueListenable: TranscriptionPendingConversations.ids,
       builder: (context, _, __) => _row(context),
     );

@@ -214,7 +214,7 @@ class SummaryRetryWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<Set<String>>(
+    return ValueListenableBuilder<Map<String, DateTime>>(
       valueListenable: TranscriptionPendingConversations.ids,
       builder: (context, _, __) => _build(context),
     );

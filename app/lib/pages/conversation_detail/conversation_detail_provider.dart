@@ -1123,7 +1123,19 @@ class ConversationDetailProvider extends ChangeNotifier
       }
       PlatformManager.instance.analytics.reProcessConversation(target);
       final updatedConversation = result.conversation;
-      if (updatedConversation == null || !conversationHasRequestedSummary(updatedConversation, appId)) {
+      if (result is ReprocessTranscriptionPending) {
+        // A 409 has no copy, so remember it; a 200 copy is the server's own waiting state, shown as is.
+        final waiting = result.conversation;
+        if (waiting == null) TranscriptionPendingConversations.mark(target.id);
+        if (waiting != null) conversationProvider?.updateConversation(waiting, preserveHomeStep: false);
+        if (waiting != null && conversationOrNull?.id == target.id) {
+          _cachedConversation = waiting;
+          _refreshGeneration++;
+        }
+      }
+      if (updatedConversation == null ||
+          result is ReprocessTranscriptionPending ||
+          !conversationHasRequestedSummary(updatedConversation, appId)) {
         _failReprocess(
           target,
           appId,
@@ -1217,13 +1229,10 @@ class ConversationDetailProvider extends ChangeNotifier
     lastFailedReprocessConversationId = target.id;
     lastFailedReprocessAppId = appId;
     recordSummaryFailure(SummaryFailure(conversationId: target.id, kind: kind, appId: appId));
-    if (kind == SummaryFailureKind.transcriptionPending) {
-      // Not an error: the audio is still in the transcription queue and a retry cannot speed it up.
-      TranscriptionPendingConversations.mark(target.id);
-      notifyInfo('REPROCESS_TRANSCRIPTION_PENDING');
-    } else {
-      notifyError('REPROCESS_FAILED');
-    }
+    // Not transcribed is not an error: a summary retry cannot change it.
+    kind == SummaryFailureKind.transcriptionPending
+        ? notifyInfo('REPROCESS_TRANSCRIPTION_PENDING')
+        : notifyError('REPROCESS_FAILED');
     notifyListeners();
   }
 
@@ -1314,8 +1323,8 @@ class ConversationDetailProvider extends ChangeNotifier
                 updatedConversation.status == ConversationStatus.merging)) {
           updatedConversation = updatedConversation.withHomeStep('failed');
         }
-        // The detail copy omits home_step; observe only what the list applies (it retains 'failed').
-        if (conversationProvider == null) TranscriptionPendingConversations.observe(updatedConversation);
+        // A transcript in the detail copy proves transcription finished; a missing Home step proves nothing.
+        TranscriptionPendingConversations.observe(updatedConversation);
         conversationProvider?.updateConversation(updatedConversation);
         _cachedConversation = updatedConversation;
         resetRecordingTranscript();

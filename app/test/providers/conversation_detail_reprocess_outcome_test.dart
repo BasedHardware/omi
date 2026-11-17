@@ -56,6 +56,20 @@ void main() {
       expect(reprocessResultFromResponse(http.Response('not json', 200)), isA<ReprocessFailed>());
     });
 
+    test('200 back in Home step transcribing is the in-window wait, with its copy, receipt or not', () {
+      final waiting = {
+        ...summaryConversation().toJson(),
+        'status': 'processing',
+        'home_step': 'transcribing',
+      };
+      for (final requireSpeakerReceipt in [false, true]) {
+        final result = reprocessResultFromResponse(_json(200, waiting), requireSpeakerReceipt: requireSpeakerReceipt);
+        expect(result, isA<ReprocessTranscriptionPending>());
+        expect(result.conversation!.homeStep, 'transcribing');
+        expect(result.conversation!.status, ConversationStatus.processing);
+      }
+    });
+
     test('409 conversation_processing_in_progress is busy', () {
       final result = reprocessResultFromResponse(_json(409, {
         'detail': {'code': 'conversation_processing_in_progress', 'message': 'Already processing'},
@@ -138,6 +152,36 @@ void main() {
       expect(provider.summaryFailure!.kind, SummaryFailureKind.transcriptionPending);
       expect(provider.loadingReprocessConversation, isFalse);
       expect(TranscriptionPendingConversations.contains('conv-summary'), isTrue);
+      expect(errors, isNot(contains('REPROCESS_FAILED')));
+      expect(infos, contains('REPROCESS_TRANSCRIPTION_PENDING'));
+    });
+
+    test('a 200 in-window wait applies the server copy and is a waiting status, not an error', () async {
+      TranscriptionPendingConversations.reset();
+      addTearDown(TranscriptionPendingConversations.reset);
+      final errors = <String>[];
+      final infos = <String>[];
+      final waiting = ServerConversation.fromJson({
+        ...summaryConversation().toJson(),
+        'status': 'processing',
+        'home_step': 'transcribing',
+      });
+      final provider = summaryProvider(
+        summaryConversation(),
+        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async =>
+            ReprocessTranscriptionPending(waiting),
+      );
+      addTearDown(provider.dispose);
+      provider.addListener(() {
+        if (provider.error case final e?) errors.add(e);
+        if (provider.info case final i?) infos.add(i);
+      });
+      final ok = await provider.reprocessConversation();
+      expect(ok, isFalse);
+      expect(provider.conversation.status, ConversationStatus.processing);
+      expect(provider.conversation.homeStep, 'transcribing');
+      expect(provider.summaryFailure!.kind, SummaryFailureKind.transcriptionPending);
+      expect(TranscriptionPendingConversations.contains('conv-summary'), isFalse);
       expect(errors, isNot(contains('REPROCESS_FAILED')));
       expect(infos, contains('REPROCESS_TRANSCRIPTION_PENDING'));
     });

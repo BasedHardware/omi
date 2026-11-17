@@ -48,8 +48,8 @@ import 'package:omi/providers/transcription_pending_conversations.dart';
 /// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
-  if (conversation.homeStep == 'failed') {
-    if (TranscriptionPendingConversations.contains(conversation.id)) return l10n.summaryTranscriptionPendingTitle;
+  // A row the server said is not transcribed keeps its own title; the status slot says why.
+  if (conversation.homeStep == 'failed' && !TranscriptionPendingConversations.contains(conversation.id)) {
     return l10n.summaryTemplateFailedTitle(l10n.omiAppName);
   }
   // A noise clip revealed from Home's fold reads like any row, not as "Discarded".
@@ -224,8 +224,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
       switch (result) {
         case ReprocessSuccess(:final conversation):
           context.read<ConversationProvider>().applyConversationReprocessResult(conversation);
+        // Not an error: the row shows the server's waiting state, or the not-transcribed status.
+        case ReprocessTranscriptionPending(conversation: final waiting?):
+          context.read<ConversationProvider>().applyConversationReprocessResult(waiting);
         case ReprocessTranscriptionPending():
-          // Not an error: the row switches to the not-transcribed status.
           TranscriptionPendingConversations.mark(widget.conversation.id);
         default:
           AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
