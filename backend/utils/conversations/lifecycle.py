@@ -66,6 +66,7 @@ from utils.journey_metrics_contract import bounded_client_kind
 from utils.observability.journeys import record_client_journey_accepted, record_journey_accepted
 from utils.conversation_shape import observe_completed_conversation_shape
 from utils.product_metrics import record_product_event
+from utils.metrics import observe_conversation_terminal_transition
 
 logger = logging.getLogger(__name__)
 merge_jobs = merge_conversations_job
@@ -324,9 +325,12 @@ def transition(
         guards['expected_fields'] = expected_fields
     if allow_discarded:
         guards['allow_discarded'] = True
-    return conversations_db.claim_conversation_status(
+    claimed = conversations_db.claim_conversation_status(
         uid, conversation_id, expected, target, extra_updates=extra_updates, **guards
     )
+    if claimed:
+        observe_conversation_terminal_transition(target.value, conversation.get('finished_at'))
+    return claimed
 
 
 def admit_processing(uid: str, conversation_id: str, *, extra_updates: dict[str, Any] | None = None) -> bool:
