@@ -100,6 +100,8 @@ def test_old_completion_has_no_rearm_fence_so_readiness_is_required(versions):
 def test_missing_stale_or_malformed_readiness_never_coalesces(monkeypatch, versions, marker):
     v = versions
     now = jobs._now()
+    if isinstance(marker, dict) and 'all_consumers_new' in marker:
+        marker = {**marker, 'valid_until': now + timedelta(hours=1)}
     if isinstance(marker, str):
         until = {
             'expired': now - timedelta(seconds=1),

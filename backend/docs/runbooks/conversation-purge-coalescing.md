@@ -26,6 +26,10 @@ markers refuse coalescing and execute legacy purges. Read errors retry the task.
 The marker is re-read transactionally at seal, resume, every unit/checkpoint and
 completion. Revocation or expiry hands an active group back with its journals.
 This readiness requirement applies even while the default-on kill switch is on.
+Its read budget is one exact-document lookup at admission, plus one per
+enrollment/authority transaction (seal/resume, unit, checkpoint, journal chunk,
+completion). Purge consumers never write the marker. Include these reads in the
+canary metric; this adds no polling loop or owner-history query.
 
 A worker seals at most 16 fresh obligations belonging to one UID in a transaction.
 Only the leader has `owner_scan` (epoch, token, immutable member identities,
