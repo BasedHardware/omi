@@ -154,7 +154,7 @@ def segment_records(
     return [snapshot.to_dict() or {} for snapshot in query.stream()]
 
 
-def _segment_ref(client: Any, job: str, namespace: str, segment_id: str) -> Any:
+def segment_ref(client: Any, job: str, namespace: str, segment_id: str) -> Any:
     digest = hashlib.sha256(f'{namespace}\x00{segment_id}'.encode()).hexdigest()[:40]
     return client.collection(COLLECTION).document(job).collection(SEGMENTS).document(digest)
 
@@ -356,7 +356,7 @@ class RunProgress:
             self._owned(transaction)
             for segment_id in segment_ids:
                 transaction.set(
-                    _segment_ref(self.client, self.job, namespace, segment_id),
+                    segment_ref(self.client, self.job, namespace, segment_id),
                     {'namespace': namespace, 'segment_id': segment_id},
                 )
             transaction.update(self._ref(), {**self._renewal(), 'progress': position})
@@ -379,7 +379,7 @@ class RunProgress:
         def body(transaction):
             self._owned(transaction)
             for segment_id in done:
-                transaction.delete(_segment_ref(self.client, self.job, namespace, segment_id))
+                transaction.delete(segment_ref(self.client, self.job, namespace, segment_id))
             transaction.update(self._ref(), self._renewal())
 
         _in_transaction(self.client, body)
@@ -430,7 +430,7 @@ def _drop_segment_records(client: Any, job: str) -> None:
                 break
             batch = client.batch()
             for record in records:
-                batch.delete(_segment_ref(client, job, namespace, str(record.get('segment_id'))))
+                batch.delete(segment_ref(client, job, namespace, str(record.get('segment_id'))))
             batch.commit()
 
 
@@ -493,7 +493,7 @@ def run_job(
             return 'checkpointed'
         except Exception as error:
             # Units acquire before erasing, so a unit that lost its gate wait erased nothing; progress is saved.
-            if _lost_gate_to_peer(error, uid):
+            if lost_gate_to_peer(error, uid):
                 logger.info('conversation batch purge waiting for the account gate job=%s', job)
                 finish('busy')
                 return 'busy'
@@ -512,7 +512,7 @@ def _finish_failed(finish: Callable[[str], bool]) -> None:
         pass  # The lease expires; the original failure is what the queue must see.
 
 
-def _lost_gate_to_peer(error: BaseException, uid: str) -> bool:
+def lost_gate_to_peer(error: BaseException, uid: str) -> bool:
     if type(error).__name__ == 'HTTPException' and getattr(error, 'status_code', None) == 409:
         return True  # the cascade's nested gate mapped a same-account peer to account_gate_busy
     try:
@@ -555,7 +555,7 @@ def run_erasure_job(
         except LegalHoldActive:
             raise
         except Exception as error:
-            if not _lost_gate_to_peer(error, uid):
+            if not lost_gate_to_peer(error, uid):
                 raise
             logger.info('conversation erasure waiting for the account gate job=%s', job)
             finish('busy')

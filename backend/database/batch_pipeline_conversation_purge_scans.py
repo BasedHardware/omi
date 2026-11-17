@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import time
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Iterator
 from uuid import uuid4
 
@@ -29,6 +29,18 @@ logger = logging.getLogger(__name__)
 MAX_MEMBERS = 16
 ASSOCIATION_CHUNK = 100
 SWITCH = 'CONVERSATION_BATCH_PURGE_COALESCING_ENABLED'
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _in_transaction(client: Any, body: Callable[[Any], Any]) -> Any:
+    @firestore.transactional
+    def run(transaction):
+        return body(transaction)
+
+    return run(client.transaction())
 
 
 def enabled() -> bool:
@@ -85,7 +97,7 @@ def handback(client: Any, leader: str, epoch: str, token: str) -> bool:
     def body(transaction):
         ref = _ref(client, leader)
         row = ref.get(transaction=transaction).to_dict() or {}
-        scan = row.get('owner_scan') or {}
+        scan: dict[str, Any] = row.get('owner_scan') or {}
         if scan.get('epoch') != epoch or scan.get('token') != token:
             return False
         rows = _read_members(client, transaction, scan)
@@ -99,11 +111,11 @@ def handback(client: Any, leader: str, epoch: str, token: str) -> bool:
             if job == leader:
                 changes['owner_scan'] = None
             if owned:
-                changes.update(run_token=None, lease_generation=None, lease_until=None, due_at=jobs._now())
+                changes.update(run_token=None, lease_generation=None, lease_until=None, due_at=_now())
             transaction.update(_ref(client, job), changes)
         return True
 
-    return jobs._in_transaction(client, body)
+    return _in_transaction(client, body)
 
 
 def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] | None]:
@@ -138,7 +150,7 @@ def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] 
     if job not in refs and len(refs) >= MAX_MEMBERS:
         refs.pop(next(reversed(refs)))
     refs[job] = _ref(client, job)
-    now, token, epoch = jobs._now(), uuid4().hex, uuid4().hex
+    now, token, epoch = _now(), uuid4().hex, uuid4().hex
 
     def body(transaction):
         snapshots = {key: ref.get(transaction=transaction) for key, ref in refs.items()}
@@ -196,15 +208,15 @@ def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] 
             transaction.update(_ref(client, key), changes)
         return 'run', scan
 
-    return jobs._in_transaction(client, body)
+    return _in_transaction(client, body)
 
 
 def _resume(client: Any, leader: str, generation: int, observed: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
-    now, token = jobs._now(), uuid4().hex
+    now, token = _now(), uuid4().hex
 
     def body(transaction):
         row = _ref(client, leader).get(transaction=transaction).to_dict() or {}
-        scan = row.get('owner_scan') or {}
+        scan: dict[str, Any] = row.get('owner_scan') or {}
         if scan.get('epoch') != observed['epoch'] or int(row.get('generation') or 0) != generation:
             return 'superseded', None
         if jobs.lease_held(row, now=now):
@@ -234,7 +246,7 @@ def _resume(client: Any, leader: str, generation: int, observed: dict[str, Any])
             transaction.update(_ref(client, key), changes)
         return 'run', scan
 
-    status, scan = jobs._in_transaction(client, body)
+    status, scan = _in_transaction(client, body)
     if status == 'handback':
         handback(client, leader, observed['epoch'], observed['token'])
         return 'legacy', None
@@ -280,7 +292,7 @@ class ScanProgress(jobs.RunProgress):
             self._renew_all(transaction)
             transaction.update(self._ref(), {'owner_scan.position': position})
 
-        jobs._in_transaction(self.client, body)
+        _in_transaction(self.client, body)
         self.position = dict(position)
         self._checkpointed = True
 
@@ -293,12 +305,12 @@ class ScanProgress(jobs.RunProgress):
                 self._owned(transaction)
                 for segment_id in chunk:
                     transaction.set(
-                        jobs._segment_ref(self.client, job, namespace, segment_id),
+                        jobs.segment_ref(self.client, job, namespace, segment_id),
                         {'namespace': namespace, 'segment_id': segment_id},
                     )
                 self._renew_all(transaction)
 
-            jobs._in_transaction(self.client, body)
+            _in_transaction(self.client, body)
 
     def segments(self, namespace: str) -> set[str]:
         return {
@@ -324,7 +336,7 @@ class ScanProgress(jobs.RunProgress):
         # Full dependent+parked passes have finished for ALL members before
         # entering bindings. Removing these receipts cannot strand an owed row.
         refs = [
-            jobs._segment_ref(self.client, job, namespace, segment)
+            jobs.segment_ref(self.client, job, namespace, segment)
             for job in self.scan['members']
             for segment in segment_ids
         ]
@@ -337,7 +349,7 @@ class ScanProgress(jobs.RunProgress):
                     transaction.delete(ref)
                 self._renew_all(transaction)
 
-            jobs._in_transaction(self.client, body)
+            _in_transaction(self.client, body)
 
     @contextmanager
     def unit(self) -> Iterator[Any]:
@@ -349,7 +361,7 @@ class ScanProgress(jobs.RunProgress):
                 self._owned(transaction)
                 self._renew_all(transaction)
 
-            jobs._in_transaction(self.client, renew)
+            _in_transaction(self.client, renew)
             yield authority
         self._sleep(jobs.UNIT_YIELD_SECONDS)
 
@@ -376,14 +388,14 @@ class ScanProgress(jobs.RunProgress):
                     'run_token': None,
                     'lease_generation': None,
                     'lease_until': None,
-                    'due_at': jobs._now() + timedelta(seconds=wait),
+                    'due_at': _now() + timedelta(seconds=wait),
                     'last_outcome': outcome,
                     **({'attempts': 0} if outcome in {'checkpointed', 'busy'} else {}),
                 },
             )
             return False
 
-        return jobs._in_transaction(self.client, body)
+        return _in_transaction(self.client, body)
 
 
 class _MemberProgress:
@@ -447,7 +459,7 @@ def run_job(
             return 'checkpointed'
         except BaseException as error:
             outcome = (
-                'busy' if isinstance(error, Exception) and jobs._lost_gate_to_peer(error, scan['uid']) else 'failed'
+                'busy' if isinstance(error, Exception) and jobs.lost_gate_to_peer(error, scan['uid']) else 'failed'
             )
             try:
                 progress.finish(outcome)

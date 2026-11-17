@@ -282,6 +282,10 @@ def purge_conversations(
                 if not originals:
                     break
                 _in_units(progress, originals, lambda uri, authority: remote_delete(authority)(uid, uri), clock, settle)
+                if len(members) > 1:
+                    # Deleted object generations are the WAL cursor. Persist a
+                    # handoff point even before the first metadata page.
+                    mark(dict(progress.position))
     for ns_index in range(start_ns, len(NAMESPACES)):
         namespace = NAMESPACES[ns_index]
         resuming = ns_index == start_ns and start.get('phase') in PHASES

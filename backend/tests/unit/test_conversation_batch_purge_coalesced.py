@@ -160,3 +160,22 @@ def test_switch_defaults_on_and_explicit_false_survives_global_parser_mode(monke
     for value in ('false', 'off', '0', 'no', ' FALSE '):
         monkeypatch.setenv(scans.SWITCH, value)
         assert not scans.enabled()
+
+
+def test_group_wal_sweep_hands_off_before_metadata_even_with_many_originals(monkeypatch):
+    client, plane = seed(monkeypatch, count=2, unmatched=0)
+    members = {'c0': Progress(), 'c1': Progress()}
+    progress = Progress(members)
+    progress.stop = lambda p: p.checkpoints >= 1
+    listed = []
+
+    def originals(uid, cid, *, limit):
+        listed.append(cid)
+        return [f'gs://test/record-wal/{cid}/{i}#1' for i in range(limit)]
+
+    monkeypatch.setattr(purge, 'conversation_objects', originals)
+    with pytest.raises(purge.PurgeCheckpointed):
+        purge.purge_conversations(UID, members, progress, firestore_client=client)
+    assert listed == ['c0']
+    assert len(plane.objects) == purge.UNIT_MAX_ROWS
+    assert plane.erased == []  # WAL units can yield before metadata discovery.
