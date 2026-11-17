@@ -18,14 +18,26 @@ from database.batch_pipeline_record_dead_letter import requeue_record as requeue
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.admission import authorize
 from utils.batch_pipeline.enrichment import run_enrichment
-from utils.batch_pipeline.serving import serving_for_stage
-from utils.batch_pipeline.shadow_projection import run as run_shadow_projection
 from utils.executors import db_executor, postprocess_executor, run_blocking, sync_executor
 from utils.observability.reasons import RetryReason
 from utils.workers.retry import retry_response
 from utils.sync.stage import current_stage, require_http_stage
 
 logger = logging.getLogger(__name__)
+
+
+def serving_for_stage(stage):
+    # Enrichment deliveries do not need the serving/projection import closure.
+    from utils.batch_pipeline.serving import serving_for_stage as serving
+
+    return serving(stage)
+
+
+def run_shadow_projection(store, segment_id, payload):
+    from utils.batch_pipeline.shadow_projection import run
+
+    return run(store, segment_id, payload)
+
 
 # Static retry classes; never IDs. 'unexpected' answers 500, the others 409.
 ENRICHMENT_RETRIES = Counter(
