@@ -142,7 +142,13 @@ def run(args):
     storage = dependencies.storage()
     after = json.loads(Path(args.after_file).read_text())['after'] if args.after_file else None
     paths, next_after = dependencies.planner.discover(client, limit=args.limit, after=after)
-    planned = dependencies.planner.plan_no_speech(store, paths, storage, pace=args.pace_seconds)
+    planned = dependencies.planner.plan_no_speech(
+        store,
+        paths,
+        storage,
+        pace=args.pace_seconds,
+        actionable=None if args.only is None else (args.only,),
+    )
     report = {**dependencies.planner.summary(planned), 'apply': args.apply}
     if args.next_file:
         dependencies.write_cursor(args.next_file, next_after)
@@ -173,6 +179,7 @@ def main(argv=None):
     parser.add_argument('--approve-plan-sha256')
     parser.add_argument('--undo', action='store_true')
     parser.add_argument('--ledger')
+    parser.add_argument('--only', choices=('no_speech', 'empty_stub'))
     args = parser.parse_args(argv)
     logging.disable(logging.CRITICAL)
     allowed = {'prod-operator'} if args.apply else {'ro-prod', 'prod-operator'}

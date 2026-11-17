@@ -3,6 +3,8 @@
 OPERATION = 'batch-live-no-speech-v1'
 EXITS = {
     'no_speech': 'operator_undo_restores_original_fields',
+    'empty_stub': 'operator_undo_restores_original_fields',
+    'lease_active': 'quiet_check_after_lease',
     'no_retained_audio': 'operator_review',
     'has_speech': 'normal_batch_pipeline',
     'retained_audio_unmeasured': 'operator_review',

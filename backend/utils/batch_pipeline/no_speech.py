@@ -21,8 +21,10 @@ from google.api_core.exceptions import PreconditionFailed
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+from config import listen_reconnect
 from config.refactor_modes import no_speech_terminal_enabled
 from config.no_speech_terminal import EXITS, OPERATION
+from database import conversation_finalization_jobs as jobs_db
 from database import no_speech_terminal as terminal_db
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils import encryption
@@ -45,7 +47,32 @@ SPEECH_LIMIT_SECONDS = 10.0
 MAX_RAW_OBJECTS = 4096
 MAX_AUDIO_SECONDS = 7200
 
-ACTIONABLE = frozenset({'no_speech'})
+EMPTY_STUB = 'empty_stub'
+ACTIONABLE = frozenset({'no_speech', EMPTY_STUB})
+
+
+def empty_stub_shape(row):
+    """An in-progress capture that received a first frame but never committed any audio.
+
+    This is the shape the 2026-11-16 listen rollover storm left behind: no committed
+    window, no content, no close barrier and no reconnect producer. It is only
+    actionable when both retained-object listings are also empty, and the close
+    is the same reversible hidden terminal (no row or object is deleted).
+    """
+    return bool(
+        row.get('server_batch_audio_received') is True
+        and row.get('server_batch_audio_closed') is not True
+        and row.get('record_audio_closed') is not True
+        and row.get('server_batch_audio_start') is None
+        and row.get('server_batch_audio_end') is None
+        and not row.get('has_content')
+        and not row.get('audio_files')
+        and not row.get('transcript_segments')
+        and not row.get('photos')
+        and not row.get('record_sealed_at')
+        and not row.get('record_wal_handoff_present')
+        and not listen_reconnect.producer(row)
+    )
 
 
 def discover(client, *, limit=128, after=None, now=None):
@@ -94,6 +121,17 @@ def _snapshot(store, uid, cid):
 def _job_exists(store, uid, cid):
     _, job_id = record_identity(uid, cid)
     return store.client.collection(f'{store.namespace}_jobs').document(job_id).get().exists
+
+
+def _lease_active(store, uid, cid, row, now):
+    """A live recording session still owns this capture; never hide it under a socket."""
+    sessions = store.client.collection('users').document(uid).collection('recording_sessions')
+
+    def read(tx):
+        expiry = jobs_db.recording_session_lease_expiry(tx.transaction, sessions, uid, cid, row, now)
+        return expiry is not None and expiry > now
+
+    return store.run(read)
 
 
 def _raw_refs(storage_client, uid, cid):
@@ -189,6 +227,8 @@ def _measure_row(storage_client, uid, cid, row):
             0,
         )
     legacy = _legacy_chunks(storage_client, uid, cid)
+    if not legacy and empty_stub_shape(row):
+        return EMPTY_STUB, None, None, 0, 0
     return (
         'coverage_incomplete' if not legacy else 'retained_audio_unmeasured',
         None,
@@ -198,9 +238,12 @@ def _measure_row(storage_client, uid, cid, row):
     )
 
 
-def plan_no_speech(store, paths, storage_client, *, run_id=None, now=None, pace=0.0):
+def plan_no_speech(store, paths, storage_client, *, run_id=None, now=None, pace=0.0, actionable=None):
     if run_id == '' or len(paths) > 128 or len(set(paths)) != len(paths):
         raise ValueError('bounded unique discovery page required')
+    allowed = ACTIONABLE if actionable is None else frozenset(actionable)
+    if not allowed or not allowed <= ACTIONABLE:
+        raise ValueError('unknown actionable disposition')
     now = now or datetime.now(timezone.utc)
     entries = []
     for path in paths:
@@ -218,6 +261,8 @@ def plan_no_speech(store, paths, storage_client, *, run_id=None, now=None, pace=
                 entry['disposition'] = 'already_registered'
             else:
                 disposition, speech, audio, raw_objects, legacy_objects = _measure_row(storage_client, uid, cid, row)
+                if disposition == EMPTY_STUB and _lease_active(store, uid, cid, row, now):
+                    disposition = 'lease_active'
                 entry.update(
                     disposition=disposition,
                     raw_objects=raw_objects,
@@ -226,7 +271,7 @@ def plan_no_speech(store, paths, storage_client, *, run_id=None, now=None, pace=
                 if speech is not None:
                     entry['speech_seconds'] = speech
                     entry['audio_seconds'] = audio
-                if disposition in ACTIONABLE:
+                if disposition in allowed:
                     entry.update(
                         row_sha256=row_state(row),
                         privacy_generation=generation,
@@ -247,6 +292,9 @@ def plan_no_speech(store, paths, storage_client, *, run_id=None, now=None, pace=
         if pace:
             time.sleep(pace)
     body = {'operation': OPERATION, 'namespace': store.namespace, 'entries': entries}
+    if actionable is not None:
+        # A restricted page binds its allowlist into the approval digest.
+        body['actionable'] = sorted(allowed)
     # Bind run identity to the page proof so dry-run and apply reconstruct the
     # same approval; a random CLI run id would invalidate every reviewed digest.
     body['run_id'] = run_id if run_id is not None else plan_digest(body)
@@ -270,6 +318,8 @@ def _reprove(store, storage_client, entry, now):
         raise NoSpeechRefused('coverage_incomplete')
     if disposition != entry['disposition']:
         raise NoSpeechRefused('state_changed')
+    if disposition == EMPTY_STUB and _lease_active(store, uid, cid, row, now):
+        raise NoSpeechRefused('lease_active')
     if disposition == 'no_speech' and (speech is None or abs(speech - entry['speech_seconds']) > 1e-6):
         raise NoSpeechRefused('state_changed')
     return uid, cid, speech, audio
@@ -281,10 +331,11 @@ def apply_no_speech(store, plan, approved_digest, storage_client, *, ledger, pac
         raise ValueError('fresh dry-run plan approval required')
     if plan['operation'] != OPERATION or plan['namespace'] != store.namespace or len(plan['entries']) > 128:
         raise ValueError('plan target changed')
+    allowed = ACTIONABLE & frozenset(plan.get('actionable', ACTIONABLE))
     outcomes = Counter()
     for entry in plan['entries']:
         action = entry['disposition']
-        if action not in ACTIONABLE:
+        if action not in allowed or 'row_sha256' not in entry:
             outcomes[action] += 1
             continue
         if not no_speech_terminal_enabled():
@@ -327,8 +378,8 @@ def summary(plan):
         'count': len(plan['entries']),
         'dispositions': dict(sorted(counts.items())),
         'exits': {key: EXITS[key] for key in sorted(counts)},
-        'actionable': sum(n for key, n in counts.items() if key in ACTIONABLE),
-        'skipped': sum(n for key, n in counts.items() if key not in ACTIONABLE),
+        'actionable': sum(1 for entry in plan['entries'] if 'row_sha256' in entry),
+        'skipped': sum(1 for entry in plan['entries'] if 'row_sha256' not in entry),
         'measured_speech_seconds': sum(entry.get('speech_seconds', 0.0) for entry in plan['entries']),
         'measured_audio_seconds': sum(entry.get('audio_seconds', 0.0) for entry in plan['entries']),
         'raw_objects': sum(entry.get('raw_objects', 0) for entry in plan['entries']),

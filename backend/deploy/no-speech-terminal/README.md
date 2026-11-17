@@ -46,6 +46,36 @@ coverage. Historical `no_retained_audio` plans are no longer actionable. Obtain
 a fresh plan only after coverage is established; never weaken proof to drain a
 refusal. No operator execution is authorized by this change.
 
+## Empty rollover stubs (`empty_stub`)
+
+The 2026-11-16 22:06Z listen rollout held dropped mobile captures open with no
+exit (fixed by #25599). Every reconnect then rolled into a new in-progress
+generation that received a first frame but never committed audio.
+
+Such a row is `empty_stub` and takes the same reversible hidden terminal, with
+`speech_seconds=0` and `audio_seconds=0`, when all of the following hold:
+
+- both retained-object listings are empty (`raw-live/` and the legacy/raw
+  chunk listing);
+- the row has exactly the empty shape: received, no committed window
+  (`server_batch_audio_start/end` absent), no `has_content`, `audio_files`,
+  transcript segments or photos;
+- the row has no close barrier, seal or WAL handoff, and no reconnect producer;
+- no recording session holds a live lease (otherwise `lease_active`);
+- the existing candidate refusals pass (stale, batch-owned, consent, no upload
+  tokens, no job).
+
+Apply re-proves every condition against the exact row revision. A late object,
+window or lease refuses the write.
+
+The empty listing is not proof that no bytes exist anywhere. That is why this
+class only hides the row and never deletes a row or an object: the ledger
+undo restores it. David chose hiding these stubs on 2026-11-17.
+
+To run only this class, pass `--only empty_stub` to both the dry-run and the
+apply. The allowlist is part of the plan body, so the reviewed digest binds it,
+and a restricted page never closes `no_speech` rows.
+
 ## Plan, review, approve one page
 
 Use the approved operator environment with the repository backend on `PATH`.
