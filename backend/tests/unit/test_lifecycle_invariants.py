@@ -24,7 +24,14 @@ from tests.support.lifecycle_state_table import (
     STATES,
     ordering_holds,
 )
-from tests.support.lifecycle_ast import EntryPath, definition_fingerprint, entry_deadline_sites, function_node
+from tests.support.lifecycle_ast import (
+    EntryPath,
+    constant_names,
+    definition_fingerprint,
+    entry_deadline_sites,
+    function_node,
+    parsed,
+)
 from utils.conversations.phase import ConversationPhase, EpisodePhase
 
 BACKEND = Path(__file__).resolve().parents[2]
@@ -142,7 +149,22 @@ def module_source(module):
     if not path.is_file():
         return '', ast.Module(body=[], type_ignores=[])
     source = path.read_text()
-    return source, ast.parse(source)
+    return source, parsed(source)
+
+
+@pytest.mark.parametrize(
+    'body',
+    [
+        'if condition:\n    FIELD = "state"\nelse:\n    FIELD = "status"',
+        'def outer():\n    FIELD = "state"\n    def inner():\n        FIELD = "status"',
+        'class Owner:\n    FIELD: str = "state"\n    def method(self):\n        FIELD = "status"',
+        'try:\n    FIELD = "state"\nexcept Exception:\n    FIELD = "status"',
+        'match value:\n    case 1:\n        FIELD = "state"\n    case _:\n        FIELD = "status"',
+    ],
+)
+def test_constant_inventory_retains_all_statement_scopes(body):
+    source = body + '\nPHASE = "queued" if condition else ConversationStatus.completed.value\n'
+    assert constant_names(parsed(source)) == {'FIELD': {'state', 'status'}, 'PHASE': {'queued', 'completed'}}
 
 
 def scope_definitions(nodes):
@@ -179,6 +201,21 @@ def test_function_source_finds_loop_nested_transaction_without_crossing_scopes(m
     assert 'return item' in read('synthetic.py:outer.commit')
     assert read('synthetic.py:outer.hidden') == ''
     assert read('synthetic.py:commit') == ''
+
+
+@pytest.mark.parametrize('outer_deadline', [False, True])
+def test_deadline_probe_never_borrows_or_erases_a_deadline_from_a_nested_scope(outer_deadline):
+    deadline = ", 'lease_until': 123" if outer_deadline else ''
+    nested = "row.pop('lease_until')" if outer_deadline else "row['lease_until'] = 123"
+    source = (
+        "def commit(tx, ref):\n"
+        f"    row = {{'state': 'leased'{deadline}}}\n"
+        "    def unrelated():\n"
+        f"        {nested}\n"
+        "    tx.set(ref, row)\n"
+    )
+    path = EntryPath('synthetic.py', 'commit', 'state', 'leased')
+    assert [stamped for _line, stamped in entry_deadline_sites(source, path, 'lease_until')] == [outer_deadline]
 
 
 def assigned_fields(source):

@@ -54,6 +54,13 @@ def strict(monkeypatch):
     return client
 
 
+@pytest.fixture(scope='module', autouse=True)
+def speaker_evidence_import():
+    # Hydration's real lazy dependency is setup work; import failures still
+    # fail this suite and its cost stays inside the whole-file wall limit.
+    return importlib.import_module('utils.speakers.evidence')
+
+
 def test_two_workers_get_one_lease(strict):
     with ThreadPoolExecutor(max_workers=2) as pool:
         tokens = list(pool.map(lambda _: leases.acquire('synthetic', 'builder', firestore_client=strict), range(2)))
