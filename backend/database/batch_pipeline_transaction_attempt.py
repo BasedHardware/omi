@@ -18,7 +18,7 @@ _DIRECT_READ_KINDS = {
 }
 
 
-def _note_direct_reads(view: Any) -> None:
+def note_direct_reads(view: Any) -> None:
     """Record read kinds on this attempt's view; leave class methods untouched."""
     for name, kind in _DIRECT_READ_KINDS.items():
         method = getattr(view, name)
