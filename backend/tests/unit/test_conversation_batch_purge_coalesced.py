@@ -179,3 +179,49 @@ def test_group_wal_sweep_hands_off_before_metadata_even_with_many_originals(monk
     assert listed == ['c0']
     assert len(plane.objects) == purge.UNIT_MAX_ROWS
     assert plane.erased == []  # WAL units can yield before metadata discovery.
+
+
+def test_group_wal_sweep_resumes_and_erases_both_members_and_new_orphans(monkeypatch):
+    client, plane = seed(monkeypatch, count=2, unmatched=0)
+    members = {'c0': Progress(), 'c1': Progress()}
+    progress = Progress(members)
+    originals = {cid: {f'gs://test/record-wal/{cid}/first#1'} for cid in members}
+    first = {cid: next(iter(uris)) for cid, uris in originals.items()}
+    listed, erased = [], []
+
+    def remaining(uid, cid, *, limit):
+        listed.append(cid)
+        return sorted(originals[cid])[:limit]
+
+    def delete(uid, uri, **kwargs):
+        plane.objects.append(uri)
+        if '/record-wal/' in uri:
+            cid = uri.split('/record-wal/')[1].split('/')[0]
+            assert uri in originals[cid]  # never delete an already-erased generation
+            originals[cid].remove(uri)
+            erased.append(uri)
+
+    from utils.batch_pipeline import retention
+
+    monkeypatch.setattr(purge, 'conversation_objects', remaining)
+    monkeypatch.setattr(retention, 'delete_batch_object', delete)
+    progress.stop = lambda p: p.checkpoints >= 1
+    with pytest.raises(purge.PurgeCheckpointed):
+        purge.purge_conversations(UID, members, progress, firestore_client=client)
+    assert erased == [first['c0']] and originals['c1']
+    assert plane.erased == []
+    # Re-list c0 too: an orphan arriving between runs is still owed even though
+    # the previous generation's original was deleted before the interruption.
+    late = 'gs://test/record-wal/c0/crash-orphan#2'
+    originals['c0'].add(late)
+    progress.stop = None
+    listed.clear()
+    purge.purge_conversations(UID, members, progress, firestore_client=client)
+    assert set(listed) == set(members) and not any(originals.values())
+    assert set(erased) == {*first.values(), late} and len(erased) == 3
+    assert progress.position['ns'] == len(purge.NAMESPACES)
+    assert all(not member.segments(NS) for member in members.values())
+    for n in range(2):
+        assert plane.doc('artifacts', f'a-{n}') is None
+        assert plane.doc('artifacts', f'parked-{n}') is None
+        assert plane.doc('intakes', f'i-{n}') is None

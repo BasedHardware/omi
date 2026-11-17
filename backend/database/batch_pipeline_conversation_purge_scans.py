@@ -166,7 +166,7 @@ def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] 
     if leader:
         leader_row = _ref(client, leader).get().to_dict() or {}
         scan = leader_row.get('owner_scan') or {}
-        if scan.get('epoch') == row.get('scan_epoch'):
+        if scan.get('epoch') is not None and scan.get('epoch') == row.get('scan_epoch'):
             if not ready:
                 handback(client, leader, scan['epoch'], scan['token'])
                 return 'legacy', None
@@ -535,9 +535,15 @@ def run_job(
             try:
                 progress.finish(outcome)
             except jobs.RunSuperseded:
-                handback(client, job, scan['epoch'], scan['token'])
-            if outcome == 'busy':
-                return 'busy'
+                try:
+                    handback(client, job, scan['epoch'], scan['token'])
+                except Exception:
+                    pass  # Preserve the original failure; finite leases permit redrive.
+            except Exception:
+                pass  # As in the legacy runner, failed settlement must not hide the original error.
+            else:
+                if outcome == 'busy':
+                    return 'busy'
             raise
         logger.info('event=conversation_batch_purge_owner_scan_completed members=%d count=1', len(scan['members']))
         return 'purged'

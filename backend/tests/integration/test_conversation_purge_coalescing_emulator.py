@@ -232,10 +232,10 @@ def test_old_worker_takeover_invalidates_scan_but_preserves_other_member(world):
     scans.handback(world.client, leader, scan['epoch'], scan['token'])
     row = world.client.collection(jobs.COLLECTION).document(follower).get().to_dict()
     assert row['run_token'] == legacy_token  # old binary retains its own lease
-    assert (
-        jobs.finish_run(follower, row['generation'], legacy_token, 'checkpointed', firestore_client=world.client)
-        is False
-    )
+    jobs.finish_run(follower, row['generation'], legacy_token, 'checkpointed', firestore_client=world.client)
+    settled = world.client.collection(jobs.COLLECTION).document(follower).get().to_dict()
+    assert settled['last_outcome'] == 'checkpointed' and settled['run_token'] is None
+    assert settled['due_at'] <= jobs._now()
     _seed(world, ['one', 'two'])
     for job in (leader, follower):
         row = world.client.collection(jobs.COLLECTION).document(job).get().to_dict()
@@ -282,6 +282,22 @@ def test_max_group_bound_and_stale_handback_cannot_revoke_new_token(world):
     assert successor['token'] != scan['token']
     assert not scans.handback(world.client, leader, scan['epoch'], scan['token'])
     assert world.client.collection(jobs.COLLECTION).document(leader).get().to_dict()['run_token'] == successor['token']
+
+
+def test_delivered_leader_outside_first_candidate_page_still_seals_a_bounded_group(world):
+    ids = [world.arm(f'overflow-{n}') for n in range(scans.MAX_MEMBERS + 1)]
+    leader = max(ids)  # default name order places it beyond the first limit(16)
+    assert leader not in {snapshot.id for snapshot in scans.owner_candidates(world.uid, firestore_client=world.client)}
+    generation = _dispatch(world, leader)
+    status, scan = scans._claim(world.client, leader, generation)
+    assert status == 'run' and leader in scan['members']
+    assert len(scan['members']) == scans.MAX_MEMBERS
+    outside = set(ids) - scan['members'].keys()
+    assert len(outside) == 1
+    excluded = world.client.collection(jobs.COLLECTION).document(outside.pop()).get().to_dict()
+    assert not excluded.get('scan_epoch') and not jobs.lease_held(excluded)
+    assert scans.handback(world.client, leader, scan['epoch'], scan['token'])
+    assert all(world.client.collection(jobs.COLLECTION).document(job).get().exists for job in ids)
 
 
 def test_all_phases_required_and_missing_tombstone_revokes_group(world):

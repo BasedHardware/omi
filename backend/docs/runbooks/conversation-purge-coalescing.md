@@ -25,6 +25,9 @@ consumers read it. It is separate from member obligations and has no due work.
 markers refuse coalescing and execute legacy purges. Read errors retry the task.
 The marker is re-read transactionally at seal, resume, every unit/checkpoint and
 completion. Revocation or expiry hands an active group back with its journals.
+The read-only `scripts/complete_half_deleted_conversations.py` diagnostic also
+counts this collection; it excludes underscore-prefixed control document IDs
+from pending-obligation totals (real obligations use SHA-256 hex IDs).
 This readiness requirement applies even while the default-on kill switch is on.
 Its read budget is one exact-document lookup at admission, plus one per
 enrollment/authority transaction (seal/resume, unit, checkpoint, journal chunk,

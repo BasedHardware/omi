@@ -159,3 +159,33 @@ def test_unreadable_readiness_retries_instead_of_asserting_consumer_compatibilit
     with pytest.raises(RuntimeError, match='synthetic control read failed'):
         scans._claim(v.client, v.leader, 2)
     assert v.client.rows == before
+
+
+def test_dangling_leader_with_null_epoch_falls_back_without_inheriting_a_cursor(versions):
+    v = versions
+    v.client.rows[(jobs.COLLECTION, v.follower)]['scan_epoch'] = None
+    v.client.rows[(jobs.COLLECTION, v.leader)]['owner_scan'] = None
+    before = deepcopy(v.client.rows)
+    assert scans._claim(v.client, v.follower, 2) == ('legacy', None)
+    assert v.client.rows == before
+
+
+@pytest.mark.parametrize('outcome', ['failed', 'busy'])
+@pytest.mark.parametrize('superseded', [False, True])
+def test_failed_settlement_preserves_original_task_error(monkeypatch, versions, outcome, superseded):
+    v = versions
+    original = RuntimeError('original destructive-unit failure')
+    replacement = jobs.RunSuperseded() if superseded else RuntimeError('settlement failed')
+    progress = SimpleNamespace(check_authority=Mock(), finish=Mock(side_effect=replacement))
+    monkeypatch.setattr(scans, '_claim', lambda *a: ('run', v.scan))
+    monkeypatch.setattr(scans, 'ScanProgress', lambda *a, **k: progress)
+    monkeypatch.setattr(scans.legal_holds, 'assert_account_deletion_permitted', lambda uid: None)
+    monkeypatch.setattr(scans, 'purge_conversations', Mock(side_effect=original))
+    monkeypatch.setattr(scans.jobs, 'lost_gate_to_peer', lambda *a: outcome == 'busy')
+    handback = Mock(side_effect=RuntimeError('handback also failed'))
+    monkeypatch.setattr(scans, 'handback', handback)
+    with pytest.raises(RuntimeError) as caught:
+        scans.run_job(v.leader, 2, firestore_client=v.client)
+    assert caught.value is original
+    progress.finish.assert_called_once_with(outcome)
+    assert handback.call_count == int(superseded)
