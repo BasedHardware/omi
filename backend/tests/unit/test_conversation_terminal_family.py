@@ -14,6 +14,10 @@ from utils.conversations import lifecycle, terminal_relevance
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.relevance import RelevanceDecision
 from utils.conversations.relevance_rules import RULES_VERSION
+
+# persist_processed_conversation lazily imports speaker_resolution_inputs on its
+# first call; load it at collection so the first case's CPU guard measures the test.
+import utils.conversations.speaker_resolution_inputs  # noqa: E402,F401
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 
 PATH = ('users', 'synthetic', 'conversations', 'capture')
