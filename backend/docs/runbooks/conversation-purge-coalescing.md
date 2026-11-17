@@ -39,8 +39,13 @@ Only the leader has `owner_scan` (epoch, token, immutable member identities,
 generations, arm revisions and cursor). All members use the existing generation,
 run_token and finite lease fields. Pending named tasks are invalidated by the
 followers' new generations. Enrollment refuses live leases and nonempty legacy
-progress. Existing partial runs finish on the legacy path; their cursors and
-segment journals never move. Candidate lookup reads at most 16 owner obligations;
+progress. Existing partial runs finish on the legacy path. Legacy `progress_arm` binds
+the cursor to its `armed_at`/`arm_revision` at claim. Each checkpoint, unit and
+completion transaction verifies that arm; a re-arm preserves the obligation and
+segment journals, clears the stale cursor and makes the next generation due.
+A cursor without an arm stamp is conservatively rewound once at legacy claim;
+a matching stamped cursor resumes intact. This also fixes the pre-existing
+legacy re-arm completion gap on main, including switch-off/readiness fallback. Candidate lookup reads at most 16 owner obligations;
 a singleton takes the legacy path. Multiple waves/overflow require more groups.
 
 The two namespaces' owner pages, job-result lookups and owner-ID artifact fallback

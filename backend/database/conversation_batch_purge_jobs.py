@@ -116,6 +116,11 @@ def arm_fields(uid: str, conversation_id: str, now: datetime | None = None) -> d
     }
 
 
+def _arm(row: dict[str, Any]) -> dict[str, Any]:
+    # armed_at also detects re-arms from producers predating arm_revision.
+    return {'armed_at': row.get('armed_at'), 'arm_revision': row.get('arm_revision')}
+
+
 def _in_transaction(client: Any, body: Callable[[Any], Any]) -> Any:
     @firestore.transactional
     def run(transaction):
@@ -252,6 +257,15 @@ def begin_run(
             return 'in_progress', row, None
         lease_until = current + timedelta(seconds=LEASE_SECONDS)
         due = row.get('due_at')
+        progress_fields = {}
+        if collection == COLLECTION:
+            arm = _arm(row)
+            # An unversioned legacy cursor cannot prove which arm it covered.
+            # Rewind discovery once; segment journals remain owed and untouched.
+            if row.get('progress_arm') != arm:
+                row['progress'] = {}
+            row['progress_arm'] = arm
+            progress_fields = {'progress': row.get('progress') or {}, 'progress_arm': arm}
         transaction.update(
             ref,
             {
@@ -259,6 +273,7 @@ def begin_run(
                 'lease_generation': generation,
                 'lease_until': lease_until,
                 'due_at': lease_until if due is None or due < lease_until else due,
+                **progress_fields,
             },
         )
         return 'run', row, token
@@ -289,6 +304,23 @@ def finish_run(
             return False
         row = snapshot.to_dict() or {}
         if int(row.get('generation') or 0) != generation or row.get('run_token') != token:
+            return False
+        if collection == COLLECTION and row.get('progress_arm') != _arm(row):
+            # The owner still owes the new arm. Never let an obsolete run
+            # complete it or publish a cursor beyond newly added rows.
+            transaction.update(
+                ref,
+                {
+                    'progress': {},
+                    'progress_arm': _arm(row),
+                    'run_token': None,
+                    'lease_generation': None,
+                    'lease_until': None,
+                    'due_at': current,
+                    'attempts': 0,
+                    'last_outcome': 'rearmed',
+                },
+            )
             return False
         if outcome == 'completed':
             transaction.delete(ref)
@@ -342,6 +374,8 @@ class RunProgress:
         snapshot = self._ref().get(transaction=transaction)
         row = (snapshot.to_dict() or {}) if snapshot.exists else {}
         if int(row.get('generation') or 0) != self.generation or row.get('run_token') != self.token:
+            raise RunSuperseded()
+        if row.get('progress_arm') != _arm(row):
             raise RunSuperseded()
 
     @staticmethod
@@ -484,6 +518,7 @@ def run_job(
             if _owes_segments(client, job):
                 raise RuntimeError('batch purge finished with segment erasure still recorded')
         except RunSuperseded:
+            finish('checkpointed')  # re-arms rewind and redrive; another owner remains untouched
             return 'superseded'
         except LegalHoldActive:
             finish('held')

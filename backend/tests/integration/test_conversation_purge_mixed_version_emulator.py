@@ -3,6 +3,7 @@
 No cloud fallback. These tests inherit the isolated synthetic project fixture.
 """
 
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import timedelta
 
@@ -306,3 +307,60 @@ def test_frozen_old_rearm_gap_is_why_mixed_rolls_must_not_seal(monkeypatch, worl
     assert _run(world, follower, row['generation']) == 'purged'
     assert remaining.get().to_dict()['projection_state'] == 'erased'
     _assert_erased(world, cids)
+
+
+@pytest.mark.parametrize('admission', ['unready', 'switch_off'])
+@pytest.mark.parametrize('boundary', ['checkpoint', 'unit', 'completion'])
+def test_new_legacy_rearm_behind_cursor_is_redriven_without_early_completion(monkeypatch, world, admission, boundary):
+    """A real fallback traversal passes the new row before its obligation is re-armed."""
+    if admission == 'unready':
+        _marker(world).delete()
+    else:
+        monkeypatch.setenv(scans.SWITCH, 'off')
+    leader = world.arm('one')
+    _seed(world, ['one'])
+    generation = _dispatch(world, leader)
+    rearmed = []
+    original_finish = jobs.finish_run
+
+    def rearm():
+        world.arm('one')
+        remaining = world.client.collection(f'{purge.NAMESPACES[0]}_results').document('behind-cursor')
+        remaining.set({'owner_key': world.key, 'conversation_id': 'one', 'segment_id': 'behind-cursor'})
+        rearmed.append(remaining)
+
+    def shadow(namespace, uid):
+        if namespace == purge.NAMESPACES[0] and not rearmed and boundary == 'checkpoint':
+            rearm()
+        return 0
+
+    def finish(*args, **kwargs):
+        if args[3] == 'completed' and not rearmed and boundary == 'completion':
+            rearm()  # after every traversal checkpoint, immediately before completion's transaction
+        return original_finish(*args, **kwargs)
+
+    original_unit = jobs.RunProgress.unit
+
+    @contextmanager
+    def unit(self):
+        changed = boundary == 'unit' and not rearmed and self.position.get('ns', 0) >= 1
+        if changed:
+            rearm()  # outside the previous unit, just before the next unit transaction
+        with original_unit(self) as authority:
+            assert not changed, 're-armed run entered destructive work'
+            yield authority
+
+    monkeypatch.setattr(jobs.RunProgress, 'unit', unit)
+    monkeypatch.setattr(purge, 'purge_jobstore_owner', shadow)
+    monkeypatch.setattr(jobs, 'finish_run', finish)
+    assert _run(world, leader, generation) == 'superseded'
+    row = _row(world, leader)
+    assert row['last_outcome'] == 'rearmed' and row['progress'] == {}
+    assert row['lease_until'] is None and row['run_token'] is None
+    assert rearmed[0].get().to_dict()['conversation_id'] == 'one'
+    next_generation = _dispatch(world, leader)
+    assert next_generation == generation + 1
+    assert _run(world, leader, next_generation) == 'purged'
+    assert not _row(world, leader)
+    assert rearmed[0].get().to_dict()['projection_state'] == 'erased'
+    _assert_erased(world, ['one'])

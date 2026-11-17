@@ -190,17 +190,19 @@ def purge_conversations(
     firestore_client: Any = None,
     delete_uri: Callable[[str, str], None] | None = None,
     clock: Callable[[], float] = time.monotonic,
+    check_tombstones: bool = True,
 ) -> int:
     """One owner traversal for sealed, independently authorized members.
 
     Each member keeps its own durable segment journal. Associations are saved
     before the shared cursor, and every dependent/parked page finishes for the
     entire group before any binding is removed. The single-member path retains
-    its atomic association+cursor checkpoint.
+    its atomic association+cursor checkpoint. A coalesced caller may skip the
+    precheck only after transactionally checking every member tombstone.
     """
     client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
     rpc_deadline.bind_firestore_client(client)  # erasures inside units honour the unit deadline
-    for conversation_id in members:
+    for conversation_id in members if check_tombstones else ():
         tombstone = (
             client.collection('users').document(uid).collection('deleted_conversations').document(conversation_id)
         )

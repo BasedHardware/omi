@@ -164,7 +164,7 @@ def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] 
     ready = enabled() and consumers_ready(client)
     leader = row.get('scan_leader')
     if leader:
-        leader_row = _ref(client, leader).get().to_dict() or {}
+        leader_row = row if leader == job else _ref(client, leader).get().to_dict() or {}
         scan = leader_row.get('owner_scan') or {}
         if scan.get('epoch') is not None and scan.get('epoch') == row.get('scan_epoch'):
             if not ready:
@@ -516,7 +516,7 @@ def run_job(
             members = {
                 member['conversation_id']: _MemberProgress(progress, key) for key, member in scan['members'].items()
             }
-            purge_conversations(scan['uid'], members, progress, clock=clock)
+            purge_conversations(scan['uid'], members, progress, clock=clock, check_tombstones=False)
             if any(progress.pending_segments(namespace, 1) for namespace in NAMESPACES):
                 raise RuntimeError('owner scan finished with segment erasure still recorded')
             if not progress.finish('completed'):

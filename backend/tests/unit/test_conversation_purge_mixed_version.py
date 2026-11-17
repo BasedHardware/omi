@@ -189,3 +189,64 @@ def test_failed_settlement_preserves_original_task_error(monkeypatch, versions, 
     assert caught.value is original
     progress.finish.assert_called_once_with(outcome)
     assert handback.call_count == int(superseded)
+
+
+@pytest.mark.parametrize('boundary', ['checkpoint', 'unit', 'segments_done', 'completion'])
+@pytest.mark.parametrize('producer', ['new', 'old'])
+def test_new_legacy_run_fences_rearms_at_every_write_boundary(monkeypatch, versions, boundary, producer):
+    from contextlib import nullcontext
+
+    v = versions
+    ref = jobs.job_ref(v.client, 'owner', 'one')
+    v.client.rows[(jobs.COLLECTION, v.leader)] = jobs.arm_fields('owner', 'one') | {'generation': 2}
+    claim, row, token = jobs.begin_run(v.leader, 2, firestore_client=v.client)
+    assert claim == 'run'
+    progress = jobs.RunProgress(v.client, v.leader, 2, token, 'owner', row.get('progress'))
+    progress.checkpoint({'ns': 1}, add_segments=('namespace', ['durable-segment']))
+    saved = deepcopy(v.client.rows)
+    arm = (
+        jobs.arm_fields('owner', 'one')
+        if producer == 'new'
+        else {'armed_at': row['armed_at'] + timedelta(seconds=1), 'due_at': jobs._now()}
+    )
+    v.client.rows[ref.path].update(arm)
+    monkeypatch.setattr(jobs.legal_holds, 'bounded_destructive_unit', lambda *a, **k: nullcontext(None))
+    if boundary == 'completion':
+        assert not jobs.finish_run(v.leader, 2, token, 'completed', firestore_client=v.client)
+    else:
+        with pytest.raises(jobs.RunSuperseded):
+            if boundary == 'checkpoint':
+                progress.checkpoint({'ns': 2}, add_segments=('namespace', ['not-authorized']))
+            elif boundary == 'segments_done':
+                progress.segments_done('namespace', ['durable-segment'])
+            else:
+                with progress.unit():
+                    pytest.fail('stale arm entered destructive work')
+        assert v.client.rows[ref.path]['progress'] == {'ns': 1}
+        assert not jobs.finish_run(v.leader, 2, token, 'checkpointed', firestore_client=v.client)
+    current = ref.get().to_dict()
+    assert current['last_outcome'] == 'rearmed' and current['progress'] == {}
+    assert current['lease_until'] is None and current['run_token'] is None
+    assert {k: r for k, r in v.client.rows.items() if len(k) > 2} == {k: r for k, r in saved.items() if len(k) > 2}
+    assert jobs.claim_dispatch(v.leader, firestore_client=v.client)[0] == 3
+    claim, next_row, _ = jobs.begin_run(v.leader, 3, firestore_client=v.client)
+    assert claim == 'run' and next_row['progress'] == {}
+
+
+@pytest.mark.parametrize('stamp', ['matching', 'older', 'absent'])
+def test_legacy_claim_resumes_only_progress_bound_to_its_current_arm(versions, stamp):
+    v = versions
+    arm = jobs.arm_fields('owner', 'one')
+    cursor = {'ns': 1, 'phase': 'discover', 'table': 1, 'after': 'passed'}
+    row = {**arm, 'generation': 2, 'progress': cursor}
+    if stamp != 'absent':
+        row['progress_arm'] = {key: arm[key] for key in ('armed_at', 'arm_revision')}
+        if stamp == 'older':
+            row['progress_arm']['arm_revision'] = 'earlier-arm'
+    v.client.rows[(jobs.COLLECTION, v.leader)] = row
+    journal = jobs.segment_ref(v.client, v.leader, 'namespace', 'durable')
+    journal.create({'namespace': 'namespace', 'segment_id': 'durable'})
+    claim, claimed, _ = jobs.begin_run(v.leader, 2, firestore_client=v.client)
+    assert claim == 'run'
+    assert claimed['progress'] == (cursor if stamp == 'matching' else {})
+    assert journal.get().exists
