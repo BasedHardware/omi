@@ -8,6 +8,7 @@ from config.episodes import home_neutral_minimum_titles_enabled
 
 from utils.conversations.deterministic_minimum import fallback_title, first_sentence, truncate_on_word_boundary
 from utils.conversations.summary_delivery import field, present
+from utils.summary_quality import is_fallback_title, notes_pending
 
 
 def apply_user_title(row: dict[str, Any], user_title: str | None) -> None:
@@ -31,6 +32,25 @@ def summary_owed(row: Mapping[str, Any]) -> bool:
         and not row.get('summary_completed_at')
         and not row.get('summary_output_present')
     )
+
+
+def placeholder_title_wire(row: dict[str, Any]) -> dict[str, Any]:
+    """Serve a row that carries only a deterministic placeholder as untitled.
+
+    Capture stubs written 2026-11-16..17 were stamped "Discussion notes" before
+    any notes existed. Read-only: clients keep their own untitled presentation,
+    a user title or any summary keeps the stored title, and nothing is rewritten.
+    """
+    structured = row.get('structured')
+    if not isinstance(structured, Mapping):
+        return row
+    if (
+        not is_fallback_title(structured.get('title'))
+        or str(row.get('user_title') or '').strip()
+        or not notes_pending(structured)
+    ):
+        return row
+    return {**row, 'structured': {**structured, 'title': ''}}
 
 
 def is_deferred_preview_title(row: Any) -> bool:

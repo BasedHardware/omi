@@ -22,6 +22,7 @@ from config.refactor_modes import default_on
 from config.summary_guarantee import deadline_seconds
 from config.policy import FirstSummaryPolicy
 from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
+from utils.summary_quality import valid_title
 
 Row = dict[str, Any]
 PROJECTION_DEBT_ENV = 'SUMMARY_PROJECTION_DEBT_ENABLED'
@@ -259,7 +260,9 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     elif not isinstance(structured, dict):
         # Preserve non-dict structured data; only a dict can carry provenance.
         return False
-    if str(structured.get('title') or '').strip() or present(structured):
+    # A deterministic placeholder is not a title: a row that carries only one
+    # has no notes and still owes its first summary.
+    if valid_title(structured.get('title')) or present(structured):
         return False
     current = time.time() if now is None else now
     # Evaluate the exact eligibility the repair will use, with the provenance

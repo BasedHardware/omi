@@ -39,7 +39,14 @@ from threading import Lock
 import utils.other.hume as hume
 from models.audio_file import AudioFile
 from models.structured import Structured
-from utils.summary_quality import clean_structured, stable_title, content_units, title_basis
+from utils.summary_quality import (
+    clean_structured,
+    stable_title,
+    content_units,
+    title_basis,
+    notes_pending,
+    valid_title,
+)
 from utils.conversations.llm_input_dedupe import NOTES_OUTPUT_HASH, output_fingerprint
 from database.audio_file_projection import finalize_audio_file_group as _finalize_audio_file_group
 from models.note_claims import claim_references_segment
@@ -1407,12 +1414,21 @@ def _quality_processing_notes(uid: str, data: dict, existing: Mapping[str, Any])
     generated = data.get('structured')
     if not isinstance(generated, dict) or data.get('discarded'):
         return
-    cleaned = clean_structured(generated)
     user_title = effective_user_title(existing.get('user_title'))
-    if user_title is not None:
+    prior = title_for_stability(existing)
+    if user_title is None and not valid_title(prior) and notes_pending(generated):
+        # A capture stub or raw completion has no notes to title. A fallback
+        # title here would present the row as finished and keep the batch
+        # projection from registering its first-summary obligation. A stored
+        # stand-in (server minimum) stays; a stored placeholder is cleared.
+        stored = existing.get('structured')
+        stored_title = stored.get('title') if isinstance(stored, Mapping) else None
+        cleaned = {**generated, 'title': stored_title if valid_title(stored_title) else ''}
+    elif user_title is not None:
+        cleaned = clean_structured(generated)
         cleaned['title'] = user_title
     else:
-        prior = title_for_stability(existing)
+        cleaned = clean_structured(generated)
         units = data.get('content_word_units')
         if units is None:
             units = content_units(data.get('transcript_segments', []))
