@@ -52,8 +52,24 @@ version fields alone cannot trigger release. Once readable, it uses the
 existing pending reset and projection_redriven_at fence. The ordinary pending
 sweep projects the retained result and follow-ups refresh derived content. Late
 assignment never moves the owner's watermark backward. Existing release attempt,
-operator-intent and privacy fences remain in force; a manual reviewed redrive is
-still available under the existing recovery tooling. No result bytes are edited.
+operator-intent and privacy fences remain in force. The pre-marker residual
+(no marker on either job or result) requires a later reader fix before either
+automatic release or an operator redrive can succeed. This PR does not teach
+the current reader to assign that unproven format. Once a compatible reader
+understands the retained result, existing release/redrive tooling applies;
+operator=True and administrative version stamps alone do not confer support.
+No result bytes are edited to recover it.
+
+A duplicate canonical upload may claim the same source range while the original
+is held. Release checks that source owner in the reset transaction and keeps a
+conflicting row held, including when the claim's expiry timestamp is past. It
+does not manufacture ownership or reset the row to an endlessly refused pending
+assignment. A compatible reader and the ordinary source/identity/privacy fences
+must all permit recovery; a source conflict needs reviewed resolution. The
+owner's later chain and the retained result/audio remain intact meanwhile.
+Assignment still rechecks ownership: a new competing claim after the reset can
+refuse late assignment and require reviewed resolution. This change never
+relaxes that fence or promises delivery through a later privacy/ownership block.
 
 ## Control and verification
 

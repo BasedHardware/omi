@@ -745,3 +745,10 @@ uses the existing pending redrive behind the watermark. Assignment sorts late
 text by capture timestamp; it never moves the watermark backward. No new TTL,
 query, index or alert is introduced. See
 `backend/docs/listen_pusher_pipeline/changes/2026-11-18-projection-head-bound.md`.
+
+An unmarked-job residual needs a compatible reader fix before either automatic
+or operator release can succeed; administrative versions and operator intent do
+not establish format support. Protocol-hold release also rechecks the canonical
+source owner before resetting to pending. A conflicting duplicate claim keeps
+the row held, including a past-expiry claim, until ordinary ownership permits
+recovery. No source claim is rewritten to make a redrive pass.

@@ -22,6 +22,7 @@ from google.cloud import firestore
 
 from database.batch_pipeline_projection_protocol import normalized_binding, source_reader_marked
 from database.batch_pipeline_projection_protocol_hold import PROTOCOL_HOLD_REASON
+from database.batch_pipeline_source_reuse import receipt_id as source_receipt_id
 from database.batch_pipeline_projection_finish import projection_finish_state_fields
 from database.batch_pipeline_projection import assignment_held_without_recovery, OPERATOR_INTENTS
 from database.batch_pipeline_shadow_hook import mirror_refresh
@@ -231,6 +232,23 @@ class ProjectionReleaseStore:
             # for the original source protocol; do not cycle a refused row.
             if protocol_hold and not source_reader_marked(entry, job):
                 return False
+            if protocol_hold:
+                source_key = job.get('source_reuse_key')
+                if not source_key:
+                    return False
+                source = (
+                    self.store.ref('projections', source_receipt_id(source_key)).get(transaction=transaction).to_dict()
+                    or {}
+                )
+                # Another canonical upload may have claimed this range while
+                # this result was held. Preserve the hold until ordinary source
+                # ownership permits assignment; expiry alone is not that proof.
+                if source and (
+                    source.get('owner_id') != job.get('owner_id')
+                    or source.get('privacy_generation') != job.get('privacy_generation')
+                    or source.get('segment_id') != segment_id
+                ):
+                    return False
             # Multipart summaries can remain ambiguous holds after a privacy
             # refusal. Fence every receipt before either expiry path or release.
             if projection_restorable_cap_expiry_enabled() and (

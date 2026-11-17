@@ -1,6 +1,7 @@
 """11-16 replay: real prepare, quarantine, assignment, owner walk and release fences."""
 
 from dataclasses import asdict
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -19,6 +20,7 @@ from database.batch_pipeline_projection_protocol_hold import (
     PROTOCOL_REFUSAL_SECONDS,
     bound_protocol_head,
 )
+from database.batch_pipeline_projection_protocol import missing_canonical_source_marker
 from database.sync_ledger import sync_content_ledger_ref
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import chunk
@@ -208,8 +210,34 @@ def test_unmarked_job_residual_is_bounded_by_current_reader(incident, monkeypatc
     assert walk(f).advanced == []
     f.now[0] += PROTOCOL_REFUSAL_SECONDS
     assert walk(f).advanced == ['head', 'next', 'tail']
-    assert not releases.ProjectionReleaseStore(f.store).release('head', f.now[0])
+    release = releases.ProjectionReleaseStore(f.store)
+    assert not release.release('head', f.now[0])
+    assert not release.release('head', f.now[0], operator=True)
     assert f.row('head')['projection_state'] == 'quarantine_held'
+    retained_result = dict(f.row('head')['result'])
+
+    def compatible_reader(entry, job):
+        # Stand in for a later reader that understands this synthetic retained
+        # format. Administrative versions and operator=True are not that proof.
+        return f.supported(entry, job) or (
+            missing_canonical_source_marker(entry, job) and entry.get('result') == retained_result
+        )
+
+    monkeypatch.setattr(sessions, 'source_reader_marked', compatible_reader)
+    monkeypatch.setattr(releases, 'source_reader_marked', compatible_reader)
+    assert release.release('head', f.now[0] + 1)
+    job, entry, binding = f.store.read('head')
+    f.projector._persist_read('head', job, entry, binding)
+    assert f.watermark() == 'tail'
+    assert f.row('head')['projection_state'] == 'persisted'
+    assert f.row('head')['result'] == retained_result
+    assert 'source_reuse_version' not in f.client.rows[(f'{NS}_jobs', 'head')]
+    receipt = f.row('head')['projection']
+    row = f.client.rows[('users', OWNER, 'conversations', receipt['conversation_id'])]
+    segments = conversations_db.decode_transcript_segments_verified(
+        OWNER, row['transcript_segments'], row.get('transcript_segments_compressed', False)
+    )
+    assert [s['text'].split()[1] for s in segments] == ['head', 'next', 'tail']
 
 
 @pytest.mark.parametrize(
@@ -284,6 +312,33 @@ def test_sweep_also_bounds_the_refused_head(incident):
     assert f.projector.sweep()['blocked'] == 1
     assert f.watermark() == 'head'
     assert walk(f).advanced == ['next', 'tail']
+
+
+@pytest.mark.parametrize(
+    'field,value', [('owner_id', 'foreign'), ('privacy_generation', 1), ('segment_id', 'duplicate')]
+)
+def test_release_retains_hold_when_source_ownership_changed(incident, monkeypatch, field, value):
+    f = incident
+    assert walk(f).advanced == []
+    f.now[0] += PROTOCOL_REFUSAL_SECONDS
+    assert walk(f).advanced == ['head', 'next', 'tail']
+    monkeypatch.setattr(sessions, 'source_reader_marked', f.supported)
+    monkeypatch.setattr(releases, 'source_reader_marked', f.supported)
+    f.store.ref('projections', 'source-synthetic-key').create(
+        {
+            'owner_id': OWNER,
+            'privacy_generation': 0,
+            'segment_id': 'head',
+            'expires_at': datetime.fromtimestamp(f.now[0] - 1, timezone.utc),
+            field: value,
+        }
+    )
+    release = releases.ProjectionReleaseStore(f.store)
+    assert not release.release('head', f.now[0] + 1)
+    assert not release.release('head', f.now[0] + 1, operator=True)
+    assert f.row('head')['projection_state'] == 'quarantine_held'
+    assert f.client.rows[(f'{NS}_jobs', 'head')]['recovery_state'] == 'held'
+    assert f.watermark() == 'tail'
 
 
 def test_post_commit_observation_uses_fresh_age_despite_stale_hint_and_shadow_failure(incident, monkeypatch, caplog):
