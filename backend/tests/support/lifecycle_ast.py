@@ -104,12 +104,19 @@ def constant_names(tree):
         return set()
 
     result = {}
-    for node in ast.walk(tree):
+    pending = [tree]
+    while pending:
+        node = pending.pop()
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            values = strings(node.value)
             for target in targets:
-                if isinstance(target, ast.Name) and strings(node.value):
-                    result.setdefault(target.id, set()).update(strings(node.value))
+                if isinstance(target, ast.Name) and values:
+                    result.setdefault(target.id, set()).update(values)
+        # Assign/AnnAssign are statements: none can occur inside an expression.
+        # Keep traversing every statement scope/control-flow body, but avoid
+        # rescanning RHS calls, decorators and annotations across whole modules.
+        pending.extend(child for child in ast.iter_child_nodes(node) if not isinstance(child, ast.expr))
     return result
 
 

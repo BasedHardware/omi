@@ -24,7 +24,14 @@ from tests.support.lifecycle_state_table import (
     STATES,
     ordering_holds,
 )
-from tests.support.lifecycle_ast import EntryPath, definition_fingerprint, entry_deadline_sites, function_node
+from tests.support.lifecycle_ast import (
+    EntryPath,
+    constant_names,
+    definition_fingerprint,
+    entry_deadline_sites,
+    function_node,
+    parsed,
+)
 from utils.conversations.phase import ConversationPhase, EpisodePhase
 
 BACKEND = Path(__file__).resolve().parents[2]
@@ -142,7 +149,22 @@ def module_source(module):
     if not path.is_file():
         return '', ast.Module(body=[], type_ignores=[])
     source = path.read_text()
-    return source, ast.parse(source)
+    return source, parsed(source)
+
+
+@pytest.mark.parametrize(
+    'body',
+    [
+        'if condition:\n    FIELD = "state"\nelse:\n    FIELD = "status"',
+        'def outer():\n    FIELD = "state"\n    def inner():\n        FIELD = "status"',
+        'class Owner:\n    FIELD: str = "state"\n    def method(self):\n        FIELD = "status"',
+        'try:\n    FIELD = "state"\nexcept Exception:\n    FIELD = "status"',
+        'match value:\n    case 1:\n        FIELD = "state"\n    case _:\n        FIELD = "status"',
+    ],
+)
+def test_constant_inventory_retains_all_statement_scopes(body):
+    source = body + '\nPHASE = "queued" if condition else ConversationStatus.completed.value\n'
+    assert constant_names(parsed(source)) == {'FIELD': {'state', 'status'}, 'PHASE': {'queued', 'completed'}}
 
 
 def scope_definitions(nodes):

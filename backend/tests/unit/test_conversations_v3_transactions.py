@@ -7,6 +7,7 @@ from database import conversations_v3_processing as writers
 from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
+import importlib
 
 import pytest
 
@@ -17,6 +18,16 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, St
 AT = datetime.now(timezone.utc)
 R = ('users', 'synthetic', 'conversations', 'r')
 L = ('users', 'synthetic', 'conversation_v3_leases', 'builder')
+
+
+@pytest.fixture(scope='module', autouse=True)
+def projection_dependencies():
+    # Reconcile lazily loads these real dependencies at projection commit and
+    # speaker hydration. Prepare them in setup so the call CPU guard measures
+    # the concurrent replay, while import failures still fail the suite and
+    # their cost remains inside test.sh's whole-file wall limit.
+    importlib.import_module('utils.conversations.lifecycle')
+    importlib.import_module('utils.speakers.evidence')
 
 
 @pytest.fixture
