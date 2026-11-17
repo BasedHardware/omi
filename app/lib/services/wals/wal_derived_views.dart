@@ -47,6 +47,127 @@ class WalDerivedViews {
       w.addViewChangeListener(_changed);
       _apply(w);
     }
+    _source = wals is List<Wal> ? wals : null;
+  }
+
+  /// The last adopted snapshot, when it was a list: lets [sync] recognise the
+  /// common append-only change with pointer comparisons alone.
+  List<Wal>? _source;
+
+  /// Adopts a new inventory snapshot without rebuilding unchanged rows.
+  ///
+  /// A capture flush adds one row to an index that can hold ~100k synced
+  /// recordings; constructing fresh views for it cost seconds of UI-isolate
+  /// time per flush. This pass does only identity lookups for retained rows
+  /// and the full per-row work for added or removed ones. Every selector
+  /// afterwards equals a fresh `WalDerivedViews(wals)` over the same list.
+  void sync(Iterable<Wal> wals) {
+    final previous = _source;
+    _source = wals is List<Wal> ? wals : null;
+    // The same list object may have been edited in place; only a distinct
+    // snapshot proves its prefix still holds the rows adopted last time.
+    if (previous != null && !identical(previous, wals) && wals is List<Wal> && wals.length >= previous.length) {
+      var same = true;
+      for (var i = 0; i < previous.length; i++) {
+        if (!identical(previous[i], wals[i])) {
+          same = false;
+          break;
+        }
+      }
+      if (same) {
+        // Append-only: retained rows keep their positions and order.
+        for (var i = previous.length; i < wals.length; i++) {
+          final w = wals[i];
+          if (_entries.containsKey(w)) {
+            _syncAll(wals);
+            return;
+          }
+          _order[w] = i;
+          w.addViewChangeListener(_changed);
+          _apply(w);
+        }
+        refresh();
+        return;
+      }
+    }
+    _syncAll(wals);
+  }
+
+  void _syncAll(Iterable<Wal> wals) {
+    final epoch = ++_syncEpoch;
+    var position = 0;
+    var lastRetained = -1;
+    var reordered = false;
+    var distinct = 0;
+    for (final w in wals) {
+      final previous = _order[w];
+      _order[w] = position++;
+      if (_seen[w] == epoch) {
+        // Listed twice: the last position wins, as in the constructor.
+        reordered = true;
+        continue;
+      }
+      _seen[w] = epoch;
+      distinct++;
+      if (!_entries.containsKey(w)) {
+        w.addViewChangeListener(_changed);
+        _apply(w);
+      } else if (previous != null) {
+        // Retained rows keep their relative order unless a previous position
+        // goes backwards; uniform shifts from inserted rows change nothing.
+        if (previous < lastRetained) reordered = true;
+        lastRetained = previous;
+      }
+    }
+    // Every row seen this pass is in [_entries], so a shortfall means removals.
+    if (distinct < _entries.length) {
+      final gone = [
+        for (final w in _entries.keys)
+          if (_seen[w] != epoch) w
+      ];
+      gone.forEach(_remove);
+    }
+    refresh();
+    if (reordered) {
+      sortRevision++;
+      for (final bucket in _buckets) {
+        bucket.invalidate();
+      }
+      _syncing = null;
+      _pendingWork = null;
+      _pendingSecondsByDay = null;
+      _refusalSummary = null;
+    }
+  }
+
+  int _syncEpoch = 0;
+  final _seen = HashMap<Wal, int>.identity();
+
+  void _remove(Wal w) {
+    w.removeViewChangeListener(_changed);
+    _dirty.remove(w);
+    _order.remove(w);
+    _seen.remove(w);
+    final old = _entries.remove(w);
+    if (old == null) return;
+    _unindexId(old.id, w);
+    displayCounts[old.display] = displayCounts[old.display]! - 1;
+    statusCounts[old.status] = statusCounts[old.status]! - 1;
+    if (old.hiddenId != null) {
+      final count = _hidden[old.hiddenId]! - 1;
+      if (count == 0) {
+        _hidden.remove(old.hiddenId);
+      } else {
+        _hidden[old.hiddenId!] = count;
+      }
+    }
+    for (var i = 0; i < _buckets.length; i++) {
+      if (old.membership[i]) _buckets[i].update(w, false, sortChanged: false);
+    }
+    _syncing = null;
+    _pendingWork = null;
+    _pendingSecondsByDay = null;
+    _refusalSummary = null;
   }
 
   int sortRevision = 0;
@@ -54,13 +175,41 @@ class WalDerivedViews {
   final _order = HashMap<Wal, int>.identity();
   final _dirty = LinkedHashSet<Wal>.identity();
   final _hidden = <String, int>{};
-  final _byId = <String, Set<Wal>>{};
+  // id -> the row, or a Set<Wal> on the rare id collision. One row per id is
+  // the norm; a set per row cost ~100k allocations on a long-lived phone.
+  final _byId = <String, Object>{};
+
+  void _indexId(String id, Wal w) {
+    final current = _byId[id];
+    if (current == null) {
+      _byId[id] = w;
+    } else if (current is Wal) {
+      if (!identical(current, w)) _byId[id] = HashSet<Wal>.identity()..addAll([current, w]);
+    } else {
+      (current as Set<Wal>).add(w);
+    }
+  }
+
+  void _unindexId(String id, Wal w) {
+    final current = _byId[id];
+    if (current is Wal) {
+      if (identical(current, w)) _byId.remove(id);
+    } else if (current is Set<Wal>) {
+      current.remove(w);
+      if (current.length == 1) {
+        _byId[id] = current.single;
+      } else if (current.isEmpty) {
+        _byId.remove(id);
+      }
+    }
+  }
 
   Iterable<Wal> rowsForIds(Set<String> ids) sync* {
     for (final id in ids) {
       final members = _byId[id];
       if (members == null) continue;
-      final ordered = members.toList()..sort((a, b) => _order[a]!.compareTo(_order[b]!));
+      final ordered = (members is Wal ? [members] : (members as Set<Wal>).toList())
+        ..sort((a, b) => _order[a]!.compareTo(_order[b]!));
       yield* ordered;
     }
   }
@@ -90,11 +239,9 @@ class WalDerivedViews {
     if (old != null && old.start != next.start) sortRevision++;
     if (old?.id != next.id) {
       if (old != null) {
-        final previous = _byId[old.id]!;
-        previous.remove(w);
-        if (previous.isEmpty) _byId.remove(old.id);
+        _unindexId(old.id, w);
       }
-      _byId.putIfAbsent(next.id, () => HashSet<Wal>.identity()).add(w);
+      _indexId(next.id, w);
     }
     if (old != null) {
       displayCounts[old.display] = displayCounts[old.display]! - 1;
@@ -113,8 +260,14 @@ class WalDerivedViews {
     if (next.hiddenId != null) {
       _hidden.update(next.hiddenId!, (n) => n + 1, ifAbsent: () => 1);
     }
+    final startChanged = old != null && old.start != next.start;
     for (var i = 0; i < _buckets.length; i++) {
-      _buckets[i].update(w, next.membership[i], sortChanged: old != null && old.start != next.start);
+      // Most rows (synced history) belong to one bucket; skip the hash work
+      // for buckets whose membership and sort key did not change.
+      final now = next.membership[i];
+      if (now != (old?.membership[i] ?? false) || (now && startChanged)) {
+        _buckets[i].update(w, now, sortChanged: startChanged);
+      }
     }
     _entries[w] = next;
     _syncing = null;
@@ -123,8 +276,14 @@ class WalDerivedViews {
     _refusalSummary = null;
   }
 
-  List<Wal> _list(int bucket, {bool newest = false}) => _buckets[bucket]
-      .list(newest ? (a, b) => b.timerStart.compareTo(a.timerStart) : (a, b) => _order[a]!.compareTo(_order[b]!));
+  int _byOrder(Wal a, Wal b) => _order[a]!.compareTo(_order[b]!);
+  // Ties keep source order, so the result never depends on update history.
+  int _newestFirst(Wal a, Wal b) {
+    final byStart = b.timerStart.compareTo(a.timerStart);
+    return byStart != 0 ? byStart : _byOrder(a, b);
+  }
+
+  List<Wal> _list(int bucket, {bool newest = false}) => _buckets[bucket].list(newest ? _newestFirst : _byOrder);
   int get legacyPendingCount => _buckets[0].members.length;
   int get corruptedCount => _buckets[2].members.length;
   int get deletableCount => _buckets[5].members.length;
@@ -140,9 +299,8 @@ class WalDerivedViews {
   bool get hasForwardMoving => _buckets[9].members.isNotEmpty;
 
   List<Wal>? _syncing;
-  List<Wal> get syncing =>
-      _syncing ??= List.unmodifiable(_visibleSyncRows(_buckets[9].members.toList(), _hidden.containsKey)
-        ..sort((a, b) => b.timerStart.compareTo(a.timerStart)));
+  List<Wal> get syncing => _syncing ??=
+      List.unmodifiable(_visibleSyncRows(_buckets[9].members.toList(), _hidden.containsKey)..sort(_newestFirst));
   List<Wal>? _pendingWork;
   List<Wal> get pendingWork => _pendingWork ??= List.unmodifiable([...uploaded, ...syncing]);
   Map<DateTime, int>? _pendingSecondsByDay;
@@ -207,13 +365,14 @@ class _ViewBucket {
   }
 
   List<Wal> list(int Function(Wal, Wal) compare) => _cache ??= List.unmodifiable(members.toList()..sort(compare));
+  void invalidate() => _cache = null;
 }
 
 class _ViewEntry {
-  _ViewEntry(Wal w)
+  factory _ViewEntry(Wal w) => _ViewEntry._(w, w.syncDisplayState);
+  _ViewEntry._(Wal w, this.display)
       : id = w.id,
         status = w.status,
-        display = w.syncDisplayState,
         start = w.timerStart,
         hiddenId = !_onDevice(w) && (w.status == WalStatus.uploaded || w.status == WalStatus.synced) ? w.id : null,
         membership = [
@@ -230,7 +389,7 @@ class _ViewEntry {
           w.status == WalStatus.uploaded,
           w.status == WalStatus.miss,
           w.status == WalStatus.miss && !w.isSyncing,
-          isAttentionSyncState(w.syncDisplayState),
+          isAttentionSyncState(display),
           walRetryCanHelp(w),
           w.status == WalStatus.uploadRejected,
           _moving(w),

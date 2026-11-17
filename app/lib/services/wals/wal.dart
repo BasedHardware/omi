@@ -294,6 +294,7 @@ class Wal {
   set timerStart(int value) {
     if (_timerStart == value) return;
     _timerStart = value;
+    _id = null;
     _changed();
   }
 
@@ -334,6 +335,7 @@ class Wal {
   set device(String value) {
     if (_device == value) return;
     _device = value;
+    _id = null;
     _changed();
   }
 
@@ -860,7 +862,10 @@ class Wal {
             syncDisplayState == WalSyncDisplayState.syncing);
   }
 
-  String get id => '${device}_$timerStart';
+  // Cached: identity lookups scan indexes of ~100k rows. Cleared by the
+  // [device] and [timerStart] setters, its only inputs.
+  String? _id;
+  String get id => _id ??= '${_device}_$_timerStart';
 
   /// Single source of truth for how this recording's sync state is shown to the
   /// user. The sync page renders an explicit label + icon for every value so a
