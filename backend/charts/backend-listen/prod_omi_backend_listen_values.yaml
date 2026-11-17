@@ -1073,3 +1073,10 @@ affinity:
               values:
                 - backend-listen-pool-v2
                 - backend-listen-pool-v2-b
+
+# GMP only: local Prometheus still scrapes every family at 15s for HPA/pages.
+# Keep job-pinned custody guards, privacy, GMP paging and freshness at 15s.
+# Complementary filters export all remaining families once per 60s.
+podMonitoring:
+  bulkInterval: 60s
+  fastMetrics: 'backend_listen_active_ws_connections|pusher_active_ws_connections|privacy_.*|omi_audio_.*|omi_record_.*|omi_firestore_billed_reads_by_caller_total|omi_firestore_caller_label_overflow_total|omi_batch_pipeline_completed_audio_seconds_total|.*_(timestamp|refreshed_at|observed_at)_seconds'
