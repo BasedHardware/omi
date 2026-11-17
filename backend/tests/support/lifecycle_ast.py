@@ -283,7 +283,25 @@ def entry_deadline_sites(source, entry, deadline):
         return []
     constants = constant_names(parsed(source))
     bindings = dict(entry.bindings)
-    parents = {child: parent for parent in ast.walk(root) for child in ast.iter_child_nodes(parent)}
+    parents = {}
+    nodes = []
+
+    def collect(node):
+        nodes.append(node)
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            parents[child] = node
+            collect(child)
+
+    # Analysis never enters nested scopes. Build both views in that same walk,
+    # rather than traversing their bodies for parents that cannot be queried.
+    collect(root)
+    assignments = sorted(
+        (node for node in nodes if isinstance(node, (ast.Assign, ast.AnnAssign))),
+        key=lambda node: node.lineno,
+        reverse=True,
+    )
 
     def guards(node):
         result = []
@@ -312,8 +330,8 @@ def entry_deadline_sites(source, entry, deadline):
 
     def resolved(item, site, seen=frozenset()):
         if isinstance(item, ast.Name) and item.id not in seen:
-            for previous in sorted(nodes, key=lambda node: getattr(node, 'lineno', 0), reverse=True):
-                if not isinstance(previous, (ast.Assign, ast.AnnAssign)) or previous.lineno >= site.lineno:
+            for previous in assignments:
+                if previous.lineno >= site.lineno:
                     continue
                 targets = previous.targets if isinstance(previous, ast.Assign) else [previous.target]
                 if any(isinstance(target, ast.Name) and target.id == item.id for target in targets) and guaranteed(
@@ -333,14 +351,6 @@ def entry_deadline_sites(source, entry, deadline):
     candidates = []
     mutations = []
 
-    def local_nodes(node):
-        yield node
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                continue
-            yield from local_nodes(child)
-
-    nodes = list(local_nodes(root))
     local_mappings = {
         target.id
         for node in nodes
@@ -354,8 +364,8 @@ def entry_deadline_sites(source, entry, deadline):
         if isinstance(item, ast.Dict):
             return list(zip(item.keys, item.values))
         if isinstance(item, ast.Name) and item.id not in seen:
-            for previous in sorted(nodes, key=lambda node: getattr(node, 'lineno', 0), reverse=True):
-                if not isinstance(previous, (ast.Assign, ast.AnnAssign)) or previous.lineno >= site.lineno:
+            for previous in assignments:
+                if previous.lineno >= site.lineno:
                     continue
                 targets = previous.targets if isinstance(previous, ast.Assign) else [previous.target]
                 if any(isinstance(target, ast.Name) and target.id == item.id for target in targets) and guaranteed(
@@ -428,8 +438,8 @@ def entry_deadline_sites(source, entry, deadline):
         if evaluated != entry.state:
             return False
         if isinstance(item, ast.Name):
-            for previous in sorted(nodes, key=lambda node: getattr(node, 'lineno', 0), reverse=True):
-                if not isinstance(previous, (ast.Assign, ast.AnnAssign)) or previous.lineno >= site.lineno:
+            for previous in assignments:
+                if previous.lineno >= site.lineno:
                     continue
                 targets = previous.targets if isinstance(previous, ast.Assign) else [previous.target]
                 if any(isinstance(target, ast.Name) and target.id == item.id for target in targets) and guaranteed(

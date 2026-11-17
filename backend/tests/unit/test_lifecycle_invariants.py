@@ -181,6 +181,21 @@ def test_function_source_finds_loop_nested_transaction_without_crossing_scopes(m
     assert read('synthetic.py:commit') == ''
 
 
+@pytest.mark.parametrize('outer_deadline', [False, True])
+def test_deadline_probe_never_borrows_or_erases_a_deadline_from_a_nested_scope(outer_deadline):
+    deadline = ", 'lease_until': 123" if outer_deadline else ''
+    nested = "row.pop('lease_until')" if outer_deadline else "row['lease_until'] = 123"
+    source = (
+        "def commit(tx, ref):\n"
+        f"    row = {{'state': 'leased'{deadline}}}\n"
+        "    def unrelated():\n"
+        f"        {nested}\n"
+        "    tx.set(ref, row)\n"
+    )
+    path = EntryPath('synthetic.py', 'commit', 'state', 'leased')
+    assert [stamped for _line, stamped in entry_deadline_sites(source, path, 'lease_until')] == [outer_deadline]
+
+
 def assigned_fields(source):
     fields = set()
     for node in ast.walk(ast.parse(source)):
