@@ -203,3 +203,78 @@ def test_apply_refuses_default_human_and_other_tiers_before_cloud(monkeypatch, t
     )
     assert result.returncode != 0
     assert 'approved prod-operator' in result.stderr
+
+
+def retired_guard(flag='true', *, suspended=False):
+    env = [] if flag is None else [{'name': 'PARAKEET_SUSPENDED', 'value': flag}]
+    pod_spec = {'containers': [{'name': 'guard', 'env': env}]}
+    return {'spec': {'suspend': suspended, 'jobTemplate': {'spec': {'template': {'spec': pod_spec}}}}}
+
+
+def guard_role(*verbs):
+    return {'rules': [{'resources': ['horizontalpodautoscalers'], 'verbs': list(verbs)}]}
+
+
+def guard_job(flag):
+    return {'spec': retired_guard(flag)['spec']['jobTemplate']['spec']}
+
+
+@pytest.mark.parametrize('suspended', [False, True])
+@pytest.mark.parametrize('flag', ['true', 'false', None])
+def test_retirement_requires_parakeet_skip_instead_of_whole_cronjob_suspension(flag, suspended):
+    guard = retired_guard(flag, suspended=suspended)
+    if flag == 'true':
+        tool.assert_parakeet_guard_retired(guard, guard_role('get'), [])
+    else:
+        with pytest.raises(RuntimeError, match='PARAKEET_SUSPENDED=true'):
+            tool.assert_parakeet_guard_retired(guard, guard_role('get'), [])
+
+
+@pytest.mark.parametrize('flag', ['true', 'false', None])
+def test_active_batch_observer_is_allowed_but_pre_retirement_guard_job_blocks(flag):
+    jobs = [guard_job(flag)]
+    if flag == 'true':
+        tool.assert_parakeet_guard_retired(retired_guard(), guard_role('get'), jobs)
+    else:
+        with pytest.raises(RuntimeError, match='pre-retirement Parakeet guard Jobs'):
+            tool.assert_parakeet_guard_retired(retired_guard(), guard_role('get'), jobs)
+
+
+def test_parakeet_skip_does_not_bypass_the_hpa_write_permission_fence():
+    with pytest.raises(RuntimeError, match='HPA write permission'):
+        tool.assert_parakeet_guard_retired(retired_guard(), guard_role('get', 'patch'), [])
+
+
+@pytest.mark.parametrize('job_flag', ['true', None])
+def test_apply_checks_active_job_template_before_reaching_capacity_changes(tmp_path, monkeypatch, job_flag):
+    for name in tool.DEPLOYMENTS:
+        tool.save_once(tmp_path / f'{name}-replicas.json', {'replicas': 4})
+    guard = retired_guard()
+    guard['status'] = {'active': [{'name': 'existing-guard-job'}]}
+    calls = []
+
+    def kube(*args):
+        calls.append(args)
+        assert args[0] == 'get', 'guard qualification must precede every capacity write'
+        if args[1] == 'deployments':
+            return {'items': []}
+        if args[1] == 'cronjob':
+            return guard
+        if args[1] == 'role':
+            return guard_role('get')
+        if args[1] == 'job':
+            assert args[2] == 'existing-guard-job'
+            return guard_job(job_flag)
+        if args[1] == 'deployment':
+            raise RuntimeError('qualified guard reached capacity reader')
+        pytest.fail(f'unexpected Kubernetes read: {args}')
+
+    monkeypatch.setattr(tool, 'kubectl', kube)
+    monkeypatch.setattr(tool, 'assert_callers', lambda _: None)
+    monkeypatch.setattr(tool, 'assert_cloud_run', lambda: None)
+    monkeypatch.setattr(tool, 'cluster_state', lambda: ([], []))
+    error = 'qualified guard reached capacity reader' if job_flag == 'true' else 'pre-retirement Parakeet guard Jobs'
+    with pytest.raises(RuntimeError, match=error):
+        tool.apply(tmp_path)
+    assert ('get', 'job', 'existing-guard-job', '-o', 'json') in calls
+    assert any(args[1] == 'deployment' for args in calls) is (job_flag == 'true')

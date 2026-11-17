@@ -15,6 +15,9 @@ its state ConfigMap. Parakeet is recorded as `SKIPPED`; no Parakeet HPA,
 deployment, events, floor schedule or rollback API is read or written. Existing
 Parakeet state is preserved. Production HPA RBAC remains read-only and the
 separate Cloud Run batch rollback writer stays disabled.
+The streaming GPU teardown tool verifies this setting in both the CronJob and
+every referenced active Job. Batch-only Jobs can remain active; an older Job
+without the skip setting must finish before teardown proceeds.
 
 The batch observer records a fresh oldest uncommitted age over thirty minutes
 as TRIP; missing, stale or incomplete metrics as BLIND; other usable readings

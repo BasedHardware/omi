@@ -340,7 +340,11 @@ AREA_TESTS = (
             'backend/charts/monitoring/prometheus-adapter/*_omi_prometheus_adapter.yaml',
             'backend/charts/parakeet/*_omi_parakeet_values.yaml',
         ),
-        ('tests/unit/test_incluster_guards.py',),
+        (
+            'tests/unit/test_incluster_guards.py',
+            'tests/unit/test_gpu_fleet_retirement.py',
+            'tests/unit/test_streaming_gpu_teardown.py',
+        ),
     ),
     (('backend/config/flag_budget.json',), (), FLAG_BUDGET_TESTS),
     (

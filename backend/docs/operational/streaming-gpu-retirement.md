@@ -55,9 +55,14 @@ it before callers drain is unsafe.
 5. Merge this PR with `parakeetSuspended=true`, then deploy the guard chart at
    that exact reviewed SHA once, with its production values. Do not deploy the
    intervening cap-assert fix alone: that would let a blind trip restore 12.
-   Verify suspension, no HPA patch permission, no floors.json, and no active
-   guard Job (deadline 240 seconds). Never raise a cap to satisfy the guard.
-   Independent batch monitoring/state remain intact. Keep the guard state.
+   Verify the CronJob's guard container has `PARAKEET_SUSPENDED=true`, no HPA
+   patch permission, and no floors.json. The CronJob stays scheduled for its
+   independent batch observer. Check every Job referenced by `status.active`:
+   each must also have `PARAKEET_SUSPENDED=true` in its pod template. Wait for
+   any pre-retirement Job without that setting to finish (deadline 240 seconds).
+   Never raise a cap to satisfy the guard. Batch-only active Jobs do not block
+   retirement. Independent batch monitoring/state remain intact. Keep the guard
+   state.
 
 6. Apply the reviewed Parakeet chart and its off overlay, preserving the
    serving image tag. Both prod and bare chart defaults set `fleetRetired=true`:
@@ -74,8 +79,9 @@ it before callers drain is unsafe.
    ```
 
    The default executes no commands. Apply requires explicit lead gates,
-   positive saved rollback replicas, fully rolled callers, guard suspension and
-   removed HPA write permission. Each operation prints before/after state and a
+   positive saved rollback replicas, fully rolled callers, the Parakeet-specific
+   guard skip in the CronJob and every active Job, and removed HPA write
+   permission. Each operation prints before/after state and a
    rollback instruction. A batch/diarizer/unknown pod, persistent/host audio
    volume, or repurposed pool label stops the operation. Every non-DaemonSet pod
    must leave target pools before capacity is changed.

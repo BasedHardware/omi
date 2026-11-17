@@ -356,6 +356,26 @@ def snapshot(backup):
     print(f'SNAPSHOT: capacity/floor baseline saved locally under {backup}; no cloud writes')
 
 
+def assert_parakeet_guard_retired(guard, role, active_jobs):
+    """Retire only the Parakeet writer; batch-only Jobs may keep running."""
+
+    def skips_parakeet(pod_spec):
+        containers = [c for c in pod_spec.get('containers', []) if c.get('name') == 'guard']
+        if len(containers) != 1:
+            return False
+        settings = [e for e in containers[0].get('env', []) if e.get('name') == 'PARAKEET_SUSPENDED']
+        return len(settings) == 1 and settings[0].get('value') == 'true'
+
+    if not skips_parakeet(guard['spec']['jobTemplate']['spec']['template']['spec']):
+        raise RuntimeError('Apply reviewed Parakeet guard retirement (PARAKEET_SUSPENDED=true) first')
+    if any(not skips_parakeet(job['spec']['template']['spec']) for job in active_jobs):
+        raise RuntimeError('Wait for pre-retirement Parakeet guard Jobs to finish (deadline 240 seconds)')
+    if any(
+        'patch' in r.get('verbs', []) and 'horizontalpodautoscalers' in r.get('resources', []) for r in role['rules']
+    ):
+        raise RuntimeError('Guard still has HPA write permission; apply reviewed chart first')
+
+
 def apply(backup):
     backup.mkdir(parents=True, exist_ok=True)
     for name in DEPLOYMENTS:
@@ -370,13 +390,11 @@ def apply(backup):
     assert_no_foreign_pods(nodes, pods)
     guard = kubectl('get', 'cronjob', GUARD, '-o', 'json')
     role = kubectl('get', 'role', GUARD, '-o', 'json')
-    if not guard['spec'].get('suspend') or guard.get('status', {}).get('active'):
-        raise RuntimeError('Apply reviewed guard retirement and wait for its active Jobs first')
-    if any(
-        'patch' in r.get('verbs', []) and 'horizontalpodautoscalers' in r.get('resources', []) for r in role['rules']
-    ):
-        raise RuntimeError('Guard still has HPA write permission; apply reviewed chart first')
-    print('before guard: suspended=true active_jobs=0 hpa_patch=false')
+    active_jobs = [
+        kubectl('get', 'job', ref['name'], '-o', 'json') for ref in guard.get('status', {}).get('active', [])
+    ]
+    assert_parakeet_guard_retired(guard, role, active_jobs)
+    print(f'before guard: parakeet_skipped=true active_batch_only_jobs={len(active_jobs)} hpa_patch=false')
     for name in DEPLOYMENTS:
         deploy = kubectl('get', 'deployment', name, '-o', 'json')
         save_once(backup / f'{name}-replicas.json', {'replicas': deploy['spec']['replicas']})
@@ -418,7 +436,7 @@ def apply(backup):
     )
     if 'floors.json' in kubectl('get', 'cm', GUARD + '-script', '-o', 'json').get('data', {}):
         raise RuntimeError('Floor removal did not persist')
-    print('after floors: present=false; guard remains suspended')
+    print('after floors: present=false; Parakeet guard remains skipped; batch observer remains scheduled')
     print('ROLLBACK: restore the saved floor only with an approved warm guard chart after GPU readiness')
     # Bounded foreground drain; no detached child or grep-based waiter.
     deadline = time.monotonic() + 900
@@ -538,7 +556,7 @@ def main():
         return
     if not args.apply:
         print(
-            'PLAN ONLY: verify caller train+drain and guard suspension/RBAC; scale Parakeet to 0; remove HPAs and floors; drain pods; retain exclusive pools at min=max=size 0: '
+            'PLAN ONLY: verify caller train+drain and Parakeet-specific guard skip/RBAC; scale Parakeet to 0; remove HPAs and floors; drain pods; retain exclusive pools at min=max=size 0: '
             + ', '.join(POOLS)
             + '; remove only their production Parakeet dedicated ingress'
             + '; remove dormant Deepgram HPAs; remove Deepgram ingress only with complete 24h zero-request proof'
