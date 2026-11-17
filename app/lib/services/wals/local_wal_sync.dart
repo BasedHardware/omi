@@ -274,7 +274,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       ..clear()
       ..addAll(loaded.where((w) => w.storage == WalStorage.disk && !w.recoveredBatchJournal).map(_durableKey));
     for (final wal in pending) {
-      if (loadedKeys.add(_durableKey(wal))) {
+      // Distinct mem rows can share a derived name until flush allocates a
+      // collision-free file. Never deduplicate their unflushed payloads.
+      if (wal.storage == WalStorage.mem || !loadedKeys.contains(_durableKey(wal))) {
         (_walAdmittedAtLoad(wal) ? _wals : _foreignWals).add(wal);
       }
     }

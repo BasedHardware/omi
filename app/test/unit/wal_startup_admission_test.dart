@@ -229,4 +229,76 @@ void main() {
     expect(timers, hasLength(3), reason: 'repeated start must not duplicate capture timers');
     await sync.stop();
   });
+  test('admission keeps distinct memory WALs with colliding derived names', () async {
+    final old = await seedOldRow();
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    final sync = LocalWalSyncImpl(_Listener(),
+        freeDiskBytes: () async => 64 << 30,
+        deltaIndexAllowed: () async => true,
+        loadWals: () async {
+          final rows = await WalFileManager.loadWals();
+          entered.complete();
+          await release.future;
+          return rows;
+        });
+    sync.start();
+    await entered.future;
+    final pending = [
+      for (final payload in [
+        [4, 5],
+        [6, 7]
+      ])
+        Wal(
+            timerStart: 2,
+            codec: BleAudioCodec.opus,
+            seconds: 1,
+            storage: WalStorage.mem,
+            ownerUid: 'owner-a',
+            totalFrames: 1,
+            data: [payload])
+    ];
+    sync.testWals = pending;
+    release.complete();
+    await sync.walReady;
+    await sync.stop();
+    (await sync.indexWorkerForTesting)?.close();
+    final rows = await WalFileManager.loadIndexedWals();
+    expect(rows, hasLength(3));
+    expect(rows.map((w) => w.filePath).toSet(), hasLength(3));
+    for (var i = 0; i < pending.length; i++) {
+      expect(await File('${documents.path}/${pending[i].filePath}').readAsBytes(), [2, 0, 0, 0, 4 + 2 * i, 5 + 2 * i]);
+    }
+    expect(rows.map((w) => w.filePath), contains(old.filePath));
+  });
+
+  test('transcript confirmation fails closed when admission prevents its index save', () async {
+    await seedOldRow();
+    final originalIndex = await File('${documents.path}/wals.json').readAsString();
+    final sync = LocalWalSyncImpl(_Listener(), loadWals: () async => throw StateError('load unavailable'));
+    sync.start();
+    await pumpEventQueue(times: 30);
+    final pending = Wal(
+        timerStart: 470,
+        codec: BleAudioCodec.opus,
+        seconds: 30,
+        storage: WalStorage.mem,
+        status: WalStatus.miss,
+        ownerUid: 'owner-a',
+        conversationId: 'c1',
+        data: [
+          [7, 8]
+        ]);
+    sync.testWals = [pending];
+    try {
+      await expectLater(
+          sync.confirmSessionTranscription(500, 'c1', transcriptSpans: [(469, 531)]), throwsA(isA<StateError>()));
+      expect(pending.status, WalStatus.miss);
+      expect(pending.syncedAt, 0);
+      expect(pending.keptForTranscriptRecovery, isTrue);
+      expect(await File('${documents.path}/wals.json').readAsString(), originalIndex);
+    } finally {
+      await sync.stop();
+    }
+  });
 }
