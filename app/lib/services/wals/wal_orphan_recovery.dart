@@ -201,10 +201,17 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
               totalFrames: candidate.frames,
               storage: WalStorage.disk,
               status: WalStatus.miss,
-              // Original per-file capture policy is lost. The existing held
-              // recordings UI permits explicit upload/delete; onDeviceOnly
-              // would also reject that deliberate manual upload in syncWal.
-              holdForUser: true,
+              // David, 2026-11-17: automatic upload requires no local-only
+              // history anywhere on this phone AND a cloud-permitting choice.
+              // Read preferences and memory again after budget I/O, with no
+              // await before publication. Held rows keep explicit user actions.
+              holdForUser: snapshot.hasLocalOnlyHistory ||
+                  buckets.any((r) => r.onDeviceOnly || r.holdForUser) ||
+                  !SharedPreferencesUtil().autoSyncOfflineRecordings ||
+                  SharedPreferencesUtil().getBool('onDeviceTranscription.keepEverythingOnDevice') ||
+                  SharedPreferencesUtil().getBool('onDeviceTranscription.saveLiveHours') ||
+                  SharedPreferencesUtil().getBool('onDeviceOverflowActive') ||
+                  LocalSttCustody.keepsPhoneAudio,
               filePath: path.basename(candidate.filePath),
               device: info.marker,
               ownerUid: uid,

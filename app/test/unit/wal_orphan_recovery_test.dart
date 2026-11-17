@@ -76,7 +76,7 @@ void main() {
         .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (_) async => dir.path);
     await WalFileManager.init();
     await json('wals.json', {
-      'wals': [row('existing.bin')]
+      'wals': [row('existing.bin')..['on_device_only'] = true]
     });
   });
   tearDown(() async {
@@ -292,6 +292,104 @@ void main() {
     });
     return sync;
   }
+
+  test('clean single-owner phone automatically uploads recovered miss rows', () async {
+    await json('wals.json', {
+      'wals': [row('existing.bin')]
+    });
+    await audio(name(now));
+    final sync = await ledger(realCensus: true);
+    await sync.recoverOrphanAudio();
+    final recovered = sync.testWals.singleWhere((w) => w.status == WalStatus.miss);
+    expect(recovered.holdForUser, isFalse);
+    expect(recovered.onDeviceOnly, isFalse);
+    expect(isAutoUploadEligible(recovered), isTrue);
+    expect(Wal.fromJson(recovered.toJson()).holdForUser, isFalse);
+  });
+
+  for (final source in [
+    'wals.json',
+    'wals_backup.json',
+    'wals.json.tmp',
+    'wals.json.corrupt-1',
+    'wals_backup.json.corrupt-1'
+  ]) {
+    for (final policy in ['on_device_only', 'hold_for_user']) {
+      test('$source $policy history keeps recovered audio held', () async {
+        await json('wals.json', {
+          'wals': [row('existing.bin')]
+        });
+        final sync = await ledger(realCensus: true);
+        await json(source, {
+          'wals': [row('historic.bin')..[policy] = true]
+        });
+        await audio(name(now));
+        await sync.recoverOrphanAudio();
+        final recovered = sync.testWals.singleWhere((w) => w.status == WalStatus.miss);
+        expect(recovered.holdForUser, isTrue);
+        expect(isAutoUploadEligible(recovered), isFalse);
+      });
+    }
+  }
+
+  for (final bucket in ['active', 'retired', 'foreign']) {
+    for (final policy in ['on_device_only', 'hold_for_user']) {
+      test('$bucket $policy appearing after census prevents automatic adoption', () async {
+        await json('wals.json', {
+          'wals': [row('existing.bin')]
+        });
+        await audio(name(now));
+        late LocalWalSyncImpl sync;
+        sync = await ledger(scan: () async {
+          final result = await census();
+          final history = Wal.fromJson(row('memory-only.bin')..[policy] = true);
+          switch (bucket) {
+            case 'active':
+              sync.testWals.add(history);
+            case 'retired':
+              sync.testRetiredWals.add(history);
+            case 'foreign':
+              sync.testForeignWals.add(history);
+          }
+          return result;
+        });
+        await sync.recoverOrphanAudio();
+        expect(sync.testWals.singleWhere((w) => w.status == WalStatus.miss).holdForUser, isTrue);
+      });
+    }
+  }
+
+  for (final preference in [
+    'autoSyncOfflineRecordings',
+    'onDeviceTranscription.keepEverythingOnDevice',
+    'onDeviceTranscription.saveLiveHours',
+    'onDeviceOverflowActive'
+  ]) {
+    test('$preference local-only preference holds clean-phone recovery', () async {
+      await json('wals.json', {
+        'wals': [row('existing.bin')]
+      });
+      await SharedPreferencesUtil().saveBool(preference, preference != 'autoSyncOfflineRecordings');
+      await audio(name(now));
+      final sync = await ledger(realCensus: true);
+      await sync.recoverOrphanAudio();
+      expect(sync.testWals.singleWhere((w) => w.status == WalStatus.miss).holdForUser, isTrue);
+    });
+  }
+
+  test('preference changed during census is rechecked before admission', () async {
+    await json('wals.json', {
+      'wals': [row('existing.bin')]
+    });
+    await audio(name(now));
+    final sync = await ledger(scan: () async {
+      final result = await census();
+      await SharedPreferencesUtil().saveBool('autoSyncOfflineRecordings', false);
+      return result;
+    });
+    await sync.recoverOrphanAudio();
+    expect(sync.testWals.singleWhere((w) => w.status == WalStatus.miss).holdForUser, isTrue);
+  });
 
   for (final source in ['pending files', 'jobs', 'quarantined jobs']) {
     test('ownerless legacy $source prevents orphan adoption despite a current-owner row', () async {

@@ -23,7 +23,9 @@ class RecordingInventoryRow {
       required this.disk,
       this.filePath,
       this.owner,
-      this.rebase = true});
+      this.rebase = true,
+      this.onDeviceOnly = false,
+      this.holdForUser = false});
   final String status;
   final int? captureSeconds;
   final double? audioSeconds;
@@ -32,6 +34,7 @@ class RecordingInventoryRow {
   final String? filePath;
   final String? owner;
   final bool rebase;
+  final bool onDeviceOnly, holdForUser;
 }
 
 /// Concurrent stats per batch while walking a recordings directory.
@@ -91,7 +94,9 @@ RecordingInventoryRow _row(Map row) {
       indexBytes: (_integer(row['storage_total_bytes']) ?? 0).clamp(0, 1 << 62),
       disk: row['storage'] == 'disk',
       filePath: _string(row['file_path']),
-      owner: _string(row['owner_uid']));
+      owner: _string(row['owner_uid']),
+      onDeviceOnly: row['on_device_only'] != null && row['on_device_only'] != false,
+      holdForUser: row['hold_for_user'] != null && row['hold_for_user'] != false);
 }
 
 bool _audio(String name) =>
@@ -421,6 +426,7 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       'symlinks_skipped': linksSkipped,
       'orphan_scope': 'unreferenced_by_readable_indexes_journals_preferences_and_memory_snapshot',
       'audio_file_scope': 'audio_prefix_bin_part_torn_and_wav',
+      'local_only_history': buckets.values.expand((rows) => rows).any((r) => r.onDeviceOnly || r.holdForUser),
       'orphan_census_complete': unreadable == 0 &&
           invalidRows == 0 &&
           unresolvedReferences == 0 &&

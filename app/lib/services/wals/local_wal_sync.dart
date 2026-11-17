@@ -1999,7 +1999,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
                   indexBytes: wal.storageTotalBytes.clamp(0, 1 << 62),
                   disk: wal.storage == WalStorage.disk,
                   filePath: wal.filePath ?? (wal.storage == WalStorage.disk ? wal.getFileName() : null),
-                  owner: wal.ownerUid),
+                  owner: wal.ownerUid,
+                  onDeviceOnly: wal.onDeviceOnly,
+                  holdForUser: wal.holdForUser),
           ],
       };
 

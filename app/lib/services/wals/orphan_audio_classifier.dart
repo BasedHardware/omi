@@ -30,6 +30,7 @@ class RecordingOrphanCensus {
   final OrphanAudioFrameCache frameCache;
   bool isDocumentsFile(OrphanAudioFile file) => path.dirname(file.filePath) == _directories.keys.first;
   bool get complete => summary['orphan_census_complete'] == true;
+  bool get hasLocalOnlyHistory => summary['local_only_history'] != false;
 
   /// Small metadata-only commit fence. No directory walk on the capture queue.
   /// A new/removed receipt or index changes its parent directory stamp.
