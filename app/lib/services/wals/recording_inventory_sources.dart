@@ -56,11 +56,21 @@ _Decoded _decode(Uint8List bytes, String kind) {
             ? _row(row)
             : const RecordingInventoryRow(
                 status: 'unknown', captureSeconds: null, audioSeconds: null, indexBytes: 0, disk: false)
-    ], null,
-        invalidRows: rows.where((row) => row is! Map || row['timer_start'] is! int || row['codec'] is! String).length);
+    ], null, invalidRows: rows.where((row) => !_validWalReferenceRow(row)).length);
   } catch (_) {
     return _Decoded([], 'unreadable');
   }
+}
+
+// Optional legacy storage defaults to mem, exactly as Wal.fromJson. Present
+// unknown storage or path types cannot prove the absence of a file reference.
+bool _validWalReferenceRow(Object? value) {
+  if (value is! Map || value['timer_start'] is! int || value['codec'] is! String) return false;
+  final storage = value['storage'], file = value['file_path'];
+  if (storage != null && !const {'mem', 'disk', 'sdcard', 'flashPage'}.contains(storage)) return false;
+  if (file != null && file is! String) return false;
+  if (storage == 'disk' && (file is! String || file.isEmpty)) return false;
+  return true;
 }
 
 String? _kind(String name) {

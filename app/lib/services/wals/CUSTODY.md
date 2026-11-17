@@ -313,7 +313,7 @@ or live/retired/foreign memory bucket, and an account preference permitting clou
 upload. Otherwise `holdForUser=true`. An unavailable history snapshot fails closed to a hold. Optional legacy WAL
 policy fields retain the same false defaults as `Wal.fromJson`; a missing/null
 optional flag does not assert local-only history. Present non-null invalid flag
-types are treated conservatively as local-only. Offline auto-sync off, any durable Custom STT choice (including the pinned
+types are treated conservatively as local-only. Unknown storage enums, malformed file-path types and disk rows without a nonempty path make the census incomplete; they cannot erase a possible reference. Offline auto-sync off, any durable Custom STT choice (including the pinned
 on-device choice), malformed/unknown STT settings, keep-everything-on-device, save-live-hours, active
 on-device overflow or the selected local capture route all preserve the hold.
 Preferences, memory policy and the kill switch are checked again after budget I/O at admission.

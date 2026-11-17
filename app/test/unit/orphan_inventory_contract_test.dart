@@ -4,6 +4,36 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/wals/recording_inventory.dart';
 
 void main() {
+  for (final fields in <Map<String, Object?>>[
+    {'storage': 'future'},
+    {'storage': 7},
+    {'storage': false},
+    {
+      'storage': 'mem',
+      'file_path': {'file': 'hidden.bin'}
+    },
+    {'storage': 'disk'},
+    {'storage': 'disk', 'file_path': ''},
+    {
+      'storage': 'sdcard',
+      'file_path': ['hidden.bin']
+    },
+  ]) {
+    test('ambiguous WAL reference schema fences census: $fields', () async {
+      final dir = await Directory.systemTemp.createTemp('orphan-schema-');
+      addTearDown(() => dir.delete(recursive: true));
+      await File('${dir.path}/wals.json').writeAsString(jsonEncode({
+        'wals': [
+          {'timer_start': 1794873600, 'codec': 'opus', 'owner_uid': 'owner', ...fields}
+        ]
+      }));
+      final census = await captureRecordingCensus(
+          documents: dir.path, memoryBuckets: {'active': []}, phoneSeconds: 1794873600, currentOwner: 'owner');
+      expect(census.complete, isFalse);
+      expect(census.summary['invalid_minimum_schema_rows'], 1);
+    });
+  }
+
   test('diagnostics classify owner-proven orphan audio without exporting file identifiers', () async {
     final dir = await Directory.systemTemp.createTemp('orphan-contract-');
     addTearDown(() => dir.delete(recursive: true));
