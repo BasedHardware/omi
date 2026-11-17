@@ -269,7 +269,7 @@
       "runs_on": "ubuntu-latest"
     },
     "backend-unit-tests.yml/backend-unit-shard": {
-      "budget_p50_minutes": 6,
+      "budget_p50_minutes": 5,
       "display_name": "Backend unit shard ${{ matrix.shard }}/8",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
@@ -288,9 +288,9 @@
         ]
       },
       "matrix_size": 8,
-      "needs": [],
+      "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "2026-11-03 ciflake: run 41672443401 selected about 2540 files (+47% since six-shard sizing); all tests passed but shard wall reached 729s against the unchanged 720s regression gate. Eight shards restore capacity headroom: projected max test wall 740 * 6/8 = 555s, while the existing 8-minute p50 forecast scales to 6 minutes per runner. Aggregate forecast remains 48 Linux runner-minutes/run (8 * 6 instead of 6 * 8), with the same 119 PR runs/day and 49-minute conservative signal cap. No measured p50 is claimed; re-seed from completed runs after merge.",
+      "rationale": "2026-11-17 selection v2: shards now wait for the one-minute ci-tier job, which plans the selection once so all eight shards partition the same file list (import-graph selection, ci:full label, main diff since the last green main run plus a rotating 1/8 slice). Backtest over the last 300 backend-touching first-parent main commits (backend/scripts/backtest_backend_unit_selection.py --ref origin/main at 0ce396503a55): mean selected files 2095.4 -> 1042.8 (-50.2%), median 2951 -> 530, full-suite runs 212 -> 42, with no narrow legacy selection lost. The 6-minute p50 assumed a full-suite median; with a 530-file median the p50 forecast drops to 5 minutes per runner (about 1.5 minutes setup plus a smaller test share), keeping the critical path at 1 + 5x8 + 1 = 42 minutes under the 49-minute cap. No measured p50 is claimed; re-seed from completed runs after merge. Prior: 2026-11-03 ciflake eight-shard sizing (run 41672443401).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
