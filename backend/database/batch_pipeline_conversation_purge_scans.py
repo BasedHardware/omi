@@ -389,7 +389,9 @@ class ScanProgress(jobs.RunProgress):
             transaction.update(
                 self._ref(),
                 {
-                    'run_token': None,
+                    # Retain proof across dispatch handoffs. A legacy worker
+                    # overwrites/clears it, invalidating this saved scan.
+                    'run_token': self.token,
                     'lease_generation': None,
                     'lease_until': None,
                     'due_at': _now() + timedelta(seconds=wait),
