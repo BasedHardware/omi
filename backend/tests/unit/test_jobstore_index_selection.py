@@ -132,11 +132,13 @@ def test_private_worker_registry_keeps_other_modes_separate(configured, monkeypa
     monkeypatch.setenv('BATCH_JOBSTORE_MODE', mode)
     collectors = hook.shadow_parity_collectors()
     assert INDEX_READS_TOTAL not in collectors
-    assert INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP not in collectors
+    assert INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP in collectors
     if mode == 'shadow':
         assert dual_store.SHADOW_PARITY_TOTAL in collectors
     else:
-        assert collectors == ()
+        from database.batch_pipeline_recovery_metrics import RECOVERY_COLLECTORS
+
+        assert collectors == RECOVERY_COLLECTORS
 
 
 def test_index_answers_preserve_optional_async_serving_parity(configured, monkeypatch):

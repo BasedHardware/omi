@@ -173,7 +173,7 @@ def health_server(
     ):
         registry.register(collector)
     register_gpu_skip_counters(registry)  # diarization decisions + per-unit FP32-parity counters
-    for collector in shadow_parity_collectors():  # A2 shadow only; empty (no jobstore import) otherwise
+    for collector in shadow_parity_collectors():  # Caller denominator/freshness also export in primary-only mode.
         registry.register(collector)
 
     class Handler(BaseHTTPRequestHandler):
