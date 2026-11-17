@@ -72,9 +72,9 @@ def shadow_parity_collectors() -> tuple:
             dual_store.SHADOW_CONVERGENCE_SECONDS,
         )
         if _shadow_mode(index_only=True):
-            from database.jobstore.index_store import INDEX_READS_TOTAL
+            from database.jobstore.index_store import INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP, INDEX_READS_TOTAL
 
-            return (*collectors, INDEX_READS_TOTAL)
+            return (*collectors, INDEX_READS_TOTAL, INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP)
         return collectors
     except Exception:
         logger.warning('event=jobstore_shadow outcome=metrics_unavailable', exc_info=True)

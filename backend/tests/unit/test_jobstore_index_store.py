@@ -21,6 +21,7 @@ def setup(monkeypatch):
     shadow = SimpleNamespace(namespace=primary.namespace, pool=Mock())
     mirror = SimpleNamespace(primary=primary, shadow=shadow)
     clock = [100.0]
+    wall = [1_800_000_000.0]
     enabled = [True]
     store = IndexStore(
         mirror,
@@ -28,6 +29,7 @@ def setup(monkeypatch):
         enabled=lambda: enabled[0],
         sweep_interval_s=60,
         clock=lambda: clock[0],
+        wall_clock=lambda: wall[0],
     )
     read = Mock(return_value=['postgres'])
     monkeypatch.setattr(store._index, 'due', read)
@@ -39,6 +41,7 @@ def setup(monkeypatch):
         primary=primary,
         shadow=shadow,
         clock=clock,
+        wall=wall,
         enabled=enabled,
         read=read,
         fallback=fallback,
@@ -76,6 +79,108 @@ def test_failed_sweep_stays_due_and_never_uses_postgres(setup):
             setup.store.due('retry', 100)
     setup.read.assert_not_called()
     assert not setup.store._last_sweep
+
+
+def test_new_process_collector_has_no_false_freshness_before_success(setup, monkeypatch):
+    gauge = index_store.Gauge('test_primary_scan_timestamp', 'test', ['namespace', 'query'], registry=None)
+    monkeypatch.setattr(index_store, 'INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP', gauge)
+    assert not list(gauge.collect())[0].samples
+    setup.primary.due.side_effect = RuntimeError('first primary failed')
+    with pytest.raises(RuntimeError, match='first primary failed'):
+        setup.store.due('leased', 1)
+    assert not list(gauge.collect())[0].samples
+    setup.primary.due.side_effect = None
+    setup.store.due('leased', 2)
+    assert gauge.labels(namespace='batch_pipeline_dev', query='due_leased')._value.get() == setup.wall[0]
+
+
+def test_primary_scan_timestamp_tracks_successful_completion_not_scrapes_or_pg(setup):
+    metric = index_store.INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP.labels(namespace='batch_pipeline_dev', query='due_leased')
+
+    # The primary callback changes wall time: the metric must describe completion.
+    def primary(*_args):
+        setup.wall[0] += 2
+        return []
+
+    setup.primary.due.side_effect = primary
+    assert setup.store.due('leased', 1) == []
+    first = setup.wall[0]
+    assert metric._value.get() == first
+    setup.wall[0] += 30
+    assert setup.store.due('leased', 2) == ['postgres']
+    list(index_store.INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP.collect())
+    assert metric._value.get() == first
+    setup.clock[0] += 60
+    setup.primary.due.side_effect = RuntimeError('primary failed')
+    with pytest.raises(RuntimeError, match='primary failed'):
+        setup.store.due('leased', 3)
+    assert metric._value.get() == first
+    setup.primary.due.side_effect = primary
+    assert setup.store.due('leased', 4) == []
+    assert metric._value.get() == setup.wall[0] > first
+
+
+def test_fallback_and_killed_primary_scans_update_each_query_independently(setup):
+    gauge = index_store.INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP
+    leased = gauge.labels(namespace='batch_pipeline_dev', query='due_leased')
+    retry = gauge.labels(namespace='batch_pipeline_dev', query='due_retry')
+    setup.store.due('leased', 1)
+    first = leased._value.get()
+    setup.wall[0] += 5
+    setup.store.due('retry', 1)
+    assert retry._value.get() == setup.wall[0]
+    assert leased._value.get() == first
+    setup.wall[0] += 5
+    setup.read.side_effect = TimeoutError('pg timeout')
+    setup.store.due('leased', 1)
+    assert leased._value.get() == setup.wall[0]
+    setup.wall[0] += 5
+    setup.enabled[0] = False
+    setup.store.due('leased', 1)
+    assert leased._value.get() == setup.wall[0]
+
+
+def test_unselected_primary_scan_is_observed_and_labels_are_bounded(setup):
+    setup.store.enabled_queries = frozenset({'due_leased'})
+    setup.store.namespace = 'arbitrary-customer-text'
+    setup.store.due('retry', 1)
+    metric = index_store.INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP.labels(namespace='other', query='due_retry')
+    assert metric._value.get() == setup.wall[0]
+    setup.store.due('arbitrary-state', 1)
+    for family in index_store.INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP.collect():
+        for sample in family.samples:
+            assert sample.labels['namespace'] in {'batch_pipeline_dev', 'batch_pipeline_prod', 'other'}
+            assert sample.labels['query'] in index_store.INDEX_QUERIES
+
+
+@pytest.mark.parametrize('state', ['leased', 'retry', 'result_ready'])
+@pytest.mark.parametrize('hints', [[], ['plausible-selected-owner-row']])
+def test_unpartitioned_production_discovery_never_substitutes_partial_copy(setup, monkeypatch, state, hints):
+    setup.store.namespace = 'batch_pipeline_prod'
+    monkeypatch.setattr(index_store, 'production_policy_applies', lambda _namespace: True)
+    setup.read.return_value = hints
+    setup.primary.due.return_value = ['uncopied-owner-row']
+    for _ in range(2):
+        assert setup.store.due(state, 1, 7) == ['uncopied-owner-row']
+    setup.primary.due.assert_called_with(state, 1, 7)
+    setup.read.assert_not_called()
+    setup.primary.due.side_effect = RuntimeError('primary failed')
+    with pytest.raises(RuntimeError, match='primary failed'):
+        setup.store.due(state, 1, 7)
+    setup.read.assert_not_called()
+
+
+def test_production_context_changed_during_pg_read_discards_hint(setup, monkeypatch):
+    production = [False]
+    monkeypatch.setattr(index_store, 'production_policy_applies', lambda _namespace: production[0])
+    setup.store.due('leased', 1)
+
+    def change_context(*_args):
+        production[0] = True
+        return ['postgres']
+
+    setup.read.side_effect = change_context
+    assert setup.store.due('leased', 2) == ['firestore']
 
 
 @pytest.mark.parametrize('error', [RuntimeError('pg down'), TimeoutError('deadline')])

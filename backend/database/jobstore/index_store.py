@@ -13,6 +13,8 @@ wrapper does not create connections, perform backfills or change erasure.
 Index reads require an already warm connection; no IAM refresh or dial can
 enter the caller. Both the server statement and the synchronous psycopg
 network wait have deadlines. A failed connection is discarded by its pool.
+Production unpartitioned discovery stays on Firestore until complete-query
+coverage can be proven; an owner-sampled copy cannot supply that proof.
 """
 
 from __future__ import annotations
@@ -26,9 +28,10 @@ import threading
 import time
 from typing import Any
 
-from prometheus_client import Counter
+from prometheus_client import Counter, Gauge
 
 from database import rpc_deadline
+from database.jobstore.cohort import production_policy_applies
 from database.jobstore.dual_store import DualStore
 from database.jobstore.postgres_store import PostgresStore
 from database.jobstore.connection import sql
@@ -52,6 +55,7 @@ class IndexReadReason(StrEnum):
     EXCLUDED = 'excluded'
     ERROR = 'error'
     TIMEOUT = 'timeout'
+    COVERAGE_UNKNOWN = 'coverage_unknown'
 
 
 class IndexReadOutcome(StrEnum):
@@ -70,6 +74,15 @@ INDEX_READS_TOTAL = Counter(
     'Discovery answers by source; Postgres returns non-authoritative IDs only.',
     ['query', 'source', 'reason', 'outcome'],
 )
+INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP = Gauge(
+    'omi_jobstore_index_primary_scan_success_timestamp_seconds',
+    'Unix completion time of the last successful bounded primary due query; not backlog coverage.',
+    ['namespace', 'query'],
+)
+
+
+def _metric_namespace(namespace: str) -> str:
+    return namespace if namespace in {'batch_pipeline_dev', 'batch_pipeline_prod'} else 'other'
 
 
 def _count(query: str, source: IndexReadSource, reason: IndexReadReason, outcome: IndexReadOutcome) -> None:
@@ -171,6 +184,7 @@ class IndexStore:
         sweep_interval_s: float = 60.0,
         read_budget_s: float = 0.2,
         clock: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
         observe: Callable[[str, tuple[Any, ...], dict[str, Any]], None] | None = None,
     ):
         queries = frozenset(enabled_queries)
@@ -194,6 +208,7 @@ class IndexStore:
         self.sweep_interval_s = sweep_interval_s
         self.read_budget_s = read_budget_s
         self._clock = clock
+        self._wall_clock = wall_clock
         self._observe = observe
         self._last_sweep: dict[str, float] = {}
         self._sweep_lock = threading.Lock()
@@ -224,6 +239,10 @@ class IndexStore:
         if query in self.enabled_queries:
             with self._sweep_lock:
                 self._last_sweep[query] = self._clock()
+        if query in INDEX_QUERIES:
+            INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP.labels(namespace=_metric_namespace(self.namespace), query=query).set(
+                self._wall_clock()
+            )
         if fallback_reason is not None:
             self._fallback(fallback_reason, 'recovered')
         self._observe_due(state, now, limit)
@@ -256,6 +275,12 @@ class IndexStore:
             return self._primary_due(state, now, limit, query, IndexReadReason.UNSELECTED)
         if not self.enabled():
             return self._primary_due(state, now, limit, query, IndexReadReason.DISABLED)
+        # The production copy is owner-sampled, while due() is unpartitioned.
+        # Neither 10000 owner BPS nor a successful cursor pass certifies all
+        # relevant rows/producers. There is no complete-query coverage proof
+        # in this source yet, so a production PG answer is never eligible.
+        if production_policy_applies(self.namespace):
+            return self._primary_due(state, now, limit, query, IndexReadReason.COVERAGE_UNKNOWN)
         with self._sweep_lock:
             last = self._last_sweep.get(query)
         if last is None or self._clock() - last >= self.sweep_interval_s:
@@ -274,6 +299,8 @@ class IndexStore:
             )
         if not self.enabled():
             return self._primary_due(state, now, limit, query, IndexReadReason.DISABLED)
+        if production_policy_applies(self.namespace):
+            return self._primary_due(state, now, limit, query, IndexReadReason.COVERAGE_UNKNOWN)
         _count(query, IndexReadSource.POSTGRES, IndexReadReason.INDEX, IndexReadOutcome.RETURNED)
         self._observe_due(state, now, limit)
         return result
