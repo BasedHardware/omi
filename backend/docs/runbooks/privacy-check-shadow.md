@@ -166,22 +166,38 @@ interval includes setup checks, while listen resets its census after bootstrap.
 
 ## Current API owner-memo admission (2026-11-17)
 
-The margin-40 lead's O2b stage-2 order supersedes the historical calendar gate
-and owner-candidate packet below only for prod Cloud Run backend, backend-sync and backend-integration.
-It follows the recorded 100% live-shadow qualification under David's 2026-11-04
-evidence-based privacy gate and Release's stage-1/native-5xx disposition.
+The margin-40 lead's O2b stage-2 order recorded the source target only for
+prod Cloud Run backend, backend-sync and backend-integration, following the
+100% live-shadow qualification under David's 2026-11-04 evidence-based privacy
+gate and Release's stage-1/native-5xx disposition. The later incident and current
+hold described below require fresh admission; the gate itself is not waived.
 The durable source for those three APIs is owner enforcement 100, shadow 0,
 decision cache 0, negative cache 0 and TTL60 0; see the
 [runtime-source contract](../../deploy/runtime_env/README.md#api-owner-memo-source-carry-o2b-2026-11-17).
 Backfill remains owner enforcement 0/shadow 10/decision cache 0. Other role and
 family admissions remain separate; no worker/GKE/global default expands here.
 
-Existing transactional per-decision token re-reads and writer fences remain.
-With shadow 0 there is no mismatch stream, so the lead's stage guard is a
-manual-trip backstop; retain the authority-unavailable/audio/5xx stop conditions.
-Release's runtime inverse is enforcement 0 with shadow 10, or the existing
-privacy kill document. Reconcile source before the next train after an inverse.
-Source merge is not runtime acceptance, writer coverage or measured savings.
+The margin lead records that David's 2026-11-04 gate was met from
+2026-11-16T23:40Z through 2026-11-17T01:40Z: two hours of live shadow at
+100 percent, zero mismatches, with the automatic kill armed. This is historical
+qualification, not a waiver of the automatic-trip requirement. The owner memo
+serves only when `privacy_checks_shadow` is 0; enforcement therefore emits no
+mismatch comparison stream and the comparison guard cannot trip automatically
+in that state. The safety mechanism on each served decision is the token
+re-read in the caller's transaction, with the existing writer fences. A sampled
+live comparison alongside enforcement is owed as a code follow-up commissioned
+by the margin lead; this source carry does not implement or validate it.
+Retain the authority-unavailable/audio/5xx stop conditions.
+
+The subsequent 2026-11-17T04:56Z guard/receiving-vector incident supersedes the
+earlier source admission. Release holds this carry until the margin lead
+reconciles the current runtime/guard disposition and explicitly admits the
+corrected source. The existing kill remains set; neither this historical
+qualification nor the source literals authorize clearing it or reactivating
+enforcement. Release's runtime inverse is enforcement 0 with shadow 10, or
+the existing privacy kill document. Reconcile source before the next train
+after an inverse. Source merge is not runtime acceptance, writer coverage or
+measured savings.
 
 ### Historical owner-level decision memo packet (before the API admission above)
 

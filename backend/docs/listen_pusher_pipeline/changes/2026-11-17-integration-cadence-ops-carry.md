@@ -14,11 +14,12 @@ or config-train apply. Hold expiry, green CI and source merge do not authorize
 restoring 100/20. The separate privacy persistence and classification16 remain.
 
 The staging ops file mirrors these keys under the existing parity contract;
-staging application remains a separately authorized config train. Its deploy
-path replaces the complete environment from the runtime manifest and does not
-merge the ops file. A later staging deploy drops these ops-only keys and restores
-code defaults (100/20/classification8) until another admitted staging config train.
-This source carry changes neither that deploy path nor staging admission.
+staging application remains separately authorized. Both prod and staging
+runtime overlays also pin these three integration-only values, so their full
+environment replacement deploys preserve 200/10/classification16 instead of
+dropping ops-only keys and reverting to the superseded code defaults. Tests
+pin both ops files and both composed deploy environments and reject declaration
+on any other service. No staging privacy admission or runtime code default changes.
 
 Release owns production and any later inverse, serialized with config trains.
 Reconcile source after a new ruling before another train can reassert stale
@@ -29,7 +30,8 @@ packet. Its historical classification8 must not be mistaken for the current
 
 Use `backend/scripts/ops/drift_check.py` for source-aware ops comparison.
 The manifest-only `check_cloud_run_env_drift.py` can still list ops-only keys as
-extra bindings; this carry adds no broad allowlist or duplicate manifest owner.
+extra bindings elsewhere; the cadence keys now have matching canonical runtime
+bindings. This carry adds no broad allowlist.
 Runtime defaults, controller logic, capacity and enforcement behavior are unchanged.
 
 The margin-40 lead owns projection recovery and matched safety/cost readouts.

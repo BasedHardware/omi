@@ -343,13 +343,14 @@ def test_staging_rejects_production_privacy_admission(tmp_path, service, lever, 
     ) in staging_check.staging_diff(root)
 
 
-def test_removing_staging_privacy_map_cannot_inherit_production_admission(tmp_path):
+@pytest.mark.parametrize('service', sorted(staging_check.STAGING_PRIVACY_SERVICES))
+def test_removing_staging_privacy_map_cannot_inherit_production_admission(tmp_path, service):
     root = _copy_tree(tmp_path)
     _edit_staging_overlay(
-        root, lambda doc: doc['overlay']['cloud_run']['services']['backend']['env'].pop('FIRESTORE_READ_LEVERS')
+        root, lambda doc: doc['overlay']['cloud_run']['services'][service]['env'].pop('FIRESTORE_READ_LEVERS')
     )
     assert (
-        'backend',
+        service,
         'FIRESTORE_READ_LEVERS',
         'staging privacy retention or other lever parity differs',
     ) in staging_check.staging_diff(root)
@@ -382,3 +383,21 @@ def test_staging_privacy_exception_preserves_strict_map_parity(tmp_path, mutatio
         'FIRESTORE_READ_LEVERS',
         'staging privacy retention or other lever parity differs',
     ) in staging_check.staging_diff(root)
+
+
+@pytest.mark.parametrize('environment', ['prod', 'staging'])
+def test_full_deploy_preserves_restored_integration_cadence(composer, environment):
+    config = (
+        composer.compose_staging(inputs=INPUTS)
+        if environment == 'staging'
+        else composer.compose_manifest()['environments']['prod']
+    )
+    expected = {
+        'BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS': '200',
+        'BATCH_PIPELINE_SERVING_TICK_SECONDS': '10',
+        'BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT': '16',
+    }
+    assert 'backend-integration' in config['cloud_run']['services']
+    for service, spec in config['cloud_run']['services'].items():
+        actual = {key: entry['value'] for key, entry in spec['env'].items() if key in expected}
+        assert actual == (expected if service == 'backend-integration' else {}), service

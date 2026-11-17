@@ -144,8 +144,11 @@ The existing backend unit selector runs these checks when any source changes.
 
 `firestore_read_lever_policy.lever_expiry` in `_base.yaml` is a surface-keyed
 map: each partial `(surface, lever)` entry binds the exact `value` to an ISO UTC
-`expires` date. Dates must be today through seven days out. Current approvals
-end on 2026-11-17; this is an expiry deadline, not permission to expand the rollout.
+`expires` date. Dates must be today through seven days out. Existing lifecycle approvals
+end on 2026-11-17. The three retained prod backfill/worker shadow-10 entries
+are renewed through 2026-11-24 under the margin lead's panel F3 disposition to
+retain their excluded scope; percentages and runtime admission do not change.
+An expiry deadline is not permission to expand the rollout.
 Renewal requires an explicit reviewed source change. `base/` and `overlay/`
 identify raw input paths; `runtime/<env>/` identifies both the generated and
 in-memory composed surface; `chart/<env>/` includes Helm default inheritance;
@@ -188,14 +191,19 @@ admit owner-memo enforcement only on prod Cloud Run `backend`, `backend-sync`
 and `backend-integration`. Their canonical `prod.overlay.yaml` maps now carry
 `bpp_owner_memo_enforce:100`, `privacy_checks_shadow:0`, `bpp_decision_cache:0`,
 `privacy_negative_lookup_cache:0` and `privacy_ttl60:0`. All unrelated entries
-are preserved. Integration cadence/classification remain separately ops-owned.
+are preserved. The restored integration200/10/class16 values are pinned in both ops and
+prod/staging runtime overlays so full deploys cannot reintroduce the inverse;
+Release still owns application and separate runtime admission.
 
 Backfill is excluded: its existing O4 decision-cache OFF state is now durable
 with enforcement 0 and shadow 10. The worker chart, GKE, jobs, desktop and dev
 source remain unchanged. This supersedes the older shadow/negative-cache values
 in the historical SCA-2173 paragraph above, without widening its monthly readers.
-Only the six obsolete API shadow-10 expiry entries are removed; no other expiry
-is renewed and expiry never authorizes a rollout.
+The six obsolete API shadow-10 expiry entries are removed. The three retained
+backfill/worker shadow-10 entries are renewed through 2026-11-24 by the margin
+lead's panel F3 disposition; no percentage changes and expiry never authorizes
+a rollout. The later04:56 privacy incident supersedes the earlier source GO;
+current lead/runtime reconciliation and explicit Release admission remain HOLD.
 
 These complete literals are source replacements, not live-map patches. Edit the
 prod overlay and run both canonical generators; never run the one-time source

@@ -788,7 +788,7 @@
       ],
       "lever_expiry": {
         "privacy_checks_shadow": {
-          "expires": "2026-11-17",
+          "expires": "2026-11-24",
           "value": 10
         }
       }
@@ -2872,7 +2872,7 @@
           "value": 5
         },
         "privacy_checks_shadow": {
-          "expires": "2026-11-17",
+          "expires": "2026-11-24",
           "value": 10
         }
       }
