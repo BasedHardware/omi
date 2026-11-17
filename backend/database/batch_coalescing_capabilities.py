@@ -19,7 +19,7 @@ import math
 import os
 import re
 
-from config.batch_pipeline_coalescing import EXTENDED_MAX_MEMBERS
+from config.batch_pipeline_coalescing_protocol import MAX_COMPLETION_MEMBERS
 
 SHA = re.compile('[0-9a-f]{40}')
 _ADVERTISED = set()
@@ -36,9 +36,9 @@ def advertise(store):
     def commit(tx):
         key = ('coalesce_capabilities', release)
         current = tx.get(*key)
-        if current.get('protocol') == 2 and current.get('max_members') == EXTENDED_MAX_MEMBERS:
+        if current.get('protocol') == 2 and current.get('max_members') == MAX_COMPLETION_MEMBERS:
             return
-        tx.put(*key, {'protocol': 2, 'max_members': EXTENDED_MAX_MEMBERS})
+        tx.put(*key, {'protocol': 2, 'max_members': MAX_COMPLETION_MEMBERS})
 
     store.run(commit)
     if len(_ADVERTISED) < 64:
@@ -63,6 +63,6 @@ def extended_ready(tx, now):
         return False
     for release in releases:
         ad = tx.get('coalesce_capabilities', release)
-        if ad.get('protocol') != 2 or ad.get('max_members') != EXTENDED_MAX_MEMBERS:
+        if ad.get('protocol') != 2 or ad.get('max_members') != MAX_COMPLETION_MEMBERS:
             return False
     return True

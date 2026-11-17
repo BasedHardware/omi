@@ -7,7 +7,7 @@ remains the authority for completion. No poll or surviving hold row is needed.
 
 from datetime import datetime, timedelta, timezone
 
-from config.batch_pipeline_coalescing import EXTENDED_MAX_MEMBERS
+from config.batch_pipeline_coalescing_protocol import MAX_COMPLETION_MEMBERS
 from utils.batch_pipeline.upload_metrics import clock_fields
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result, sync_content_ledger_ref
 
@@ -30,7 +30,7 @@ def prepare(client, namespace, transaction, binding, ledger):
     if metadata is None:
         return []  # Ordinary uploads add no reads or writes.
     members = metadata['members']
-    if not 0 < len(members) <= EXTENDED_MAX_MEMBERS or len({m['job_id'] for m in members}) != len(members):
+    if not 0 < len(members) <= MAX_COMPLETION_MEMBERS or len({m['job_id'] for m in members}) != len(members):
         raise ValueError('invalid original receipt membership')
     prepared = []
     for member in members:
