@@ -41,8 +41,22 @@ continue using their existing independent cursors/clocks.
    python scripts/batch_pipeline_projection_followup_backfill.py --stage prod
    # Separate admitted prod-operator action, only after writer-coverage proof:
    python scripts/batch_pipeline_projection_followup_backfill.py --stage prod \
-     --apply --confirm-writers-deployed --max-pages 10
+     --apply --confirm-writers-deployed --max-pages 10 \
+     --page-size 50 --max-rows-per-second 10
    ```
+
+   Apply defaults to a **10 newly admitted candidate rows/second** page budget,
+   with one page-size burst. One monotonic limiter spans the entire invocation;
+   waiting occurs before page reads or transactions, never inside a transaction.
+   Every page reserves its full configured size, including a short or empty page,
+   so it cannot exceed the candidate-admission budget. Slow IO earns no catch-up
+   credit. A restart or second driver has an independent budget: this is not a
+   distributed lock, and the existing one-driver admission still applies.
+   SDK transaction/RPC retries are **not separately rate-limited** by this page
+   budget; observe the admitted Firestore abort/retry bounds and stop at a page
+   boundary on a trip. Do not describe this as a physical billed-read/RPC ceiling.
+   A lower value changes operator throughput, not a serving parameter. Dry-run
+   remains one unpaced page and is not a no-row-read aggregate operation.
 
    Each page and checkpoint commit atomically. A concurrent cursor change fails
    the page rather than advancing stale progress. Repeat bounded admitted runs
