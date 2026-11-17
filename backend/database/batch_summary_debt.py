@@ -1,4 +1,4 @@
-"""Transfer summary custody only after the batch capture's finalizer has finished."""
+"""Verify bound finalizer custody before arming batch projection summary debt."""
 
 import logging
 
@@ -17,6 +17,10 @@ def arm_projection_summary(uid, client, transaction, payload, current):
     alone. Bind the proof to both job id and revision so a new finalizer restores
     the ordinary generation fence. This creates no task: projection and repair
     continue using the same conversation-keyed enrichment outbox.
+
+    Unbound rows retain the existing projection-debt policy; no finalizer
+    custody exception is minted. Canonical orphan completion supports that
+    shape without creating a finalization job.
     """
     if (
         not delivery.projection_debt_enabled()
@@ -29,6 +33,9 @@ def arm_projection_summary(uid, client, transaction, payload, current):
     ):
         return
     job_id = payload.get('finalization_job_id')
+    if job_id is not None and (not isinstance(job_id, str) or '/' in job_id):
+        logger.info('event=batch_summary_debt phase=precommit outcome=refused reason=finalizer_not_eligible')
+        return
     if job_id:
         job = (
             client.collection(FINALIZATION_JOBS_COLLECTION).document(job_id).get(transaction=transaction).to_dict()

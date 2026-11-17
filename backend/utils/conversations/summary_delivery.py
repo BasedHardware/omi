@@ -229,7 +229,7 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     provenance together with the debt clock.
 
     Processing acceptance can leave a pending timestamp without a due time.
-    Keep that original clock when arming it. Batch-live rows retaining a
+    Keep its valid non-future clock when arming it. Batch-live rows retaining a
     finalization id require transactionally verified, generation-bound custody.
 
     A row whose ``created_at`` is already past the repair age gate gets the
@@ -287,6 +287,7 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
         or isinstance(accepted, bool)
         or not math.isfinite(accepted)
         or accepted <= 0
+        or accepted > current
     ):
         accepted = current
     if _past_age_gate(accepted, now=current):
@@ -306,6 +307,8 @@ def projection_owns_finalization(row: Row) -> bool:
         and row.get('record_lane_owner') == 'batch_live_v1'
         and row.get('record_projection_revision')
         and isinstance(proof, dict)
+        and isinstance(row.get('finalization_job_id'), str)
+        and '/' not in row['finalization_job_id']
         and proof.get('job_id') == row.get('finalization_job_id')
         and row.get('finalization_job_id')
         and type(revision) is int
@@ -333,6 +336,9 @@ def _refusal(row: Row) -> str | None:
         return row['summary_blocked_reason']
     if row.get('summary_title_provenance') != 'server_minimum':
         return 'unknown_provenance'
+    job_id = row.get('finalization_job_id')
+    if job_id is not None and (not isinstance(job_id, str) or '/' in job_id):
+        return 'generation_owned'
     if row.get('finalization_status') == 'blocked_byok' or (
         row.get('finalization_job_id') and not projection_owns_finalization(row)
     ):

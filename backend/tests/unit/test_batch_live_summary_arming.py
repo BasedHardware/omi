@@ -126,7 +126,7 @@ def test_projection_kill_switch_preserves_the_generation_fence(batch_projection,
     assert 'summary_projection_finalization' not in stored
 
 
-def test_summary_custody_proof_cannot_cross_generation_or_bypass_byok():
+def test_summary_custody_proof_cannot_cross_generation_or_bypass_byok(monkeypatch):
     row = dict(
         status='completed',
         record_lane_owner='batch_live_v1',
@@ -145,6 +145,41 @@ def test_summary_custody_proof_cannot_cross_generation_or_bypass_byok():
         {'finalization_status': 'blocked_byok'},
     ]:
         assert delivery.refusal({**row, **changes}) == 'generation_owned'
+    monkeypatch.setenv('SUMMARY_PROJECTION_DEBT_ENABLED', 'false')
+    assert delivery.refusal(row) == 'generation_owned'
+
+
+@pytest.mark.parametrize('job_id', ['missing', 123, True, False, 0, {}, [], 'bad/job'])
+def test_missing_or_invalid_finalizer_preserves_projection_but_does_not_arm(batch_projection, job_id):
+    lane = batch_projection
+    setup_record(lane, finalization_job_id=job_id)
+    lane.projector.project('segment')
+    stored = lane.client.rows[('users', 'u', 'conversations', 'live')]
+    assert stored['record_projection_revision'] == 1
+    assert stored['transcript_segments']
+    assert stored.get('summary_due_at') is None
+    assert 'summary_projection_finalization' not in stored
+
+
+def test_projection_preserves_existing_unbound_record_debt_policy(batch_projection):
+    lane = batch_projection
+    setup_record(lane, finalization_job_id=None, finalization_revision=None, finalization_status=None)
+    lane.client.rows.pop(('conversation_finalization_jobs', 'finalizer'))
+    lane.projector.project('segment')
+    stored = lane.client.rows[('users', 'u', 'conversations', 'live')]
+    assert stored['record_projection_revision'] == 1
+    assert stored['summary_due_at'] == stored['summary_first_pending_at'] + delivery.deadline_seconds()
+    assert 'summary_projection_finalization' not in stored
+    assert delivery.refusal({k: v for k, v in stored.items() if v is not firestore.DELETE_FIELD}) is None
+
+
+@pytest.mark.parametrize('offset', [60, 10**12])
+def test_future_pending_clock_cannot_postpone_the_first_summary(offset):
+    now = datetime.now(timezone.utc).timestamp()
+    row = dict(status='completed', summary_first_pending_at=now + offset, structured={'title': ''})
+    assert delivery.stamp_projection_debt(row, now=now)
+    assert row['summary_first_pending_at'] == now
+    assert row['summary_due_at'] == now + delivery.deadline_seconds()
 
 
 def test_acceptance_clock_alone_is_receipt_metadata_not_armed_debt():
