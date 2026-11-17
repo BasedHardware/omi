@@ -13998,11 +13998,11 @@ class AppLocalizationsEs extends AppLocalizations {
       'Omi ya está trabajando en esta conversación. El resumen aparecerá aquí cuando termine.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'Aún sin transcribir';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'El audio de esta grabación aún no se ha transcrito, así que reintentar el resumen no servirá.';
 
   @override
   String get summaryCheckAgain => 'Volver a comprobar';

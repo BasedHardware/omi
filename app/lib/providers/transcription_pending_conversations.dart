@@ -5,7 +5,7 @@ import 'package:omi/backend/schema/conversation.dart';
 /// Conversations the server said have audio that is not transcribed: a reprocess answered 409
 /// `transcription_pending`. A summary retry cannot transcribe audio, so surfaces that would offer
 /// "Retry" for these rows listen here and show a plain status instead. An id leaves the set when a
-/// reprocess succeeds or a newer copy of the conversation is no longer a failed row.
+/// reprocess succeeds or an applied copy explicitly carries a non-failed Home step.
 class TranscriptionPendingConversations {
   TranscriptionPendingConversations._();
 
@@ -23,9 +23,11 @@ class TranscriptionPendingConversations {
     ids.value = {...ids.value}..remove(id);
   }
 
-  /// A newer server copy that is no longer a failed row settles the status.
+  /// Clears the status only when an applied copy explicitly carries a non-failed Home step. A copy
+  /// without `home_step` (the detail endpoint omits it) is not evidence that the row settled.
   static void observe(ServerConversation conversation) {
-    if (conversation.homeStep != 'failed') unmark(conversation.id);
+    final step = conversation.homeStep;
+    if (step != null && step != 'failed') unmark(conversation.id);
   }
 
   @visibleForTesting

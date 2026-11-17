@@ -13949,11 +13949,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get summaryBusyBody => 'Omi juba töötab selle vestlusega. Kokkuvõte ilmub siia, kui see valmis saab.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'Pole veel transkribeeritud';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'Selle salvestise heli pole veel transkribeeritud, seega kokkuvõtte uuesti proovimine ei aita.';
 
   @override
   String get summaryCheckAgain => 'Kontrolli uuesti';

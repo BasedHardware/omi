@@ -14012,11 +14012,11 @@ class AppLocalizationsHu extends AppLocalizations {
       'Az Omi már dolgozik ezen a beszélgetésen. Az összefoglaló itt jelenik meg, amikor elkészül.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'Még nincs átírva';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'A felvétel hangja még nincs átírva, ezért az összefoglaló újrapróbálása nem segít.';
 
   @override
   String get summaryCheckAgain => 'Újbóli ellenőrzés';

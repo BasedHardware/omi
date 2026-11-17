@@ -13960,11 +13960,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get summaryBusyBody => 'Omi käsittelee jo tätä keskustelua. Tiivistelmä näkyy tässä, kun se on valmis.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'Ei vielä litteroitu';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'Tämän tallenteen ääntä ei ole vielä litteroitu, joten yhteenvedon uudelleenyritys ei auta.';
 
   @override
   String get summaryCheckAgain => 'Tarkista uudelleen';

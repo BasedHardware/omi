@@ -13953,11 +13953,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get summaryBusyBody => 'Omi در حال حاضر روی این گفتگو کار می‌کند. خلاصه پس از اتمام اینجا نمایش داده می‌شود.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'هنوز رونویسی نشده';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'صدای این ضبط هنوز رونویسی نشده است، پس تلاش دوباره برای خلاصه کمکی نمی‌کند.';
 
   @override
   String get summaryCheckAgain => 'بررسی دوباره';

@@ -13999,11 +13999,11 @@ class AppLocalizationsKn extends AppLocalizations {
   String get summaryBusyBody => 'Omi ಈಗಾಗಲೇ ಈ ಸಂಭಾಷಣೆಯ ಮೇಲೆ ಕೆಲಸ ಮಾಡುತ್ತಿದೆ. ಮುಗಿದಾಗ ಸಾರಾಂಶ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'ಇನ್ನೂ ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗಿಲ್ಲ';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'ಈ ರೆಕಾರ್ಡಿಂಗ್‌ನ ಆಡಿಯೋ ಇನ್ನೂ ಲಿಪ್ಯಂತರ ಆಗಿಲ್ಲ, ಆದ್ದರಿಂದ ಸಾರಾಂಶವನ್ನು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸುವುದರಿಂದ ಪ್ರಯೋಜನವಿಲ್ಲ.';
 
   @override
   String get summaryCheckAgain => 'ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ';

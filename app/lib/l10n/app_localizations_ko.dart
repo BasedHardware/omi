@@ -13766,11 +13766,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get summaryBusyBody => 'Omi가 이미 이 대화를 처리하고 있습니다. 완료되면 여기에 요약이 표시됩니다.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => '아직 전사되지 않음';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+  String get summaryTranscriptionPendingBody => '이 녹음의 오디오가 아직 전사되지 않아 요약을 다시 시도해도 도움이 되지 않습니다.';
 
   @override
   String get summaryCheckAgain => '다시 확인';

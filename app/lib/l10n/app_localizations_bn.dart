@@ -13954,11 +13954,11 @@ class AppLocalizationsBn extends AppLocalizations {
   String get summaryBusyBody => 'Omi ইতিমধ্যে এই কথোপকথনে কাজ করছে। শেষ হলে সারসংক্ষেপ এখানে দেখা যাবে।';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'এখনও ট্রান্সক্রাইব হয়নি';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'এই রেকর্ডিংয়ের অডিও এখনও ট্রান্সক্রাইব হয়নি, তাই সারাংশ আবার চেষ্টা করে লাভ নেই।';
 
   @override
   String get summaryCheckAgain => 'আবার দেখুন';

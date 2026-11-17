@@ -13968,11 +13968,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get summaryBusyBody => 'Omi bu konuşma üzerinde zaten çalışıyor. Özet tamamlandığında burada görünecek.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'Henüz yazıya dökülmedi';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'Bu kaydın sesi henüz yazıya dökülmedi, bu yüzden özeti yeniden denemek işe yaramaz.';
 
   @override
   String get summaryCheckAgain => 'Tekrar kontrol et';

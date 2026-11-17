@@ -1031,6 +1031,9 @@ class ConversationProvider extends ChangeNotifier {
     completedById.removeWhere((id, _) => _isHiddenByDelete(id));
     conversations = completedById.values.toList()
       ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+    for (final row in conversations) {
+      TranscriptionPendingConversations.observe(row);
+    }
     // Only use cache when no folder filter is applied
     if (conversations.isEmpty && selectedFolderId == null) {
       if (!await _restoreCacheForFetch(generation, fetchRevision)) {
@@ -1536,11 +1539,12 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void updateConversation(ServerConversation conversation, {int? index, bool preserveHomeStep = true}) {
-    TranscriptionPendingConversations.observe(conversation);
     if (conversation.isLocked || conversation.deleted || conversation.isMergedDonor) {
       homeCardSourceChanged?.call(conversation.id, false);
     }
     conversation = _homeReplacement(conversation, preserveHomeStep);
+    // Observe the row actually applied: it keeps a retained 'failed' Home step.
+    TranscriptionPendingConversations.observe(conversation);
     if (conversation.deleted || conversation.isMergedDonor) {
       updateConversationInSortedList(conversation);
       return;

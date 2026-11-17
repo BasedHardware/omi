@@ -13969,11 +13969,11 @@ class AppLocalizationsId extends AppLocalizations {
   String get summaryBusyBody => 'Omi sedang memproses percakapan ini. Ringkasan akan muncul di sini setelah selesai.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'Belum ditranskripsi';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'Audio rekaman ini belum ditranskripsi, jadi mencoba ulang ringkasan tidak akan membantu.';
 
   @override
   String get summaryCheckAgain => 'Periksa lagi';

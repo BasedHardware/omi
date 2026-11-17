@@ -13888,11 +13888,11 @@ class AppLocalizationsTh extends AppLocalizations {
   String get summaryBusyBody => 'Omi กำลังประมวลผลบทสนทนานี้อยู่แล้ว สรุปจะปรากฏที่นี่เมื่อเสร็จสิ้น';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'ยังไม่ได้ถอดเสียง';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'เสียงของการบันทึกนี้ยังไม่ได้ถอดเสียง การลองสรุปอีกครั้งจึงไม่ช่วยอะไร';
 
   @override
   String get summaryCheckAgain => 'ตรวจสอบอีกครั้ง';

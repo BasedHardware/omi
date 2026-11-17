@@ -13989,11 +13989,11 @@ class AppLocalizationsBe extends AppLocalizations {
   String get summaryBusyBody => 'Omi ужо працуе над гэтай размовай. Падсумаванне з\'явіцца тут, калі будзе гатова.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'Яшчэ не транскрыбавана';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'Аўдыя гэтага запісу яшчэ не транскрыбавана, таму паўтор зводкі не дапаможа.';
 
   @override
   String get summaryCheckAgain => 'Праверыць зноў';

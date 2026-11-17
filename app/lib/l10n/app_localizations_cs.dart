@@ -13957,11 +13957,11 @@ class AppLocalizationsCs extends AppLocalizations {
   String get summaryBusyBody => 'Omi už na této konverzaci pracuje. Shrnutí se zde zobrazí, až bude hotové.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'Zatím nepřepsáno';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'Zvuk této nahrávky zatím nebyl přepsán, takže opakování shrnutí nepomůže.';
 
   @override
   String get summaryCheckAgain => 'Zkontrolovat znovu';

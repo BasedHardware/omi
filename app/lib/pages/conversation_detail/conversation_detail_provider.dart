@@ -1314,7 +1314,8 @@ class ConversationDetailProvider extends ChangeNotifier
                 updatedConversation.status == ConversationStatus.merging)) {
           updatedConversation = updatedConversation.withHomeStep('failed');
         }
-        TranscriptionPendingConversations.observe(updatedConversation);
+        // The detail copy omits home_step; observe only what the list applies (it retains 'failed').
+        if (conversationProvider == null) TranscriptionPendingConversations.observe(updatedConversation);
         conversationProvider?.updateConversation(updatedConversation);
         _cachedConversation = updatedConversation;
         resetRecordingTranscript();

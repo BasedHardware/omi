@@ -13760,11 +13760,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get summaryBusyBody => 'Omi はすでにこの会話を処理しています。完了すると、ここに要約が表示されます。';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'まだ文字起こしされていません';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+  String get summaryTranscriptionPendingBody => 'この録音の音声はまだ文字起こしされていないため、要約を再試行しても解決しません。';
 
   @override
   String get summaryCheckAgain => '再確認';

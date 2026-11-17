@@ -14003,11 +14003,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get summaryBusyBody => 'Omi уже работает над этим разговором. Сводка появится здесь, когда будет готова.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'Ещё не расшифровано';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'Аудио этой записи ещё не расшифровано, поэтому повторная попытка сводки не поможет.';
 
   @override
   String get summaryCheckAgain => 'Проверить снова';

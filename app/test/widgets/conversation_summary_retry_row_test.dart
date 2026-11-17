@@ -248,11 +248,63 @@ void main() {
     expect(_retryButton, findsNothing);
     expect(find.byKey(const Key('conversation_transcription_pending_indicator')), findsOneWidget);
 
-    // A newer server copy that is no longer a failed row (transcribed and summarized).
-    provider.updateConversation(_conversation(title: 'Venue planning', summaryRetryable: false));
+    // A newer server copy that explicitly settled the Home step (transcribed and summarized).
+    provider.updateConversation(
+      _conversation(title: 'Venue planning', summaryRetryable: false).withHomeStep('ready'),
+      preserveHomeStep: false,
+    );
     await tester.pump();
     expect(TranscriptionPendingConversations.contains('c1'), isFalse);
     expect(find.byKey(const Key('conversation_transcription_pending_indicator')), findsNothing);
+  });
+
+  testWidgets('opening the detail page keeps the not-transcribed row: its copy has no home_step', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    final failedRow = _conversation(title: 'Processing', summaryRetryable: false).withHomeStep('failed');
+    final provider = await _pumpRow(tester, conversation: failedRow);
+    TranscriptionPendingConversations.mark('c1');
+    await tester.pump();
+    expect(find.byKey(const Key('conversation_transcription_pending_indicator')), findsOneWidget);
+
+    // The detail endpoint projects the hold without home_step.
+    final detailCopy = _conversation(title: 'Processing', summaryRetryable: false);
+    expect(detailCopy.homeStep, isNull);
+    final detail = ConversationDetailProvider(fetchConversation: (_) async => detailCopy)
+      ..conversationProvider = provider
+      ..selectedDate = conversationLocalDayKey(failedRow.createdAt)
+      ..setCachedConversation(provider.conversations.single);
+    addTearDown(detail.dispose);
+    expect(await detail.refreshConversation(), isTrue);
+    await tester.pump();
+
+    expect(provider.conversations.single.homeStep, 'failed');
+    expect(TranscriptionPendingConversations.contains('c1'), isTrue);
+    expect(find.byKey(const Key('conversation_transcription_pending_indicator')), findsOneWidget);
+    expect(_retryButton, findsNothing);
+    expect(find.text(_l10n(tester).conversationSummaryFailed), findsNothing);
+  });
+
+  test('a list replacement clears the status only for rows the server settled', () async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    TranscriptionPendingConversations.mark('settled');
+    TranscriptionPendingConversations.mark('still-failed');
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (
+        items: [
+          _conversation(id: 'settled', summaryRetryable: false).withHomeStep('ready'),
+          _conversation(id: 'still-failed', summaryRetryable: false).withHomeStep('failed'),
+        ],
+        ok: true,
+      ),
+      conversationCacheLoader: () async => [],
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    expect(await provider.fetchConversations(), isTrue);
+    expect(TranscriptionPendingConversations.contains('settled'), isFalse);
+    expect(TranscriptionPendingConversations.contains('still-failed'), isTrue);
   });
 
   testWidgets('a row the model found nothing in keeps its title and offers no retry', (tester) async {

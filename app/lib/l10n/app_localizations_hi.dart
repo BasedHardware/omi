@@ -13938,11 +13938,11 @@ class AppLocalizationsHi extends AppLocalizations {
   String get summaryBusyBody => 'Omi पहले से ही इस बातचीत पर काम कर रहा है। पूरा होने पर सारांश यहां दिखाई देगा।';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'अभी तक ट्रांसक्राइब नहीं हुआ';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'इस रिकॉर्डिंग का ऑडियो अभी तक ट्रांसक्राइब नहीं हुआ है, इसलिए सारांश दोबारा आज़माने से मदद नहीं मिलेगी।';
 
   @override
   String get summaryCheckAgain => 'फिर से जांचें';

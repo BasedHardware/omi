@@ -14017,11 +14017,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get summaryBusyBody => 'Omi lucrează deja la această conversație. Rezumatul va apărea aici când se termină.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'Încă netranscris';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'Audio din această înregistrare nu a fost încă transcris, așa că reîncercarea rezumatului nu va ajuta.';
 
   @override
   String get summaryCheckAgain => 'Verifică din nou';

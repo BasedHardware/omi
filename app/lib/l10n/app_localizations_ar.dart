@@ -13878,11 +13878,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get summaryBusyBody => 'يعمل Omi بالفعل على هذه المحادثة. سيظهر الملخص هنا عند الانتهاء.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => 'لم يُفرَّغ نصيًا بعد';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+      'لم يُفرَّغ صوت هذا التسجيل نصيًا بعد، لذا لن تفيد إعادة محاولة الملخص.';
 
   @override
   String get summaryCheckAgain => 'تحقق مرة أخرى';

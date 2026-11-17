@@ -13741,11 +13741,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get summaryBusyBody => 'Omi 已在处理此对话。完成后，摘要将显示在这里。';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+  String get summaryTranscriptionPendingTitle => '尚未转录';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+  String get summaryTranscriptionPendingBody => '这段录音的音频尚未转录，因此重试摘要也无济于事。';
 
   @override
   String get summaryCheckAgain => '再次检查';
