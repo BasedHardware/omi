@@ -19,6 +19,7 @@ from utils.mcp_server.payloads import tool_response_serialized_chars
 from utils.mcp_server.registry import TOOLS_BY_NAME
 from utils.mcp_server.transport import _tools_for_scopes
 from utils.mcp_server import transport
+from utils.mcp_server import helpers as mcp_helpers
 from utils.mcp_server.auth import MCPAuthContext
 
 OWNER = 'synthetic-owner'
@@ -53,8 +54,27 @@ def registry_and_budget():
     return {flag['key']: flag for flag in registry}, budget
 
 
+@pytest.fixture
+def cached_speaker_display(monkeypatch):
+    render = mcp_helpers.display_participants
+    projections = {}
+
+    def render_once(segments, **kwargs):
+        key = json.dumps([segments, kwargs], sort_keys=True)
+        if key not in projections:
+            projections[key] = render(segments, **kwargs)
+        return projections[key]
+
+    monkeypatch.setattr(mcp_helpers, 'display_participants', render_once)
+
+
+@pytest.mark.usefixtures('cached_speaker_display')
 def test_walk_1200_segments_once_with_one_existing_read_per_page(stored):
     row, fetch = stored
+    schema = TOOLS_BY_NAME['get_conversation_by_id'].output_schema
+    validator_class = jsonschema.validators.validator_for(schema)
+    validator_class.check_schema(schema)
+    validator = validator_class(schema)
     pages = []
     cursor = None
     for _ in range(10):
@@ -62,7 +82,7 @@ def test_walk_1200_segments_once_with_one_existing_read_per_page(stored):
         pages.append(page)
         assert page['total_segments'] == 1200
         assert page['truncated'] == (page['next_cursor'] is not None)
-        jsonschema.validate(page, TOOLS_BY_NAME['get_conversation_by_id'].output_schema)
+        validator.validate(page)
         cursor = page['next_cursor']
         if cursor is None:
             break

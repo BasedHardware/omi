@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from database import conversations_v3 as store
+from utils.conversations import lifecycle  # Load the commit dependency before timed reconciliation.
 from utils.conversations.v3 import service, summary
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
