@@ -3198,10 +3198,13 @@ backend reconciliation sweep (or the opt-in self-heal sweep) as a
 never a new conversation — through this same durable job ledger. The recovery
 run reuses normal persistence but is fenced by a pre-persist structured guard:
 kept output carrying only the deterministic minimum raises before the
-completed-status transaction. The one exception is a kept, plain, decoded
-conversation whose enrichment returned no structure at all: it completes on the
-deterministic minimum unless `LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED`
-is set off (default on; see `changes/2026-11-12-capfix-finalization.md`). An explicit relevance discard is a valid
+completed-status transaction. A kept, plain, decoded conversation whose enrichment
+returned no structure at all completes on the deterministic minimum unless
+`LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED` is off (default on; see
+`changes/2026-11-12-capfix-finalization.md`). With quiet recovery enabled, an
+eligible kept short capture can also settle on the minimum before paid notes
+and records `kept_minimum/content_below_floor`.
+An explicit relevance discard is a valid
 terminal outcome without rich structure only when the sweep verifies its
 persisted server-recovery verdict and preserved transcript and audio IDs. With
 `LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED`, a clear rule-level
@@ -10122,6 +10125,23 @@ instrumentation never invents their first lease timestamp.
 The Home histogram admits only recordings ended within 30 minutes and notes
 written at or after that end. Old Home history, untrusted/future end clocks and
 prior in-recording notes do not contaminate the post-seal latency cohort.
+
+### Stale merge head skip (canary)
+
+`BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST` (comma-separated uids, default
+empty) is read on every ordered-merge commit. A listed owner whose strict head
+is starved skips the bounded head wait. Starved means admitted at least 1,800 s
+ago and waiting that long for a lease: `ready` or `retry` with `available_at` at
+least 1,800 s in the past (lease-ending paths reset `lease_until` to 0 and stamp
+`available_at`), or `leased` with `lease_until` at least 1,800 s in the past. The skip commits the row an expired wait would commit (the
+owner's earliest ready pending row) only when that row is a native record unit
+whose earlier binding units are settled, and when every pending row captured
+before it is starved. The transaction reads at most 129 pending rows; a longer
+backlog keeps the wait. Head wait off, unlisted owners and refused skips keep
+the ordinary wait, with no early hold or fallback. A skip is logged as
+`event=batch_merge outcome=stale_head_skip` and never sets `head_wait_bypass`.
+Writers without this code keep the wait.
+[Change note](listen_pusher_pipeline/changes/2026-11-18-merge-stale-head-skip.md).
 
 ### Staged source-frame close protocol
 

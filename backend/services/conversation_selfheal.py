@@ -423,15 +423,15 @@ def run_selfheal_tick(
                 ):
                     if len(eligible) < MAX_ELIGIBLE_PER_TICK:
                         eligible.append(row)
-                    elif content_due_scan:
-                        # A refused lease prefix stays in this query. Resume
-                        # after the considered window instead of the scan tail
-                        # so those rows cannot starve a due row behind the cap.
+                    elif content_due_scan or mode == 'heal':
+                        # Resume after the considered window instead of the
+                        # scan tail, so an eligible row behind the cap comes
+                        # first next tick rather than after a full rotation.
                         resume_after_path = eligible[-1]['path']
                         exhausted = False
                         break
             pending_before = len(pending)
-            pending = _act_on_eligible(
+            pending, deferred_at = _act_on_eligible(
                 eligible,
                 pending,
                 mode=mode,
@@ -444,6 +444,12 @@ def run_selfheal_tick(
                 counters=counters,
                 now=now,
             )
+            if deferred_at is not None:
+                # Capacity deferred the rest: resume after the last row acted on.
+                resume_after_path = (
+                    eligible[deferred_at - 1]['path'] if deferred_at else cursor.get('resume_after_path')
+                )
+                exhausted = False
             if dry_run:
                 # A read-only preview must still page a real safety violation.
                 for entry, reason in verification_refusals:
@@ -540,19 +546,22 @@ def _act_on_eligible(
     firestore_client: Any,
     counters: dict[str, Any],
     now: datetime,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], int | None]:
     """Admit eligible rows in heal mode; preview or skip them otherwise.
 
-    Returns the pending-verification list to persist on the sweep cursor.
+    Returns the pending-verification list to persist on the sweep cursor and
+    the index of the first row deferred by the admission or verification cap.
+    A refused row is acted on, so the cursor passes it.
     """
     if mode != 'heal':
         for row in eligible:
             _log_action('skipped', reason=f'mode_{mode}', uid=row['uid'], conversation_id=row['conversation_id'])
             counters['skipped'] += 1
-        return pending
+        return pending, None
 
     admitted = 0
-    for row in eligible:
+    deferred_at: int | None = None
+    for index, row in enumerate(eligible):
         try:
             if account_deletion_blocks_user_work(row['uid']):
                 _log_action(
@@ -568,6 +577,7 @@ def _act_on_eligible(
             logger.error('selfheal deletion fence failed type=%s', type(error).__name__)
             continue
         if admitted >= MAX_HEAL_ADMISSIONS_PER_TICK:
+            deferred_at = index if deferred_at is None else deferred_at
             _log_action(
                 'skipped',
                 reason='admission_cap',
@@ -589,6 +599,7 @@ def _act_on_eligible(
             )
             continue
         if len(pending) >= jobs_db.SELFHEAL_MAX_PENDING_VERIFICATIONS:
+            deferred_at = index if deferred_at is None else deferred_at
             _log_action(
                 'skipped',
                 reason='verification_capacity',
@@ -663,4 +674,4 @@ def _act_on_eligible(
                 conversation_id=row['conversation_id'],
             )
             counters['skipped'] += 1
-    return pending
+    return pending, deferred_at

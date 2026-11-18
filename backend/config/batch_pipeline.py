@@ -1081,6 +1081,16 @@ def merge_head_wait_seconds() -> float:
     return value if value <= MERGE_HEAD_WAIT_MAX else MERGE_HEAD_WAIT_DEFAULT
 
 
+# A head still unready this long after admission is starved stock, not a unit about to finish.
+MERGE_STALE_HEAD_SECONDS = 1800.0
+
+
+def merge_stale_head_skip(owner_id: str) -> bool:
+    """Canary: listed owners skip the head wait behind a stale head. Unset or empty: nobody."""
+    raw = os.getenv('BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST', '')
+    return bool(owner_id) and owner_id in {uid.strip() for uid in raw.split(',') if uid.strip()}
+
+
 MERGE_CATCH_UP_DEPTH_DEFAULT = 16
 MERGE_CATCH_UP_DEPTH_MAX = 1000
 

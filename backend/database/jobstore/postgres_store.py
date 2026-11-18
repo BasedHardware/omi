@@ -174,6 +174,9 @@ class PostgresTransaction:
         row = self.store.first_pending_in(self.conn, owner_key)
         return self._locked_query_row(*row) if row else None
 
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        return [self._locked_query_row(*row) for row in self.store.pending_page_in(self.conn, owner_key, limit)]
+
     def first_ready_pending(self, owner_key: str) -> dict | None:
         """The owner's earliest-captured pending row that already has a result (bounded head wait)."""
         row = self.store.first_pending_in(self.conn, owner_key, result_ready=True)
@@ -756,6 +759,23 @@ class PostgresStore:
             .format(sql().SQL(state)),
             params,
         ).fetchone()
+
+    def pending_page_in(self, conn: Any, owner_key: str, limit: int) -> list[tuple[str, dict]]:
+        """``first_pending_in``'s rows, at most ``limit`` (capped at 160)."""
+        state = ''
+        params: tuple[Any, ...] = (self.namespace, owner_key)
+        if held_poll_skip_enabled():
+            state = 'AND state <> ALL(%s) '
+            params += (list(MERGE_POLL_TERMINAL_STATES),)
+        return conn.execute(
+            sql()
+            .SQL(
+                'SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending {}'
+                'ORDER BY capture_at, key COLLATE "C" LIMIT %s'
+            )
+            .format(sql().SQL(state)),
+            (*params, max(1, min(limit, 160))),
+        ).fetchall()
 
     def write_doc(self, conn: Any, table: str, key: str, value: dict) -> None:
         if table in _TYPED:
