@@ -30,6 +30,7 @@ import hashlib
 from typing import Any, Callable, TypeVar
 
 from config.batch_pipeline import held_poll_skip_enabled, MERGE_POLL_TERMINAL_STATES
+from database import batch_pipeline_projection_outbox as outbox
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from database.batch_pipeline_projection_followup_backfill import (
     BACKFILL_KEY as FOLLOWUP_BACKFILL_KEY,
@@ -163,8 +164,9 @@ class SimTransaction:
         self.writes[(table, key)] = deepcopy(value)
 
     def patch(self, table: str, key: str, fields: dict) -> None:
-        if table != 'conversations' or set(fields) != {'record_lane_owner'}:
-            raise ValueError('only the conversation route owner may be patched by admission')
+        outbox.validate_batch_patch(table, fields)
+        if table == 'results' and self.get_existing(table, key) is None:
+            raise LookupError('cannot patch missing projection result')
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
     def defer_set(self, ref: Any, value: dict) -> None:
@@ -502,7 +504,8 @@ class SimStore:
         due_before: float | None = None,
         exclude_async: bool = False,
         followup_due_before: float | None = None,
-    ) -> tuple[list[str], Any]:
+        include_outbox: bool = False,
+    ):
         """Mirror Firestore's legacy or due-clock keyset scan, including inclusive seed cursors."""
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
@@ -528,7 +531,23 @@ class SimStore:
         size = max(1, min(limit, 200))
         page = ordered[:size]
         cursor = page[-1] if len(page) == size else None
-        return [entry[-1] for entry in page], cursor
+        ids = [entry[-1] for entry in page]
+        if include_outbox:
+            return ids, cursor, {sid for sid in ids if outbox.covered(sid, self.rows['results', sid])}
+        return ids, cursor
+
+    def projection_page_with_outbox(self, **scope):
+        return self.projection_page(include_outbox=True, **scope)
+
+    def projection_outbox_page(self, now: float, limit: int) -> list[outbox.DueObligation]:
+        due = (
+            obligation
+            for (table, key), row in self.rows.items()
+            if table == 'results'
+            and (obligation := outbox.due_obligation(key, row)) is not None
+            and obligation.due_at <= now
+        )
+        return sorted(due, key=lambda row: (row.due_at, row.key.segment_id))[: max(1, min(limit, 200))]
 
     def longest_ready_pending(self, owner_key: str) -> dict | None:
         # Firestore excludes rows without the ordered field, and orders ties by document name.

@@ -208,7 +208,8 @@ class PgSimStore(SimStore):
         due_before: float | None = None,
         exclude_async: bool = False,
         followup_due_before: float | None = None,
-    ) -> tuple[list[str], Any]:
+        include_outbox: bool = False,
+    ):
         return self.pg.projection_page(
             limit,
             after=after,
@@ -216,7 +217,14 @@ class PgSimStore(SimStore):
             due_before=due_before,
             exclude_async=exclude_async,
             followup_due_before=followup_due_before,
+            include_outbox=include_outbox,
         )
+
+    def projection_outbox_page(self, now: float, limit: int):
+        return self.pg.projection_outbox_page(now, limit)
+
+    def projection_page_with_outbox(self, **scope):
+        return self.pg.projection_page_with_outbox(**scope)
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         return self.pg.projection_successor(owner_key, previous)

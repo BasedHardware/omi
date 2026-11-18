@@ -37,6 +37,7 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database import batch_pipeline_projection_outbox as outbox
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from database.batch_pipeline_projection_followup_backfill import (
     BACKFILL_KEY as FOLLOWUP_BACKFILL_KEY,
@@ -160,8 +161,7 @@ class PostgresTransaction:
         self.writes[(table, key)] = deepcopy(value)
 
     def patch(self, table: str, key: str, fields: dict) -> None:
-        if table != 'conversations' or set(fields) != {'record_lane_owner'}:
-            raise ValueError('only the conversation route owner may be patched by admission')
+        outbox.validate_batch_patch(table, fields)
         self.store.require_table(table)
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
@@ -662,7 +662,8 @@ class PostgresStore:
         due_before: float | None = None,
         exclude_async: bool = False,
         followup_due_before: float | None = None,
-    ) -> tuple[list[str], Any]:
+        include_outbox: bool = False,
+    ):
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
         if due_before is not None and followup_due_before is not None:
@@ -695,6 +696,8 @@ class PostgresStore:
                     )
                 )
                 params.extend(after)
+        if include_outbox:
+            fields.append(psycopg_sql.Identifier('doc'))
         with self._read_conn() as conn:
             rows = conn.execute(
                 psycopg_sql.SQL(
@@ -707,8 +710,42 @@ class PostgresStore:
                 ),
                 (*params, size),
             ).fetchall()
-        cursor = (*reversed(rows[-1][1:]), rows[-1][0]) if len(rows) == size else None
-        return [row[0] for row in rows], cursor
+        ids = [row[0] for row in rows]
+        cursor = None
+        if rows and len(rows) == size:
+            last = rows[-1][:-1] if include_outbox else rows[-1]
+            cursor = (*reversed(last[1:]), last[0])
+        if include_outbox:
+            return ids, cursor, {row[0] for row in rows if outbox.covered(row[0], row[-1])}
+        return ids, cursor
+
+    def projection_page_with_outbox(self, **scope):
+        return self.projection_page(include_outbox=True, **scope)
+
+    def projection_outbox_page(self, now: float, limit: int) -> list[outbox.DueObligation]:
+        # The partial index has the same numeric-type predicate as the query.
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT key, doc->'log_sequence', (doc->>'projection_outbox_due_at')::float8 AS due_at
+                FROM results
+                WHERE namespace = %s AND doc->>'projection_outbox_kind' = 'project_conversation_v1'
+                  AND jsonb_typeof(doc->'projection_outbox_due_at') = 'number'
+                  AND (doc->>'projection_outbox_due_at')::float8 <= %s
+                ORDER BY due_at, key COLLATE "C" LIMIT %s
+                """,
+                (self.namespace, now, max(1, min(limit, 200))),
+            ).fetchall()
+        return [
+            due
+            for segment, revision, at in rows
+            if (
+                due := outbox.due_obligation(
+                    segment, {outbox.KIND_FIELD: outbox.KIND, outbox.DUE_FIELD: at, 'log_sequence': revision}
+                )
+            )
+            is not None
+        ]
 
     # -- internals ---------------------------------------------------------------------------
     @contextmanager

@@ -1,0 +1,73 @@
+# Commit-triggered batch projection
+
+`BATCH_PROJECTION_OUTBOX` defaults on. Normal merge and source-alias fallback
+atomically stamp a due obligation on the existing result document. The segment
+ID and immutable owner log sequence identify a commit. Release and privacy
+resume can rearm that slot in their existing transactions and invalidate a
+previous claim. The scheduling fields contain no transcript, audio reference,
+conversation identifier, or billing state.
+
+Serving enqueues a bounded in-process hint after its commit succeeds. The GPU
+pump has no projector. Its stamped commits are found by the elected due reader
+through the same index that recovers lost serving hints. The `ef42ee8` GPU
+image and earlier backend writers produce unstamped results. All legacy
+assignment, finish and follow-up readers still cover them.
+
+The dedicated projection pump and normal serving supervisor share one strict
+`projection_outbox_scan` lease per namespace. A holder confirms its token after
+reading a bounded `kind, due_at, document ID` page. Loss of the token discards
+the page. Already-admitted delivery has its own 180-second claim and can finish
+through a leadership change. A crashed worker leaves retryable debt at claim
+expiry. Claims and settlements modify only scheduling fields on an existing
+result. The existing assignment, privacy, ledger, enrichment and accounting
+fences apply separately on every attempt. Legacy and outbox follow-up workers
+share the existing process-wide follow-up slot budget.
+
+The consumer defers predecessor or claim contention for 10 seconds and other
+unfinished work for up to 60 seconds. A ready multipart receipt can still owe
+work for siblings. Only canonical completion settles it as completed. A
+durable quarantine parks the obligation for the existing held/release owner.
+An expired claim on a completed result settles from the result state without
+replaying publication or accounting. Privacy purges retain their existing
+ordering-edge or deletion behavior and scheduling fields follow result retention.
+
+## Compatibility and release
+
+- A live lease and a due query that succeeded recently and is keeping up
+  certify the backstop. The mark expires within 30 seconds of a stalled scan.
+  A row needs its own valid obligation before a compatibility page skips
+  policy lookups and projection transactions. No fleet-wide completeness
+  assumption, writer backfill or committed-time cutoff is used.
+- Older projection binaries can consume any result through the same durable
+  receipt and accounting fences. Older reactivation writers can leave no active
+  obligation. These rows remain visible on the legacy pages. An updated writer
+  with the switch off marks a reactivated row for legacy discovery, including
+  when that row retains its previous scheduling metadata.
+- Follow-up due-clock coverage and its marker retain their own admission.
+  #25314 still classifies async finish receipts. The #25596 overlap observer
+  continues to count every returned legacy follow-up row, including those
+  subsequently skipped. #25555's keyset parity holds on the raw page and
+  #25623's refused-head disposition stays with the canonical projector.
+- Verify both stage-specific Firestore composite indexes are READY and queryable
+  before a fleet rollout. The doc-mode Postgres adapter mirrors due selection
+  for qualification. Firestore remains the serving effect store.
+- Rollback sets `BATCH_PROJECTION_OUTBOX=false` on the relevant readers and
+  writers. Assignment, finish and follow-up discovery proceed on the original
+  result and receipt state. Keep the scheduling metadata and result retention.
+
+## Read and write accounting
+
+Result-row stamps add zero document writes to a merge transaction. A delivered
+row normally adds one claim and one scheduling settlement, inferred at about
+3.03 million writes per day at the design record's 1.516 million daily commits.
+Retries, index-entry maintenance, scan leases and coverage reads add cost. Earlier binaries'
+compatibility pages still return stamped documents, and new readers also pay
+for raw pages. The avoided work is the downstream policy, assignment and
+follow-up probing of covered rows, particularly while their due time is in the
+future. Production net savings are unmeasured.
+
+Keep the existing oldest-unfinished projection gauge on the full result view.
+For release qualification, compare matched read origins, writes, completed
+units and audio, projection age, partial latency, and transaction failures
+across the full writer/reader roster. The local outbox outcome counter
+`omi_batch_pipeline_projection_outbox_total` uses bounded disposition labels.

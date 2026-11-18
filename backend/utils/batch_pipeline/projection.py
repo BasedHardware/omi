@@ -69,6 +69,7 @@ from utils.stt.transcript_admission import filter_admission
 from utils.episodes import transcript_receipts
 
 if TYPE_CHECKING:
+    from asyncio import Semaphore
     from utils.batch_pipeline.projection_prefetch import Prefetched
 
 logger = logging.getLogger(__name__)
@@ -447,12 +448,18 @@ class Projector:
         # behind work already queued, never ahead of it, so discovery's cursor
         # position cannot strand them and other owners are not starved.
         self.chain_followups: list[str] = []
-        self.discovery = ProjectionDiscovery(store)
+        self.outbox_coverage: Callable[[], bool] | None = None
+        self.outbox_followup_slots: Semaphore | None = None
+        self.discovery = ProjectionDiscovery(store, outbox_coverage=self.has_outbox_coverage)
         self.finish_backoff = FinishBackoff(self)
         # Pending-page mode: assignment never spends page slots on rows it can
         # only replay, and persisted/ready rows advance on their own cursor.
-        self.assignment_discovery = ProjectionDiscovery(store, states=PROJECTION_ASSIGNMENT_STATES, recent=True)
-        self.finish_discovery = ProjectionDiscovery(store, states=PROJECTION_FINISH_STATES)
+        self.assignment_discovery = ProjectionDiscovery(
+            store, states=PROJECTION_ASSIGNMENT_STATES, recent=True, outbox_coverage=self.has_outbox_coverage
+        )
+        self.finish_discovery = ProjectionDiscovery(
+            store, states=PROJECTION_FINISH_STATES, outbox_coverage=self.has_outbox_coverage
+        )
         # Search/people-stats work walks owe, converged off the ordered chain.
         self.index = ProjectionIndex()
         # Owners a sweep or wake wants drained; ``draining`` is live in this process.
@@ -472,6 +479,9 @@ class Projector:
         self.held_pass_seen: set[tuple[str, str]] = set()
         # Resume point of the held-release scan; a short page wraps it.
         self.release_after: str | None = None
+
+    def has_outbox_coverage(self) -> bool:
+        return self.outbox_coverage is not None and self.outbox_coverage()
 
     def request_drain(self, owner_id: str, *, reason: str = 'unknown') -> None:
         with self.handoff:
@@ -555,6 +565,17 @@ class Projector:
 
     def project(self, segment_id: str) -> dict | None:
         return self._project_read(segment_id, *self.store.read(segment_id))
+
+    def apply_outbox_snapshot(self, segment_id, job, entry, binding) -> str:
+        """Apply a delivery through the ordinary policy and receipt fences."""
+        policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
+        if not policy.async_projection:
+            self._project_read(segment_id, job, entry, binding)
+            return 'incomplete'
+        if entry['projection_state'] == 'pending':
+            if self._persist_read(segment_id, job, entry, binding) is PRIVACY_HELD:
+                return 'blocked'
+        return 'followup'
 
     @settle_refusals()
     def _project_read(self, segment_id, job, entry, binding, *, hint=None, claimed=False):

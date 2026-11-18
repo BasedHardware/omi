@@ -223,6 +223,26 @@ job; that does not turn it into a worker quarantine.
 | `batch_projection:completed` | `P:ProjectionStore.acknowledge.commit` | Terminal | none | none | none | No held-specific switch | Keep receipts; no automatic reopening |
 | `batch_projection:erased` | `database/batch_pipeline_purge.py:_write_erased_result` | Terminal privacy disposition | none | none | none | No held switch bypasses privacy | This is explicit privacy deletion, never dead-lettering |
 
+#### Projection delivery scheduling
+
+The normal merge and source-alias fallback stamp an obligation on the committed
+result in the same transaction. The immutable result key and owner log sequence
+identify it. A due clock, claim token and disposition schedule the next attempt
+through the existing assignment and finish transactions. Their receipts still
+own ordering, privacy, multipart completion and paid-once accounting.
+
+Only one elected scanner per namespace discovers missed wakes by kind, due time
+and document ID. Post-commit hints from serving processes bypass election.
+A fresh successful scan and an obligation on the same result are both required
+before a compatibility page skips an attempt. Unstamped rows and released rows
+whose older writer left no active obligation remain eligible.
+
+Held work retains its receipts and returns to due at a fenced release or
+privacy resume. A privacy purge still removes the result or replaces it with
+the existing ordering edge. `BATCH_PROJECTION_OUTBOX=false` restores legacy
+discovery and stops new obligations and claims. See the
+[serving and rollback notes](../../docs/runbooks/batch-projection-outbox.md).
+
 ### Finalization job
 
 Fenced job status and conversation `finalization_status` are separate from

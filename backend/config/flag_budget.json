@@ -469,6 +469,11 @@
       "owner": "firestore-lead / SCA-2280",
       "review_by": "2026-12-14"
     },
+    "BATCH_PROJECTION_OUTBOX": {
+      "owner": "omi-pipeline / lead2",
+      "review_by": "2026-12-18",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_PULL_BUSY_BORROW_ENABLED": {
       "owner": "cl2-gpueff / batch rollout lead",
       "review_by": "2026-12-04"

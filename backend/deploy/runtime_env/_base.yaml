@@ -1037,6 +1037,7 @@ environment_shared:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
             default: '0'
             category: rollout
+          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1448,6 +1449,7 @@ environment_shared:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
             default: '0'
             category: rollout
+          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1835,6 +1837,7 @@ environment_shared:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
             default: '0'
             category: rollout
+          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -2197,6 +2200,7 @@ environment_shared:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
             default: '0'
             category: rollout
+          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             category: rollout
           BATCH_PIPELINE_WORKER_ENABLED:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+from contextlib import nullcontext
 import hashlib
 import logging
 import os
@@ -98,7 +99,9 @@ class ProjectionFollowups:
         store = projector.store.store
         # Only existing periodic Firestore discovery pages, before local backoff.
         # Targeted/owed repairs and simulated/Postgres stores are outside this measurement.
-        self.discovery = ProjectionDiscovery(store, on_page=observer_for_store(store))
+        self.discovery = ProjectionDiscovery(
+            store, on_page=observer_for_store(store), outbox_coverage=getattr(projector, 'has_outbox_coverage', None)
+        )
         self.due_clock = FollowupClock(projector)
         self.due_pass_before: float | None = None
         self.page = 0
@@ -384,7 +387,14 @@ class ProjectionFollowups:
         raise ProjectionBlocked('complete ordered assignment required before follow-up')
 
     @with_batch_privacy_attempt
-    async def run(self, segment):
+    async def run(self, segment, *, track_backoff=True):
+        slots = getattr(self.projector, 'outbox_followup_slots', None)
+        # During mixed discovery both queues share one process-wide effect
+        # budget. Queueing for it does not spend the follow-up attempt clock.
+        async with slots if isinstance(slots, asyncio.Semaphore) else nullcontext():
+            return await self.run_attempt(segment, track_backoff=track_backoff)
+
+    async def run_attempt(self, segment, *, track_backoff):
         try:
             # Cancel this coordinator, not the drain. The persisted/ready outbox
             # row remains eligible for a later sweep, including a lost reply
@@ -404,7 +414,11 @@ class ProjectionFollowups:
             outcome = 'timeout'
         finally:
             self.due_clock.entries.pop(segment, None)
-        self.note(segment, outcome)
+        if track_backoff:
+            self.note(segment, outcome)
+        else:
+            OUTCOMES.labels(outcome).inc()
+        return outcome
 
     @staticmethod
     def unit_key(segment: str) -> str:

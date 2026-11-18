@@ -16,6 +16,7 @@ from config.batch_pipeline import (
     recovery_owner_only_enabled,
     recovery_dispatch_interval_seconds,
     projection_hold_recovery_enabled,
+    projection_outbox_enabled,
     serving_metrics_min_refresh_seconds,
     serving_projection_sweep_enabled,
     serving_tick_seconds,
@@ -31,6 +32,7 @@ from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.live import drain_recordings
 from utils.batch_pipeline.projection import HELD_PARTIAL_PAGE, Projector, error_type
+from utils.batch_pipeline.projection_outbox import ProjectionOutbox
 from utils.executors import db_executor, run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from config.batch_pipeline_leader import UPLOAD_COALESCING_SCAN, UPLOAD_COALESCING_SCAN_TTL
@@ -81,6 +83,7 @@ class Serving:
         enrichment_sweep=None,
         recovery=None,
         leader=None,
+        outbox=None,
     ):
         self.store = store
         self.metrics = metrics
@@ -88,6 +91,7 @@ class Serving:
         # must survive queue() calls on the serving/maintenance plane too.
         self._queues = {pool: Scheduler(store, metrics=metrics, pool=pool) for pool in ('batch', 'live')}
         self.projector = projector
+        self.outbox = outbox
         self.cleanup = cleanup
         self.reap_staging = reap_staging
         self.enrichment_sweep = enrichment_sweep
@@ -141,8 +145,11 @@ class Serving:
             self.merge.release_set(recovered) if recovered is not None and recovered_merge_release_enabled() else None
         )
         for _ in range(100):
-            if self.merge.commit_next(owner_id, time.time(), release=release) is None:
+            entry = self.merge.commit_next(owner_id, time.time(), release=release)
+            if entry is None:
                 break
+            if self.outbox is not None:
+                self.outbox.wake(entry)
 
     @with_batch_privacy_attempt
     async def drain_settled_async(self, owner_id: str) -> None:
@@ -450,6 +457,7 @@ def serving_for_stage(stage: str) -> Serving:
         recovery=QuarantineRecovery(store, artifacts),
         metrics=metrics,
         projector=projector,
+        outbox=ProjectionOutbox(store, projector, clock=time.time),
         cleanup=cleanup_completed_artifacts,
         reap_staging=reap,
         enrichment_sweep=reprocess.sweep,
@@ -565,6 +573,24 @@ def start_serving_from_env():
             except asyncio.TimeoutError:
                 pass
 
+    async def supervise_projection_outbox():
+        while not stop.is_set():
+            try:
+                if projection_outbox_enabled() and (pump_enabled or serving_projection_sweep_enabled()):
+                    service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+                    outbox = getattr(service, 'outbox', None)
+                    if outbox is not None:
+                        await outbox.run(stop)
+                        return
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'event=batch_projection_outbox outcome=supervise_retry exception_type=%s', type(error).__name__
+                )
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=serving_tick_seconds())
+            except TimeoutError:
+                pass
+
     @with_batch_privacy_attempt
     async def drain_tick():
         service = await run_blocking(sync_executor, serving_for_stage, current_stage())
@@ -643,10 +669,11 @@ def start_serving_from_env():
         set_recurring_sweep('pump' if pump_enabled else 'serving')
         try:
             if pump_enabled:
-                await asyncio.gather(projection_pump(), drain_upload_holds())
+                await asyncio.gather(projection_pump(), drain_upload_holds(), supervise_projection_outbox())
             else:
                 await asyncio.gather(
                     supervise(),
+                    supervise_projection_outbox(),
                     drain(),
                     dispatch_recovery(),
                     drain_upload_holds(),

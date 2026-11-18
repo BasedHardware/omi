@@ -45,6 +45,8 @@ STORE_QUERIES = frozenset(
         'allowance_page',
         'projection_pending',
         'projection_page',
+        'projection_page_with_outbox',
+        'projection_outbox_page',
         'projection_successor',
         'projection_finish_backfill_complete',
         'projection_followup_backfill_complete',
