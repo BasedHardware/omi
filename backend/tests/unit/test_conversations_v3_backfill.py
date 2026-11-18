@@ -613,7 +613,7 @@ def direct(monkeypatch):
 
     for module in (service, backfill):
         monkeypatch.setattr(module, 'run_blocking', blocking)
-    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda uid: False)
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda uid, **kw: False)
 
 
 @pytest.mark.asyncio
@@ -1074,10 +1074,13 @@ def test_undo_of_a_rederive_run_names_the_original_run_and_fails(tmp_path, monke
 @pytest.mark.asyncio
 async def test_the_drain_stops_once_account_deletion_starts(direct, monkeypatch):
     monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid: [{'id': 'a'}])
-    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda uid: True)
+    fresh = []
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda uid, **kw: fresh.append(kw) or True)
     monkeypatch.setattr(service, '_process_leased', AsyncMock(side_effect=AssertionError('sent a transcript')))
     counts = await service.drain_backfill('u', deadline=float('inf'))
     assert counts['account_deletion'] == 1 and counts['processed'] == 0
+    # Read past the negative cache: a marker written seconds ago still stops the drain.
+    assert fresh == [{'fresh': True}]
 
 
 @pytest.mark.asyncio
@@ -1115,7 +1118,7 @@ async def test_a_row_rechecks_account_deletion_right_before_its_notes_call(direc
     monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid: [{'id': 'a'}, {'id': 'b'}])
     # One chunk of two: the chunk check passes, then deletion starts between row a and row b.
     checks = iter([False, False, True])
-    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda uid: next(checks, True))
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda uid, **kw: next(checks, True))
     monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
     released = []
     monkeypatch.setattr(leases, 'release', lambda *a: released.append(a[1]))
@@ -1140,7 +1143,7 @@ def test_an_oversized_undo_group_is_refused_whole(strict):
 async def test_a_failed_deletion_read_releases_the_rows_summary_lease(direct, monkeypatch):
     checks = iter([False])
 
-    def marker(uid):
+    def marker(uid, **kw):
         try:
             return next(checks)
         except StopIteration:
@@ -1182,3 +1185,21 @@ def test_a_blocked_owner_still_fails_the_exit_code_with_no_wait(tmp_path, monkey
     monkeypatch.setattr(script, 'plan_owner', plan)
     monkeypatch.setattr(backfill, 'create_run', lambda *a, **kw: 'run-x')
     assert script.main(['run', '--owners-file', str(owners), '--no-wait']) == 1
+
+
+def test_a_failed_undo_group_is_recorded_and_leaves_the_run_resumable(monkeypatch):
+    ledger = _undo_ledger(monkeypatch)
+    _undo_leases(monkeypatch)
+    docs = [
+        {'id': 'd1', 'claims': [{'conversation_id': 'c1'}]},
+        {'id': 'c1', 'v3_derived': True, 'v3_recording_ids': ['d1']},
+    ]
+    monkeypatch.setattr(store, 'backfill_run_documents', lambda *a, **kw: docs)
+
+    def fail(*a, **kw):
+        raise store.Conflict('lease_lost')
+
+    monkeypatch.setattr(store, 'undo_backfill_group', fail)
+    result = backfill.undo_run('u', RUN)
+    assert result['outcome'] == 'error' and result['reason'] == 'lease_lost'
+    assert ledger.run['status'] == 'undoing' and ledger.run['undo']['reason'] == 'lease_lost'

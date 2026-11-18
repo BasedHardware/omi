@@ -712,7 +712,8 @@ def load_derive(uid, *, since, until, run_id, rederive=False, firestore_client=N
     stay ordinary visible conversations.
     """
     client = firestore_client or get_firestore_client()
-    if account_deletion_blocks_user_work(uid, firestore_client=client):
+    # The marker lives on the data plane; the default resolver pins it (never the conversations client).
+    if account_deletion_blocks_user_work(uid):
         raise Conflict('account_deletion')
     snapshots = list(
         user_conversations(client, uid)

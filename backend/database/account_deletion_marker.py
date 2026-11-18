@@ -60,17 +60,20 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     return status
 
 
-def account_deletion_blocks_user_work(uid: str, *, firestore_client: Any | None = None) -> bool:
+def account_deletion_blocks_user_work(uid: str, *, firestore_client: Any | None = None, fresh: bool = False) -> bool:
     """Shared fail-closed predicate for per-user background and public work.
 
     Keep this aligned with the normal account access fence: only explicitly
     restored/pre-acceptance statuses permit work. An unavailable authority
-    raises so callers cannot silently process a deleting account.
+    raises so callers cannot silently process a deleting account. ``fresh``
+    skips the negative cache, for a check that gates sending user content out.
     """
     if not uid or not uid.strip():
         raise ValueError('uid is required')
     from database.account_deletion_policy import account_deletion_blocks_access
 
+    if fresh:
+        return account_deletion_blocks_access(_s4_read_deletion_status(uid, firestore_client=firestore_client))
     return account_deletion_blocks_access(get_user_deletion_wipe_status(uid, firestore_client=firestore_client))
 
 

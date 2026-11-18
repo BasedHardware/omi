@@ -709,7 +709,7 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
         failed = False
         try:
             # Re-checked per row, right before the model call, not only per chunk.
-            blocked = await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid)
+            blocked = await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid, fresh=True)
         except Exception:
             await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
             raise
@@ -739,7 +739,7 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
     for start in range(0, len(rows), concurrency):
         if time.monotonic() >= deadline or (keep_going is not None and not await keep_going()):
             break
-        if await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid):
+        if await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid, fresh=True):
             counts['account_deletion'] = 1
             return counts
         await asyncio.gather(*(one(row) for row in rows[start : start + concurrency]))

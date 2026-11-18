@@ -497,9 +497,21 @@ def undo_run(uid, run_id, *, firestore_client=None):
             return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client)
         result = {'donors_restored': 0, 'rows_removed': 0, 'groups_kept_deleted': 0, 'donors_kept_deleted': 0}
         for donors, rows in undo_groups(docs):
-            outcome, restored, removed = store.undo_backfill_group(
-                uid, token, donors, rows, firestore_client=firestore_client
-            )
+            try:
+                outcome, restored, removed = store.undo_backfill_group(
+                    uid, token, donors, rows, firestore_client=firestore_client
+                )
+            except store.Conflict as error:
+                # Groups already done stay done; the run stays 'undoing' and a rerun continues.
+                runs.update_run(
+                    uid,
+                    run_id,
+                    patch={
+                        'undo': {**result, 'outcome': 'error', 'reason': str(error), 'at': datetime.now(timezone.utc)}
+                    },
+                    firestore_client=firestore_client,
+                )
+                return {'outcome': 'error', 'reason': str(error), **result}
             result['donors_restored'] += restored
             result['rows_removed'] += removed
             if outcome == 'kept':
