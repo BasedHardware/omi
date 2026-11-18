@@ -128,7 +128,8 @@ def test_rate_is_bounded(monkeypatch, raw, rate):
     assert not sampled('ffffffff', rate)
 
 
-def test_projected_read_origin_grid_and_completion_labels(monkeypatch):
+@pytest.mark.parametrize('receipt_attempt,members', [(1, 2), (2, 1)])
+def test_projected_read_origin_grid_and_completion_labels(monkeypatch, receipt_attempt, members):
     monkeypatch.setenv('BATCH_PIPELINE_PACKING_SAMPLE_RATE', '0.001')
     registry = CollectorRegistry()
     metrics = PackingMetrics(registry)
@@ -140,15 +141,17 @@ def test_projected_read_origin_grid_and_completion_labels(monkeypatch):
         return [anchor, row('next', 260, state='leased'), row('new-arrival', 400, enqueued_at=11)]
 
     store = SimpleNamespace(packing_candidates=candidates)
-    metrics._read(store, 'private-owner', 'first', 0, 1, 10, 3600, monotonic(), {'next': 1})
+    metrics._read(store, 'private-owner', 'first', 0, 1, 10, 3600, monotonic(), {'next': receipt_attempt})
     metrics.complete(anchor['packing_observation'])
-    assert registry.get_sample_value('omi_batch_pipeline_packing_due_depth_sum', {'coverage': 'complete'}) == 2
+    assert registry.get_sample_value('omi_batch_pipeline_packing_due_depth_sum', {'coverage': 'complete'}) == members
     assert registry.get_sample_value('omi_batch_pipeline_packing_capture_gap_seconds_sum', {'kind': 'gap'}) == 60
     for gap in config.GAP_SECONDS:
         for size in config.PACK_SECONDS:
             labels = {'gap': str(gap), 'size': str(size)}
-            assert registry.get_sample_value('omi_batch_pipeline_packing_members_sum', labels) == 2
-            assert registry.get_sample_value('omi_batch_pipeline_packing_eligible_seconds_total', labels) == 180
+            assert registry.get_sample_value('omi_batch_pipeline_packing_members_sum', labels) == members
+            assert (
+                registry.get_sample_value('omi_batch_pipeline_packing_eligible_seconds_total', labels) == 90 * members
+            )
     for event in ('leased_sample', 'completed'):
         labels = {'event': event, 'entitlement': 'free', 'source_age': 'under_1h'}
         assert registry.get_sample_value('omi_batch_pipeline_packing_cohort_units_total', labels) == 1
@@ -157,3 +160,4 @@ def test_projected_read_origin_grid_and_completion_labels(monkeypatch):
     metrics._read(store, 'does-not-read', 'first', 0, 1, 10, 3600, monotonic(), {})
     metrics.complete(anchor['packing_observation'])
     assert registry.get_sample_value('omi_batch_pipeline_packing_samples_total', {'outcome': 'stale'}) is None
+    assert registry.get_sample_value('omi_batch_pipeline_packing_samples_total', {'outcome': 'unavailable'}) is None

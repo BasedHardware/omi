@@ -208,9 +208,9 @@ class Pack:
     stop: str
 
 
-def _due(row, when):
+def _due(row, when, later_ready):
     return (
-        row.get('state') == 'ready'
+        (row.get('state') == 'ready' or row.get('segment_id') in later_ready)
         and _number(row.get('available_at'))
         and row['available_at'] <= when
         and not row.get('last_policy_hold')
@@ -225,7 +225,7 @@ def _gap(previous, following):
     return round((following['start'] - previous['end']) * RATE) / RATE
 
 
-def build_pack(anchor, following, *, when, max_gap, max_seconds, predecessor, capped):
+def build_pack(anchor, following, *, when, max_gap, max_seconds, predecessor, capped, later_ready=frozenset()):
     first = job_observation(anchor)
     seconds = first.get('seconds')
     if not _number(seconds) or seconds <= 0:
@@ -239,7 +239,7 @@ def build_pack(anchor, following, *, when, max_gap, max_seconds, predecessor, ca
     previous, members, duration = first, 1, anchor['duration_seconds']
     for row in following:
         candidate = job_observation(row)
-        if not _due(row, when):
+        if not _due(row, when, later_ready):
             stop = 'not_ready'
         elif candidate.get('key') != first['key']:
             stop = 'incompatible_key'
@@ -342,14 +342,13 @@ class PackingMetrics:
             for row in rows
             if row.get('priority') == priority and _number(row.get('enqueued_at')) and row['enqueued_at'] <= when
         ]
-        for position, row in enumerate(partition):
-            attempt_at_commit = later.get(row['segment_id'])
-            if (
-                attempt_at_commit is not None
-                and row.get('attempt') == attempt_at_commit
-                and row.get('state') == 'leased'
-            ):
-                partition[position] = {**row, 'state': 'ready'}
+        later_ready = frozenset(
+            row['segment_id']
+            for row in partition
+            if row.get('state') == 'leased'
+            and (attempt_at_commit := later.get(row['segment_id'])) is not None
+            and row.get('attempt') == attempt_at_commit
+        )
         index = next((i for i, row in enumerate(partition) if row['segment_id'] == segment), None)
         if index is None or partition[index].get('state') != 'leased' or partition[index].get('attempt') != attempt:
             self.samples.labels('anchor_missing').inc()
@@ -357,7 +356,9 @@ class PackingMetrics:
         anchor, following = partition[index], partition[index + 1 :]
         self.samples.labels('observed').inc()
         self.cohorts.labels('leased_sample', *_cohort(job_observation(anchor))).inc()
-        self.depth.labels('capped' if capped else 'complete').observe(1 + sum(_due(row, when) for row in partition))
+        self.depth.labels('capped' if capped else 'complete').observe(
+            1 + sum(_due(row, when, later_ready) for row in partition)
+        )
         previous_by_scope = {}
         for row in partition:
             observation = job_observation(row)
@@ -377,6 +378,7 @@ class PackingMetrics:
                     max_seconds=min(size, ceiling),
                     predecessor=index > 0,
                     capped=capped,
+                    later_ready=later_ready,
                 )
                 self.stops.labels(gap, size, pack.stop).inc()
                 self.members.labels(gap, size).observe(pack.members)
