@@ -28,6 +28,7 @@ import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/local_recording.dart';
@@ -197,6 +198,16 @@ class _LiveCapture extends CaptureProvider {
 
   @override
   String? get topConversationId => 'conv-0-live';
+
+  /// Taps on End: the pendant double-tap's action, without draining a real capture.
+  int endCalls = 0;
+
+  @override
+  Future<void> forceProcessingCurrentConversation() async {
+    endCalls++;
+    segments = [];
+    notifyListeners();
+  }
 }
 
 class _RecordingAdapter implements AnalyticsAdapter {
@@ -237,13 +248,13 @@ class _RecordingAdapter implements AnalyticsAdapter {
 final _now = DateTime(2026, 11, 16, 12, 30);
 
 ServerConversation _conversation(String id, DateTime start, String title,
-        {ConversationV3Fields? v3, Duration length = const Duration(minutes: 25)}) =>
+        {ConversationV3Fields? v3, Duration length = const Duration(minutes: 25), DateTime? lastSpeech}) =>
     ServerConversation(
       id: id,
       speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0]),
       createdAt: start,
       startedAt: start,
-      finishedAt: v3?.tileState == ConversationTileState.live ? null : start.add(length),
+      finishedAt: v3?.tileState == ConversationTileState.live ? lastSpeech : start.add(length),
       structured: Structured(title, 'Overview of $title.', emoji: '💬', category: 'work'),
       transcriptSegments: const [],
       v3: v3,
@@ -266,7 +277,18 @@ class _Home {
   /// False once the conversation in progress has closed.
   bool liveOpen = true;
   final sync = _StubSyncProvider();
-  late final _LiveCapture capture = _LiveCapture();
+  late final _LiveCapture capture = _LiveCapture()
+    ..segments = [
+      TranscriptSegment(
+          id: 's1',
+          text: 'Doors at six.',
+          speaker: 'SPEAKER_00',
+          isUser: true,
+          personId: null,
+          start: 0,
+          end: 2,
+          translations: []),
+    ];
   late final EpisodeProvider episodes = EpisodeProvider(
     fetchPage: (from, to, {cursor}) async {
       episodeCalls++;
@@ -310,6 +332,8 @@ class _Home {
         v3: v3,
         conversation: v3 && liveOpen
             ? _conversation('live-1', _now.subtract(const Duration(minutes: 20)), 'Launch checklist',
+                // The server's finished_at for an open window is its last speech: 11 minutes in.
+                lastSpeech: _now.subtract(const Duration(minutes: 9)),
                 v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.live))
             : null,
       ));
@@ -478,6 +502,22 @@ void main() {
       expect(find.byKey(const ValueKey('day_summary_header_2026-11-16')), findsNothing);
 
       expect(home.episodeCalls, 0, reason: 'a v3 account makes no episode calls');
+
+      // The live tile shows the speech so far (11m), the length its detail shows, not start to now (20m).
+      final length = tester.widget<Text>(find.byKey(const Key('conversation_row_live_length')));
+      expect(length.data, contains('11'));
+      expect(length.data, isNot(contains('20')));
+      await tester.pump(const Duration(minutes: 3));
+      expect(tester.widget<Text>(find.byKey(const Key('conversation_row_live_length'))).data, length.data,
+          reason: 'silence after the last words does not grow it');
+
+      // End on the live tile is the pendant double-tap: it ends the conversation this phone is capturing.
+      expect(find.byKey(const Key('live_conversation_end')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('live_conversation_end')));
+      await tester.pump();
+      expect(home.capture.endCalls, 1);
+      expect(find.byKey(const Key('live_conversation_end')), findsNothing,
+          reason: 'nothing is left on this phone to end');
       await _dispose(tester, home);
     });
   });

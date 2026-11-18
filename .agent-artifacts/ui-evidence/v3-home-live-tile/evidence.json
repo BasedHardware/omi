@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-v3-live-tile-end.png",
+      "platform": "mobile-ios",
+      "description": "v3 Home: the live tile shows the speech span (11m, same as its detail) instead of start-to-now, with an End Conversation button while this phone is capturing",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-v3-live-detail-end.png",
+      "platform": "mobile-ios",
+      "description": "v3 live conversation detail: End Conversation above the summary being written; the header length (11m) matches the Home tile",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

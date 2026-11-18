@@ -1,4 +1,3 @@
-import 'package:clock/clock.dart';
 import 'dart:async';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
@@ -15,7 +14,6 @@ import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
-import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -23,6 +21,7 @@ import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/paywall/value_moment_paywall.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
@@ -618,21 +617,17 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   style: _metaStyle,
                   maxLines: 1,
                 ),
-              if (_isLive)
-                // The conversation in progress counts from its start, whether or not its transcript
-                // came with the live read.
-                LiveEpisodeClock(
-                  key: const Key('conversation_row_live_length'),
-                  clock: clock.now,
-                  builder: (context, now) {
-                    final start = widget.conversation.startedAt ?? widget.conversation.createdAt;
-                    final seconds = now.difference(start).inSeconds;
-                    return seconds <= 0
-                        ? const SizedBox.shrink()
-                        : Text('• ${OmiDuration.compact(seconds, context.l10n)}', style: _metaStyle, maxLines: 1);
-                  },
-                )
-              else if (duration.isNotEmpty)
+              if (_isLive) ...[
+                // The conversation in progress shows its speech so far, the same length its detail
+                // shows. Counting from its start to now made silence after the last words grow it.
+                if (_liveSpeechSeconds case final seconds? when seconds > 0)
+                  Text(
+                    '• ${OmiDuration.compact(seconds, context.l10n)}',
+                    key: const Key('conversation_row_live_length'),
+                    style: _metaStyle,
+                    maxLines: 1,
+                  ),
+              ] else if (duration.isNotEmpty)
                 Text('• $duration', style: _metaStyle, maxLines: 1),
               if (widget.homeCard?.memberCount case final count? when count > 1)
                 Text(context.l10n.homeRecordingsCount(count), style: _metaStyle),
@@ -719,6 +714,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       ],
                       const SizedBox(height: 3),
                       _buildMetaRow(context),
+                      if (_isLive)
+                        const Padding(
+                          padding: EdgeInsets.only(top: OmiSpacing.xs),
+                          child: Align(alignment: AlignmentDirectional.centerStart, child: LiveConversationEndButton()),
+                        ),
                       if (widget.conversation.processingDeferred && widget.conversation.homeStep != 'failed')
                         const ProcessingDeferredMarker(),
                       OnDeviceProvenanceChip(conversationId: widget.conversation.id),
@@ -787,6 +787,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
   bool get _isLive =>
       widget.conversation.v3?.tileState == ConversationTileState.live &&
       (context.read<ConversationsV3Provider?>()?.v3 ?? false);
+
+  /// Speech so far in a live v3 conversation: its first words to the server's latest `finished_at`.
+  int? get _liveSpeechSeconds {
+    final end = widget.conversation.finishedAt;
+    if (end == null) return null;
+    return end.difference(widget.conversation.startedAt ?? widget.conversation.createdAt).inSeconds;
+  }
 
   String _getConversationDuration(BuildContext context) {
     if (widget.homeCard != null && widget.homeCard!.startedAt == null) return '';

@@ -202,6 +202,10 @@ class ConversationProvider extends ChangeNotifier {
   static const int _conversationPageSize = 50;
   int _conversationServerOffset = 0;
   bool _conversationServerHasMore = false;
+
+  /// The server's resume point after the last loaded page, when its cursor is enabled; the next page
+  /// sends it alongside the offset, and an older server ignores it.
+  String? _conversationServerCursor;
   final Set<String> _conversationServerLoadedIds = {};
 
   // The empty-state widget should defer to a pending auto-retry so the user
@@ -399,6 +403,7 @@ class ConversationProvider extends ChangeNotifier {
     _processingStateRevisionById.clear();
     _conversationServerOffset = 0;
     _conversationServerHasMore = false;
+    _conversationServerCursor = null;
     _conversationServerLoadedIds.clear();
     mergingConversationIds = {};
     selectedConversationIds = {};
@@ -834,7 +839,9 @@ class ConversationProvider extends ChangeNotifier {
     final receivedStorageCount = _recordServerPageIds(rawNewConversations, rawNewConversations.length);
     if (_conversationServerOffset == 0) {
       _conversationServerOffset = receivedStorageCount;
-      _conversationServerHasMore = !result.truncated && rawNewConversations.length >= _conversationPageSize;
+      _conversationServerHasMore = result.page
+          .more(storageCount: rawNewConversations.length, pageSize: _conversationPageSize, truncated: result.truncated);
+      _conversationServerCursor = result.page.nextCursor;
     }
     final currentlyProcessingIds = processingConversations
         .where((conversation) => _isActiveProcessingStatus(conversation.status))
@@ -983,7 +990,9 @@ class ConversationProvider extends ChangeNotifier {
     );
     _conversationServerLoadedIds.clear();
     _conversationServerOffset = _recordServerPageIds(result.items, result.storageCount);
-    _conversationServerHasMore = !result.truncated && result.storageCount >= _conversationPageSize;
+    _conversationServerHasMore = result.page
+        .more(storageCount: result.storageCount, pageSize: _conversationPageSize, truncated: result.truncated);
+    _conversationServerCursor = result.page.nextCursor;
 
     // The page replaces overlaps and covered rows; older cached pages remain
     // reachable. A live completion while the list/lifecycle awaits can outdate
@@ -1326,14 +1335,9 @@ class ConversationProvider extends ChangeNotifier {
     final (startDate, endDate) = _getDateFilterRange();
 
     final pageOffset = _conversationServerOffset;
+    final pageCursor = _conversationServerCursor;
     final typedApi = _conversationApi;
-    late final ({
-      List<ServerConversation> items,
-      bool ok,
-      bool truncated,
-      int storageCount,
-      ApiResult<List<ServerConversation>>? typed
-    }) pageResult;
+    late final _HomePage pageResult;
     if (conversationPageFetcherOverride != null) {
       final fetched = await conversationPageFetcherOverride!.call();
       pageResult = (
@@ -1341,24 +1345,34 @@ class ConversationProvider extends ChangeNotifier {
         ok: fetched.ok,
         truncated: fetched.truncated,
         storageCount: fetched.items.length,
+        page: const ConversationPageHeaders(),
         typed: null
       );
     } else if (typedApi != null) {
-      pageResult = await _getTypedHomePage(typedApi, pageOffset, startDate, endDate);
+      pageResult = await _getTypedHomePage(typedApi, pageOffset, pageCursor, startDate, endDate);
     } else {
       var storageCount = 0;
+      var page = const ConversationPageHeaders();
       final fetched = await getConversationsResult(
         heldHomeEpisodes: _homeEpisodeAcknowledgements,
         onStorageCount: (count) => storageCount = count,
+        onPageHeaders: (headers) => page = headers,
         offset: pageOffset,
+        cursor: pageCursor,
         includeDiscarded: showDiscardedConversations,
         startDate: startDate,
         endDate: endDate,
         folderId: selectedFolderId,
         starred: showStarredOnly ? true : null,
       );
-      pageResult =
-          (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, storageCount: storageCount, typed: null);
+      pageResult = (
+        items: fetched.items,
+        ok: fetched.ok,
+        truncated: fetched.truncated,
+        storageCount: storageCount,
+        page: page,
+        typed: null
+      );
     }
     if (operationRevision != _conversationFetchRevision) {
       if (_conversationLoadingRevision == operationRevision) setLoadingConversations(false);
@@ -1376,7 +1390,9 @@ class ConversationProvider extends ChangeNotifier {
     }
     final newConversations = pageResult.items;
     _conversationServerOffset += _recordServerPageIds(newConversations, pageResult.storageCount);
-    _conversationServerHasMore = !pageResult.truncated && pageResult.storageCount >= _conversationPageSize;
+    _conversationServerHasMore = pageResult.page
+        .more(storageCount: pageResult.storageCount, pageSize: _conversationPageSize, truncated: pageResult.truncated);
+    _conversationServerCursor = pageResult.page.nextCursor;
     final existingIds = conversations.map((conversation) => conversation.id).toSet();
     final visiblePage = _filterPendingDeletes(newConversations);
     _recordHomeProcessingPage(visiblePage, processingRevisionsAtStart);
