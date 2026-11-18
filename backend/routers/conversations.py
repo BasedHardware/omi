@@ -1190,7 +1190,6 @@ def get_conversations(
     _heal_locked_conversations_if_eligible(uid, conversations)
     conversations = [transcribing_hold.project(home_step.project(row), home_list=True) for row in conversations]
     redact_conversations_for_list(conversations)
-    # One stored row the response model rejects must not fail the whole page.
     conversations = row_contract.readable_rows(conversations, surface='v1_conversations')
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
@@ -2698,10 +2697,7 @@ async def _search_conversation_page(
         return {**search_results, 'items': conversations}
     conversations = [transcribing_hold.project(row) for row in conversations]
     redact_conversations_for_list(conversations)
-    # Pagination below counts the hydrated page; only the response drops a row the model rejects.
-    search_results['items'] = row_contract.readable_rows(
-        conversations, surface='conversation_search', model=ConversationSearchItem
-    )
+    search_results['items'] = row_contract.readable_rows(conversations, surface='search', model=ConversationSearchItem)
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
     # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
     # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.
