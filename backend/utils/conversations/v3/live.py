@@ -8,7 +8,9 @@ MAX_IDLE = timedelta(hours=2)
 # A v3 window is capped at two hours (``planner.CAP``) and its ``created_at`` is its first
 # speech, so an open window that spoke within MAX_IDLE started inside this lookback.
 LOOKBACK = timedelta(hours=2) + MAX_IDLE
-SCAN = 10
+# Legacy in-progress rows created inside the lookback still fill the page ahead of the window
+# (v3_derived is filtered after the read; a query filter would need a new index), so leave room.
+SCAN = 50
 # The bounded page the live read scans: a stale stub may sort ahead of the open conversation.
 # List fields only: the live tile needs no transcript blob.
 OPEN_ROWS = dict(limit=SCAN, statuses=['in_progress'], hide_home=True, list_fields_only=True)

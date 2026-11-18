@@ -1021,7 +1021,10 @@ def is_visible_conversation(
 # it still reports how many storage rows it consumed and that more remain, so
 # pagination continues. 512 rows plus a page stays far inside the request's
 # 25,000-document list budget, and list reads select no transcript blobs.
+# Readers without a request budget (full-document internal callers) keep the
+# old 64-row allowance, so their worst case does not grow.
 _HIDDEN_ROW_PAGE_SKIP_CAP = 512
+_UNBUDGETED_HIDDEN_ROW_SKIP_CAP = 64
 
 
 def _conversation_list_cursor_enabled(uid: Optional[str]) -> bool:
@@ -1057,7 +1060,8 @@ def _with_conversation_cursor_envelope(func):
 class _PageFill:
     """Fill one page of visible rows from a newest-first query.
 
-    Hidden rows count against :data:`_HIDDEN_ROW_PAGE_SKIP_CAP`; visible rows
+    Hidden rows count against the cap (:data:`_HIDDEN_ROW_PAGE_SKIP_CAP` under a
+    request budget); visible rows
     do not. ``consumed`` is the number of storage rows this page read past its
     start (the raw-offset advance), and ``has_more`` says whether the scan
     stopped before the end of the query. A budget cut keeps the honest prefix.
@@ -1073,6 +1077,7 @@ class _PageFill:
         self.consumed = 0
         self.skipped = 0
         self.has_more = False
+        self.cap = _HIDDEN_ROW_PAGE_SKIP_CAP if budget is not None else _UNBUDGETED_HIDDEN_ROW_SKIP_CAP
 
     def run(self, query, batch_limit):
         try:
@@ -1092,7 +1097,7 @@ class _PageFill:
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not self.visible(conversation):
                     self.skipped += 1
-                    if self.skipped >= _HIDDEN_ROW_PAGE_SKIP_CAP:
+                    if self.skipped >= self.cap:
                         self.has_more = True
                         return
                     continue
@@ -1111,7 +1116,7 @@ class _PageFill:
             missing = self.limit - len(self.rows)
             refill += 1
             batch_limit = min(
-                missing + _HIDDEN_ROW_PAGE_SKIP_CAP - self.skipped,
+                missing + self.cap - self.skipped,
                 missing if refill == 1 else max(missing, 2 * batch_limit),
             )
             query = self.conversations_ref.start_after(self.last_doc).limit(batch_limit)

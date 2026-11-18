@@ -443,6 +443,14 @@ def _live_row(id, *, v3=True, minutes_ago=1, tile_state='live', **extra):
     }
 
 
+def test_live_window_behind_newer_legacy_rows_survives_the_query_limit(monkeypatch):
+    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
+    rows = [_live_row(f'legacy-{i}', v3=False) for i in range(12)] + [_live_row('window', minutes_ago=5)]
+    # The stub honours the query's limit, as Firestore does.
+    monkeypatch.setattr(db, 'get_conversations_without_photos', lambda uid, **kw: rows[: kw['limit']])
+    assert routes.get_live_conversation('u', 'store')['conversation']['id'] == 'window'
+
+
 @pytest.mark.parametrize(
     'rows, expected',
     [

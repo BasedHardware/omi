@@ -41,6 +41,8 @@ def page(monkeypatch, data, **kwargs):
     query = CountingQuery(data)
     monkeypatch.setattr(db, 'db', query)
     info = {}
+    # The Home route always reads under a request budget; that is what earns the larger cap.
+    kwargs.setdefault('budget', budget())
     result = db.get_conversations_without_photos('u', limit=PAGE, hide_home=True, cursor_page=info, **kwargs)
     return [row['id'] for row in result], info, query.counts
 
@@ -96,6 +98,15 @@ def test_run_longer_than_the_cap_returns_a_short_page_that_still_pages_on(monkey
     assert counts['reads'] == 10 + 64
     seen, _ = released_app_walk(monkeypatch, data)
     assert seen == visible
+
+
+def test_unbudgeted_readers_keep_the_old_allowance(monkeypatch):
+    """Full-document internal callers have no request budget; their worst case must not grow."""
+    data, visible = owner(before=10, hidden=150, after=100)
+    ids, info, counts = page(monkeypatch, data, offset=0, budget=None)
+    assert ids == visible[:10]
+    assert counts['reads'] == 10 + db._UNBUDGETED_HIDDEN_ROW_SKIP_CAP
+    assert info['has_more'] is True
 
 
 def test_end_of_collection_reports_no_more(monkeypatch):
