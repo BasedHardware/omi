@@ -741,7 +741,7 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
             break
         if await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid, fresh=True):
             counts['account_deletion'] = 1
-            return counts
+            break  # still count what remains owed below
         await asyncio.gather(*(one(row) for row in rows[start : start + concurrency]))
     left = await run_blocking(db_executor, store.pending_backfill_processing, uid)
     counts['remaining'] = len([row for row in left if row])

@@ -1087,6 +1087,8 @@ async def test_the_drain_stops_once_account_deletion_starts(direct, monkeypatch)
     monkeypatch.setattr(service, '_process_leased', AsyncMock(side_effect=AssertionError('sent a transcript')))
     counts = await service.drain_backfill('u', deadline=float('inf'))
     assert counts['account_deletion'] == 1 and counts['processed'] == 0
+    # The ledger still learns what is owed.
+    assert counts['remaining'] == 1
     # Read past the negative cache: a marker written seconds ago still stops the drain.
     assert fresh == [{'fresh': True}]
 
@@ -1228,7 +1230,10 @@ def test_undo_refuses_a_group_whose_copy_took_a_notes_lease_after_the_first_chec
 
 def test_a_rerun_undo_keeps_the_totals_of_groups_already_undone(monkeypatch):
     ledger = _undo_ledger(monkeypatch)
-    ledger.run.update(status='undoing', undo={'donors_restored': 4, 'rows_removed': 3, 'outcome': 'error'})
+    ledger.run.update(
+        status='undoing',
+        undo={'donors_restored': 4, 'rows_removed': 3, 'groups_kept_deleted': 1, 'donors_kept_deleted': 2},
+    )
     _undo_leases(monkeypatch)
     docs = [
         {'id': 'd1', 'claims': [{'conversation_id': 'c1'}]},
@@ -1239,6 +1244,8 @@ def test_a_rerun_undo_keeps_the_totals_of_groups_already_undone(monkeypatch):
     result = backfill.undo_run('u', RUN)
     assert result['donors_restored'] == 5 and result['rows_removed'] == 4
     assert ledger.run['undo']['donors_restored'] == 5
+    # Kept groups are still in the run's documents and recounted, never carried twice.
+    assert result['groups_kept_deleted'] == 0 and result['donors_kept_deleted'] == 0
 
 
 def test_a_refused_undo_keeps_the_earlier_totals(monkeypatch):

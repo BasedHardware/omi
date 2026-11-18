@@ -497,12 +497,11 @@ def undo_run(uid, run_id, *, firestore_client=None):
         derived = [d['id'] for d in docs if d.get('v3_derived')]
         if any(leases.held(uid, 'summary-' + cid, firestore_client=firestore_client) for cid in derived):
             return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client, run.get('undo'))
-        # Groups an interrupted undo already finished are gone from the run's documents: carry their totals.
+        # Groups an interrupted undo already undid are gone from the run's documents: carry those totals.
+        # Kept groups stay stamped with the run and are recounted on every attempt.
         earlier = run.get('undo') or {}
-        result = {
-            key: int(earlier.get(key) or 0)
-            for key in ('donors_restored', 'rows_removed', 'groups_kept_deleted', 'donors_kept_deleted')
-        }
+        result = {key: int(earlier.get(key) or 0) for key in ('donors_restored', 'rows_removed')}
+        result.update(groups_kept_deleted=0, donors_kept_deleted=0)
         for donors, rows in undo_groups(docs):
             try:
                 outcome, restored, removed = store.undo_backfill_group(
