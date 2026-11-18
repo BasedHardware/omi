@@ -836,11 +836,13 @@ class ConversationProvider extends ChangeNotifier {
       processingRowsAtStart,
       {for (final conversation in newConversations) conversation.id: conversation},
     );
-    final receivedStorageCount = _recordServerPageIds(rawNewConversations, rawNewConversations.length);
+    // The storage count, not the body length, is the offset advance: a page
+    // that crossed hidden rows is shorter than the rows it consumed.
+    final receivedStorageCount = _recordServerPageIds(rawNewConversations, result.storageCount);
     if (_conversationServerOffset == 0) {
       _conversationServerOffset = receivedStorageCount;
       _conversationServerHasMore = result.page
-          .more(storageCount: rawNewConversations.length, pageSize: _conversationPageSize, truncated: result.truncated);
+          .more(storageCount: result.storageCount, pageSize: _conversationPageSize, truncated: result.truncated);
       _conversationServerCursor = result.page.nextCursor;
     }
     final currentlyProcessingIds = processingConversations
@@ -872,8 +874,11 @@ class ConversationProvider extends ChangeNotifier {
     // Refresh pages exclude discarded/bridged donors. Absence is authoritative
     // inside this page's time window, not for older paginated rows. Failed or
     // truncated reads never remove rows, nor do they override a live update.
-    if (!result.truncated) {
-      final coveredAfter = rawNewConversations.length >= _conversationPageSize
+    // A page that consumed a full page of storage rows covers only down to its
+    // oldest row; one with no visible row covers nothing.
+    final fullPage = result.storageCount >= _conversationPageSize;
+    if (!result.truncated && !(fullPage && rawNewConversations.isEmpty)) {
+      final coveredAfter = fullPage
           ? rawNewConversations.map((c) => c.startedAt ?? c.createdAt).reduce((a, b) => a.isBefore(b) ? a : b)
           : null;
       conversations.removeWhere((row) =>

@@ -92,4 +92,42 @@ void main() {
     expect(requests.last.queryParameters.containsKey('cursor'), isFalse);
     expect(requests.last.queryParameters['offset'], '50');
   });
+  test('a refresh advances by the storage count, not the body length', () async {
+    final requests = <Uri>[];
+    final api = ConversationApi(
+        baseUrl: 'http://127.0.0.1:1/',
+        send: (request) async {
+          requests.add(Uri.parse(request.url));
+          // Thirty visible rows that consumed 542 storage rows (a hidden run).
+          return http.Response(jsonEncode([for (var i = 0; i < 30; i++) row(i).toJson()]), 200,
+              headers: {'x-omi-conversation-page-size': '542'});
+        });
+    final provider = ConversationProvider(conversationApi: api, isSignedIn: () => true);
+    addTearDown(provider.dispose);
+    await provider.forceRefreshConversations();
+    expect(provider.hasMoreConversations, isTrue);
+    await provider.getMoreConversationsFromServer();
+    expect(requests.last.queryParameters['offset'], '542');
+  });
+
+  test('a refresh page shortened by hidden rows does not drop older loaded rows', () async {
+    var served = 0;
+    final api = ConversationApi(
+        baseUrl: 'http://127.0.0.1:1/',
+        send: (request) async {
+          served++;
+          final rows = served == 1 ? [for (var i = 0; i < 50; i++) row(i)] : [for (var i = 0; i < 30; i++) row(i)];
+          final size = served == 1 ? '50' : '542';
+          return http.Response(jsonEncode([for (final c in rows) c.toJson()]), 200,
+              headers: {'x-omi-conversation-page-size': size});
+        });
+    final provider = ConversationProvider(conversationApi: api, isSignedIn: () => true);
+    addTearDown(provider.dispose);
+    expect(await provider.fetchConversations(), isTrue);
+    expect(provider.conversations, hasLength(50));
+    await provider.forceRefreshConversations();
+    // The refresh consumed a full page of storage rows, so it covers only down to
+    // its oldest visible row; rows older than that stay.
+    expect(provider.conversations, hasLength(50));
+  });
 }
