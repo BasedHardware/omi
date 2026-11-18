@@ -63,7 +63,7 @@ from config.occasion_conversations import OCCASION_MAX_SPAN_SECONDS
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.lifecycle_clocks import speech_clock, utc
 from utils.stt.speech_clock import quiet_since, rotation_due
-from utils.observability.v3_rotation import record_rotation
+from utils.observability.recording_rotation import record_rotation
 from utils.conversations.v3 import policy as v3_policy
 from config.conversations_v3 import recording_rotation_enabled, rotation_seconds
 from utils.episodes import boundaries, boundary_runtime
