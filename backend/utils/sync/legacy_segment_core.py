@@ -102,7 +102,6 @@ from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.voiceprints import usable_person_voiceprint
 from config.stt_cap_dispatch import offline_admission_enabled as cap_enabled, recovery_admission_enabled, LANES
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance, CapAllowanceDenied
-from utils import backfill_hours_cap
 from utils.observability.stt_cap_dispatch import DispatchPath
 from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.stt.pre_recorded import get_prerecorded_service, postprocess_words, prerecorded
@@ -1082,14 +1081,9 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
     def cap_enforced() -> bool:
         return (recovery_admission_enabled if cap_recovery else cap_enabled)(uid, cap_dispatch_lane)
 
-    def backfill_cap_active() -> bool:
-        # The default-off unlimited_v2 backfill day cap is independent of the
-        # legacy/offline dispatch scope: it only ever refuses historical work.
-        return sync_lane == SyncLane.BACKFILL.value and backfill_hours_cap.cap_enabled()
-
-    def admission_enforced() -> bool:
-        return cap_enforced() or backfill_cap_active()
-
+    # The unlimited_v2 backfill day cap is enforced only at upload admission
+    # (routers/sync.py), never here: a segment-time refusal would park admitted
+    # audio in a hold that no prod recovery path releases.
     if cap_recovery and not cap_enforced():
         return False
     cap_context = {
@@ -1132,8 +1126,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         if ambiguous_binding_pending(uid, lineage_binding):
             phase = 'persistence'
             raise SyncAssignmentConflict('sync lineage ambiguous', subtype=Conflict.LINEAGE_OWNERSHIP_AMBIGUOUS)
-        if admission_enforced():
-            if not sync_allowed(uid, lane=cap_dispatch_lane, backfill=backfill_cap_active()):
+        if cap_enforced():
+            if not sync_allowed(uid, lane=cap_dispatch_lane):
                 return hold_for_cap()
             # Queue-time locks do not survive execution-time authorization.
             is_locked = False
@@ -1163,13 +1157,12 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 req_language,
                 path,
                 selector=get_prerecorded_service,
-                before_probe=lambda: not admission_enforced()
+                before_probe=lambda: not cap_enforced()
                 or sync_allowed(
                     uid,
                     provider='modulate',
                     lane=cap_dispatch_lane,
                     path=DispatchPath.LANGUAGE_PROBE,
-                    backfill=backfill_cap_active(),
                 ),
                 cohort_key=uid,
             )
@@ -1216,13 +1209,12 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             if (
                 cap_recovery
                 and not cap_enforced()
-                or admission_enforced()
+                or cap_enforced()
                 and not sync_allowed(
                     uid,
                     provider=provider,
                     lane=cap_dispatch_lane,
                     path=DispatchPath.EMPTY_RETRY if empty_retried else DispatchPath.SYNC_SEGMENT,
-                    backfill=backfill_cap_active(),
                 )
             ):
                 return hold_for_cap()
@@ -1243,8 +1235,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 on_provider_served=_note_served_provider,
                 **recovery_dispatch,
             )
-            if admission_enforced():
-                allowance = funded_allowance(uid, lane=cap_dispatch_lane, backfill=backfill_cap_active())
+            if cap_enforced():
+                allowance = funded_allowance(uid, lane=cap_dispatch_lane)
                 record_cap_audio(
                     'sync', 'accepted', provider, get_wav_duration(path), allowance.reason == 'plan_allowance_exhausted'
                 )

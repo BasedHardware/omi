@@ -202,7 +202,7 @@ env:
   - name: MEDIA_NOISE_MODE_SERVE_PERCENT
     value: "0"
   - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED
-    value: "false"
+    value: "true"
   - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS
     value: "24"
   - name: DEMAND_PROCESSING_ENABLED
