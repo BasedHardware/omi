@@ -160,7 +160,7 @@ def get_folder_conversations(
     conversations = [transcribing_hold.project(row) for row in conversations]
     redact_conversations_for_list(conversations)
     # One malformed/legacy conversation must not fail the whole list with a 500.
-    return row_contract.readable_models(conversations, surface='folder_conversations')
+    return row_contract.readable_models(conversations, surface='folder_conversations', model=Conversation)
 
 
 @router.patch(

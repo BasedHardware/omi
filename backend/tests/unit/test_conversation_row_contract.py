@@ -123,7 +123,7 @@ def test_list_read_skips_only_the_malformed_row(caplog):
     assert kept == [rows[0], rows[3]] and kept[0] is rows[0]
     assert _skips() == before + 2
     assert 'surface=unit conversation_id=bad' in caplog.text and SECRET not in caplog.text
-    assert [c.id for c in row_contract.readable_models(rows, surface='unit')] == ['a', 'b']
+    assert [c.id for c in row_contract.readable_models(rows, surface='unit', model=Conversation)] == ['a', 'b']
 
 
 def test_get_conversations_returns_the_rest_of_a_page_with_one_malformed_row(monkeypatch):

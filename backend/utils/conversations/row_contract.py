@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, TypeVar, cast
 
 from prometheus_client import Counter
 from pydantic import BaseModel, ValidationError
@@ -39,6 +39,8 @@ WRITE_REJECTIONS = Counter(
 )
 
 _MAX_PATHS = 8
+
+ModelT = TypeVar('ModelT', bound=BaseModel)
 
 
 class InvalidConversationRow(ValueError):
@@ -109,6 +111,6 @@ def readable_rows(rows: Iterable[Any], *, surface: str, model: type[BaseModel] =
     return [row for row, _ in _screen(rows, surface, model)]
 
 
-def readable_models(rows: Iterable[Any], *, surface: str, model: type[BaseModel] = Conversation) -> list[BaseModel]:
-    """The validated ``model`` instance for each row it accepts (``Conversation`` unless the surface has its own)."""
-    return [validated for _, validated in _screen(rows, surface, model)]
+def readable_models(rows: Iterable[Any], *, surface: str, model: type[ModelT]) -> list[ModelT]:
+    """The validated ``model`` instance for each row it accepts."""
+    return [cast(ModelT, validated) for _, validated in _screen(rows, surface, model)]
