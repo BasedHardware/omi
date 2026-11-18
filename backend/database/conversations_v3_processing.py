@@ -5,8 +5,9 @@ from utils.conversations.v3 import metrics
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 from database import conversations, conversations_v3 as store
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -64,7 +65,36 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
     persist(client.transaction())
 
 
-def settle_processing(uid, cid, token, revision, covers, *, skipped=False, content_hash=None, firestore_client=None):
+def created_eligible(row):
+    """A visible, completed, notes-bearing derived row owes one conversation-created delivery.
+
+    Mirrors the legacy suppressions: discarded, locked, recordings, free-tier terminal minimums
+    (terminal_no_derived_effects) and silent backfill never fan out; hidden rows wait for visibility.
+    """
+    return bool(
+        row
+        and row.get('v3_derived')
+        and row.get('v3_notes_written')
+        and not row.get('recording')
+        and not row.get('deleted')
+        and not row.get('discarded')
+        and not row.get('is_locked')
+        and not row.get('home_hidden')
+        and not row.get('backfilled')
+        and not row.get('terminal_no_derived_effects')
+        and not row.get('v3_process_failed')
+        and row.get('status') == 'completed'
+        and not row.get('v3_created_delivered_at')
+    )
+
+
+def settle_processing(
+    uid, cid, token, revision, covers, *, skipped=False, notes=False, content_hash=None, firestore_client=None
+):
+    """Settle one processing attempt; `notes` marks a completed notes write (arms the created delivery).
+
+    Returns True when this settle armed the conversation-created delivery obligation.
+    """
     client = firestore_client or store.get_firestore_client()
     ref = store.user_conversations(client, uid).document(cid)
     held = leases.lease_ref(client, uid, 'summary-' + cid)
@@ -77,11 +107,15 @@ def settle_processing(uid, cid, token, revision, covers, *, skipped=False, conte
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('processing_source_changed')
         if not row:
-            return
+            return False
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
             decoded = store.decode_row(uid, snapshot)
             if not content_hash or processing_hash(decoded) != content_hash:
                 raise Conflict('processing_source_changed')
+        written = bool(notes and not skipped and not row.get('deleted'))
+        armed = written and created_eligible(
+            {**row, 'v3_notes_written': True, 'v3_process_failed': False, 'v3_process_pending': False}
+        )
         tx.update(
             ref,
             {
@@ -96,10 +130,89 @@ def settle_processing(uid, cid, token, revision, covers, *, skipped=False, conte
                     if not skipped and not row.get('home_hidden') and (row.get('structured') or {}).get('title')
                     else {}
                 ),
+                **({'v3_notes_written': True} if written else {}),
+                **({'v3_created_pending': True} if armed else {}),
             },
         )
+        return armed
 
-    settle(client.transaction())
+    return settle(client.transaction())
+
+
+CREATED_CLAIM = timedelta(minutes=5)
+CREATED_MAX_ATTEMPTS = 5
+
+
+def pending_created(uid, *, firestore_client=None):
+    """Owed conversation-created deliveries for one owner (collection-scoped, bounded)."""
+    client = firestore_client or store.get_firestore_client()
+    return [
+        snapshot.id
+        for snapshot in store.user_conversations(client, uid)
+        .where(filter=FieldFilter('v3_created_pending', '==', True))
+        .limit(8)
+        .stream()
+    ]
+
+
+def claim_created(uid, cid, *, firestore_client=None):
+    """Claim one owed delivery for a bounded lease; returns the attempt number or None.
+
+    A row that stopped qualifying (deleted, hidden, locked, discarded, already delivered) drops the
+    obligation instead of delivering. A live claim held by another worker is left alone.
+    """
+    client = firestore_client or store.get_firestore_client()
+    ref = store.user_conversations(client, uid).document(cid)
+
+    @firestore.transactional
+    def claim(tx):
+        snapshot = ref.get(transaction=tx)
+        row = snapshot.to_dict() or {}
+        if not snapshot.exists or not row.get('v3_created_pending'):
+            return None
+        now = datetime.now(timezone.utc)
+        if not created_eligible(row):
+            tx.update(ref, {'v3_created_pending': False, 'v3_created_claim_until': None})
+            return None
+        if row.get('v3_created_claim_until') and row['v3_created_claim_until'] > now:
+            return None
+        attempt = int(row.get('v3_created_attempts') or 0) + 1
+        if attempt > CREATED_MAX_ATTEMPTS + 1:
+            # The final delivery attempt drops failures itself; this bounds a row whose read or
+            # claim keeps failing outside the delivery so it never cycles the owner's wakes forever.
+            tx.update(ref, {'v3_created_pending': False, 'v3_created_claim_until': None})
+            return None
+        tx.update(ref, {'v3_created_attempts': attempt, 'v3_created_claim_until': now + CREATED_CLAIM})
+        return attempt
+
+    return claim(client.transaction())
+
+
+def finish_created(uid, cid, attempt, *, delivered, firestore_client=None):
+    """Record the delivery (or release the claim for a later retry), fenced by the attempt number."""
+    client = firestore_client or store.get_firestore_client()
+    ref = store.user_conversations(client, uid).document(cid)
+
+    @firestore.transactional
+    def finish(tx):
+        snapshot = ref.get(transaction=tx)
+        row = snapshot.to_dict() or {}
+        if not snapshot.exists or int(row.get('v3_created_attempts') or 0) != attempt:
+            return False
+        if delivered:
+            tx.update(
+                ref,
+                {
+                    'v3_created_pending': False,
+                    'v3_created_claim_until': None,
+                    'v3_created_delivered_at': datetime.now(timezone.utc),
+                },
+            )
+        else:
+            tx.update(ref, {'v3_created_claim_until': None})
+        return True
+
+    return finish(client.transaction())
 
 
 def processing_hash(row):
