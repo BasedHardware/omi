@@ -67,14 +67,15 @@ void main() {
     expect(result.$3, '2.0.0');
   });
 
-  test('firmware below the minimum still reports the zero sentinel', () async {
+  test('firmware below the minimum reports a below-minimum message', () async {
     final result = await DeviceUtils.shouldUpdateFirmware(
       currentFirmware: '0.9.0',
       latestFirmwareDetails: valid,
     );
 
-    expect(result.$1, '0');
+    expect(result.$1, 'Current firmware is below the minimum version required for this update');
     expect(result.$2, isFalse);
+    expect(result.$3, '2.0.0');
   });
 
   test('an up to date device is told so', () async {

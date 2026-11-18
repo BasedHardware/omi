@@ -96,7 +96,11 @@ class DeviceUtils {
     }
 
     if (currentVersion < minVersion) {
-      return (status: notConfirmed, message: '0', version: latestVersionStr);
+      return (
+        status: notConfirmed,
+        message: 'Current firmware is below the minimum version required for this update',
+        version: latestVersionStr,
+      );
     } else {
       if (latestVersion > currentVersion) {
         PackageInfo packageInfo = await PackageInfo.fromPlatform();
