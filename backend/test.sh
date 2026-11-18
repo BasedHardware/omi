@@ -189,23 +189,75 @@ fi
 selection_dir="$(mktemp -d)"
 trap 'rm -rf "$selection_dir"' EXIT
 
-# Print the backend-relative form of an existing file; fail when it is outside backend/.
-backend_relative_path() {
-  local directory relative
-  directory="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || return 1
-  case "$directory/" in
-    "$ROOT_DIR_PHYSICAL"/*) ;;
-    *) return 1 ;;
+# Print the physical path of an existing file with every symlink resolved, the
+# file's own included (Bash 3.2 and macOS have no portable `readlink -f`). A
+# symlinked test file is collected from its target, so containment must be
+# judged on the target, not on the directory that holds the link.
+resolve_physical_path() {
+  local path="$1" target hops=0
+  while [[ -L "$path" ]]; do
+    hops=$((hops + 1))
+    [[ "$hops" -le 40 ]] || return 1
+    target="$(readlink "$path")" || return 1
+    case "$target" in
+      /*) path="$target" ;;
+      *) path="$(dirname "$path")/$target" ;;
+    esac
+  done
+  [[ -e "$path" ]] || return 1
+  printf '%s/%s\n' "$(cd "$(dirname "$path")" 2>/dev/null && pwd -P)" "$(basename "$path")"
+}
+
+path_is_inside_backend() {
+  case "$1" in
+    "$ROOT_DIR_PHYSICAL"/*) return 0 ;;
   esac
+  return 1
+}
+
+# Print the backend-relative form of an existing file; fail when the file, or
+# whatever it resolves to through symlinks, is outside backend/.
+backend_relative_path() {
+  local directory relative resolved
+  directory="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || return 1
+  path_is_inside_backend "$directory/" || return 1
+  resolved="$(resolve_physical_path "$1")" || return 1
+  path_is_inside_backend "$resolved" || return 1
   relative="${directory#"$ROOT_DIR_PHYSICAL"}"
   relative="${relative#/}"
   printf '%s%s\n' "${relative:+$relative/}" "$(basename "$1")"
 }
 
+# Selector output is backend-relative. Fail when one of those paths reaches
+# outside backend/ through a symlinked file or directory. Only the builtin -L
+# test runs per path component; a path is resolved only when a link is found.
+selected_path_escapes_backend() {
+  local path="${1%%::*}" partial="" component
+  local components=()
+  IFS='/' read -r -a components <<< "$path"
+  for component in "${components[@]}"; do
+    partial="${partial:+$partial/}$component"
+    if [[ -L "$partial" ]]; then
+      backend_relative_path "$path" >/dev/null || return 0
+      return 1
+    fi
+  done
+  return 1
+}
+
 # Resolve one requested test path to a backend-relative path. Never guesses: a
 # path that does not exist, a directory, or an ambiguous bare name is an error.
+report_outside_backend() {
+  local resolved
+  if resolved="$(resolve_physical_path "$2")" && [[ "$resolved" != "$(cd "$(dirname "$2")" 2>/dev/null && pwd -P)/$(basename "$2")" ]]; then
+    echo "test.sh: $1 resolves through a symlink to $resolved, outside backend/; this runner only runs backend tests" >&2
+  else
+    echo "test.sh: $1 is outside backend/; this runner only runs backend tests" >&2
+  fi
+}
+
 resolve_test_path() {
-  local spec="$1" file_part node_suffix="" candidate name matches match_count match
+  local spec="$1" file_part node_suffix="" candidate relative name matches match_count match
   local candidates=()
   file_part="${spec%%::*}"
   [[ "$file_part" == "$spec" ]] || node_suffix="::${spec#*::}"
@@ -222,11 +274,11 @@ resolve_test_path() {
       return 1
     fi
     if [[ -f "$candidate" ]]; then
-      if ! candidate="$(backend_relative_path "$candidate")"; then
-        echo "test.sh: $spec is outside backend/; this runner only runs backend tests" >&2
+      if ! relative="$(backend_relative_path "$candidate")"; then
+        report_outside_backend "$spec" "$candidate"
         return 1
       fi
-      printf '%s%s\n' "$candidate" "$node_suffix"
+      printf '%s%s\n' "$relative" "$node_suffix"
       return 0
     fi
   done
@@ -237,7 +289,11 @@ resolve_test_path() {
     match_count=0
     [[ -z "$matches" ]] || match_count="$(printf '%s\n' "$matches" | wc -l | tr -d ' ')"
     if [[ "$match_count" -eq 1 ]]; then
-      printf '%s%s\n' "$matches" "$node_suffix"
+      if ! match="$(backend_relative_path "$matches")"; then
+        report_outside_backend "$spec" "$matches"
+        return 1
+      fi
+      printf '%s%s\n' "$match" "$node_suffix"
       return 0
     fi
     if [[ "$match_count" -gt 1 ]]; then
@@ -337,6 +393,24 @@ while IFS= read -r test_path; do
     selected_count=$((selected_count + 1))
   fi
 done < "$test_list_file"
+
+# Named files were contained as they resolved. The selector's output gets the
+# same rule: a symlinked file or directory under backend/ must not make pytest
+# collect code from elsewhere. An explicit BACKEND_UNIT_TEST_FILE_LIST is the
+# caller's own statement and may name files anywhere, as it always could.
+if [[ ( "$selection_mode" == "changed" || "$selection_mode" == "all" ) && "$selected_count" -gt 0 ]]; then
+  escaped_count=0
+  for test_path in "${selected_tests[@]}"; do
+    if selected_path_escapes_backend "$test_path"; then
+      echo "test.sh: selected $test_path resolves through a symlink to outside backend/" >&2
+      escaped_count=$((escaped_count + 1))
+    fi
+  done
+  if [[ "$escaped_count" -gt 0 ]]; then
+    echo "test.sh: no tests were run; remove the symlink(s) above or name the files you mean to run." >&2
+    exit 2
+  fi
+fi
 
 if [[ "$list_only" == "1" ]]; then
   [[ "$selected_count" -eq 0 ]] || printf '%s\n' "${selected_tests[@]}"

@@ -39,6 +39,8 @@ if '--changed-files' in args:
 else:
     selected = 'tests/unit/test_unique.py\\ntests/unit/test_dup.py\\ntesting/e2e/test_contract_e2e.py\\n'
     reason = 'full backend unit suite'
+if os.environ.get('SELECTOR_SELECTED'):
+    selected = os.environ['SELECTOR_SELECTED'].replace(',', '\\n') + '\\n'
 output = Path(args[args.index('--output') + 1])
 output.write_text(selected, encoding='utf-8')
 if '--reason-output' in args:
@@ -345,3 +347,73 @@ def test_invalid_worker_counts_fail_before_running(fixture_repo):
     assert invalid.returncode == 2
     assert 'BACKEND_PYTEST_WORKERS must be a positive integer or auto' in invalid.stderr
     assert fixture_repo.pytest_targets() == []
+
+
+def _outside_test(fixture_repo) -> Path:
+    outside = fixture_repo.root / 'outside'
+    outside.mkdir(exist_ok=True)
+    target = outside / 'outside_test.py'
+    target.write_text('def test_outside():\n    pass\n', encoding='utf-8')
+    return target
+
+
+@pytest.mark.parametrize(
+    'argument', ['tests/unit/test_link.py', 'backend/tests/unit/test_link.py', 'tests/unit/linked_dir/outside_test.py']
+)
+def test_symlinks_that_leave_backend_are_rejected_before_pytest(fixture_repo, argument):
+    target = _outside_test(fixture_repo)
+    (fixture_repo.backend / 'tests' / 'unit' / 'test_link.py').symlink_to(target)
+    (fixture_repo.backend / 'tests' / 'unit' / 'linked_dir').symlink_to(target.parent, target_is_directory=True)
+    cwd = fixture_repo.repo if argument.startswith('backend/') else fixture_repo.backend
+    result = fixture_repo.run(argument, cwd=cwd)
+    assert result.returncode == 2
+    assert 'outside backend/' in result.stderr
+    assert fixture_repo.pytest_targets() == []
+
+
+def test_symlink_chain_to_an_outside_file_is_rejected(fixture_repo):
+    target = _outside_test(fixture_repo)
+    hop = fixture_repo.backend / 'tests' / 'unit' / 'hop.py'
+    hop.symlink_to(target)
+    (fixture_repo.backend / 'tests' / 'unit' / 'test_chain.py').symlink_to('hop.py')
+    result = fixture_repo.run('tests/unit/test_chain.py')
+    assert result.returncode == 2
+    assert f'resolves through a symlink to {target.resolve()}' in result.stderr
+    assert fixture_repo.pytest_targets() == []
+
+
+def test_bare_name_of_an_outside_symlink_is_not_resolved(fixture_repo):
+    (fixture_repo.backend / 'tests' / 'unit' / 'test_link.py').symlink_to(_outside_test(fixture_repo))
+    result = fixture_repo.run('test_link.py')
+    assert result.returncode == 2
+    assert fixture_repo.pytest_targets() == []
+
+
+def test_symlink_inside_backend_still_runs(fixture_repo):
+    (fixture_repo.backend / 'tests' / 'unit' / 'test_alias.py').symlink_to('test_unique.py')
+    result = fixture_repo.run('tests/unit/test_alias.py')
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert fixture_repo.pytest_targets() == ['tests/unit/test_alias.py']
+
+
+@pytest.mark.parametrize('mode', ['--changed', '--all'])
+@pytest.mark.parametrize('selected', ['tests/unit/test_link.py', 'tests/unit/linked_dir/outside_test.py'])
+def test_selector_output_that_leaves_backend_through_a_symlink_fails(fixture_repo, mode, selected):
+    target = _outside_test(fixture_repo)
+    (fixture_repo.backend / 'tests' / 'unit' / 'test_link.py').symlink_to(target)
+    (fixture_repo.backend / 'tests' / 'unit' / 'linked_dir').symlink_to(target.parent, target_is_directory=True)
+    result = fixture_repo.run(mode, SELECTOR_SELECTED=f'tests/unit/test_unique.py,{selected}')
+    assert result.returncode == 2
+    assert f'selected {selected} resolves through a symlink to outside backend/' in result.stderr
+    assert fixture_repo.pytest_targets() == []
+
+
+def test_explicit_file_list_keeps_naming_files_anywhere(fixture_repo, tmp_path):
+    # BACKEND_UNIT_TEST_FILE_LIST is the caller's own statement; existing callers
+    # pass absolute paths outside backend/ and must keep working.
+    target = _outside_test(fixture_repo)
+    selected = tmp_path / 'selected.txt'
+    selected.write_text(f'{target}\n', encoding='utf-8')
+    result = fixture_repo.run(BACKEND_UNIT_TEST_FILE_LIST=str(selected))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert fixture_repo.pytest_targets() == [str(target)]

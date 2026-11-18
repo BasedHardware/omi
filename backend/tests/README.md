@@ -14,7 +14,9 @@ bash test.sh --list --changed                            # print a selection wit
 ```
 
 A path that does not resolve, a directory, an ambiguous bare name, or an unknown option is an error
-that names the argument; nothing falls back to the full suite. With no selection, a local run uses
+that names the argument; nothing falls back to the full suite. Named files and `--changed`/`--all`
+selections must also stay inside `backend/` after symlinks are resolved (a symlinked test file or
+directory pointing elsewhere is an error); an explicit `BACKEND_UNIT_TEST_FILE_LIST` may name any file. With no selection, a local run uses
 `--changed` and CI (`CI` or `GITHUB_ACTIONS` set to `true`) uses `--all`. Every automated caller
 (the CI runner, pre-push, the ratchet preflight, the Firestore index guard) passes an explicit
 `BACKEND_UNIT_TEST_FILE_LIST`, so that default only changes what a person or agent typing
