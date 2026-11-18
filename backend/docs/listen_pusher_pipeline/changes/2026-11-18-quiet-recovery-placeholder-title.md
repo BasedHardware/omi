@@ -8,8 +8,11 @@ Longer captures, captures with previous Home metadata and captures with owner
 corrections continue through normal notes processing.
 
 The [placeholder admission change](2026-11-18-recovery-admits-placeholder-stub.md)
-allows these jobs into recovery. This follow-up guards the short-transcript
-minimum while keeping the batch-audio handoff and final-attempt behavior.
+allows these jobs into recovery. Both the short-transcript minimum and the
+final-attempt fallback after an empty notes response use the same metadata
+guard. If the final attempt cannot produce useful notes for a protected row,
+recovery keeps the existing refusal and leaves the stored content intact.
+The batch-audio handoff is unchanged.
 
 See [the server recovery contract](../../listen_pusher_pipeline.mdx#replay-without-changing-listen-admission).
 

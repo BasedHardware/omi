@@ -132,11 +132,25 @@ def _run_empty_structure_recovery(pc, conversation, *, verdict='keep', captured=
         )
 
 
-def test_empty_structure_keep_completes_on_deterministic_minimum(pc, capsys, monkeypatch):
+@pytest.mark.parametrize(
+    'stored_fields',
+    [
+        pytest.param({}, id='empty-structure'),
+        pytest.param(
+            {'title': 'Earlier minimum', 'title_provenance': 'server_minimum', 'overview': '  ', 'gist': '  '},
+            id='provisional-title',
+        ),
+    ],
+)
+def test_empty_structure_keep_completes_on_deterministic_minimum(pc, capsys, monkeypatch, stored_fields):
+    from models.structured import Structured
+
     monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
     captured: dict = {}
     with pytest.raises(_RecoveryProbeReached):
-        _run_empty_structure_recovery(pc, _empty_structure_conversation(), captured=captured)
+        _run_empty_structure_recovery(
+            pc, _empty_structure_conversation(structured=Structured(**stored_fields)), captured=captured
+        )
 
     structured = captured['structured']
     assert structured.title.strip()
@@ -171,6 +185,32 @@ def test_empty_structure_discard_verdict_keeps_the_refusal(pc, monkeypatch):
     monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
     with pytest.raises(RecoveryStructureUnavailableError):
         _run_empty_structure_recovery(pc, _empty_structure_conversation(), verdict='discard')
+
+
+@pytest.mark.parametrize(
+    ('stored_fields', 'owner_fields'),
+    [
+        pytest.param({'gist': 'Existing preview'}, {}, id='gist'),
+        pytest.param({'salience': 'highlight'}, {}, id='salience'),
+        pytest.param({'category': 'work'}, {}, id='category'),
+        pytest.param(
+            {'participants': [{'source': 'roster', 'name': 'Test reviewer'}]},
+            {},
+            id='participants',
+        ),
+        pytest.param({}, {'user_title': 'My title'}, id='owner-title'),
+        pytest.param({}, {'user_corrections': [{'text': 'Keep the speaker name'}]}, id='owner-corrections'),
+    ],
+)
+def test_empty_final_attempt_cannot_overwrite_existing_metadata(pc, monkeypatch, stored_fields, owner_fields):
+    from models.structured import Structured
+
+    monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
+    stored = Structured(title='Call mom before five', title_provenance='server_minimum', **stored_fields)
+    conversation = _empty_structure_conversation(structured=stored, **owner_fields)
+    with pytest.raises(RecoveryStructureUnavailableError):
+        _run_empty_structure_recovery(pc, conversation)
+    assert conversation.structured == stored
 
 
 def _set_attribute(attribute, value):

@@ -81,7 +81,10 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from config.refactor_modes import serving_for
-from utils.conversations.empty_structure_minimum import apply_empty_structure_minimum
+from utils.conversations.empty_structure_minimum import (
+    apply_empty_structure_minimum,
+    recovery_minimum_would_drop_metadata,
+)
 from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
@@ -624,8 +627,6 @@ def _get_structured(
             if stored_content_is_replaceable and (
                 batch_audio_owed
                 or recovery_transcript_decoded
-                and not getattr(main_conv, 'user_title', None)
-                and not getattr(main_conv, 'user_corrections', None)
                 and not is_release_probe_uid(uid)
                 and not user_kept
                 and not getattr(main_conv, 'photos', None)
@@ -633,13 +634,7 @@ def _get_structured(
                 and not summary_app_selected
                 and english_word_floor(main_conv, discard_transcript)
                 and recovery_transcript_below_content_floor(main_conv)
-                and not (getattr(stored_structured, 'gist', '') or '').strip()
-                and (
-                    not isinstance(stored_structured, Structured)
-                    or not stored_structured.model_dump(
-                        exclude={'title', 'title_provenance', 'overview', 'gist'}, exclude_defaults=True
-                    )
-                )
+                and not recovery_minimum_would_drop_metadata(main_conv)
             ):
                 reason = 'batch_audio_owed' if batch_audio_owed else 'content_below_floor'
                 if relevance_observer is not None:
