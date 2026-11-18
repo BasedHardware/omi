@@ -165,6 +165,14 @@ _RECORD_LATENCY_LISTEN_ONLY = frozenset(
         'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     }
 )
+# Only the listen lifecycle loop rotates live v3 recordings; pusher never owns a capture socket.
+_V3_ROTATION_LISTEN_ONLY = frozenset(
+    {
+        'CONVERSATIONS_V3_RECORDING_ROTATION',
+        'CONVERSATIONS_V3_ROTATION_MIN_SECONDS',
+        'CONVERSATIONS_V3_ROTATION_MAX_SECONDS',
+    }
+)
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
@@ -271,6 +279,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _DEMAND_LISTEN_ONLY
     | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
+    | _V3_ROTATION_LISTEN_ONLY
     | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
@@ -410,6 +419,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _DEMAND_LISTEN_ONLY
     | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
+    | _V3_ROTATION_LISTEN_ONLY
     | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'})
     | _FINALIZATION_REPLAY_LISTEN_ONLY,
 }
