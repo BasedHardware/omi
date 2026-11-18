@@ -362,39 +362,44 @@ def _open_row(cid, last, **extra):
     }
 
 
+def _serve_windows(monkeypatch, rows, calls=None):
+    """Stub the indexed v3 read the live route uses (database.conversations_v3_live)."""
+
+    def recent(uid, *, now, max_idle, **kw):
+        if calls is not None:
+            calls.append(dict(now=now, max_idle=max_idle))
+        return rows() if callable(rows) else rows
+
+    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setattr(routes.conversations_v3_live, 'recent_windows', recent)
+
+
 def test_live_skips_a_capture_that_never_closed(monkeypatch):
     now = datetime.now(timezone.utc)
     seen = {}
-
-    def rows(*a, **kw):
-        seen.update(kw)
-        return seen['rows']
-
-    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
-    monkeypatch.setattr(db, 'get_conversations_without_photos', rows)
+    calls = []
+    _serve_windows(monkeypatch, lambda: seen['rows'], calls)
     stale = _open_row('stale', now - routes.v3_live.MAX_IDLE - timedelta(minutes=1))
     # Only a days-old open row: nothing is in progress, so the client keeps its capture card.
     seen['rows'] = [stale]
     assert routes.get_live_conversation('u', 'beta') == {'v3': True, 'conversation': None}
-    assert seen['limit'] == routes.v3_live.SCAN and seen['statuses'] == ['in_progress']
-    # A newer stale stub sorts first; the open conversation behind it is still the live row.
+    assert calls[-1]['max_idle'] == routes.v3_live.MAX_IDLE
+    # A stale stub beside it does not hide the open conversation.
     seen['rows'] = [stale, _open_row('rec', now, recording=True), _open_row('open', now - timedelta(minutes=10))]
     assert routes.get_live_conversation('u', 'beta')['conversation']['id'] == 'open'
     # Naive stored times read as UTC; a row with no time at all is not served.
     seen['rows'] = [_open_row('naive', now.replace(tzinfo=None))]
     assert routes.get_live_conversation('u', 'beta')['conversation']['id'] == 'naive'
-    seen['rows'] = [{'id': 'bare', 'status': 'in_progress'}]
+    seen['rows'] = [{'id': 'bare', 'status': 'in_progress', 'v3_derived': True, 'tile_state': 'live'}]
     assert routes.get_live_conversation('u', 'beta')['conversation'] is None
 
 
 @pytest.mark.parametrize('recording', [False, True])
 def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording):
-    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
     started = datetime.now(timezone.utc) - timedelta(minutes=3)
-    monkeypatch.setattr(
-        db,
-        'get_conversations_without_photos',
-        lambda *a, **kw: [
+    _serve_windows(
+        monkeypatch,
+        [
             {
                 'id': 'c',
                 'started_at': started,
@@ -443,45 +448,93 @@ def _live_row(id, *, v3=True, minutes_ago=1, tile_state='live', **extra):
     }
 
 
-def test_live_window_behind_newer_legacy_rows_survives_the_query_limit(monkeypatch):
-    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
-    rows = [_live_row(f'legacy-{i}', v3=False) for i in range(12)] + [_live_row('window', minutes_ago=5)]
-    # The stub honours the query's limit, as Firestore does.
-    monkeypatch.setattr(db, 'get_conversations_without_photos', lambda uid, **kw: rows[: kw['limit']])
-    assert routes.get_live_conversation('u', 'store')['conversation']['id'] == 'window'
-
-
 @pytest.mark.parametrize(
     'rows, expected',
     [
         # A legacy in-progress row (not v3-derived) is never the live tile, however new.
         ([_live_row('legacy', v3=False)], None),
-        # A newer legacy row must not hide the open v3 window behind it.
         ([_live_row('legacy', v3=False), _live_row('window')], 'window'),
         # A v3 window whose last speech is past the idle bound is stale, not live.
         ([_live_row('stale', minutes_ago=121)], None),
         ([_live_row('writing', tile_state='writing')], None),
         ([_live_row('window', minutes_ago=119)], 'window'),
+        # Hidden, deleted, discarded or finished windows are never the live tile.
+        ([_live_row('hidden', home_hidden=True)], None),
+        ([_live_row('deleted', deleted=True)], None),
+        ([_live_row('discarded', discarded=True)], None),
+        ([_live_row('done', status='processing')], None),
+        # The index returns windows oldest-first: the newest open window wins.
+        ([_live_row('older', minutes_ago=40), _live_row('newer', minutes_ago=2)], 'newer'),
     ],
 )
 def test_live_returns_only_a_recent_open_v3_window(monkeypatch, rows, expected):
-    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
-    calls = []
-
-    def fetch(uid, **kw):
-        calls.append(kw)
-        return rows
-
-    monkeypatch.setattr(db, 'get_conversations_without_photos', fetch)
+    _serve_windows(monkeypatch, rows)
     result = routes.get_live_conversation('u', 'store')
     assert (result['conversation'] or {}).get('id') == expected
-    # The query itself is bounded: no scan into hundreds of stale legacy rows.
-    (kw,) = calls
-    assert kw['statuses'] == ['in_progress'] and kw['hide_home'] is True
-    lookback = datetime.now(timezone.utc) - kw['start_date']
-    assert (
-        routes.v3_live.LOOKBACK - routes.v3_live.MAX_IDLE < lookback <= routes.v3_live.LOOKBACK + timedelta(seconds=5)
-    )
+
+
+class _WindowQuery:
+    """A Firestore query fake over v3 windows: records the shape and pages by limit/start_after."""
+
+    def __init__(self, docs, log, filters=(), size=None, after=None, fields=None):
+        self.docs, self.log, self.filters, self.size, self.after, self.fields = docs, log, filters, size, after, fields
+
+    def _clone(self, **kw):
+        state = dict(filters=self.filters, size=self.size, after=self.after, fields=self.fields)
+        state.update(kw)
+        return _WindowQuery(self.docs, self.log, **state)
+
+    def collection(self, name):
+        return self
+
+    def document(self, name):
+        return self
+
+    def where(self, *, filter):
+        return self._clone(filters=(*self.filters, (filter.field_path, filter.op_string)))
+
+    def select(self, fields):
+        return self._clone(fields=list(fields))
+
+    def limit(self, size):
+        return self._clone(size=size)
+
+    def start_after(self, snapshot):
+        return self._clone(after=snapshot)
+
+    def stream(self):
+        self.log.append(dict(filters=self.filters, size=self.size, fields=self.fields))
+        start = 0 if self.after is None else self.docs.index(self.after) + 1
+        return iter(self.docs[start : start + self.size])
+
+
+class _Snap:
+    def __init__(self, data):
+        self.id, self._data = data['id'], data
+
+    def to_dict(self):
+        return dict(self._data)
+
+
+def test_live_read_uses_the_v3_index_and_pages_to_the_newest_window(monkeypatch):
+    from database import conversations_v3_live as live_db
+
+    now = datetime.now(timezone.utc)
+    # 45 finished windows inside the idle cap, oldest first (the index order), then the open one.
+    docs = [
+        _Snap(_live_row(f'done-{i:02d}', minutes_ago=100 - i, status='processing', tile_state='done'))
+        for i in range(45)
+    ] + [_Snap(_live_row('open', minutes_ago=1))]
+    log = []
+    monkeypatch.setattr(live_db, 'prepare_conversation_for_read', lambda row, uid: row)
+    rows = live_db.recent_windows('u', now=now, max_idle=timedelta(hours=2), firestore_client=_WindowQuery(docs, log))
+    assert routes.v3_live.active(rows, now)['id'] == 'open'
+    # Indexed filters only (v3_derived, finished_at, started_at): legacy rows never enter the scan.
+    assert log[0]['filters'] == (('v3_derived', '=='), ('finished_at', '>='), ('started_at', '<='))
+    # The projection is unconditional and carries no transcript.
+    assert 'transcript_segments' not in log[0]['fields'] and 'structured' in log[0]['fields']
+    assert [call['size'] for call in log] == [live_db.PAGE] * 3
+    assert len(log) <= live_db.MAX_PAGES
 
 
 def test_merge_rejects_recording_before_admission(monkeypatch):

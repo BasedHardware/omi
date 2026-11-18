@@ -1,5 +1,6 @@
 """Execute recording-builder and sweeper query shapes without external effects."""
 
+from datetime import timedelta
 from unittest.mock import patch
 
 from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID, FROZEN_NOW, FROZEN_LATER
@@ -51,6 +52,10 @@ def entries():
         DriverEntry(
             'database.conversations_v3.backfill_window_metadata',
             base={'uid': SHAPE_UID, 'since': FROZEN_NOW, 'until': FROZEN_LATER},
+        ),
+        DriverEntry(
+            'database.conversations_v3_live.recent_windows',
+            base={'uid': SHAPE_UID, 'now': FROZEN_NOW, 'max_idle': timedelta(hours=2)},
         ),
         DriverEntry('database.conversations_v3.pending_backfill_processing', base={'uid': SHAPE_UID}),
         DriverEntry('database.conversations_v3.backfill_run_documents', base={'uid': SHAPE_UID, 'run_id': 'shape-run'}),

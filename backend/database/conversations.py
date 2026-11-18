@@ -1066,6 +1066,11 @@ class _PageFill:
     do not. ``consumed`` is the number of storage rows this page read past its
     start (the raw-offset advance), and ``has_more`` says whether the scan
     stopped before the end of the query. A budget cut keeps the honest prefix.
+
+    A page that fills to ``limit`` reports ``has_more`` without probing for a
+    next row, so a query that ends exactly on a page boundary costs the client
+    one extra request that returns an empty page. That is intended: a probe
+    would charge every full page one more read to save that rare request.
     """
 
     def __init__(self, conversations_ref, *, limit, budget, visible):
@@ -1284,7 +1289,9 @@ def _collect_visible_conversation_page(
         try:
             budget.charge(offset)
         except ListReadBudgetExhausted:
-            return finish([], None, storage_rows=0, has_more=True)
+            # Nothing was read, so there is no position to resume from; a retry
+            # would pay the same charge and stop here again.
+            return finish([], None, storage_rows=0, has_more=False)
     fill = _PageFill(conversations_ref, limit=limit, budget=budget, visible=visible).run(
         conversations_ref.limit(limit).offset(offset), limit
     )

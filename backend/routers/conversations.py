@@ -170,6 +170,7 @@ from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
 from utils.conversations.v3 import live as v3_live
+from database import conversations_v3_live
 from utils.conversations import list_page_headers
 
 router = APIRouter()
@@ -187,7 +188,7 @@ def get_live_conversation(
     if not enabled:
         return {'v3': False, 'conversation': None}
     now = datetime.now(timezone.utc)
-    row = v3_live.active(conversations_db.get_conversations_without_photos(uid, **v3_live.open_rows(now)), now)
+    row = v3_live.active(conversations_v3_live.recent_windows(uid, now=now, max_idle=v3_live.MAX_IDLE), now)
     compact = (
         {
             key: row[key]

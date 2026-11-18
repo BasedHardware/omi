@@ -123,6 +123,15 @@ def test_budget_cut_keeps_prefix_and_says_more(monkeypatch):
     assert info['has_more'] is True
 
 
+def test_offset_charge_that_exhausts_the_budget_ends_the_walk(monkeypatch):
+    data, _ = owner()
+    ids, info, counts = page(monkeypatch, data, offset=100, budget=budget(60))
+    assert ids == []
+    assert counts['reads'] == 0
+    # No storage row was read, so there is no position to resume from.
+    assert info == {'storage_rows': 0, 'has_more': False}
+
+
 def test_cursor_walk_crosses_the_run(monkeypatch):
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"conversation_list_cursor":100}')
     data, visible = owner()

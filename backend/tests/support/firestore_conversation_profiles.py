@@ -62,12 +62,6 @@ COUNT_PROFILES = (
 
 WITHOUT_PHOTOS_PROFILES = (
     _profile(
-        'v3-live-conversation',
-        statuses=[['in_progress']],
-        # Bounded lookback (v3 live.LOOKBACK, 4 hours): an open v3 window starts inside it.
-        start_date=[FROZEN_NOW],
-    ),
-    _profile(
         'developer-list',
         statuses=[['completed']],
         categories=[[], ['personal'], ['personal', 'technology']],
