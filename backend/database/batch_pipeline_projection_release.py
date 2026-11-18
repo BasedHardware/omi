@@ -13,10 +13,12 @@ than field deletes: every consumer reads these fields through truthiness, and
 tombstones keep the strict Firestore test fixture's sentinel contract intact.
 """
 
+from collections.abc import Callable
 import logging
 import math
 import time
 from typing import Any, TypeGuard
+from uuid import uuid4
 
 from google.cloud import firestore
 
@@ -446,14 +448,58 @@ ASSIGNMENT_RELEASE_CURSOR_KEY = 'projection_assignment_release_cursor'
 HELD_PARTIAL_CURSOR_KEY = 'projection_held_partial_cursor'
 
 
-def load_release_cursor(store, *, key=RELEASE_CURSOR_KEY, event='batch_projection action=release_held') -> dict:
+def _read_cursor(store, key, event) -> dict | None:
     try:
-        row = store.ref('control', key).get().to_dict() or {}
+        return store.ref('control', key).get().to_dict() or {}
     except Exception as error:
         logger.warning('event=%s action=cursor_load outcome=retry exception_type=%s', event, type(error).__name__)
-        return {'after_id': None}
+        return None
+
+
+def cursor_after_id(row: dict) -> str | None:
     after = row.get('after_id')
-    return {**row, 'after_id': after if isinstance(after, str) and after else None}
+    return after if isinstance(after, str) and after else None
+
+
+def load_release_cursor(store, *, key=RELEASE_CURSOR_KEY, event='batch_projection action=release_held') -> dict:
+    row = _read_cursor(store, key, event) or {}
+    return {**row, 'after_id': cursor_after_id(row)}
+
+
+def load_held_partial_cursor(store) -> dict | None:
+    """Return the raw checkpoint for comparison. An unreadable row has no baseline."""
+    return _read_cursor(store, HELD_PARTIAL_CURSOR_KEY, 'batch_held_partial')
+
+
+def advance_held_partial_cursor(
+    store, baseline: dict, after_id: str | None, now: float, *, record_read: Callable[[], None] | None = None
+) -> dict | None:
+    """Publish a page or wrap only while the checkpoint it followed is current."""
+    # A token per write fences repeated document IDs, including wraps and legacy
+    # rows that have no token. Keep it stable when the transaction retries.
+    proposed = {'after_id': after_id, 'updated_at': now, 'write_token': uuid4().hex}
+    ref = store.ref('control', HELD_PARTIAL_CURSOR_KEY)
+
+    @firestore.transactional
+    def put(transaction):
+        # The SDK or the store can re-enter the transaction body after contention.
+        if record_read is not None:
+            record_read()
+        current = ref.get(transaction=transaction).to_dict() or {}
+        if current == proposed:
+            return True
+        if current != baseline:
+            return False
+        transaction.set(ref, proposed)
+        return True
+
+    try:
+        return proposed if store.run(put) else None
+    except Exception as error:
+        logger.warning(
+            'event=batch_held_partial action=cursor_save outcome=retry exception_type=%s', type(error).__name__
+        )
+        return None
 
 
 def save_release_cursor(

@@ -1824,6 +1824,8 @@ overlay:
           BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
           BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
           BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
+          # Stale-head merge skip canary (#25673): one canary uid on the only CPU merge host.
+          BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST: {value: viUv7GtdoHXbK1UBCDlPuTDuPgJ2, category: rollout}
           # Hold silent read skipping until the release-owner canary (review F1).
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}

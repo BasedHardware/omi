@@ -55,6 +55,7 @@ TRANSACTION_QUERIES = frozenset(
         'get',
         'get_existing',
         'first_pending',
+        'pending_page',
         'first_ready_pending',
         'fresh_first_pending',
         'fresh_first_ready_pending',
