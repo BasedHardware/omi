@@ -47,7 +47,7 @@ def builder(monkeypatch):
     monkeypatch.setattr(store, 'outline_attempt', lambda *a, **kw: True)
     monkeypatch.setattr(store, 'save_outline', lambda *a, **kw: None)
     monkeypatch.setattr(store, 'adoptable', lambda *a: {})
-    monkeypatch.setattr(store, 'backoff_until', lambda *a: None)
+    monkeypatch.setattr(store, 'backoff_state', lambda *a: (None, None))
     monkeypatch.setattr(service, '_commit', lambda *a, **kw: committed.append(a))
     monkeypatch.setattr(service, 'has_pending', lambda *a: False)
     monkeypatch.setattr(service, 'enqueue', lambda *a, **kw: None)
