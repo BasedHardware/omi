@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from database.home_feed import CONVERSATION_FIELDS
 from models.conversation import Conversation
 from utils.conversations import home_step, home_titles
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
@@ -400,7 +401,6 @@ def test_unstamped_wait_uses_server_clock_not_offline_capture_age(age, expected,
 @pytest.mark.parametrize('title', ['', 'Discussion notes'])
 def test_feed_read_of_a_projected_batch_row_owing_notes_is_writing_notes(title):
     """The feed classifies the field-masked read, so the row-level stand-in marker must be loaded."""
-    from database.home_feed import CONVERSATION_FIELDS
 
     projected = row(
         structured={'title': title, 'overview': ''},
@@ -417,7 +417,6 @@ def test_feed_read_of_a_projected_batch_row_owing_notes_is_writing_notes(title):
 
 def test_past_age_gate_projection_stamp_stays_on_home_through_the_feed_mask():
     """A late batch transcript past the repair age gate gets the row marker but no debt."""
-    from database.home_feed import CONVERSATION_FIELDS
     from utils.conversations import summary_delivery
 
     old = NOW - timedelta(days=4)
