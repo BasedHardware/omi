@@ -695,10 +695,10 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
 
     Returns counts; ``remaining`` > 0 asks the caller for a continuation task. ``keep_going`` is
     checked before each chunk so an undo stops new notes work, and so is the account-deletion marker:
-    once deletion starts no transcript goes to the notes model (``stopped`` names why).
+    once deletion starts no transcript goes to the notes model (``account_deletion`` is set).
     """
     rows = [row for row in await run_blocking(db_executor, store.pending_backfill_processing, uid) if row]
-    counts = {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 0}
+    counts = {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 0, 'account_deletion': 0}
 
     async def one(row):
         token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
@@ -729,7 +729,7 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
         if time.monotonic() >= deadline or (keep_going is not None and not await keep_going()):
             break
         if await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid):
-            counts['stopped'] = 'account_deletion'
+            counts['account_deletion'] = 1
             return counts
         await asyncio.gather(*(one(row) for row in rows[start : start + concurrency]))
     left = await run_blocking(db_executor, store.pending_backfill_processing, uid)

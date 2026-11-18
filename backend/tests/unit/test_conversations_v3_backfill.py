@@ -1075,14 +1075,14 @@ async def test_the_drain_stops_once_account_deletion_starts(direct, monkeypatch)
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda uid: True)
     monkeypatch.setattr(service, '_process_leased', AsyncMock(side_effect=AssertionError('sent a transcript')))
     counts = await service.drain_backfill('u', deadline=float('inf'))
-    assert counts['stopped'] == 'account_deletion' and counts['processed'] == 0
+    assert counts['account_deletion'] == 1 and counts['processed'] == 0
 
 
 @pytest.mark.asyncio
 async def test_a_step_blocks_the_run_when_the_drain_stops_for_account_deletion(chain, monkeypatch):
     ledger, steps = chain
     ledger.run['partitions'][0]['status'] = 'notes'
-    service.drain_backfill.return_value = {'processed': 0, 'failed': 0, 'remaining': 0, 'stopped': 'account_deletion'}
+    service.drain_backfill.return_value = {'processed': 0, 'failed': 0, 'remaining': 0, 'account_deletion': 1}
     assert await backfill.run_step('u', RUN, 0, 'drain') == {'outcome': 'blocked', 'reason': 'account_deletion'}
     assert ledger.run['status'] == 'blocked' and not steps
 

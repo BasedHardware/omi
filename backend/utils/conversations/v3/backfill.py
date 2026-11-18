@@ -364,17 +364,17 @@ async def run_step(uid, run_id, index, phase):
         return bool(current) and current.get('status') not in runs.STOPPED
 
     drained = await service.drain_backfill(uid, deadline=deadline, keep_going=keep_going)
-    if drained.get('stopped'):
+    if drained.get('account_deletion'):
         await run_blocking(
             db_executor,
             runs.update_run,
             uid,
             run_id,
             status='blocked',
-            partition=(index, {'status': 'blocked', 'reason': drained['stopped']}),
+            partition=(index, {'status': 'blocked', 'reason': 'account_deletion'}),
             expect=active,
         )
-        return {'outcome': 'blocked', 'reason': drained['stopped']}
+        return {'outcome': 'blocked', 'reason': 'account_deletion'}
     fields = {
         'notes_processed': int(part.get('notes_processed') or 0) + drained['processed'],
         'notes_failed': int(part.get('notes_failed') or 0) + drained['failed'],
