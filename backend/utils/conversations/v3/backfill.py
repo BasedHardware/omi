@@ -504,11 +504,12 @@ def undo_run(uid, run_id, *, firestore_client=None):
             # Restored/removed totals and removed copy ids are written in each group's own transaction
             # (crash-safe, across attempts); kept groups stay stamped with the run and are recounted.
             progress = (runs.get_run(uid, run_id, firestore_client=firestore_client) or {}).get('undo_progress') or {}
-            return progress, {
+            result: dict[str, object] = {
                 'donors_restored': int(progress.get('donors_restored') or 0),
                 'rows_removed': int(progress.get('rows_removed') or 0),
                 **kept,
             }
+            return progress, result
 
         for donors, rows in undo_groups(docs):
             try:
