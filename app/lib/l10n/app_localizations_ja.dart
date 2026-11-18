@@ -13750,6 +13750,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get summaryBusyBody => 'Omi はすでにこの会話を処理しています。完了すると、ここに要約が表示されます。';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'まだ文字起こしされていません';
+
+  @override
+  String get summaryTranscriptionPendingBody => '文字起こしが完了すると、要約が表示されます。';
+
+  @override
   String get summaryCheckAgain => '再確認';
 
   @override

@@ -11688,6 +11688,8 @@
     "summaryWithOmiInstead": "বরং Omi দিয়ে সারসংক্ষেপ করুন",
     "summaryBusyTitle": "এখনও প্রক্রিয়া চলছে",
     "summaryBusyBody": "Omi ইতিমধ্যে এই কথোপকথনে কাজ করছে। শেষ হলে সারসংক্ষেপ এখানে দেখা যাবে।",
+    "summaryTranscriptionPendingTitle": "এখনও ট্রান্সক্রাইব হয়নি",
+    "summaryTranscriptionPendingBody": "ট্রান্সক্রিপ্ট তৈরি হলে সারসংক্ষেপ দেখা যাবে।",
     "summaryCheckAgain": "আবার দেখুন",
     "summaryLimitTitle": "সারসংক্ষেপের সীমা পূর্ণ হয়েছে",
     "summaryLimitBody": "আপনি গত এক ঘণ্টায় একাধিক সারসংক্ষেপ পুনরায় তৈরি করেছেন। পরে আবার চেষ্টা করুন।",

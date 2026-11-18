@@ -13993,6 +13993,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get summaryBusyBody => 'Omi уже работает над этим разговором. Сводка появится здесь, когда будет готова.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Ещё не расшифровано';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Сводка появится, когда будет готова расшифровка.';
+
+  @override
   String get summaryCheckAgain => 'Проверить снова';
 
   @override

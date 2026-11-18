@@ -11,6 +11,7 @@ from uuid import uuid4
 import json
 
 from utils.encryption import encrypt, decrypt
+from utils.conversations.home_titles import notes_pending
 
 SCHEMA = 1
 DISPLAY = 'home_display'
@@ -58,6 +59,7 @@ def content(row: Mapping[str, Any], kind: str) -> dict[str, Any]:
         'emoji': text(row.get('emoji') if kind == 'episode' else structured.get('emoji'), 32),
         'preview': text(preview, 320),
         'summary_available': bool(preview) and not bool(row.get('is_locked')),
+        **({'notes_pending': notes_pending(structured)} if kind == 'conversation' else {}),
     }
 
 

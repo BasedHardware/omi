@@ -13979,6 +13979,12 @@ class AppLocalizationsMs extends AppLocalizations {
       'Omi sedang memproses perbualan ini. Ringkasan akan dipaparkan di sini apabila selesai.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Belum ditranskripsikan';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Ringkasan akan dipaparkan apabila transkrip sedia.';
+
+  @override
   String get summaryCheckAgain => 'Semak semula';
 
   @override

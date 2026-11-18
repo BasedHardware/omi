@@ -14045,6 +14045,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get summaryBusyBody => 'Omi ஏற்கனவே இந்த உரையாடலில் வேலை செய்கிறது. முடிந்ததும் சுருக்கம் இங்கே தோன்றும்.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'இன்னும் படியெடுக்கப்படவில்லை';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'படியெடுப்பு தயாரானதும் சுருக்கம் தோன்றும்.';
+
+  @override
   String get summaryCheckAgain => 'மீண்டும் சரிபார்';
 
   @override

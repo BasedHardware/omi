@@ -251,6 +251,7 @@ class CaptureEndProofOutcome(StrEnum):
     RESUMED = 'resumed'
     CLOCK_UNKNOWN = 'clock_unknown'
     SEALED = 'sealed'
+    SEALED_HELD = 'sealed_held'
 
 
 class UploadTraceGateReason(StrEnum):

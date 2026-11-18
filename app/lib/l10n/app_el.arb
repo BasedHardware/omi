@@ -4268,6 +4268,8 @@
     "summaryWithOmiInstead": "Σύνοψη με το Omi αντί αυτού",
     "summaryBusyTitle": "Η επεξεργασία συνεχίζεται",
     "summaryBusyBody": "Το Omi επεξεργάζεται ήδη αυτή τη συνομιλία. Η σύνοψη θα εμφανιστεί εδώ μόλις ολοκληρωθεί.",
+    "summaryTranscriptionPendingTitle": "Δεν έχει μεταγραφεί ακόμα",
+    "summaryTranscriptionPendingBody": "Η σύνοψη θα εμφανιστεί μόλις είναι έτοιμη η μεταγραφή.",
     "summaryCheckAgain": "Νέος έλεγχος",
     "summaryLimitTitle": "Συμπληρώθηκε το όριο συνόψεων",
     "summaryLimitBody": "Δημιουργήσατε ξανά αρκετές συνόψεις την τελευταία ώρα. Δοκιμάστε ξανά αργότερα.",

@@ -4268,6 +4268,8 @@
     "summaryWithOmiInstead": "Resumeix amb Omi en lloc d'això",
     "summaryBusyTitle": "Encara s'està processant",
     "summaryBusyBody": "Omi ja està treballant en aquesta conversa. El resum apareixerà aquí quan acabi.",
+    "summaryTranscriptionPendingTitle": "Encara no s'ha transcrit",
+    "summaryTranscriptionPendingBody": "El resum apareixerà quan la transcripció estigui llesta.",
     "summaryCheckAgain": "Torna-ho a comprovar",
     "summaryLimitTitle": "S'ha arribat al límit de resums",
     "summaryLimitBody": "Has tornat a generar diversos resums durant l'última hora. Torna-ho a provar més tard.",

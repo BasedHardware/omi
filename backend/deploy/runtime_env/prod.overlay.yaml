@@ -3,6 +3,9 @@ environment: prod
 compute_project: based-hardware
 data_plane_project: based-hardware
 overlay:
+  # v3 kill switch on every writer: 'off' stops new v3 admission (marked rows keep draining), 'on' admits
+  # by stage. Re-enabled 2026-11-18 after the v3-app admission gate (#25658) and commit hardening (#25661).
+  conversations_v3: 'on'
   llm_gateway:
     env:
       OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
@@ -45,6 +48,10 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        # Mirrors the listen chart (2026-11-18 fold of live values; media noise is also carried by the privateEnv overlay).
+        MEDIA_NOISE_MODE: {value: shadow, category: rollout}
+        MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+        NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
         # Shared backend routes: keep the silence kill switch off on listen too.
         BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
@@ -302,6 +309,12 @@ overlay:
           category: rollout
     pusher:
       env:
+        # The conversations v3 reconcile dispatch (utils/conversations/v3/triggers.py) runs on the
+        # recording writes pusher makes. Without this binding each enqueue raised RuntimeError and the
+        # owner waited for the 5-minute sweeper (rows pending 10+ minutes). HANDLER_URL/INVOKER_SA come
+        # from the shared ConfigMap; pusher-runtime holds cloudtasks.enqueuer and actAs on the invoker.
+        SYNC_TASKS_PROJECT: {value: based-hardware, category: reliability}
+        SYNC_TASKS_LOCATION: {value: us-central1, category: reliability}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -624,7 +637,7 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1016,7 +1029,7 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
           # Projection finish backoff: backend-sync can run the same sweep through its authenticated
@@ -1446,7 +1459,7 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1805,6 +1818,8 @@ overlay:
           BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
           BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
           BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
+          # Stale-head merge skip canary (#25673): one canary uid on the only CPU merge host.
+          BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST: {value: viUv7GtdoHXbK1UBCDlPuTDuPgJ2, category: rollout}
           # Hold silent read skipping until the release-owner canary (review F1).
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
@@ -1828,7 +1843,7 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
           # Projection finish backoff. Off: turned off in production on 2026-11-14 19:41Z on a 5xx

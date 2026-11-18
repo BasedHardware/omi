@@ -13846,6 +13846,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get summaryBusyBody => 'Omi כבר עובד על השיחה הזו. הסיכום יופיע כאן כשהוא יסתיים.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'עדיין לא תומלל';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'הסיכום יופיע כשהתמלול יהיה מוכן.';
+
+  @override
   String get summaryCheckAgain => 'בדיקה חוזרת';
 
   @override

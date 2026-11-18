@@ -982,7 +982,8 @@ def test_canonical_recovery_races_one_fallback_owner(recovery_first):
             reuse.claim(loser, store.client.transaction(), {'state': 'ready'})
 
 
-def test_fallback_restart_replaces_same_log_slot_and_charges_own_speech(monkeypatch):
+@pytest.mark.parametrize('legacy_requirements', [False, True])
+def test_fallback_restart_replaces_same_log_slot_and_charges_own_speech(monkeypatch, legacy_requirements):
     from utils.batch_pipeline.scheduler import Scheduler
     from utils.batch_pipeline.merge import OrderedMerge
     from utils.batch_pipeline.contracts import WorkResult
@@ -992,6 +993,12 @@ def test_fallback_restart_replaces_same_log_slot_and_charges_own_speech(monkeypa
     original = replace(original, duration_seconds=120.0)
     patch_document(store, store.ref('jobs', SOURCE), {'duration_seconds': 120.0})
     item, binding = prepare_copy(store, original)
+    if legacy_requirements:
+        from utils.batch_pipeline.result_protocol import stamp
+
+        job = store.client.rows[store.ref('jobs', COPY).path]
+        stamp(job, 'source_alias_version')
+        store.client.rows[store.ref('results', COPY).path].pop('source_reuse_version', None)
     slot = store.ref('results', COPY).get().to_dict()
     patch_document(store, store.ref('jobs', SOURCE), {'state': 'dead'})
     with pytest.raises(reuse.SourceReuseUnavailable, match='enqueued'):
@@ -1003,6 +1010,10 @@ def test_fallback_restart_replaces_same_log_slot_and_charges_own_speech(monkeypa
         view.flush()
         return value
 
+    if legacy_requirements:
+        # The pre-registry projector rewrites source fields but preserves this
+        # unknown envelope from new intake. No job repair is allowed to drain it.
+        patch_document(store, store.ref('jobs', COPY), {'required_result_markers': {'source_alias_version': 1}})
     store.store.run = run
     # Query ordering is not modelled by the strict document fixture. This
     # selects the one pending job; all admission/merge writes remain real.
@@ -1043,7 +1054,16 @@ def test_fallback_restart_replaces_same_log_slot_and_charges_own_speech(monkeypa
     assert vendor.call_args.args[1] == 'multi'
     result = WorkResult(COPY, 'gs://synthetic/fresh-result#2')
     owner_before = store.ref('owners', owner_key(UID)).get().to_dict()
+    # The preserved slot carries a stamp from an earlier head-wait episode.
+    fallback = store.ref('jobs', COPY).get().to_dict()['source_alias_fallback']
+    stamped = {
+        **fallback['log_slot'],
+        'projection_blocked_since': NOW,
+        'projection_block_type': 'SyncAssignmentConflict',
+    }
+    patch_document(store, store.ref('jobs', COPY), {'source_alias_fallback': {**fallback, 'log_slot': stamped}})
     merged = OrderedMerge(store.store, head_wait_seconds=0, catch_up_depth=1).commit_next(UID, NOW + 3)
+    assert merged['projection_blocked_since'] is None and merged['projection_block_type'] is None
     assert merged['previous_segment_id'] == slot['previous_segment_id']
     assert merged['committed_at'] == slot['committed_at']
     assert merged['result']['result_uri'] == 'gs://synthetic/fresh-result#2'

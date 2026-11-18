@@ -13971,6 +13971,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get summaryBusyBody => 'O Omi já está trabalhando nesta conversa. O resumo aparecerá aqui quando terminar.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Ainda não transcrito';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'O resumo aparecerá quando a transcrição estiver pronta.';
+
+  @override
   String get summaryCheckAgain => 'Verificar novamente';
 
   @override

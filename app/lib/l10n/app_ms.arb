@@ -4268,6 +4268,8 @@
     "summaryWithOmiInstead": "Ringkaskan dengan Omi sahaja",
     "summaryBusyTitle": "Masih diproses",
     "summaryBusyBody": "Omi sedang memproses perbualan ini. Ringkasan akan dipaparkan di sini apabila selesai.",
+    "summaryTranscriptionPendingTitle": "Belum ditranskripsikan",
+    "summaryTranscriptionPendingBody": "Ringkasan akan dipaparkan apabila transkrip sedia.",
     "summaryCheckAgain": "Semak semula",
     "summaryLimitTitle": "Had ringkasan dicapai",
     "summaryLimitBody": "Anda telah menjana semula beberapa ringkasan dalam sejam yang lalu. Cuba lagi nanti.",

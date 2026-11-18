@@ -14001,6 +14001,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get summaryBusyBody => 'Omi ఇప్పటికే ఈ సంభాషణపై పని చేస్తోంది. పూర్తయినప్పుడు సారాంశం ఇక్కడ కనిపిస్తుంది.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'ఇంకా ట్రాన్స్‌క్రైబ్ కాలేదు';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'ట్రాన్స్‌క్రిప్ట్ సిద్ధమైనప్పుడు సారాంశం కనిపిస్తుంది.';
+
+  @override
   String get summaryCheckAgain => 'మళ్లీ తనిఖీ చేయండి';
 
   @override

@@ -14007,6 +14007,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get summaryBusyBody => 'Omi lucrează deja la această conversație. Rezumatul va apărea aici când se termină.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Încă netranscris';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Rezumatul va apărea când transcrierea este gata.';
+
+  @override
   String get summaryCheckAgain => 'Verifică din nou';
 
   @override

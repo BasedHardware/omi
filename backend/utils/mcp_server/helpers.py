@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.render import redact_conversation_for_list
+from utils.conversations.structured_defaults import project_structured_defaults
 from utils.speakers.display import display_participants
 from utils.mcp_data import parse_date_only_utc
 from utils.mcp_server.errors import ToolExecutionError
@@ -80,6 +81,10 @@ def conversation_card(
     redact_conversation_for_list(conversation)
     structured_raw = conversation.get("structured")
     structured = structured_raw if isinstance(structured_raw, dict) else {}
+    # A v3 row written before its summary carries no category, but the card's response models
+    # require it. Only a missing field is filled: an out-of-enum category stays for the caller's
+    # own per-record guard to decide, which is what the MCP list/detail routes already do.
+    structured = project_structured_defaults({"structured": structured}, fold_invalid_category=False)["structured"]
     return {
         **(
             conversation_participants(conversation, include_display=include_display)

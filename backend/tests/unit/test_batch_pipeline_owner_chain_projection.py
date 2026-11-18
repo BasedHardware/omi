@@ -176,6 +176,19 @@ class ResultLog:
     def run(self, operation, **_):
         return operation(Tx(self))
 
+    def note_head_blocked(self, sid, now, block_type):
+        row = self.results.get(sid)
+        if row is None:
+            return False
+        if row.get('projection_blocked_since') is not None or row.get('projection_state') not in (
+            'pending',
+            'persisted',
+            'ready',
+        ):
+            return False
+        row.update({'projection_blocked_since': now, 'projection_block_type': block_type})
+        return True
+
     def read(self, sid):
         if sid not in self.results:
             raise ProjectionBlocked('committed result and durable intake binding required')

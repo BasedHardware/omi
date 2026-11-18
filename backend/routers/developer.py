@@ -99,7 +99,7 @@ from utils.observability.external_lists import (
 from utils.observability.firestore_request_reads import ReadComponent, read_component
 from utils import external_list_reads as external_lists
 from utils import external_polling_cache as polling_cache
-from utils.developer_item_reads import read_conversation_item
+from utils.developer_item_reads import project_structured_defaults, read_conversation_item
 from utils.conversations import transcribing_hold
 from config.episodes import home_transcription_presentation_gate_enabled
 from utils.mcp_server.handlers.conversations import conversation_cards_page_core
@@ -1629,7 +1629,7 @@ def get_conversations(
                 logger.warning('Skipping malformed conversation in Developer API conversation list')
                 continue
             try:
-                valid_conversations.append(Conversation.model_validate(conv))
+                valid_conversations.append(Conversation.model_validate(project_structured_defaults(conv)))
             except ValidationError as e:
                 invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
                 logger.warning(
@@ -2576,7 +2576,7 @@ def update_conversation_endpoint(
     conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if conversation:
         populate_folder_names(uid, [conversation])
-    return conversation
+    return project_structured_defaults(conversation) if conversation else conversation
 
 
 # ******************************************************

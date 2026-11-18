@@ -13878,6 +13878,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get summaryBusyBody => 'Omi กำลังประมวลผลบทสนทนานี้อยู่แล้ว สรุปจะปรากฏที่นี่เมื่อเสร็จสิ้น';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'ยังไม่ได้ถอดเสียง';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'สรุปจะปรากฏเมื่อการถอดเสียงพร้อม';
+
+  @override
   String get summaryCheckAgain => 'ตรวจสอบอีกครั้ง';
 
   @override

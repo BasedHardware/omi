@@ -158,6 +158,8 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.batch_pipeline_conversation_purge_scans._claim': 'a0c54821175dbc883d89f41bea6e5d2d6b25c6f25733362556db13a13e87c2bc',
+    'database.batch_pipeline_conversation_purge_scans.run_job': 'b73e589c1018bfb3a8eefc51bd7ba4ef29a0c9876fd670d74efae3e1ba4cff30',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
     'database.batch_census_export._filtered': '6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
@@ -165,9 +167,9 @@ BODY_DIGEST = {
     'database.batch_pipeline_allowance_migration.candidates': '04c9beae56ec6091544a2ec69a8ba170032dbe3670697b704db2f88d513bc5cb',
     'database.conversation_batch_purge_jobs.RunProgress.pending_segments': '86b3d882fe3c575b3a540bb00d1845c941c5256d99848c4dc89917eb707ff3cc',
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
-    'database.conversation_batch_purge_jobs._drop_segment_records': '53f3a9444e2caee3f79c05d68d1dd3876c42e6445f6ba42037140276558ae39a',
+    'database.conversation_batch_purge_jobs._drop_segment_records': '2db3123e6e11d177d434326668969249a7fd4e0aade9788d045056fbdefe8c9d',
     'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
-    'database.conversation_batch_purge_jobs.run_job': 'b53f24db0b73ea39f9f0fcdfa18971a0c256cdf5ac30115723c461601ea5f829',
+    'database.conversation_batch_purge_jobs.run_job': 'f56ed851d01cdc69e0b755dbe1a53a6a6ccb6cbc77d3c84104e17b26bde6f0ef',
     'database.batch_pipeline_store.promote_record_recoveries': 'ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
     'database.record_custody_receipts.prune': 'a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
     'database.user_usage._s4_month_cache': '14a6b7d82ee83ec56f552ab798b0021e2342ffd920dcdbe2a8e851ec32029f28',
@@ -215,6 +217,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.oldest': 'ce672d79f4c8c453f5096d0ff9a6a074277caff55c0ae5cb80900698125f0327',
     'database.batch_pipeline_store.FirestoreStore.due': '6082abc15cee6736e23fa3554fbaa74ce65f751082a884e67416eda0757bc5ea',
     'database.batch_pipeline_store.FirestoreTransaction.first_pending': '48a4a9544add4433487df790e5884203eec835b9f8b16ed977c4743b88b596ea',
+    'database.batch_pipeline_store.FirestoreTransaction.pending_page': 'b7bcced82f592d8f14f8cdae8f7bde59e27b63c90e165ec175b762e30876cb5c',
     'database.batch_pipeline_store.FirestoreTransaction.fresh_first_pending': '3eda52b96735afad17b1471efc6e912998c1d9720a02fff4ce80260099bd7f59',
     'database.batch_pipeline_store.FirestoreTransaction.fresh_first_ready_pending': 'bd2a5ddf5a4c4b1d0bbc6145621622530adb9b1a158c13f8f1691fa2786725ec',
     'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending': '9999bc14a1c88206f5d98e34284f7895c179c73ab563bf813b179faa417076ba',
@@ -407,6 +410,27 @@ _add(
         domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
     )
 )
+# Sealed owner groups use an existing single-field uid index on obligations.
+_add(
+    DriverEntry(
+        'database.batch_pipeline_conversation_purge_scans.owner_candidates',
+        base={'uid': UID},
+    )
+)
+for _name in ('_claim', 'run_job'):
+    _function = 'database.batch_pipeline_conversation_purge_scans.' + _name
+    _add(
+        CoveredByEntry(
+            _function,
+            covered_by=(
+                'database.batch_pipeline_conversation_purge_scans.owner_candidates',
+                'database.conversation_batch_purge_jobs.segment_records',
+            ),
+            reason='delegates owner discovery to owner_candidates and member journals to segment_records',
+            expect_observed=False,
+            body_digest=BODY_DIGEST[_function],
+        )
+    )
 # Its durable per-segment erasure work: one equality filter inside a single obligation.
 _add(
     DriverEntry(

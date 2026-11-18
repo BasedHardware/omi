@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -27,6 +28,7 @@ import 'package:omi/pages/activity/activity_page.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/activity/past_processing_section.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/ui/ui.dart';
@@ -34,6 +36,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import '../helpers/home_fixture_env.dart';
 import '../helpers/sfpro_font_fixtures.dart';
+import '../helpers/transcription_hold_wire.dart';
 import '../support/typed_conversation_screen.dart';
 
 const _output = String.fromEnvironment('PROCESSING_TODAY_RENDER_OUTPUT');
@@ -617,10 +620,10 @@ void main() {
                   home: ActivityPage(
                       pendingWork: store,
                       captureWedgeMonitor: monitor,
-                      reprocessConversation: (id) {
+                      reprocessConversation: (id) async {
                         expect(id, 'failed');
                         calls++;
-                        return retry.future;
+                        return ReprocessResult.fromConversation(await retry.future);
                       },
                       seen: ActivitySeen(read: () => 0, write: (_) {}),
                       probeDreamReport: () async => false,
@@ -686,6 +689,64 @@ void main() {
     expect(opened, 'retry-error');
     await tester.pumpWidget(const SizedBox());
     debugDefaultTargetPlatformOverride = null;
+  });
+  evidenceTest('a failed Activity row waiting for transcription shows waiting with no retry', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = _phone;
+    addTearDown(tester.view.reset);
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    // The real Home/list row for a held recording, (a) in ../helpers/transcription_hold_wire.dart.
+    final failed = ServerConversation.fromJson({
+      ...heldListRowJson(),
+      'id': 'pending',
+      'created_at': clock.now().toUtc().toIso8601String(),
+      'started_at': clock.now().toUtc().toIso8601String(),
+    });
+    final store = _store(true, []);
+    await store.refresh();
+    final monitor = CaptureWedgeMonitor(
+        featureGate: () async => false,
+        track: (_, __) {},
+        bleRetry: (_) async {},
+        appBuild: () => 'fixture',
+        platform: () => 'ios');
+    addTearDown(store.dispose);
+    addTearDown(monitor.dispose);
+    var attempts = 0;
+    final boundary = GlobalKey();
+    await tester.pumpWidget(RepaintBoundary(
+        key: boundary,
+        child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: _theme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+                body: NeedsAttentionSection(
+                    store: store,
+                    captureMonitor: monitor,
+                    failedConversations: [failed],
+                    openConversation: (_, __) async {},
+                    reprocess: (id) {
+                      attempts++;
+                      return reProcessConversationServer(id,
+                          send: (_) async => heldJsonResponse(409, heldReprocess409Body));
+                    })))));
+    await tester.tap(find.text('Try Again'));
+    await tester.pumpAndSettle();
+    await _capture(tester, boundary, '031-mobile-ios-activity-transcription-pending');
+    expect(attempts, 1);
+    expect(find.textContaining('Something went wrong'), findsNothing);
+    expect(find.text('Try Again'), findsNothing);
+    // The server's stand-in title gives way to the status, said once.
+    expect(find.textContaining('Not transcribed yet'), findsOneWidget);
+    expect(find.textContaining("Couldn't transcribe"), findsNothing);
+    expect(TranscriptionPendingConversations.contains('pending'), isTrue);
+    await tester.pumpWidget(const SizedBox());
+    debugDefaultTargetPlatformOverride = null;
+    // The expiry timer must not outlive the test body.
+    TranscriptionPendingConversations.reset();
   });
   evidenceTest('locked failed Activity rows keep the title redacted', (tester) async {
     final failed = ServerConversation(

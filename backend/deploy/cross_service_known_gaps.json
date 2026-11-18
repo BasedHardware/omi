@@ -34,6 +34,14 @@
       "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
     },
     {
+      "key": "no-uid-literals|prod|cloud_run/backend-integration/BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST|uids=1",
+      "why": "Reviewed exception, owner's order 2026-11-18: one canary uid for the stale-head merge skip (#25673) on the only CPU merge host. Delete with the key when the skip ramps fleet-wide or by its 2026-12-18 review."
+    },
+    {
+      "key": "no-uid-literals|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST|uids=1",
+      "why": "Reviewed exception, owner's order 2026-11-18: the GPU pump is the other merge writer and carries the same canary uid as backend-integration (#25673). Delete with the backend-integration key."
+    },
+    {
       "key": "no-uid-literals|prod|cloud_run/backend/OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS|uids=3",
       "why": "Reviewed exception, Nik's order 2026-11-05: his own three accounts preview the read-only referral campaign on TestFlight against prod. Delete with the key once the TestFlight-channel preview gate ships."
     },

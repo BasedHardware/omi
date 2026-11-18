@@ -13,6 +13,7 @@ import 'recording_inventory.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/services/experiments/orphan_audio_recovery.dart';
+import 'package:omi/services/experiments/orphan_audio_reclaim.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 // TypedEvents must resolve through its registry library, not the legacy re-export.
 // ignore: unnecessary_import
@@ -83,6 +84,7 @@ part 'device_chunk_persistence.dart';
 part 'wal_account_purge.dart';
 part 'wal_discard.dart';
 part 'wal_orphan_recovery.dart';
+part 'wal_orphan_reclaim.dart';
 
 class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// A cheap view invalidation signal: unrelated live/device sync changes do
@@ -153,6 +155,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Timer? _pendantTimer;
   DateTime? _lastOrphanRecoveryWake;
   Future<void>? _orphanRecoveryInFlight;
+  Future<void>? _orphanReclaimInFlight;
+  final Future<bool> Function()? _orphanReclaimOffOverride;
+  final void Function()? _orphanReclaimAfterTombstone;
+  final void Function(Map<String, Object?>)? _orphanReclaimTelemetry;
   OrphanAudioFrameCache _orphanFrameCache = const OrphanAudioFrameCache.empty();
   final Future<RecordingOrphanCensus> Function()? _orphanCensusOverride;
   final Future<bool> Function()? _orphanRecoveryOffOverride;
@@ -269,7 +275,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // bytes on disk but no index commit yet; preserve them without claiming
     // that the load confirmed their durability.
     final pending = [..._wals, ..._foreignWals];
-    final loadedKeys = loaded.map(_durableKey).toSet();
+    final loadedKeys = pending.isEmpty ? const <String>{} : loaded.map(_durableKey).toSet();
     _indexInventory.primeLoaded(loaded);
     final admitted = <Wal>[];
     final foreign = <Wal>[];
@@ -391,6 +397,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     this.listener, {
     Future<RecordingOrphanCensus> Function()? orphanCensus,
     Future<bool> Function()? orphanRecoveryOff,
+    Future<bool> Function()? orphanReclaimOff,
+    void Function()? orphanReclaimAfterTombstone,
+    void Function(Map<String, Object?>)? orphanReclaimTelemetry,
     bool Function()? orphanForeground,
     void Function(Map<String, Object?>)? orphanTelemetry,
     SyncUploadGate? uploadGate,
@@ -410,6 +419,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     Future<DeviceConnection?> Function(String deviceId)? connectionResolver,
   })  : _orphanCensusOverride = orphanCensus,
         _orphanRecoveryOffOverride = orphanRecoveryOff,
+        _orphanReclaimOffOverride = orphanReclaimOff,
+        _orphanReclaimAfterTombstone = orphanReclaimAfterTombstone,
+        _orphanReclaimTelemetry = orphanReclaimTelemetry,
         _orphanForegroundOverride = orphanForeground,
         _orphanTelemetryOverride = orphanTelemetry,
         _jobPollerOverride = jobPoller,
@@ -1254,7 +1266,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         }
         wal.data = [];
       }
-      for (final wal in List<Wal>.from(_wals)) {
+      for (final wal in _liveProofPendingWalIds.isEmpty ? const <Wal>[] : List<Wal>.from(_wals)) {
         if (!_liveProofPendingWalIds.contains(_durableKey(wal))) continue;
         await _reportDurableLiveWal(wal, generation);
         _liveProofPendingWalIds.remove(_durableKey(wal));
@@ -1372,10 +1384,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   // before the field existed) is acknowledged but of unknown age: unknown age
   // protects deletion — _removeExpiredSyncedCopies never touches syncedAt == 0
   // — and must not manufacture retention pressure.
-  int get _pendingDiskWalCount => [
-        ..._retiredWals,
-        ..._wals,
-      ].where((wal) => wal.storage == WalStorage.disk && wal.status != WalStatus.synced).length;
+  int get _pendingDiskWalCount => _retiredWals.where(_isPendingDisk).length + _wals.where(_isPendingDisk).length;
+  static bool _isPendingDisk(Wal w) => w.storage == WalStorage.disk && w.status != WalStatus.synced;
 
   /// Surfaces the bounded-retention pressure once per cap-engagement event.
   /// Pending (unsynced) copies are never evicted and admission is not refused

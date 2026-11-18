@@ -558,3 +558,31 @@ def test_unit_blocked_by_another_destructive_kind_still_fails_the_run(
     assert fast_clock.sleeps == [] and plane.erased == [] and plane.objects == []
     row = _obligation(tombstone_db, 'c1')
     assert row['last_outcome'] == 'failed' and row['lease_until'] is None
+
+
+def test_legacy_rearm_behind_cursor_preserves_obligation_and_restarts_discovery(
+    monkeypatch, owner, tombstone_db, armed, dispatch, fast_clock
+):
+    plane = owner.plane()
+    plane.add('results', 'original', conversation_id='c1', segment_id='original')
+    rearmed = []
+
+    def rearm_after_namespace(namespace, uid):
+        if not rearmed:
+            tombstone_db.docs[f'{purge_jobs.COLLECTION}/{armed}'].update(purge_jobs.arm_fields(UID, 'c1'))
+            plane.add('results', 'behind-cursor', conversation_id='c1', segment_id='behind-cursor')
+            rearmed.append(True)
+        return 0
+
+    monkeypatch.setattr(purge, 'purge_jobstore_owner', rearm_after_namespace)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert _run(armed, 1) == 'superseded'
+    row = _obligation(tombstone_db, 'c1')
+    assert row['last_outcome'] == 'rearmed' and row['progress'] == {}
+    assert row['lease_until'] is None and row['run_token'] is None
+    assert plane.doc('results', 'behind-cursor')['conversation_id'] == 'c1'
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert dispatch[-1] == (armed, 2)
+    assert _run(armed, 2) == 'purged'
+    assert plane.doc('results', 'behind-cursor')['projection_state'] == 'erased'
+    assert _obligation(tombstone_db, 'c1') is None

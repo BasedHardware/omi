@@ -4268,6 +4268,8 @@
     "summaryWithOmiInstead": "Tā vietā apkopot ar Omi",
     "summaryBusyTitle": "Joprojām notiek apstrāde",
     "summaryBusyBody": "Omi jau apstrādā šo sarunu. Kopsavilkums parādīsies šeit, kad tas būs gatavs.",
+    "summaryTranscriptionPendingTitle": "Vēl nav transkribēts",
+    "summaryTranscriptionPendingBody": "Kopsavilkums parādīsies, kad transkripcija būs gatava.",
     "summaryCheckAgain": "Pārbaudīt vēlreiz",
     "summaryLimitTitle": "Sasniegts kopsavilkumu limits",
     "summaryLimitBody": "Pēdējās stundas laikā jūs vairākkārt atkārtoti ģenerējāt kopsavilkumus. Mēģiniet vēlāk vēlreiz.",

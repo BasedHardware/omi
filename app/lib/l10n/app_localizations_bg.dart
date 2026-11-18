@@ -13993,6 +13993,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get summaryBusyBody => 'Omi вече работи по този разговор. Обобщението ще се появи тук, когато приключи.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Все още не е транскрибирано';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Обобщението ще се появи, когато транскрипцията е готова.';
+
+  @override
   String get summaryCheckAgain => 'Провери отново';
 
   @override

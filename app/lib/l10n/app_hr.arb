@@ -11688,6 +11688,8 @@
     "summaryWithOmiInstead": "Ipak sažmi s Omi",
     "summaryBusyTitle": "Obrada je još u tijeku",
     "summaryBusyBody": "Omi već radi na ovom razgovoru. Sažetak će se pojaviti ovdje kad bude gotov.",
+    "summaryTranscriptionPendingTitle": "Još nije transkribirano",
+    "summaryTranscriptionPendingBody": "Sažetak će se pojaviti kad transkript bude spreman.",
     "summaryCheckAgain": "Provjeri ponovno",
     "summaryLimitTitle": "Dosegnuto je ograničenje sažetaka",
     "summaryLimitBody": "U posljednjih sat vremena više ste puta ponovno generirali sažetke. Pokušajte ponovno kasnije.",

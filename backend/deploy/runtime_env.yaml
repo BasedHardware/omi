@@ -3256,6 +3256,9 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          MEDIA_NOISE_MODE: {value: shadow, category: rollout}
+          MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+          NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
             value: 'false'
             category: ops_kill
@@ -3613,6 +3616,12 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          SYNC_TASKS_PROJECT:
+            value: based-hardware
+            category: reliability
+          SYNC_TASKS_LOCATION:
+            value: us-central1
+            category: reliability
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -3851,6 +3860,9 @@ environments:
             source: environment
           SYNC_TASKS_INVOKER_SA:
             source: environment
+          CONVERSATIONS_V3:
+            source: literal
+            value: 'on'
           CONVERSATIONS_V3_STAGE:
             source: literal
             value: beta
@@ -4391,7 +4403,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
@@ -4566,6 +4578,9 @@ environments:
               env_var: SYNC_TASKS_HANDLER_URL
               default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
               category: reliability
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -4939,7 +4954,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
@@ -5125,6 +5140,9 @@ environments:
             SYNC_TASKS_QUEUE:
               value: sync-jobs-fresh
               category: reliability
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -5482,7 +5500,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
@@ -5649,6 +5667,9 @@ environments:
             SYNC_TASKS_QUEUE:
               value: sync-backfill-fresh
               category: reliability
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -5918,6 +5939,7 @@ environments:
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
+            BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST: {value: viUv7GtdoHXbK1UBCDlPuTDuPgJ2, category: rollout}
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -5973,7 +5995,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
@@ -6121,6 +6143,9 @@ environments:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -6197,6 +6222,9 @@ environments:
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -6271,6 +6299,9 @@ environments:
               value: 'on'
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -6318,6 +6349,9 @@ environments:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -6376,6 +6410,9 @@ environments:
               value: based-hardware
             BASE_API_URL:
               value: https://api.omi.me
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''

@@ -14038,6 +14038,12 @@ class AppLocalizationsEl extends AppLocalizations {
       'Το Omi επεξεργάζεται ήδη αυτή τη συνομιλία. Η σύνοψη θα εμφανιστεί εδώ μόλις ολοκληρωθεί.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Δεν έχει μεταγραφεί ακόμα';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Η σύνοψη θα εμφανιστεί μόλις είναι έτοιμη η μεταγραφή.';
+
+  @override
   String get summaryCheckAgain => 'Νέος έλεγχος';
 
   @override

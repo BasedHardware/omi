@@ -14002,6 +14002,12 @@ class AppLocalizationsHu extends AppLocalizations {
       'Az Omi már dolgozik ezen a beszélgetésen. Az összefoglaló itt jelenik meg, amikor elkészül.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Még nincs átírva';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Az összefoglaló akkor jelenik meg, amikor az átirat elkészül.';
+
+  @override
   String get summaryCheckAgain => 'Újbóli ellenőrzés';
 
   @override

@@ -11688,6 +11688,8 @@
     "summaryWithOmiInstead": "סיכום עם Omi במקום",
     "summaryBusyTitle": "העיבוד עדיין מתבצע",
     "summaryBusyBody": "Omi כבר עובד על השיחה הזו. הסיכום יופיע כאן כשהוא יסתיים.",
+    "summaryTranscriptionPendingTitle": "עדיין לא תומלל",
+    "summaryTranscriptionPendingBody": "הסיכום יופיע כשהתמלול יהיה מוכן.",
     "summaryCheckAgain": "בדיקה חוזרת",
     "summaryLimitTitle": "הגעת למגבלת הסיכומים",
     "summaryLimitBody": "יצרת מחדש כמה סיכומים בשעה האחרונה. אפשר לנסות שוב מאוחר יותר.",

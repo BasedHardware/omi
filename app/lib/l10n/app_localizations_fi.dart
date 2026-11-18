@@ -13950,6 +13950,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get summaryBusyBody => 'Omi käsittelee jo tätä keskustelua. Tiivistelmä näkyy tässä, kun se on valmis.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Ei vielä litteroitu';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Tiivistelmä näkyy, kun litterointi on valmis.';
+
+  @override
   String get summaryCheckAgain => 'Tarkista uudelleen';
 
   @override

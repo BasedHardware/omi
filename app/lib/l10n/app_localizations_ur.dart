@@ -13960,6 +13960,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get summaryBusyBody => 'Omi پہلے ہی اس گفتگو پر کام کر رہا ہے۔ مکمل ہونے پر خلاصہ یہاں ظاہر ہوگا۔';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'ابھی تک ٹرانسکرائب نہیں ہوا';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'ٹرانسکرپٹ تیار ہونے پر خلاصہ ظاہر ہوگا۔';
+
+  @override
   String get summaryCheckAgain => 'دوبارہ چیک کریں';
 
   @override
