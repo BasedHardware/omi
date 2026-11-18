@@ -69,6 +69,17 @@ def _router():
     return module, saved, BytesIO
 
 
+@pytest.fixture
+def router_harness():
+    # Cold construction of the stubbed router is setup, not the routing behavior
+    # measured by the call-phase CPU guard. Keep the route and assertions timed.
+    module, saved, BytesIO = _router()
+    try:
+        yield module, BytesIO
+    finally:
+        _restore(saved)
+
+
 async def _upload(module, BytesIO, *, conversation_id=None):
     # This suite tests routing counters, not wall-clock lookback admission. Keep
     # the classifier's clock aligned with its fixed synthetic file timestamp.
@@ -316,28 +327,25 @@ async def test_session_resolved_final_pass_owner_marks_the_follow(monkeypatch):
 # --- one counter branch per upload outcome, through the real router ------------------------------
 
 
-async def test_upload_accepted_by_batch_counts_batch(monkeypatch):
-    module, saved, BytesIO = _router()
-    try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
-        module.resolve_batch_policy = lambda uid: enabled_policy()
-        module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
+async def test_upload_accepted_by_batch_counts_batch(monkeypatch, router_harness):
+    module, BytesIO = router_harness
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
+    module.resolve_batch_policy = lambda uid: enabled_policy()
+    module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
 
-        async def admit_fresh(**kwargs):
-            kwargs['evidence'].batch_accepted = True
-            return module.JSONResponse(status_code=202, content={'job_id': 'bp_1', 'status': 'queued'})
+    async def admit_fresh(**kwargs):
+        kwargs['evidence'].batch_accepted = True
+        return module.JSONResponse(status_code=202, content={'job_id': 'bp_1', 'status': 'queued'})
 
-        module.accept_batch_upload = admit_fresh
-        module.create_sync_job = Mock()
-        before = _counts()
-        response = await _upload(module, BytesIO)
-        assert response.status_code == 202
-        after = _counts()
-        assert after['batch'] == before['batch'] + 1
-        assert {k: v for k, v in after.items() if k != 'batch'} == {k: v for k, v in before.items() if k != 'batch'}
-        module.create_sync_job.assert_not_called()
-    finally:
-        _restore(saved)
+    module.accept_batch_upload = admit_fresh
+    module.create_sync_job = Mock()
+    before = _counts()
+    response = await _upload(module, BytesIO)
+    assert response.status_code == 202
+    after = _counts()
+    assert after['batch'] == before['batch'] + 1
+    assert {k: v for k, v in after.items() if k != 'batch'} == {k: v for k, v in before.items() if k != 'batch'}
+    module.create_sync_job.assert_not_called()
 
 
 async def test_batch_response_without_fresh_admission_is_not_counted(monkeypatch):
