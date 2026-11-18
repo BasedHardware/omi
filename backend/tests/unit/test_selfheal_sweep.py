@@ -1090,20 +1090,59 @@ def test_a_permanently_refused_prefix_is_passed_once_per_rotation():
     assert state['advances'] == ['users/u1/conversations/r24', None]
 
 
+def _pending_verifications(count):
+    return [{'uid': 'p', 'conversation_id': f'p{i}', 'job_id': f'job-p{i}', 'admitted_at': NOW} for i in range(count)]
+
+
 def test_full_verification_capacity_keeps_the_cursor_on_unadmitted_rows():
-    rows = [_row('u1', f'c{i}', _eligible_data()) for i in range(3)]
-    state, kwargs = _rotating(rows, max_scan=2)
+    rows = [_row('u1', f'c{i}', _eligible_data()) for i in range(4)]
+    state, kwargs = _rotating(rows)
     queued = {'status': 'queued', 'created_at': NOW}
     kwargs['job_reader'] = lambda job_id, **_: queued
-    pending = [
-        {'uid': 'p', 'conversation_id': f'p{i}', 'job_id': f'job-p{i}', 'admitted_at': NOW}
-        for i in range(sweep.jobs_db.SELFHEAL_MAX_PENDING_VERIFICATIONS)
-    ]
-    state['cursor'].update(resume_after_path=None, pending_verifications=pending)
+    pending = _pending_verifications(sweep.jobs_db.SELFHEAL_MAX_PENDING_VERIFICATIONS)
+    state['cursor'].update(resume_after_path=rows[0]['path'], pending_verifications=pending)
 
     counters = sweep.run_selfheal_tick(**kwargs)
 
     assert counters['enqueued'] == 0
     assert state['finalization_calls'] == []
-    assert state['advances'] == [None]
-    assert state['cursor']['resume_after_path'] is None
+    assert state['advances'] == [rows[0]['path']]
+    assert state['cursor']['resume_after_path'] == rows[0]['path']
+
+
+def test_mid_tick_verification_capacity_resumes_after_the_last_admitted_row():
+    rows = [_row('u1', f'c{i}', _eligible_data()) for i in range(5)]
+    state, kwargs = _rotating(rows)
+    queued = {'status': 'queued', 'created_at': NOW}
+    hold = {'pending': True}
+    kwargs['job_reader'] = lambda job_id, **_: queued if hold['pending'] else None
+    capacity = sweep.jobs_db.SELFHEAL_MAX_PENDING_VERIFICATIONS
+    state['cursor'].update(pending_verifications=_pending_verifications(capacity - 2))
+
+    first = sweep.run_selfheal_tick(**kwargs)
+    assert first['enqueued'] == 2
+    assert state['cursor']['resume_after_path'] == rows[1]['path']
+    hold['pending'] = False
+    second = sweep.run_selfheal_tick(**kwargs)
+
+    assert state['scan_calls'][1]['resume_after_path'] == rows[1]['path']
+    assert second['enqueued'] == 3
+    attempted = [call['conversation_id'] for call in state['finalization_calls']]
+    assert attempted == [row['conversation_id'] for row in rows]
+
+
+def test_rows_past_the_eligible_cap_still_count_toward_the_backlog():
+    rows = [_row('u1', f'c{i:02d}', _eligible_data()) for i in range(30)]
+    rows[27]['data']['finished_at'] = ANCIENT
+    rows.append(_row('u1', 'locked', _eligible_data(is_locked=True)))
+    refused = frozenset(f'c{i:02d}' for i in range(25))
+    state, kwargs = _rotating(rows, refuse=refused)
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert state['cursor']['resume_after_path'] == 'users/u1/conversations/c24'
+    assert len(state['finalization_calls']) == 25
+    assert counters['scanned'] == 31
+    assert counters['content_holding'] == 31
+    assert counters['content_holding_over_12h'] == 1
+    assert counters['oldest_age_seconds'] == (NOW - ANCIENT).total_seconds()
