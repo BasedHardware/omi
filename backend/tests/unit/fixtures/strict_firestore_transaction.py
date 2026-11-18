@@ -32,7 +32,7 @@ from copy import deepcopy
 from threading import RLock
 from typing import Any
 
-from google.cloud.firestore_v1.transforms import DELETE_FIELD, Increment
+from google.cloud.firestore_v1.transforms import Increment
 from google.cloud.firestore_v1.field_path import FieldPath
 
 
@@ -402,12 +402,8 @@ class StrictFirestoreTransaction:
         self.has_written = True
         if ref.path not in self._database.rows:
             raise RuntimeError('missing row')
-        removed = {key for key, value in patch.items() if value is DELETE_FIELD}
-        payload = deepcopy({key: value for key, value in patch.items() if key not in removed})
-        self.updates.append((ref.path, {**payload, **{key: 'DELETE_FIELD' for key in removed}}))
-        for key in removed:
-            # DELETE_FIELD removes the (top-level) field, as Firestore does.
-            self._database.rows[ref.path].pop(key, None)
+        payload = deepcopy(patch)
+        self.updates.append((ref.path, payload))
         # Emulator proof: test_conversation_terminal_family_firestore.py covers
         # nested updates, quoted keys, and replacement of non-map ancestors.
         for key, value in payload.items():

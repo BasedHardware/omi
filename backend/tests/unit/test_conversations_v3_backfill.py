@@ -439,13 +439,18 @@ def convert(strict):
     return token
 
 
+def stored(row):
+    """The document as Firestore would hold it: StrictFirestore keeps DELETE_FIELD as a value."""
+    return {k: v for k, v in row.items() if type(v).__name__ != 'Sentinel'}
+
+
 def test_conversion_keeps_legacy_notes_and_undo_restores_the_donor_exactly(strict):
     token = convert(strict)
     assert strict.rows[R]['recording'] is True and strict.rows[R]['structured'] == LEGACY_DONOR['structured']
     assert strict.rows[R]['claims'] and strict.rows[COPY]['backfilled'] is True
     assert store.restore_backfill_donors('synthetic', token, ['r'], firestore_client=strict) == 1
     assert store.delete_backfill_rows('synthetic', token, ['c0'], firestore_client=strict) == 1
-    assert strict.rows[R] == LEGACY_DONOR
+    assert stored(strict.rows[R]) == LEGACY_DONOR
     assert COPY not in strict.rows
     # No tombstone: the window can be derived again later.
     assert ('users', 'synthetic', 'deleted_conversations', 'c0') not in strict.rows
