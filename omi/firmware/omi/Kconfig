@@ -56,6 +56,14 @@ config OMI_ENABLE_RFSW_CTRL
         "Enable RFSwitch Control support."
     default y
 
+config OMI_ENABLE_WIFI
+    bool "Enable Wi-Fi (nRF7002) support"
+    help
+        "Enable nRF7002 Wi-Fi bring-up for CV1 (scan/connect plumbing). Use with
+         Wi-Fi networking/provisioning support to reach cloud services (e.g. a
+         voice agent) over an access point or phone hotspot."
+    default n
+
 config OMI_ENABLE_MONITOR
     bool "Enable monitoring/metrics system"
     help
