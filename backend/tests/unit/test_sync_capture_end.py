@@ -485,3 +485,39 @@ def test_a_pendant_copy_after_sealed_notes_waits_quiet_then_buys_exactly_one_lat
     assert hold.admission(
         conversation, {'first_pending_at': 2000}, now=2000 + hold.quiet_seconds(), end_proven=asked
     ) == ('late_cap', None)
+
+
+def held_units(**changes):
+    """A sealed live record whose projection stamped every unit landed or held for recovery."""
+    conversation = sealed_live(**changes)
+    conversation[hold.FIELD] = {**conversation[hold.FIELD], capture_end.UNITS_SETTLED_FIELD: SEALED_AT}
+    return conversation
+
+
+def test_units_held_for_recovery_prove_the_first_notes_without_the_ledger():
+    assert capture_end.seal_proof(held_units(), None) == 'units_held'
+    assert capture_end.seal_proof(held_units(), SIBLING_PENDING) == 'units_held'
+    # A reseal moves the clock the stamp named; the old stamp proves nothing.
+    assert capture_end.seal_proof(held_units(record_sealed_at=1000.0), SIBLING_PENDING) == 'units_pending'
+    # The barrier still decides first: notes written, record reopened.
+    assert capture_end.seal_proof(held_units(summary_output_present=True), None) == 'notes_written'
+    assert capture_end.seal_proof(held_units(status='in_progress'), None) == 'record_open'
+    assert capture_end.units_settled(sealed_live()) is False
+
+
+def test_a_held_units_stamp_is_proof_with_no_ledger_read(monkeypatch):
+    ledgers = Mock(side_effect=AssertionError('the stamp needs no ledger read'))
+    monkeypatch.setattr(store, 'load_ledger', ledgers)
+    counted = Mock()
+    monkeypatch.setattr(capture_end, 'record_proof', counted)
+    conversation = held_units()
+    assert store.proven('u', conversation) is True
+    counted.assert_called_once_with('sealed_held')
+    assert hold.admission(
+        conversation, {'first_pending_at': 100}, now=130, end_proven=lambda: store.proven('u', conversation)
+    ) == (
+        'end_proof',
+        None,
+    )
+    monkeypatch.setenv('SYNC_UPLOAD_WATERMARK_ENABLED', 'false')
+    assert store.proven('u', conversation) is False

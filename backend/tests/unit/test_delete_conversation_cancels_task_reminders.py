@@ -19,6 +19,8 @@ def _delete_with_tasks(monkeypatch, tasks, vector_batch_fn=None, source_lookup=N
         conversations_router.conversations_db, 'get_conversation_raw_snapshot', source_lookup or (lambda *a, **kw: {})
     )
     monkeypatch.setattr(conversations_router.conversation_tombstones, 'record_deletion', lambda *a: None)
+    # #25610's already-deleted short-circuit reads the tombstone first; this row was never deleted.
+    monkeypatch.setattr(conversations_router.conversation_tombstones, 'is_deleted', lambda *a, **kw: False)
     monkeypatch.setattr(conversations_router, 'delete_owner_prompt_embedding_cache', lambda *a: None)
     vectors = []
     monkeypatch.setattr(conversations_router, 'MemoryService', lambda db_client=None: object())

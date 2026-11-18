@@ -171,6 +171,37 @@ def test_huh_completed_dead_letter_empty_decision_snapshot(monkeypatch, text, ve
     assert patch['discarded'] == (verdict == 'discard')
 
 
+@pytest.mark.parametrize(
+    'structured,retryable',
+    [
+        ({'title': 'Discussion notes'}, True),
+        ({'title': 'Discussion 3'}, True),
+        ({'title': 'Pilot budget'}, False),
+        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, False),
+        ({'title': 'Discussion notes', 'overview': 'Pilot budget approved'}, False),
+    ],
+)
+def test_dead_letter_retryability_ignores_a_placeholder_title(monkeypatch, structured, retryable):
+    """A placeholder-only row holds no earlier summary, so a retry can be offered."""
+    row = {
+        'source': 'omi',
+        'id': 'c',
+        'status': 'completed',
+        'discarded': False,
+        'finalization_status': 'dead_letter',
+        'relevance_decision': {},
+        'structured': structured,
+        'transcript_segments': [{'text': 'the pilot budget is eight thousand dollars'}],
+    }
+    monkeypatch.setattr(terminal, 'calendar_retains', lambda *_: False)
+    monkeypatch.setattr(terminal, '_has_described_photo', lambda *_, **__: False)
+    ref = SimpleNamespace(path='users/u/conversations/c')
+    patch = terminal.dead_letter_conversation_updates(
+        'u', row, ref, object(), 'processing_failed', None, lambda _: False
+    )
+    assert bool(patch.get('summary_retryable')) is retryable
+
+
 def test_decision_metrics_have_distinct_terminal_labels():
     from utils.metrics import CONVERSATION_RELEVANCE_DECISION_TOTAL, record_conversation_relevance
 
@@ -191,11 +222,11 @@ def test_new_rules_do_not_change_server_recovery_policy():
 
 @pytest.fixture
 def calendar_probe():
-    from database import calendar_meetings, users
+    from database import calendar_meetings, google_calendar_preferences, users
     from utils.conversations import calendar_linking
     from utils.conversations.terminal_calendar import calendar_retains
 
-    return calendar_meetings, users, calendar_linking, calendar_retains
+    return calendar_meetings, google_calendar_preferences, users, calendar_linking, calendar_retains
 
 
 @pytest.mark.parametrize(
@@ -205,9 +236,10 @@ def test_real_terminal_calendar_probe_distinguishes_unavailable_evidence(monkeyp
     from datetime import datetime, timedelta, timezone
     from unittest.mock import AsyncMock
 
-    calendar_meetings, users, calendar_linking, calendar_retains = calendar_probe
+    calendar_meetings, google_calendar_preferences, users, calendar_linking, calendar_retains = calendar_probe
 
     monkeypatch.setattr(calendar_meetings, 'get_meetings_in_time_range', lambda *_: [])
+    monkeypatch.setattr(google_calendar_preferences, 'get_selections', lambda *_: {})
     integration = {'connected': True, 'access_token': 'test-token'}
     if mode == 'missing_token':
         integration.pop('access_token')
@@ -381,3 +413,24 @@ def test_production_terminal_assessment_call_sites_are_pinned(terminal_source_tr
                     for kw in call.keywords
                 )
     assert observed == expected
+
+
+def test_terminal_calendar_probe_keeps_uncertainty_when_a_calendar_was_skipped(monkeypatch, calendar_probe):
+    # A selected calendar that could not be read leaves absence unproven, so the
+    # probe must return uncertainty rather than confirmed no-overlap.
+    from datetime import datetime, timedelta, timezone
+
+    calendar_meetings, google_calendar_preferences, users, calendar_linking, calendar_retains = calendar_probe
+
+    monkeypatch.setattr(calendar_meetings, 'get_meetings_in_time_range', lambda *_: [])
+    monkeypatch.setattr(google_calendar_preferences, 'get_selections', lambda *_: {})
+    monkeypatch.setattr(users, 'get_integration', lambda *_: {'connected': True, 'access_token': 'test-token'})
+
+    async def fetch(**kwargs):
+        kwargs['on_degraded']()
+        return []
+
+    monkeypatch.setattr(calendar_linking, 'get_google_calendar_events', fetch)
+    now = datetime.now(timezone.utc)
+    row = {'source': 'omi', 'started_at': now, 'finished_at': now + timedelta(minutes=1)}
+    assert calendar_retains('u', row) is None

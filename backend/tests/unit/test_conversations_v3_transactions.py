@@ -7,16 +7,27 @@ from database import conversations_v3_processing as writers
 from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
+import importlib
 
 import pytest
 
 from database import conversations_v3 as store
 from utils.conversations.v3 import service, summary
+from utils.conversations import (
+    lifecycle,
+)  # noqa: F401 -- the commit path's import graph is paid at collection, not in a test's CPU budget
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
 AT = datetime.now(timezone.utc)
 R = ('users', 'synthetic', 'conversations', 'r')
 L = ('users', 'synthetic', 'conversation_v3_leases', 'builder')
+
+
+@pytest.fixture(scope='module', autouse=True)
+def lifecycle_owner_import():
+    # Exercise real lifecycle transactions below, but load their owner during
+    # file setup, as the call-phase CPU guard requires for shared imports.
+    return importlib.import_module('utils.conversations.lifecycle')
 
 
 @pytest.fixture
@@ -41,6 +52,13 @@ def strict(monkeypatch):
     monkeypatch.setattr(store, 'encrypt', lambda value, uid: value)
     monkeypatch.setattr(store.conversations, '_prepare_conversation_for_write', lambda row, *a, **kw: deepcopy(row))
     return client
+
+
+@pytest.fixture(scope='module', autouse=True)
+def speaker_evidence_import():
+    # Hydration's real lazy dependency is setup work; import failures still
+    # fail this suite and its cost stays inside the whole-file wall limit.
+    return importlib.import_module('utils.speakers.evidence')
 
 
 def test_two_workers_get_one_lease(strict):
@@ -375,13 +393,24 @@ def test_multi_batch_backfill_conversion_is_not_its_own_race_and_keeps_an_obliga
         }
         for i in range(128)
     ]
-    donor = {**strict.rows[R], 'recording': True, '_v3_derive': True, '_v3_revision': 1}
+    donor = {
+        **strict.rows[R],
+        'recording': True,
+        '_v3_derive': True,
+        '_v3_revision': 1,
+        '_v3_backfill_run': 'run-1',
+        '_v3_backfill_prior': {},
+    }
     store.commit_projection('synthetic', token, {'r': donor}, {}, rows, [], firestore_client=strict)
     assert len(observations) >= 4
     # Hidden as a recording from the first batch, with a durable obligation until the last one lands.
     assert all(recording is True and pending is True for recording, pending in observations[:-1])
     assert observations[-1] == (True, False)
     assert len(strict.rows[R]['claims']) == 128
+    # Non-destructive: the legacy notes stay, and the donor names its run and its prior state for undo.
+    assert strict.rows[R]['structured'] == {'title': 'Old notes'}
+    assert strict.rows[R]['v3_backfill_run'] == 'run-1' and strict.rows[R]['v3_backfill_prior'] == {}
+    assert strict.rows[R]['v3_audio_purge_pending'] is False
 
 
 def test_metadata_revision_change_does_not_rebill_unchanged_content(strict, monkeypatch):

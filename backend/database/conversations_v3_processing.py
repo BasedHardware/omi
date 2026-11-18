@@ -5,12 +5,13 @@ from utils.conversations.v3 import metrics
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 from database import conversations, conversations_v3 as store
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
-from utils.conversations.v3 import Conflict
+from utils.conversations.v3 import Conflict, policy
 
 
 def store_summary(uid, cid, token, revision, structured, covers, *, firestore_client=None):
@@ -43,6 +44,15 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
         if current.get('title_locked'):
             patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
             patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
+        settled = current.get('v3_derived') and current.get('status') != 'in_progress'
+        # On-open notes are a notes write too: a row whose background notes failed and the user then
+        # opened owes the same single created delivery once it is visible and completed.
+        armed = bool(
+            settled
+            and policy.created_eligible(
+                {**current, 'v3_notes_written': True, 'v3_process_failed': False, 'tile_state': 'done'}
+            )
+        )
         tx.update(
             ref,
             {
@@ -58,13 +68,22 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
                     if current.get('v3_derived') and not current.get('home_hidden') and patch['structured'].get('title')
                     else {}
                 ),
+                **({'v3_notes_written': True} if settled else {}),
+                **({'v3_created_pending': True} if armed else {}),
             },
         )
+        return armed
 
-    persist(client.transaction())
+    return persist(client.transaction())
 
 
-def settle_processing(uid, cid, token, revision, covers, *, skipped=False, content_hash=None, firestore_client=None):
+def settle_processing(
+    uid, cid, token, revision, covers, *, skipped=False, notes=False, content_hash=None, firestore_client=None
+):
+    """Settle one processing attempt; `notes` marks a completed notes write (arms the created delivery).
+
+    Returns True when this settle armed the conversation-created delivery obligation.
+    """
     client = firestore_client or store.get_firestore_client()
     ref = store.user_conversations(client, uid).document(cid)
     held = leases.lease_ref(client, uid, 'summary-' + cid)
@@ -77,11 +96,15 @@ def settle_processing(uid, cid, token, revision, covers, *, skipped=False, conte
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('processing_source_changed')
         if not row:
-            return
+            return False
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
             decoded = store.decode_row(uid, snapshot)
             if not content_hash or processing_hash(decoded) != content_hash:
                 raise Conflict('processing_source_changed')
+        written = bool(notes and not skipped and not row.get('deleted'))
+        armed = written and policy.created_eligible(
+            {**row, 'v3_notes_written': True, 'v3_process_failed': False, 'v3_process_pending': False}
+        )
         tx.update(
             ref,
             {
@@ -96,10 +119,95 @@ def settle_processing(uid, cid, token, revision, covers, *, skipped=False, conte
                     if not skipped and not row.get('home_hidden') and (row.get('structured') or {}).get('title')
                     else {}
                 ),
+                **({'v3_notes_written': True} if written else {}),
+                **({'v3_created_pending': True} if armed else {}),
             },
         )
+        return armed
 
-    settle(client.transaction())
+    return settle(client.transaction())
+
+
+CREATED_CLAIM = timedelta(minutes=5)
+CREATED_MAX_ATTEMPTS = 5
+CREATED_PAGE = 8
+
+
+def pending_created(uid, *, firestore_client=None):
+    """Owed conversation-created deliveries for one owner (collection-scoped, bounded)."""
+    client = firestore_client or store.get_firestore_client()
+    return [
+        snapshot.id
+        for snapshot in store.user_conversations(client, uid)
+        .where(filter=FieldFilter('v3_created_pending', '==', True))
+        .limit(CREATED_PAGE)
+        .stream()
+    ]
+
+
+def claim_created(uid, cid, *, firestore_client=None):
+    """Claim one owed delivery for a bounded lease; returns the attempt number or None.
+
+    A row that stopped qualifying (deleted, hidden, locked, discarded, already delivered) drops the
+    obligation instead of delivering. A live claim held by another worker is left alone.
+    """
+    client = firestore_client or store.get_firestore_client()
+    ref = store.user_conversations(client, uid).document(cid)
+
+    @firestore.transactional
+    def claim(tx):
+        snapshot = ref.get(transaction=tx)
+        row = snapshot.to_dict() or {}
+        if not snapshot.exists or not row.get('v3_created_pending'):
+            return None
+        now = datetime.now(timezone.utc)
+        if not policy.created_eligible(row):
+            tx.update(ref, {'v3_created_pending': False, 'v3_created_claim_until': None})
+            return None
+        if row.get('v3_created_claim_until') and row['v3_created_claim_until'] > now:
+            return None
+        attempt = int(row.get('v3_created_attempts') or 0) + 1
+        if attempt > CREATED_MAX_ATTEMPTS + 1:
+            # The final delivery attempt drops failures itself; this bounds a row whose read or
+            # claim keeps failing outside the delivery so it never cycles the owner's wakes forever.
+            tx.update(ref, {'v3_created_pending': False, 'v3_created_claim_until': None})
+            return None
+        tx.update(ref, {'v3_created_attempts': attempt, 'v3_created_claim_until': now + CREATED_CLAIM})
+        return attempt
+
+    return claim(client.transaction())
+
+
+def finish_created(uid, cid, attempt, *, delivered, dropped=False, firestore_client=None):
+    """Record the delivery, drop an obligation the row no longer qualifies for, or release the claim.
+
+    Fenced by the attempt number so a superseded claimant cannot settle a successor's attempt.
+    """
+    client = firestore_client or store.get_firestore_client()
+    ref = store.user_conversations(client, uid).document(cid)
+
+    @firestore.transactional
+    def finish(tx):
+        snapshot = ref.get(transaction=tx)
+        row = snapshot.to_dict() or {}
+        if not snapshot.exists or int(row.get('v3_created_attempts') or 0) != attempt:
+            return False
+        if delivered:
+            tx.update(
+                ref,
+                {
+                    'v3_created_pending': False,
+                    'v3_created_claim_until': None,
+                    'v3_created_delivered_at': datetime.now(timezone.utc),
+                },
+            )
+        elif dropped:
+            tx.update(ref, {'v3_created_pending': False, 'v3_created_claim_until': None})
+        else:
+            tx.update(ref, {'v3_created_claim_until': None})
+        return True
+
+    return finish(client.transaction())
 
 
 def processing_hash(row):
@@ -199,3 +307,39 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
     if changed:
         metrics.terminal_failure('processing')
     return changed
+
+
+def settle_backfill_processing(uid, cid, *, failed, max_attempts, firestore_client=None):
+    """Clear the backfill notes marker once the live processing writer settled the row.
+
+    A raised attempt parks the row (never left on the live sweep's v3_process_pending) and retries
+    on the next backfill drain; after max_attempts it fails like a live exhausted row.
+    """
+    client = firestore_client or store.get_firestore_client()
+    ref = store.user_conversations(client, uid).document(cid)
+
+    @firestore.transactional
+    def settle(tx):
+        snapshot = ref.get(transaction=tx)
+        row = snapshot.to_dict() or {}
+        if not snapshot.exists or not row.get('v3_backfill_process_pending'):
+            return 'absent'
+        if not failed and not row.get('v3_process_pending'):
+            tx.update(ref, {'v3_backfill_process_pending': False})
+            # The live writers settled it: notes written, or a terminal failure (attempts exhausted).
+            return 'failed' if row.get('v3_process_failed') else 'settled'
+        attempts = int(row.get('v3_backfill_attempts') or 0) + 1
+        if attempts >= max_attempts:
+            tx.update(
+                ref,
+                {
+                    **failure_patch(retryable=bool(row.get('transcript_segments'))),
+                    'v3_backfill_process_pending': False,
+                    'v3_backfill_attempts': attempts,
+                },
+            )
+            return 'failed'
+        tx.update(ref, {'v3_process_pending': False, 'v3_backfill_attempts': attempts})
+        return 'retry'
+
+    return settle(client.transaction())

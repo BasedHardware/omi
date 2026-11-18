@@ -23,6 +23,31 @@ python scripts/select_backend_unit_tests.py --changed-files /tmp/changed-files -
 BACKEND_UNIT_TEST_FILE_LIST=/tmp/backend-tests bash test.sh
 ```
 
+How changed-file selection decides (in order): explicit full-run inputs (lockfiles, `conftest.py`,
+`test.sh`, `main.py`, the selector itself) run everything; workflow contracts and area mappings add their
+tests; any other present, parseable Python module, including `database/`, `models/` and `tests/support/`
+helpers, selects the tests that can import it (`scripts/backend_import_graph.py`: module-level import
+closure, one lazy-import hop, `conftest.py` ancestors, literal `importlib` names); an unmapped data file
+selects tests reaching a module that names it. Deleted or unparseable modules, data files nothing names,
+and modules with no dependents still run the full suite. Every selection writes its reason.
+
+Controls, all on unless set to `0`/`false`/`off`:
+
+- `BACKEND_UNIT_GRAPH_SELECTION` (repository variable and local env): off restores the pre-graph
+  full-suite fallbacks.
+- `BACKEND_UNIT_MAIN_SELECTION` (repository variable): off makes every main push run `--all` again. When on,
+  a main push selects from the diff since the last green main push run plus a rotating 1/8 slice of the
+  suite (slice = green main run count mod 8); the nightly full run (`main_nightly_full.yml`) still runs all.
+- The `ci:full` PR label forces the full unit suite on that PR (add it, then re-run).
+
+Before changing selection rules, replay them over recent main history and quote the output:
+
+```bash
+python scripts/backtest_backend_unit_selection.py --limit 300 --json /tmp/selection-backtest.json
+```
+
+It exits nonzero if graph selection drops any test the legacy narrow selection picked.
+
 `BACKEND_PYTEST_MARK_EXPR` defaults to `not integration and not slow`, which is the PR unit-test lane.
 Use markers for tests that need live services, credentials, long waits, native stress paths, or broader
 component coverage.

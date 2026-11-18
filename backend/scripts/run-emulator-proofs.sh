@@ -74,6 +74,19 @@ run_proof "canonical apply-control read retry (transient / exhausted / wipe race
   "$PYTHON" scripts/canonical_apply_control_retry_emulator_test.py
 run_proof "destructive gate contention (same-kind block / stale takeover fence)" \
   "$PYTHON" scripts/destructive_gate_contention_emulator_test.py
+# Purge fixtures deliberately refuse cloud fallback. Make a wrong proof host a
+# failure here, rather than recording a successful invocation of skipped tests.
+if [[ "$FIRESTORE_EMULATOR_HOST" == 127.0.0.1:* || "$FIRESTORE_EMULATOR_HOST" == localhost:* ]]; then
+  run_proof "conversation purge (coalescing, pre-PR consumers, rollback and WAL)" \
+    "$PYTHON" -m pytest -q -p no:cacheprovider \
+    tests/integration/test_conversation_batch_purge_emulator.py \
+    tests/integration/test_conversation_purge_coalescing_emulator.py \
+    tests/integration/test_conversation_purge_mixed_version_emulator.py \
+    tests/unit/test_record_wal_handoff_emulator.py
+else
+  echo "FAIL conversation purge: a loopback Firestore emulator is required" >&2
+  failures+=("conversation purge: loopback emulator required")
+fi
 run_proof "ledger correction, revert, standalone reopen, privacy fence" \
   "$PYTHON" scripts/knowledge_ledger_correction_emulator_test.py
 # Module execution, not a file path: this older proof has no sys.path bootstrap
@@ -93,6 +106,9 @@ run_proof "batch projection follow-up (silent ready, rollback and mixed completi
   "$PYTHON" -m pytest -q -p no:cacheprovider \
   tests/integration/test_batch_pipeline_projection_followup_firestore.py \
   tests/integration/test_batch_pipeline_silence_sizing_firestore.py
+
+run_proof "held-partial cursor concurrency (advance and wrap fence)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_held_partial_cursor_emulator.py
 
 run_proof "projection ghost-hold release gaps and ready-hint repair follow-up" \
   "$PYTHON" -m pytest -q -rxX -p no:cacheprovider \
@@ -178,6 +194,10 @@ run_proof "pending deletion and restore conformance (sim + emulator required)" \
 run_proof "provider merge conformance (sim + emulator required; Postgres when available)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/provider_merge_emulator_test.py
+
+run_proof "stale merge-head promotion (real transactions, privacy fence, stale hints, demotion)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/merge_stale_head_emulator_test.py
 
 run_proof "Firestore read budget: batch unit end-to-end (M3 scenario 1)" \
   "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_batch_unit.py

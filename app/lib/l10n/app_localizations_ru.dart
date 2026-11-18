@@ -1128,6 +1128,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Имя успешно обновлено!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Читать выбранные календари. Новые события используют $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Настройки календаря';
 
   @override
@@ -12269,7 +12274,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'С момента сопряжения: обрывов — $drops, неудачных подключений — $failed.';
+    return 'С момента сопряжения: $drops повторных подключений, $failed неудачных подключений.';
   }
 
   @override
@@ -13510,16 +13515,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Преобразование $amount в разговоры';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Готово $done из $total · можно покинуть этот экран';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount готово к синхронизации';
   }
@@ -13543,7 +13538,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Ожидает на этом телефоне';
 
   @override
-  String get syncDetailsTranscribing => 'Расшифровывается в Omi';
+  String get syncDetailsTranscribing => 'Загружено, ожидание сервера';
 
   @override
   String get syncDetailsAudioFiles => 'Аудиофайлы';
@@ -14001,6 +13996,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi уже работает над этим разговором. Сводка появится здесь, когда будет готова.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Ещё не расшифровано';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Сводка появится, когда будет готова расшифровка.';
 
   @override
   String get summaryCheckAgain => 'Проверить снова';
@@ -15606,4 +15607,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Пишем ваше резюме…';
+
+  @override
+  String get onTheWayServerWork => 'Работа по данным сервера';
 }

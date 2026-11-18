@@ -1123,6 +1123,11 @@ class AppLocalizationsSr extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Име је успешно ажурирано!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Читај изабране календаре. Нови догађаји користе $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Подешавања календара';
 
   @override
@@ -12238,7 +12243,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Од упаривања: прекида $drops, неуспелих веза $failed.';
+    return 'Од упаривања: $drops поновних повезивања, $failed неуспешних повезивања.';
   }
 
   @override
@@ -13473,16 +13478,6 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Претварање $amount у разговоре';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Готово $done од $total · можете напустити овај екран';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount спремно за синхронизацију';
   }
@@ -13506,7 +13501,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Чека на овом телефону';
 
   @override
-  String get syncDetailsTranscribing => 'Транскрипција на Omi';
+  String get syncDetailsTranscribing => 'Отпремљено, чека сервер';
 
   @override
   String get syncDetailsAudioFiles => 'Аудио датотеке';
@@ -13962,6 +13957,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi већ ради на овом разговору. Сажетак ће се појавити овде када буде готов.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Још није транскрибовано';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Сажетак ће се појавити када транскрипт буде спреман.';
 
   @override
   String get summaryCheckAgain => 'Провери поново';
@@ -15564,4 +15565,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Пишемо ваш сажетак…';
+
+  @override
+  String get onTheWayServerWork => 'Рад који је пријавио сервер';
 }

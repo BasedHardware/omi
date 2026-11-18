@@ -1126,6 +1126,11 @@ class AppLocalizationsNl extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Naam succesvol bijgewerkt!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Geselecteerde agenda’s lezen. Nieuwe afspraken gebruiken $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Agenda-instellingen';
 
   @override
@@ -12261,7 +12266,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Sinds koppeling: $drops onderbrekingen, $failed mislukte verbindingen.';
+    return 'Sinds koppelen: $drops herverbindingen, $failed mislukte verbindingen.';
   }
 
   @override
@@ -13500,16 +13505,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount omzetten in gesprekken';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done van $total klaar · je kunt dit scherm verlaten';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount klaar om te synchroniseren';
   }
@@ -13533,7 +13528,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Wacht op deze telefoon';
 
   @override
-  String get syncDetailsTranscribing => 'Transcriberen op Omi';
+  String get syncDetailsTranscribing => 'Geüpload, wacht op server';
 
   @override
   String get syncDetailsAudioFiles => 'Audiobestanden';
@@ -13989,6 +13984,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi is al met dit gesprek bezig. De samenvatting verschijnt hier zodra deze klaar is.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Nog niet getranscribeerd';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'De samenvatting verschijnt zodra het transcript klaar is.';
 
   @override
   String get summaryCheckAgain => 'Opnieuw controleren';
@@ -15596,4 +15597,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Je samenvatting wordt geschreven…';
+
+  @override
+  String get onTheWayServerWork => 'Door de server gemeld werk';
 }

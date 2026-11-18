@@ -1,10 +1,19 @@
 # Recording-derived conversations v3
 
-Admission defaults to `CONVERSATIONS_V3_STAGE=beta`. `CONVERSATIONS_V3=off`
+The code default is `CONVERSATIONS_V3_STAGE=beta`, and the deployed source (`runtime_env/_base.yaml`)
+is `beta` again since 2026-11-18 (it held at `cohort` on 2026-11-17 while reconcile commit
+conflicts were fixed). Change the stage only there, never by a live-only env edit, which the next
+workflow deploy would revert. `CONVERSATIONS_V3=off`
 stops marking new mobile pendant documents. Stages are `cohort`, `beta`, `all`;
-`rollout_cohorts/conversations-v3` is for named qualification accounts. Beta uses
-the shared, refreshed 14-day episode client-seen marker, so all devices of an
-owner agree. No client version gate is introduced.
+`rollout_cohorts/conversations-v3` is for named qualification accounts. Admission
+needs a v3-capable app: only those builds call `GET /v1/conversations/live`, on any
+channel, which refreshes the 14-day `conversations_v3:client_capable:{uid}` marker
+(`utils/conversations/v3/client_capability.py`). Beta also needs the shared, refreshed
+14-day episode client-seen marker (TestFlight); `all` needs only the capable marker.
+The episode marker alone is not proof: code before #25500 wrote it for store-channel
+episode callers too. Owners whose apps all predate v3 keep legacy intake: their builds
+would show the raw recording a capture ends with as a blank card that 404s. An owner
+with a v3 app on one device and a pre-v3 app on another gets that card on the old device.
 
 Provision the dedicated queue on dev/prod before enabling admission; the prod
 ops manifest declares its bounded concurrency/retry policy. The same stage must reach backend/API, backend-listen (including realtime role),
@@ -50,6 +59,17 @@ are explicit exceptions. Raw product by-id readers use a recording guard because
 they do not all pass through the conversations router. Typesense's external
 extension may still index recordings; first-party projection deletes them and
 hydration rejects them. Admin raw-index counts may therefore be inflated.
+
+Deterministic reconcile conflicts (`target_exists`, `target_deleted`, `multiple_open_conversations`,
+the closure/derived budgets, `recording_decode_unavailable`, `account_deletion`, and
+`document_too_large` when a copied window exceeds Firestore's 1 MiB limit) answer the task with
+outcome `blocked` instead of a 500 retry and park the owner on the builder lease doc
+(`v3_backoff_until`, 5 min doubling to 1 h, token-fenced); `v3_pending` stays owed, on-open bypasses it,
+backfill never parks the live builder, and the next successful commit clears it. A planned id that
+already exists outside the loaded closure is adopted once as the prior (live derived rows only).
+Watch `omi_conversations_v3_blocked_total{reason}` and `omi_conversations_v3_adopted_total`; an owner
+blocked for hours needs investigation, and an operator clears the park by deleting the three
+`v3_blocked_*`/`v3_backoff_until` fields on `users/{uid}/conversation_v3_leases/builder`.
 
 Each source has a durable `v3_pending` obligation. Tasks use the dedicated `conversations-v3`
 Cloud Tasks queue and the configured sync origin/OIDC identity unless
@@ -129,12 +149,82 @@ optional-predicate composite indexes. Rare filtered layer counts select at most
 transcript decoding. The generated manifest has 304 composite indexes.
 The daily gauge refuses a truncated scan rather than publishing a partial count.
 
-Backfill is `CONVERSATIONS_V3_BACKFILL=off` by default. The OIDC-only backfill
-route derives the preceding 30 days, marks new rows `backfilled`, and changes
-source layers in the projection transaction. Historical processing uses the
-existing silent-backfill policy. The initial implementation refuses a user
-window over 128 documents; operator partitioning is required before enabling
-for larger histories (follow-up V3-BACKFILL-30D-PARTITIONS). Do not describe a blocked or partial backfill as complete.
+## Backfill and repair (per owner)
+
+`CONVERSATIONS_V3_BACKFILL=off` by default. While it is off, nothing below runs. The switch is
+not per owner: turning it on only lets runs that an operator planned start. A run is one owner and
+one window, and it re-derives that owner's completed legacy `omi`/`phone` conversations
+in `[since, until)` through the live builder and notes path. Code: `utils/conversations/v3/backfill.py`.
+Operator: `backend/scripts/conversations_v3_backfill.py`, with the prod-operator tier (Firestore
+only). Owners come from a file and print only as `owner[N]`. Output is counts and run ids only.
+
+```bash
+S=backend/scripts/conversations_v3_backfill.py; O=/path/to/owners.txt   # one uid per line, 0600
+PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --dry-run   # reads only
+PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2             # plans, waits
+PYTHONPATH=backend backend/.venv/bin/python $S status --owners-file $O
+PYTHONPATH=backend backend/.venv/bin/python $S resume --owners-file $O --run RUN_ID      # stalled/blocked
+PYTHONPATH=backend backend/.venv/bin/python $S undo --owners-file $O --run RUN_ID [--dry-run]
+PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --mode rederive
+```
+
+- **Plan.** The window is cut into partitions of at most 48 documents. Each cut is at a recorded gap
+  of five minutes or more, the live hard boundary, so no live stretch spans two partitions. A gap-free
+  run over the cap is cut at its largest gap, and the plan reports it as `forced_cuts`. Gaps come from
+  row `started_at`/`finished_at`; a legacy row whose late text never moved `finished_at` can show a
+  gap the live speech-level cut would not, so rarely one live stretch is split at a partition edge.
+  `legacy_candidates` counts rows by metadata; the estimate's `sources` is the loaded count. The dry-run
+  loads every partition as the builder will and prices it: one outline per stretch, plus notes or
+  task-only calls by word count, at the gateway Luna card. The windows are known only after the
+  outline, so treat the estimate as a planning number. Gateway usage has the actual spend.
+- **Run.** The script writes `users/{uid}/conversations_v3_backfill_runs/{run_id}`: operator,
+  window, planned and served code SHA, per-partition counts and outcome, and no content. It also
+  writes a start marker in `users/{uid}/conversations_v3_backfill_starts` (account deletion purges
+  it with the owner's data). The five-minute sweep starts the run
+  when the switch is on. Each partition then runs as one task on the `conversations-v3-backfill`
+  queue, one dispatch at a time: an outline pass under its own `backfill-builder` lease (never the
+  live builder's), then notes through the live `_process` until a 20-minute step deadline. Notes for
+  historical rows use their own `v3_backfill_process_pending` marker, so the live sweep and the live
+  queue never pick them up. Owners run one after another. A new run is refused while the owner has a
+  planned, running, blocked or undoing run: resume or undo it first.
+- **Accuracy.** Derive uses the live stretches (five-minute silence, manual cuts, duplicate-capture
+  removal), outline prompt and model, planner, visibility rules, the `CAPTURE_END` notes trigger
+  (relevance, speaker resolution, meeting context, media/short-clip floors), the notes models,
+  context and entitlement checks. Backfilled rows differ in one way: `process_conversation` takes no
+  derived effects for them, the same as silent backfill. That means no memories, tasks, apps,
+  folders, vectors, notifications, duplicate-capture links or created webhooks. A legacy manual stop
+  is read from the row's `relevance_decision.trigger == client_finalize`. Rows without that record
+  are treated as silence-ended.
+- **Home.** Each legacy donor becomes a hidden source: `recording=True`, `backfill_superseded`, and
+  `v3_backfill_run`. Its `structured` notes and summary are kept, and the original values of every
+  field the conversion touches are kept in `v3_backfill_prior`. Derived rows carry `backfilled=True`
+  and `v3_backfill_run`. Home shows the v3 rows and not the legacy ones, so there are no duplicate
+  cards. Legacy rows that are private, discarded, imported, locked or unreadable stay as they are,
+  and so does a row no window claims (no usable lines after duplicate-capture and deleted-span
+  removal); the ledger counts those as `sources_unclaimed`.
+  Deleting a backfilled row never arms the donor's audio purge.
+- **Resume, re-derive and undo.** A redelivered or resumed partition loads its own run's donors and
+  derived rows and plans over them (adoption, not delete and recreate). `--mode rederive` rebuilds
+  rows that were already backfilled in the window after a pipeline fix. It reuses each row's id,
+  re-runs outline (when its inputs changed) and notes, and retires copies that no rebuilt window
+  claims. A window that would merge rows from two different runs blocks with `rederive_mixed_runs`,
+  so undo stays scoped to one run. Edits made to backfilled copies are not kept. `undo --run` takes both the backfill and the live
+  builder leases before it lists the run's documents, so no pass commits while it works. It refuses
+  while either is held or a notes write for the owner is in flight, and records the refusal in the
+  ledger (`undo.reason`); rerun it. `undo` and `resume` exit 1 when no listed owner has the run.
+  Otherwise it restores every donor field exactly, then deletes the run's derived rows. It writes no
+  tombstones and touches no audio. A donor whose backfilled copy the owner deleted is not restored
+  (that would resurrect the deletion): it stays a hidden source, together with every copy it shares
+  and those copies' donors. The ledger and `undo --dry-run` count them (`donors_kept_deleted`,
+  `rows_kept_deleted`, `donors_deleted_by_owner`). Undo a re-derive by undoing the original run;
+  `undo` on a re-derive run id says so and exits 1. Not undone: outline cache entries, speaker-resolution and media-boundary
+  evidence that the notes path wrote, and gateway spend.
+- **Blocked.** A partition over the loader's 128-document limit, a planned id that is already a live
+  row (`target_exists`), a tombstoned window, or a converted donor that no longer reads
+  (`backfill_source_unreadable`; its copies are kept) blocks the run. The partition and its reason are
+  recorded in the ledger. Fix the cause, then `resume`. Never describe a blocked or partial run as
+  complete. `status` shows partitions committed, windows, Home-visible rows, outline calls and
+  notes processed or failed.
 
 Rollout owner: lead2. Step 0: set CONVERSATIONS_V3_FIRST_APP_BUILD through the shared runtime source
 from the first TestFlight build containing this PR. Then dev named accounts,
@@ -149,7 +239,7 @@ new intake only; previously marked recordings continue draining.
 Delete the old episode implementation in a follow-up only after stage all for
 14 days, kill switch unused for seven days, episode calls below 1% of active
 mobile sessions by app-build bucket, and completed/sample-verified 30-day backfill
-for every active pendant owner. V3-BACKFILL-30D-PARTITIONS must ship and qualify
-before enabling backfill or claiming this deletion gate. Episode routes continue returning disabled.
+for every active pendant owner (consecutive per-owner runs of at most 31 days each; the partitioned
+runner above replaces V3-BACKFILL-30D-PARTITIONS and still has to qualify on named owners first). Episode routes continue returning disabled.
 No source test, green CI, or generated client check is device acceptance or a
 measured production outcome.

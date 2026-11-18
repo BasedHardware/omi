@@ -39,6 +39,13 @@ def _load_repo_script(name: str):
     return module
 
 
+@pytest.fixture(autouse=True)
+def graph_selection_on(monkeypatch):
+    # Graph assertions must not depend on the ambient kill switch; tests that
+    # exercise the switch set it off explicitly.
+    monkeypatch.setenv("BACKEND_UNIT_GRAPH_SELECTION", "1")
+
+
 @pytest.fixture(scope="module")
 def selector_and_all_tests():
     selector = _load_script("select_backend_unit_tests")
@@ -76,20 +83,27 @@ def test_background_task_ratchet_change_selects_the_ratchet(selector_and_all_tes
         assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
     # Negatives: narrow-area paths outside the ratchet's scanned directories.
-    # (backend/database/_client.py is not a valid negative: database/ changes
-    # fall back to the full suite, which includes the ratchet.)
+    # (backend/database/_client.py is not a valid negative: almost every test
+    # reaches it through the import graph, including the ratchet.)
     for path in ("backend/models/users.py", "backend/database/csat.py"):
         selected, reason = selector.tests_for_changed_paths([path], all_tests)
         assert ratchet not in selected, path
         assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
-def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests):
+GRAPH_REASON_PREFIX = "selected backend unit tests from changed paths, workflow contracts and the import graph"
+
+
+def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests, monkeypatch):
     selector, all_tests = selector_and_all_tests
 
-    full_run_cases = {
+    # Blanket database/ prefix paths now select through the import graph, and
+    # still include their workflow-contract tests (union, never replace).
+    graph_cases = {
         "backend/database/memory_vector_repair_outbox_worker.py": "tests/unit/test_vector_repair_outbox_worker.py",
         "backend/database/projection_repair.py": "tests/unit/test_memory_ledger.py",
+    }
+    full_run_cases = {
         "backend/main.py": "tests/unit/test_vector_repair_outbox_worker.py",
         "backend/utils/executors.py": "tests/unit/test_vector_repair_outbox_worker.py",
     }
@@ -131,6 +145,19 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
     for source_path, expected_test in full_run_cases.items():
         selected, reason = selector.tests_for_changed_paths([source_path], all_tests)
         assert expected_test in selected, source_path
+        assert reason == f"{source_path} requires the full backend unit suite"
+        assert selected == all_tests
+
+    for source_path, expected_test in graph_cases.items():
+        selected, reason = selector.tests_for_changed_paths([source_path], all_tests)
+        assert expected_test in selected, source_path
+        assert reason.startswith(GRAPH_REASON_PREFIX), (source_path, reason)
+        assert selected != all_tests, source_path
+
+    # Kill switch: graph selection off restores the full-suite fallback.
+    monkeypatch.setenv(selector.GRAPH_SELECTION_ENV, "0")
+    for source_path in graph_cases:
+        selected, reason = selector.tests_for_changed_paths([source_path], all_tests)
         assert reason == f"{source_path} requires the full backend unit suite"
         assert selected == all_tests
 
@@ -188,9 +215,10 @@ def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
     selected, reason = selector.tests_for_changed_paths(["backend/utils/metrics.py"], all_tests)
-    # Not a FULL_RUN_GLOBS path; unmapped flat utils still use the fallback.
-    assert reason == "backend/utils/metrics.py did not match a backend test-selection contract", reason
-    assert selected == all_tests
+    # Not a FULL_RUN_GLOBS path; an unmapped module selects its importers.
+    assert reason.startswith(GRAPH_REASON_PREFIX), reason
+    assert selected != all_tests
+    assert "tests/unit/test_auth_callback_failure_class_cardinality.py" in selected  # imports utils.metrics
 
     selected, reason = selector.tests_for_changed_paths(["backend/routers/sync.py"], all_tests)
     assert "tests/unit/test_sync_v2.py" in selected
@@ -203,7 +231,10 @@ def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector
         assert reason == f"{path} requires the full backend unit suite"
 
 
-def test_unmapped_source_forces_full_suite_even_when_direct_test_changed(selector_and_all_tests):
+def test_absent_unmapped_source_forces_full_suite_even_when_direct_test_changed(selector_and_all_tests):
+    """A deleted or not-yet-existing unmapped source cannot be resolved by the
+    import graph, so one direct test must not narrow it. (A present unmapped
+    module selects its importers; see the utils/metrics.py case above.)"""
     selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(
@@ -285,9 +316,16 @@ def test_query_guard_paths_select_firestore_shape_guard_tests(selector_and_all_t
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
-def test_regular_conversations_path_remains_full_run(selector_and_all_tests):
+def test_regular_conversations_path_selects_its_importers(selector_and_all_tests, monkeypatch):
     selector, all_tests = selector_and_all_tests
 
+    selected, reason = selector.tests_for_changed_paths(["backend/database/conversations.py"], all_tests)
+    assert reason.startswith(GRAPH_REASON_PREFIX), reason
+    assert selected != all_tests
+    # A direct importer and a conftest-free router test that loads it transitively.
+    assert "tests/unit/test_conversation_lifecycle_contract.py" in selected
+
+    monkeypatch.setenv(selector.GRAPH_SELECTION_ENV, "off")
     selected, reason = selector.tests_for_changed_paths(["backend/database/conversations.py"], all_tests)
     assert selected == all_tests
     assert reason == "backend/database/conversations.py requires the full backend unit suite"
@@ -325,6 +363,104 @@ def test_every_external_workflow_contract_source_triggers_backend_unit_workflow(
     }
 
     assert missing == set()
+
+
+def test_registered_deployment_workflows_have_exact_discovered_tests(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+    registry = json.loads(selector.RUNTIME_IMAGES_PATH.read_text(encoding='utf-8'))
+    contracts = selector.load_workflow_contracts()
+
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == []
+
+
+@pytest.mark.parametrize('registration', ['image', 'service'])
+@pytest.mark.parametrize('sources', [[], ['.github/workflows/**'], ['.github/workflows/new_*.yml']])
+def test_new_deployment_workflow_requires_exact_mapping(selector_and_all_tests, registration, sources):
+    selector, all_tests = selector_and_all_tests
+    path = '.github/workflows/new_deploy.yml'
+    registry = {'images': [], 'services': {}}
+    if registration == 'image':
+        registry['images'].append({'deployment_workflows': [path]})
+    else:
+        registry['services']['new-service'] = {'current_deploy': [path, 'backend/deploy/new-service.yaml']}
+    contracts = [{'sources': sources, 'tests': ['tests/unit/test_workflow_contracts.py']}]
+
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == [
+        f'{path}: registered deployment workflow has no exact-path workflow contract'
+    ]
+
+
+@pytest.mark.parametrize(
+    'targets', [[], ['tests/unit/test_nonexistent_deploy.py'], ['tests/integration/test_deploy.py']]
+)
+def test_deployment_workflow_exact_mapping_requires_discovered_target(selector_and_all_tests, targets):
+    selector, all_tests = selector_and_all_tests
+    path = '.github/workflows/gcp_diarizer.yml'
+    registry = {'images': [{'deployment_workflows': [path]}], 'services': {}}
+    contracts = [
+        {'sources': [path], 'tests': targets},
+        # A broad contract selecting a real test cannot repair an empty exact entry.
+        {'sources': ['.github/workflows/**'], 'tests': ['tests/unit/test_workflow_contracts.py']},
+    ]
+
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == [
+        f'{path}: exact-path workflow contracts select no existing discovered backend tests'
+    ]
+    contracts[0]['tests'] = ['tests/unit/test_workflow_contracts.py']
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == []
+
+
+@pytest.mark.parametrize('registration', ['image', 'service'])
+def test_renamed_deployment_workflow_rejects_stale_registry_and_catalog(
+    selector_and_all_tests, monkeypatch, tmp_path, registration
+):
+    selector, all_tests = selector_and_all_tests
+    monkeypatch.setattr(selector, 'REPO_DIR', tmp_path)
+    path = '.github/workflows/deploy.yml'
+    workflow = tmp_path / path
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text('jobs: {}\n', encoding='utf-8')
+    registry = {'images': [], 'services': {}}
+    if registration == 'image':
+        registry['images'].append({'deployment_workflows': [path]})
+    else:
+        registry['services']['service'] = {'current_deploy': [path]}
+    contracts = [{'sources': [path], 'tests': ['tests/unit/test_workflow_contracts.py']}]
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == []
+
+    workflow.rename(workflow.with_name('renamed_deploy.yml'))
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == [
+        f'{path}: registered deployment workflow does not exist; update registry and exact mapping'
+    ]
+
+
+@pytest.mark.parametrize('mode', ['--all', '--changed-files', '--from-test-list', '--check-deployment-contracts'])
+def test_selector_cli_fails_before_emitting_tests_for_unmapped_deployment(
+    selector_and_all_tests, monkeypatch, tmp_path, capsys, mode
+):
+    selector, _ = selector_and_all_tests
+    registry = json.loads(selector.RUNTIME_IMAGES_PATH.read_text(encoding='utf-8'))
+    registry['images'].append({'deployment_workflows': ['.github/workflows/new_deploy.yml']})
+    registry_path = tmp_path / 'runtime_images.json'
+    registry_path.write_text(json.dumps(registry), encoding='utf-8')
+    monkeypatch.setattr(selector, 'RUNTIME_IMAGES_PATH', registry_path)
+    argv = ['select_backend_unit_tests.py', mode]
+    if mode in ('--changed-files', '--from-test-list'):
+        inputs = tmp_path / 'inputs.txt'
+        inputs.write_text('backend/runtime_images.json\n', encoding='utf-8')
+        argv.append(str(inputs))
+    monkeypatch.setattr(sys, 'argv', argv)
+
+    with pytest.raises(SystemExit, match='new_deploy.yml: registered deployment workflow has no exact-path'):
+        selector.main()
+    assert capsys.readouterr().out == ''
+
+
+def test_deployment_inventory_and_selector_changes_select_coverage_guard(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+    for path in ('backend/runtime_images.json', 'backend/scripts/select_backend_unit_tests.py'):
+        selected, _ = selector.tests_for_changed_paths([path], all_tests)
+        assert 'tests/unit/test_workflow_contracts.py' in selected
 
 
 def test_backend_unit_ci_runner_stays_in_ci_while_pre_push_keeps_its_budget():

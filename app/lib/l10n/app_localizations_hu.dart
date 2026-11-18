@@ -1132,6 +1132,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Név sikeresen frissítve!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Kijelölt naptárak olvasása. Az új események naptára: $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Naptár beállítások';
 
   @override
@@ -12275,7 +12280,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Párosítás óta: $drops kiesés, $failed sikertelen kapcsolat.';
+    return 'Párosítás óta: $drops újracsatlakozás, $failed sikertelen csatlakozás.';
   }
 
   @override
@@ -13516,16 +13521,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount átalakítása beszélgetésekké';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total kész · elhagyhatod ezt a képernyőt';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount készen áll a szinkronizálásra';
   }
@@ -13549,7 +13544,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Ezen a telefonon vár';
 
   @override
-  String get syncDetailsTranscribing => 'Átírás az Omin';
+  String get syncDetailsTranscribing => 'Feltöltve, várakozás a szerverre';
 
   @override
   String get syncDetailsAudioFiles => 'Hangfájlok';
@@ -14010,6 +14005,12 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get summaryBusyBody =>
       'Az Omi már dolgozik ezen a beszélgetésen. Az összefoglaló itt jelenik meg, amikor elkészül.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Még nincs átírva';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Az összefoglaló akkor jelenik meg, amikor az átirat elkészül.';
 
   @override
   String get summaryCheckAgain => 'Újbóli ellenőrzés';
@@ -15615,4 +15616,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Összefoglaló írása…';
+
+  @override
+  String get onTheWayServerWork => 'A szerver által jelzett munka';
 }

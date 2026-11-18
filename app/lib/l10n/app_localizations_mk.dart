@@ -1126,6 +1126,11 @@ class AppLocalizationsMk extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Името е успешно ажурирано!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Читај ги избраните календари. Новите настани користат $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Поставки на календар';
 
   @override
@@ -12286,7 +12291,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Од спарувањето: $drops прекини, $failed неуспешни поврзувања.';
+    return 'Од спарувањето: $drops повторни поврзувања, $failed неуспешни поврзувања.';
   }
 
   @override
@@ -13525,16 +13530,6 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Претворање на $amount во разговори';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Завршено $done од $total · можете да го напуштите екранот';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount подготвени за синхронизација';
   }
@@ -13558,7 +13553,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Чека на овој телефон';
 
   @override
-  String get syncDetailsTranscribing => 'Се транскрибира на Omi';
+  String get syncDetailsTranscribing => 'Прикачено, се чека серверот';
 
   @override
   String get syncDetailsAudioFiles => 'Аудио датотеки';
@@ -14016,6 +14011,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi веќе работи на овој разговор. Резимето ќе се појави тука кога ќе заврши.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Сè уште не е транскрибирано';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Резимето ќе се појави кога транскриптот ќе биде подготвен.';
 
   @override
   String get summaryCheckAgain => 'Провери повторно';
@@ -15621,4 +15622,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Го пишуваме вашето резиме…';
+
+  @override
+  String get onTheWayServerWork => 'Работа пријавена од серверот';
 }

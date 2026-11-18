@@ -8,6 +8,7 @@ import logging
 import os
 
 KILL_SWITCHES = {
+    'BATCH_RESULT_PROTOCOL_GUARD_ENABLED': True,
     'BATCH_ALLOWANCE_PARK_ENABLED': True,
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED': True,
     'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED': True,
@@ -24,6 +25,7 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED': True,
     'BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED': True,
     'BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED': True,
+    'BATCH_PIPELINE_MERGE_STALE_HEAD_PROMOTE_ENABLED': True,
     'BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED': True,
     'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED': True,
     'BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED': True,
@@ -47,6 +49,7 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED': True,
     'BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED': True,
     'BATCH_PIPELINE_HELD_PARTIAL_ENABLED': True,
+    'CONVERSATION_BATCH_PURGE_COALESCING_ENABLED': True,
     # Backlog state machine (config/backlog_state_machine.py). Defaults follow the
     # lead2 rule: ON only where the change just cuts wasted work or retries, OFF
     # where it changes custody, settle or expiry semantics.
@@ -100,6 +103,8 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
         'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
     }:
         enabled = value not in {'false', '0', 'off', 'no'}
+    elif name == 'CONVERSATION_BATCH_PURGE_COALESCING_ENABLED':
+        enabled = value not in {'false', '0', 'off', 'no'}
     elif name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':
         enabled = value not in {'false', '0', 'off'}
     else:
@@ -109,6 +114,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
     # Preserve the explicit off-only controls and true-only pump selector
     # in every parser mode.
     if name not in {
+        'CONVERSATION_BATCH_PURGE_COALESCING_ENABLED',
         'BATCH_ALLOWANCE_PARK_ENABLED',
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',

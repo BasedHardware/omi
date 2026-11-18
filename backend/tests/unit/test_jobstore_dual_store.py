@@ -27,7 +27,7 @@ class FakeConn:
         self.statements: list[str] = []
 
     def execute(self, sql: str, *args):
-        self.statements.append(sql)
+        self.statements.append(sql.as_string(None) if hasattr(sql, 'as_string') else sql)
 
     @contextmanager
     def transaction(self):
@@ -199,7 +199,7 @@ def test_mirror_is_bounded(stores):
     real = FakeConn.execute
 
     def spy(self, sql, *args):
-        conn_statements.append(sql)
+        conn_statements.append(sql.as_string(None) if hasattr(sql, 'as_string') else sql)
         return real(self, sql, *args)
 
     FakeConn.execute = spy

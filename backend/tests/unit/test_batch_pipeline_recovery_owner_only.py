@@ -14,6 +14,7 @@ from tests.unit.test_batch_pipeline_recovered_release import recovered
 from tests.unit.test_batch_pipeline_owner_chain_projection import BURST, ResultLog, chain, projector_for
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import projection, projection_followup
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
 from utils.batch_pipeline.serving import Serving
 
 SWITCH = 'BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED'
@@ -58,7 +59,7 @@ async def test_recovery_scope_skips_all_global_work_and_kill_switch_restores_it(
         projector.start_followups.assert_awaited_once_with(['recovered'], discover=False)
         projector.start_drains.assert_not_called()
     else:
-        service._maintain.assert_called_once_with(recover_quarantine=False)
+        service._maintain.assert_called_once_with(recover_quarantine=False, recovery_caller=RecoveryCaller.RECONCILE)
         projector.sweep.assert_called_once()
         service.metrics.refresh.assert_called_once()
         projector.start_followups.assert_awaited_once_with(['recovered'])
@@ -175,7 +176,7 @@ async def test_periodic_restart_finishes_durable_publication_after_request_failu
     periodic._maintain = Mock()
     try:
         await periodic.reconcile_async(periodic=True, recover_quarantine=True)
-        periodic._maintain.assert_called_once_with(recover_quarantine=True)
+        periodic._maintain.assert_called_once_with(recover_quarantine=True, recovery_caller=RecoveryCaller.SERVING)
         # The first pass can hand the pending chain to the process drain;
         # its walk-owed follow-ups launch on the next independent tick.
         if restarted.drains and restarted.drains.tasks:

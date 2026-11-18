@@ -49,6 +49,7 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'BATCH_RESULT_PROTOCOL_GUARD_ENABLED',
     'MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS',
     'BATCH_ORIGINAL_IDENTITY_EVIDENCE_ENABLED',
     'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED',
@@ -237,6 +238,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         'BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED',
         'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED',
         'BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED',
+        'BATCH_PIPELINE_MERGE_STALE_HEAD_PROMOTE_ENABLED',
         'BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED',
         'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED',
         'BATCH_SOURCE_REUSE_ENABLED',
@@ -315,6 +317,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         elif name.startswith('PUSHER_RECORD_CLOSE_') or name == 'PUSHER_RECORD_SEAL_WAKE_ENABLED':
             assert entry['owner'] == flag['owner'] == 'quality-12h/Q12-A'
             assert entry['review_by'] == '2026-12-15'
+        elif name == 'BATCH_RESULT_PROTOCOL_GUARD_ENABLED':
+            assert entry['owner'] == flag['owner'] == 'pipeline-driver'
+            assert entry['review_by'] == '2026-12-17'
         elif name == 'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED':
             assert entry['owner'] == 'Goal: Pipeline'
             assert entry['review_by'] == '2026-12-13'

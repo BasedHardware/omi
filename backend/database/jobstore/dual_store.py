@@ -52,6 +52,7 @@ from typing import Any, Callable, TypeVar
 from prometheus_client import Counter, Histogram
 
 import database.jobstore.codec as codec
+from database.jobstore.connection import sql
 from utils.observability.reasons import ReasonFamily, reason_label
 from utils.staging_fence import jobstore_mirror_factory_admits
 from database.jobstore.cohort import production_policy_applies, project_document
@@ -83,6 +84,13 @@ MIRRORED_TABLES = frozenset(
         'merge_holds',
     }
 )
+
+
+def _statement_timeout(seconds: float):
+    """A bounded ``SET LOCAL statement_timeout``; the value is a literal, never interpolated text."""
+    return sql().SQL('SET LOCAL statement_timeout = {}').format(sql().Literal(int(seconds * 1000)))
+
+
 # The original-capture lineage a missing-input repair restages with (geolocation, capture claims) stays
 # Firestore-only: the mirror does not follow the intake receipt TTL (Luna #24366 r3), and a repair that
 # finds no record holds rather than guessing.
@@ -526,18 +534,19 @@ class DualStore:
             ('allowance_holds', key),
         }
         rows.update(('queues', f'{priority}_{key}') for priority in range(3))
-        owner_match = "(doc->>'owner_key' = %s OR doc->>'owner_id' = %s)"
+        owner_match = sql().SQL("(doc->>'owner_key' = %s OR doc->>'owner_id' = %s)")
         jobs = conn.execute(
-            f"SELECT key, doc->>'shared_gpu_key' FROM jobs WHERE namespace = %s AND {owner_match}",
+            sql().SQL("SELECT key, doc->>'shared_gpu_key' FROM jobs WHERE namespace = %s AND {}").format(owner_match),
             (namespace, key, owner_id),
         ).fetchall()
         rows.update(('jobs', row[0]) for row in jobs)
         found = conn.execute(
-            f'SELECT key FROM results WHERE namespace = %s AND {owner_match}', (namespace, key, owner_id)
+            sql().SQL('SELECT key FROM results WHERE namespace = %s AND {}').format(owner_match),
+            (namespace, key, owner_id),
         ).fetchall()
         rows.update(('results', row[0]) for row in found)
         found = conn.execute(
-            f'SELECT tbl, key FROM docs WHERE namespace = %s AND tbl = ANY(%s) AND {owner_match}',
+            sql().SQL('SELECT tbl, key FROM docs WHERE namespace = %s AND tbl = ANY(%s) AND {}').format(owner_match),
             (namespace, sorted(MIRRORED_TABLES - {'jobs', 'results', 'control'}), key, owner_id),
         ).fetchall()
         rows.update((row[0], row[1]) for row in found)
@@ -551,14 +560,14 @@ class DualStore:
         pool = self.shadow.pool if self.erasure_pool is None else self.erasure_pool
         with pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
             with conn.transaction():
-                conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
+                conn.execute(_statement_timeout(PURGE_TIMEOUT_S))
                 # Exclusive barrier: in-flight copies that read the pre-purge primary commit first.
                 conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (self._purge_barrier(),))
                 rows = self.owner_rows(conn, owner_id)
         for start in range(0, len(rows), PURGE_CHUNK):
             with pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
                 with conn.transaction():
-                    conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
+                    conn.execute(_statement_timeout(PURGE_TIMEOUT_S))
                     self.copy_current(conn, rows[start : start + PURGE_CHUNK])
         return rows
 
@@ -593,7 +602,7 @@ class DualStore:
         try:
             with self.shadow.pool.connection(timeout=self.budget_s) as conn:
                 with conn.transaction():
-                    conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
+                    conn.execute(_statement_timeout(self.budget_s))
                     self.copy_current(conn, keys, phase)
         except Exception as exc:
             outcome = ShadowParityOutcome.TIMEOUT if _is_timeout(exc) else ShadowParityOutcome.ERROR
@@ -611,7 +620,7 @@ class DualStore:
         try:
             with self.shadow.pool.connection(timeout=self.budget_s) as conn:
                 with conn.transaction():
-                    conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
+                    conn.execute(_statement_timeout(self.budget_s))
                     phase[0] = 'postgres_read'
                     for (table, key), primary_doc in reads.items():
                         primary_doc = (
@@ -696,7 +705,7 @@ class DualStore:
     def _read_shadow(self, table: str, key: str) -> dict:
         with self.shadow.pool.connection(timeout=self.budget_s) as conn:
             with conn.transaction():
-                conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
+                conn.execute(_statement_timeout(self.budget_s))
                 return self.shadow.read_doc(conn, table, key)
 
     def _check_convergence(self, item: tuple[float, int, str, str, float, int]) -> None:

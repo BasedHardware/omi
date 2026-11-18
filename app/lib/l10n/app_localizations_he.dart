@@ -1116,6 +1116,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'השם עודכן בהצלחה!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'קריאת היומנים שנבחרו. אירועים חדשים משתמשים ב־$calendar.';
+  }
+
+  @override
   String get calendarSettings => 'הגדרות קלנדר';
 
   @override
@@ -12134,7 +12139,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'מאז ההתאמה: $drops ניתוקים, $failed חיבורים שנכשלו.';
+    return 'מאז ההתאמה: $drops חיבורים מחדש, $failed חיבורים שנכשלו.';
   }
 
   @override
@@ -13366,16 +13371,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'הופך $amount לשיחות';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done מתוך $total הושלמו · אפשר לצאת ממסך זה';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount מוכנים לסנכרון';
   }
@@ -13399,7 +13394,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'ממתין בטלפון זה';
 
   @override
-  String get syncDetailsTranscribing => 'מתמלל ב-Omi';
+  String get syncDetailsTranscribing => 'הועלה, בהמתנה לשרת';
 
   @override
   String get syncDetailsAudioFiles => 'קובצי אודיו';
@@ -13854,6 +13849,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi כבר עובד על השיחה הזו. הסיכום יופיע כאן כשהוא יסתיים.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'עדיין לא תומלל';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'הסיכום יופיע כשהתמלול יהיה מוכן.';
 
   @override
   String get summaryCheckAgain => 'בדיקה חוזרת';
@@ -15444,4 +15445,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'כותבים את הסיכום שלך…';
+
+  @override
+  String get onTheWayServerWork => 'עבודה שדווחה מהשרת';
 }

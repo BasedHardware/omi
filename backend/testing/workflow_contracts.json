@@ -843,7 +843,9 @@
         "scripts/changed-files",
         "scripts/install-git-hooks.sh",
         "scripts/pre-push",
-        "scripts/pre-push-singleflight"
+        "scripts/pre-push-singleflight",
+        "backend/runtime_images.json",
+        "backend/scripts/select_backend_unit_tests.py"
       ],
       "tests": [
         "tests/unit/test_changed_files_script.py",
@@ -853,7 +855,8 @@
       "invariants": [
         "deletions and both sides of renames select the checks owned by the old and new paths",
         "unmapped backend production paths cannot be hidden by adding one direct test",
-        "desktop-only pushes do not require a backend virtual environment"
+        "desktop-only pushes do not require a backend virtual environment",
+        "every registered deployment workflow has an exact-path source mapping selecting at least one discovered test"
       ]
     },
     {
@@ -1045,6 +1048,86 @@
         "every Cloud Tasks dispatcher targets a same-env service whose handler mode is on, whose audience matches, and whose timeout covers the dispatch deadline",
         "a flag read by a process is set on that process's deployment when its coupled flag is on elsewhere",
         "the public manifest gains no UID-shaped literal and no cross-environment service URL"
+      ]
+    },
+    {
+      "id": "desktop_backend_deployment",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/desktop_backend_prod.yml"
+      ],
+      "tests": [
+        "tests/unit/test_render_backend_runtime_env.py",
+        "tests/unit/test_tts_deploy_contract.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "registered deployment workflows select their existing backend contract tests"
+      ]
+    },
+    {
+      "id": "listen_helm_deployment",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_backend_listen_helm.yml"
+      ],
+      "tests": [
+        "tests/unit/test_listen_helm_env_overrides.py",
+        "tests/unit/test_listen_overlay_workflow.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "registered deployment workflows select their existing backend contract tests"
+      ]
+    },
+    {
+      "id": "scheduled_job_deployment",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_day3_reengagement_email_job.yml",
+        ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml",
+        ".github/workflows/gcp_frame_request_retention_job.yml"
+      ],
+      "tests": [
+        "tests/unit/test_scheduler_reconcile.py",
+        "tests/unit/test_workflow_contracts.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "registered deployment workflows select their existing backend contract tests"
+      ]
+    },
+    {
+      "id": "gpu_image_deployment",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_models.yml",
+        ".github/workflows/gcp_nllb_translation.yml",
+        ".github/workflows/gcp_parakeet.yml"
+      ],
+      "tests": [
+        "tests/unit/test_runtime_image_contracts.py",
+        "tests/unit/test_workflow_contracts.py",
+        "tests/unit/test_nllb_release_image.py",
+        "tests/unit/test_parakeet_helm_contract.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "registered deployment workflows select their existing backend contract tests"
+      ]
+    },
+    {
+      "id": "plugins_image_deployment",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_plugins.yml"
+      ],
+      "tests": [
+        "tests/unit/test_runtime_image_contracts.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "registered deployment workflows select their existing backend contract tests"
       ]
     }
   ]

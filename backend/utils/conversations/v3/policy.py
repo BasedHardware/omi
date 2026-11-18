@@ -48,3 +48,40 @@ def transcription_failed(row):
         or field(row, 'record_upload_failed')
         or field(row, 'finalization_status') == 'dead_letter'
     )
+
+
+def created_eligible(row):
+    """A visible, completed, notes-bearing derived row owes one conversation-created delivery.
+
+    Mirrors the legacy suppressions: discarded, locked, recordings, free-tier terminal minimums
+    (terminal_no_derived_effects) and silent backfill never fan out; hidden rows wait for visibility.
+    """
+    return bool(
+        row
+        and row.get('v3_derived')
+        and row.get('v3_notes_written')
+        and not row.get('recording')
+        and not row.get('deleted')
+        and not row.get('discarded')
+        and not row.get('is_locked')
+        and not row.get('home_hidden')
+        and not row.get('backfilled')
+        and not row.get('terminal_no_derived_effects')
+        and row.get('data_protection_level') != 'private'
+        and not row.get('v3_process_failed')
+        and row.get('status') == 'completed'
+        and not row.get('v3_created_delivered_at')
+    )
+
+
+def builder_eligible(row):
+    """A source recording the builder places into stretches (live and backfill passes alike)."""
+    return bool(
+        row
+        and row.get('recording')
+        and not row.get('deleted')
+        and not row.get('sync_merged_into')
+        and row.get('data_protection_level') != 'private'
+        and row.get('started_at')
+        and not row.get('_v3_unreadable')
+    )

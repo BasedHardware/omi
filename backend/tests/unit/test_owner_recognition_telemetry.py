@@ -262,7 +262,8 @@ def test_process_conversation_observes_every_successful_persist():
     body = text[text.index('def process_conversation(') :]
     assert body.count('_observe_owner_recognition_completion(') == 2
     report = body[body.index('def report_persistence(') : body.index('is_initial_creation')]
-    assert 'if current and completed is not None:' in report
+    # Historical (backfilled v3) rows skip owner-recognition telemetry: legacy processing already observed them.
+    assert 'if current and completed is not None and not historical:' in report
     assert '_observe_owner_recognition_completion(completed)' in report
     fence = body.index('if not persisted:')
     assert body.index('report_persistence(persisted, completed=conversation)') < fence

@@ -26,6 +26,7 @@ from utils.batch_pipeline import source_reuse
 from utils.sync import source_reuse_decode
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding, Priority
+from utils.batch_pipeline.result_protocol import REQUIRED, stamp
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.source_reuse_decode import decode_for_intake
 
@@ -277,6 +278,7 @@ def prepare_copy(store, original, *, accepted=True):
             'segment_id': COPY,
             'owner_key': owner_key(UID),
             'owner_id': UID,
+            'privacy_generation': item.privacy_generation,
             'protocol_version': 2,
             'source_alias_version': 1 if accepted else None,
             'source_reuse_version': 1,
@@ -887,6 +889,33 @@ def test_lost_canonical_fallback_is_durable_idempotent_and_survives_off(defect, 
     assert store.client.rows == before and observed.count('fallback') == 1
 
 
+@pytest.mark.parametrize(
+    'unsupported',
+    [
+        {REQUIRED: {'source_alias_version': 1, 'future_version': 1}},
+        {REQUIRED: {'source_alias_version': 2}},
+        {REQUIRED: {'source_alias_version': True}},
+        {REQUIRED: {'source_reuse_version': 1}},
+        {REQUIRED: ['source_alias_version']},
+        {'protocol_version': 3},
+    ],
+)
+def test_fallback_does_not_discard_unsupported_alias_requirements(unsupported):
+    store, original = setup_store()
+    item, binding = prepare_copy(store, original)
+    job = store.client.rows[store.ref('jobs', COPY).path]
+    stamp(job, 'source_alias_version')
+    job.update(unsupported)
+    # A legacy result row can enter projection without consulting the job's
+    # requirements; the fallback writer must still refuse before any write.
+    patch_document(store, store.ref('results', COPY), {'protocol_version': 1})
+    patch_document(store, store.ref('jobs', SOURCE), {'state': 'dead'})
+    before = deepcopy(store.client.rows)
+    with pytest.raises(ProjectionBlocked, match='unsupported alias result requirements'):
+        project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
+    assert store.client.rows == before
+
+
 @pytest.mark.parametrize('erasure', ['own_conversation', 'account_generation', 'own_artifact', 'own_result'])
 def test_alias_erasure_prevents_fallback_compute(erasure):
     store, original = setup_store()
@@ -982,7 +1011,11 @@ def test_canonical_recovery_races_one_fallback_owner(recovery_first):
             reuse.claim(loser, store.client.transaction(), {'state': 'ready'})
 
 
-def test_fallback_restart_replaces_same_log_slot_and_charges_own_speech(monkeypatch):
+@pytest.mark.parametrize(
+    ('envelope', 'previously_projected'),
+    [('canonical', False), ('legacy_alias', False), ('historical_dual', False), ('historical_dual', True)],
+)
+def test_fallback_restart_replaces_same_log_slot_and_charges_own_speech(monkeypatch, envelope, previously_projected):
     from utils.batch_pipeline.scheduler import Scheduler
     from utils.batch_pipeline.merge import OrderedMerge
     from utils.batch_pipeline.contracts import WorkResult
@@ -992,10 +1025,19 @@ def test_fallback_restart_replaces_same_log_slot_and_charges_own_speech(monkeypa
     original = replace(original, duration_seconds=120.0)
     patch_document(store, store.ref('jobs', SOURCE), {'duration_seconds': 120.0})
     item, binding = prepare_copy(store, original)
+    job = store.client.rows[store.ref('jobs', COPY).path]
+    stamp(job, 'source_alias_version')
+    store.client.rows[store.ref('results', COPY).path].pop('source_reuse_version', None)
+    if previously_projected:
+        assert project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
     slot = store.ref('results', COPY).get().to_dict()
+    assert slot['projection_state'] == ('ready' if previously_projected else 'pending')
     patch_document(store, store.ref('jobs', SOURCE), {'state': 'dead'})
     with pytest.raises(reuse.SourceReuseUnavailable, match='enqueued'):
         project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
+    queued = store.ref('jobs', COPY).get().to_dict()
+    assert queued[REQUIRED] == {'source_reuse_version': 1}
+    assert 'source_alias_version' not in queued
 
     def run(body):
         view = FirestoreTransaction(store.client, NS, store.client.transaction())
@@ -1003,6 +1045,11 @@ def test_fallback_restart_replaces_same_log_slot_and_charges_own_speech(monkeypa
         view.flush()
         return value
 
+    if envelope != 'canonical':
+        required = {'source_alias_version': 1}
+        if envelope == 'historical_dual':
+            required['source_reuse_version'] = 1
+        patch_document(store, store.ref('jobs', COPY), {REQUIRED: required})
     store.store.run = run
     # Query ordering is not modelled by the strict document fixture. This
     # selects the one pending job; all admission/merge writes remain real.
@@ -1043,7 +1090,16 @@ def test_fallback_restart_replaces_same_log_slot_and_charges_own_speech(monkeypa
     assert vendor.call_args.args[1] == 'multi'
     result = WorkResult(COPY, 'gs://synthetic/fresh-result#2')
     owner_before = store.ref('owners', owner_key(UID)).get().to_dict()
+    # The preserved slot carries a stamp from an earlier head-wait episode.
+    fallback = store.ref('jobs', COPY).get().to_dict()['source_alias_fallback']
+    stamped = {
+        **fallback['log_slot'],
+        'projection_blocked_since': NOW,
+        'projection_block_type': 'SyncAssignmentConflict',
+    }
+    patch_document(store, store.ref('jobs', COPY), {'source_alias_fallback': {**fallback, 'log_slot': stamped}})
     merged = OrderedMerge(store.store, head_wait_seconds=0, catch_up_depth=1).commit_next(UID, NOW + 3)
+    assert merged['projection_blocked_since'] is None and merged['projection_block_type'] is None
     assert merged['previous_segment_id'] == slot['previous_segment_id']
     assert merged['committed_at'] == slot['committed_at']
     assert merged['result']['result_uri'] == 'gs://synthetic/fresh-result#2'
