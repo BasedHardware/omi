@@ -1133,7 +1133,7 @@
     "SYNC_EARLY_CAPTURE_CLAMP_ENABLED": {
       "owner": "earlyclamp / two-lane transcription",
       "review_by": "2026-12-16",
-      "reason": "2026-11-18: default-on ops kill switch, registry decision keep, terminal keep. Renewed because review_by 2026-11-17 lapsed and test_flag_budget.py fails on main. Same renewal as #25647; drop this hunk if that PR merges first."
+      "reason": "Renewed 2026-11-18: registry decision keep/terminal keep, default-on ops kill switch for pre-2024 V2 sync stamps; expiry turned main's unit tests red"
     },
     "SYNC_EMPTY_SUCCESS_GUARD_ENABLED": {
       "seeded": "2026-10-25"
