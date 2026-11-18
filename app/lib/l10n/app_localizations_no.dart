@@ -9078,7 +9078,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Dette opptaket er lastet opp, men Omi lager fortsatt samtalen. Hvis du sletter det nå og behandlingen mislykkes, kan det ikke gjenopprettes. Slette likevel?';
+      'Dette opptaket er allerede lastet opp. Sletting her fjerner bare kopien på denne telefonen. Omi fullfører fortsatt behandlingen av lyden som ble lastet opp.';
 
   @override
   String get syncCardAllBackedUp => 'Alle opptak synkronisert';
@@ -15431,6 +15431,11 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Oppdateringen ble ikke installert. Anhenget ditt fungerer fortsatt på gjeldende fastvare ($version). Kontakt kundestøtte i stedet for å prøve oppdateringen på nytt.';
   }
 
   @override

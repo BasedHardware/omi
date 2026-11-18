@@ -9162,7 +9162,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Cet enregistrement a été envoyé mais Omi crée encore la conversation. Si vous le supprimez maintenant et que le traitement échoue, il sera irrécupérable. Supprimer quand même ?';
+      'Cet enregistrement est déjà envoyé. Le supprimer ici retire seulement la copie de ce téléphone. Omi terminera quand même le traitement de l\'audio envoyé.';
 
   @override
   String get syncCardAllBackedUp => 'Tous les enregistrements synchronisés';
@@ -15554,6 +15554,11 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'La mise à jour ne s\'est pas installée. Votre pendentif fonctionne toujours avec son firmware actuel ($version). Contactez l\'assistance plutôt que de relancer la mise à jour.';
   }
 
   @override

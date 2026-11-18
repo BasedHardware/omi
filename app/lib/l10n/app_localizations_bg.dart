@@ -9112,7 +9112,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Този запис е качен, но Omi още създава разговора. Ако го изтриете сега и обработката се провали, той не може да бъде възстановен. Изтриване въпреки това?';
+      'Този запис вече е качен. Изтриването тук премахва само копието на този телефон. Omi ще завърши обработката на каченото аудио.';
 
   @override
   String get syncCardAllBackedUp => 'Всички записи са синхронизирани';
@@ -15478,6 +15478,11 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Актуализацията не се инсталира. Висулката ви продължава да работи с текущия фърмуер ($version). Моля, свържете се с поддръжката, вместо да опитвате актуализацията отново.';
   }
 
   @override

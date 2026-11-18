@@ -9118,7 +9118,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Ezt a felvételt feltöltöttük, de az Omi még készíti a beszélgetést. Ha most törli és a feldolgozás meghiúsul, nem állítható vissza. Mégis törli?';
+      'Ez a felvétel már fel van töltve. Az itteni törlés csak a telefonon lévő másolatot távolítja el. Az Omi ettől még befejezi a feltöltött hang feldolgozását.';
 
   @override
   String get syncCardAllBackedUp => 'Minden felvétel szinkronizálva';
@@ -15486,6 +15486,11 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'A frissítés nem települt. A medál továbbra is működik a jelenlegi firmware-rel ($version). A frissítés újrapróbálása helyett kérjük, fordulj az ügyfélszolgálathoz.';
   }
 
   @override

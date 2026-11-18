@@ -9161,7 +9161,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Na-upload na ang recording na ito ngunit ginagawa pa ng Omi ang usapan. Kung buburahin mo ito ngayon at mabigo ang pagproseso, hindi na ito mababawi. Burahin pa rin?';
+      'Na-upload na ang recording na ito. Ang pagbura dito ay nag-aalis lang ng kopya sa phone na ito. Tatapusin pa rin ng Omi ang pagproseso ng audio na na-upload.';
 
   @override
   String get syncCardAllBackedUp => 'Lahat ng recording ay na-sync na';
@@ -15549,6 +15549,11 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Hindi na-install ang update. Gumagana pa rin ang iyong pendant sa kasalukuyang firmware ($version). Makipag-ugnayan sa support sa halip na subukang muli ang update.';
   }
 
   @override

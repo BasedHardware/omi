@@ -9089,7 +9089,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Esta gravação foi enviada, mas o Omi ainda está criando a conversa. Se você excluí-la agora e o processamento falhar, não será possível recuperá-la. Excluir mesmo assim?';
+      'Esta gravação já foi enviada. Excluí-la aqui remove apenas a cópia deste telefone. O Omi ainda vai concluir o processamento do áudio enviado.';
 
   @override
   String get syncCardAllBackedUp => 'Todas as gravações sincronizadas';
@@ -15455,6 +15455,11 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'A atualização não foi instalada. Seu pingente continua funcionando com o firmware atual ($version). Entre em contato com o suporte em vez de tentar a atualização de novo.';
   }
 
   @override

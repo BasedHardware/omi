@@ -9007,7 +9007,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'ההקלטה הזו הועלתה אך Omi עדיין יוצר את השיחה. אם תמחק אותה עכשיו והעיבוד ייכשל, לא יהיה ניתן לשחזר אותה. למחוק בכל זאת?';
+      'ההקלטה הזו כבר הועלתה. מחיקה כאן מסירה רק את העותק בטלפון הזה. Omi עדיין ישלים את עיבוד האודיו שהועלה.';
 
   @override
   String get syncCardAllBackedUp => 'כל ההקלטות סונכרנו';
@@ -15315,6 +15315,11 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'העדכון לא הותקן. התליון שלך ממשיך לעבוד עם הקושחה הנוכחית ($version). במקום לנסות שוב את העדכון, פנה לתמיכה.';
   }
 
   @override

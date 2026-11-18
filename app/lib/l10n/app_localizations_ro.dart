@@ -9122,7 +9122,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Această înregistrare a fost încărcată, dar Omi încă creează conversația. Dacă o ștergi acum și procesarea eșuează, nu poate fi recuperată. Ștergi oricum?';
+      'Această înregistrare este deja încărcată. Ștergerea de aici elimină doar copia de pe acest telefon. Omi va termina oricum procesarea audio-ului încărcat.';
 
   @override
   String get syncCardAllBackedUp => 'Toate înregistrările sincronizate';
@@ -15492,6 +15492,11 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Actualizarea nu s-a instalat. Pandantivul tău funcționează în continuare cu firmware-ul actual ($version). Te rugăm să contactezi asistența în loc să reîncerci actualizarea.';
   }
 
   @override

@@ -9062,7 +9062,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'यह रिकॉर्डिंग अपलोड हो गई है लेकिन Omi अभी भी बातचीत बना रहा है। यदि आप इसे अभी हटाते हैं और प्रोसेसिंग विफल होती है, तो इसे पुनर्प्राप्त नहीं किया जा सकेगा। फिर भी हटाएँ?';
+      'यह रिकॉर्डिंग पहले ही अपलोड हो चुकी है। यहाँ डिलीट करने से सिर्फ़ इस फ़ोन की कॉपी हटेगी। Omi अपलोड हुए ऑडियो की प्रोसेसिंग फिर भी पूरी करेगा।';
 
   @override
   String get syncCardAllBackedUp => 'सभी रिकॉर्डिंग सिंक हो गईं';
@@ -15410,6 +15410,11 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'अपडेट इंस्टॉल नहीं हुआ। आपका पेंडेंट मौजूदा फ़र्मवेयर ($version) पर काम कर रहा है। अपडेट दोबारा आज़माने के बजाय कृपया सपोर्ट से संपर्क करें।';
   }
 
   @override

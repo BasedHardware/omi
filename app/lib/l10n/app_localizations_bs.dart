@@ -9099,7 +9099,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Ovaj snimak je otpremljen, ali Omi još kreira razgovor. Ako ga sada izbrišete i obrada ne uspije, ne može se vratiti. Svejedno izbrisati?';
+      'Ovaj snimak je već otpremljen. Brisanje ovdje uklanja samo kopiju na ovom telefonu. Omi će i dalje završiti obradu otpremljenog zvuka.';
 
   @override
   String get syncCardAllBackedUp => 'Sve snimke su sinkronizovane';
@@ -15456,6 +15456,11 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Ažuriranje se nije instaliralo. Vaš privjesak i dalje radi na trenutnom firmveru ($version). Kontaktirajte podršku umjesto ponovnog pokušaja ažuriranja.';
   }
 
   @override

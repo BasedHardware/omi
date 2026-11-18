@@ -9077,7 +9077,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'این ضبط بارگذاری شده اما Omi هنوز در حال ساخت مکالمه است. اگر اکنون آن را حذف کنید و پردازش ناموفق شود، قابل بازیابی نخواهد بود. به‌هرحال حذف شود؟';
+      'این ضبط قبلاً آپلود شده است. حذف در اینجا فقط نسخهٔ روی این گوشی را پاک می‌کند. Omi پردازش صدای آپلودشده را همچنان کامل می‌کند.';
 
   @override
   String get syncCardAllBackedUp => 'همهٔ ضبط‌ها همگام شدند';
@@ -15420,6 +15420,11 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'به‌روزرسانی نصب نشد. آویز شما همچنان با میان‌افزار فعلی ($version) کار می‌کند. لطفاً به‌جای تلاش دوباره برای به‌روزرسانی، با پشتیبانی تماس بگیرید.';
   }
 
   @override

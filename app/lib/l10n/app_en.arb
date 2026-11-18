@@ -10844,7 +10844,7 @@
     "syncInProgress": "Sync in progress",
     "syncStatusUploaded": "Uploaded · processing on Omi",
     "deleteWhileProcessingTitle": "Still Processing",
-    "deleteWhileProcessingMessage": "This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can't be recovered. Delete anyway?",
+    "deleteWhileProcessingMessage": "This recording is already uploaded. Deleting it here only removes the copy on this phone. Omi will still finish processing the audio that was uploaded.",
     "syncCardAllBackedUp": "All recordings synced",
     "syncCardReadyCount": "{count, plural, =1{1 recording ready to sync} other{{count} recordings ready to sync}}",
     "@syncCardReadyCount": {
@@ -18820,6 +18820,15 @@
             }
         }
     },
+    "firmwareUpdateNotInstalledCv1Message": "The update didn't install. Your pendant still works on its current firmware ({version}). Please contact support rather than retrying the update.",
+    "@firmwareUpdateNotInstalledCv1Message": {
+        "description": "CV1 pendant: firmware update finished transferring but the pendant reconnected on its old version. Retrying is discouraged on affected units, so point to support.",
+        "placeholders": {
+            "version": {
+                "type": "String"
+            }
+        }
+    },
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -18996,5 +19005,8 @@
     "@conversationWritingSummary": {
         "description": "Shown with a pen over a skeleton while the summary of a conversation in progress is written"
     },
-    "onTheWayServerWork": "Server-reported work"
+    "onTheWayServerWork": "Server-reported work",
+    "@deleteWhileProcessingMessage": {
+        "description": "Delete confirmation for a recording already uploaded and still processing. Deleting removes only the phone copy; the server keeps processing."
+    }
 }

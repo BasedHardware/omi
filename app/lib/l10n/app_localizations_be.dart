@@ -9102,7 +9102,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Гэты запіс запампаваны, але Omi яшчэ стварае размову. Калі выдаліць зараз і апрацоўка не атрымаецца, аднавіць будзе немагчыма. Усё роўна выдаліць?';
+      'Гэты запіс ужо запампаваны. Выдаленне тут прыбірае толькі копію на гэтым тэлефоне. Omi усё роўна завершыць апрацоўку запампаванага аўдыя.';
 
   @override
   String get syncCardAllBackedUp => 'Усе запісы сінхранізаваны';
@@ -15463,6 +15463,11 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Абнаўленне не ўсталявалася. Ваш кулон працуе на бягучай прашыўцы ($version). Звярніцеся ў службу падтрымкі, а не паўтарайце абнаўленне.';
   }
 
   @override

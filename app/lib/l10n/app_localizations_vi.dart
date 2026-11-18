@@ -9083,7 +9083,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Bản ghi này đã được tải lên nhưng Omi vẫn đang tạo cuộc trò chuyện. Nếu bạn xóa ngay bây giờ và quá trình xử lý thất bại, sẽ không thể khôi phục. Vẫn xóa?';
+      'Bản ghi này đã được tải lên. Xóa ở đây chỉ xóa bản sao trên điện thoại này. Omi vẫn sẽ xử lý xong phần âm thanh đã tải lên.';
 
   @override
   String get syncCardAllBackedUp => 'Tất cả bản ghi đã đồng bộ';
@@ -15428,6 +15428,11 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Bản cập nhật chưa được cài đặt. Mặt dây của bạn vẫn hoạt động với firmware hiện tại ($version). Vui lòng liên hệ hỗ trợ thay vì thử cập nhật lại.';
   }
 
   @override

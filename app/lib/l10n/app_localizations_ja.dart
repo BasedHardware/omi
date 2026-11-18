@@ -8949,7 +8949,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteWhileProcessingTitle => 'まだ処理中です';
 
   @override
-  String get deleteWhileProcessingMessage => 'この録音はアップロード済みですが、Omi はまだ会話を作成しています。今削除して処理が失敗すると復元できません。それでも削除しますか？';
+  String get deleteWhileProcessingMessage =>
+      'この録音はすでにアップロード済みです。ここで削除しても、このスマートフォン上のコピーが消えるだけです。アップロード済みの音声の処理は Omi が引き続き完了します。';
 
   @override
   String get syncCardAllBackedUp => 'すべての録音を同期済み';
@@ -15199,6 +15200,11 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'アップデートはインストールされませんでした。ペンダントは現在のファームウェア（$version）で引き続き使えます。アップデートを繰り返さず、サポートにお問い合わせください。';
   }
 
   @override

@@ -9101,7 +9101,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Šis ieraksts ir augšupielādēts, bet Omi vēl veido sarunu. Ja to tagad izdzēsīsiet un apstrāde neizdosies, to nevarēs atjaunot. Vai tomēr dzēst?';
+      'Šis ieraksts jau ir augšupielādēts. Dzēšot šeit, tiek noņemta tikai kopija šajā tālrunī. Omi tik un tā pabeigs augšupielādētā audio apstrādi.';
 
   @override
   String get syncCardAllBackedUp => 'Visi ieraksti sinhronizēti';
@@ -15462,6 +15462,11 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Atjauninājums netika instalēts. Jūsu kulons joprojām darbojas ar pašreizējo programmaparatūru ($version). Lūdzu, sazinieties ar atbalstu, nevis mēģiniet atjaunināt vēlreiz.';
   }
 
   @override

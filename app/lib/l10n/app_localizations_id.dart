@@ -9082,7 +9082,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Rekaman ini sudah diunggah tetapi Omi masih membuat percakapan. Jika dihapus sekarang dan pemrosesan gagal, rekaman tidak dapat dipulihkan. Tetap hapus?';
+      'Rekaman ini sudah diunggah. Menghapusnya di sini hanya menghapus salinan di ponsel ini. Omi tetap akan menyelesaikan pemrosesan audio yang sudah diunggah.';
 
   @override
   String get syncCardAllBackedUp => 'Semua rekaman tersinkron';
@@ -15442,6 +15442,11 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Pembaruan tidak terpasang. Liontin Anda tetap berfungsi dengan firmware saat ini ($version). Hubungi dukungan alih-alih mencoba pembaruan lagi.';
   }
 
   @override
