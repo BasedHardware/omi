@@ -17,7 +17,7 @@ from config.record_wal_storage import private_archive_bucket
 from database import conversation_batch_purge_jobs as jobs
 from database.batch_pipeline_conversation_purge import DEPENDENT_TABLES, DISCOVER_TABLES
 from database.batch_pipeline_privacy import privacy_owner_key
-from database.batch_pipeline_purge import NAMESPACES, _belongs, _references
+from database.batch_pipeline_purge import NAMESPACES, _belongs, _references, result_document
 from database.conversation_tombstones import COLLECTION
 from utils.batch_pipeline.record_wal_erasure import _prefix
 from utils.batch_pipeline.retention import batch_object_address
@@ -115,7 +115,7 @@ def remainders(db, gcs, budget, uid, cid):
             for row in rows:
                 data = row.to_dict() or {}
                 if table == 'jobs':
-                    ref = db.collection(f'{namespace}_results').document(row.id)
+                    ref = result_document(db, namespace, row.id)
                     result = budget.read(f'{namespace}_results', lambda: ref.get(**RPC)).to_dict() or {}
                     if row.id in segments or _belongs(
                         {**data, 'projection': result.get('projection') or data.get('projection')}, cid
