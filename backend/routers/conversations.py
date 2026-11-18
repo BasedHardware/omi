@@ -168,7 +168,7 @@ from config.conversations_v3 import conversations_v3_enabled
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
-from utils.conversations.v3 import audio as v3_audio, summary as v3_summary
+from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
 
 router = APIRouter()
 
@@ -179,6 +179,8 @@ def get_live_conversation(
 ):
     if app_channel(channel) == 'beta':
         client_gate.note_client_seen(uid)
+    # Only v3-capable builds call this route, on any channel: that call is what stage all admits.
+    v3_client_capability.note_capable(uid)
     enabled = conversations_v3_enabled(uid)
     if not enabled:
         return {'v3': False, 'conversation': None}

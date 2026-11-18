@@ -44,32 +44,92 @@ def test_manual_end_wake_survives_a_completed_live_task_in_same_minute(monkeypat
 
 
 @pytest.mark.parametrize(
-    'stage,seen,cohort,expected',
+    'stage,seen,capable,cohort,expected',
     [
-        ('beta', False, False, False),
-        ('beta', True, False, True),
-        ('cohort', True, False, False),
-        ('cohort', False, True, True),
-        ('all', False, False, True),
-        ('invalid', True, False, False),
+        ('beta', False, False, False, False),
+        ('beta', True, True, False, True),
+        # A stale episodes marker from a pre-v3 store build is not v3 capability.
+        ('beta', True, False, False, False),
+        # The capability marker alone does not widen beta past TestFlight.
+        ('beta', False, True, False, False),
+        ('beta', False, False, True, True),
+        ('cohort', True, True, False, False),
+        ('cohort', False, False, True, True),
+        # all admits any owner with a v3-capable app, never an owner whose apps all predate v3.
+        ('all', False, False, False, False),
+        ('all', False, True, False, True),
+        ('all', True, False, False, False),
+        ('all', False, False, True, True),
+        ('invalid', True, True, False, False),
     ],
 )
-def test_switch_is_per_owner_not_device(monkeypatch, stage, seen, cohort, expected):
+def test_switch_is_per_owner_not_device(monkeypatch, stage, seen, capable, cohort, expected):
     monkeypatch.setenv('CONVERSATIONS_V3_STAGE', stage)
     monkeypatch.delenv('CONVERSATIONS_V3', raising=False)
     monkeypatch.setattr(switch.client_gate, 'client_seen_cached', lambda uid: seen)
+    monkeypatch.setattr(switch.client_capability, 'capable_cached', lambda uid: capable)
     monkeypatch.setattr(switch, 'in_rollout_cohort', lambda uid, key: cohort)
     assert switch.conversations_v3_enabled('synthetic') is expected
     monkeypatch.setenv('CONVERSATIONS_V3', 'off')
     assert switch.conversations_v3_enabled('synthetic') is False
 
 
-def test_beta_call_refreshes_marker_before_v3_check(monkeypatch):
+@pytest.mark.parametrize('channel,expected', [('beta', ['seen', 'capable', 'check']), ('store', ['capable', 'check'])])
+def test_live_call_marks_capability_before_v3_check(monkeypatch, channel, expected):
     calls = []
     monkeypatch.setattr(routes.client_gate, 'note_client_seen', lambda uid: calls.append('seen'))
+    monkeypatch.setattr(routes.v3_client_capability, 'note_capable', lambda uid: calls.append('capable'))
     monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: calls.append('check') or False)
-    assert routes.get_live_conversation('synthetic', 'beta') == {'v3': False, 'conversation': None}
-    assert calls == ['seen', 'check']
+    assert routes.get_live_conversation('synthetic', channel) == {'v3': False, 'conversation': None}
+    assert calls == expected
+
+
+class _FakeRedis:
+    def __init__(self):
+        self.store, self.sets, self.fail = {}, [], False
+
+    def set(self, key, value, ex=None):
+        if self.fail:
+            raise ConnectionError('redis down')
+        self.sets.append((key, ex))
+        self.store[key] = value
+
+    def exists(self, key):
+        if self.fail:
+            raise ConnectionError('redis down')
+        return 1 if key in self.store else 0
+
+
+def test_capability_marker_refreshes_hourly_and_fails_closed(monkeypatch):
+    from database import redis_db
+    from utils.conversations.v3 import client_capability as capability
+
+    fake = _FakeRedis()
+    monkeypatch.setattr(redis_db, 'r', fake)
+    capability.reset_for_tests()
+    assert capability.capable_cached('u', now=0) is False
+    capability.note_capable('u', now=10)
+    # The noting process admits at once, despite its cached miss.
+    assert capability.capable_cached('u', now=11) is True
+    capability.note_capable('u', now=20)
+    assert fake.sets == [('conversations_v3:client_capable:u', capability.TTL_SECONDS)]
+    capability.note_capable('u', now=10 + capability.REFRESH_SECONDS)
+    assert len(fake.sets) == 2
+    # Another process (empty cache) reads the shared marker.
+    capability.reset_for_tests()
+    assert capability.capable_cached('u', now=0) is True
+    capability.reset_for_tests()
+    fake.fail = True
+    capability.note_capable('v', now=0)  # never raises
+    # A failed write does not make this process answer v3 for an owner the shared marker lacks.
+    assert capability.capable_cached('v', now=1) is False
+    capability.reset_for_tests()
+    assert capability.capable_cached('u', now=0) is False  # read error fails closed
+    fake.fail = False
+    assert capability.capable_cached('u', now=1) is False  # and the miss is cached briefly
+    capability.note_capable('v', now=2)  # a failed write is retried, not memoized
+    assert fake.sets[-1][0] == 'conversations_v3:client_capable:v'
+    capability.reset_for_tests()
 
 
 @pytest.mark.parametrize('include', [False, True])
