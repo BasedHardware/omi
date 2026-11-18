@@ -13,6 +13,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 from config.episodes import home_step_projection_enabled
 from config.summary_guarantee import deadline_seconds
+from database import rpc_deadline
 from services import home_health_repair as repair, home_health_review as review
 from scripts import home_health_runtime as runtime
 from utils.enrichment.age_gate import max_age_seconds
@@ -38,21 +39,48 @@ def _scope(snapshot):
     return parts[1] if len(parts) == 4 and parts[0] == 'users' and parts[2] == 'conversations' else None
 
 
-def scan(client, *, lane, status, start, end, limit):
-    # Registered index record_seal_repair_newest_completed, also usable for
-    # other status keys. One explicitly bounded query per status, no offsets.
-    return (
-        client.collection_group('conversations')
-        .where(filter=FieldFilter('record_lane_owner', '==', lane))
-        .where(filter=FieldFilter('status', '==', status))
-        .where(filter=FieldFilter('finished_at', '>=', start))
-        .where(filter=FieldFilter('finished_at', '<', end))
-        .order_by('finished_at', direction=firestore.Query.DESCENDING)
-        .order_by('__name__', direction=firestore.Query.DESCENDING)
-        .select(repair.DISCOVERY_FIELDS)
-        .limit(limit + 1)
-        .get(retry=None, timeout=SCAN_TIMEOUT)
-    )
+def scan(client, *, lane, status, start, end, limit, deadline):
+    @firestore.transactional
+    def read_page(transaction):
+        # Both reads share a snapshot so a protection change cannot race
+        # the selection of card fields. The lookahead reads metadata only.
+        snapshots = (
+            client.collection_group('conversations')
+            .where(filter=FieldFilter('record_lane_owner', '==', lane))
+            .where(filter=FieldFilter('status', '==', status))
+            .where(filter=FieldFilter('finished_at', '>=', start))
+            .where(filter=FieldFilter('finished_at', '<', end))
+            .order_by('finished_at', direction=firestore.Query.DESCENDING)
+            .order_by('__name__', direction=firestore.Query.DESCENDING)
+            .select(repair.DISCOVERY_FIELDS)
+            .limit(limit + 1)
+            .get(transaction=transaction)
+        )
+        rows = []
+        card_refs = []
+        card_rows = {}
+        for snapshot in snapshots[:limit]:
+            owner = _scope(snapshot)
+            if owner is None:
+                continue
+            row = snapshot.to_dict() or {}
+            ref = snapshot.reference
+            rows.append((owner, ref, row))
+            if status != 'in_progress' and not row.get('deleted') and not review.protected_for_review(row):
+                card_refs.append(ref)
+                card_rows[ref.path] = row
+        if card_refs:
+            for snapshot in client.get_all(card_refs, field_paths=review.CARD_FIELDS, transaction=transaction):
+                if not snapshot.exists:
+                    raise ValueError('missing card snapshot')
+                card_rows.pop(snapshot.reference.path).update(snapshot.to_dict() or {})
+            if card_rows:
+                raise ValueError('incomplete card read')
+        return len(snapshots), rows
+
+    rpc_deadline.bind_firestore_client(client)
+    with rpc_deadline.rpc_deadline(min(deadline, rpc_deadline.now() + SCAN_TIMEOUT)):
+        return read_page(client.transaction(read_only=True, max_attempts=1))
 
 
 def run(client, args, *, now, monotonic=time.monotonic, utcnow=lambda: datetime.now(timezone.utc)):
@@ -74,7 +102,7 @@ def run(client, args, *, now, monotonic=time.monotonic, utcnow=lambda: datetime.
         'per_status_limit': args.per_status,
         'survey_documents': 0,
         'budget_interrupted': False,
-        'status_coverage': {},
+        'status_coverage': dict.fromkeys(review.STATUSES, 'not_scanned'),
         'mode': 'apply' if args.apply else 'review',
         'repair': {},
     }
@@ -90,8 +118,14 @@ def run(client, args, *, now, monotonic=time.monotonic, utcnow=lambda: datetime.
             report['budget_interrupted'] = True
             break
         try:
-            snapshots = scan(
-                client, lane=args.lane, status=status, start=args.start, end=args.end, limit=args.per_status
+            scanned, rows = scan(
+                client,
+                lane=args.lane,
+                status=status,
+                start=args.start,
+                end=args.end,
+                limit=args.per_status,
+                deadline=stop_at,
             )
         except Exception:
             # Driver errors can embed document references. No exception text
@@ -99,22 +133,18 @@ def run(client, args, *, now, monotonic=time.monotonic, utcnow=lambda: datetime.
             report['status_coverage'][status] = 'query_failed'
             query_failed = True
             break
-        report['survey_documents'] += len(snapshots)
+        report['survey_documents'] += scanned
         status_owners = set()
-        for snapshot in snapshots[: args.per_status]:
-            owner = _scope(snapshot)
-            if owner is None:
-                continue
+        for owner, ref, row in rows:
             status_owners.add(owner)
-            row = snapshot.to_dict() or {}
             findings = observations.observe(owner, row, now=now)
             if 'notes_not_scheduled' in findings and repair.candidate(row, now=now.timestamp()):
-                proposed.setdefault(owner, (snapshot.reference, repair.generation(row)))
-        if snapshots and len(status_owners) < review.MIN_REPORT_OWNERS:
+                proposed.setdefault(owner, (ref, repair.generation(row)))
+        if scanned and len(status_owners) < review.MIN_REPORT_OWNERS:
             counts_suppressed = True
             report['status_coverage'][status] = 'suppressed'
         else:
-            report['status_coverage'][status] = 'capped' if len(snapshots) > args.per_status else 'complete'
+            report['status_coverage'][status] = 'capped' if scanned > args.per_status else 'complete'
     report.update(observations.receipt())
     if counts_suppressed or report['suppressed']:
         report['survey_documents'] = None

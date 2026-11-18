@@ -21,20 +21,23 @@ from utils.sync import bridge_pending
 STATUSES = ('completed', 'in_progress', 'processing', 'merging', 'failed')
 LANES = ('batch_live_v1', 'batch_sync_v1')
 
-# Match the legacy list's metadata shape. No transcripts, audio, photos, tasks,
-# notes sections, prepared-display ciphertext, or account documents are surveyed.
-FIELDS = tuple(
+# Read card text only after the protection check at the same snapshot.
+CARD_FIELDS = (
+    'user_title',
+    'user_overview',
+    'structured.title',
+    'structured.gist',
+    'structured.overview',
+    'structured.emoji',
+    'structured.title_provenance',
+)
+
+METADATA_FIELDS = tuple(
     dict.fromkeys(
         (
-            *transcribing_hold.READ_FIELDS,
+            *(name for name in transcribing_hold.READ_FIELDS if name != 'user_title'),
             'started_at',
             'finished_at',
-            'structured.title',
-            'structured.gist',
-            'structured.overview',
-            'structured.emoji',
-            'structured.title_provenance',
-            'user_overview',
             'data_protection_level',
             'private_cloud_sync_enabled',
             'uses_custom_stt',
@@ -53,6 +56,9 @@ FIELDS = tuple(
             'has_photos',
             'record_transcription_empty',
             'record_audio_partial',
+            'record_audio_closed',
+            'server_batch_audio_start',
+            'server_batch_audio_end',
             'starred',
             'folder_user_set',
             'sync_relevance_user_kept',
@@ -210,7 +216,7 @@ def protected_for_review(row):
     return (
         row.get('data_protection_level') not in {'standard', 'enhanced'}
         or row.get('is_locked')
-        or row.get('private_cloud_sync_enabled') is False
+        or row.get('private_cloud_sync_enabled') is not True
         or row.get('uses_custom_stt')
         or row.get('deferred')
         or row.get('processing_state') == 'local_pending'

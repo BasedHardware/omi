@@ -144,11 +144,24 @@ def test_candidate_does_not_rearm_protected_existing_or_terminal_rows(now, updat
     assert not repair.candidate(row(now, **updates), now=now.timestamp())
 
 
-def test_repair_rechecks_revision_and_arms_only_the_original_clock(now):
-    prior = row(now, summary_first_pending_at=now.timestamp() - 600)
+@pytest.mark.parametrize(
+    'derived',
+    [{'action_items': [{'description': 'Test task'}]}, {'events': [{'title': 'Test event'}]}],
+)
+def test_derived_items_are_not_a_summary(now, derived):
+    prior = row(now, structured={'title': 'Discussion notes', **derived})
+    assert repair.candidate(prior, now=now.timestamp())
+
+
+@pytest.mark.parametrize('lane,expected_lane', [('fresh', 'fresh'), (None, 'batch')])
+def test_repair_rechecks_revision_and_arms_only_the_original_clock(now, lane, expected_lane):
+    prior = row(now, summary_first_pending_at=now.timestamp() - 600, summary_lane=lane)
     ref = Mock(id='test_capture')
     transaction, client = Mock(), Mock()
-    ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: dict(prior))
+    ref.get.side_effect = lambda *, transaction, field_paths: SimpleNamespace(
+        exists=True,
+        to_dict=lambda: {key: value for key, value in prior.items() if key in field_paths},
+    )
     ref.parent.parent.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {})
     client.collection.return_value.document.return_value.get.return_value.exists = False
     with patch.object(repair, 'assert_batch_write_allowed') as privacy:
@@ -171,7 +184,7 @@ def test_repair_rechecks_revision_and_arms_only_the_original_clock(now):
             'summary_first_pending_at': prior['summary_first_pending_at'],
             'summary_due_at': prior['summary_first_pending_at'] + deadline_seconds(),
             'summary_title_provenance': 'server_minimum',
-            'summary_lane': 'batch',
+            'summary_lane': expected_lane,
         },
     )
 
@@ -196,13 +209,27 @@ def test_repair_respects_other_writers_and_provider_policy(now, kind, expected):
     transaction.update.assert_not_called()
 
 
-def _snapshots(now, count):
-    return [
-        SimpleNamespace(
-            reference=SimpleNamespace(path=f'users/private-test-{index}/conversations/private-test-row'),
-            to_dict=lambda: row(now),
+def test_repair_never_reads_card_fields_when_protection_is_unknown(now):
+    prior = row(now)
+    del prior['private_cloud_sync_enabled']
+    ref, transaction, client = Mock(), Mock(), Mock()
+    ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: prior)
+    assert (
+        repair.commit(client, transaction, ref, 'test_owner', repair.generation(prior), now=now.timestamp())
+        == 'superseded'
+    )
+    ref.get.assert_called_once_with(transaction=transaction, field_paths=repair.APPLY_METADATA_FIELDS)
+    transaction.update.assert_not_called()
+
+
+def _page(now, count, limit=5):
+    return count, [
+        (
+            f'private-test-{index}',
+            SimpleNamespace(path=f'users/private-test-{index}/conversations/private-test-row'),
+            row(now),
         )
-        for index in range(count)
+        for index in range(min(count, limit))
     ]
 
 
@@ -224,7 +251,7 @@ def _args(now, **updates):
 def test_review_and_apply_use_fixed_read_and_write_caps(now):
     with (
         patch.object(
-            worker, 'scan', side_effect=lambda *a, **kw: _snapshots(now, 6) if kw['status'] == 'completed' else []
+            worker, 'scan', side_effect=lambda *a, **kw: _page(now, 6) if kw['status'] == 'completed' else (0, [])
         ),
         patch.object(repair, 'arm', return_value='armed') as arm,
     ):
@@ -240,11 +267,14 @@ def test_review_and_apply_use_fixed_read_and_write_caps(now):
 
 def test_query_error_cannot_trigger_partial_apply_or_leak_exception(now):
     with (
-        patch.object(worker, 'scan', side_effect=[_snapshots(now, 5), RuntimeError('private-test-path')]),
+        patch.object(worker, 'scan', side_effect=[_page(now, 5), RuntimeError('private-test-path')]),
         patch.object(repair, 'arm') as arm,
     ):
         receipt, failed = worker.run(None, _args(now, apply=True), now=now)
     assert failed and receipt['status_coverage']['in_progress'] == 'query_failed'
+    assert receipt['status_coverage']['processing'] == 'not_scanned'
+    assert receipt['status_coverage']['merging'] == 'not_scanned'
+    assert receipt['status_coverage']['failed'] == 'not_scanned'
     arm.assert_not_called()
     assert 'private-test-path' not in json.dumps(receipt)
 
@@ -252,10 +282,10 @@ def test_query_error_cannot_trigger_partial_apply_or_leak_exception(now):
 def test_small_status_cell_suppresses_read_count_even_when_other_rows_are_reportable(now):
     def scan(*args, **kwargs):
         if kwargs['status'] == 'completed':
-            return _snapshots(now, 5)
+            return _page(now, 5)
         if kwargs['status'] == 'processing':
-            return _snapshots(now, 1)
-        return []
+            return _page(now, 1)
+        return 0, []
 
     with patch.object(worker, 'scan', side_effect=scan):
         receipt, failed = worker.run(None, _args(now), now=now)
@@ -297,13 +327,17 @@ def test_apply_deadline_prevents_a_late_commit_rpc(monkeypatch):
     underlying_commit.assert_not_called()
 
 
-def test_scan_uses_the_registered_masked_finish_time_query(now):
+def test_scan_uses_the_registered_masked_finish_time_query(now, monkeypatch):
+    monkeypatch.setattr(worker.firestore, 'transactional', lambda fn: fn)
     client, query = Mock(), Mock()
     client.collection_group.return_value = query
+    query.get.return_value = []
     for method in ('where', 'order_by', 'select', 'limit'):
         getattr(query, method).return_value = query
     start = now - timedelta(hours=1)
-    scanned = worker.scan(client, lane='batch_live_v1', status='completed', start=start, end=now, limit=11)
+    scanned = worker.scan(
+        client, lane='batch_live_v1', status='completed', start=start, end=now, limit=11, deadline=float('inf')
+    )
     client.collection_group.assert_called_once_with('conversations')
     filters = [record.kwargs['filter'] for record in query.where.call_args_list]
     assert [(item.field_path, item.op_string, item.value) for item in filters] == [
@@ -317,9 +351,49 @@ def test_scan_uses_the_registered_masked_finish_time_query(now):
         (('__name__',), {'direction': worker.firestore.Query.DESCENDING}),
     ]
     query.select.assert_called_once_with(repair.DISCOVERY_FIELDS)
+    assert not set(repair.DISCOVERY_FIELDS) & set(review.CARD_FIELDS)
     query.limit.assert_called_once_with(12)
-    query.get.assert_called_once_with(retry=None, timeout=worker.SCAN_TIMEOUT)
-    assert scanned is query.get.return_value
+    client.transaction.assert_called_once_with(read_only=True, max_attempts=1)
+    query.get.assert_called_once_with(transaction=client.transaction.return_value)
+    client.get_all.assert_not_called()
+    assert scanned == (0, [])
+
+
+def test_scan_fetches_card_fields_only_for_rows_with_known_permission(now, monkeypatch):
+    monkeypatch.setattr(worker.firestore, 'transactional', lambda fn: fn)
+    client, query = Mock(), Mock()
+    client.collection_group.return_value = query
+    for method in ('where', 'order_by', 'select', 'limit'):
+        getattr(query, method).return_value = query
+    metadata = [
+        row(now),
+        row(now, is_locked=True),
+        row(now, data_protection_level='private'),
+        row(now, private_cloud_sync_enabled=False),
+        row(now),
+        row(now),
+    ]
+    metadata[4].pop('private_cloud_sync_enabled')
+    refs = [entry[1] for entry in _page(now, 6, limit=6)[1]]
+    query.get.return_value = [
+        SimpleNamespace(
+            reference=ref,
+            to_dict=lambda meta=meta: {key: value for key, value in meta.items() if key in repair.DISCOVERY_FIELDS},
+        )
+        for ref, meta in zip(refs, metadata)
+    ]
+    client.get_all.return_value = [
+        SimpleNamespace(exists=True, reference=refs[0], to_dict=lambda: {'structured': {'title': 'Test title'}})
+    ]
+    scanned, rows = worker.scan(
+        client, lane='batch_live_v1', status='completed', start=now, end=now, limit=5, deadline=float('inf')
+    )
+    client.get_all.assert_called_once_with(
+        [refs[0]], field_paths=review.CARD_FIELDS, transaction=client.transaction.return_value
+    )
+    assert scanned == 6
+    assert rows[0][2]['structured']['title'] == 'Test title'
+    assert all('structured' not in entry[2] for entry in rows[1:])
 
 
 def test_review_mask_preserves_partial_audio_visibility(now, monkeypatch):
@@ -331,7 +405,7 @@ def test_review_mask_preserves_partial_audio_visibility(now, monkeypatch):
         started_at=now - timedelta(seconds=40),
         finished_at=now - timedelta(seconds=20),
     )
-    masked = {key: value for key, value in recent.items() if key in review.FIELDS}
+    masked = {key: value for key, value in recent.items() if key in review.METADATA_FIELDS}
     assert not review.hidden_for_review(masked)
     assert review.hidden_for_review({**masked, 'record_audio_partial': False})
 
@@ -400,7 +474,7 @@ def test_production_apply_refuses_before_any_write_when_live_policy_is_disabled(
     client = SimpleNamespace(project=worker.runtime.PRODUCTION_PROJECT)
     with (
         patch.object(
-            worker, 'scan', side_effect=lambda *a, **kw: _snapshots(now, 5) if kw['status'] == 'completed' else []
+            worker, 'scan', side_effect=lambda *a, **kw: _page(now, 5) if kw['status'] == 'completed' else (0, [])
         ),
         patch.object(worker.runtime, 'serving_allows_repair', return_value=False) as verify,
         patch.object(repair, 'arm') as arm,

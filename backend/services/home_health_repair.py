@@ -8,10 +8,16 @@ from google.cloud import firestore
 from database import rpc_deadline
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 from database.batch_summary_debt import verify_projection_finalization
-from services.home_health_review import FIELDS, hidden_for_review, protected_for_review, positive_revision
+from services.home_health_review import (
+    CARD_FIELDS,
+    METADATA_FIELDS,
+    hidden_for_review,
+    protected_for_review,
+    positive_revision,
+)
 from utils.conversations import summary_delivery
-from utils.conversations.home_titles import notes_pending
 from utils.enrichment import age_gate, outbox
+from utils.summary_quality import safe_body, valid_title
 
 GENERATION_FIELDS = (
     'record_projection_revision',
@@ -19,8 +25,9 @@ GENERATION_FIELDS = (
     'finalization_job_id',
     'finalization_revision',
 )
-DISCOVERY_FIELDS = tuple(dict.fromkeys((*FIELDS, 'content_word_units', *GENERATION_FIELDS)))
-APPLY_FIELDS = (*DISCOVERY_FIELDS, 'structured.sections', 'structured.action_items', 'structured.events')
+DISCOVERY_FIELDS = tuple(dict.fromkeys((*METADATA_FIELDS, 'content_word_units', *GENERATION_FIELDS)))
+APPLY_METADATA_FIELDS = (*DISCOVERY_FIELDS, 'summary_lane')
+APPLY_CARD_FIELDS = (*CARD_FIELDS, 'structured.sections')
 
 
 def generation(row):
@@ -29,17 +36,19 @@ def generation(row):
 
 def candidate(row, *, now):
     """Cheap scan fence. The masked survey can admit a candidate for rechecking only."""
+    return _eligible_metadata(row, now=now) and _missing_summary(row)
+
+
+def _eligible_metadata(row, *, now):
     created = age_gate.timestamp(row.get('created_at'))
     finished = age_gate.timestamp(row.get('finished_at'))
-    structured = row.get('structured')
     units = row.get('content_word_units')
     return bool(
         summary_delivery.projection_debt_enabled()
         and row.get('record_lane_owner') == 'batch_live_v1'
         and row.get('status') == 'completed'
         and not protected_for_review(row)
-        and row.get('private_cloud_sync_enabled') is True
-        and not hidden_for_review(row)
+        and not row.get('deleted')
         and not row.get('record_upload_failed')
         and not row.get('summary_retryable')
         and row.get('finalization_status') not in {'blocked_byok', 'dead_letter'}
@@ -56,16 +65,25 @@ def candidate(row, *, now):
         and not row.get('notes_written_at')
         and row.get('summary_due_at') is None
         and row.get('summary_blocked_reason') is None
-        and row.get('user_title') is None
-        and row.get('user_overview') is None
-        and (structured is None or isinstance(structured, dict))
-        and notes_pending(structured)
-        and not summary_delivery.intentional_short_clip_minimum(row)
         and created is not None
         and created <= now
         and finished is not None
         and finished <= now - summary_delivery.deadline_seconds()
         and not age_gate.expired({'first_pending_at': _pending(row, now)}, row.get('created_at'), now=now)
+    )
+
+
+def _missing_summary(row):
+    structured = row.get('structured')
+    return bool(
+        (structured is None or isinstance(structured, dict))
+        and not hidden_for_review(row)
+        and row.get('user_title') is None
+        and row.get('user_overview') is None
+        and not valid_title(summary_delivery.field(structured, 'title'))
+        and not safe_body(summary_delivery.field(structured, 'gist')).strip()
+        and not summary_delivery.present(structured)
+        and not summary_delivery.intentional_short_clip_minimum(row)
     )
 
 
@@ -78,9 +96,9 @@ def _pending(row, now):
 
 def commit(client, transaction, ref, uid, expected, *, now):
     """Recheck all fences in the conflict set before updating scheduling metadata."""
-    current = ref.get(transaction=transaction, field_paths=APPLY_FIELDS)
+    current = ref.get(transaction=transaction, field_paths=APPLY_METADATA_FIELDS)
     row = current.to_dict() or {}
-    if not current.exists or generation(row) != expected or not candidate(row, now=now):
+    if not current.exists or generation(row) != expected or not _eligible_metadata(row, now=now):
         return 'superseded'
     row['id'] = ref.id
     try:
@@ -92,6 +110,10 @@ def commit(client, transaction, ref, uid, expected, *, now):
     byok = (user.to_dict() or {}).get('byok')
     if not user.exists or (byok is not None and (not isinstance(byok, dict) or byok.get('active'))):
         return 'provider_refused'
+    card = ref.get(transaction=transaction, field_paths=APPLY_CARD_FIELDS)
+    row.update(card.to_dict() or {})
+    if not card.exists or not _missing_summary(row):
+        return 'superseded'
     verified, proof = verify_projection_finalization(uid, client, transaction, row)
     if not verified:
         return 'finalization_refused'
