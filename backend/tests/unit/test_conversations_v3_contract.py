@@ -363,11 +363,11 @@ def test_live_skips_a_capture_that_never_closed(monkeypatch):
 
     monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
     monkeypatch.setattr(db, 'get_conversations_without_photos', rows)
-    stale = _open_row('stale', now - routes.LIVE_ROW_MAX_IDLE - timedelta(minutes=1))
+    stale = _open_row('stale', now - routes.v3_live.MAX_IDLE - timedelta(minutes=1))
     # Only a days-old open row: nothing is in progress, so the client keeps its capture card.
     seen['rows'] = [stale]
     assert routes.get_live_conversation('u', 'beta') == {'v3': True, 'conversation': None}
-    assert seen['limit'] == routes.LIVE_ROW_SCAN and seen['statuses'] == ['in_progress']
+    assert seen['limit'] == routes.v3_live.SCAN and seen['statuses'] == ['in_progress']
     # A newer stale stub sorts first; the open conversation behind it is still the live row.
     seen['rows'] = [stale, _open_row('rec', now, recording=True), _open_row('open', now - timedelta(minutes=10))]
     assert routes.get_live_conversation('u', 'beta')['conversation']['id'] == 'open'

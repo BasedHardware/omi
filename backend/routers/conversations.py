@@ -169,20 +169,9 @@ from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
+from utils.conversations.v3 import live as v3_live
 
 router = APIRouter()
-
-
-# The v3 window cap: an open conversation idle for longer is not in progress.
-LIVE_ROW_MAX_IDLE = timedelta(hours=2)
-LIVE_ROW_SCAN = 10
-
-
-def _live_row_active(row: Dict[str, Any], fresh_after: datetime) -> bool:
-    last = next((row[k] for k in ('finished_at', 'started_at', 'created_at') if isinstance(row.get(k), datetime)), None)
-    if last is None:
-        return False
-    return (last if last.tzinfo else last.replace(tzinfo=timezone.utc)) >= fresh_after
 
 
 @router.get('/v1/conversations/live', response_model=ConversationsLiveResponse, response_model_exclude_unset=True)
@@ -196,13 +185,7 @@ def get_live_conversation(
     enabled = conversations_v3_enabled(uid)
     if not enabled:
         return {'v3': False, 'conversation': None}
-    rows = conversations_db.get_conversations_without_photos(
-        uid, limit=LIVE_ROW_SCAN, statuses=['in_progress'], hide_home=True
-    )
-    # A capture that never closed stays in_progress for days. Served as live, it hides the
-    # capture card and sits under its own start date, so Home shows nothing in progress.
-    fresh_after = datetime.now(timezone.utc) - LIVE_ROW_MAX_IDLE
-    row = next((r for r in rows if not r.get('recording') and _live_row_active(r, fresh_after)), None)
+    row = v3_live.active(conversations_db.get_conversations_without_photos(uid, **v3_live.OPEN_ROWS))
     compact = (
         {
             key: row[key]
