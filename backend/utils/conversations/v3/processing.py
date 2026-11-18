@@ -7,6 +7,7 @@ from database import conversations_v3_fence as fence, conversations_v3_leases as
 from database import conversations_v3_processing as writers
 from utils.conversations.v3 import models, policy
 from utils.conversations.v3.triggers import enqueue
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -60,3 +61,6 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
                 enqueue(uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
             except Exception as error:
                 logger.warning('event=v3_created_wake outcome=deferred exception_type=%s', type(error).__name__)
+                record_fallback(
+                    component='other', from_mode='dispatch', to_mode='none', reason='enqueue_failed', outcome='degraded'
+                )

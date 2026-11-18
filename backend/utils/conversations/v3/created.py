@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from database import conversations as conversations_db, conversations_v3_processing as writers
 from utils.app_integrations import ExternalIntegrationFanoutError, trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
-from utils.conversations.v3 import metrics
+from utils.conversations.v3 import metrics, policy
 from utils.conversations.v3.triggers import enqueue
 from utils.executors import db_executor, run_blocking
 
@@ -36,15 +36,25 @@ async def deliver(uid):
             continue
         try:
             data = await run_blocking(db_executor, conversations_db.get_conversation, uid, cid)
-            conversation = deserialize_conversation(data) if data else None
-            if conversation is not None:
-                await trigger_external_integrations(
-                    uid,
-                    conversation,
-                    idempotency_key=idempotency_key(cid),
-                    require_delivery=True,
-                    last_delivery_attempt=attempt >= writers.CREATED_MAX_ATTEMPTS,
+            if data is None:
+                # The claim saw the row, so an empty read is a failed decode, not an absence: retry it
+                # (the attempt cap bounds a row that never reads back).
+                raise LookupError('v3_created_payload_unreadable')
+            if not policy.created_eligible(data):
+                # Re-checked on the payload actually sent: a row that turned private, hidden, locked or
+                # deleted after the claim must never reach an external integration.
+                await run_blocking(
+                    db_executor, writers.finish_created, uid, cid, attempt, delivered=False, dropped=True
                 )
+                metrics.CREATED_DELIVERIES.labels('dropped').inc()
+                continue
+            await trigger_external_integrations(
+                uid,
+                deserialize_conversation(data),
+                idempotency_key=idempotency_key(cid),
+                require_delivery=True,
+                last_delivery_attempt=attempt >= writers.CREATED_MAX_ATTEMPTS,
+            )
         except Exception as error:
             # The marker stays owed; the claim is released for a later wake, never a tight loop.
             metrics.CREATED_DELIVERIES.labels('retry').inc()
@@ -65,10 +75,7 @@ async def deliver(uid):
         # A full page may hide more owed rows; continue them on a later owner wake.
         retry = True
     if retry:
-        try:
-            await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RETRY)
-        except Exception as error:
-            # The owner's next capture or wake drains the marker; no cross-owner sweep owns it.
-            metrics.RECONCILES.labels('dispatch_error').inc()
-            logger.warning('event=v3_created_delivery_wake outcome=deferred exception_type=%s', type(error).__name__)
+        # No cross-owner sweep owns this marker, so a wake that cannot be scheduled fails the current
+        # task: Cloud Tasks retries it instead of the obligation waiting for the owner's next capture.
+        await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RETRY)
     return delivered

@@ -264,3 +264,56 @@ def test_on_open_notes_arm_a_completed_visible_row(strict, monkeypatch):
     assert strict.rows[C]['v3_created_pending'] is True and strict.rows[C]['v3_notes_written'] is True
     strict.rows[C].update(v3_created_pending=False, v3_created_delivered_at=AT)
     assert writers.store_summary('synthetic', 'c', token, 1, {'title': 'Plan'}, AT, firestore_client=strict) is False
+
+
+@pytest.mark.asyncio
+async def test_a_row_that_turned_private_after_its_claim_is_never_sent(strict, delivery, monkeypatch):
+    strict.rows[C] = derived()
+    settle(strict)
+    monkeypatch.setattr(
+        created.conversations_db,
+        'get_conversation',
+        lambda uid, cid: {**strict.rows[C], 'data_protection_level': 'private'},
+    )
+    assert await created.deliver('synthetic') == 0
+    assert delivery.sent == [] and strict.rows[C]['v3_created_pending'] is False
+    assert 'v3_created_delivered_at' not in strict.rows[C]
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_payload_stays_owed_instead_of_counting_as_delivered(strict, delivery, monkeypatch):
+    strict.rows[C] = derived()
+    settle(strict)
+    monkeypatch.setattr(created.conversations_db, 'get_conversation', lambda uid, cid: None)
+    assert await created.deliver('synthetic') == 0
+    assert delivery.sent == [] and strict.rows[C]['v3_created_pending'] is True
+    assert 'v3_created_delivered_at' not in strict.rows[C] and len(delivery.wakes) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_retry_wake_that_cannot_be_scheduled_fails_the_task(strict, delivery, monkeypatch):
+    strict.rows[C] = derived()
+    settle(strict)
+    delivery.failures.append(ExternalIntegrationFanoutError('1 durable integration deliveries failed'))
+
+    def unavailable(uid, at=None):
+        raise RuntimeError('conversations_v3_task_target_unconfigured')
+
+    monkeypatch.setattr(created, 'enqueue', unavailable)
+    with pytest.raises(RuntimeError, match='unconfigured'):
+        await created.deliver('synthetic')
+    assert strict.rows[C]['v3_created_pending'] is True
+
+
+@pytest.mark.asyncio
+async def test_the_builder_drain_delivers_settled_notes(strict, delivery, monkeypatch):
+    strict.rows[C] = derived()
+    settle(strict)
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(service, 'run_blocking', blocking)
+    monkeypatch.setattr(service, 'pending_processing', lambda uid: [])
+    await service.drain_processing('synthetic')
+    assert [cid for _, cid, _ in delivery.sent] == ['c']

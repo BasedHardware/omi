@@ -178,8 +178,11 @@ def claim_created(uid, cid, *, firestore_client=None):
     return claim(client.transaction())
 
 
-def finish_created(uid, cid, attempt, *, delivered, firestore_client=None):
-    """Record the delivery (or release the claim for a later retry), fenced by the attempt number."""
+def finish_created(uid, cid, attempt, *, delivered, dropped=False, firestore_client=None):
+    """Record the delivery, drop an obligation the row no longer qualifies for, or release the claim.
+
+    Fenced by the attempt number so a superseded claimant cannot settle a successor's attempt.
+    """
     client = firestore_client or store.get_firestore_client()
     ref = store.user_conversations(client, uid).document(cid)
 
@@ -198,6 +201,8 @@ def finish_created(uid, cid, attempt, *, delivered, firestore_client=None):
                     'v3_created_delivered_at': datetime.now(timezone.utc),
                 },
             )
+        elif dropped:
+            tx.update(ref, {'v3_created_pending': False, 'v3_created_claim_until': None})
         else:
             tx.update(ref, {'v3_created_claim_until': None})
         return True

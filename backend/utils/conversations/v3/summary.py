@@ -20,6 +20,7 @@ from database import conversations_v3 as store
 from models.conversation import Conversation
 from utils.conversations.v3 import models, policy
 from utils.conversations.v3.triggers import enqueue
+from utils.observability.fallback import record_fallback
 from utils.executors import run_blocking, db_executor, llm_executor
 from utils.subscription import should_skip_omi_paid_postprocessing
 
@@ -198,4 +199,7 @@ async def _wake_created(uid):
     except Exception as error:
         logging.getLogger(__name__).warning(
             'event=v3_created_wake outcome=deferred exception_type=%s', type(error).__name__
+        )
+        record_fallback(
+            component='other', from_mode='dispatch', to_mode='none', reason='enqueue_failed', outcome='degraded'
         )
