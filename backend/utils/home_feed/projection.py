@@ -10,12 +10,21 @@ from uuid import uuid4
 import json
 
 from utils.encryption import encrypt, decrypt
-from utils.home_feed.card_content import SCHEMA, content, utc
+from utils.conversations.home_titles import notes_pending
+from utils.home_feed import card_content
+from utils.home_feed.card_content import SCHEMA, utc
 
 DISPLAY = 'home_display'
 VERSION = 'home_display_version'
 SORT = 'home_sort_at'
 DISPLAY_FIELDS = frozenset({DISPLAY, VERSION, SORT, 'home_started_at', 'home_projection_schema', 'home_has_tasks'})
+
+
+def content(row: Mapping[str, Any], kind: str) -> dict[str, Any]:
+    display = card_content.content(row, kind)
+    if kind == 'conversation':
+        display['notes_pending'] = notes_pending(row.get('structured'))
+    return display
 
 
 def seal_display(uid: str, value: Mapping[str, Any]) -> str:

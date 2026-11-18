@@ -1188,7 +1188,7 @@ def get_conversations(
         ),
     )
     _heal_locked_conversations_if_eligible(uid, conversations)
-    conversations = [transcribing_hold.project(home_step.project(row)) for row in conversations]
+    conversations = [transcribing_hold.project(home_step.project(row), home_list=True) for row in conversations]
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
