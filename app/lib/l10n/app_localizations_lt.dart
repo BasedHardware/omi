@@ -1123,6 +1123,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Vardas sėkmingai atnaujintas!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Skaityti pasirinktus kalendorius. Naujiems įvykiams naudojamas $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalendoriaus nustatymai';
 
   @override

@@ -3163,7 +3163,6 @@ FIELD_SITES = {
             "'leased'",
             ('attempt', 'lease_until', 'shared_gpu_key', 'state', 'token'),
         ),
-        ('Scheduler._recover.recover_page.commit', 'state', "'ready'", ('state',)),
         ('Scheduler.complete.commit', 'state', "'result_ready'", ('ready_at', 'result', 'state')),
         ('Scheduler.defer.commit', 'state', "'retry'", ('attempt', 'available_at', 'lease_until', 'state', 'token')),
         (
@@ -3212,6 +3211,8 @@ FIELD_SITES = {
             "'retry'",
             ('available_at', 'failure', 'lease_until', 'retry_started_at', 'state', 'token'),
         ),
+        # Shared by Scheduler.recover and the merge's stale-head promotion.
+        ('requeue_due_retry', 'state', "'ready'", ('state',)),
     ],
     'utils/batch_pipeline/shadow_projection.py': [
         ('plan', 'status', "'empty'", ('parts', 'planned_writes', 'reads', 'status')),

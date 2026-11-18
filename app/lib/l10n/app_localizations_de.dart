@@ -1133,6 +1133,11 @@ class AppLocalizationsDe extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Name erfolgreich aktualisiert!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Ausgewählte Kalender lesen. Neue Termine verwenden $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalendereinstellungen';
 
   @override

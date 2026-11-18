@@ -48,8 +48,21 @@ def test_listed_owner_commits_at_once_behind_a_stale_head(listed, caplog):
     assert entry['segment_id'] == 'first' and 'head_wait_bypass' not in entry
     assert store.rows['jobs', 'first']['state'] == 'committed'
     assert store.rows['jobs', 'stale']['merge_pending'] is True  # Appends later as late_capture.
-    assert 'outcome=stale_head_skip source=ordered_merge head_state=retry wait_bucket=lt60' in caplog.text
+    # The due retry head is promoted (requeued) first, then the skip passes it as a ready head.
+    assert 'outcome=stale_head_promoted action=requeued source=ordered_merge count=1' in caplog.text
+    assert store.rows['jobs', 'stale']['state'] == 'ready'
+    assert 'outcome=stale_head_skip source=ordered_merge head_state=ready wait_bucket=lt60' in caplog.text
     assert 'outcome=head_wait_bypass' not in caplog.text
+
+
+def test_listed_owner_skip_without_promotion_reports_the_retry_head(listed, monkeypatch, caplog):
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_STALE_HEAD_PROMOTE_ENABLED', 'false')
+    store, merge = world()
+    ready(store, 'first', NOW)
+    with caplog.at_level(logging.INFO):
+        entry = merge.commit_next('owner', NOW + 1)
+    assert entry['segment_id'] == 'first' and store.rows['jobs', 'stale']['state'] == 'retry'
+    assert 'outcome=stale_head_skip source=ordered_merge head_state=retry wait_bucket=lt60' in caplog.text
 
 
 def test_an_expired_wait_keeps_the_bypass_marker(monkeypatch, caplog):
@@ -153,6 +166,15 @@ def test_a_head_that_is_not_starved_keeps_the_wait(listed, head):
     ready(store, 'first', NOW)
     assert merge.commit_next('owner', NOW + 1) is None
     assert store.rows['jobs', 'first']['state'] == 'result_ready'
+
+
+def test_a_requeued_ready_row_ahead_of_the_unit_blocks_the_skip(listed):
+    # Admitted hours ago but requeued a minute ago (lease_until reset to 0): due now, not starved.
+    store, merge = world()
+    Scheduler(store).enqueue(item('requeued', owner='owner', capture=2), NOW - 7200)
+    store.rows['jobs', 'requeued'].update(state='ready', available_at=NOW - 60, lease_until=0.0)
+    ready(store, 'first', NOW)
+    assert merge.commit_next('owner', NOW + 1) is None
 
 
 def test_a_retry_due_for_hours_without_a_lease_is_starved(listed):

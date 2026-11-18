@@ -81,7 +81,7 @@ protocol DeviceConnectionDelegate: AnyObject {
 /// Abstract protocol for device connections
 /// Ported from: omi/app/lib/services/devices/device_connection.dart
 @MainActor
-protocol DeviceConnection: AnyObject {
+protocol DeviceConnection: AnyObject, StorageSyncTransport {
 
   // MARK: - Properties
 

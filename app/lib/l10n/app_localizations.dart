@@ -2301,6 +2301,12 @@ abstract class AppLocalizations {
   /// **'Name updated successfully!'**
   String get nameUpdatedSuccessfully;
 
+  /// Explains that read/import choices do not change the primary calendar used for new events
+  ///
+  /// In en, this message translates to:
+  /// **'Read selected calendars. New events use {calendar}.'**
+  String calendarReadSelectionHelp(String calendar);
+
   /// No description provided for @calendarSettings.
   ///
   /// In en, this message translates to:

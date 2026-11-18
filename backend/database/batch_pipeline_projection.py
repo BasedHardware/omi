@@ -507,7 +507,8 @@ class ProjectionStore:
                 finished = len(remaining) <= 1
                 receipt.update(state='ready' if finished else 'persisted', record_notes_deferred=True)
                 return result, finished, session.write_receipt(transaction, receipt)
-            backfill = session.job.get('priority') != 0
+            # A merge-promoted row keeps its admission class for dispatch and fair-use.
+            backfill = session.job.get('admitted_priority', session.job.get('priority')) != 0
             # The enrichment obligation and its exactly-once projection
             # receipt commit together, fenced against account deletion.
             completed = receipt.get('size_rollover_enriched', [])
@@ -753,7 +754,7 @@ class ProjectionStore:
                 raise ProjectionBlocked('validated speech accounting receipt required')
             seconds += value
             job = self.ref('jobs', sid).get().to_dict() or {}
-            if job.get('priority') == 0:
+            if job.get('admitted_priority', job.get('priority')) == 0:
                 source = 'sync_fresh'
         ledger = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id).get().to_dict() or {}
         if held and not batch_projection_ledger_owner_matches(
