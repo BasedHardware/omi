@@ -155,6 +155,15 @@ def test_a_head_that_is_not_starved_keeps_the_wait(listed, head):
     assert store.rows['jobs', 'first']['state'] == 'result_ready'
 
 
+def test_a_requeued_ready_row_ahead_of_the_unit_blocks_the_skip(listed):
+    # Admitted hours ago but requeued a minute ago (lease_until reset to 0): due now, not starved.
+    store, merge = world()
+    Scheduler(store).enqueue(item('requeued', owner='owner', capture=2), NOW - 7200)
+    store.rows['jobs', 'requeued'].update(state='ready', available_at=NOW - 60, lease_until=0.0)
+    ready(store, 'first', NOW)
+    assert merge.commit_next('owner', NOW + 1) is None
+
+
 def test_a_retry_due_for_hours_without_a_lease_is_starved(listed):
     # Prod shape: failed once, due 10+ hours, never leased again.
     store, merge = world(head_age=40 * 3600)

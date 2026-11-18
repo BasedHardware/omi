@@ -118,6 +118,9 @@ spec:
             - {name: BATCH_HELD_POLL_SKIP_ENABLED, value: {{ .Values.worker.heldPollSkipEnabled | quote }}}
             {{- end }}
             - {name: RECORD_FRESH_MERGE_ENABLED, value: {{ .Values.worker.RECORD_FRESH_MERGE_ENABLED | default false | quote }}}
+            {{- if hasKey .Values.worker "mergeStaleHeadUidAllowlist" }}
+            - {name: BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST, value: {{ .Values.worker.mergeStaleHeadUidAllowlist | quote }}}
+            {{- end }}
             - {name: BATCH_SHARD_SPREAD_ENABLED, value: {{ .Values.worker.shardSpreadEnabled | quote }}}
             - {name: BATCH_PULL_MULTI_LEASE_ENABLED, value: {{ .Values.worker.pullMultiLeaseEnabled | quote }}}
             - {name: BATCH_PULL_BUSY_BORROW_ENABLED, value: {{ .Values.worker.pullBusyBorrowEnabled | quote }}}
