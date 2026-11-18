@@ -62,6 +62,29 @@ def test_sync_old_backfill_is_created_historical_with_a_final_title(pipeline):
     assert write.get('summary_due_at') is None and 'summary_title_provenance' not in write
 
 
+def test_a_late_bridge_segment_still_merges_historical_neighbours(pipeline, monkeypatch):
+    # A provenance-free historical title is not processing: the merge donor fence must keep
+    # absorbing old backfill, or out-of-order uploads would split one capture into two rows.
+    module, store = pipeline
+    monkeypatch.setattr(module.real_bridge, 'finish_sync_bridges', MagicMock(side_effect=lambda uid, cid, **kw: cid))
+    module.finish_sync_segment = module.real_bridge.finish_sync_segment
+    response = {'new_memories': set(), 'updated_memories': set()}
+    for timestamp in (1000, 1240, 1120):
+        assert module.process_segment(f'{timestamp}.wav', 'u', response, threading.Lock(), [])
+    rows = [row for row in conversations(store) if not row.get('deleted')]
+    assert len(rows) == 1 and rows[0]['processing_tier'] == 'historical'
+
+
+def test_an_opened_historical_row_is_protected_like_any_processed_row():
+    from config import merge_before_processing
+
+    raw = {'processing_tier': 'historical', 'structured': {'title': 'Final title'}}
+    assert merge_before_processing.already_processed(raw) is False
+    opened = {**raw, 'structured': {'title': 'Final title', 'overview': 'Notes'}}
+    assert merge_before_processing.already_processed(opened) is True
+    assert merge_before_processing.already_processed({**raw, 'summary_completed_at': 1.0}) is True
+
+
 def test_sync_recent_backfill_keeps_full_processing(pipeline):
     module, store = pipeline
     row, response = _segment(module, store, 2)

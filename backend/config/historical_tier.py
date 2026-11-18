@@ -32,6 +32,8 @@ MIN_AGE_FLOOR_SECONDS = 72 * 3600
 MIN_AGE_CEILING_SECONDS = 60 * 86400
 DEFAULT_GLOBAL_DAILY_LIMIT = 10000
 UNTRUSTED = 'untrusted'
+TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
+BLOCKED_REASON = 'historical_on_open'
 
 
 def tier_enabled() -> bool:

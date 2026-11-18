@@ -41,7 +41,7 @@ from google.cloud import firestore  # noqa: E402
 from google.cloud.firestore_v1 import FieldFilter, LastUpdateOption  # noqa: E402
 
 from config import historical_tier  # noqa: E402
-from utils.conversations.historical_minimum import BLOCKED_REASON, TERMINAL_NO_DERIVED_EFFECTS_FIELD  # noqa: E402
+from config.historical_tier import BLOCKED_REASON, TERMINAL_NO_DERIVED_EFFECTS_FIELD  # noqa: E402
 
 PRODUCTION_PROJECT = 'based-hardware'
 MAX_LIMIT = 500

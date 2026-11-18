@@ -19,8 +19,8 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.projection_payload import omit_null_processing_state, strip_client_processing
 from utils.conversations.summary_delivery import present
 
-TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
-BLOCKED_REASON = 'historical_on_open'
+TERMINAL_NO_DERIVED_EFFECTS_FIELD = historical_tier.TERMINAL_NO_DERIVED_EFFECTS_FIELD
+BLOCKED_REASON = historical_tier.BLOCKED_REASON
 # Owner actions on this exact row. Their run is summary-only (process_conversation's
 # historical seam); everything else is stored without a model call.
 SUMMARY_TRIGGERS = frozenset(

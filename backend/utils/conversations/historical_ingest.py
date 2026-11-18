@@ -17,7 +17,7 @@ from prometheus_client import Counter
 
 from config import historical_tier
 from database import conversations as conversations_db
-from utils.conversations.historical_minimum import BLOCKED_REASON, TERMINAL_NO_DERIVED_EFFECTS_FIELD
+from config.historical_tier import BLOCKED_REASON, TERMINAL_NO_DERIVED_EFFECTS_FIELD
 from utils.conversations.summary_delivery import present
 from utils.sync import processing_hold
 

@@ -29,6 +29,9 @@ def already_processed(row: Mapping[str, Any]) -> bool:
     structured = row.get('structured') or {}
     if isinstance(structured, Mapping) and (structured.get('action_items') or structured.get('events')):
         return True
+    if row.get('processing_tier') == 'historical':
+        # T1+: the historical title is final but provenance-free; the row stays raw until opened.
+        return isinstance(structured, Mapping) and bool(structured.get('overview') or structured.get('sections'))
     if (
         isinstance(structured, Mapping)
         and structured.get('title')
