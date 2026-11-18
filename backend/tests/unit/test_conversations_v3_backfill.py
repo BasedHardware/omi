@@ -1106,3 +1106,23 @@ def test_one_owners_blocked_plan_never_stops_the_others(tmp_path, monkeypatch, c
     out = capsys.readouterr().out
     assert 'owner[1] blocked: backfill_partition_budget' in out and planned == ['owner[2]']
     assert 'owner-one' not in out
+
+
+@pytest.mark.asyncio
+async def test_a_row_rechecks_account_deletion_right_before_its_notes_call(direct, monkeypatch):
+    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid: [{'id': 'a'}, {'id': 'b'}])
+    # One chunk of two: the chunk check passes, then deletion starts between row a and row b.
+    checks = iter([False, False, True])
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda uid: next(checks, True))
+    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    released = []
+    monkeypatch.setattr(leases, 'release', lambda *a: released.append(a[1]))
+    processed = []
+
+    async def process(uid, row, token):
+        processed.append(row['id'])
+
+    monkeypatch.setattr(service, '_process_leased', process)
+    monkeypatch.setattr(writers, 'settle_backfill_processing', lambda *a, **kw: 'settled')
+    counts = await service.drain_backfill('u', deadline=float('inf'), concurrency=2)
+    assert processed == ['a'] and counts['account_deletion'] == 1 and 'summary-b' in released

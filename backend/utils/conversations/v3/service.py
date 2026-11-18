@@ -706,6 +706,11 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
             counts['busy'] += 1
             return
         failed = False
+        if await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid):
+            # Re-checked per row, right before the model call, not only per chunk.
+            counts['account_deletion'] = 1
+            await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
+            return
         try:
             await _process_leased(uid, row, token)
         except Exception as error:
