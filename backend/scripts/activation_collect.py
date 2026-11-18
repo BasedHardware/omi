@@ -41,6 +41,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
+import yaml
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import activation_check  # noqa: E402
 
@@ -174,7 +176,10 @@ class Registry:
         if not google_host(host):
             raise ReadError('registry host is not Google')
         if self._token is None:
-            self._token = self._token_fn().strip()
+            try:
+                self._token = self._token_fn().strip()
+            except (OSError, subprocess.SubprocessError, ReadError) as error:
+                raise ReadError(f'registry token unavailable: {type(error).__name__}') from error
         req = urllib.request.Request(
             f'https://{host}/v2/{path}/{kind}/{ref}',
             headers={'Authorization': f'Bearer {self._token}', 'Accept': accept},
@@ -211,6 +216,21 @@ class Registry:
         return hexes[0]
 
 
+def app_container(containers: list[dict[str, Any]], name: str = '') -> dict[str, Any]:
+    """The application container: the manifest's ``container`` name, else the only one, else the only one with ports."""
+    if name:
+        named = [c for c in containers if c.get('name') == name]
+        if len(named) != 1:
+            raise ReadError(f'container {name} not found')
+        return named[0]
+    if len(containers) == 1:
+        return containers[0]
+    with_ports = [c for c in containers if c.get('ports')]
+    if len(with_ports) != 1:
+        raise ReadError('application container ambiguous')
+    return with_ports[0]
+
+
 def split_image(image: str) -> tuple[str, str, str]:
     """'host/p/repo:tag@sha256:x' -> ('host/p/repo', 'tag', 'sha256:x'); missing parts are ''."""
     name, _, digest = image.partition('@')
@@ -238,9 +258,14 @@ class Git:
 
     def contains(self, source: str, commit: str) -> bool:
         source, commit = self.resolve(source), self.resolve(commit)
-        proc = subprocess.run(
-            ['git', '-C', str(self.repo), 'merge-base', '--is-ancestor', commit, source], capture_output=True
-        )
+        try:
+            proc = subprocess.run(
+                ['git', '-C', str(self.repo), 'merge-base', '--is-ancestor', commit, source],
+                capture_output=True,
+                timeout=120,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            raise ReadError(f'merge-base: {type(error).__name__}') from error
         if proc.returncode not in (0, 1):
             raise ReadError('merge-base failed')
         return proc.returncode == 0
@@ -250,8 +275,6 @@ class Git:
 
 
 def lanes_at(git: Git, sha: str) -> list[str]:
-    import yaml
-
     lanes = yaml.safe_load(git.show(sha, 'backend/llm_gateway/config/lanes.yaml')) or {}
     overrides = yaml.safe_load(git.show(sha, 'backend/llm_gateway/config/generated_route_overrides.yaml')) or {}
     ids = {lane['lane_id'] for lane in lanes.get('lanes', []) if isinstance(lane, dict) and lane.get('lane_id')}
@@ -308,17 +331,14 @@ class Collector:
         units = []
         for name, percent in sorted(traffic.items()):
             revision = self.gcloud_json('run', 'revisions', 'describe', name, *flags)
-            containers = revision['spec']['containers']
-            apps = containers if len(containers) == 1 else [c for c in containers if c.get('ports')]
-            if len(apps) != 1:
-                raise ReadError('application container ambiguous')
+            app = app_container(revision['spec']['containers'])
             unit: dict[str, Any] = {'name': name, 'percent': percent}
-            env = cloud_run_env(apps[0], wanted)
+            env = cloud_run_env(app, wanted)
             release = env.pop('OMI_BACKEND_RELEASE_SHA', {}).get('value')
             if release:
                 unit['release_env'] = release
             unit['env'] = env
-            image = apps[0].get('image', '')
+            image = app.get('image', '')
             digest = (revision.get('status') or {}).get('imageDigest', '')
             try:
                 unit['source_sha'] = self.source_of(image, digest.rpartition('@')[2] if '@' in digest else '')
@@ -344,12 +364,14 @@ class Collector:
                     continue
             raise ReadError(f'{error}; promoted_from unreadable' if promoted_from else str(error)) from error
 
-    def gke(self, namespace: str, deployment: str, wanted: set[str], promoted_from: list[str] = ()) -> dict[str, Any]:
+    def gke(
+        self, namespace: str, deployment: str, wanted: set[str], promoted_from: list[str] = (), container: str = ''
+    ) -> dict[str, Any]:
         deploy = json.loads(self.run([*self.kubectl, '-n', namespace, 'get', 'deployment', deployment, '-o', 'json']))
         selector = ((deploy.get('spec') or {}).get('selector') or {}).get('matchLabels') or {}
         if not selector:
             raise ReadError('deployment selector unreadable')
-        app = deploy['spec']['template']['spec']['containers'][0]
+        app = app_container(deploy['spec']['template']['spec']['containers'], container)
         env = gke_env(app, wanted, lambda name: self.configmap(namespace, name))
         labels = ','.join(f'{k}={v}' for k, v in sorted(selector.items()))
         pods = json.loads(self.run([*self.kubectl, '-n', namespace, 'get', 'pods', '-l', labels, '-o', 'json']))
@@ -360,7 +382,8 @@ class Collector:
             for status in (pod.get('status') or {}).get('containerStatuses') or []:
                 if status.get('name') == app['name']:
                     image_id = status.get('imageID', '').rpartition('@')[2]
-                    digests[image_id if DIGEST.fullmatch(image_id) else ''] = digests.get(image_id, 0) + 1
+                    key = image_id if DIGEST.fullmatch(image_id) else ''
+                    digests[key] = digests.get(key, 0) + 1
         total = sum(digests.values())
         if not total:
             raise ReadError('no running pods')
@@ -420,7 +443,11 @@ def collect(manifest: dict[str, Any], collector: Collector) -> dict[str, Any]:
                 services[name] = collector.cloud_run(svc.get('service', name), wanted.get(name, set()))
             else:
                 services[name] = collector.gke(
-                    svc['namespace'], svc['deployment'], wanted.get(name, set()), svc.get('promoted_from', [])
+                    svc['namespace'],
+                    svc['deployment'],
+                    wanted.get(name, set()),
+                    svc.get('promoted_from', []),
+                    svc.get('container', ''),
                 )
         except (ReadError, KeyError, ValueError) as error:
             services[name] = {'kind': svc['kind'], 'error': f'{type(error).__name__}: {error}'}
@@ -443,8 +470,8 @@ def collect(manifest: dict[str, Any], collector: Collector) -> dict[str, Any]:
                 continue
             try:
                 unit['lanes'] = lanes_at(collector.git, unit['source_sha'])
-            except (ReadError, ValueError) as error:
-                unit['lanes_error'] = str(error)
+            except (ReadError, ValueError, yaml.YAMLError) as error:
+                unit['lanes_error'] = f'{type(error).__name__}: {error}'[:200]
     queues = _objects(collector, ['tasks', 'queues'], manifest.get('queues', []))
     jobs = _objects(collector, ['scheduler', 'jobs'], manifest.get('scheduler_jobs', []))
     return {
@@ -474,7 +501,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument('--repo', type=Path, default=REPO_ROOT, help='git checkout with the serving commits fetched')
     args = parser.parse_args(argv)
-    manifest = activation_check.load_manifest(args.manifest)
+    try:
+        manifest = activation_check.load_manifest(args.manifest)
+    except (activation_check.InvalidInput, OSError) as error:
+        print(f'activation_collect: invalid manifest: {error}', file=sys.stderr)
+        return activation_check.EXIT_INVALID
     with tempfile.TemporaryDirectory(prefix='activation-collect-') as scratch:
         kubectl = ['kubectl']
         if args.cluster:

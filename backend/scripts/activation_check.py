@@ -62,6 +62,7 @@ class Verdict:
     step: str
     verdict: str
     results: list[Result] = field(default_factory=list)
+    collected_at: str = ''
 
     @property
     def exit_code(self) -> int:
@@ -77,6 +78,7 @@ class Verdict:
         return {
             'feature': self.feature,
             'step': self.step,
+            'collected_at': self.collected_at,
             'verdict': self.verdict,
             'exit_code': self.exit_code,
             'counts': self.counts(),
@@ -141,7 +143,11 @@ def load_manifest(path: Path) -> dict[str, Any]:
     import yaml  # PyYAML is in every backend environment; imported here so the pure checker loads without it
 
     with open(path, encoding='utf-8') as handle:
-        return validate_manifest(yaml.safe_load(handle))
+        try:
+            data = yaml.safe_load(handle)
+        except yaml.YAMLError as error:
+            raise InvalidInput(f'manifest is not valid YAML: {type(error).__name__}') from error
+    return validate_manifest(data)
 
 
 # ---------------------------------------------------------------------------------------------- state
@@ -151,7 +157,20 @@ def validate_state(state: Any) -> dict[str, Any]:
     _require(isinstance(state, dict), 'state: mapping')
     _require(state.get('schema_version') == SCHEMA_VERSION, 'state.schema_version: 1')
     for key in ('services', 'queues', 'scheduler_jobs', 'ancestry'):
-        _require(isinstance(state.get(key, {}), dict), f'state.{key}: mapping')
+        table = state.get(key, {})
+        _require(isinstance(table, dict), f'state.{key}: mapping')
+        for name, value in table.items():
+            if key in ('queues', 'scheduler_jobs') and name == '_error':
+                _require(isinstance(value, str), f'state.{key}._error: string')
+                continue
+            _require(isinstance(value, dict), f'state.{key}.{name}: mapping')
+        if key == 'services':
+            for name, value in table.items():
+                serving = value.get('serving', [])
+                _require(
+                    isinstance(serving, list) and all(isinstance(u, dict) for u in serving),
+                    f'state.services.{name}.serving: list of mappings',
+                )
     return state
 
 
@@ -234,7 +253,9 @@ def _env_value(unit: dict[str, Any], key: str, default: str | None, unset: Itera
     """('set', comparable) | ('absent', None) | ('unknown', reason) for one serving unit.
 
     ``unset`` lists placeholder values that mean "not configured" (a deploy default such as
-    ``http://127.0.0.1:9``); they count as absent."""
+    ``http://127.0.0.1:9``); they count as absent. Only an absent key takes the code ``default``: an
+    explicit empty value is compared as itself, because code may read '' differently from the default
+    (``CONVERSATIONS_V3_STAGE=''`` falls through to the named cohort, not ``beta``)."""
     env = unit.get('env')
     if not isinstance(env, dict):
         return 'unknown', 'env not collected'
@@ -248,8 +269,8 @@ def _env_value(unit: dict[str, Any], key: str, default: str | None, unset: Itera
     if 'secret_ref' in entry:
         return 'set', 'secret:' + str(entry['secret_ref'])
     value = entry.get('value')
-    if value is None or value == '' or str(value) in set(unset):
-        return ('set', default) if default is not None else ('absent', None)
+    if value is None or str(value) in set(unset) or (value == '' and default is None):
+        return 'absent', None
     return 'set', str(value)
 
 
@@ -262,6 +283,7 @@ def _env(manifest, state, due, out: list[Result]) -> None:
         any_of = req.get('any_of') or []
         observed: dict[str, dict[str, Any]] = {k: {} for k in keys}
         absent_on: dict[str, set[str]] = {k: set() for k in keys}
+        unknown_on: dict[str, set[str]] = {k: set() for k in keys}
         for runtime in req['runtimes']:
             units, reason = _service(state, runtime) if runtime in due else (None, '')
             for key in keys or ['|'.join(any_of)]:
@@ -271,6 +293,8 @@ def _env(manifest, state, due, out: list[Result]) -> None:
                     continue
                 if units is None:
                     out.append(Result(rid, 'env', UNKNOWN, controlled, reason, why))
+                    if keys:
+                        unknown_on[key].add(runtime)
                     continue
                 absent, unknown = [], []
                 for unit in units:
@@ -286,6 +310,8 @@ def _env(manifest, state, due, out: list[Result]) -> None:
                         continue
                     if any(s[0] == 'unknown' for s in states):
                         unknown.append(_unit_label(unit))
+                        if keys:
+                            unknown_on[key].add(runtime)
                     else:
                         absent.append(_unit_label(unit))
                         if keys:
@@ -304,10 +330,12 @@ def _env(manifest, state, due, out: list[Result]) -> None:
             if len(due_runtimes) < 2 and len(observed[key]) < 2:
                 out.append(Result(rid, 'env_equal', DEFERRED, controlled, 'fewer than two due runtimes', why))
                 continue
+            # A runtime is unread when any of its serving units could not be read, even if another unit was.
             unread = [
                 r
                 for r in due_runtimes
-                if r not in absent_on[key] and not any(k.startswith(r + '/') for k in observed[key])
+                if r in unknown_on[key]
+                or (r not in absent_on[key] and not any(k.startswith(r + '/') for k in observed[key]))
             ]
             groups: dict[str, set[str]] = {}
             for where, value in observed[key].items():
@@ -407,14 +435,18 @@ def evaluate(manifest: dict[str, Any], state: dict[str, Any], step: str = ACTIVA
         verdict = UNDETERMINED
     else:
         verdict = READY
-    return Verdict(manifest['feature'], step, verdict, results)
+    return Verdict(manifest['feature'], step, verdict, results, str(state.get('collected_at', '')))
 
 
 # ---------------------------------------------------------------------------------------------- output
 
 
 def render_text(verdict: Verdict) -> str:
-    lines = [f'ACTIVATION {verdict.feature} before={verdict.step} verdict={verdict.verdict}']
+    # The state is a snapshot; the caller judges whether collected_at is fresh enough for the move.
+    lines = [
+        f'ACTIVATION {verdict.feature} before={verdict.step} verdict={verdict.verdict} '
+        f"state_collected_at={verdict.collected_at or 'unknown'}"
+    ]
     order = {MISSING: 0, UNKNOWN: 1, SATISFIED: 2, DEFERRED: 3}
     for r in sorted(verdict.results, key=lambda r: (not r.controlled, order[r.status])):
         scope = '' if r.controlled else ' (not controlled by this activation; advisory)'

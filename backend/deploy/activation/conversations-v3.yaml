@@ -121,9 +121,10 @@ env:
   - id: v3-gateway-endpoint
     why: >-
       v3 outline/notes run on the API (on-open) and the sync task handler; the Cloud Run deploy default
-      http://127.0.0.1:9 means the gateway URL was never supplied
+      http://127.0.0.1:9 and the code default http://127.0.0.1:9080 mean the gateway URL was never supplied
     keys: [OMI_LLM_GATEWAY_URL]
-    unset_values: ['http://127.0.0.1:9']
+    # The deploy placeholder and the code default (utils/llm/gateway_client.DEFAULT_LLM_GATEWAY_URL).
+    unset_values: ['http://127.0.0.1:9', 'http://127.0.0.1:9080']
     runtimes: [backend, backend-sync]
 
 queues:

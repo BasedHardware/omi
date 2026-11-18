@@ -229,14 +229,12 @@ def test_v3_manifest_matches_the_code_it_declares(manifest):
     import yaml
 
     ops = yaml.safe_load((BACKEND / 'deploy/ops/prod.yaml').read_text())
-    for queue in manifest['queues']:
-        assert queue['name'] in ops['cloud_tasks']
-    jobs = (BACKEND / 'deploy/scheduler/jobs.yaml').read_text()
-    for job in manifest['scheduler_jobs']:
-        assert f"name: {job['name']}" in jobs
-    overrides = (BACKEND / 'llm_gateway/config/generated_route_overrides.yaml').read_text()
-    for lane in manifest['gateway_lanes']['lanes']:
-        assert f"feature: {lane.removeprefix('omi:auto:').replace('-', '_')}" in overrides
+    assert {q['name'] for q in manifest['queues']} <= set(ops['cloud_tasks'])
+    jobs = yaml.safe_load((BACKEND / 'deploy/scheduler/jobs.yaml').read_text())['environments']['prod']['jobs']
+    assert {j['name'] for j in manifest['scheduler_jobs']} <= {job['name'] for job in jobs}
+    overrides = yaml.safe_load((BACKEND / 'llm_gateway/config/generated_route_overrides.yaml').read_text())
+    features = {item['feature'] for item in overrides['generated_route_overrides']}
+    assert {lane.removeprefix('omi:auto:').replace('-', '_') for lane in manifest['gateway_lanes']['lanes']} <= features
     triggers = (BACKEND / 'utils/conversations/v3/triggers.py').read_text()
     assert "'conversations-v3'" in triggers and 'CONVERSATIONS_V3_TASKS_URL' in triggers
     models = (BACKEND / 'utils/conversations/v3/models.py').read_text()
@@ -258,8 +256,7 @@ def test_v3_manifest_env_is_declared_in_the_prod_runtime_source(manifest):
         return None if service is None else set(service.get('env', {}))
 
     for req in manifest['env']:
-        if 'default' in req:
-            continue
+        # Keys with a code default are checked too: the source must still declare them for every runtime.
         for runtime in req['runtimes']:
             keys = declared(runtime)
             if keys is None:
@@ -476,7 +473,7 @@ def test_collect_end_to_end_marks_failures_unknown(manifest):
         def cloud_run(self, service, wanted):
             raise collect.ReadError('gcloud exit 1')
 
-        def gke(self, namespace, deployment, wanted, promoted_from=()):
+        def gke(self, namespace, deployment, wanted, promoted_from=(), container=''):
             return {'kind': 'gke', 'serving': [{'name': deployment, 'percent': 100, 'source_sha': NEW, 'env': {}}]}
 
     runner, _ = _fake_runner(
@@ -516,3 +513,150 @@ def test_split_image_and_google_only_registry():
     registry = collect.Registry(lambda: 'token', opener=lambda *a, **k: pytest.fail('must not call out'))
     with pytest.raises(collect.ReadError):
         registry.get('evil.example.com', 'p/x', 'manifests', DIG_NEW)
+
+
+# ---------------------------------------------------------------------------------------------- review fixes
+
+
+def test_invalid_yaml_manifest_exits_3(tmp_path):
+    bad = tmp_path / 'm.yaml'
+    bad.write_text('services: [unclosed\n')
+    state = FIXTURES / 'state-ready.json'
+    assert check.main(['--manifest', str(bad), '--state', str(state)]) == check.EXIT_INVALID
+    assert collect.main(['--manifest', str(bad)]) == check.EXIT_INVALID
+
+
+@pytest.mark.parametrize(
+    'mutate',
+    [
+        lambda s: s['queues'].update({'conversations-v3': 'RUNNING'}),
+        lambda s: s['services'].update({'pusher': ['x']}),
+        lambda s: s['services']['pusher'].update({'serving': ['x']}),
+    ],
+)
+def test_malformed_state_values_exit_3(manifest, mutate):
+    state = _state('state-ready.json')
+    mutate(state)
+    with pytest.raises(check.InvalidInput):
+        check.evaluate(manifest, state)
+
+
+def test_explicit_empty_stage_is_not_the_default(manifest):
+    state = _state('state-ready.json')
+    state['services']['pusher']['serving'][0]['env']['CONVERSATIONS_V3_STAGE'] = {'value': ''}
+    verdict = check.evaluate(manifest, state)
+    assert 'env-equal:v3-stage:CONVERSATIONS_V3_STAGE' in _by_status(verdict, check.MISSING)
+
+
+def test_equal_is_unknown_when_one_unit_of_a_runtime_is_unreadable(manifest):
+    state = _state('state-ready.json')
+    units = state['services']['backend']['serving']
+    second = copy.deepcopy(units[0])
+    second['name'] = 'backend-00099-old'
+    second['env']['SYNC_TASKS_PROJECT'] = {'unknown': 'unsupported valueFrom'}
+    units.append(second)
+    verdict = check.evaluate(manifest, state)
+    unknown = _by_status(verdict, check.UNKNOWN)
+    assert 'env:v3-task-binding:backend:SYNC_TASKS_PROJECT' in unknown
+    assert 'env-equal:v3-task-binding:SYNC_TASKS_PROJECT' in unknown
+
+
+def test_render_shows_state_age(manifest):
+    verdict = check.evaluate(manifest, _state('state-2026-11-17.json'))
+    assert 'state_collected_at=2026-11-17T07:30:00Z' in check.render_text(verdict)
+    assert verdict.to_json()['collected_at'] == '2026-11-17T07:30:00Z'
+
+
+class _Response:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return json.dumps(self.payload).encode()
+
+
+def _registry(routes):
+    def opener(req, timeout=None):
+        for suffix, payload in routes.items():
+            if req.full_url.endswith(suffix):
+                return _Response(payload)
+        raise collect.urllib.error.URLError('404')
+
+    return collect.Registry(lambda: 'token', opener=opener)
+
+
+CONFIG = 'sha256:' + 'c' * 64
+AMD = 'sha256:' + 'd' * 64
+
+
+def test_registry_source_label_index_and_tag_fallback():
+    label = {'config': {'Labels': {collect.REVISION_LABEL: NEW}}}
+    index = {
+        'mediaType': collect.INDEX_TYPES[0],
+        'manifests': [
+            {'digest': AMD, 'platform': {'os': 'linux', 'architecture': 'amd64'}},
+            {'digest': 'sha256:' + 'e' * 64, 'platform': {'os': 'unknown', 'architecture': 'unknown'}},
+        ],
+    }
+    reg = _registry(
+        {f'manifests/{DIG_NEW}': index, f'manifests/{AMD}': {'config': {'digest': CONFIG}}, f'blobs/{CONFIG}': label}
+    )
+    assert reg.source('gcr.io/p/pusher', DIG_NEW) == NEW
+
+    no_label = {f'manifests/{DIG_NEW}': {'config': {'digest': CONFIG}}, f'blobs/{CONFIG}': {'config': {}}}
+    one_tag = {'manifest': {DIG_NEW: {'tag': ['promotion-x', '95005e7']}}}
+    assert _registry({**no_label, 'tags/list': one_tag}).source('gcr.io/p/pusher', DIG_NEW) == '95005e7'
+
+    for tags in (['promotion-x'], ['95005e7', 'abcdef1']):
+        reg = _registry({**no_label, 'tags/list': {'manifest': {DIG_NEW: {'tag': tags}}}})
+        with pytest.raises(collect.ReadError, match='single commit tag'):
+            reg.source('gcr.io/p/pusher', DIG_NEW)
+
+    two_amd = dict(index, manifests=[index['manifests'][0], index['manifests'][0]])
+    with pytest.raises(collect.ReadError, match='ambiguous'):
+        _registry({f'manifests/{DIG_NEW}': two_amd}).source('gcr.io/p/pusher', DIG_NEW)
+    with pytest.raises(collect.ReadError, match='config missing'):
+        _registry({f'manifests/{DIG_NEW}': {'config': {}}}).source('gcr.io/p/pusher', DIG_NEW)
+
+
+def test_registry_token_failure_is_a_read_error():
+    def broken():
+        raise collect.subprocess.TimeoutExpired('gcloud', 90)
+
+    with pytest.raises(collect.ReadError, match='token'):
+        collect.Registry(broken, opener=lambda *a, **k: None).get('gcr.io', 'p/x', 'manifests', DIG_NEW)
+
+
+def test_gke_counts_pods_with_unreadable_digests_and_picks_the_named_container():
+    deployment = {
+        'spec': {
+            'selector': {'matchLabels': {'app': 'x'}},
+            'template': {
+                'spec': {
+                    'containers': [
+                        {'name': 'sidecar', 'image': 'gcr.io/p/side:1'},
+                        {'name': 'app', 'image': 'gcr.io/p/app@' + DIG_NEW, 'env': [{'name': 'K', 'value': 'v'}]},
+                    ]
+                }
+            },
+        }
+    }
+    bad_pod = {'status': {'phase': 'Running', 'containerStatuses': [{'name': 'app', 'imageID': 'garbage'}]}}
+    runner, _ = _fake_runner(
+        {('get', 'deployment', 'd'): deployment, ('get', 'pods'): {'items': [bad_pod, copy.deepcopy(bad_pod)]}}
+    )
+    collector = collect.Collector('p', 'r', FakeGit({}), runner, registry=FakeRegistry({}))
+
+    result = collector.gke('ns', 'd', {'K'}, (), 'app')
+
+    (unit,) = result['serving']
+    assert unit['pods'] == 2 and unit['env'] == {'K': {'value': 'v'}}
+    assert unit['source_error'] == 'running image digest unknown'
+    with pytest.raises(collect.ReadError, match='ambiguous'):
+        collect.app_container(deployment['spec']['template']['spec']['containers'])
