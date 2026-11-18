@@ -16,6 +16,7 @@ from prometheus_client import Counter
 
 import database.jobstore.codec as codec
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
+from database.jobstore.connection import sql
 from database import rpc_deadline
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from database.batch_pipeline_projection_followup_backfill import (
@@ -99,7 +100,9 @@ class _ParityPostgresStore(PostgresStore):
                 budget = min(budget, remaining) if remaining is not None else budget
                 if budget <= 0:
                     raise TimeoutError('serving observation deadline exceeded')
-                conn.execute(f'SET LOCAL statement_timeout = {max(1, int(budget * 1000))}')
+                conn.execute(
+                    sql().SQL('SET LOCAL statement_timeout = {}').format(sql().Literal(max(1, int(budget * 1000))))
+                )
                 yield conn
 
     read_connection = _read_conn

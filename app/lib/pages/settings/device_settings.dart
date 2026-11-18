@@ -696,8 +696,15 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       // notify reuses the last snapshot instead of rescanning, and the server
       // flag and status line select on their own.
       final l10n = context.l10n;
-      final local = context.select<SyncProvider?, DeviceCatchUpLocal>(
-          (s) => deviceCatchUpLocal(s?.pendingWorkWals ?? const [], alreadyCollapsed: true));
+      final view = context.select<SyncProvider?, ({DeviceCatchUpLocal local, bool stalled})>((s) {
+        if (s == null) return (local: deviceCatchUpLocal(const [], alreadyCollapsed: true), stalled: false);
+        final rows = s.derivedWals;
+        return (
+          local: deviceCatchUpLocal(rows.pendingWork, alreadyCollapsed: true),
+          stalled: rows.stalledUploadsAt().isNotEmpty
+        );
+      });
+      final local = view.local;
       final serverProcessing = context.select<SyncProvider?, bool>((s) => s?.syncState.isProcessing ?? false);
       // The status line reads sync state only; whether server jobs exist comes
       // from the memoized snapshot, so a progress tick never rescans the inventory.
@@ -720,7 +727,16 @@ extension _DeviceLiveSections on _DeviceSettingsState {
             builder: (context, _) {
               final catchUp =
                   _catchUp(context, local: local, serverProcessing: serverProcessing, syncStatus: syncStatus);
-              if (!connected && catchUp == null) return const SizedBox.shrink();
+              Widget stalledDetails() => OmiSettingsGroup(children: [
+                    OmiSettingsRow(
+                      key: const Key('device_stalled_upload_details'),
+                      title: l10n.transcriptionUnavailable,
+                      onTap: () => openOfflineSyncDetails(context, context.read<SyncProvider>()),
+                    ),
+                  ]);
+              if (!connected && catchUp == null) {
+                return view.stalled ? Column(children: [stalledDetails(), gap]) : const SizedBox.shrink();
+              }
               final online = context.select<ConnectivityProvider?, bool>((c) => c?.isConnected ?? true);
               return Column(children: [
                 Builder(
@@ -736,6 +752,7 @@ extension _DeviceLiveSections on _DeviceSettingsState {
                           onOpenCatchUp: () => routeToPage(context, OnTheWayPage(pendingWork: _pendingWork)),
                         )),
                 gap,
+                if (view.stalled) ...[stalledDetails(), gap],
               ]);
             },
           ),

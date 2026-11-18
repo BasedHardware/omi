@@ -24,7 +24,7 @@ from database import conversations
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.conversations import transcribing_hold
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_relevance_discarded
-from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS
+from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS, display_title
 from database.home_feed_writer import CONTROL, SCHEMA
 from database.home_feed_queries import EPISODES, CONVERSATIONS, STANDALONE
 from utils.encryption import ENCRYPTION_SECRET, decrypt
@@ -663,7 +663,17 @@ def feed(
             'sort_at': row['home_sort_at'],
             'started_at': row.get('home_started_at'),
             'finished_at': row.get('home_finished_at'),
-            'title': '' if locked else display.get('title', ''),
+            # A capture stub stamped with the fallback label before any notes existed
+            # is sealed with that label; serve it as untitled, like the list wire.
+            'title': (
+                ''
+                if locked
+                else (
+                    display_title(display.get('title', ''), display.get('preview', ''))
+                    if kind == 'conversation'
+                    else display.get('title', '')
+                )
+            ),
             'emoji': '' if locked else display.get('emoji', ''),
             'preview': '' if locked else display.get('preview', ''),
             'status': row.get('home_status') or 'completed',

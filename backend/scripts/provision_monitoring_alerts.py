@@ -65,6 +65,11 @@ def index_rules(payload: object) -> dict[str, dict]:
 # them even when the committed source omits them; they are not semantic drift.
 QUERY_DEFAULTS = (('queryType', ''),)
 MODEL_DEFAULTS = (('intervalMs', 1000), ('maxDataPoints', 43200))
+# Grafana's NotificationSettings marks these lists `omitempty`, so an empty list
+# is dropped on save and readback omits the key. Empty and absent are the same
+# setting: an empty group_by inherits the parent group, and no mute/active
+# interval is no interval.
+NOTIFICATION_LIST_DEFAULTS = ('group_by', 'mute_time_intervals', 'active_time_intervals')
 DURATION_UNITS = {'ms': 0.001, 's': 1, 'm': 60, 'h': 3600, 'd': 86400, 'w': 604800}
 
 
@@ -100,6 +105,9 @@ def comparable(rule: dict) -> dict:
                     model.pop(key)
     settings = result.get('notification_settings')
     if isinstance(settings, dict):
+        for key in NOTIFICATION_LIST_DEFAULTS:
+            if key in settings and settings[key] == []:
+                settings.pop(key)
         for key in ('group_wait', 'group_interval', 'repeat_interval'):
             if key in settings:
                 settings[key] = duration_seconds(settings[key])

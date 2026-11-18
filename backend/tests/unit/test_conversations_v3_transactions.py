@@ -7,16 +7,27 @@ from database import conversations_v3_processing as writers
 from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
+import importlib
 
 import pytest
 
 from database import conversations_v3 as store
 from utils.conversations.v3 import service, summary
+from utils.conversations import (
+    lifecycle,
+)  # noqa: F401 -- the commit path's import graph is paid at collection, not in a test's CPU budget
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
 AT = datetime.now(timezone.utc)
 R = ('users', 'synthetic', 'conversations', 'r')
 L = ('users', 'synthetic', 'conversation_v3_leases', 'builder')
+
+
+@pytest.fixture(scope='module', autouse=True)
+def lifecycle_owner_import():
+    # Exercise real lifecycle transactions below, but load their owner during
+    # file setup, as the call-phase CPU guard requires for shared imports.
+    return importlib.import_module('utils.conversations.lifecycle')
 
 
 @pytest.fixture
@@ -41,6 +52,13 @@ def strict(monkeypatch):
     monkeypatch.setattr(store, 'encrypt', lambda value, uid: value)
     monkeypatch.setattr(store.conversations, '_prepare_conversation_for_write', lambda row, *a, **kw: deepcopy(row))
     return client
+
+
+@pytest.fixture(scope='module', autouse=True)
+def speaker_evidence_import():
+    # Hydration's real lazy dependency is setup work; import failures still
+    # fail this suite and its cost stays inside the whole-file wall limit.
+    return importlib.import_module('utils.speakers.evidence')
 
 
 def test_two_workers_get_one_lease(strict):

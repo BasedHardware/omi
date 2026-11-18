@@ -18,13 +18,16 @@ construction): those must not re-buy anything.
 
 from __future__ import annotations
 
-NOTES_PROMPT_VERSION = 'notes-6'
+NOTES_PROMPT_VERSION = 'notes-7'
+# notes-7 only defaults a missing participants[].source when stored rows are read back
+# (models/structured.py); prompt, schema and output are unchanged, so notes-6 checkpoints
+# stay reusable and nothing is re-bought.
 # notes-6 adds the v3 (recordings and conversations) notes path: its own model,
 # low effort and bounded personal context, all behind v3_models.active(). Output
 # for every non-v3 conversation is unchanged, so notes-5 checkpoints stay reusable.
 # Unchanged notes-4 checkpoints are filtered locally, not invalidated by the
 # quality prompt. Retain the earlier unscaled notes-3 alias.
-NOTES_REUSABLE_PREVIOUS_VERSIONS = ('notes-5', 'notes-4')
+NOTES_REUSABLE_PREVIOUS_VERSIONS = ('notes-6', 'notes-5', 'notes-4')
 NOTES_UNSCALED_PREVIOUS_VERSION = 'notes-3'
 L1_PROMPT_VERSION = 'l1-1'
 

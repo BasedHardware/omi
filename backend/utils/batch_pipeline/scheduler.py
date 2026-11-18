@@ -36,6 +36,7 @@ from utils.batch_pipeline.errors import error_site_field, validate_worker_failur
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 from config.backlog_state_machine import MAX_HELD_REDRIVES, held_redrive_budget_enabled, held_redrive_counter_enabled
 from database import batch_pipeline_allowance_hold as allowance_hold
+from database.batch_pipeline_recovery_discovery import RecoveryCaller, RecoveryQuery
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
@@ -302,10 +303,19 @@ def _defer(job: dict, now: float, reason: str) -> None:
 
 
 class Scheduler:
-    def __init__(self, store: Store, *, metrics: QueueMetrics | None = None, pool: str = 'batch', worker_id: str = ''):
+    def __init__(
+        self,
+        store: Store,
+        *,
+        metrics: QueueMetrics | None = None,
+        pool: str = 'batch',
+        worker_id: str = '',
+        recovery_caller: RecoveryCaller = RecoveryCaller.UNKNOWN,
+    ):
         if pool not in {'batch', 'live'}:
             raise ValueError('pool must be batch or live')
         self.store = store
+        self.recovery_caller = recovery_caller
         self.metrics = metrics
         self.pool = pool
         self.worker_id = worker_id or uuid.uuid4().hex
@@ -1120,36 +1130,24 @@ class Scheduler:
 
         return self.store.run(commit)
 
-    def recover(self, now: float, limit: int = 100) -> int:
+    def recover(self, now: float, limit: int = 100, *, caller: RecoveryCaller | None = None) -> int:
+        with RecoveryQuery(self.store, now, limit, caller if caller is not None else self.recovery_caller) as query:
+            return self._recover(now, limit, query)
+
+    def _recover(self, now: float, limit: int, query: RecoveryQuery) -> int:
         self.store.run(lambda tx: migrate_legacy(tx, now))
         recovered = 0
         candidates, observations = {}, []
         protected = protected_share.enabled()
-        for state in ('leased', 'retry'):
-            protected_ids = set()
-            if state == 'retry' and protected:
-                size = max(1, min(limit, protected_share.RETRY_PAGE_SIZE))
-                reserved = max(1, size * protected_share.share_percent() // 100)
-                # Preserve at least one oldest-due discovery, even for limit=1.
-                ordinary = self.store.due(state, now, max(1, size - reserved))
-                with self._share_lock:
-                    page = self.store.protected_retries(now, reserved, after=self._protected_retry_after)
-                    self._protected_retry_after = [page[-1]['capture_at'], page[-1]['segment_id']] if page else None
-                protected_ids = {row['segment_id'] for row in page if protected_share.eligible(row, now)}
-                segments = list(dict.fromkeys([*ordinary, *sorted(protected_ids)]))
-                if self.metrics:
-                    try:
-                        self.metrics.record_discovery('retry', max(1, len(ordinary)) + max(1, len(page)))
-                    except Exception:
-                        pass
-            else:
-                segments = self.store.due(state, now, limit)
+
+        def recover_page(segments, discovery=None):
+            nonlocal recovered
             for segment_id in segments:
 
                 def commit(tx: Transaction):
                     observations.clear()
                     job = tx.get('jobs', segment_id)
-                    if job.get('state') == 'leased' and job['lease_until'] <= now:
+                    if state == 'leased' and job.get('state') == 'leased' and job['lease_until'] <= now:
                         outcome = expire_lease(
                             tx,
                             job,
@@ -1159,7 +1157,7 @@ class Scheduler:
                             observations=observations,
                             defer=_defer,
                         )
-                    elif job.get('state') == 'retry' and job['available_at'] <= now:
+                    elif state == 'retry' and job.get('state') == 'retry' and job['available_at'] <= now:
                         if segment_id in protected_ids and not protected_share.eligible(job, now):
                             return None
                         if allowance_hold.enabled() and allowance_hold.park(tx, job, now):
@@ -1178,10 +1176,39 @@ class Scheduler:
                     record_policy_observations(observations)
                 except BatchPrivacyBlocked:
                     self.store.quarantine_fenced(segment_id, now)
+                    if discovery is not None:
+                        discovery.candidate(False)
                     continue
+                if discovery is not None:
+                    discovery.candidate(bool(outcome))
                 if outcome:
                     recovered += 1
                     observe_recovery(outcome, self.metrics)
+
+        for state in ('leased', 'retry'):
+            protected_ids = set()
+            if state == 'leased':
+                recover_page(query.discover(), query)
+                if query.needs_primary():
+                    recover_page(query.primary('hint_ineligible'), query)
+            elif protected:
+                size = max(1, min(limit, protected_share.RETRY_PAGE_SIZE))
+                reserved = max(1, size * protected_share.share_percent() // 100)
+                # Preserve at least one oldest-due discovery, even for limit=1.
+                ordinary = self.store.due(state, now, max(1, size - reserved))
+                with self._share_lock:
+                    page = self.store.protected_retries(now, reserved, after=self._protected_retry_after)
+                    self._protected_retry_after = [page[-1]['capture_at'], page[-1]['segment_id']] if page else None
+                protected_ids = {row['segment_id'] for row in page if protected_share.eligible(row, now)}
+                segments = list(dict.fromkeys([*ordinary, *sorted(protected_ids)]))
+                if self.metrics:
+                    try:
+                        self.metrics.record_discovery('retry', max(1, len(ordinary)) + max(1, len(page)))
+                    except Exception:
+                        pass
+                recover_page(segments)
+            else:
+                recover_page(self.store.due(state, now, limit))
         return recovered
 
     @staticmethod

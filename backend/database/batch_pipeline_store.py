@@ -40,6 +40,7 @@ from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database import record_recovery_gate
 from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_pipeline_transaction_attempt import note_direct_reads as _note_direct_reads, prepare_transaction
 from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
 from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
@@ -105,34 +106,6 @@ class Store(Protocol):
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
     def allowance_owners(self, now: float, limit: int) -> list[str]: ...
     def allowance_page(self, owner_key: str | None, after, limit: int) -> list[str]: ...
-
-
-# Reads that bypass the view cache and go through the raw transaction, by kind.
-_DIRECT_READ_KINDS = {
-    'first_pending': 'jobs_query',
-    'first_ready_pending': 'jobs_query',
-    'fresh_first_pending': 'jobs_query',
-    'fresh_first_ready_pending': 'jobs_query',
-    'ready_predecessor': 'jobs_query',
-    'protected_ready': 'jobs_query',
-    'service_frontier': 'control_query',
-    'check_privacy': 'privacy',
-}
-
-
-def _note_direct_reads(view: 'FirestoreTransaction') -> None:
-    """Record, per attempt, which kinds of direct reads ran, so contention logs can name them.
-
-    Wraps the bound methods on this one view; the class methods stay untouched.
-    """
-    for name, kind in _DIRECT_READ_KINDS.items():
-        method = getattr(view, name)
-
-        def noted(*args, _method=method, _kind=kind, **kwargs):
-            view.direct_reads.add(_kind)
-            return _method(*args, **kwargs)
-
-        setattr(view, name, noted)
 
 
 def contention_tables(view: 'FirestoreTransaction') -> tuple[str, str]:
@@ -365,7 +338,7 @@ class FirestoreStore:
         self._require_stage()
         return self._client if self._client is not None else get_data_plane_firestore_client()
 
-    def run(self, body):
+    def run(self, body, *, before_attempt=None):
         client = self.client
         last_view: list[FirestoreTransaction] = []
 
@@ -378,7 +351,10 @@ class FirestoreStore:
             view.flush()
             return result
 
-        result = self._run_committed(client, commit, last_view)
+        if before_attempt is None:
+            result = self._run_committed(client, commit, last_view)
+        else:
+            result = self._run_committed(client, commit, last_view, before_attempt=before_attempt)
         for key, priority in sorted(last_view[0].hinted_activations) if last_view else ():
             try:
                 reseed_hinted_activation(client, self.namespace, key, priority)
@@ -390,15 +366,15 @@ class FirestoreStore:
                 )
         return result
 
-    def _run_committed(self, client, commit, last_view):
+    def _run_committed(self, client, commit, last_view, *, before_attempt=None):
         if not contention_retry_enabled():
-            return commit(client.transaction())
+            return commit(prepare_transaction(client, before_attempt))
         # The outer budget owns fresh transaction IDs and all retries. The
         # SDK's same-ID commit loop would multiply the contention window.
         operation = current_operation()
         try:
             return run_with_transaction_contention_retry(
-                lambda: client.transaction(max_attempts=1),
+                lambda: prepare_transaction(client, before_attempt, max_attempts=1),
                 commit,
                 operation_name=operation,
             )

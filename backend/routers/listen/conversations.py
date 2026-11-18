@@ -60,7 +60,8 @@ from utils.transcribe_decisions import (
 from utils.transcribe_store import calendar_db, conversations_db, redis_db
 from config.occasion_conversations import OCCASION_MAX_SPAN_SECONDS
 from utils.conversations.recorded_time import conversation_span
-from utils.conversations.lifecycle_clocks import speech_clock
+from utils.conversations.lifecycle_clocks import speech_clock, utc
+from utils.stt.speech_clock import quiet_since
 from utils.episodes import boundaries, boundary_runtime
 from utils.episodes.batch_close import attach_admitted_batch_capture
 from routers.listen.occasion import occasion_attach_target
@@ -1231,17 +1232,25 @@ class LiveConversationController:
             conversation = await self._continuity_row(conversation)
             finished_at = speech_clock(self.host.request.uid, conversation) or self.clock()
             if server_batch_owned(conversation) and self.host.state.last_audio_received_time is not None:
-                finished_at = max(
-                    finished_at, datetime.fromtimestamp(self.host.state.last_audio_received_time, timezone.utc)
+                # Batch-only audio never pauses through silence; quiet counts from speech when we can hear it.
+                quiet_from = quiet_since(
+                    getattr(getattr(self.host, 'receiver', None), 'speech_clock', None),
+                    utc(conversation.get('created_at')),
+                    self.clock().timestamp(),
                 )
+                if quiet_from is None:
+                    quiet_from = self.host.state.last_audio_received_time
+                finished_at = max(finished_at, datetime.fromtimestamp(quiet_from, timezone.utc))
+            # A live batch row's stored recorded_end is its creation; a calendar window counts from speech.
+            timed_row = (
+                dict(conversation, recorded_end=finished_at) if server_batch_owned(conversation) else conversation
+            )
             action = decide_lifecycle_action(
                 conversation_exists=True,
                 status=conversation.get('status'),
                 in_progress_status=ConversationStatus.in_progress,
                 seconds_since_last_update=(self.clock() - finished_at).total_seconds(),
-                conversation_creation_timeout=continuation_timeout(
-                    conversation, self.host.conversation_creation_timeout
-                ),
+                conversation_creation_timeout=continuation_timeout(timed_row, self.host.conversation_creation_timeout),
             )
             boundary_action = await conversation_action(self, conversation)
             if boundary_action == 'hold':

@@ -1,0 +1,23 @@
+{
+  "captured_at" : "2026-11-17T08:42:34Z",
+  "cases" : [
+    {
+      "binary_plist_bytes" : 69373,
+      "host_plist_and_defaults_max_ms" : 51.365333143621683,
+      "host_plist_and_defaults_p50_ms" : 9.2537500895559788,
+      "json_bytes" : 199001,
+      "rows" : 500
+    },
+    {
+      "binary_plist_bytes" : 623019,
+      "host_plist_and_defaults_max_ms" : 146.76004159264266,
+      "host_plist_and_defaults_p50_ms" : 80.607291776686907,
+      "json_bytes" : 1630209,
+      "rows" : 4096
+    }
+  ],
+  "host" : "m5-mbp",
+  "input" : "synthetic native disconnect fields",
+  "limits" : "macOS serialization and isolated defaults only; iOS\/Android disconnect-loop latency unverified",
+  "samples_per_case" : 12
+}

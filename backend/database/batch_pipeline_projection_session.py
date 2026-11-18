@@ -25,6 +25,7 @@ from database.batch_pipeline_projection_protocol import (
     ProjectionPredecessorPending,
     ProjectionReplay,
     normalized_binding,
+    source_reader_marked,
 )
 from database.batch_pipeline_projection_finish import projection_finish_state_fields
 
@@ -298,8 +299,7 @@ class ProjectionSession:
             or not (
                 self.entry.get('protocol_version') == 1
                 or self.entry.get('protocol_version') == 2
-                and (self.entry.get('source_reuse_version') == 1 or self.entry.get('source_alias_version') == 1)
-                and bool(self.job.get('source_reuse_key'))
+                and source_reader_marked(self.entry, self.job)
                 or self.entry.get('protocol_version') == 2
                 and self.entry.get('projection_release_version') == 1
                 or self.entry.get('protocol_version') == 2

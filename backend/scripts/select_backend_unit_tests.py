@@ -8,7 +8,9 @@ from typing import Any, Dict, List, Set, Tuple, cast
 import argparse
 import fnmatch
 import json
+import os
 import sys
+import zlib
 from pathlib import Path
 from pathlib import PurePosixPath
 
@@ -21,6 +23,21 @@ if str(BACKEND_DIR) not in sys.path:
 from tests.support.firestore_serving_query_inventory import is_serving_query_inventory_path  # noqa: E402
 from tests.support.background_task_ratchet_scope import is_background_task_ratchet_path  # noqa: E402
 from tests.support.sync_legacy_ratchet_scope import is_sync_legacy_ratchet_path  # noqa: E402
+from scripts.backend_import_graph import ImportGraph, cached_import_graph  # noqa: E402
+
+# Kill switch for import-graph selection: on unless set to 0/false/off. Off
+# restores the pre-graph behaviour exactly (every graph-eligible path forces
+# the full suite again). CI passes the repository variable of the same name.
+GRAPH_SELECTION_ENV = 'BACKEND_UNIT_GRAPH_SELECTION'
+
+
+def graph_selection_enabled() -> bool:
+    return os.environ.get(GRAPH_SELECTION_ENV, '1').strip().lower() not in {'0', 'false', 'off', 'no'}
+
+
+def import_graph() -> ImportGraph:
+    return cached_import_graph(BACKEND_DIR)
+
 
 FULL_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'unit',
@@ -53,6 +70,7 @@ FULL_RUN_PATHS = (
     'backend/tests/conftest.py',
     'backend/tests/unit/conftest.py',
     'backend/scripts/select_backend_unit_tests.py',
+    'backend/scripts/backend_import_graph.py',
 )
 
 FULL_RUN_PREFIXES = (
@@ -173,8 +191,8 @@ BATCH_STAGE_ENV_RATCHET_TESTS = ('tests/unit/test_batch_stage_env_ratchet.py',)
 # post-merge ``--all`` run. The scanned writer sites and vocabularies live in
 # config/batch_census.py and tests/unit/test_batch_census_registry.py; selection
 # uses their prefixes so an edit to any registered writer or enum always runs the
-# guard. ``backend/config/batch_census.py`` also keeps its full-suite fallback
-# because it is not otherwise mapped to a narrow area.
+# guard. ``backend/config/batch_census.py`` is not otherwise mapped to a narrow
+# area, so it selects its importers through the import graph.
 CENSUS_GUARD_TESTS = ('tests/unit/test_batch_census_registry.py',)
 CENSUS_GUARD_PREFIXES = (
     'backend/utils/batch_pipeline/',
@@ -340,7 +358,11 @@ AREA_TESTS = (
             'backend/charts/monitoring/prometheus-adapter/*_omi_prometheus_adapter.yaml',
             'backend/charts/parakeet/*_omi_parakeet_values.yaml',
         ),
-        ('tests/unit/test_incluster_guards.py',),
+        (
+            'tests/unit/test_incluster_guards.py',
+            'tests/unit/test_gpu_fleet_retirement.py',
+            'tests/unit/test_streaming_gpu_teardown.py',
+        ),
     ),
     (('backend/config/flag_budget.json',), (), FLAG_BUDGET_TESTS),
     (
@@ -650,6 +672,52 @@ def is_full_run_path(path: str) -> bool:
     return any(path_matches(path, pattern) for pattern in FULL_RUN_GLOBS)
 
 
+def is_prefix_only_full_run_path(path: str) -> bool:
+    """True when only a blanket FULL_RUN_PREFIXES entry forces the full suite.
+
+    Explicit cross-cutting paths (FULL_RUN_PATHS, FULL_RUN_GLOBS) keep forcing
+    it: they are build inputs or entry points whose effect is not an import.
+    """
+    if path in FULL_RUN_PATHS or any(path_matches(path, pattern) for pattern in FULL_RUN_GLOBS):
+        return False
+    return any(path.startswith(prefix) for prefix in FULL_RUN_PREFIXES)
+
+
+def is_graph_resolvable_path(path: str) -> bool:
+    """A present, parseable backend module the import graph can follow.
+
+    Deleted, renamed-away, non-Python and unparseable inputs return False so
+    their callers keep the full-suite fallback: the graph cannot see who
+    depended on a module that no longer exists, or on a data file.
+    """
+    if not graph_selection_enabled() or not path.startswith('backend/') or not path.endswith('.py'):
+        return False
+    if not (REPO_DIR / path).is_file():
+        return False
+    relative = path.removeprefix('backend/')
+    graph = import_graph()
+    return graph.module_for_path(relative) is not None and relative not in graph.unparseable
+
+
+def is_undiscovered_test_file(path: str) -> bool:
+    name = path.rsplit('/', 1)[-1]
+    return path.startswith(('backend/tests/', 'backend/testing/')) and name.startswith('test_') and name.endswith('.py')
+
+
+def is_referenced_data_path(path: str, all_tests: list[str]) -> bool:
+    """A present non-Python backend file that some test reaches by naming it.
+
+    Only unmapped data files use this. Blanket full-run prefixes, explicit
+    full-run paths, and files nothing names (directory scans, globs) keep the
+    full-suite fallback.
+    """
+    if not graph_selection_enabled() or not path.startswith('backend/') or path.endswith('.py'):
+        return False
+    if is_full_run_path(path) or not (REPO_DIR / path).is_file():
+        return False
+    return bool(import_graph().dependent_tests(path.removeprefix('backend/'), all_tests))
+
+
 def is_selectable_backend_path(path: str) -> bool:
     """Return True for backend paths that can select or force unit tests.
 
@@ -789,8 +857,14 @@ def tests_for_changed_paths(
     for path in changed_paths:
         selected.update(workflow_contract_tests_for_path(path, all_tests))
 
+    # Paths the import graph selects for instead of the full suite. Each one is
+    # still also run through the contract and area mappings below (union).
+    graph_paths: list[str] = []
     for path in backend_paths:
         if allow_full_suite and is_full_run_path(path):
+            if is_prefix_only_full_run_path(path) and is_graph_resolvable_path(path):
+                graph_paths.append(path)
+                continue
             return all_tests, f'{path} requires the full backend unit suite'
 
     for path in test_paths:
@@ -799,8 +873,14 @@ def tests_for_changed_paths(
             selected.add(backend_relative)
 
     removed_or_unlisted_tests = [path for path in test_paths if path.removeprefix('backend/') not in all_tests]
-    if allow_full_suite and removed_or_unlisted_tests:
-        return all_tests, f'{removed_or_unlisted_tests[0]} was removed or is outside backend test discovery'
+    if allow_full_suite:
+        # Support modules, fixtures and helpers under backend/tests/ are not
+        # discovered tests, but the tests that import them are. A deleted
+        # test-tree module keeps the full-suite fallback.
+        unresolved = [path for path in removed_or_unlisted_tests if not is_graph_resolvable_path(path)]
+        if unresolved:
+            return all_tests, f'{unresolved[0]} was removed or is outside backend test discovery'
+        graph_paths.extend(removed_or_unlisted_tests)
 
     mapped_backend_sources: set[str] = set()
     for path in backend_paths:
@@ -823,16 +903,57 @@ def tests_for_changed_paths(
         selected.update(test for test in MEMORY_POLICY_CORE_TESTS if test in all_tests)
 
     unmapped_backend_sources = [
-        path for path in backend_paths if path not in test_paths and path not in mapped_backend_sources
+        path
+        for path in backend_paths
+        if path not in test_paths and path not in mapped_backend_sources and path not in graph_paths
     ]
     if allow_full_suite and unmapped_backend_sources:
-        return all_tests, f'{unmapped_backend_sources[0]} did not match a backend test-selection contract'
+        unresolved = [
+            path
+            for path in unmapped_backend_sources
+            if not is_graph_resolvable_path(path) and not is_referenced_data_path(path, all_tests)
+        ]
+        if unresolved:
+            return all_tests, f'{unresolved[0]} did not match a backend test-selection contract'
+        graph_paths.extend(unmapped_backend_sources)
+
+    graph_skipped_only = False
+    if graph_paths:
+        graph = import_graph()
+        resolved: list[str] = []
+        for path in graph_paths:
+            dependents = graph.dependent_tests(path.removeprefix('backend/'), all_tests)
+            if not dependents and is_undiscovered_test_file(path):
+                # An integration or e2e test outside unit discovery that no
+                # unit test imports: its own workflow runs it.
+                continue
+            if not dependents and allow_full_suite:
+                # Nothing imports or names it: a guard-only selection would
+                # be a silent gap, so this path still runs everything.
+                return all_tests, f'{path} has no import-graph dependents'
+            selected.update(dependents)
+            resolved.append(path)
+        if any(path.endswith('.py') for path in resolved):
+            # Ratchets that scan source trees see every module without importing it.
+            selected.update(graph.tree_scan_tests(all_tests))
+        graph_skipped_only = not resolved
 
     if not backend_paths:
         if selected:
             return sorted(selected), 'selected backend unit tests from changed paths and workflow contracts'
         return [], 'no backend files changed'
+    if graph_skipped_only and not unmapped_backend_sources:
+        # Any guard tests already selected (lifecycle writers, contracts) still run.
+        return (
+            sorted(selected),
+            'only integration/e2e test files outside unit discovery changed; their own workflows run them',
+        )
     if selected:
+        if graph_paths:
+            return sorted(selected), (
+                'selected backend unit tests from changed paths, workflow contracts and the import graph '
+                f'({len(graph_paths)} path(s) resolved by import graph, e.g. {graph_paths[0]})'
+            )
         return sorted(selected), 'selected backend unit tests from changed paths and workflow contracts'
     return (all_tests if allow_full_suite else []), 'backend changes did not match a narrow area'
 
@@ -847,6 +968,11 @@ def focused_tests_for_changed_paths(changed_paths: list[str], all_tests: list[st
     selected, _ = tests_for_changed_paths(changed_paths, all_tests, allow_full_suite=False)
     changed_tests = {normalize_changed_path(path).removeprefix('backend/') for path in changed_paths}
     return sorted(set(selected) - changed_tests) + sorted(set(selected) & changed_tests)
+
+
+def rotation_slice(test: str, total: int) -> int:
+    """Stable slice index for a test path; independent of suite order and growth."""
+    return zlib.crc32(test.encode('utf-8')) % total
 
 
 def match_tests(all_tests: list[str], test_globs: tuple[str, ...]) -> set[str]:
@@ -877,9 +1003,27 @@ def main() -> None:
     parser.add_argument(
         '--focused-output', type=Path, help='write affected contracts then changed tests for bounded pre-push'
     )
+    parser.add_argument(
+        '--rotation',
+        help=(
+            'K/N: also select every full-suite test in rotating slice K of N (stable crc32 of the path). '
+            'Main pushes use this so the whole suite is covered across N runs, not on every run. The slices '
+            'partition exactly what --all runs; contract-only extras such as the canonical-memory e2e are '
+            'outside --all and are selected by their contracts instead.'
+        ),
+    )
     args = parser.parse_args()
     if args.focused_output and not args.changed_files:
         parser.error('--focused-output requires --changed-files')
+    rotation: tuple[int, int] | None = None
+    if args.rotation:
+        try:
+            slice_text, total_text = args.rotation.split('/', 1)
+            rotation = (int(slice_text), int(total_text))
+        except ValueError:
+            parser.error('--rotation must be K/N with integers')
+        if rotation[1] < 1 or not 0 <= rotation[0] < rotation[1]:
+            parser.error('--rotation needs N >= 1 and 0 <= K < N')
 
     all_tests = discover_all_tests()
     reason = 'full backend unit suite'
@@ -894,6 +1038,15 @@ def main() -> None:
         if args.focused_output:
             focused = focused_tests_for_changed_paths(changed_paths, all_tests)
             args.focused_output.write_text(''.join(test + '\n' for test in focused), encoding='utf-8', newline='\n')
+
+    if rotation is not None and not args.all:
+        slice_index, slice_total = rotation
+        rotated = [test for test in discover_unit_tests() if rotation_slice(test, slice_total) == slice_index]
+        before = len(set(selected))
+        selected = sorted(set(selected) | set(rotated))
+        reason = (
+            f'{reason}; plus rotating full-suite slice {slice_index}/{slice_total} (+{len(selected) - before} files)'
+        )
 
     output = '\n'.join(selected)
     if output:

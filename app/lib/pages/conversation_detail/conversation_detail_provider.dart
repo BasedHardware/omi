@@ -28,6 +28,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/siri_integration.dart';
@@ -1122,13 +1123,26 @@ class ConversationDetailProvider extends ChangeNotifier
       }
       PlatformManager.instance.analytics.reProcessConversation(target);
       final updatedConversation = result.conversation;
-      if (updatedConversation == null || !conversationHasRequestedSummary(updatedConversation, appId)) {
+      if (result is ReprocessTranscriptionPending) {
+        // A 409 has no copy, so remember it; a 200 copy is the server's own waiting state, shown as is.
+        final waiting = result.conversation;
+        if (waiting == null) TranscriptionPendingConversations.mark(target.id);
+        if (waiting != null) conversationProvider?.updateConversation(waiting, preserveHomeStep: false);
+        if (waiting != null && conversationOrNull?.id == target.id) {
+          _cachedConversation = waiting;
+          _refreshGeneration++;
+        }
+      }
+      if (updatedConversation == null ||
+          result is ReprocessTranscriptionPending ||
+          !conversationHasRequestedSummary(updatedConversation, appId)) {
         _failReprocess(
           target,
           appId,
           switch (result) {
             ReprocessBusy() => SummaryFailureKind.busy,
             ReprocessRateLimited() => SummaryFailureKind.rateLimited,
+            ReprocessTranscriptionPending() => SummaryFailureKind.transcriptionPending,
             _ when appId != null => SummaryFailureKind.template,
             _ => SummaryFailureKind.generic,
           },
@@ -1136,6 +1150,7 @@ class ConversationDetailProvider extends ChangeNotifier
         return false;
       }
 
+      TranscriptionPendingConversations.unmark(target.id);
       conversationProvider?.updateConversation(updatedConversation, preserveHomeStep: false);
       SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
 
@@ -1214,7 +1229,10 @@ class ConversationDetailProvider extends ChangeNotifier
     lastFailedReprocessConversationId = target.id;
     lastFailedReprocessAppId = appId;
     recordSummaryFailure(SummaryFailure(conversationId: target.id, kind: kind, appId: appId));
-    notifyError('REPROCESS_FAILED');
+    // Not transcribed is not an error: a summary retry cannot change it.
+    kind == SummaryFailureKind.transcriptionPending
+        ? notifyInfo('REPROCESS_TRANSCRIPTION_PENDING')
+        : notifyError('REPROCESS_FAILED');
     notifyListeners();
   }
 
@@ -1305,8 +1323,11 @@ class ConversationDetailProvider extends ChangeNotifier
                 updatedConversation.status == ConversationStatus.merging)) {
           updatedConversation = updatedConversation.withHomeStep('failed');
         }
+        // A transcript in the detail copy proves transcription finished; a missing Home step proves nothing.
+        TranscriptionPendingConversations.observe(updatedConversation);
         conversationProvider?.updateConversation(updatedConversation);
         _cachedConversation = updatedConversation;
+        clearSettledSummaryFailure(updatedConversation);
         resetRecordingTranscript();
       }
     }

@@ -5,10 +5,12 @@ This is preparation for one exact session, not a runtime or serving admission.
 The candidate image in `readiness_contract.py` has a verified local OCI export.
 Its `qualification_run` remains null until the existing Release executor supplies
 actual native AMD64 qualification and immutable publication receipts for this
-exact digest. The prior image passed [Actions run 43851897045](https://github.com/BasedHardware/omi/actions/runs/43851897045);
-that receipt does not qualify the new candidate. Its frozen source expects the exact migration 0001..0008 vector. Main also has
-0009 for a separate PostgreSQL-primary worker roll; never run migrations,
-rebuild the image or substitute main's vector to make this probe pass.
+exact digest. The original `a79982bb…` base passed native qualification and immutable publication in
+[Actions run 43960712883](https://github.com/BasedHardware/omi/actions/runs/43960712883);
+that receipt does not qualify the derivative candidate. Its frozen source expects the exact migration 0001..0008 vector. Main also has
+0009 for a separate PostgreSQL-primary worker roll; never run migrations or
+substitute main's source/vector to make this probe pass. A readiness-helper
+change requires a new exact artifact and fresh qualification as described below.
 
 `readiness_probe.py` is a local renderer and verifier. It has no Kubernetes,
 cloud, SQL, credential or execution interface. It does not initialize state.
@@ -60,10 +62,28 @@ exercise the real source checks at the admitted resource limit.
 
 `runner_readiness.py` is the versioned candidate for the in-image `readiness.py`.
 It retains full HEAD and tracked/untracked cleanliness checks, bounds HEAD to 5s
-and status to 15s within the unchanged 50s probe deadline, and adds fixed failure
-stages and bounded error categories only to HOLD reports. The successful metadata
-report stays unchanged. The 15s stage allowance is a candidate that must pass
-native acceptance; local emulation exceeded a 25s measurement allowance.
+and status to 30s within the unchanged 50s probe deadline, and adds fixed failure
+stages and bounded error categories only to HOLD reports. Each Git call is also
+capped by the actual remaining overall budget; the source allowance does not
+reserve a fixed amount of time for credentials or SQL. The successful metadata
+report stays unchanged.
+
+A source-only GKE diagnostic on 2026-11-17 completed the strict status scan cleanly
+in 14.641372s, after an earlier metadata attempt timed out at the former 15s cap.
+The 30s allocation gives that stage headroom without changing the total deadline,
+Pod deadline or resources. One observation does not bound future scans, establish
+a root cause, or prove SQL readiness. The rebuilt image requires fresh native
+acceptance and a separately reviewed actual metadata attempt.
+
+The candidate uses a readiness-only derivative of the verified `a79982bb…` base.
+Its original 13 layers remain byte-for-byte identical; the sole added filesystem
+layer replaces `/opt/runner/readiness.py`. Runtime configuration differs only in
+three provenance labels: the new build-input hash and the explicit original
+base manifest/build-input hashes. The frozen source, dependencies, supervisor,
+process guard and original `/build/` inputs remain unchanged. The fixture includes
+the actual derivative recipe, verifier, closed input manifest and provenance.
+The attempted full rebuild's offline dependency install failed with local Docker
+VM ENOSPC; that failed receipt is retained and is not qualification evidence.
 
 Before publication, qualification now runs the exact new image with the correct
 hostname, UID1000, read-only root, no network, 0.5 CPU and 512Mi without extra swap. It executes the

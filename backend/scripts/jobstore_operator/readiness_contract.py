@@ -15,7 +15,7 @@ READINESS_ENV = {
 CONTRACT = {
     'source_sha': '97074e78defa1a84b9d39c021e28aa70cf4f2e4e',
     'supervisor_sha256': '1b6a0a1ed5ca8dbc7f8087ae51441539a8aa9b4f4da2171932e2f08af9de699f',
-    'image': 'gcr.io/based-hardware/jobstore-reconcile-operator@sha256:a79982bb85f0d612c256041493339c147d50869d6734f0862e4082d184e82d99',
+    'image': 'gcr.io/based-hardware/jobstore-reconcile-operator@sha256:f713574047679618ecea32ff29b939f20fa3d63cfea33ba9cdf6643577d2c145',
     'qualification_run': None,
     'migrations': [
         [1, 'doc_mode_store', '4f121b4df8ffe9c8369cc5b920f94010d3ada94b11909c49318db9f49f6ba205'],

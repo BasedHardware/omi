@@ -158,6 +158,8 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.batch_pipeline_conversation_purge_scans._claim': 'a0c54821175dbc883d89f41bea6e5d2d6b25c6f25733362556db13a13e87c2bc',
+    'database.batch_pipeline_conversation_purge_scans.run_job': 'b73e589c1018bfb3a8eefc51bd7ba4ef29a0c9876fd670d74efae3e1ba4cff30',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
     'database.batch_census_export._filtered': '6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
@@ -165,9 +167,9 @@ BODY_DIGEST = {
     'database.batch_pipeline_allowance_migration.candidates': '04c9beae56ec6091544a2ec69a8ba170032dbe3670697b704db2f88d513bc5cb',
     'database.conversation_batch_purge_jobs.RunProgress.pending_segments': '86b3d882fe3c575b3a540bb00d1845c941c5256d99848c4dc89917eb707ff3cc',
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
-    'database.conversation_batch_purge_jobs._drop_segment_records': '53f3a9444e2caee3f79c05d68d1dd3876c42e6445f6ba42037140276558ae39a',
+    'database.conversation_batch_purge_jobs._drop_segment_records': '2db3123e6e11d177d434326668969249a7fd4e0aade9788d045056fbdefe8c9d',
     'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
-    'database.conversation_batch_purge_jobs.run_job': 'b53f24db0b73ea39f9f0fcdfa18971a0c256cdf5ac30115723c461601ea5f829',
+    'database.conversation_batch_purge_jobs.run_job': 'f56ed851d01cdc69e0b755dbe1a53a6a6ccb6cbc77d3c84104e17b26bde6f0ef',
     'database.batch_pipeline_store.promote_record_recoveries': 'ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
     'database.record_custody_receipts.prune': 'a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
     'database.user_usage._s4_month_cache': '14a6b7d82ee83ec56f552ab798b0021e2342ffd920dcdbe2a8e851ec32029f28',
@@ -205,7 +207,8 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
     'database.batch_pipeline_store.reseed_hinted_activation': 'b962f088769367e4902876ef9dd91de299238b945f13610829e5f1f1acd8d449',
-    'database.batch_pipeline_store.FirestoreStore.run': 'd7cced46951bbfea06f7c501288ee41c76d972f6149aa7ead6e3c31573055b52',
+    # Re-reviewed 2026-11-17: optional pre-begin pacing only; reseed query ownership is unchanged.
+    'database.batch_pipeline_store.FirestoreStore.run': '20a0e3fdea5dd2194d7c806216e36c644fccbeca46bd5a6489e132ae902d8e32',
     'database.batch_pipeline_store.FirestoreStore.control_candidates': 'c1ce9e8170a7fde0e6a82c44a2db0c0c18909cba723e9cefd402cfe1f7993df9',
     'database.batch_pipeline_store.FirestoreStore.control_candidate': 'd82ee8b1c03be61b104e25304d6a0a732a9b59453fd302f4e7794a75622d65ad',
     'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
@@ -406,6 +409,27 @@ _add(
         domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
     )
 )
+# Sealed owner groups use an existing single-field uid index on obligations.
+_add(
+    DriverEntry(
+        'database.batch_pipeline_conversation_purge_scans.owner_candidates',
+        base={'uid': UID},
+    )
+)
+for _name in ('_claim', 'run_job'):
+    _function = 'database.batch_pipeline_conversation_purge_scans.' + _name
+    _add(
+        CoveredByEntry(
+            _function,
+            covered_by=(
+                'database.batch_pipeline_conversation_purge_scans.owner_candidates',
+                'database.conversation_batch_purge_jobs.segment_records',
+            ),
+            reason='delegates owner discovery to owner_candidates and member journals to segment_records',
+            expect_observed=False,
+            body_digest=BODY_DIGEST[_function],
+        )
+    )
 # Its durable per-segment erasure work: one equality filter inside a single obligation.
 _add(
     DriverEntry(

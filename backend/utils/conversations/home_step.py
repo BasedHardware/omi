@@ -43,7 +43,7 @@ from utils.conversations import transcribing_hold
 from utils.conversations import home_latency, legacy_empty_wire
 from utils.conversations import empty_capture
 from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
-from utils.conversations.home_titles import summary_owed
+from utils.conversations.home_titles import summary_owed, untitled_pending
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
 
 READY = 'ready'
@@ -102,7 +102,8 @@ def classify(row: Mapping[str, Any]) -> str | None:
         elif _older_than(anchor, seconds):
             PROCESSING_AGE_TOTAL.labels(reason=HomeProcessingAgeReason.EXPIRED).inc()
             return FAILED
-        return TRANSCRIBING if not title else WRITING_NOTES
+        # A placeholder stamped on a capture stub is not evidence of a transcript.
+        return TRANSCRIBING if untitled_pending(structured) else WRITING_NOTES
     if status == 'failed':
         return FAILED
     if status != 'completed':
@@ -145,6 +146,12 @@ def classify(row: Mapping[str, Any]) -> str | None:
             return WRITING_NOTES
         if row.get('summary_output_present') or row.get('summary_completed_at'):
             # A real summary landed; read projections may still re-stamp an echo title.
+            return READY
+        if structured.get('title_provenance') != 'server_minimum' and not row.get('summary_blocked_reason'):
+            # Only the batch projection marks the row alone, and only when its
+            # transcript text landed. Past the repair age gate it carries no debt
+            # and no notes will come, but the speech stays on Home. A blocked row
+            # (local-only, BYOK, empty output) keeps its terminal disposition.
             return READY
         # The stand-in title is final: nothing will ever summarize this row.
         return NOISE
