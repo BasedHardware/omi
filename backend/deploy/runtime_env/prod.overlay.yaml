@@ -48,6 +48,10 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
+        # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
+        UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+        UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
         # Mirrors the listen chart (2026-11-18 fold of live values; media noise is also carried by the privateEnv overlay).
         MEDIA_NOISE_MODE: {value: shadow, category: rollout}
         MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
@@ -611,6 +615,10 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
+          # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           # Hold silent read skipping until the release-owner canary (review F1).
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
@@ -1006,6 +1014,10 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
+          # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           # Operator-only per-owner v3 backfill/repair route (scripts/conversations_v3_backfill.py); off = route 404s.
           CONVERSATIONS_V3_BACKFILL: {value: 'on', category: ops_kill}
           # Hold silent read skipping until the release-owner canary (review F1).
@@ -1359,8 +1371,11 @@ overlay:
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
             category: rollout
+          # 60 days: checked once at upload admission; a backlog that older app builds or slow
+          # drains cannot clear within 30 days is refused with a terminal 422 on the phone.
+          # Rollback: '2592000' (30 days) in one config train.
           SYNC_BACKFILL_MAX_AGE_SECONDS:
-            value: '2592000'
+            value: '5184000'
             category: rollout
           SYNC_BACKFILL_ORDER:
             value: 'newest'
@@ -1438,6 +1453,10 @@ overlay:
         # (SCA-2283).
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
+          # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
+          # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           # Hold silent read skipping until the release-owner canary (review F1).
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
@@ -1740,8 +1759,11 @@ overlay:
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
             category: rollout
+          # 60 days: checked once at upload admission; a backlog that older app builds or slow
+          # drains cannot clear within 30 days is refused with a terminal 422 on the phone.
+          # Rollback: '2592000' (30 days) in one config train.
           SYNC_BACKFILL_MAX_AGE_SECONDS:
-            value: '2592000'
+            value: '5184000'
             category: rollout
           SYNC_BACKFILL_ORDER:
             value: 'newest'
@@ -1816,6 +1838,10 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
+          # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           # Margin-40 O1 inverse: full deploys must retain the admitted 200/10/class16 cadence.
           BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
           BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}

@@ -19,7 +19,7 @@ from database.firestore_index_registry import (
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
 )
-from database.frame_requests import enqueue_frame_request
+from database.frame_requests import FrameRequestQuotaExceeded, enqueue_frame_request
 from utils.retrieval.keyframe_policy import KeyframeCandidate, select_conversation_keyframe
 from utils.integration_telemetry import emit_posthog_event
 from utils.retrieval.frame_request_policy import FRAME_REQUEST_MAX_TTL_SECONDS
@@ -206,6 +206,10 @@ def reconcile_conversation_keyframe_jobs(
                 device_retention_seconds=device_retention,
                 firestore_client=client,
             )
+        except FrameRequestQuotaExceeded:
+            # Leave the outbox job pending. Screen sync will still list live
+            # requests and prune expired ones, making room for a later sync.
+            break
         except ValueError as exc:
             if "already has an active frame request" not in str(exc):
                 raise

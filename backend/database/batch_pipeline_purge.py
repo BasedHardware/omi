@@ -53,6 +53,10 @@ def _references(data: dict) -> set[str]:
     return {uri for uri in (data.get('audio_uri'), result.get('result_uri'), data.get('uri')) if uri}
 
 
+def result_document(client: Any, namespace: str, segment_id: str) -> Any:
+    return client.collection(f'{namespace}_results').document(segment_id)
+
+
 def _delete_job(
     client: Any,
     namespace: str,
@@ -77,7 +81,7 @@ def _delete_job(
         if not job:
             return
         key = job['owner_key']
-        result_ref = client.collection(f'{namespace}_results').document(snapshot.id)
+        result_ref = result_document(client, namespace, snapshot.id)
         result = result_ref.get(transaction=transaction).to_dict() or {}
         if retain_ordering and not result:
             result = (job.get('source_alias_fallback') or {}).get('log_slot') or {}
@@ -241,7 +245,7 @@ def purge_batch_owner(
                     data = snapshot.to_dict() or {}
                     result = {}
                     if table == 'jobs':
-                        result_ref = client.collection(f'{namespace}_results').document(snapshot.id)
+                        result_ref = result_document(client, namespace, snapshot.id)
                         result = result_ref.get().to_dict() or {}
                     matched = _belongs(
                         {**data, 'projection': result.get('projection') or data.get('projection')}, conversation_id

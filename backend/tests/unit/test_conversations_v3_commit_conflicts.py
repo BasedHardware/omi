@@ -140,14 +140,24 @@ async def test_backfill_race_still_raises_for_its_own_task_retry(builder, monkey
 
 @pytest.mark.asyncio
 async def test_backed_off_owner_skips_without_taking_the_lease(builder, monkeypatch):
-    monkeypatch.setattr(store, 'backoff_until', lambda uid: datetime.now(timezone.utc) + timedelta(minutes=5))
+    monkeypatch.setattr(
+        store, 'backoff_state', lambda uid: (datetime.now(timezone.utc) + timedelta(minutes=5), 'target_exists')
+    )
     monkeypatch.setattr(service.leases, 'acquire', lambda *a: pytest.fail('backoff must not take the lease'))
+    drained = []
+
+    async def drain(uid):
+        drained.append(uid)
+
+    monkeypatch.setattr(service, 'drain_processing', drain)
     assert await service.reconcile('u') == 'backoff'
+    # Already committed rows still get their notes while the builder is parked.
+    assert drained == ['u']
 
 
 @pytest.mark.asyncio
 async def test_open_conversation_bypasses_owner_backoff(builder, monkeypatch):
-    monkeypatch.setattr(store, 'backoff_until', lambda uid: pytest.fail('on-open is the user waiting'))
+    monkeypatch.setattr(store, 'backoff_state', lambda uid: pytest.fail('on-open is the user waiting'))
     monkeypatch.setattr(store, 'load', lambda *a, **kw: ({}, {}, []))
     await service.reconcile('u', on_open=True, conversation_id='c')
 

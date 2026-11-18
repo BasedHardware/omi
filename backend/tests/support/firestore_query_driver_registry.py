@@ -158,8 +158,8 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
-    'database.batch_pipeline_conversation_purge_scans._claim': 'a0c54821175dbc883d89f41bea6e5d2d6b25c6f25733362556db13a13e87c2bc',
-    'database.batch_pipeline_conversation_purge_scans.run_job': 'b73e589c1018bfb3a8eefc51bd7ba4ef29a0c9876fd670d74efae3e1ba4cff30',
+    'database.batch_pipeline_conversation_purge_scans._claim': '8bd1a47728de848c4fd6bee2490705b21465536f0b431315a5f0f14bb5851b81',
+    'database.batch_pipeline_conversation_purge_scans.run_job': '3832da1dcc239a6a57ff0a5d4cebd55f03ed4e84ca4c3c919bbdc299fca2fc59',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
     'database.batch_census_export._filtered': '6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
@@ -200,7 +200,7 @@ BODY_DIGEST = {
     # Re-reviewed 2026-11-01: intake-outcome evidence kwarg only; no query or read added.
     'database.batch_ramp.ramp_admission_policy': '2d702e87308e65426820bbe9b4b89f492a966a01bc056fa39d63ed3a8545d649',
     # Re-reviewed 2026-11-05: forward presentation visibility only; cursor/query/budget bounds unchanged.
-    'database.conversations._collect_cursor_conversation_page': '0becc04e442dcd1d1fb97be36684dc5e998833d7907eb2bda38982dc97fa1682',
+    'database.conversations._collect_cursor_conversation_page': 'd54ff0bc45158ade28d59b9096d6c0df0bbd9579fd4f8e0193bb6df4b0bfe391',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
     'database.batch_pipeline_store.FirestoreStore.projection_page': '96f024578c9d338e4fb3a528f1c59801c928167da8ddf0d2747d686700b46ff5',
@@ -1530,6 +1530,7 @@ _add(
             'include_recordings': (False, 'post-read visibility only; same query'),
             'hide_home': (False, 'post-read visibility only; same query'),
             'capture_only': (False, 'post-read visibility only; same query'),
+            'show_held': (False, 'post-read visibility only; same query'),
             'limit': _LIMIT,
             'offset': _OFFSET,
             'budget': _BUDGET,

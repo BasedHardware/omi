@@ -1,6 +1,6 @@
 """Synthetic v3 switch, read boundaries, capture and released-wire contracts."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import importlib.util
@@ -349,6 +349,35 @@ def test_cursor_refills_after_recording_and_hidden_rows(include_recordings, hide
     assert last.id == expected
 
 
+def _open_row(cid, last, **extra):
+    return {'id': cid, 'status': 'in_progress', 'created_at': last, 'started_at': last, 'finished_at': last, **extra}
+
+
+def test_live_skips_a_capture_that_never_closed(monkeypatch):
+    now = datetime.now(timezone.utc)
+    seen = {}
+
+    def rows(*a, **kw):
+        seen.update(kw)
+        return seen['rows']
+
+    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setattr(db, 'get_conversations_without_photos', rows)
+    stale = _open_row('stale', now - routes.v3_live.MAX_IDLE - timedelta(minutes=1))
+    # Only a days-old open row: nothing is in progress, so the client keeps its capture card.
+    seen['rows'] = [stale]
+    assert routes.get_live_conversation('u', 'beta') == {'v3': True, 'conversation': None}
+    assert seen['limit'] == routes.v3_live.SCAN and seen['statuses'] == ['in_progress']
+    # A newer stale stub sorts first; the open conversation behind it is still the live row.
+    seen['rows'] = [stale, _open_row('rec', now, recording=True), _open_row('open', now - timedelta(minutes=10))]
+    assert routes.get_live_conversation('u', 'beta')['conversation']['id'] == 'open'
+    # Naive stored times read as UTC; a row with no time at all is not served.
+    seen['rows'] = [_open_row('naive', now.replace(tzinfo=None))]
+    assert routes.get_live_conversation('u', 'beta')['conversation']['id'] == 'naive'
+    seen['rows'] = [{'id': 'bare', 'status': 'in_progress'}]
+    assert routes.get_live_conversation('u', 'beta')['conversation'] is None
+
+
 @pytest.mark.parametrize('recording', [False, True])
 def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording):
     monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
@@ -358,9 +387,9 @@ def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording):
         lambda *a, **kw: [
             {
                 'id': 'c',
-                'started_at': datetime(2026, 11, 16, tzinfo=timezone.utc),
+                'started_at': datetime.now(timezone.utc),
                 'status': 'in_progress',
-                'created_at': datetime(2026, 11, 16, tzinfo=timezone.utc),
+                'created_at': datetime.now(timezone.utc),
                 'recording': recording,
                 'transcript_segments': [{'text': 'private capture'}],
                 'structured': {'title': 'Plan', 'emoji': '🌳', 'overview': 'omit'},

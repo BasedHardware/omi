@@ -9,10 +9,13 @@ from database import conversations_v3_leases as leases
 from database import conversations_v3_processing as writers
 
 import asyncio
+import hashlib
 import logging
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -45,6 +48,7 @@ BLOCKED = frozenset(
         'recording_decode_unavailable',
         'account_deletion',
         'document_too_large',
+        'request_too_large',
         'backfill_partition_budget',
         'remove_not_backfilled',
         'rederive_mixed_runs',
@@ -53,6 +57,41 @@ BLOCKED = frozenset(
         'invalid_row',
     }
 )
+
+
+# A blocked owner's earlier passes may have committed windows that still owe notes; draining them is
+# safe for every reason except a pending account deletion.
+NO_DRAIN = frozenset({'account_deletion'})
+
+
+def owner_tag(uid):
+    return hashlib.sha256(str(uid).encode()).hexdigest()[:12]
+
+
+def redacted_cause(error):
+    """The blocking error's cause: its type, plus the size limit and byte counts for a Firestore size error.
+
+    Never the raw message: Firestore names the document path (owner and conversation ids).
+    """
+    cause = getattr(error, '__cause__', None)
+    if cause is None:
+        return '-'
+    text = str(cause)
+    # Pure string checks (store.size_error's markers): this runs on the event loop.
+    kind = 'document' if store.DOCUMENT_TOO_LARGE in text else 'request' if store.REQUEST_TOO_LARGE in text else None
+    if not kind:
+        return type(cause).__name__
+    sizes = ','.join(re.findall(r'\(?(\d+) bytes', text)) or '-'
+    return f'{type(cause).__name__} limit={kind} bytes={sizes}'
+
+
+async def _drain_blocked(uid, reason):
+    if reason in NO_DRAIN:
+        return
+    try:
+        await drain_processing(uid)
+    except Exception as error:
+        logger.warning('v3 reconcile blocked drain failed exception_type=%s', type(error).__name__)
 
 
 def recording_short_path(fn):
@@ -139,12 +178,16 @@ async def reconcile(
     """
     report = {} if report is None else report
     key = store.BACKFILL_LEASE if derive else 'builder'
+    blocked = None
+    moved = set()
     # Live passes call the outline-cache writers exactly as before; only a backfill names its lease.
     keyed = {'key': key} if derive else {}
     if not on_open and not derive:
-        backoff = await run_blocking(db_executor, store.backoff_until, uid)
+        backoff, parked = await run_blocking(db_executor, store.backoff_state, uid)
         if backoff and backoff > datetime.now(timezone.utc):
             metrics.RECONCILES.labels('backoff').inc()
+            # Rows earlier passes committed still owe notes while the builder is parked.
+            await _drain_blocked(uid, parked)
             return 'backoff'
     token = await run_blocking(db_executor, leases.acquire, uid, key)
     if token is None:
@@ -242,8 +285,13 @@ async def reconcile(
                 cache.append({'fingerprint': fingerprint, 'entries': entries})
 
         async def plan():
-            rows, used = [], set()
             windows = planner.preserve_finished_windows(planner.windows(groups, outlines), existing, recordings)
+            # A retained finished conversation owns its id by claim evidence; a fresh window that sorts
+            # before it (late speech overlapping its start) must not time-match the same id. Two planned
+            # rows with one id each re-add the source's held claims, doubling them every pass until the
+            # recording outgrows Firestore's 1 MiB document limit (document_too_large).
+            rows, used = [], {window['existing_id'] for window in windows if window.get('existing_id')}
+            taken = set()
             await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
             for window in windows:
                 # An affirmative transcription failure is terminal even before the silence deadline.
@@ -253,6 +301,12 @@ async def reconcile(
                 if prior:
                     used.add(prior['id'])
                 row = planner.build(uid, window, recordings, prior)
+                if not prior and row['id'] in used | taken:
+                    # A fresh window starting at a planned row's exact start derives the same start-keyed
+                    # id; qualify it with its first recording so one id never names two planned rows.
+                    first = window['lines'][0]['conversation_id']
+                    row['id'] = str(uuid5(NAMESPACE_URL, f"v3:{uid}:{row['started_at'].isoformat()}:{first}"))
+                taken.add(row['id'])
                 contributing = _backfill_runs(window, recordings)
                 if derive and len(contributing) > 1:
                     # Undo is scoped to one run; a re-derive never merges rows that different runs own.
@@ -439,17 +493,24 @@ async def reconcile(
         # retry storm through the shared queue) and back this owner off; v3_pending stays owed.
         metrics.RECONCILES.labels('blocked').inc()
         metrics.BLOCKED.labels(reason).inc()
-        logger.warning('v3 reconcile blocked reason=%s', reason)
+        logger.warning(
+            'v3 reconcile blocked reason=%s owner=%s cause=%s', reason, owner_tag(uid), redacted_cause(error)
+        )
         report['blocked_reason'] = reason
         if not derive:
             # A backfill conflict must not park the owner's live builder.
             await run_blocking(db_executor, store.record_blocked, uid, token, reason)
-        return 'blocked'
+        blocked = reason
     except Exception:
         metrics.RECONCILES.labels('error').inc()
         raise
     finally:
         await run_blocking(db_executor, leases.release, uid, key, token)
+    if blocked is not None:
+        if not derive and not on_open:
+            # Windows earlier passes (or earlier batches) committed still owe their notes.
+            await _drain_blocked(uid, blocked)
+        return 'blocked'
     if on_open:
         await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
         return 'committed'
@@ -477,10 +538,13 @@ def _commit(uid, token, recordings, existing, rows, cache, *, clear_pending=True
             uid, token, recordings, existing, rows, cache, clear_pending=clear_pending, remove=remove, key=key
         )
     except InvalidArgument as error:
-        # A copied window whose inline transcript exceeds Firestore's 1 MiB document limit fails the same
-        # way on every retry; park the owner instead of cycling the shared queue.
-        if 'exceeds the maximum allowed size' in str(error):
+        # A document over Firestore's 1 MiB limit, or a commit request over its payload limit, fails the
+        # same way on every retry; park the owner instead of cycling the shared queue with 500s.
+        kind = store.size_error(error)
+        if kind == 'document':
             raise Conflict('document_too_large') from error
+        if kind == 'request':
+            raise Conflict('request_too_large') from error
         raise
 
 
