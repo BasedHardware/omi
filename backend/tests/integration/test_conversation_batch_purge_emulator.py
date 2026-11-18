@@ -124,6 +124,7 @@ def test_purge_erases_intake_parked_unit_and_debits_owner_once(plane, monkeypatc
         30,
         Priority.FRESH,
         conversation_id=cid,
+        privacy_generation=0,
         requires_compute_admission=True,
     )
     binding = ProjectionBinding(plane.uid, 'bp_held', 'intake-content', ('held',))

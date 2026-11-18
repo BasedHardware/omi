@@ -56,6 +56,7 @@ def admit_intake(h, now, refusal, segments=('z', 'a')):
             f'gs://synthetic/{segment}',
             30,
             Priority.DEEP,
+            privacy_generation=0,
             requires_compute_admission=True,
         )
         for offset, segment in enumerate(segments)
