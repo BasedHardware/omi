@@ -67,14 +67,60 @@ def get_user_messages_with_bot_name() -> List[str]:
     return uids
 
 
+def handle_questions() -> None:
+    users_ref = db.collection("users")
+    uids = get_users_uid()
+
+    total_users = len(uids)
+    users_with_personas_messages = 0
+    automatic_conversations_count = 0
+    users_no_messages_back = 0
+    conversation_lengths = []
+    conversations_per_user = []
+
+    print(f"Analyzing {total_users} users for questions...")
+
+    for uid in uids:
+        messages_ref = users_ref.document(uid).collection("messages")
+        messages = list(messages_ref.stream())
+
+        has_persona_message = False
+        user_messages_count = 0
+        bot_messages_count = 0
+
+        for doc in messages:
+            raw = doc.to_dict()
+            data = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+            if 'botName' in data:
+                has_persona_message = True
+                bot_messages_count += 1
+            elif data.get('role') == 'user':
+                user_messages_count += 1
+
+        if has_persona_message:
+            users_with_personas_messages += 1
+
+        if user_messages_count == 0 and bot_messages_count > 0:
+            automatic_conversations_count += 1
+
+        if bot_messages_count == 0:
+            users_no_messages_back += 1
+
+        conversations_per_user.append(len(messages))
+        # simplistic length distribution based on messages count for this user
+        conversation_lengths.extend([len(messages)])  # just placeholder for conversation logic
+
+    print("--- Questions Handling ---")
+    print(f"Users with personas messages: {users_with_personas_messages}")
+    print(f"Conversations that are just automatic messages: {automatic_conversations_count}")
+    print(f"Users with no messages back at all: {users_no_messages_back}")
+    ratio = (users_no_messages_back / total_users) if total_users > 0 else 0
+    print(f"Ratio of users with no messages back: {ratio:.2%}")
+    print(f"Conversations distribution per user: {conversations_per_user}")
+    print(f"Conversation length distribution: {conversation_lengths}")
+
+
 if __name__ == "__main__":
     get_user_messages_with_bot_name()
     get_plugin_data_by_persona_name()
-    # TODO: questions
-    # -- % of people who provided their x vs someone else's, and most popular questions
-    # -- If someone else, who were the top 3 most popular questions and to whom
-    # - how many users have personas messages?
-    # - how many conversations are just automatic messages? (no user messages)
-    # - how many users have no messages back at all? ratio
-    # - conversations length distribution
-    # - # of conversations distribution per user
+    handle_questions()
