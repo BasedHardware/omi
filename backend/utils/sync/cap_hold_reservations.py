@@ -88,18 +88,32 @@ def reserve(
     stamp = time.time() if now is None else now
 
     @firestore.transactional
-    def commit(transaction: Any) -> None:
+    def commit(transaction: Any) -> bool:
         snapshot = ref.get(transaction=transaction)
         entries = _entries(snapshot.to_dict() if snapshot.exists else None)
         if hold_id in entries:
-            return
+            return True
         if len(entries) >= MAX_OPEN:
-            raise ValueError('cap-hold reservation bound exceeded')
+            return False
         entries[hold_id] = {'units': units, 'period': period, 'batch_job_id': batch_job_id, 'reserved_at': stamp}
         transaction.set(ref, {'entries': entries})
+        return True
 
-    with external_write_fence(uid, firestore_client=client):
-        commit(client.transaction())
+    def try_reserve() -> bool:
+        with external_write_fence(uid, firestore_client=client):
+            return commit(client.transaction())
+
+    if not try_reserve():
+        # Older sweeps could erase a projected hold without releasing its reservation.
+        # Settle those entries outside the reservation transaction, then recheck the bound.
+        open_units(uid, period, status_reader=batch_status, now=stamp, firestore_client=client)
+        if not try_reserve():
+            raise ValueError('cap-hold reservation bound exceeded')
+
+
+def release_projected(uid: str, hold_id: str, batch_job_id: str) -> None:
+    """Release the matching reservation after the hand-off's projection has been verified."""
+    _settle(uid, {hold_id: (batch_job_id, 'projected')}, {}, time.time(), get_firestore_client())
 
 
 def open_units(
@@ -124,18 +138,19 @@ def open_units(
     if not entries:
         return 0.0
     stamp = time.time() if now is None else now
-    settled: dict[str, str] = {}
-    stale: list[str] = []
+    settled: dict[str, tuple[str, str]] = {}
+    stale: dict[str, str] = {}
     for hold_id, entry in entries.items():
         age = stamp - float(entry.get('reserved_at') or 0)
+        batch_job_id = str(entry.get('batch_job_id') or '')
         if entry.get('period') != period and age >= PRUNE_SECONDS:
-            settled[hold_id] = 'pruned'
+            settled[hold_id] = (batch_job_id, 'pruned')
             continue
-        outcome = status_reader(uid, str(entry.get('batch_job_id') or ''))
+        outcome = status_reader(uid, batch_job_id)
         if outcome in ('projected', 'failed', 'abandoned'):
-            settled[hold_id] = outcome
+            settled[hold_id] = (batch_job_id, outcome)
         elif age >= STALE_SECONDS and not entry.get('stale_at'):
-            stale.append(hold_id)
+            stale[hold_id] = batch_job_id
     if settled or stale:
         _settle(uid, settled, stale, stamp, client)
     return sum(
@@ -145,28 +160,35 @@ def open_units(
     )
 
 
-def _settle(uid: str, settled: dict[str, str], stale: list[str], stamp: float, client: Any) -> None:
+def _settle(uid: str, settled: dict[str, tuple[str, str]], stale: dict[str, str], stamp: float, client: Any) -> None:
     ref = _ref(uid, client)
 
     @firestore.transactional
-    def commit(transaction: Any) -> None:
+    def commit(transaction: Any) -> list[str]:
         snapshot = ref.get(transaction=transaction)
         entries = _entries(snapshot.to_dict() if snapshot.exists else None)
-        for hold_id in settled:
-            entries.pop(hold_id, None)
-        for hold_id in stale:
-            if hold_id in entries:
-                entries[hold_id] = {**entries[hold_id], 'stale_at': stamp}
-        transaction.set(ref, {'entries': entries})
+        outcomes = []
+        for hold_id, (batch_job_id, outcome) in settled.items():
+            entry = entries.get(hold_id)
+            if entry is not None and str(entry.get('batch_job_id') or '') == batch_job_id:
+                del entries[hold_id]
+                outcomes.append(outcome)
+        for hold_id, batch_job_id in stale.items():
+            entry = entries.get(hold_id)
+            if entry is not None and str(entry.get('batch_job_id') or '') == batch_job_id and not entry.get('stale_at'):
+                entries[hold_id] = {**entry, 'stale_at': stamp}
+                outcomes.append('stale')
+        if outcomes:
+            transaction.set(ref, {'entries': entries})
+        return outcomes
 
     with external_write_fence(uid, firestore_client=client):
-        commit(client.transaction())
-    for outcome in settled.values():
+        outcomes = commit(client.transaction())
+    for outcome in outcomes:
         CAP_HOLD_RESERVATIONS_RELEASED.labels(outcome=_bounded_outcome(outcome)).inc()
-    for _ in stale:
-        # Alertable: still reserved and still counted; the batch job has not reached a terminal state.
-        CAP_HOLD_RESERVATIONS_RELEASED.labels(outcome='stale').inc()
-        logger.error('event=cap_hold_reservation outcome=stale stale_seconds=%d', STALE_SECONDS)
+        if outcome == 'stale':
+            # Alertable: still reserved and still counted; the batch job has not reached a terminal state.
+            logger.error('event=cap_hold_reservation outcome=stale stale_seconds=%d', STALE_SECONDS)
 
 
 def batch_status(uid: str, batch_job_id: str) -> str:
