@@ -166,13 +166,61 @@ def is_completed_below_floor(data: Mapping[str, Any]) -> bool:
     )
 
 
+def _epoch(value: Any) -> float | None:
+    if isinstance(value, datetime):
+        return value.timestamp()
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def held_for_notes(data: Mapping[str, Any], *, now: float | None = None) -> bool:
+    """A kept legacy sync piece whose notes wait on its quiet hold or its open live bridge.
+
+    The only content evidence is intake's: ``keep`` (the deterministic rules did
+    not classify it as filler) and ``has_content``; no transcript is decoded. Discarded, blocked, below-floor, already-summarized and v3-layer
+    rows never qualify: a stale bridge field outlives a standalone run.
+    The wait counts from the last content arrival and ends with the settling
+    bound, so a lost obligation cannot keep a row processing.
+    """
+    hold = data.get('sync_processing_hold')
+    hold = hold if isinstance(hold, Mapping) else {}
+    bridge = data.get('sync_bridge_pending')
+    waiting = hold.get('held') is True or (isinstance(bridge, Mapping) and bool(bridge.get('target_id')))
+    if (
+        not waiting
+        or _value(data.get('status')) != 'completed'
+        or data.get('sync_relevance') != 'keep'
+        or not data.get('has_content')
+        or data.get('deleted')
+        or data.get('sync_merged_into')
+        or data.get('recording')
+        or data.get('v3_derived')
+        or data.get('summary_blocked_reason')
+        or data.get('summary_output_present')
+        or data.get('summary_completed_at')
+        or is_relevance_discarded(data)
+        or is_rule_discard_decision(data.get('relevance_decision'))
+        or is_completed_below_floor(data)
+    ):
+        return False
+    anchor = _epoch(hold.get('last_content_at')) or _epoch(data.get('finished_at'))
+    if anchor is None:
+        return False
+    current = datetime.now(timezone.utc).timestamp() if now is None else now
+    return current - anchor < SETTLING_MAX_HOLD_SECONDS
+
+
 @phase_shadow.compare('settling_hold')
-def is_settling_fragment(data: Mapping[str, Any], *, now: float | None = None) -> bool:
+def is_settling_fragment(data: Mapping[str, Any], *, now: float | None = None, show_held: bool = False) -> bool:
     """Hold minimum/floor rows across capture lanes, without discarding speech.
 
     Batch-owned short provisional rows retain their existing hold too. User
     curation releases every hold. Only unsettled rows expire after two hours;
-    a completed below-floor verdict stays off Home permanently.
+    a completed below-floor verdict stays off Home permanently. ``show_held``
+    (the legacy Home list of a non-v3 owner) shows a kept piece held for notes
+    as processing: a growing piece's ``finished_at`` keeps moving and would
+    otherwise hide it for as long as the capture lasts.
     """
     from config.episodes import home_hide_below_floor_rows_enabled
 
@@ -180,7 +228,7 @@ def is_settling_fragment(data: Mapping[str, Any], *, now: float | None = None) -
         return False
     if is_completed_below_floor(data):
         return True
-    if is_user_curated(data):
+    if is_user_curated(data) or (show_held and held_for_notes(data, now=now)):
         return False
     if data.get('record_projection_revision') or data.get('record_upload_failed') or data.get('record_audio_partial'):
         return False
