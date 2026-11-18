@@ -1,12 +1,13 @@
 """Legacy-sync kill switch ("legacy dark"): contract (h) of the legacy-retire swarm.
 
-One runtime switch, ``rollout_cohorts/_ramp.envs.<env>.legacy_sync``, moves the
+Historical contract (``current_mode()`` is now hard-wired to ``dark``; see below):
+one runtime switch, ``rollout_cohorts/_ramp.envs.<env>.legacy_sync``, moved the
 legacy sync lane through ``on`` -> ``draining`` -> ``dark`` without a deploy.
 The value is read through ``utils.rollout.runtime_percent.legacy_sync_mode``
 (contract (f): 30s TTL, legacy mode fails safe to on on read errors). This module owns what
 the legacy call sites do with it:
 
-* ``on``: today's behaviour, byte for byte.
+* ``on``: the pre-deletion legacy behaviour.
 * ``draining``: no new legacy admission and no new sequencer owner. Accepted
   legacy work (running tasks, ``sync_backfill_pending`` entries) finishes.
 * ``dark``: as ``draining``, and the sequencer sweep stops claiming.

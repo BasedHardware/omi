@@ -719,8 +719,8 @@ def _install_sync_observability_stubs(saved_modules):
 
 
 class TestAsyncCoordinatorBehavioral:
-    """Behavioral tests that invoke run_full_pipeline_background_async with
-    mocked dependencies. Verifies actual call sequences and outcomes."""
+    """Behavioral tests of the retained cap-hold segment core (legacy_segment_core.py)
+    and the upload fast path, with mocked dependencies."""
 
     @staticmethod
     def _load_sync_module():

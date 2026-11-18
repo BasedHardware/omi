@@ -171,7 +171,7 @@ async def test_router_never_admits_legacy_even_when_mode_is_on(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_router_never_admits_legacy_after_a_stale_on_read(monkeypatch):
+async def test_router_never_admits_legacy_across_on_then_draining_reads(monkeypatch):
     """Even a stale ON read cannot create a job after C9 permanently retires legacy admission."""
     from unittest.mock import MagicMock
 
@@ -179,7 +179,6 @@ async def test_router_never_admits_legacy_after_a_stale_on_read(monkeypatch):
     try:
         reads = iter([ON, DRAINING])
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: next(reads))
-        monkeypatch.setattr(legacy_dark, 'ADMISSION_REVALIDATE_SECONDS', -1)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
         module.create_sync_job = MagicMock()
         response = await _upload(module, BytesIO)
