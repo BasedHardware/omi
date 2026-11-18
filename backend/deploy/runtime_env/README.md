@@ -144,8 +144,10 @@ The existing backend unit selector runs these checks when any source changes.
 
 `firestore_read_lever_policy.lever_expiry` in `_base.yaml` is a surface-keyed
 map: each partial `(surface, lever)` entry binds the exact `value` to an ISO UTC
-`expires` date. Dates must be today through seven days out. Existing lifecycle approvals
-end on 2026-11-17. The three retained prod backfill/worker shadow-10 entries
+`expires` date. Dates must be today through seven days out. The lifecycle
+`lifecycle_record_pending_head:5` approvals ended on 2026-11-17 with no owner decision and
+started failing every backend PR; they were renewed unchanged through 2026-11-24 on 2026-11-18
+(value and admission unchanged) so the owning lane can decide 0, 100 or another renewal. The three retained prod backfill/worker shadow-10 entries
 are renewed through 2026-11-24 under the margin lead's panel F3 disposition to
 retain their excluded scope; percentages and runtime admission do not change.
 An expiry deadline is not permission to expand the rollout.
