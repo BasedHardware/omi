@@ -9109,7 +9109,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Эта запись уже загружена. Удаление здесь убирает только копию на этом телефоне. Omi всё равно завершит обработку загруженного аудио.';
+      'Эта запись уже загружена, и Omi её обрабатывает. Удаление здесь убирает копию на телефоне. Если обработка не удастся, Omi не сможет повторить попытку с этого телефона.';
 
   @override
   String get syncCardAllBackedUp => 'Все записи синхронизированы';

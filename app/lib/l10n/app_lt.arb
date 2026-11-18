@@ -2922,7 +2922,7 @@
     "noRecordingsYet": "Įrašų dar nėra",
     "syncInProgress": "Vyksta sinchronizavimas",
     "deleteWhileProcessingTitle": "Vis dar apdorojama",
-    "deleteWhileProcessingMessage": "Šis įrašas jau įkeltas. Ištrynus čia pašalinama tik šiame telefone esanti kopija. Omi vis tiek baigs apdoroti įkeltą garsą.",
+    "deleteWhileProcessingMessage": "Šis įrašas jau įkeltas, ir Omi jį apdoroja. Ištrynus čia pašalinama telefone esanti kopija. Jei apdorojimas nepavyks, Omi negalės bandyti dar kartą iš šio telefono.",
     "syncCardAllBackedUp": "Visi įrašai sinchronizuoti",
     "syncCardReadyCount": "{count, plural, one{1 įrašas paruoštas sinchronizuoti} few{{count} įrašai paruošti sinchronizuoti} many{{count} įrašo paruošta sinchronizuoti} other{{count} įrašų paruošta sinchronizuoti}}",
     "syncCardProcessing": "Apdorojama Omi…",

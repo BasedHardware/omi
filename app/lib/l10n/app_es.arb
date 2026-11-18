@@ -2922,7 +2922,7 @@
     "noRecordingsYet": "Aún no hay grabaciones",
     "syncInProgress": "Sincronización en curso",
     "deleteWhileProcessingTitle": "Aún procesándose",
-    "deleteWhileProcessingMessage": "Esta grabación ya se subió. Eliminarla aquí solo borra la copia de este teléfono. Omi seguirá procesando el audio que se subió.",
+    "deleteWhileProcessingMessage": "Esta grabación ya se subió y Omi la está procesando. Eliminarla aquí borra la copia del teléfono. Si el procesamiento falla, Omi no podrá reintentarlo desde este teléfono.",
     "syncCardAllBackedUp": "Todas las grabaciones sincronizadas",
     "syncCardReadyCount": "{count, plural, one{1 grabación lista para sincronizar} other{{count} grabaciones listas para sincronizar}}",
     "syncCardProcessing": "Procesando en Omi…",

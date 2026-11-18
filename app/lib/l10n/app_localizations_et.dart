@@ -9074,7 +9074,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'See salvestis on juba üles laaditud. Siin kustutamine eemaldab ainult selle telefoni koopia. Omi lõpetab üles laaditud heli töötlemise ikkagi.';
+      'See salvestis on juba üles laaditud ja Omi töötleb seda. Siin kustutamine eemaldab telefoni koopia. Kui töötlemine ebaõnnestub, ei saa Omi sellest telefonist uuesti proovida.';
 
   @override
   String get syncCardAllBackedUp => 'Kõik salvestused sünkroonitud';

@@ -459,7 +459,7 @@ void main() {
   group('delete confirmation tells the truth about uploaded audio', () {
     final en = lookupAppLocalizations(const Locale('en'));
     const uploadedCopy =
-        'This recording is already uploaded. Deleting it here only removes the copy on this phone. Omi will still finish processing the audio that was uploaded.';
+        "This recording is already uploaded and Omi is processing it. Deleting it here removes the phone's copy. If processing fails, Omi can't retry from this phone.";
 
     Wal phoneWal(int ageMinutes, WalStatus status) => Wal(
           timerStart: DateTime.now().subtract(Duration(minutes: ageMinutes)).millisecondsSinceEpoch ~/ 1000,
@@ -479,7 +479,8 @@ void main() {
       expect(en.deleteWhileProcessingMessage, uploadedCopy);
     });
 
-    testWidgets('an uploaded recording says deleting removes only the phone copy', (tester) async {
+    testWidgets('an uploaded recording says deleting removes the phone copy and a failure cannot be retried',
+        (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       OmiColors.active = OmiColors.forBrightness(Brightness.dark);
       final sync = await _pump(tester, [phoneWal(10, WalStatus.uploaded)], render: true);

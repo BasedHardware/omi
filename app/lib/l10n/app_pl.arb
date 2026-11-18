@@ -2957,7 +2957,7 @@
     "noRecordingsYet": "Brak nagrań",
     "syncInProgress": "Trwa synchronizacja",
     "deleteWhileProcessingTitle": "Wciąż przetwarzane",
-    "deleteWhileProcessingMessage": "To nagranie jest już przesłane. Usunięcie go tutaj usuwa tylko kopię z tego telefonu. Omi i tak dokończy przetwarzanie przesłanego dźwięku.",
+    "deleteWhileProcessingMessage": "To nagranie jest już przesłane i Omi je przetwarza. Usunięcie go tutaj usuwa kopię z telefonu. Jeśli przetwarzanie się nie powiedzie, Omi nie będzie mógł ponowić próby z tego telefonu.",
     "syncCardAllBackedUp": "Wszystkie nagrania zsynchronizowane",
     "syncCardReadyCount": "{count, plural, one{1 nagranie gotowe do synchronizacji} few{{count} nagrania gotowe do synchronizacji} many{{count} nagrań gotowych do synchronizacji} other{{count} nagrania gotowych do synchronizacji}}",
     "syncCardProcessing": "Przetwarzanie w Omi…",

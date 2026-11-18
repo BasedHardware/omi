@@ -2,12 +2,14 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/services/wals/wal.dart';
 
 /// Deleting a recording on Offline Sync removes only the phone's file and its list entry
-/// (`LocalWalSyncImpl.deleteWal`); it never asks the server to stop. Audio the server already
-/// holds keeps processing, so a delete there must not read as "this loses it if processing fails".
+/// (`LocalWalSyncImpl.deleteWal`); it never asks the server to stop. An uploaded file's job keeps
+/// running, but if it fails or expires, job reconciliation re-uploads from the local file, which a
+/// delete has removed. The uploaded copy says both halves: the server is processing, and a failure
+/// can't be retried from this phone.
 ///
-/// The phone-copy message shows only when every file is already on the server and at least one
-/// is still being processed. If any file has not been uploaded, deleting really loses that audio,
-/// so the row keeps [notUploadedMessage].
+/// That copy shows only when every file is on the server (uploaded or already processed) and at
+/// least one is still processing. Any file not yet uploaded, or refused by the server, means the
+/// delete loses audio outright, so the row keeps [notUploadedMessage].
 ({String title, String message}) walDeleteConfirmation(
   AppLocalizations l10n,
   Iterable<Wal> wals, {

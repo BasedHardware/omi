@@ -9099,7 +9099,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Ovaj snimak je već otpremljen. Brisanje ovdje uklanja samo kopiju na ovom telefonu. Omi će i dalje završiti obradu otpremljenog zvuka.';
+      'Ovaj snimak je već otpremljen i Omi ga obrađuje. Brisanje ovdje uklanja kopiju s telefona. Ako obrada ne uspije, Omi neće moći ponovo pokušati s ovog telefona.';
 
   @override
   String get syncCardAllBackedUp => 'Sve snimke su sinkronizovane';

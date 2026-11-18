@@ -2922,7 +2922,7 @@
     "noRecordingsYet": "Chưa có bản ghi nào",
     "syncInProgress": "Đang đồng bộ",
     "deleteWhileProcessingTitle": "Vẫn đang xử lý",
-    "deleteWhileProcessingMessage": "Bản ghi này đã được tải lên. Xóa ở đây chỉ xóa bản sao trên điện thoại này. Omi vẫn sẽ xử lý xong phần âm thanh đã tải lên.",
+    "deleteWhileProcessingMessage": "Bản ghi này đã được tải lên và Omi đang xử lý. Xóa ở đây sẽ xóa bản sao trên điện thoại. Nếu xử lý thất bại, Omi không thể thử lại từ điện thoại này.",
     "syncCardAllBackedUp": "Tất cả bản ghi đã đồng bộ",
     "syncCardReadyCount": "{count, plural, other{{count} bản ghi sẵn sàng để đồng bộ}}",
     "syncCardProcessing": "Đang xử lý trên Omi…",

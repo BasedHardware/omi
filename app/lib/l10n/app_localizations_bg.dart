@@ -9112,7 +9112,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Този запис вече е качен. Изтриването тук премахва само копието на този телефон. Omi ще завърши обработката на каченото аудио.';
+      'Този запис вече е качен и Omi го обработва. Изтриването тук премахва копието на телефона. Ако обработката се провали, Omi няма да може да опита отново от този телефон.';
 
   @override
   String get syncCardAllBackedUp => 'Всички записи са синхронизирани';

@@ -4,7 +4,7 @@
     {
       "file": "001-mobile-ios-delete-uploaded-phone-copy.png",
       "platform": "mobile-ios",
-      "description": "Offline Sync: swiping an uploaded, still-processing recording shows that deleting removes only the phone copy and Omi still finishes processing",
+      "description": "Offline Sync: swiping an uploaded, still-processing recording says Omi is processing it, deleting removes the phone copy, and a failed job cannot be retried from this phone",
       "captured_by": "agent",
       "source": "visual-audit"
     },

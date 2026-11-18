@@ -2922,7 +2922,7 @@
     "noRecordingsYet": "Încă nu există înregistrări",
     "syncInProgress": "Sincronizare în curs",
     "deleteWhileProcessingTitle": "Încă se procesează",
-    "deleteWhileProcessingMessage": "Această înregistrare este deja încărcată. Ștergerea de aici elimină doar copia de pe acest telefon. Omi va termina oricum procesarea audio-ului încărcat.",
+    "deleteWhileProcessingMessage": "Această înregistrare este deja încărcată și Omi o procesează. Ștergerea de aici elimină copia de pe telefon. Dacă procesarea eșuează, Omi nu va putea reîncerca de pe acest telefon.",
     "syncCardAllBackedUp": "Toate înregistrările sincronizate",
     "syncCardReadyCount": "{count, plural, one{1 înregistrare gata de sincronizare} few{{count} înregistrări gata de sincronizare} other{{count} de înregistrări gata de sincronizare}}",
     "syncCardProcessing": "Procesare în Omi…",

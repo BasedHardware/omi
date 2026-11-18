@@ -2922,7 +2922,7 @@
     "noRecordingsYet": "Salvestisi veel pole",
     "syncInProgress": "Sünkroonimine käib",
     "deleteWhileProcessingTitle": "Töötlemine veel käib",
-    "deleteWhileProcessingMessage": "See salvestis on juba üles laaditud. Siin kustutamine eemaldab ainult selle telefoni koopia. Omi lõpetab üles laaditud heli töötlemise ikkagi.",
+    "deleteWhileProcessingMessage": "See salvestis on juba üles laaditud ja Omi töötleb seda. Siin kustutamine eemaldab telefoni koopia. Kui töötlemine ebaõnnestub, ei saa Omi sellest telefonist uuesti proovida.",
     "syncCardAllBackedUp": "Kõik salvestused sünkroonitud",
     "syncCardReadyCount": "{count, plural, one{1 salvestus on sünkroonimiseks valmis} other{{count} salvestust on sünkroonimiseks valmis}}",
     "syncCardProcessing": "Töötlemine Omis…",

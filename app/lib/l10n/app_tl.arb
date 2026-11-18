@@ -10341,7 +10341,7 @@
     "noRecordingsYet": "Wala pang mga recording",
     "syncInProgress": "Kasalukuyang nagsi-sync",
     "deleteWhileProcessingTitle": "Pinoproseso pa rin",
-    "deleteWhileProcessingMessage": "Na-upload na ang recording na ito. Ang pagbura dito ay nag-aalis lang ng kopya sa phone na ito. Tatapusin pa rin ng Omi ang pagproseso ng audio na na-upload.",
+    "deleteWhileProcessingMessage": "Na-upload na ang recording na ito at pinoproseso na ito ng Omi. Ang pagbura dito ay nag-aalis ng kopya sa phone. Kung pumalya ang pagproseso, hindi na makakasubok ulit ang Omi mula sa phone na ito.",
     "syncCardAllBackedUp": "Lahat ng recording ay na-sync na",
     "syncCardReadyCount": "{count, plural, one{1 recording ang handa nang i-sync} other{{count} na recording ang handa nang i-sync}}",
     "syncCardProcessing": "Pinoproseso sa Omi…",

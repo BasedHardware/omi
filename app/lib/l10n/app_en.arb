@@ -10844,7 +10844,7 @@
     "syncInProgress": "Sync in progress",
     "syncStatusUploaded": "Uploaded · processing on Omi",
     "deleteWhileProcessingTitle": "Still Processing",
-    "deleteWhileProcessingMessage": "This recording is already uploaded. Deleting it here only removes the copy on this phone. Omi will still finish processing the audio that was uploaded.",
+    "deleteWhileProcessingMessage": "This recording is already uploaded and Omi is processing it. Deleting it here removes the phone's copy. If processing fails, Omi can't retry from this phone.",
     "syncCardAllBackedUp": "All recordings synced",
     "syncCardReadyCount": "{count, plural, =1{1 recording ready to sync} other{{count} recordings ready to sync}}",
     "@syncCardReadyCount": {
@@ -19007,6 +19007,6 @@
     },
     "onTheWayServerWork": "Server-reported work",
     "@deleteWhileProcessingMessage": {
-        "description": "Delete confirmation for a recording already uploaded and still processing. Deleting removes only the phone copy; the server keeps processing."
+        "description": "Delete confirmation for a recording already uploaded whose server job has not finished. Deleting removes the phone copy; the server keeps processing, but if that job fails the app has no local file to re-upload from."
     }
 }

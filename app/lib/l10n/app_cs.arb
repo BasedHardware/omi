@@ -2913,7 +2913,7 @@
     "noRecordingsYet": "Zatím žádné nahrávky",
     "syncInProgress": "Probíhá synchronizace",
     "deleteWhileProcessingTitle": "Stále se zpracovává",
-    "deleteWhileProcessingMessage": "Tento záznam je už nahraný. Smazáním zde odstraníte jen kopii v tomto telefonu. Omi nahraný zvuk i tak dokončí zpracovávat.",
+    "deleteWhileProcessingMessage": "Tento záznam je už nahraný a Omi ho zpracovává. Smazáním zde odstraníte kopii v telefonu. Pokud zpracování selže, Omi to z tohoto telefonu nebude moct zkusit znovu.",
     "syncCardAllBackedUp": "Všechny nahrávky synchronizovány",
     "syncCardReadyCount": "{count, plural, one{1 nahrávka připravená k synchronizaci} few{{count} nahrávky připravené k synchronizaci} many{{count} nahrávky připravené k synchronizaci} other{{count} nahrávek připravených k synchronizaci}}",
     "syncCardProcessing": "Zpracování v Omi…",

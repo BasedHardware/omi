@@ -9084,7 +9084,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Овај снимак је већ отпремљен. Брисање овде уклања само копију на овом телефону. Omi ће ипак завршити обраду отпремљеног звука.';
+      'Овај снимак је већ отпремљен и Omi га обрађује. Брисање овде уклања копију са телефона. Ако обрада не успе, Omi неће моћи поново да покуша са овог телефона.';
 
   @override
   String get syncCardAllBackedUp => 'Сви снимци синхронизовани';

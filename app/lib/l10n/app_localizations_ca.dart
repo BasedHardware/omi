@@ -9129,7 +9129,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Aquest enregistrament ja s\'ha pujat. Eliminar-lo aquí només esborra la còpia d\'aquest telèfon. Omi acabarà igualment de processar l\'àudio pujat.';
+      'Aquest enregistrament ja s\'ha pujat i Omi l\'està processant. Eliminar-lo aquí esborra la còpia del telèfon. Si el processament falla, Omi no ho podrà tornar a provar des d\'aquest telèfon.';
 
   @override
   String get syncCardAllBackedUp => 'Tots els enregistraments sincronitzats';

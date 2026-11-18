@@ -2913,7 +2913,7 @@
     "noRecordingsYet": "Noch keine Aufnahmen",
     "syncInProgress": "Synchronisierung läuft",
     "deleteWhileProcessingTitle": "Wird noch verarbeitet",
-    "deleteWhileProcessingMessage": "Diese Aufnahme ist bereits hochgeladen. Löschen entfernt hier nur die Kopie auf diesem Telefon. Omi verarbeitet das hochgeladene Audio trotzdem fertig.",
+    "deleteWhileProcessingMessage": "Diese Aufnahme ist bereits hochgeladen und wird von Omi verarbeitet. Löschen entfernt hier die Kopie auf dem Telefon. Wenn die Verarbeitung fehlschlägt, kann Omi es von diesem Telefon aus nicht erneut versuchen.",
     "syncCardAllBackedUp": "Alle Aufnahmen synchronisiert",
     "syncCardReadyCount": "{count, plural, one{1 Aufnahme bereit zur Synchronisierung} other{{count} Aufnahmen bereit zur Synchronisierung}}",
     "syncCardProcessing": "Wird in Omi verarbeitet…",

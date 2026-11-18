@@ -10341,7 +10341,7 @@
     "noRecordingsYet": "ابھی تک کوئی ریکارڈنگ نہیں",
     "syncInProgress": "سینک جاری ہے",
     "deleteWhileProcessingTitle": "ابھی پروسیسنگ جاری ہے",
-    "deleteWhileProcessingMessage": "یہ ریکارڈنگ پہلے ہی اپ لوڈ ہو چکی ہے۔ یہاں حذف کرنے سے صرف اس فون کی کاپی ہٹتی ہے۔ Omi اپ لوڈ شدہ آڈیو کی پروسیسنگ پھر بھی مکمل کرے گا۔",
+    "deleteWhileProcessingMessage": "یہ ریکارڈنگ پہلے ہی اپ لوڈ ہو چکی ہے اور Omi اس پر کارروائی کر رہا ہے۔ یہاں حذف کرنے سے فون کی کاپی ہٹ جاتی ہے۔ اگر کارروائی ناکام ہوئی تو Omi اس فون سے دوبارہ کوشش نہیں کر سکے گا۔",
     "syncCardAllBackedUp": "تمام ریکارڈنگز سنک ہو گئیں",
     "syncCardReadyCount": "{count, plural, one{1 ریکارڈنگ سنک کے لیے تیار} other{{count} ریکارڈنگز سنک کے لیے تیار}}",
     "syncCardProcessing": "Omi پر پروسیس ہو رہا ہے…",

@@ -9007,7 +9007,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'ההקלטה הזו כבר הועלתה. מחיקה כאן מסירה רק את העותק בטלפון הזה. Omi עדיין ישלים את עיבוד האודיו שהועלה.';
+      'ההקלטה הזו כבר הועלתה ו-Omi מעבד אותה. מחיקה כאן מסירה את העותק שבטלפון. אם העיבוד ייכשל, Omi לא יוכל לנסות שוב מהטלפון הזה.';
 
   @override
   String get syncCardAllBackedUp => 'כל ההקלטות סונכרנו';

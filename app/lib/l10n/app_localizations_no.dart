@@ -9078,7 +9078,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Dette opptaket er allerede lastet opp. Sletting her fjerner bare kopien på denne telefonen. Omi fullfører fortsatt behandlingen av lyden som ble lastet opp.';
+      'Dette opptaket er allerede lastet opp, og Omi behandler det. Sletting her fjerner kopien på telefonen. Hvis behandlingen mislykkes, kan ikke Omi prøve på nytt fra denne telefonen.';
 
   @override
   String get syncCardAllBackedUp => 'Alle opptak synkronisert';

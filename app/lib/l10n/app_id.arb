@@ -2957,7 +2957,7 @@
     "noRecordingsYet": "Belum ada rekaman",
     "syncInProgress": "Sinkronisasi berlangsung",
     "deleteWhileProcessingTitle": "Masih diproses",
-    "deleteWhileProcessingMessage": "Rekaman ini sudah diunggah. Menghapusnya di sini hanya menghapus salinan di ponsel ini. Omi tetap akan menyelesaikan pemrosesan audio yang sudah diunggah.",
+    "deleteWhileProcessingMessage": "Rekaman ini sudah diunggah dan sedang diproses Omi. Menghapusnya di sini menghapus salinan di ponsel. Jika pemrosesan gagal, Omi tidak dapat mencoba lagi dari ponsel ini.",
     "syncCardAllBackedUp": "Semua rekaman tersinkron",
     "syncCardReadyCount": "{count, plural, other{{count} rekaman siap disinkronkan}}",
     "syncCardProcessing": "Memproses di Omi…",

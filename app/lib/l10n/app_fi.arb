@@ -2922,7 +2922,7 @@
     "noRecordingsYet": "Ei vielä tallenteita",
     "syncInProgress": "Synkronointi käynnissä",
     "deleteWhileProcessingTitle": "Käsitellään yhä",
-    "deleteWhileProcessingMessage": "Tämä tallenne on jo lähetetty. Poistaminen tässä poistaa vain tämän puhelimen kopion. Omi viimeistelee silti lähetetyn äänen käsittelyn.",
+    "deleteWhileProcessingMessage": "Tämä tallenne on jo lähetetty, ja Omi käsittelee sitä. Poistaminen tässä poistaa puhelimen kopion. Jos käsittely epäonnistuu, Omi ei voi yrittää uudelleen tästä puhelimesta.",
     "syncCardAllBackedUp": "Kaikki tallenteet synkronoitu",
     "syncCardReadyCount": "{count, plural, one{1 tallenne valmis synkronoitavaksi} other{{count} tallennetta valmiina synkronoitavaksi}}",
     "syncCardProcessing": "Käsitellään Omissa…",

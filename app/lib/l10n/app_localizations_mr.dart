@@ -9090,7 +9090,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'हे रेकॉर्डिंग आधीच अपलोड झाले आहे. येथे हटवल्यास फक्त या फोनवरील प्रत हटेल. अपलोड झालेल्या ऑडिओची प्रक्रिया Omi तरीही पूर्ण करेल.';
+      'हे रेकॉर्डिंग आधीच अपलोड झाले आहे आणि Omi त्यावर प्रक्रिया करत आहे. येथे हटवल्यास फोनवरील प्रत हटेल. प्रक्रिया अयशस्वी झाल्यास, Omi या फोनवरून पुन्हा प्रयत्न करू शकणार नाही.';
 
   @override
   String get syncCardAllBackedUp => 'सर्व रेकॉर्डिंग सिंक झाली';

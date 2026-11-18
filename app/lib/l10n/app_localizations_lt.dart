@@ -9086,7 +9086,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Šis įrašas jau įkeltas. Ištrynus čia pašalinama tik šiame telefone esanti kopija. Omi vis tiek baigs apdoroti įkeltą garsą.';
+      'Šis įrašas jau įkeltas, ir Omi jį apdoroja. Ištrynus čia pašalinama telefone esanti kopija. Jei apdorojimas nepavyks, Omi negalės bandyti dar kartą iš šio telefono.';
 
   @override
   String get syncCardAllBackedUp => 'Visi įrašai sinchronizuoti';

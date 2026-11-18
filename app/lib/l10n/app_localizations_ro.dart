@@ -9122,7 +9122,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Această înregistrare este deja încărcată. Ștergerea de aici elimină doar copia de pe acest telefon. Omi va termina oricum procesarea audio-ului încărcat.';
+      'Această înregistrare este deja încărcată și Omi o procesează. Ștergerea de aici elimină copia de pe telefon. Dacă procesarea eșuează, Omi nu va putea reîncerca de pe acest telefon.';
 
   @override
   String get syncCardAllBackedUp => 'Toate înregistrările sincronizate';

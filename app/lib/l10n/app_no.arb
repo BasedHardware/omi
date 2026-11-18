@@ -2922,7 +2922,7 @@
     "noRecordingsYet": "Ingen opptak ennå",
     "syncInProgress": "Synkronisering pågår",
     "deleteWhileProcessingTitle": "Behandles fortsatt",
-    "deleteWhileProcessingMessage": "Dette opptaket er allerede lastet opp. Sletting her fjerner bare kopien på denne telefonen. Omi fullfører fortsatt behandlingen av lyden som ble lastet opp.",
+    "deleteWhileProcessingMessage": "Dette opptaket er allerede lastet opp, og Omi behandler det. Sletting her fjerner kopien på telefonen. Hvis behandlingen mislykkes, kan ikke Omi prøve på nytt fra denne telefonen.",
     "syncCardAllBackedUp": "Alle opptak synkronisert",
     "syncCardReadyCount": "{count, plural, one{1 opptak klart for synkronisering} other{{count} opptak klare for synkronisering}}",
     "syncCardProcessing": "Behandler i Omi…",

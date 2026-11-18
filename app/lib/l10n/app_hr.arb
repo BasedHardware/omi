@@ -10341,7 +10341,7 @@
     "noRecordingsYet": "Još nema snimaka",
     "syncInProgress": "Sinkronizacija u tijeku",
     "deleteWhileProcessingTitle": "Još se obrađuje",
-    "deleteWhileProcessingMessage": "Ova je snimka već prenesena. Brisanje ovdje uklanja samo kopiju na ovom telefonu. Omi će i dalje dovršiti obradu prenesenog zvuka.",
+    "deleteWhileProcessingMessage": "Ova je snimka već prenesena i Omi je obrađuje. Brisanje ovdje uklanja kopiju s telefona. Ako obrada ne uspije, Omi neće moći ponovno pokušati s ovog telefona.",
     "syncCardAllBackedUp": "Sve snimke sinkronizirane",
     "syncCardReadyCount": "{count, plural, one{1 snimka spremna za sinkronizaciju} few{{count} snimke spremne za sinkronizaciju} other{{count} snimaka spremno za sinkronizaciju}}",
     "syncCardProcessing": "Obrada u Omi…",

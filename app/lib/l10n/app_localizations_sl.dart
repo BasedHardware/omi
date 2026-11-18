@@ -9100,7 +9100,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Ta posnetek je že naložen. Brisanje tukaj odstrani samo kopijo v tem telefonu. Omi bo naloženi zvok vseeno dokončal obdelovati.';
+      'Ta posnetek je že naložen in ga Omi obdeluje. Brisanje tukaj odstrani kopijo v telefonu. Če obdelava ne uspe, Omi ne bo mogel znova poskusiti iz tega telefona.';
 
   @override
   String get syncCardAllBackedUp => 'Vsi posnetki sinhronizirani';

@@ -2922,7 +2922,7 @@
     "noRecordingsYet": "Nog geen opnames",
     "syncInProgress": "Synchronisatie bezig",
     "deleteWhileProcessingTitle": "Nog bezig met verwerken",
-    "deleteWhileProcessingMessage": "Deze opname is al geüpload. Hier verwijderen wist alleen de kopie op deze telefoon. Omi verwerkt de geüploade audio nog steeds volledig.",
+    "deleteWhileProcessingMessage": "Deze opname is al geüpload en Omi verwerkt hem. Hier verwijderen wist de kopie op de telefoon. Als de verwerking mislukt, kan Omi het niet opnieuw proberen vanaf deze telefoon.",
     "syncCardAllBackedUp": "Alle opnames gesynchroniseerd",
     "syncCardReadyCount": "{count, plural, one{1 opname klaar om te synchroniseren} other{{count} opnames klaar om te synchroniseren}}",
     "syncCardProcessing": "Verwerken bij Omi…",

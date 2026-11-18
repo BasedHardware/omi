@@ -2925,7 +2925,7 @@
     "noRecordingsYet": "暂无录音",
     "syncInProgress": "正在同步",
     "deleteWhileProcessingTitle": "仍在处理",
-    "deleteWhileProcessingMessage": "此录音已上传。在这里删除只会移除这部手机上的副本。Omi 仍会完成已上传音频的处理。",
+    "deleteWhileProcessingMessage": "此录音已上传，Omi 正在处理。在这里删除会移除手机上的副本。如果处理失败，Omi 将无法从这部手机重试。",
     "syncCardAllBackedUp": "所有录音已同步",
     "syncCardReadyCount": "{count, plural, other{{count} 条录音可同步}}",
     "syncCardProcessing": "Omi 处理中…",

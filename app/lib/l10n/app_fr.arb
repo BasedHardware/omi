@@ -2957,7 +2957,7 @@
     "noRecordingsYet": "Aucun enregistrement pour l'instant",
     "syncInProgress": "Synchronisation en cours",
     "deleteWhileProcessingTitle": "Traitement en cours",
-    "deleteWhileProcessingMessage": "Cet enregistrement est déjà envoyé. Le supprimer ici retire seulement la copie de ce téléphone. Omi terminera quand même le traitement de l'audio envoyé.",
+    "deleteWhileProcessingMessage": "Cet enregistrement est déjà envoyé et Omi le traite. Le supprimer ici retire la copie du téléphone. Si le traitement échoue, Omi ne pourra pas réessayer depuis ce téléphone.",
     "syncCardAllBackedUp": "Tous les enregistrements synchronisés",
     "syncCardReadyCount": "{count, plural, one{1 enregistrement prêt à synchroniser} other{{count} enregistrements prêts à synchroniser}}",
     "syncCardProcessing": "Traitement sur Omi…",

@@ -2913,7 +2913,7 @@
     "noRecordingsYet": "Все още няма записи",
     "syncInProgress": "Извършва се синхронизация",
     "deleteWhileProcessingTitle": "Все още се обработва",
-    "deleteWhileProcessingMessage": "Този запис вече е качен. Изтриването тук премахва само копието на този телефон. Omi ще завърши обработката на каченото аудио.",
+    "deleteWhileProcessingMessage": "Този запис вече е качен и Omi го обработва. Изтриването тук премахва копието на телефона. Ако обработката се провали, Omi няма да може да опита отново от този телефон.",
     "syncCardAllBackedUp": "Всички записи са синхронизирани",
     "syncCardReadyCount": "{count, plural, one{1 запис, готов за синхронизация} other{{count} записа, готови за синхронизация}}",
     "syncCardProcessing": "Обработка в Omi…",

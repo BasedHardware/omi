@@ -9015,7 +9015,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'تم رفع هذا التسجيل بالفعل. الحذف هنا يزيل النسخة الموجودة على هذا الهاتف فقط. سيواصل Omi معالجة الصوت الذي تم رفعه.';
+      'تم رفع هذا التسجيل بالفعل ويعالجه Omi الآن. الحذف هنا يزيل النسخة الموجودة على الهاتف. إذا فشلت المعالجة، فلن يتمكن Omi من إعادة المحاولة من هذا الهاتف.';
 
   @override
   String get syncCardAllBackedUp => 'تمت مزامنة كل التسجيلات';

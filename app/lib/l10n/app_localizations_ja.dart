@@ -8950,7 +8950,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'この録音はすでにアップロード済みです。ここで削除しても、このスマートフォン上のコピーが消えるだけです。アップロード済みの音声の処理は Omi が引き続き完了します。';
+      'この録音はすでにアップロード済みで、Omi が処理中です。ここで削除するとスマートフォン上のコピーが消えます。処理に失敗した場合、Omi はこのスマートフォンから再試行できません。';
 
   @override
   String get syncCardAllBackedUp => 'すべての録音を同期済み';

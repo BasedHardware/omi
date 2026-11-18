@@ -9096,7 +9096,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'یہ ریکارڈنگ پہلے ہی اپ لوڈ ہو چکی ہے۔ یہاں حذف کرنے سے صرف اس فون کی کاپی ہٹتی ہے۔ Omi اپ لوڈ شدہ آڈیو کی پروسیسنگ پھر بھی مکمل کرے گا۔';
+      'یہ ریکارڈنگ پہلے ہی اپ لوڈ ہو چکی ہے اور Omi اس پر کارروائی کر رہا ہے۔ یہاں حذف کرنے سے فون کی کاپی ہٹ جاتی ہے۔ اگر کارروائی ناکام ہوئی تو Omi اس فون سے دوبارہ کوشش نہیں کر سکے گا۔';
 
   @override
   String get syncCardAllBackedUp => 'تمام ریکارڈنگز سنک ہو گئیں';

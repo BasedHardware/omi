@@ -2957,7 +2957,7 @@
     "noRecordingsYet": "Henüz kayıt yok",
     "syncInProgress": "Eşitleme sürüyor",
     "deleteWhileProcessingTitle": "Hâlâ işleniyor",
-    "deleteWhileProcessingMessage": "Bu kayıt zaten yüklendi. Burada silmek yalnızca bu telefondaki kopyayı kaldırır. Omi yüklenen sesi işlemeyi yine de tamamlayacak.",
+    "deleteWhileProcessingMessage": "Bu kayıt zaten yüklendi ve Omi onu işliyor. Burada silmek telefondaki kopyayı kaldırır. İşleme başarısız olursa Omi bu telefondan yeniden deneyemez.",
     "syncCardAllBackedUp": "Tüm kayıtlar eşitlendi",
     "syncCardReadyCount": "{count, plural, one{1 kayıt eşitlemeye hazır} other{{count} kayıt eşitlemeye hazır}}",
     "syncCardProcessing": "Omi'de işleniyor…",

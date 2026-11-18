@@ -9101,7 +9101,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Šis ieraksts jau ir augšupielādēts. Dzēšot šeit, tiek noņemta tikai kopija šajā tālrunī. Omi tik un tā pabeigs augšupielādētā audio apstrādi.';
+      'Šis ieraksts jau ir augšupielādēts, un Omi to apstrādā. Dzēšot šeit, tiek noņemta tālrunī esošā kopija. Ja apstrāde neizdosies, Omi nevarēs mēģināt vēlreiz no šī tālruņa.';
 
   @override
   String get syncCardAllBackedUp => 'Visi ieraksti sinhronizēti';

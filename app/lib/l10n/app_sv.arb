@@ -2922,7 +2922,7 @@
     "noRecordingsYet": "Inga inspelningar än",
     "syncInProgress": "Synkronisering pågår",
     "deleteWhileProcessingTitle": "Bearbetas fortfarande",
-    "deleteWhileProcessingMessage": "Den här inspelningen är redan uppladdad. Att radera den här tar bara bort kopian på den här telefonen. Omi slutför ändå bearbetningen av ljudet som laddades upp.",
+    "deleteWhileProcessingMessage": "Den här inspelningen är redan uppladdad och Omi bearbetar den. Att radera den här tar bort kopian på telefonen. Om bearbetningen misslyckas kan Omi inte försöka igen från den här telefonen.",
     "syncCardAllBackedUp": "Alla inspelningar synkroniserade",
     "syncCardReadyCount": "{count, plural, one{1 inspelning redo att synkroniseras} other{{count} inspelningar redo att synkroniseras}}",
     "syncCardProcessing": "Bearbetar i Omi…",

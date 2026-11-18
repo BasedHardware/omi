@@ -2913,7 +2913,7 @@
     "noRecordingsYet": "لا توجد تسجيلات بعد",
     "syncInProgress": "المزامنة قيد التقدم",
     "deleteWhileProcessingTitle": "لا تزال قيد المعالجة",
-    "deleteWhileProcessingMessage": "تم رفع هذا التسجيل بالفعل. الحذف هنا يزيل النسخة الموجودة على هذا الهاتف فقط. سيواصل Omi معالجة الصوت الذي تم رفعه.",
+    "deleteWhileProcessingMessage": "تم رفع هذا التسجيل بالفعل ويعالجه Omi الآن. الحذف هنا يزيل النسخة الموجودة على الهاتف. إذا فشلت المعالجة، فلن يتمكن Omi من إعادة المحاولة من هذا الهاتف.",
     "syncCardAllBackedUp": "تمت مزامنة كل التسجيلات",
     "syncCardReadyCount": "{count, plural, zero{لا توجد تسجيلات جاهزة للمزامنة} one{تسجيل واحد جاهز للمزامنة} two{تسجيلان جاهزان للمزامنة} few{{count} تسجيلات جاهزة للمزامنة} many{{count} تسجيلًا جاهزة للمزامنة} other{{count} تسجيل جاهز للمزامنة}}",
     "syncCardProcessing": "جارٍ المعالجة على Omi…",

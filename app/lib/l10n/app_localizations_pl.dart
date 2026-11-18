@@ -9101,7 +9101,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'To nagranie jest już przesłane. Usunięcie go tutaj usuwa tylko kopię z tego telefonu. Omi i tak dokończy przetwarzanie przesłanego dźwięku.';
+      'To nagranie jest już przesłane i Omi je przetwarza. Usunięcie go tutaj usuwa kopię z telefonu. Jeśli przetwarzanie się nie powiedzie, Omi nie będzie mógł ponowić próby z tego telefonu.';
 
   @override
   String get syncCardAllBackedUp => 'Wszystkie nagrania zsynchronizowane';

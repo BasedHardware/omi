@@ -9161,7 +9161,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Na-upload na ang recording na ito. Ang pagbura dito ay nag-aalis lang ng kopya sa phone na ito. Tatapusin pa rin ng Omi ang pagproseso ng audio na na-upload.';
+      'Na-upload na ang recording na ito at pinoproseso na ito ng Omi. Ang pagbura dito ay nag-aalis ng kopya sa phone. Kung pumalya ang pagproseso, hindi na makakasubok ulit ang Omi mula sa phone na ito.';
 
   @override
   String get syncCardAllBackedUp => 'Lahat ng recording ay na-sync na';

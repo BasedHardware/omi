@@ -8939,7 +8939,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteWhileProcessingTitle => '仍在处理';
 
   @override
-  String get deleteWhileProcessingMessage => '此录音已上传。在这里删除只会移除这部手机上的副本。Omi 仍会完成已上传音频的处理。';
+  String get deleteWhileProcessingMessage => '此录音已上传，Omi 正在处理。在这里删除会移除手机上的副本。如果处理失败，Omi 将无法从这部手机重试。';
 
   @override
   String get syncCardAllBackedUp => '所有录音已同步';
