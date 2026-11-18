@@ -1123,6 +1123,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get nameUpdatedSuccessfully => '¡Nombre actualizado con éxito!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Leer los calendarios seleccionados. Los eventos nuevos usan $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Ajustes de calendario';
 
   @override
@@ -1976,6 +1981,15 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get memoryHistory => 'Historial';
+
+  @override
+  String get recordingWithYourPhone => 'Grabando con tu teléfono';
+
+  @override
+  String get wrapUp => 'Terminar';
+
+  @override
+  String get recordingDiscarded => 'Grabación descartada';
 
   @override
   String get undo => 'Deshacer';
@@ -12255,7 +12269,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Desde el emparejamiento: $drops cortes, $failed conexiones fallidas.';
+    return 'Desde el emparejamiento: $drops reconexiones, $failed conexiones fallidas.';
   }
 
   @override
@@ -13495,16 +13509,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Convirtiendo $amount en conversaciones';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done de $total listo · puedes salir de esta pantalla';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount listos para sincronizar';
   }
@@ -13528,7 +13532,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Esperando a este teléfono';
 
   @override
-  String get syncDetailsTranscribing => 'Transcribiendo en Omi';
+  String get syncDetailsTranscribing => 'Subido, esperando al servidor';
 
   @override
   String get syncDetailsAudioFiles => 'Archivos de audio';
@@ -13987,6 +13991,12 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get summaryBusyBody =>
       'Omi ya está trabajando en esta conversación. El resumen aparecerá aquí cuando termine.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Aún sin transcribir';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'El resumen aparecerá cuando la transcripción esté lista.';
 
   @override
   String get summaryCheckAgain => 'Volver a comprobar';
@@ -15509,6 +15519,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get processingDeleteScopeChanged => 'La lista de procesamiento ha cambiado. Revísala e inténtalo de nuevo.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Has usado los $minutes minutos de este mes';
   }
@@ -15584,4 +15598,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Luego con Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Escribiendo tu resumen…';
+
+  @override
+  String get onTheWayServerWork => 'Trabajo indicado por el servidor';
 }

@@ -169,16 +169,20 @@ def auto_mergeable(row: dict) -> bool:
     Explicit live targets retain their identity. Shared/curated/photo-bearing records
     remain intact rather than exposing private donors or orphaning user edits.
     """
-    return bool(row.get('sync_content_revision')) and not (
-        (row.get('smart_merge') or {}).get('role') == 'survivor'
-        or row.get('sync_live_target')
-        or row.get('has_photos')
-        or row.get('user_title')
-        or row.get('starred')
-        or row.get('folder_user_set')
-        or row.get('sync_relevance_user_kept')
-        or row.get('has_transcript_corrections')
-        or row.get('visibility', 'private') not in (None, 'private')
+    return (
+        bool(row.get('sync_content_revision'))
+        and not row.get('v3_derived')
+        and not (
+            (row.get('smart_merge') or {}).get('role') == 'survivor'
+            or row.get('sync_live_target')
+            or row.get('has_photos')
+            or row.get('user_title')
+            or row.get('starred')
+            or row.get('folder_user_set')
+            or row.get('sync_relevance_user_kept')
+            or row.get('has_transcript_corrections')
+            or row.get('visibility', 'private') not in (None, 'private')
+        )
     )
 
 

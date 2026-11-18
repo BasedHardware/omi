@@ -448,6 +448,10 @@ assert structured.ActionItem.__module__ == "models.structured"
 assert structured.Event.__module__ == "models.structured"
 assert structured.Section.__module__ == "models.structured"
 assert structured.Structured(title="fallback").title == "fallback"
+# Runtime images load this fallback: stored v3 rows with {'name'} participants must read back.
+legacy = structured.Structured(participants=[{"name": "A"}, {"name": "B", "source": "roster"}])
+assert [(p.name, p.source) for p in legacy.participants] == [("A", "transcript"), ("B", "roster")]
+assert "source" in structured.Participant.model_json_schema()["required"]
 '''
     environment = dict(os.environ)
     environment['PYTHONPATH'] = str(tmp_path)
@@ -1113,10 +1117,11 @@ def test_build_only_entries_are_validated(contracts_module, tmp_path, override, 
         ('nllb-translation', {'omi_logging'}),
     ],
 )
-def test_copied_gpu_shims_do_not_probe_checkout_only_imports(contracts_module, name, excluded_modules):
+def test_copied_gpu_shims_do_not_probe_checkout_only_imports(contracts_module, checkout_graph, name, excluded_modules):
+    _, dependency_trees = checkout_graph
     contract = _contract(contracts_module, name)
     assert excluded_modules <= contract.dependency_probe_exclusions
-    dependencies = contracts_module.third_party_dependency_modules(contract)
+    dependencies = contracts_module.third_party_dependency_modules(contract, _trees=dependency_trees)
     assert not any(
         module == shim or module.startswith(shim + '.') for module in dependencies for shim in excluded_modules
     )

@@ -1122,6 +1122,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nimi päivitetty onnistuneesti!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Lue valitut kalenterit. Uudet tapahtumat käyttävät kalenteria $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalenteriasetukset';
 
   @override
@@ -1989,6 +1994,15 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get memoryHistory => 'Historia';
+
+  @override
+  String get recordingWithYourPhone => 'Tallennetaan puhelimella';
+
+  @override
+  String get wrapUp => 'Päätä';
+
+  @override
+  String get recordingDiscarded => 'Tallenne hylätty';
 
   @override
   String get undo => 'Kumoa';
@@ -12221,7 +12235,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Parituksen jälkeen: katkoksia $drops, epäonnistuneita yhteyksiä $failed.';
+    return 'Pariliitoksen jälkeen: $drops uudelleenyhdistämistä, $failed epäonnistunutta yhteyttä.';
   }
 
   @override
@@ -13459,16 +13473,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Muutetaan $amount keskusteluiksi';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total valmis · voit poistua tästä näkymästä';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount valmiina synkronoitavaksi';
   }
@@ -13492,7 +13496,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Odottaa tässä puhelimessa';
 
   @override
-  String get syncDetailsTranscribing => 'Litteroidaan Omissa';
+  String get syncDetailsTranscribing => 'Lähetetty, odottaa palvelinta';
 
   @override
   String get syncDetailsAudioFiles => 'Äänitiedostot';
@@ -13949,6 +13953,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi käsittelee jo tätä keskustelua. Tiivistelmä näkyy tässä, kun se on valmis.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Ei vielä litteroitu';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Tiivistelmä näkyy, kun litterointi on valmis.';
 
   @override
   String get summaryCheckAgain => 'Tarkista uudelleen';
@@ -15470,6 +15480,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Käsittelylista muuttui. Tarkista lista ja yritä uudelleen.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Olet käyttänyt tämän kuun $minutes minuuttia';
   }
@@ -15545,4 +15559,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Myöhemmin Wi-Fillä';
+
+  @override
+  String get conversationWritingSummary => 'Kirjoitetaan yhteenvetoasi…';
+
+  @override
+  String get onTheWayServerWork => 'Palvelimen ilmoittama työ';
 }

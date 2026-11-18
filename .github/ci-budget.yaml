@@ -269,7 +269,7 @@
       "runs_on": "ubuntu-latest"
     },
     "backend-unit-tests.yml/backend-unit-shard": {
-      "budget_p50_minutes": 6,
+      "budget_p50_minutes": 5,
       "display_name": "Backend unit shard ${{ matrix.shard }}/8",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
@@ -288,9 +288,9 @@
         ]
       },
       "matrix_size": 8,
-      "needs": [],
+      "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "2026-11-03 ciflake: run 41672443401 selected about 2540 files (+47% since six-shard sizing); all tests passed but shard wall reached 729s against the unchanged 720s regression gate. Eight shards restore capacity headroom: projected max test wall 740 * 6/8 = 555s, while the existing 8-minute p50 forecast scales to 6 minutes per runner. Aggregate forecast remains 48 Linux runner-minutes/run (8 * 6 instead of 6 * 8), with the same 119 PR runs/day and 49-minute conservative signal cap. No measured p50 is claimed; re-seed from completed runs after merge.",
+      "rationale": "2026-11-17 selection v2: shards now wait for the one-minute ci-tier job, which plans the selection once so all eight shards partition the same file list (import-graph selection, ci:full label, main diff since the last green main run plus a rotating 1/8 slice). Backtest over the last 300 backend-touching first-parent main commits (backend/scripts/backtest_backend_unit_selection.py --ref origin/main at 0ce396503a55): mean selected files 2095.4 -> 1042.8 (-50.2%), median 2951 -> 530, full-suite runs 212 -> 42, with no narrow legacy selection lost. The 6-minute p50 assumed a full-suite median; with a 530-file median the p50 forecast drops to 5 minutes per runner (about 1.5 minutes setup plus a smaller test share), keeping the critical path at 1 + 5x8 + 1 = 42 minutes under the 49-minute cap. No measured p50 is claimed; re-seed from completed runs after merge. Prior: 2026-11-03 ciflake eight-shard sizing (run 41672443401).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2675,13 +2675,13 @@
       "budget_p50_minutes": 5,
       "display_name": "dispatch",
       "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 7,
+      "expected_runs_per_day": 8,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "4-hourly intraday rollout advance (cron 0 1,5,9,13,17,21 UTC = 6 dispatches/day, seconds each): python POST to the Codemagic builds API for the mobile-rollout-advance workflow. Advances only already-released rollouts; never builds or submits. 2026-10-20: a manual workflow_dispatch with capture_health_override (one-shot reason to advance past a capture-health HOLD) adds at most about one run a day.",
+      "rationale": "4-hourly intraday rollout advance (cron 0 1,5,9,13,17,21 UTC = 6 dispatches/day, seconds each): python POST to the Codemagic builds API for the mobile-rollout-advance workflow. Advances only already-released rollouts; never builds or submits. 2026-10-20: a manual workflow_dispatch with capture_health_override (one-shot reason to advance past a capture-health HOLD) adds at most about one run a day. 2026-11-15: a frozen ladder fails this run instead of passing silently, and gate_freeze_override adds one more budgeted manual run a day for operator recovery while the dispatcher is paused.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5819,7 +5819,7 @@
     "mobile_rollout_watch.yml": {
       "name": "Mobile rollout watch",
       "owner": "CI maintainers",
-      "rationale": "Intraday half of the self-driving mobile release lane (see .github/agent-docs/mobile-release-process.md): every 4h dispatches the Codemagic mobile-rollout-advance workflow, which moves only ALREADY-RELEASED rollouts along the agreed 12h exposure profile (iOS phased jump to 100% after its 12h observation window, Android staged ladder hop 1->10->50->100% per 4h window). Dispatch-only ubuntu runner (~seconds), no build; 2026-10-17, operator-approved posture. 2026-10-20: manual workflow_dispatch with a capture_health_override input for a one-shot advance past a capture-health HOLD.",
+      "rationale": "Intraday half of the self-driving mobile release lane (see .github/agent-docs/mobile-release-process.md): every 4h dispatches the Codemagic mobile-rollout-advance workflow, which moves only ALREADY-RELEASED rollouts along the agreed 12h exposure profile (iOS phased jump to 100% after its 12h observation window, Android staged ladder hop 1->10->50->100% per 4h window). Dispatch-only ubuntu runner (~seconds), no build; 2026-10-17, operator-approved posture. 2026-10-20: manual workflow_dispatch with a capture_health_override input for a one-shot advance past a capture-health HOLD. 2026-11-15: a frozen ladder now fails the scheduled run instead of reporting a green no-op, and a gate_freeze_override input is the documented recovery path when the dispatcher is paused on purpose.",
       "triggers": {
         "schedule": [
           {
@@ -5831,6 +5831,11 @@
             "capture_health_override": {
               "default": "",
               "description": "Reason to advance past a capture-health HOLD for this run only; empty = no override",
+              "type": "string"
+            },
+            "gate_freeze_override": {
+              "default": "",
+              "description": "Reason to advance although no daily train succeeded in the last 26h; empty = stay frozen",
               "type": "string"
             }
           }

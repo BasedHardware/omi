@@ -1,5 +1,6 @@
 """Unified Review orchestration; source lifecycles retain their existing owners."""
 
+from utils.conversations.layer import read_product as read_product_conversation
 from datetime import datetime, timedelta, timezone
 from typing import Sequence
 
@@ -60,7 +61,7 @@ def rank_review_items(items: Sequence[ReviewItem | ReviewItemV2], remaining: int
 
 
 def _speaker_item(uid: str, prompt: SpeakerTagPrompt) -> ReviewItem | None:
-    conversation = conversations.get_conversation(uid, prompt.conversation_id)
+    conversation = read_product_conversation(conversations.get_conversation, uid, prompt.conversation_id)
     if not conversation or not conversations.is_visible_conversation(conversation):
         return None
     segments = conversation.get('transcript_segments') or []
@@ -110,7 +111,7 @@ def _task_item(uid: str, candidate) -> ReviewItem:
     for ref in candidate.evidence_refs:
         if ref.kind.value != 'conversation':
             continue
-        conversation = conversations.get_conversation(uid, ref.id)
+        conversation = read_product_conversation(conversations.get_conversation, uid, ref.id)
         if not conversation or not conversations.is_visible_conversation(conversation):
             continue
         segments = conversation.get('transcript_segments') or []
@@ -190,7 +191,11 @@ def get_items(uid: str, *, include_agent_proposals: bool = False):
         for item, source, version in _sources(uid):
             if item.kind == 'agent_proposal' and not include_agent_proposals:
                 continue
-            item = enrich_spelling(item, source, load_conversation=lambda key: conversations.get_conversation(uid, key))
+            item = enrich_spelling(
+                item,
+                source,
+                load_conversation=lambda key: read_product_conversation(conversations.get_conversation, uid, key),
+            )
             if store.offer_item(uid, item, source, version):
                 eligible.append(item)
     ranked = rank_review_items(eligible, remaining)

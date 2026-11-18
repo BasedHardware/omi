@@ -5,6 +5,7 @@ Organization already fits knowledge_nodes.node_type (an unrestricted string),
 so no migration is needed. Summaries are a derived dream cache only.
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -191,6 +192,7 @@ def _title(conversation: dict) -> str:
 def _entity_page_conversation_page(uid: str) -> dict[str, dict]:
     """Read one bounded, lean conversation page without photo or transcript hydration."""
     fields = [
+        'recording',
         'created_at',
         'started_at',
         'finished_at',
@@ -245,7 +247,7 @@ def _entity_ids_for_conversation(uid: str, conversation: dict, *, graph_citation
 
 
 def conversation_entities(uid: str, conversation_id: str) -> list[EntityRef]:
-    conversation = conversations.get_conversation(uid, _id(conversation_id))
+    conversation = read_product_conversation(conversations.get_conversation, uid, _id(conversation_id))
     if not conversation or not conversations.is_visible_conversation(conversation):
         raise store.ReviewNotFound('Conversation not found')
     refs = {}

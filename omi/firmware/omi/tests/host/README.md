@@ -76,3 +76,10 @@ explicit host substitutes. These tests do not prove Zephyr scheduling, the real
 ATT implementation, RF reception, audio quality, NAND integrity, OTA/recovery or
 release eligibility. An embedded build and separate bounded hardware/OTA evidence
 are still required for the corresponding claims.
+
+The same runner compiles the production connection-parameter request and update
+callback with host API shims. It checks the 600-unit timeout, unchanged interval
+range, three-call per-link cap (including API failures), good-interval budget
+retention, lifecycle resets, and independent slots. No sleep shim is provided.
+The diagnostics cache tests also pin negotiated parameters/PHY through split
+reads, refresh on offset zero, and omit connection info on API failure.

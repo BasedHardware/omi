@@ -176,6 +176,19 @@ class ResultLog:
     def run(self, operation, **_):
         return operation(Tx(self))
 
+    def note_head_blocked(self, sid, now, block_type):
+        row = self.results.get(sid)
+        if row is None:
+            return False
+        if row.get('projection_blocked_since') is not None or row.get('projection_state') not in (
+            'pending',
+            'persisted',
+            'ready',
+        ):
+            return False
+        row.update({'projection_blocked_since': now, 'projection_block_type': block_type})
+        return True
+
     def read(self, sid):
         if sid not in self.results:
             raise ProjectionBlocked('committed result and durable intake binding required')
@@ -201,15 +214,19 @@ class ResultLog:
             def persist(self, transaction, planned=None, **_):
                 return self.persist_empty()
 
-            def persist_empty(self, *, superseded=False, quarantined=False, privacy_deleted=False):
+            def persist_empty(self, *, superseded=False, quarantined=False, privacy_deleted=False, silence=False):
                 log.check(self)
                 receipt = {
-                    'state': 'quarantined' if quarantined else 'superseded' if superseded else 'persisted',
+                    'state': (
+                        'quarantined'
+                        if quarantined
+                        else 'superseded' if superseded else 'ready' if silence else 'persisted'
+                    ),
                     'conversation_id': None,
                     'enrichment_required': False,
                     'audio_required': False,
                 }
-                state = 'quarantine_held' if quarantined else 'persisted'
+                state = 'quarantine_held' if quarantined else 'ready' if silence else 'persisted'
                 log.results[sid].update(projection=receipt, projection_state=state)
                 log.results[sid].pop('projection_finish_due_at', None)
                 log.results[sid].pop('projection_finish_backoff_step', None)
@@ -381,8 +398,8 @@ def test_walk_stops_at_first_fenced_row_and_never_skips_it():
     log.session = Mock(side_effect=RuntimeError('synthetic outage'))
     assert projector.project_owner(BURST) == []
     log.session = real
-    # The touched content's earlier persisted sibling is still owed a follow-up.
-    assert projector.project_owner(BURST) == ids
+    # The silent sibling is already ready; only the unassigned tail needs walking.
+    assert projector.project_owner(BURST) == ids[1:]
 
 
 # --- record-target conflicts cannot wedge the owner chain ------------------------
@@ -558,7 +575,7 @@ def test_generic_poison_head_holds_and_unblocks_the_chain():
     assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
     assert log.results[ids[0]]['projection']['state'] == 'quarantined'
     assert log.jobs[ids[0]]['recovery_state'] == 'held'
-    assert log.results[ids[1]]['projection_state'] == 'persisted'
+    assert log.results[ids[1]]['projection_state'] == 'ready'
     assert log.projection_watermark(owner_key(BURST)) == ids[-1]
     # Held rows never arm retention: the hold path writes no expiry receipt.
     assert 'expires_at' not in log.results[ids[0]]

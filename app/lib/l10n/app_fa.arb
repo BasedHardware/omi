@@ -1225,6 +1225,7 @@
     "enterYourName": "نام خود را وارد کنید",
     "nameCannotBeEmpty": "نام نمی‌تواند خالی باشد",
     "nameUpdatedSuccessfully": "نام با موفقیت به‌روزرسانی شد!",
+    "calendarReadSelectionHelp": "تقویم‌های انتخاب‌شده خوانده می‌شوند. رویدادهای جدید از {calendar} استفاده می‌کنند.",
     "calendarSettings": "تنظیمات تقویم",
     "calendarProviders": "ارائه‌دهندگان تقویم",
     "macOsCalendar": "تقویم macOS",
@@ -1999,6 +2000,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "در حال ضبط با تلفن شما",
+    "wrapUp": "جمع‌بندی",
+    "recordingDiscarded": "ضبط حذف شد",
     "undo": "بازگشت",
     "@undo": {
         "description": "Undo button text"
@@ -11182,7 +11186,7 @@
     "diagnosticsDrops": "قطعی‌ها",
     "diagnosticsDropsPerHour": "حدود {count} در ساعت",
     "diagnosticsLongestGap": "طولانی‌ترین وقفه",
-    "diagnosticsSincePairingSummary": "از زمان جفت‌سازی: {drops} قطعی، {failed} اتصال ناموفق.",
+    "diagnosticsSincePairingSummary": "از زمان جفت‌سازی: {drops} اتصال مجدد، {failed} اتصال ناموفق.",
     "diagnosticsLastDuration": "{duration} گذشته",
     "chatReplyOffline": "اتصال برقرار نشد. اتصال خود را بررسی کنید و دوباره تلاش کنید.",
     "chatReplyServerError": "مشکلی از سمت ما پیش آمد. لطفاً دوباره تلاش کنید.",
@@ -11542,8 +11546,6 @@
     "syncCardSyncingTitle": "همگام‌سازی ضبط‌های شما",
     "syncStepDownloadingAmount": "دریافت از Omi · {done} / {total}",
     "syncStepUploadingAmount": "آپلود · {done} / {total}",
-    "syncCardTranscribingAmount": "تبدیل {amount} به گفتگو",
-    "syncCardTranscribedOf": "{done} / {total} انجام شد · می‌توانید از این صفحه خارج شوید",
     "syncCardReadyAmount": "{amount} آماده همگام‌سازی",
     "syncDetailsTitle": "جزئیات همگام‌سازی",
     "syncDetailsRightNow": "همین حالا",
@@ -11551,7 +11553,7 @@
     "syncDetailsTransferSpeed": "سرعت انتقال",
     "syncDetailsWaitingOnOmi": "در انتظار Omi",
     "syncDetailsWaitingOnPhone": "در انتظار این گوشی",
-    "syncDetailsTranscribing": "در حال رونویسی در Omi",
+    "syncDetailsTranscribing": "بارگذاری شد، در انتظار سرور",
     "syncDetailsAudioFiles": "فایل‌های صوتی",
     "syncDetailsServerJobs": "کارهای سرور (انجام‌شده / کل)",
     "syncDetailsCopy": "کپی جزئیات برای پشتیبانی",
@@ -11687,6 +11689,8 @@
     "summaryWithOmiInstead": "به‌جای آن با Omi خلاصه کنید",
     "summaryBusyTitle": "هنوز در حال پردازش",
     "summaryBusyBody": "Omi در حال حاضر روی این گفتگو کار می‌کند. خلاصه پس از اتمام اینجا نمایش داده می‌شود.",
+    "summaryTranscriptionPendingTitle": "هنوز رونویسی نشده",
+    "summaryTranscriptionPendingBody": "خلاصه پس از آماده شدن رونوشت نمایش داده می‌شود.",
     "summaryCheckAgain": "بررسی دوباره",
     "summaryLimitTitle": "به سقف خلاصه‌ها رسیدید",
     "summaryLimitBody": "در یک ساعت گذشته چندین خلاصه را دوباره ایجاد کرده‌اید. بعداً دوباره امتحان کنید.",
@@ -12214,6 +12218,7 @@
     "monthlySwitchDoneTitle": "اکنون ماهانه پرداخت می‌کنید",
     "monthlySwitchDoneBody": "امروز {price} پرداخت شد. ماهانه تمدید می‌شود.",
     "processingDeleteScopeChanged": "فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "{minutes} دقیقهٔ این ماه را استفاده کرده‌اید",
     "freeCapBody": "Omi همچنان در حال ضبط است. انتخاب کنید رونویسی چگونه ادامه پیدا کند.",
     "omiProPlanName": "Omi Pro",
@@ -12236,5 +12241,7 @@
     "audioStaysOnPhone": "صدا روی تلفن شما می‌ماند",
     "onDeviceModelDownloadSize": "دانلود {size} مگابایت",
     "downloadNow": "اکنون دانلود کن",
-    "onWifiLater": "بعداً با Wi-Fi"
+    "onWifiLater": "بعداً با Wi-Fi",
+    "conversationWritingSummary": "در حال نوشتن خلاصه شما…",
+    "onTheWayServerWork": "کار گزارش‌شده توسط سرور"
 }

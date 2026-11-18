@@ -79,6 +79,7 @@ import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversation_task_presence_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -685,14 +686,26 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ListenableProvider(create: (context) => ConnectivityProvider()),
         ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
         ChangeNotifierProvider(create: (context) => createProductionConversationProvider()),
-        ChangeNotifierProvider(
-            create: (context) => HomeFeedProvider()..observeConversations(context.read<ConversationProvider>())),
+        // Recordings and conversations (v3): the per-account switch and the conversation in progress.
+        ChangeNotifierProvider(create: (context) => ConversationsV3Provider()),
+        ChangeNotifierProvider(create: (context) {
+          final v3 = context.read<ConversationsV3Provider>();
+          return HomeFeedProvider()
+            ..suppressed = (() => v3.suppressesLegacy)
+            ..observeConversations(context.read<ConversationProvider>());
+        }),
         ListenableProvider(create: (context) => AppProvider()),
         ChangeNotifierProvider(create: (context) => PeopleProvider()),
         ChangeNotifierProvider(create: (context) => SpeakerTagPromptsProvider()),
         ChangeNotifierProvider(create: (context) => ReviewProvider()),
-        // Live episodes overlay; reads the server capability on first use (Home's live row).
-        ChangeNotifierProvider(create: (context) => EpisodeProvider()),
+        // Live episodes overlay; reads the server capability on first use (Home's live row). Silent
+        // for a v3 account, which has no episodes.
+        ChangeNotifierProvider(
+          create: (context) {
+            final v3 = context.read<ConversationsV3Provider>();
+            return EpisodeProvider()..suppressed = (() => v3.suppressesLegacy);
+          },
+        ),
         ChangeNotifierProvider(create: (context) => UsageProvider()),
         ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
           create: (context) => MessageProvider(),

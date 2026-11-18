@@ -36,6 +36,7 @@ from utils.batch_pipeline.errors import error_site_field, validate_worker_failur
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 from config.backlog_state_machine import MAX_HELD_REDRIVES, held_redrive_budget_enabled, held_redrive_counter_enabled
 from database import batch_pipeline_allowance_hold as allowance_hold
+from database.batch_pipeline_recovery_discovery import RecoveryCaller, RecoveryQuery
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
@@ -155,6 +156,9 @@ class _OwnWrites:
 
     def first_pending(self, owner_key: str) -> dict | None:
         return self._own(self._tx.first_pending(owner_key))
+
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        return [own for job in self._tx.pending_page(owner_key, limit) if (own := self._own(job)) is not None]
 
     def first_ready_pending(self, owner_key: str) -> dict | None:
         return self._own(self._tx.first_ready_pending(owner_key))
@@ -301,11 +305,45 @@ def _defer(job: dict, now: float, reason: str) -> None:
     )
 
 
+def stored_identity(job: dict) -> dict:
+    """The job as admitted: a demoted row compares against its admission priority."""
+    if 'admitted_priority' not in job:
+        return job
+    return {**job, 'priority': job['admitted_priority']}
+
+
+def requeue_due_retry(tx: Transaction, job: dict, now: float, *, priority: int | None = None) -> str | None:
+    """A due retry row rejoins DRR, or parks if its latest decision is an allowance hold.
+
+    ``priority`` may only lower the service class; the admission priority stays the row's identity."""
+    if job.get('state') != 'retry' or job['available_at'] > now:
+        return None
+    if allowance_hold.enabled() and allowance_hold.park(tx, job, now):
+        return 'allowance_parked'
+    if priority is not None and int(priority) > job['priority']:
+        job.setdefault('admitted_priority', job['priority'])
+        job['priority'] = int(priority)
+    control = read_control(tx, scheduler_control_key(job['owner_key']))
+    job['state'] = 'ready'
+    _append(tx, control, job)
+    tx.put('jobs', job['segment_id'], job)
+    return 'requeued'
+
+
 class Scheduler:
-    def __init__(self, store: Store, *, metrics: QueueMetrics | None = None, pool: str = 'batch', worker_id: str = ''):
+    def __init__(
+        self,
+        store: Store,
+        *,
+        metrics: QueueMetrics | None = None,
+        pool: str = 'batch',
+        worker_id: str = '',
+        recovery_caller: RecoveryCaller = RecoveryCaller.UNKNOWN,
+    ):
         if pool not in {'batch', 'live'}:
             raise ValueError('pool must be batch or live')
         self.store = store
+        self.recovery_caller = recovery_caller
         self.metrics = metrics
         self.pool = pool
         self.worker_id = worker_id or uuid.uuid4().hex
@@ -339,8 +377,9 @@ class Scheduler:
         ):
             raise ValueError('pending recording owner cannot change')
         if previous and previous.get('state') != 'record_pending':
+            stored = stored_identity(previous)
             if any(
-                previous.get(key, {'unit_kind': 'conversation', 'requires_compute_admission': False}.get(key)) != value
+                stored.get(key, {'unit_kind': 'conversation', 'requires_compute_admission': False}.get(key)) != value
                 for key, value in immutable.items()
                 if not (key == 'privacy_generation' and value is None)
             ):
@@ -1120,14 +1159,63 @@ class Scheduler:
 
         return self.store.run(commit)
 
-    def recover(self, now: float, limit: int = 100) -> int:
+    def recover(self, now: float, limit: int = 100, *, caller: RecoveryCaller | None = None) -> int:
+        with RecoveryQuery(self.store, now, limit, caller if caller is not None else self.recovery_caller) as query:
+            return self._recover(now, limit, query)
+
+    def _recover(self, now: float, limit: int, query: RecoveryQuery) -> int:
         self.store.run(lambda tx: migrate_legacy(tx, now))
         recovered = 0
         candidates, observations = {}, []
         protected = protected_share.enabled()
+
+        def recover_page(segments, discovery=None):
+            nonlocal recovered
+            for segment_id in segments:
+
+                def commit(tx: Transaction):
+                    observations.clear()
+                    job = tx.get('jobs', segment_id)
+                    if state == 'leased' and job.get('state') == 'leased' and job['lease_until'] <= now:
+                        outcome = expire_lease(
+                            tx,
+                            job,
+                            now,
+                            stage_policy=stage_in_transaction,
+                            candidates=candidates,
+                            observations=observations,
+                            defer=_defer,
+                        )
+                    elif state == 'retry' and job.get('state') == 'retry' and job['available_at'] <= now:
+                        if segment_id in protected_ids and not protected_share.eligible(job, now):
+                            return None
+                        return (requeue_due_retry(tx, job, now), 0, None)
+                    else:
+                        return None
+                    tx.put('jobs', segment_id, job)
+                    return outcome
+
+                try:
+                    outcome = self.store.run(commit)
+                    record_policy_observations(observations)
+                except BatchPrivacyBlocked:
+                    self.store.quarantine_fenced(segment_id, now)
+                    if discovery is not None:
+                        discovery.candidate(False)
+                    continue
+                if discovery is not None:
+                    discovery.candidate(bool(outcome))
+                if outcome:
+                    recovered += 1
+                    observe_recovery(outcome, self.metrics)
+
         for state in ('leased', 'retry'):
             protected_ids = set()
-            if state == 'retry' and protected:
+            if state == 'leased':
+                recover_page(query.discover(), query)
+                if query.needs_primary():
+                    recover_page(query.primary('hint_ineligible'), query)
+            elif protected:
                 size = max(1, min(limit, protected_share.RETRY_PAGE_SIZE))
                 reserved = max(1, size * protected_share.share_percent() // 100)
                 # Preserve at least one oldest-due discovery, even for limit=1.
@@ -1142,46 +1230,9 @@ class Scheduler:
                         self.metrics.record_discovery('retry', max(1, len(ordinary)) + max(1, len(page)))
                     except Exception:
                         pass
+                recover_page(segments)
             else:
-                segments = self.store.due(state, now, limit)
-            for segment_id in segments:
-
-                def commit(tx: Transaction):
-                    observations.clear()
-                    job = tx.get('jobs', segment_id)
-                    if job.get('state') == 'leased' and job['lease_until'] <= now:
-                        outcome = expire_lease(
-                            tx,
-                            job,
-                            now,
-                            stage_policy=stage_in_transaction,
-                            candidates=candidates,
-                            observations=observations,
-                            defer=_defer,
-                        )
-                    elif job.get('state') == 'retry' and job['available_at'] <= now:
-                        if segment_id in protected_ids and not protected_share.eligible(job, now):
-                            return None
-                        if allowance_hold.enabled() and allowance_hold.park(tx, job, now):
-                            return ('allowance_parked', 0, None)
-                        control = read_control(tx, scheduler_control_key(job['owner_key']))
-                        job['state'] = 'ready'
-                        _append(tx, control, job)
-                        outcome = ('requeued', 0, None)
-                    else:
-                        return None
-                    tx.put('jobs', segment_id, job)
-                    return outcome
-
-                try:
-                    outcome = self.store.run(commit)
-                    record_policy_observations(observations)
-                except BatchPrivacyBlocked:
-                    self.store.quarantine_fenced(segment_id, now)
-                    continue
-                if outcome:
-                    recovered += 1
-                    observe_recovery(outcome, self.metrics)
+                recover_page(self.store.due(state, now, limit))
         return recovered
 
     @staticmethod

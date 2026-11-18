@@ -1126,6 +1126,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'İsim başarıyla güncellendi!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Seçili takvimleri oku. Yeni etkinlikler $calendar takvimini kullanır.';
+  }
+
+  @override
   String get calendarSettings => 'Takvim ayarları';
 
   @override
@@ -1993,6 +1998,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get memoryHistory => 'Geçmiş';
+
+  @override
+  String get recordingWithYourPhone => 'Telefonunla kaydediliyor';
+
+  @override
+  String get wrapUp => 'Bitir';
+
+  @override
+  String get recordingDiscarded => 'Kayıt silindi';
 
   @override
   String get undo => 'Geri Al';
@@ -12228,7 +12242,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Eşleştirmeden beri: $drops kopma, $failed başarısız bağlantı.';
+    return 'Eşleştirmeden beri: $drops yeniden bağlantı, $failed başarısız bağlantı.';
   }
 
   @override
@@ -13468,16 +13482,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount konuşmalara dönüştürülüyor';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total tamamlandı · bu ekrandan çıkabilirsiniz';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount senkronize edilmeye hazır';
   }
@@ -13501,7 +13505,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Bu telefonda bekliyor';
 
   @override
-  String get syncDetailsTranscribing => 'Omi\'de yazıya dökülüyor';
+  String get syncDetailsTranscribing => 'Yüklendi, sunucu bekleniyor';
 
   @override
   String get syncDetailsAudioFiles => 'Ses dosyaları';
@@ -13957,6 +13961,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi bu konuşma üzerinde zaten çalışıyor. Özet tamamlandığında burada görünecek.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Henüz yazıya dökülmedi';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Özet, döküm hazır olduğunda görünecek.';
 
   @override
   String get summaryCheckAgain => 'Tekrar kontrol et';
@@ -15476,6 +15486,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get processingDeleteScopeChanged => 'İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Bu ayın $minutes dakikasını kullandınız';
   }
@@ -15551,4 +15565,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Sonra Wi-Fi\'da';
+
+  @override
+  String get conversationWritingSummary => 'Özetiniz yazılıyor…';
+
+  @override
+  String get onTheWayServerWork => 'Sunucunun bildirdiği işler';
 }

@@ -1127,6 +1127,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Đã cập nhật tên thành công!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Đọc các lịch đã chọn. Sự kiện mới sử dụng $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Cài đặt lịch';
 
   @override
@@ -1996,6 +2001,15 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get memoryHistory => 'Lịch sử';
+
+  @override
+  String get recordingWithYourPhone => 'Đang ghi âm bằng điện thoại';
+
+  @override
+  String get wrapUp => 'Kết thúc';
+
+  @override
+  String get recordingDiscarded => 'Đã hủy bản ghi';
 
   @override
   String get undo => 'Hoàn tác';
@@ -12216,7 +12230,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Kể từ khi ghép đôi: $drops lần ngắt, $failed kết nối thất bại.';
+    return 'Kể từ khi ghép đôi: $drops lần kết nối lại, $failed lần kết nối thất bại.';
   }
 
   @override
@@ -13453,16 +13467,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Đang biến $amount thành cuộc trò chuyện';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Xong $done / $total · bạn có thể rời màn hình này';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount sẵn sàng đồng bộ';
   }
@@ -13486,7 +13490,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Đang chờ trên điện thoại này';
 
   @override
-  String get syncDetailsTranscribing => 'Đang phiên âm trên Omi';
+  String get syncDetailsTranscribing => 'Đã tải lên, đang chờ máy chủ';
 
   @override
   String get syncDetailsAudioFiles => 'Tệp âm thanh';
@@ -13946,6 +13950,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi đang xử lý cuộc trò chuyện này. Bản tóm tắt sẽ xuất hiện ở đây khi hoàn tất.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Chưa được chép lời';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Bản tóm tắt sẽ xuất hiện khi bản chép lời sẵn sàng.';
 
   @override
   String get summaryCheckAgain => 'Kiểm tra lại';
@@ -15466,6 +15476,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Bạn đã dùng hết $minutes phút của tháng này';
   }
@@ -15541,4 +15555,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Sau, qua Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Đang viết bản tóm tắt của bạn…';
+
+  @override
+  String get onTheWayServerWork => 'Công việc do máy chủ báo cáo';
 }

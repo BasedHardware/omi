@@ -389,6 +389,14 @@ def worker_silence_disposition_enabled() -> bool:
     )
 
 
+def silence_read_skip_enabled() -> bool:
+    """R9: false restores the full silent-unit projection/accounting path."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED',
+        os.getenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', 'true').strip().lower() not in {'false', 'off', '0'},
+    )
+
+
 LONG_SPEECH_HANDOFF_SECONDS = 5.0
 
 
@@ -735,6 +743,16 @@ def owner_drain_admission_diagnostics_enabled() -> bool:
     }
 
 
+def projection_overlap_diagnostics_enabled() -> bool:
+    """Default-on diagnostics; disable before startup without changing discovery."""
+    return os.getenv('BATCH_PIPELINE_PROJECTION_OVERLAP_DIAGNOSTICS', '1').strip().lower() not in {
+        '0',
+        'off',
+        'false',
+        'no',
+    }
+
+
 def serving_projection_sweep_enabled() -> bool:
     """Only ``off`` disables serving-instance discovery; owner wakes still run."""
     from config.policy import kill_switch
@@ -1061,6 +1079,16 @@ def merge_head_wait_seconds() -> float:
     if value <= 0:
         return 0.0
     return value if value <= MERGE_HEAD_WAIT_MAX else MERGE_HEAD_WAIT_DEFAULT
+
+
+# A head still unready this long after admission is starved stock, not a unit about to finish.
+MERGE_STALE_HEAD_SECONDS = 1800.0
+
+
+def merge_stale_head_skip(owner_id: str) -> bool:
+    """Canary: listed owners skip the head wait behind a stale head. Unset or empty: nobody."""
+    raw = os.getenv('BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST', '')
+    return bool(owner_id) and owner_id in {uid.strip() for uid in raw.split(',') if uid.strip()}
 
 
 MERGE_CATCH_UP_DEPTH_DEFAULT = 16

@@ -1123,6 +1123,11 @@ class AppLocalizationsSr extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Име је успешно ажурирано!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Читај изабране календаре. Нови догађаји користе $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Подешавања календара';
 
   @override
@@ -1986,6 +1991,15 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get memoryHistory => 'Историја';
+
+  @override
+  String get recordingWithYourPhone => 'Снима се телефоном';
+
+  @override
+  String get wrapUp => 'Заврши';
+
+  @override
+  String get recordingDiscarded => 'Снимак одбачен';
 
   @override
   String get undo => 'Врати';
@@ -12229,7 +12243,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Од упаривања: прекида $drops, неуспелих веза $failed.';
+    return 'Од упаривања: $drops поновних повезивања, $failed неуспешних повезивања.';
   }
 
   @override
@@ -13464,16 +13478,6 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Претварање $amount у разговоре';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Готово $done од $total · можете напустити овај екран';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount спремно за синхронизацију';
   }
@@ -13497,7 +13501,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Чека на овом телефону';
 
   @override
-  String get syncDetailsTranscribing => 'Транскрипција на Omi';
+  String get syncDetailsTranscribing => 'Отпремљено, чека сервер';
 
   @override
   String get syncDetailsAudioFiles => 'Аудио датотеке';
@@ -13953,6 +13957,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi већ ради на овом разговору. Сажетак ће се појавити овде када буде готов.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Још није транскрибовано';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Сажетак ће се појавити када транскрипт буде спреман.';
 
   @override
   String get summaryCheckAgain => 'Провери поново';
@@ -15473,6 +15483,10 @@ class AppLocalizationsSr extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Листа обраде се променила. Прегледајте је и покушајте поново.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Искористили сте $minutes минута за овај месец';
   }
@@ -15548,4 +15562,10 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Касније на Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Пишемо ваш сажетак…';
+
+  @override
+  String get onTheWayServerWork => 'Рад који је пријавио сервер';
 }

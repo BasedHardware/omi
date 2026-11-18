@@ -221,6 +221,21 @@ void main() {
     await Future<void>.delayed(Duration.zero);
   }
 
+  test('a caller can suppress automatic 5xx response replay', () async {
+    final url = Uri.parse('http://pool-http-fake.invalid/typed-retryable-processing');
+    final sent = HttpPoolManager.instance.send(
+      () => http.Request('POST', url),
+      retries: 1,
+      retryServerErrors: false,
+    );
+
+    (await waitForOpen(0)).complete(_FakeRequest(_FakeResponse(503, 'typed retryable')));
+    final response = await sent;
+
+    expect(response.statusCode, 503);
+    expect(client.openCount, 1);
+  });
+
   Future<({List<Object> unhandled, Object? harnessError})> runInGuardedZone(Future<void> Function() body) async {
     final unhandled = <Object>[];
     final done = Completer<void>();

@@ -1123,6 +1123,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Vardas sėkmingai atnaujintas!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Skaityti pasirinktus kalendorius. Naujiems įvykiams naudojamas $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalendoriaus nustatymai';
 
   @override
@@ -1986,6 +1991,15 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get memoryHistory => 'Istorija';
+
+  @override
+  String get recordingWithYourPhone => 'Įrašoma telefonu';
+
+  @override
+  String get wrapUp => 'Užbaigti';
+
+  @override
+  String get recordingDiscarded => 'Įrašas atmestas';
 
   @override
   String get undo => 'Atšaukti';
@@ -12238,7 +12252,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Nuo susiejimo: nutrūkimų $drops, nepavykusių ryšių $failed.';
+    return 'Nuo susiejimo: $drops pakartotinių prisijungimų, $failed nepavykusių prisijungimų.';
   }
 
   @override
@@ -13478,16 +13492,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount paverčiama pokalbiais';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Atlikta $done iš $total · galite palikti šį ekraną';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount paruošta sinchronizuoti';
   }
@@ -13511,7 +13515,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Laukia šiame telefone';
 
   @override
-  String get syncDetailsTranscribing => 'Transkribuojama Omi';
+  String get syncDetailsTranscribing => 'Įkelta, laukiama serverio';
 
   @override
   String get syncDetailsAudioFiles => 'Garso failai';
@@ -13969,6 +13973,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi jau apdoroja šį pokalbį. Santrauka bus parodyta čia, kai bus baigta.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Dar netranskribuota';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Santrauka bus parodyta, kai bus paruošta transkripcija.';
 
   @override
   String get summaryCheckAgain => 'Tikrinti dar kartą';
@@ -15489,6 +15499,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Apdorojimo sąrašas pasikeitė. Peržiūrėkite jį ir bandykite dar kartą.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Išnaudojote šio mėnesio $minutes min.';
   }
@@ -15564,4 +15578,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Vėliau per Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Rašoma jūsų santrauka…';
+
+  @override
+  String get onTheWayServerWork => 'Serverio praneštas darbas';
 }

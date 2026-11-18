@@ -142,6 +142,14 @@ AUDITED_PUBLIC_PREFIXES = (
 )
 UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     (
+        'GET',
+        '/v1/conversations/live',
+    ): 'Firebase-authenticated first-party v3 capability/live row; not a Developer API key route.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/summary/stream',
+    ): 'Firebase-authenticated first-party on-open notes stream; not a Developer API key route.',
+    (
         'POST',
         '/v1/conversations/deletion-batch-purges/run',
     ): 'Cloud Tasks worker on backend-sync, service OIDC only; not a browser, app or Developer API surface.',

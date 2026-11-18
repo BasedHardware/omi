@@ -29,11 +29,15 @@ from config.batch_pipeline import (
     projection_hold_recovery_enabled,
     sweep_owner_chain_enabled,
     serving_sweep_page_rows,
+    silence_read_skip_enabled,
 )
 from config.record_latency import recent_native_record
+from database import batch_pipeline_projection_release as projection_release
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
+from database.batch_pipeline_projection_protocol import PROJECTION_HEAD_BLOCK_TYPE as PROJECTION_HEAD_BLOCK_TYPE
+from database.batch_pipeline_projection_protocol import PROJECTION_HEAD_BLOCKED_SINCE
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
@@ -175,11 +179,6 @@ def projection_block_reason(error: BaseException) -> str:
 # once a head has failed for this long it takes the held disposition so the
 # chain can advance (audio retained; a reviewed redrive owns the unit).
 PROJECTION_HEAD_RETRY_SECONDS = 24 * 3600.0
-
-# Result-row fields stamping a bounded-retry head's first failure. Written
-# once per failure episode; the release redrive clears them with the receipt.
-PROJECTION_HEAD_BLOCKED_SINCE = 'projection_blocked_since'
-PROJECTION_HEAD_BLOCK_TYPE = 'projection_block_type'
 
 
 def projection_exception_transient(error: BaseException) -> bool:
@@ -466,6 +465,8 @@ class Projector:
         self.handoff = threading.Lock()
         # Resume point of the held-partial scan; a short page wraps it.
         self.held_after: str | None = None
+        self._held_cursor_baseline: dict | None = None
+        self._held_sweep_lock = threading.Lock()
         # Upload dedupe of the held-partial pass in flight; spans budget stops
         # and wraps only when the scan's cursor does.
         self.held_pass_seen: set[tuple[str, str]] = set()
@@ -602,8 +603,14 @@ class Projector:
         if job.get('_projection_privacy_deleted'):
             persist_disposition(session, privacy_deleted=True)
             return
+        silent = (
+            silence_read_skip_enabled()
+            and entry['result']['outcome'] == 'silence'
+            and not binding.record_origin
+            and not binding.native_record
+        )
         # A walk's fresh read showed no receipt; the transaction still fences.
-        prechecked = not (hint is not None and hint.successor and not entry.get('projection'))
+        prechecked = not silent and not (hint is not None and hint.successor and not entry.get('projection'))
         if prechecked:
             try:
                 with projection_phase('predecessor', policy):
@@ -628,7 +635,12 @@ class Projector:
                 if binding.record_origin:
                     self.assign_record_silence(item, binding, session, hint=hint)
                 else:
-                    session.persist_empty()
+                    if silent:
+                        # prepare() in this transaction retains every authority,
+                        # binding and predecessor fence. No follow-up is owed.
+                        session.persist_empty(silence=True)
+                    else:
+                        session.persist_empty()
             except ProjectionReplay:
                 if prechecked and not policy.projection_contention:
                     raise
@@ -712,12 +724,39 @@ class Projector:
             sorted(parts.items(), key=lambda pair: int(pair[0])) if parts else [(None, entry['projection'])]
         ):
             self.finish_part(item, binding, receipt, int(index) if index is not None else None, policy=policy)
-        return self.complete_content(item.segment_id, binding, policy=policy)
+        return self.complete_content(
+            item.segment_id,
+            binding,
+            policy=policy,
+            silence=entry.get('result', {}).get('outcome') == 'silence',
+        )
 
-    def complete_content(self, segment_id, binding, *, policy=None):
+    def complete_content(self, segment_id, binding, *, policy=None, silence=False):
         policy = policy or self.store.policy(segment_id)
+        entries = None
+        if silence and silence_read_skip_enabled() and not binding.record_origin and not binding.native_record:
+            # Reuse ordinary accounting's result reads to rule out known mixed
+            # uploads before paying for a speculative completion transaction.
+            with projection_phase('completion_scan', policy):
+                entries = self.store.completion_entries(binding)
+            if len(entries) == len(binding.segment_ids) and all(
+                entry.get('result', {}).get('outcome') == 'silence'
+                and (entry.get('projection') or {}).get('state') == 'ready'
+                and not entry.get('projection_parts')
+                for entry in entries.values()
+            ):
+                # This hint never authorizes completion: ALL sibling identities,
+                # outcomes, privacy and accounting are verified transactionally.
+                with projection_phase('completion', policy):
+                    result = self.store.complete(segment_id, binding, self.clock(), None, policy=policy)
+                if result is not None:
+                    return self.publish_completion(binding, result, policy=policy)
         with projection_phase('accounting', policy):
-            accounting = self.store.prepare_accounting(binding, self.clock())
+            accounting = (
+                self.store.prepare_accounting(binding, self.clock(), result_entries=entries)
+                if entries is not None
+                else self.store.prepare_accounting(binding, self.clock())
+            )
         if accounting is None:
             self.store.hold_for_quarantine(segment_id, binding, self.clock(), policy=policy)
             return None
@@ -726,6 +765,9 @@ class Projector:
                 record_speech(binding, accounting, self.clock())
         with projection_phase('completion', policy):
             result = self.store.complete(segment_id, binding, self.clock(), accounting, policy=policy)
+        return self.publish_completion(binding, result, policy=policy)
+
+    def publish_completion(self, binding, result, *, policy):
         if result is not None:
             # complete() aggregated every part before setting this disposition.
             # Never call the publisher, even with empty IDs, for a deleted job.
@@ -767,6 +809,42 @@ class Projector:
         return result
 
     def sweep_held(
+        self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None
+    ) -> dict[str, int]:
+        """Resume from the shared checkpoint, with local progress during read or write failures."""
+        with self._held_sweep_lock:
+            durable = projection_release.load_held_partial_cursor(self.store)
+            if durable is not None and durable != self._held_cursor_baseline:
+                # A first successful read of a missing document confirms the
+                # local scan started at the beginning. Keep any unsaved work.
+                if self._held_cursor_baseline is not None or durable:
+                    self.held_after = projection_release.cursor_after_id(durable)
+                    self.held_pass_seen.clear()
+                self._held_cursor_baseline = durable
+            counts = self._sweep_held_pages(limit, deadline=deadline, max_pages=max_pages)
+            counts['reads'] += 1  # The initial checkpoint lookup.
+
+            def record_cursor_read():
+                counts['reads'] += 1
+
+            confirmed = durable is not None
+            # A nonempty pass can scan from None back to None. Publish that
+            # wrap too, so a concurrent advance can fence out its completion.
+            wrapped_with_work = not counts['more'] and counts['units'] > 0
+            if durable is not None and (
+                self.held_after != projection_release.cursor_after_id(durable) or wrapped_with_work
+            ):
+                committed = projection_release.advance_held_partial_cursor(
+                    self.store, durable, self.held_after, self.clock(), record_read=record_cursor_read
+                )
+                confirmed = committed is not None
+                if committed is not None:
+                    self._held_cursor_baseline = committed
+            if not counts['more'] and not confirmed:
+                counts['wrap_unconfirmed'] = 1
+            return counts
+
+    def _sweep_held_pages(
         self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None
     ) -> dict[str, int]:
         """Pages of held units chained into one bounded pass; one partial attempt per upload.
@@ -901,23 +979,8 @@ class Projector:
 
     def _note_head_blocked(self, segment_id: str, error: BaseException) -> None:
         """Stamp a bounded-retry head's first failure time; one write per episode."""
-
-        def commit(transaction):
-            row = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
-            if row.get(PROJECTION_HEAD_BLOCKED_SINCE) is not None or row.get('projection_state') not in (
-                'pending',
-                'persisted',
-                'ready',
-            ):
-                return False
-            transaction.update(
-                self.store.ref('results', segment_id),
-                {PROJECTION_HEAD_BLOCKED_SINCE: self.clock(), PROJECTION_HEAD_BLOCK_TYPE: error_type(error)},
-            )
-            return True
-
         try:
-            self.store.run(commit)
+            self.store.note_head_blocked(segment_id, self.clock(), error_type(error))
         except Exception as note_error:
             logger.warning(
                 'event=batch_projection action=head_block_note outcome=retry exception_type=%s',

@@ -1,11 +1,22 @@
 # LIFECYCLE: permanent
-"""Frozen published image and exact metadata schema; no production admission is implied."""
+"""Pinned candidate image and exact metadata schema; qualification and production admission remain external gates."""
+
+READINESS_ENV = {
+    'HOME': '/home/ubuntu',
+    'PYTHONDONTWRITEBYTECODE': '1',
+    'GIT_OPTIONAL_LOCKS': '0',
+    'BATCH_JOBSTORE_MODE': 'firestore',
+    'JOBSTORE_SHADOW_WRITES': 'off',
+    'JOBSTORE_PRODUCTION_MIRROR': 'off',
+    'JOBSTORE_PRODUCTION_MIRROR_SAMPLE_BPS': '0',
+    'JOBSTORE_INDEX_READS': 'off',
+}
 
 CONTRACT = {
     'source_sha': '97074e78defa1a84b9d39c021e28aa70cf4f2e4e',
     'supervisor_sha256': '1b6a0a1ed5ca8dbc7f8087ae51441539a8aa9b4f4da2171932e2f08af9de699f',
-    'image': 'gcr.io/based-hardware/jobstore-reconcile-operator@sha256:8b0bf0de13348de53700dee40b5f83f02c5edf3db184345f5c0769601efaefd0',
-    'qualification_run': 43851897045,
+    'image': 'gcr.io/based-hardware/jobstore-reconcile-operator@sha256:f713574047679618ecea32ff29b939f20fa3d63cfea33ba9cdf6643577d2c145',
+    'qualification_run': None,
     'migrations': [
         [1, 'doc_mode_store', '4f121b4df8ffe9c8369cc5b920f94010d3ada94b11909c49318db9f49f6ba205'],
         [2, 'outbox', '6e53430b74b89c7a2e3b031faec7766f0374fed8aefa4e916fb19e27950d4e6e'],

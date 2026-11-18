@@ -1117,6 +1117,11 @@ class AppLocalizationsTh extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'อัปเดตชื่อสำเร็จ!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'อ่านปฏิทินที่เลือก กิจกรรมใหม่จะใช้ $calendar';
+  }
+
+  @override
   String get calendarSettings => 'การตั้งค่าปฏิทิน';
 
   @override
@@ -1975,6 +1980,15 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get memoryHistory => 'ประวัติ';
+
+  @override
+  String get recordingWithYourPhone => 'กำลังบันทึกด้วยโทรศัพท์ของคุณ';
+
+  @override
+  String get wrapUp => 'สรุป';
+
+  @override
+  String get recordingDiscarded => 'ทิ้งการบันทึกแล้ว';
 
   @override
   String get undo => 'เลิกทำ';
@@ -12154,7 +12168,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'ตั้งแต่จับคู่: หลุด $drops ครั้ง เชื่อมต่อล้มเหลว $failed ครั้ง';
+    return 'ตั้งแต่จับคู่: เชื่อมต่อใหม่ $drops ครั้ง เชื่อมต่อล้มเหลว $failed ครั้ง';
   }
 
   @override
@@ -13388,16 +13402,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'กำลังแปลง $amount เป็นบทสนทนา';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'เสร็จแล้ว $done จาก $total · ออกจากหน้าจอนี้ได้เลย';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount พร้อมซิงค์';
   }
@@ -13421,7 +13425,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'รอจากโทรศัพท์เครื่องนี้';
 
   @override
-  String get syncDetailsTranscribing => 'กำลังถอดเสียงบน Omi';
+  String get syncDetailsTranscribing => 'อัปโหลดแล้ว กำลังรอเซิร์ฟเวอร์';
 
   @override
   String get syncDetailsAudioFiles => 'ไฟล์เสียง';
@@ -13877,6 +13881,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi กำลังประมวลผลบทสนทนานี้อยู่แล้ว สรุปจะปรากฏที่นี่เมื่อเสร็จสิ้น';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'ยังไม่ได้ถอดเสียง';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'สรุปจะปรากฏเมื่อการถอดเสียงพร้อม';
 
   @override
   String get summaryCheckAgain => 'ตรวจสอบอีกครั้ง';
@@ -15391,6 +15401,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get processingDeleteScopeChanged => 'รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'คุณใช้ $minutes นาทีของเดือนนี้ครบแล้ว';
   }
@@ -15466,4 +15480,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onWifiLater => 'ภายหลังผ่าน Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'กำลังเขียนสรุปของคุณ…';
+
+  @override
+  String get onTheWayServerWork => 'งานที่เซิร์ฟเวอร์รายงาน';
 }

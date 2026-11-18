@@ -23,6 +23,17 @@ void omi_diagnostics_pack(uint8_t out[OMI_DIAGNOSTICS_SIZE], const struct omi_di
     put_u32(out + 13, snapshot->mic_overrun_count);
     put_u32(out + 17, snapshot->ble_tx_drop_count);
     put_u32(out + 21, snapshot->storage_error_count);
+    /* Preserve the battery extension already understood by released parsers.
+     * This producer does not collect those optional values. */
+    memset(out + 25, 0xff, 5);
+    out[30] = (uint8_t) snapshot->conn_interval;
+    out[31] = (uint8_t) (snapshot->conn_interval >> 8);
+    out[32] = (uint8_t) snapshot->conn_latency;
+    out[33] = (uint8_t) (snapshot->conn_latency >> 8);
+    out[34] = (uint8_t) snapshot->conn_timeout;
+    out[35] = (uint8_t) (snapshot->conn_timeout >> 8);
+    out[36] = snapshot->tx_phy;
+    out[37] = snapshot->rx_phy;
 }
 
 /* Appended recovery record and settings use the same explicit byte layout. */

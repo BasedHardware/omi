@@ -17,6 +17,7 @@ from config.policy import resolve_stage_policy
 from utils.batch_pipeline.metrics import QueueMetrics
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import projection_drain, serving
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
 
 
 async def isolated_pump(pump, holds):
@@ -88,7 +89,7 @@ def test_serving_sweep_gate_preserves_other_reconcile_work(monkeypatch, raw, def
     monkeypatch.setattr(serving, 'owner_chain_projection_enabled', lambda: True)
     assert service.reconcile(periodic=True, owner_id='wake', recovered='unit') == ['followup']
     assert service.projector.sweep.call_count == int(default)
-    service._maintain.assert_called_once_with(recover_quarantine=False)
+    service._maintain.assert_called_once_with(recover_quarantine=False, recovery_caller=RecoveryCaller.SERVING)
     service._reconcile_owner.assert_called_once_with('wake', 'unit')
     service.drain_owner.assert_called_once_with('held')
     service.metrics.refresh.assert_called_once()

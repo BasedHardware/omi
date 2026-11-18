@@ -1124,6 +1124,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'نام با موفقیت به‌روزرسانی شد!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'تقویم‌های انتخاب‌شده خوانده می‌شوند. رویدادهای جدید از $calendar استفاده می‌کنند.';
+  }
+
+  @override
   String get calendarSettings => 'تنظیمات تقویم';
 
   @override
@@ -1985,6 +1990,15 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get memoryHistory => 'تاریخچه';
+
+  @override
+  String get recordingWithYourPhone => 'در حال ضبط با تلفن شما';
+
+  @override
+  String get wrapUp => 'جمع‌بندی';
+
+  @override
+  String get recordingDiscarded => 'ضبط حذف شد';
 
   @override
   String get undo => 'بازگشت';
@@ -12213,7 +12227,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'از زمان جفت‌سازی: $drops قطعی، $failed اتصال ناموفق.';
+    return 'از زمان جفت‌سازی: $drops اتصال مجدد، $failed اتصال ناموفق.';
   }
 
   @override
@@ -13450,16 +13464,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'تبدیل $amount به گفتگو';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total انجام شد · می‌توانید از این صفحه خارج شوید';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount آماده همگام‌سازی';
   }
@@ -13483,7 +13487,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'در انتظار این گوشی';
 
   @override
-  String get syncDetailsTranscribing => 'در حال رونویسی در Omi';
+  String get syncDetailsTranscribing => 'بارگذاری شد، در انتظار سرور';
 
   @override
   String get syncDetailsAudioFiles => 'فایل‌های صوتی';
@@ -13942,6 +13946,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi در حال حاضر روی این گفتگو کار می‌کند. خلاصه پس از اتمام اینجا نمایش داده می‌شود.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'هنوز رونویسی نشده';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'خلاصه پس از آماده شدن رونوشت نمایش داده می‌شود.';
 
   @override
   String get summaryCheckAgain => 'بررسی دوباره';
@@ -15458,6 +15468,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get processingDeleteScopeChanged => 'فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return '$minutes دقیقهٔ این ماه را استفاده کرده‌اید';
   }
@@ -15533,4 +15547,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onWifiLater => 'بعداً با Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'در حال نوشتن خلاصه شما…';
+
+  @override
+  String get onTheWayServerWork => 'کار گزارش‌شده توسط سرور';
 }

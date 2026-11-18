@@ -22,8 +22,9 @@ MAIN_RESTART_HEAD_SHARE = 0.125
 
 
 class ProjectionDiscovery:
-    def __init__(self, store, *, states: tuple[str, ...] | None = None, recent: bool = False):
+    def __init__(self, store, *, states: tuple[str, ...] | None = None, recent: bool = False, on_page=None):
         self.store = store
+        self.on_page = on_page
         self.after = None
         # Assignment discovery opts in to a second, stateless read of the newest commits.
         # It shares each page with the main cursor, so the page holds no more rows.
@@ -66,13 +67,15 @@ class ProjectionDiscovery:
             self.after = None
             self.seeded = True
             if scope:
-                return self.store.projection_page(limit=limit, after=None, **scope)[0]
-            return self.store.projection_pending(limit=limit)
+                return self.read_page(limit=limit, after=None, **scope)[0]
+            rows = self.store.projection_pending(limit=limit)
+            self.observe(rows, scope)
+            return rows
         striped = projection_striping_enabled()
         after = self.after
         seeding = not self.seeded and after is None and striped
         if seeding:
-            _, head = self.store.projection_page(limit=1, after=None, **scope)
+            _, head = self.read_page(limit=1, after=None, **scope)
             if head is not None:
                 oldest = float(head[0])
                 # A timestamp-only cursor includes every tie at the lower bound.
@@ -96,10 +99,10 @@ class ProjectionDiscovery:
         newest, read = self.recent_page(limit, scope) if recent_on else ([], 0)
         if read:
             limit = max(1, limit - read)
-        segments, after = self.store.projection_page(limit=limit, after=after, **scope)
+        segments, after = self.read_page(limit=limit, after=after, **scope)
         if not segments and seeding:
             # Sparse/short collections or clock skew: do not waste a sweep tick.
-            segments, after = self.store.projection_page(limit=limit, after=None, **scope)
+            segments, after = self.read_page(limit=limit, after=None, **scope)
         # Commit the hint only after a successful query. Errors retry this page.
         self.after = after
         self.seeded = True
@@ -112,6 +115,19 @@ class ProjectionDiscovery:
             seen = set(newest)
             return newest + [segment for segment in segments if segment not in seen]
         return segments
+
+    def observe(self, rows: list[str], scope: dict) -> None:
+        if self.on_page is not None:
+            # This is diagnostic only. A failed observer cannot alter discovery or its cursor.
+            try:
+                self.on_page(rows, 'due' if 'followup_due_before' in scope else 'legacy')
+            except Exception:
+                logger.debug('Projection discovery observer failed; page and cursor unchanged')
+
+    def read_page(self, **scope):
+        rows, cursor = self.store.projection_page(**scope)
+        self.observe(rows, scope)
+        return rows, cursor
 
     def recent_page(self, limit: int, scope: dict) -> tuple[list[str], int]:
         """Rows from the newest commits this process has not offered yet, and rows read.
@@ -130,7 +146,7 @@ class ProjectionDiscovery:
             self.offered = {name: at for name, at in self.offered.items() if now - at <= 2 * window}
         try:
             start = now - window + window * self.random()
-            segments, _ = self.store.projection_page(limit=limit // 2, after=(start, ''), **scope)
+            segments, _ = self.read_page(limit=limit // 2, after=(start, ''), **scope)
         except Exception:
             # The main cursor still reads this tick; record that the newest-commits read did not.
             record_fallback(

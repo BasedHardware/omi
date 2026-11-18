@@ -1225,6 +1225,7 @@
     "enterYourName": "Vnesite svoje ime",
     "nameCannotBeEmpty": "Ime ne sme biti prazno",
     "nameUpdatedSuccessfully": "Ime je bilo uspešno posodobljeno!",
+    "calendarReadSelectionHelp": "Beri izbrane koledarje. Novi dogodki uporabljajo {calendar}.",
     "calendarSettings": "Nastavitve koledarja",
     "calendarProviders": "Ponudniki koledarjev",
     "macOsCalendar": "Koledar macOS",
@@ -1999,6 +2000,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "Snemanje s telefonom",
+    "wrapUp": "Zaključi",
+    "recordingDiscarded": "Posnetek zavržen",
     "undo": "Razveljavi",
     "@undo": {
         "description": "Undo button text"
@@ -11182,7 +11186,7 @@
     "diagnosticsDrops": "Izpadi",
     "diagnosticsDropsPerHour": "približno {count} na uro",
     "diagnosticsLongestGap": "Najdaljši premor",
-    "diagnosticsSincePairingSummary": "Od seznanitve: izpadov {drops}, neuspešnih povezav {failed}.",
+    "diagnosticsSincePairingSummary": "Od seznanitve: {drops} ponovnih povezav, {failed} neuspelih povezav.",
     "diagnosticsLastDuration": "Zadnjih {duration}",
     "chatReplyOffline": "Povezava ni uspela. Preverite povezavo in poskusite znova.",
     "chatReplyServerError": "Na naši strani je šlo nekaj narobe. Poskusite znova.",
@@ -11542,8 +11546,6 @@
     "syncCardSyncingTitle": "Sinhronizacija posnetkov",
     "syncStepDownloadingAmount": "Prenos iz naprave Omi · {done} od {total}",
     "syncStepUploadingAmount": "Nalaganje · {done} od {total}",
-    "syncCardTranscribingAmount": "Pretvarjanje {amount} v pogovore",
-    "syncCardTranscribedOf": "Končano {done} od {total} · lahko zapustite ta zaslon",
     "syncCardReadyAmount": "{amount} pripravljeno za sinhronizacijo",
     "syncDetailsTitle": "Podrobnosti sinhronizacije",
     "syncDetailsRightNow": "Trenutno",
@@ -11551,7 +11553,7 @@
     "syncDetailsTransferSpeed": "Hitrost prenosa",
     "syncDetailsWaitingOnOmi": "Čaka na Omi",
     "syncDetailsWaitingOnPhone": "Čaka na tem telefonu",
-    "syncDetailsTranscribing": "Prepisovanje v Omi",
+    "syncDetailsTranscribing": "Naloženo, čaka na strežnik",
     "syncDetailsAudioFiles": "Zvočne datoteke",
     "syncDetailsServerJobs": "Opravila strežnika (končana / skupaj)",
     "syncDetailsCopy": "Kopiraj podrobnosti za podporo",
@@ -11687,6 +11689,8 @@
     "summaryWithOmiInstead": "Raje povzemi z Omi",
     "summaryBusyTitle": "Obdelava še poteka",
     "summaryBusyBody": "Omi že obdeluje ta pogovor. Povzetek se bo prikazal tukaj, ko bo končan.",
+    "summaryTranscriptionPendingTitle": "Še ni prepisano",
+    "summaryTranscriptionPendingBody": "Povzetek se bo prikazal, ko bo prepis pripravljen.",
     "summaryCheckAgain": "Preveri znova",
     "summaryLimitTitle": "Dosežena omejitev povzetkov",
     "summaryLimitBody": "V zadnji uri ste večkrat znova ustvarili povzetke. Poskusite znova pozneje.",
@@ -12214,6 +12218,7 @@
     "monthlySwitchDoneTitle": "Zdaj plačujete mesečno",
     "monthlySwitchDoneBody": "Danes plačano {price}. Obnavlja se mesečno.",
     "processingDeleteScopeChanged": "Seznam obdelave se je spremenil. Preglejte ga in poskusite znova.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Porabili ste {minutes} minut tega meseca",
     "freeCapBody": "Omi še vedno snema. Izberite, kako nadaljevati s prepisovanjem.",
     "omiProPlanName": "Omi Pro",
@@ -12236,5 +12241,7 @@
     "audioStaysOnPhone": "Zvok ostane na telefonu",
     "onDeviceModelDownloadSize": "Prenos {size} MB",
     "downloadNow": "Prenesi zdaj",
-    "onWifiLater": "Pozneje prek Wi-Fi"
+    "onWifiLater": "Pozneje prek Wi-Fi",
+    "conversationWritingSummary": "Pišemo vaš povzetek…",
+    "onTheWayServerWork": "Delo, ki ga poroča strežnik"
 }

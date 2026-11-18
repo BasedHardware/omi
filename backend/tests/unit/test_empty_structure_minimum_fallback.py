@@ -117,6 +117,7 @@ def _run_empty_structure_recovery(pc, conversation, *, verdict='keep', captured=
         patch.object(eligibility, 'is_release_probe_uid', MagicMock(return_value=False)),
         patch.object(pc, 'should_skip_omi_paid_postprocessing', MagicMock(return_value=False)),
         patch.object(pc, '_enrich_meeting_context', MagicMock()),
+        patch.object(pc, 'resolve_speakers_for_processing', return_value=False),
         patch.object(pc, '_get_structured', side_effect=get_structured),
         patch.object(pc, '_get_conversation_obj', side_effect=get_conversation_obj),
         patch.object(pc, '_attach_client_projection', MagicMock()),
@@ -131,11 +132,25 @@ def _run_empty_structure_recovery(pc, conversation, *, verdict='keep', captured=
         )
 
 
-def test_empty_structure_keep_completes_on_deterministic_minimum(pc, capsys, monkeypatch):
+@pytest.mark.parametrize(
+    'stored_fields',
+    [
+        pytest.param({}, id='empty-structure'),
+        pytest.param(
+            {'title': 'Earlier minimum', 'title_provenance': 'server_minimum', 'overview': '  ', 'gist': '  '},
+            id='provisional-title',
+        ),
+    ],
+)
+def test_empty_structure_keep_completes_on_deterministic_minimum(pc, capsys, monkeypatch, stored_fields):
+    from models.structured import Structured
+
     monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
     captured: dict = {}
     with pytest.raises(_RecoveryProbeReached):
-        _run_empty_structure_recovery(pc, _empty_structure_conversation(), captured=captured)
+        _run_empty_structure_recovery(
+            pc, _empty_structure_conversation(structured=Structured(**stored_fields)), captured=captured
+        )
 
     structured = captured['structured']
     assert structured.title.strip()
@@ -170,6 +185,32 @@ def test_empty_structure_discard_verdict_keeps_the_refusal(pc, monkeypatch):
     monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
     with pytest.raises(RecoveryStructureUnavailableError):
         _run_empty_structure_recovery(pc, _empty_structure_conversation(), verdict='discard')
+
+
+@pytest.mark.parametrize(
+    ('stored_fields', 'owner_fields'),
+    [
+        pytest.param({'gist': 'Existing preview'}, {}, id='gist'),
+        pytest.param({'salience': 'highlight'}, {}, id='salience'),
+        pytest.param({'category': 'work'}, {}, id='category'),
+        pytest.param(
+            {'participants': [{'source': 'roster', 'name': 'Test reviewer'}]},
+            {},
+            id='participants',
+        ),
+        pytest.param({}, {'user_title': 'My title'}, id='owner-title'),
+        pytest.param({}, {'user_corrections': [{'text': 'Keep the speaker name'}]}, id='owner-corrections'),
+    ],
+)
+def test_empty_final_attempt_cannot_overwrite_existing_metadata(pc, monkeypatch, stored_fields, owner_fields):
+    from models.structured import Structured
+
+    monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
+    stored = Structured(title='Call mom before five', title_provenance='server_minimum', **stored_fields)
+    conversation = _empty_structure_conversation(structured=stored, **owner_fields)
+    with pytest.raises(RecoveryStructureUnavailableError):
+        _run_empty_structure_recovery(pc, conversation)
+    assert conversation.structured == stored
 
 
 def _set_attribute(attribute, value):
@@ -255,6 +296,76 @@ def test_empty_structure_minimum_eligible_for_plain_kept_recovery(monkeypatch):
     other_trigger['trigger'] = ProcessingTrigger.CAPTURE_END
     with patch.object(eligibility, 'is_release_probe_uid', return_value=False):
         assert eligibility.apply_empty_structure_minimum(**other_trigger)[1] is False
+
+
+def _short_recovery_conversation(**overrides):
+    """A kept English capture short enough for the recovery quiet minimum."""
+    from models.conversation import Conversation
+    from models.conversation_enums import ConversationSource, ConversationStatus
+    from models.structured import Structured
+    from models.transcript_segment import TranscriptSegment
+
+    values = dict(
+        id='recovery-short',
+        created_at=STALE_FINISHED,
+        started_at=STALE_FINISHED,
+        finished_at=NOW,
+        language='en',
+        structured=Structured(),
+        transcript_segments=[
+            TranscriptSegment(
+                id='seg-1',
+                text='the pilot budget is eight thousand dollars',
+                speaker='SPEAKER_00',
+                speaker_id=0,
+                is_user=True,
+                start=0.0,
+                end=2.0,
+            )
+        ],
+        source=ConversationSource.omi,
+        status=ConversationStatus.processing,
+    )
+    values.update(overrides)
+    return Conversation(**values)
+
+
+@pytest.mark.parametrize(
+    'title,replaced',
+    [('Discussion notes', True), ('Discussion 3', True), ('Transcribing…', True), ('Pilot budget', False)],
+)
+def test_recovery_guard_replaces_only_a_placeholder_title(pc, monkeypatch, title, replaced):
+    """Drive the real ``_get_structured`` guard, not a stubbed replacement."""
+    from models.structured import Structured
+
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'false')
+    conversation = _short_recovery_conversation(structured=Structured(title=title))
+    transcript = 'the pilot budget is eight thousand dollars'
+    monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda *_: 'UTC')
+    monkeypatch.setattr(pc, 'resolve_output_language', lambda *a, **kw: 'en')
+    monkeypatch.setattr(pc, 'selected_summary_app', lambda *a, **kw: False)
+    monkeypatch.setattr(pc, 'content_minimum', lambda *a, **kw: None)
+    monkeypatch.setattr(pc, 'quiet_minimum', lambda *a, **kw: None)
+    monkeypatch.setattr(pc, 'occasion_retention', lambda *a, **kw: None)
+    monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *a: (transcript, transcript, {}))
+    monkeypatch.setattr(pc, 'should_discard_conversation', lambda *a, **kw: False)
+    monkeypatch.setattr(pc, 'adjacent_conversation', lambda *a: None)
+    monkeypatch.setattr(pc, '_calendar_overlap_retains_conversation', lambda *a: False)
+    monkeypatch.setattr(pc, 'rich_notes_inputs', lambda *a, **kw: (None, None, None, None, 0))
+    monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: [])
+    monkeypatch.setattr(pc, 'before_notes', lambda *a, **kw: None)
+    monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a: [])
+    monkeypatch.setattr(pc, 'notes_agent_inputs', lambda *a: {})
+    from_notes = Structured(title='from notes')
+    monkeypatch.setattr(pc, 'get_conversation_notes', lambda *a, **kw: from_notes)
+
+    structured, _ = pc._get_structured('uid-recovery', 'en', conversation, trigger=ProcessingTrigger.SERVER_RECOVERY)
+    if replaced:
+        assert structured.title_provenance == 'server_minimum'
+    else:
+        # The guard did not short-circuit: the notes result is what came back.
+        assert structured is from_notes
 
 
 def _eligibility_arguments(conversation, structured, **overrides):

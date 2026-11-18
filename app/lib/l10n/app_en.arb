@@ -1243,6 +1243,15 @@
     "enterYourName": "Enter your name",
     "nameCannotBeEmpty": "Name cannot be empty",
     "nameUpdatedSuccessfully": "Name updated successfully!",
+    "calendarReadSelectionHelp": "Read selected calendars. New events use {calendar}.",
+    "@calendarReadSelectionHelp": {
+        "description": "Explains that read/import choices do not change the primary calendar used for new events",
+        "placeholders": {
+            "calendar": {
+                "type": "String"
+            }
+        }
+    },
     "calendarSettings": "Calendar settings",
     "calendarProviders": "Calendar Providers",
     "macOsCalendar": "macOS Calendar",
@@ -2027,6 +2036,18 @@
     "memoryHistory": "History",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
+    },
+    "recordingWithYourPhone": "Recording with your phone",
+    "@recordingWithYourPhone": {
+        "description": "Home's recording bar, line 1: this phone is recording a live conversation"
+    },
+    "wrapUp": "Wrap Up",
+    "@wrapUp": {
+        "description": "Button on Home's recording bar: end the phone recording and process it"
+    },
+    "recordingDiscarded": "Recording discarded",
+    "@recordingDiscarded": {
+        "description": "Confirmation after Undo on Home's recording bar: the accidental recording was thrown away"
     },
     "undo": "Undo",
     "@undo": {
@@ -14577,7 +14598,7 @@
     "@diagnosticsLongestGap": {
         "description": "Device Diagnostics row title: the longest time the device took to reconnect"
     },
-    "diagnosticsSincePairingSummary": "Since pairing: {drops} drops, {failed} failed connections.",
+    "diagnosticsSincePairingSummary": "Since pairing: {drops} reconnections, {failed} failed connections.",
     "@diagnosticsSincePairingSummary": {
         "description": "Device Diagnostics footnote under the 7-day summary with lifetime counts",
         "placeholders": {
@@ -16207,27 +16228,6 @@
             }
         }
     },
-    "syncCardTranscribingAmount": "Turning {amount} into conversations",
-    "@syncCardTranscribingAmount": {
-        "description": "Offline Sync status card title while the server transcribes uploaded audio; amount is a compact audio length.",
-        "placeholders": {
-            "amount": {
-                "type": "String"
-            }
-        }
-    },
-    "syncCardTranscribedOf": "{done} of {total} done · you can leave this screen",
-    "@syncCardTranscribedOf": {
-        "description": "Offline Sync status card subtitle while the server transcribes: compact audio lengths done and total.",
-        "placeholders": {
-            "done": {
-                "type": "String"
-            },
-            "total": {
-                "type": "String"
-            }
-        }
-    },
     "syncCardReadyAmount": "{amount} ready to sync",
     "@syncCardReadyAmount": {
         "description": "Offline Sync status card title when recordings wait for a manual sync; amount is a compact audio length.",
@@ -16261,9 +16261,9 @@
     "@syncDetailsWaitingOnPhone": {
         "description": "Sync details row label: audio on the phone that has not been uploaded yet."
     },
-    "syncDetailsTranscribing": "Transcribing on Omi",
+    "syncDetailsTranscribing": "Uploaded, awaiting server",
     "@syncDetailsTranscribing": {
-        "description": "Sync details row label: audio uploaded and still being transcribed by Omi."
+        "description": "Sync details stage label for uploaded audio awaiting a confirmed server outcome."
     },
     "syncDetailsAudioFiles": "Audio files",
     "@syncDetailsAudioFiles": {
@@ -16886,6 +16886,14 @@
     "summaryBusyBody": "Omi is already working on this conversation. The summary will appear here when it finishes.",
     "@summaryBusyBody": {
         "description": "Body when the conversation is already being processed. Omi is the product name."
+    },
+    "summaryTranscriptionPendingTitle": "Not transcribed yet",
+    "@summaryTranscriptionPendingTitle": {
+        "description": "Status shown in place of a summary when the recording has no transcript yet."
+    },
+    "summaryTranscriptionPendingBody": "The summary will appear once the transcript is ready.",
+    "@summaryTranscriptionPendingBody": {
+        "description": "Shown when a recording has no transcript yet, so its summary cannot be made. Tells the user the summary will come after the transcript."
     },
     "summaryCheckAgain": "Check Again",
     "@summaryCheckAgain": {
@@ -18874,6 +18882,7 @@
     "@processingDeleteScopeChanged": {
         "description": "Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again."
     },
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "You've used this month's {minutes} minutes",
     "@freeCapTitle": {
         "description": "Title of the sheet shown when a free plan has used all of its monthly cloud transcription minutes",
@@ -18991,5 +19000,10 @@
     "onWifiLater": "On Wi-Fi Later",
     "@onWifiLater": {
         "description": "Button: download the speech model later, when on Wi-Fi"
-    }
+    },
+    "conversationWritingSummary": "Writing your summary…",
+    "@conversationWritingSummary": {
+        "description": "Shown with a pen over a skeleton while the summary of a conversation in progress is written"
+    },
+    "onTheWayServerWork": "Server-reported work"
 }

@@ -1125,6 +1125,11 @@ class AppLocalizationsBe extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Імя паспяхова абноўлена!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Чытаць выбраныя календары. Новыя падзеі выкарыстоўваюць $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Налады календара';
 
   @override
@@ -1991,6 +1996,15 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get memoryHistory => 'Гісторыя';
+
+  @override
+  String get recordingWithYourPhone => 'Запіс на тэлефон';
+
+  @override
+  String get wrapUp => 'Завяршыць';
+
+  @override
+  String get recordingDiscarded => 'Запіс адменены';
 
   @override
   String get undo => 'Адмяніць';
@@ -12249,7 +12263,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'З моманту спарвання: разрываў — $drops, няўдалых злучэнняў — $failed.';
+    return 'З моманту спалучэння: $drops паўторных падключэнняў, $failed няўдалых падключэнняў.';
   }
 
   @override
@@ -13489,16 +13503,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Ператварэнне $amount у размовы';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Гатова $done з $total · можна пакінуць гэты экран';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount гатова да сінхранізацыі';
   }
@@ -13522,7 +13526,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Чакае на гэтым тэлефоне';
 
   @override
-  String get syncDetailsTranscribing => 'Расшыфроўваецца ў Omi';
+  String get syncDetailsTranscribing => 'Запампавана, чаканне сервера';
 
   @override
   String get syncDetailsAudioFiles => 'Аўдыяфайлы';
@@ -13978,6 +13982,12 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi ужо працуе над гэтай размовай. Падсумаванне з\'явіцца тут, калі будзе гатова.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Яшчэ не транскрыбавана';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Падсумаванне з\'явіцца, калі будзе гатовая транскрыпцыя.';
 
   @override
   String get summaryCheckAgain => 'Праверыць зноў';
@@ -15501,6 +15511,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Спіс апрацоўкі змяніўся. Праверце яго і паспрабуйце зноў.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Вы выкарысталі $minutes хвілін гэтага месяца';
   }
@@ -15576,4 +15590,10 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Пазней праз Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Пішам ваша рэзюмэ…';
+
+  @override
+  String get onTheWayServerWork => 'Праца паводле сервера';
 }

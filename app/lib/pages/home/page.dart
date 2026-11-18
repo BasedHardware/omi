@@ -86,6 +86,7 @@ import 'home_deep_links.dart';
 import 'home_navigation.dart';
 import 'home_prompt_gate.dart';
 import 'widgets/battery_info_widget.dart';
+import 'widgets/home_recording_bar.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -959,12 +960,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 left: 16,
                                 right: 16,
                                 bottom: homeChatBarOffset(context),
-                                child: Row(
-                                  children: [
-                                    Expanded(child: _buildChatBar(context)),
-                                    const SizedBox(width: 10),
-                                    const HomeRecordButton(),
-                                  ],
+                                // While this phone records, the row is the recording bar: the
+                                // confirmation, Undo for the first seconds, then Wrap Up.
+                                child: Builder(
+                                  builder: (context) => context.select<CaptureProvider, bool>(HomeRecordingBar.showsFor)
+                                      ? const HomeRecordingBar()
+                                      : Row(
+                                          children: [
+                                            Expanded(child: _buildChatBar(context)),
+                                            const SizedBox(width: 10),
+                                            const HomeRecordButton(),
+                                          ],
+                                        ),
                                 ),
                               ),
                             ],

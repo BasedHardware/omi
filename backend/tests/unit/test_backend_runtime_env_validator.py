@@ -535,6 +535,22 @@ def with_backend_storage_env(payload: str) -> str:
     )
 
 
+def with_conversations_v3_env(payload: str) -> str:
+    """The conversations v3 rollout stage, first app build and task queue ride every product API host."""
+    for service in ('backend', 'backend-sync', 'backend-integration'):
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[)',
+            r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "beta"},'
+            r'\n        {"name": "CONVERSATIONS_V3_FIRST_APP_BUILD", "value": ""},'
+            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},'
+            r'\n        {"name": "CONVERSATIONS_V3_BACKFILL_QUEUE", "value": "conversations-v3-backfill"},',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return payload
+
+
 def with_object_lake_env(payload: str) -> str:
     """Complete synthetic revisions with the six inert C1 lake bindings."""
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
@@ -766,7 +782,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     )
     # Prepending lake entries earlier hides the leading GOOGLE_CLOUD_PROJECT
     # anchor used by the translation and sync fixture helpers above.
-    return with_object_lake_env(with_firestore_read_runtime_env(payload))
+    return with_conversations_v3_env(with_object_lake_env(with_firestore_read_runtime_env(payload)))
 
 
 def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path, workflow_root: Path | None = None):
@@ -3735,12 +3751,19 @@ def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources
         assert lever in notes
     prod_worker = generated['surfaces']['chart/prod/batch-pipeline-worker']
     integration = generated['surfaces']['runtime/prod/cloud_run/services/backend-integration']
-    assert prod_worker['explicit'] == dict(integration['explicit'], usage_month_cache=0, usage_month_total=0)
+    assert prod_worker['explicit'] == dict(
+        integration['explicit'],
+        usage_month_cache=0,
+        usage_month_total=0,
+        bpp_decision_cache=100,
+        privacy_checks_shadow=10,
+        bpp_owner_memo_enforce=0,
+    )
     assert prod_worker['effective']['bpp_decision_cache'] == 100
     assert prod_worker['effective']['batch_timeliness_leader'] == 100
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         surface = generated['surfaces'][f'runtime/prod/cloud_run/services/{service}']
-        assert surface['explicit']['bpp_decision_cache'] == 100
+        assert surface['explicit']['bpp_decision_cache'] == 0
     dev_worker = generated['surfaces']['chart/dev/batch-pipeline-worker']
     assert dev_worker['explicit'] == {}
     assert dev_worker['inheritance']['status'] == 'UNRESOLVED'
@@ -3802,7 +3825,8 @@ def test_read_lever_evidence_metadata_lives_only_in_generator(read_lever_sources
     policy, _, _ = read_lever_sources
     assert policy['reviewed_inheritance'] == read_lever_manifest.REVIEWED_INHERITANCE
     assert policy['unresolved_notes'] == read_lever_manifest.UNRESOLVED_NOTES
-    generated = read_lever_manifest.build_manifest(today=date(2026, 11, 11))
+    # This inspects current source metadata; fixed-date expiry boundary cases are separate below.
+    generated = read_lever_manifest.build_manifest()
     assert generated['notes'] == [*read_lever_manifest.RESOLVED_NOTES, *read_lever_manifest.UNRESOLVED_NOTES]
     for surface, annotation in read_lever_manifest.REVIEWED_INHERITANCE.items():
         assert generated['surfaces'][surface]['inheritance'] == annotation
@@ -4142,3 +4166,15 @@ def test_control_sync_routing_validates_deployed_values_without_changing_manifes
     assert validator.validate_runtime_env(
         env='prod', cloud_run_state_path=path, cloud_run_service='backend-integration', sync_routing_env_path=overlay
     )[0].message == ('sync routing overlay outside selected service scope')
+
+
+@pytest.mark.parametrize('lever', ['bpp_decision_cache', 'privacy_checks_shadow', 'bpp_owner_memo_enforce'])
+def test_read_lever_parity_rejects_worker_inheriting_api_privacy_scope(read_lever_sources, lever):
+    """API-only admission must not flow through the integration comparison into a worker train."""
+    policy, sources, expected = read_lever_sources
+    changed = copy.deepcopy(sources)
+    worker = 'chart/prod/batch-pipeline-worker'
+    integration = 'runtime/prod/cloud_run/services/backend-integration'
+    assert changed[worker][lever] != expected[integration][lever]
+    changed[worker][lever] = expected[integration][lever]
+    assert any(worker in error for error in read_lever_manifest.parity_errors(changed, expected, policy))

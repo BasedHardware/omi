@@ -15,6 +15,7 @@ import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 
 /// Work that could not finish, at the top of Activity: conversations the server gave up summarizing
 /// (with Try Again) and recordings that could not be processed (opening Offline Sync, which owns
@@ -39,7 +40,7 @@ class NeedsAttentionSection extends StatelessWidget {
 
   final PendingWorkStore store;
   final List<ServerConversation> failedConversations;
-  final Future<ServerConversation?> Function(String id)? reprocess;
+  final Future<ReprocessResult> Function(String id)? reprocess;
 
   /// Injectable for tests; defaults to the app provider when one is in scope.
   final SyncProvider? syncProvider;
@@ -261,7 +262,7 @@ class _FailedConversationRow extends StatefulWidget {
   const _FailedConversationRow({super.key, required this.conversation, required this.openConversation, this.reprocess});
   final ServerConversation conversation;
   final Future<void> Function(BuildContext, String) openConversation;
-  final Future<ServerConversation?> Function(String)? reprocess;
+  final Future<ReprocessResult> Function(String)? reprocess;
 
   @override
   State<_FailedConversationRow> createState() => _FailedConversationRowState();
@@ -274,13 +275,19 @@ class _FailedConversationRowState extends State<_FailedConversationRow> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final retry = widget.reprocess ?? (String id) async => (await reProcessConversationServer(id)).conversation;
+      final retry = widget.reprocess ?? reProcessConversationServer;
       final result = await retry(widget.conversation.id);
       if (!mounted) return;
-      if (result == null) {
-        OmiFeedback.error(context, context.l10n.somethingWentWrong);
-      } else {
-        context.read<ConversationProvider?>()?.applyConversationReprocessResult(result);
+      switch (result) {
+        case ReprocessSuccess(:final conversation):
+          context.read<ConversationProvider?>()?.applyConversationReprocessResult(conversation);
+        // Not an error: the row shows the server's waiting state, or the not-transcribed status.
+        case ReprocessTranscriptionPending(conversation: final waiting?):
+          context.read<ConversationProvider?>()?.applyConversationReprocessResult(waiting);
+        case ReprocessTranscriptionPending():
+          TranscriptionPendingConversations.mark(widget.conversation.id);
+        default:
+          OmiFeedback.error(context, context.l10n.somethingWentWrong);
       }
     } catch (_) {
       if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
@@ -291,15 +298,25 @@ class _FailedConversationRowState extends State<_FailedConversationRow> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<Map<String, DateTime>>(
+      valueListenable: TranscriptionPendingConversations.ids,
+      builder: (context, _, __) => _row(context),
+    );
+  }
+
+  Widget _row(BuildContext context) {
     final c = widget.conversation;
     final at = (c.startedAt ?? c.createdAt).toLocal();
     final dates = OmiDateFormat.of(context);
-    final hasTitle = !c.isLocked && c.structured.title.trim().isNotEmpty;
+    final pending = TranscriptionPendingConversations.contains(c.id);
+    final hasTitle =
+        !c.isLocked && c.structured.title.trim().isNotEmpty && !TranscriptionPendingConversations.replacesTitle(c);
+    final status = pending ? context.l10n.summaryTranscriptionPendingTitle : context.l10n.processingFailed;
     return _AttentionRow(
-      title: hasTitle ? c.structured.title : context.l10n.processingFailed,
-      subtitle: [if (hasTitle) context.l10n.processingFailed, dates.dayHeader(at), dates.time(at)].join(' · '),
+      title: hasTitle ? c.structured.title : status,
+      subtitle: [if (hasTitle) status, dates.dayHeader(at), dates.time(at)].join(' · '),
       busy: _busy,
-      onRetry: _retry,
+      onRetry: pending ? null : _retry,
       onTap: () => widget.openConversation(context, c.id),
     );
   }

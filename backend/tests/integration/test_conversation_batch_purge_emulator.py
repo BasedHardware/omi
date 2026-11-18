@@ -26,11 +26,19 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def plane(monkeypatch):
+def plane(monkeypatch, tmp_path):
     host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('loopback emulator required; no cloud fallback')
     monkeypatch.setenv('MEMORY_ENABLED', 'on')
+    # WAL orphan sweeps use their own imported factory. Keep storage synthetic
+    # even when a test separately replaces the artifact-delete transport.
+    from utils.batch_pipeline import record_wal_erasure
+    from utils.other import local_storage
+
+    objects = local_storage.LocalStorageClient(tmp_path / 'wal-storage')
+    monkeypatch.setattr(record_wal_erasure, 'create_storage_client', lambda: objects)
+    monkeypatch.setattr(local_storage, 'create_storage_client', lambda: objects)
     from database import _client
 
     client = firestore.Client(project=f'demo-purge-{uuid4().hex[:10]}', credentials=AnonymousCredentials())

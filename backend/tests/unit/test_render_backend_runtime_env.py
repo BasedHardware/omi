@@ -1344,7 +1344,11 @@ def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
         assert removed == (environment == 'prod' and name in ('backend', 'backend-sync-backfill'))
         expected = {}
         if environment == 'prod':
-            expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'true'
+            # 2026-11-18: turned off on all four prod workloads. The registry's enable
+            # gates (replay, integration-first ramp, terminal-loss/SLA/read and D+2
+            # settled-SKU evidence) were never recorded, so the owner kept the
+            # documented default-off rollback. See config/feature-flags.yaml.
+            expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'false'
             if name in ('backend-sync', 'backend-integration'):
                 expected['BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED'] = 'true'
         switches = {
@@ -1407,19 +1411,19 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         # on backend-integration, backend-sync and backend — monthly readers on
         # (usage_month_cache/total=100), pending head 100, timeliness leader 100 (fleet
         # sampler election and capped backlog counts on).
-        # SCA-2190 comparison preparation pins all four callers to shadow=10,
-        # negative-cache=0, TTL60=0 and explicit owner enforcement=0.
+        # O2b admits only the three API roles; backfill remains excluded (O4).
+        # The full literal preserves the existing monthly/lifecycle scope.
         # backend-sync-backfill keeps its other ec191a row 3 pins.
         if enabled:
             wanted.update(
-                bpp_decision_cache=100,
-                privacy_checks_shadow=10,
+                bpp_decision_cache=0,
+                privacy_checks_shadow=0,
                 privacy_negative_lookup_cache=0,
                 privacy_ttl60=0,
-                bpp_owner_memo_enforce=0,
+                bpp_owner_memo_enforce=100,
             )
             if name == 'cloud_run/backend-sync-backfill':
-                wanted.update(batch_timeliness_leader=0)
+                wanted.update(batch_timeliness_leader=0, bpp_owner_memo_enforce=0, privacy_checks_shadow=10)
             else:
                 wanted.update(
                     usage_month_cache=100,
@@ -1649,3 +1653,14 @@ def test_record_close_notify_renders_on_every_cloud_run_listener(environment, se
         'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S': '',
     }.items():
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
+
+
+def test_prod_silence_read_skip_is_held_off_on_projection_hosts():
+    key = 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'
+    prod = _MANIFEST['environments']['prod']
+    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        assert prod['cloud_run']['services'][name]['env'][key] == {'value': 'false', 'category': 'ops_kill'}
+    assert prod['gke']['backend-listen']['env'][key] == {'value': 'false', 'category': 'ops_kill'}
+    chart = Path(__file__).resolve().parents[2] / 'charts/backend-listen/prod_omi_backend_listen_values.yaml'
+    values = yaml.safe_load(chart.read_text())
+    assert [entry['value'] for entry in values['env'] if entry['name'] == key] == ['false']

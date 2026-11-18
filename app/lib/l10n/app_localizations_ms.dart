@@ -1126,6 +1126,11 @@ class AppLocalizationsMs extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nama berjaya dikemas kini!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Baca kalendar yang dipilih. Acara baharu menggunakan $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Tetapan kalendar';
 
   @override
@@ -1993,6 +1998,15 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get memoryHistory => 'Sejarah';
+
+  @override
+  String get recordingWithYourPhone => 'Merakam dengan telefon anda';
+
+  @override
+  String get wrapUp => 'Selesaikan';
+
+  @override
+  String get recordingDiscarded => 'Rakaman dibuang';
 
   @override
   String get undo => 'Buat Asal';
@@ -12243,7 +12257,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Sejak pemasangan: $drops pemutusan, $failed sambungan gagal.';
+    return 'Sejak dipasangkan: $drops sambungan semula, $failed sambungan gagal.';
   }
 
   @override
@@ -13486,16 +13500,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Menukar $amount kepada perbualan';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done daripada $total selesai · anda boleh tinggalkan skrin ini';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount sedia untuk disegerakkan';
   }
@@ -13519,7 +13523,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Menunggu telefon ini';
 
   @override
-  String get syncDetailsTranscribing => 'Mentranskripsi di Omi';
+  String get syncDetailsTranscribing => 'Dimuat naik, menunggu pelayan';
 
   @override
   String get syncDetailsAudioFiles => 'Fail audio';
@@ -13978,6 +13982,12 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get summaryBusyBody =>
       'Omi sedang memproses perbualan ini. Ringkasan akan dipaparkan di sini apabila selesai.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Belum ditranskripsikan';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Ringkasan akan dipaparkan apabila transkrip sedia.';
 
   @override
   String get summaryCheckAgain => 'Semak semula';
@@ -15502,6 +15512,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Senarai pemprosesan telah berubah. Semak senarai dan cuba lagi.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Anda telah menggunakan $minutes minit bulan ini';
   }
@@ -15577,4 +15591,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Kemudian melalui Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Menulis ringkasan anda…';
+
+  @override
+  String get onTheWayServerWork => 'Kerja yang dilaporkan pelayan';
 }

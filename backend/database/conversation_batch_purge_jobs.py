@@ -107,7 +107,18 @@ def accept_fields(
 def arm_fields(uid: str, conversation_id: str, now: datetime | None = None) -> dict[str, Any]:
     """Fields a delete writes (merge) next to its tombstone; generation/attempts/progress survive re-arms."""
     current = now or _now()
-    return {'uid': uid, 'conversation_id': conversation_id, 'due_at': current, 'armed_at': current}
+    return {
+        'uid': uid,
+        'conversation_id': conversation_id,
+        'due_at': current,
+        'armed_at': current,
+        'arm_revision': uuid4().hex,
+    }
+
+
+def _arm(row: dict[str, Any]) -> dict[str, Any]:
+    # armed_at also detects re-arms from producers predating arm_revision.
+    return {'armed_at': row.get('armed_at'), 'arm_revision': row.get('arm_revision')}
 
 
 def _in_transaction(client: Any, body: Callable[[Any], Any]) -> Any:
@@ -148,7 +159,7 @@ def segment_records(
     return [snapshot.to_dict() or {} for snapshot in query.stream()]
 
 
-def _segment_ref(client: Any, job: str, namespace: str, segment_id: str) -> Any:
+def segment_ref(client: Any, job: str, namespace: str, segment_id: str) -> Any:
     digest = hashlib.sha256(f'{namespace}\x00{segment_id}'.encode()).hexdigest()[:40]
     return client.collection(COLLECTION).document(job).collection(SEGMENTS).document(digest)
 
@@ -246,6 +257,15 @@ def begin_run(
             return 'in_progress', row, None
         lease_until = current + timedelta(seconds=LEASE_SECONDS)
         due = row.get('due_at')
+        progress_fields = {}
+        if collection == COLLECTION:
+            arm = _arm(row)
+            # An unversioned legacy cursor cannot prove which arm it covered.
+            # Rewind discovery once; segment journals remain owed and untouched.
+            if row.get('progress_arm') != arm:
+                row['progress'] = {}
+            row['progress_arm'] = arm
+            progress_fields = {'progress': row.get('progress') or {}, 'progress_arm': arm}
         transaction.update(
             ref,
             {
@@ -253,6 +273,7 @@ def begin_run(
                 'lease_generation': generation,
                 'lease_until': lease_until,
                 'due_at': lease_until if due is None or due < lease_until else due,
+                **progress_fields,
             },
         )
         return 'run', row, token
@@ -283,6 +304,23 @@ def finish_run(
             return False
         row = snapshot.to_dict() or {}
         if int(row.get('generation') or 0) != generation or row.get('run_token') != token:
+            return False
+        if collection == COLLECTION and row.get('progress_arm') != _arm(row):
+            # The owner still owes the new arm. Never let an obsolete run
+            # complete it or publish a cursor beyond newly added rows.
+            transaction.update(
+                ref,
+                {
+                    'progress': {},
+                    'progress_arm': _arm(row),
+                    'run_token': None,
+                    'lease_generation': None,
+                    'lease_until': None,
+                    'due_at': current,
+                    'attempts': 0,
+                    'last_outcome': 'rearmed',
+                },
+            )
             return False
         if outcome == 'completed':
             transaction.delete(ref)
@@ -337,6 +375,8 @@ class RunProgress:
         row = (snapshot.to_dict() or {}) if snapshot.exists else {}
         if int(row.get('generation') or 0) != self.generation or row.get('run_token') != self.token:
             raise RunSuperseded()
+        if row.get('progress_arm') != _arm(row):
+            raise RunSuperseded()
 
     @staticmethod
     def _renewal() -> dict[str, Any]:
@@ -350,7 +390,7 @@ class RunProgress:
             self._owned(transaction)
             for segment_id in segment_ids:
                 transaction.set(
-                    _segment_ref(self.client, self.job, namespace, segment_id),
+                    segment_ref(self.client, self.job, namespace, segment_id),
                     {'namespace': namespace, 'segment_id': segment_id},
                 )
             transaction.update(self._ref(), {**self._renewal(), 'progress': position})
@@ -373,7 +413,7 @@ class RunProgress:
         def body(transaction):
             self._owned(transaction)
             for segment_id in done:
-                transaction.delete(_segment_ref(self.client, self.job, namespace, segment_id))
+                transaction.delete(segment_ref(self.client, self.job, namespace, segment_id))
             transaction.update(self._ref(), self._renewal())
 
         _in_transaction(self.client, body)
@@ -424,7 +464,7 @@ def _drop_segment_records(client: Any, job: str) -> None:
                 break
             batch = client.batch()
             for record in records:
-                batch.delete(_segment_ref(client, job, namespace, str(record.get('segment_id'))))
+                batch.delete(segment_ref(client, job, namespace, str(record.get('segment_id'))))
             batch.commit()
 
 
@@ -478,6 +518,7 @@ def run_job(
             if _owes_segments(client, job):
                 raise RuntimeError('batch purge finished with segment erasure still recorded')
         except RunSuperseded:
+            finish('checkpointed')  # re-arms rewind and redrive; another owner remains untouched
             return 'superseded'
         except LegalHoldActive:
             finish('held')
@@ -487,7 +528,7 @@ def run_job(
             return 'checkpointed'
         except Exception as error:
             # Units acquire before erasing, so a unit that lost its gate wait erased nothing; progress is saved.
-            if _lost_gate_to_peer(error, uid):
+            if lost_gate_to_peer(error, uid):
                 logger.info('conversation batch purge waiting for the account gate job=%s', job)
                 finish('busy')
                 return 'busy'
@@ -506,7 +547,7 @@ def _finish_failed(finish: Callable[[str], bool]) -> None:
         pass  # The lease expires; the original failure is what the queue must see.
 
 
-def _lost_gate_to_peer(error: BaseException, uid: str) -> bool:
+def lost_gate_to_peer(error: BaseException, uid: str) -> bool:
     if type(error).__name__ == 'HTTPException' and getattr(error, 'status_code', None) == 409:
         return True  # the cascade's nested gate mapped a same-account peer to account_gate_busy
     try:
@@ -549,7 +590,7 @@ def run_erasure_job(
         except LegalHoldActive:
             raise
         except Exception as error:
-            if not _lost_gate_to_peer(error, uid):
+            if not lost_gate_to_peer(error, uid):
                 raise
             logger.info('conversation erasure waiting for the account gate job=%s', job)
             finish('busy')
