@@ -4660,7 +4660,7 @@
     "monthlySwitchDoneTitle": "Ara pagues mensualment",
     "monthlySwitchDoneBody": "{price} pagats avui. Es renova cada mes.",
     "processingDeleteScopeChanged": "La llista de processament ha canviat. Revisa-la i torna-ho a provar.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Has fet servir els {minutes} minuts d'aquest mes",
     "freeCapBody": "Omi continua gravant. Tria com vols continuar transcrivint.",
     "omiProPlanName": "Omi Pro",
