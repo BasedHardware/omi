@@ -115,6 +115,10 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: SYNC_TASKS_PROJECT
+    value: "based-hardware"
+  - name: SYNC_TASKS_LOCATION
+    value: "us-central1"
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED
     value: "false"
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT
