@@ -326,7 +326,8 @@ def settle_backfill_processing(uid, cid, *, failed, max_attempts, firestore_clie
             return 'absent'
         if not failed and not row.get('v3_process_pending'):
             tx.update(ref, {'v3_backfill_process_pending': False})
-            return 'settled'
+            # The live writers settled it: notes written, or a terminal failure (attempts exhausted).
+            return 'failed' if row.get('v3_process_failed') else 'settled'
         attempts = int(row.get('v3_backfill_attempts') or 0) + 1
         if attempts >= max_attempts:
             tx.update(

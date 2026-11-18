@@ -231,9 +231,10 @@ def next_partition(run):
 
 
 def resume_run(uid, run_id, *, firestore_client=None):
-    """Re-arm a stalled (retries exhausted) or blocked run from its first unfinished partition."""
+    """Re-arm a stalled (retries exhausted), blocked or never-started run from its first unfinished partition."""
+    resumable = {'planned', 'running', 'blocked'}
     run = runs.get_run(uid, run_id, firestore_client=firestore_client)
-    if run is None or run.get('status') not in {'running', 'blocked'}:
+    if run is None or run.get('status') not in resumable:
         return {'outcome': 'not_resumable', 'status': (run or {}).get('status')}
     index = next_partition(run)
     if index is None:
@@ -245,7 +246,7 @@ def resume_run(uid, run_id, *, firestore_client=None):
         status='planned',
         partition=(index, {'status': 'pending'}) if part.get('status') == 'blocked' else None,
         patch={'resumes': int(run.get('resumes') or 0) + 1},
-        expect={'running', 'blocked'},
+        expect=resumable,
         firestore_client=firestore_client,
     )
     if not updated:
@@ -261,7 +262,12 @@ async def start_planned():
     if not backfill_enabled():
         return 0
     started = 0
-    for start in await run_blocking(db_executor, runs.pending_starts, STARTS_PER_SWEEP):
+    try:
+        starts = await run_blocking(db_executor, runs.pending_starts, STARTS_PER_SWEEP)
+    except Exception as error:
+        logger.warning('event=v3_backfill_start outcome=retry exception_type=%s', type(error).__name__)
+        return 0
+    for start in starts:
         uid, run_id = start['uid'], start['run_id']
         try:
             run = await run_blocking(db_executor, runs.get_run, uid, run_id)

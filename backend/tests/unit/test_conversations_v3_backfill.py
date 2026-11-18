@@ -473,15 +473,16 @@ def test_deleting_a_backfilled_copy_never_arms_the_donor_audio_purge(strict):
 
 
 @pytest.mark.parametrize(
-    'failed,attempts,expected',
-    [(False, 0, 'settled'), (True, 0, 'retry'), (True, 2, 'failed')],
+    'failed,attempts,live_failed,expected',
+    [(False, 0, False, 'settled'), (False, 0, True, 'failed'), (True, 0, False, 'retry'), (True, 2, False, 'failed')],
 )
-def test_backfill_notes_marker_settles_parks_or_fails(strict, failed, attempts, expected):
+def test_backfill_notes_marker_settles_parks_or_fails(strict, failed, attempts, live_failed, expected):
     path = ('users', 'synthetic', 'conversations', 'w')
     strict.rows[path] = {
         'id': 'w',
         'v3_backfill_process_pending': True,
         'v3_process_pending': failed,
+        'v3_process_failed': live_failed,
         'v3_backfill_attempts': attempts,
         'transcript_segments': [{'text': 'x'}],
     }
@@ -494,7 +495,9 @@ def test_backfill_notes_marker_settles_parks_or_fails(strict, failed, attempts, 
     assert row['v3_process_pending'] is False
     assert row['v3_backfill_process_pending'] is (expected == 'retry')
     if expected == 'failed':
-        assert row['v3_process_failed'] is True and row['tile_state'] == 'failed'
+        assert row['v3_process_failed'] is True
+    if failed and expected == 'failed':
+        assert row['tile_state'] == 'failed'
 
 
 # ---- drain, task chain and undo orchestration -----------------------------------------------
@@ -667,6 +670,7 @@ def test_resume_rearms_a_blocked_run_from_its_first_unfinished_partition(monkeyp
     assert backfill.resume_run('u', RUN) == {'outcome': 'resumed', 'partition': 1}
     assert ledger.run['status'] == 'planned' and ledger.run['resumes'] == 1 and starts == [RUN]
     assert ledger.run['partitions'][1]['status'] == 'pending'
+    ledger.run['status'] = 'undone'
     assert backfill.resume_run('u', RUN)['outcome'] == 'not_resumable'
 
 

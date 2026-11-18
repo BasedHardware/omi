@@ -137,8 +137,8 @@ async def reconcile(
     # Live passes call the outline-cache writers exactly as before; only a backfill names its lease.
     keyed = {'key': key} if derive else {}
     if not on_open and not derive:
-        until = await run_blocking(db_executor, store.backoff_until, uid)
-        if until and until > datetime.now(timezone.utc):
+        backoff = await run_blocking(db_executor, store.backoff_until, uid)
+        if backoff and backoff > datetime.now(timezone.utc):
             metrics.RECONCILES.labels('backoff').inc()
             return 'backoff'
     token = await run_blocking(db_executor, leases.acquire, uid, key)
