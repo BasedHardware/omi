@@ -398,3 +398,32 @@ def test_no_retry_head_means_no_promotion_reads(monkeypatch, wait):
     merge = OrderedMerge(store, head_wait_seconds=wait, catch_up_depth=0)
     merge.commit_next('heavy', NOW + 1)
     assert calls == [] and job(store, 'a')['state'] == 'leased'
+
+
+def test_a_spent_process_budget_skips_the_probe_read_and_keeps_the_owner_marked(monkeypatch):
+    store, _, _, due_at = stale_head()
+    monkeypatch.setattr(merge_module, '_PROMOTIONS', merge_module._TokenBucket(0.0, 0))
+    calls = counting_fresh_pending(monkeypatch, store)
+    merge = OrderedMerge(store, head_wait_seconds=W)
+    merge.commit_next('heavy', due_at + 1)
+    assert calls == [] and job(store, 'a')['state'] == 'retry'
+    assert merge._stale_pending('heavy')
+
+
+class UnfencedStore(FencedStore):
+    def quarantine_fenced(self, segment_id, now):
+        self.fenced.append(segment_id)
+        return False
+
+
+def test_an_unapplied_privacy_fence_is_not_counted_as_fenced(caplog):
+    store = UnfencedStore()
+    _, queue, leases = admitted({'a': NOW - 500, 'b': NOW - 100}, store=store)
+    fail(queue, leases['a'], NOW)
+    complete(queue, leases['b'], NOW)
+    due_at = job(store, 'a')['available_at']
+    merge = OrderedMerge(store, head_wait_seconds=W)
+    with caplog.at_level(logging.INFO, logger=merge_module.__name__):
+        merge.commit_next('heavy', due_at + 1)
+    assert store.fenced == ['a'] and job(store, 'a')['state'] == 'retry'
+    assert 'action=privacy_fenced' not in caplog.text

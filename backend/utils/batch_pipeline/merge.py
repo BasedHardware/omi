@@ -173,6 +173,10 @@ class _TokenBucket:
             self.tokens -= 1
             return True
 
+    def empty(self) -> bool:
+        with self.lock:
+            return min(self.burst, self.tokens + (self.clock() - self.at) * self.rate) < 1
+
 
 _PROMOTIONS = _TokenBucket(STALE_HEAD_PROMOTE_RATE, STALE_HEAD_PROMOTE_BURST)
 
@@ -363,6 +367,10 @@ class OrderedMerge:
         admission identity and drops to the service class its capture age earns.
         Protected-share eligibility is not consulted: like recovery's ordinary
         oldest-due page this is a plain requeue, and lease admission rechecks it."""
+        if _PROMOTIONS.empty():
+            # Skip the probe read while the process budget is spent; the owner stays marked.
+            self._mark_stale(owner_id, True)
+            return
         key = owner_key(owner_id)
         rows = dict(stale)
         try:
@@ -399,7 +407,8 @@ class OrderedMerge:
             except BatchPrivacyBlocked:
                 # Recovery's disposition for the same refusal: privacy cleanup owns the row.
                 try:
-                    self.store.quarantine_fenced(segment_id, now)
+                    if not self.store.quarantine_fenced(segment_id, now):
+                        continue
                     outcome = 'privacy_fenced'
                 except Exception as error:
                     logger.warning(

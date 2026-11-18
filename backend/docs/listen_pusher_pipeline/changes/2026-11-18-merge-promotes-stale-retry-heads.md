@@ -81,5 +81,13 @@ commit or park.
 Rows already demoted keep `admitted_priority`. The GPU pump keeps its old merge until its next image roll; serving
 drains promote for every owner meanwhile.
 
+Mixed versions: a demoted row needs a reader of `admitted_priority`. Code before this change compares the stored
+(demoted) `priority` and refuses an idempotent re-enqueue of that segment as reused work. Before rolling a CPU image
+back past this change, set the kill switch to `false` first; rows it already demoted still refuse an old-image
+re-enqueue until they finish.
+
+An `allowance_parked` promotion unblocks the head but returns no commit from that call; the owner's next ready row
+commits on the next wake or serving tick (10 s).
+
 Emulator proof: `backend/scripts/merge_stale_head_emulator_test.py` (sim + Firestore emulator, in
 `run-emulator-proofs.sh`).
