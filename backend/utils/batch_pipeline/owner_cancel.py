@@ -26,6 +26,7 @@ import time
 from typing import Any, Protocol
 
 from config import sync_owner_cancel
+from database.batch_pipeline_privacy import BatchPrivacyReason
 from database.record_wal_handoff import JOB_PREFIX as WAL_HANDOFF_PREFIX
 from database.sync_ledger import (
     BATCH_PARTIAL_STATUS,
@@ -194,6 +195,7 @@ def _fence(tx, uid: str, job_id: str, now: float) -> tuple[CancelResult, tuple[s
             merge_pending=False,
             next='',
             privacy_blocked_at=now,
+            privacy_blocked_reason=BatchPrivacyReason.OWNER_CANCELLED.value,
             owner_cancelled_at=now,
             owner_cancelled_from=job['state'],
         )

@@ -320,7 +320,7 @@ def test_a_fence_that_wins_the_race_leaves_nothing_for_workers_to_lease_or_recov
     assert scheduler.pull(201, 5) == []
     for segment in ('a', 'b'):
         job = store.rows['jobs', segment]
-        assert job['state'] == 'privacy_blocked'
+        assert job['state'] == 'privacy_blocked' and job['privacy_blocked_reason'] == 'owner_cancelled'
         assert job['merge_pending'] is False and job['token'] == '' and job['next'] == ''
 
 

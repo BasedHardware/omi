@@ -3048,6 +3048,7 @@ FIELD_SITES = {
                 'owner_cancelled_at',
                 'owner_cancelled_from',
                 'privacy_blocked_at',
+                'privacy_blocked_reason',
                 'state',
                 'token',
             ),

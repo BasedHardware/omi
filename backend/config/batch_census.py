@@ -69,6 +69,7 @@ PRIVACY_REASONS = (
     'recording_privacy_changed',
     'conversation_redirect_missing',
     'result_lease_lost',
+    'owner_cancelled',
     'unknown',
     'legacy',
 )
@@ -800,6 +801,7 @@ JOB_STATE_MODULES = (
     'database/batch_pipeline_projection_release.py',
     'database/batch_pipeline_speech_redrive.py',
     'database/batch_pipeline_terminal_empty.py',
+    'utils/batch_pipeline/owner_cancel.py',
 )
 
 # Reviewed non-job state payload sites inside those mixed-purpose modules, keyed
