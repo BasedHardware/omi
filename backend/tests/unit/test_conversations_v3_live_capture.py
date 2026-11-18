@@ -42,6 +42,7 @@ def window(start, status='in_progress'):
         'id': 'c',
         'v3_derived': True,
         'status': status,
+        'created_at': start,
         'started_at': start,
         'finished_at': start + timedelta(seconds=20),
         'v3_recording_ids': ['r'],
@@ -52,7 +53,9 @@ def window(start, status='in_progress'):
 
 def appended(raw, revision, **updates):
     later = deepcopy(raw)
-    later['transcript_segments'].append({'text': 'more speech while the pass ran', 'start': 40, 'end': 44})
+    later['transcript_segments'].append(
+        {'text': 'more speech while the pass ran', 'start': 40, 'end': 44, 'is_user': True}
+    )
     later['finished_at'] = raw['started_at'] + timedelta(seconds=44)
     later.update(updates, _test_revision=revision)
     return later

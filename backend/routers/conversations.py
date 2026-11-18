@@ -33,7 +33,7 @@ from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.list_version_check import ListVersionCheck
 from config.episodes import home_step_projection_enabled, home_transcription_presentation_gate_enabled
-from utils.conversations import home_step, transcribing_hold
+from utils.conversations import home_step, row_contract, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
     delete_action_item_vector,
@@ -1190,6 +1190,8 @@ def get_conversations(
     _heal_locked_conversations_if_eligible(uid, conversations)
     conversations = [transcribing_hold.project(home_step.project(row), home_list=True) for row in conversations]
     redact_conversations_for_list(conversations)
+    # One stored row the response model rejects must not fail the whole page.
+    conversations = row_contract.readable_rows(conversations, surface='v1_conversations')
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
@@ -2696,7 +2698,10 @@ async def _search_conversation_page(
         return {**search_results, 'items': conversations}
     conversations = [transcribing_hold.project(row) for row in conversations]
     redact_conversations_for_list(conversations)
-    search_results['items'] = conversations
+    # Pagination below counts the hydrated page; only the response drops a row the model rejects.
+    search_results['items'] = row_contract.readable_rows(
+        conversations, surface='conversation_search', model=ConversationSearchItem
+    )
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
     # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
     # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.

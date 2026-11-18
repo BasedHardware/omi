@@ -49,6 +49,8 @@ BLOCKED = frozenset(
         'remove_not_backfilled',
         'rederive_mixed_runs',
         'backfill_source_unreadable',
+        # A planned row the reader model rejects (utils.conversations.row_contract): a code fix is owed.
+        'invalid_row',
     }
 )
 

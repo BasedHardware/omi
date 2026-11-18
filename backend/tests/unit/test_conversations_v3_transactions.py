@@ -81,6 +81,7 @@ def test_atomic_projection_and_claim(strict):
     row = {
         'id': 'c',
         'status': 'processing',
+        'created_at': AT,
         'started_at': AT,
         'finished_at': AT,
         'v3_recording_ids': ['r'],
@@ -323,7 +324,13 @@ def test_projection_allows_transcript_offload(strict, monkeypatch):
     )
     token = leases.acquire('synthetic', 'builder', firestore_client=strict)
     store.commit_projection(
-        'synthetic', token, {}, {}, [{'id': 'c', 'status': 'completed'}], [], firestore_client=strict
+        'synthetic',
+        token,
+        {},
+        {},
+        [{'id': 'c', 'status': 'completed', 'created_at': AT, 'started_at': AT, 'finished_at': AT, 'structured': {}}],
+        [],
+        firestore_client=strict,
     )
     assert calls[0]['allow_offload'] is True
 
@@ -349,10 +356,12 @@ def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(strict, 
         {
             'id': f'c{i}',
             'status': 'processing',
+            'created_at': AT,
             'started_at': AT,
             'finished_at': AT,
+            'structured': {},
             'v3_recording_ids': ['r'],
-            'transcript_segments': [{'text': 'x' * 60000}],
+            'transcript_segments': [{'text': 'x' * 60000, 'start': 0, 'end': 1, 'is_user': True}],
         }
         for i in range(128)
     ]
@@ -386,10 +395,12 @@ def test_multi_batch_backfill_conversion_is_not_its_own_race_and_keeps_an_obliga
         {
             'id': f'c{i}',
             'status': 'processing',
+            'created_at': AT,
             'started_at': AT,
             'finished_at': AT,
+            'structured': {},
             'v3_recording_ids': ['r'],
-            'transcript_segments': [{'text': 'x' * 60000}],
+            'transcript_segments': [{'text': 'x' * 60000, 'start': 0, 'end': 1, 'is_user': True}],
         }
         for i in range(128)
     ]
