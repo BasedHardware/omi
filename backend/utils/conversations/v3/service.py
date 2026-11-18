@@ -48,6 +48,7 @@ BLOCKED = frozenset(
         'backfill_partition_budget',
         'remove_not_backfilled',
         'rederive_mixed_runs',
+        'backfill_source_unreadable',
     }
 )
 

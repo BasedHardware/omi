@@ -199,9 +199,15 @@ def cmd_undo(args) -> int:
     status, found = 0, False
     for number, uid in enumerate(read_owners(args.owners_file), 1):
         label = f'owner[{number}]'
-        if runs.get_run(uid, args.run) is None:
+        run = runs.get_run(uid, args.run)
+        if run is None:
             continue
         found = True
+        if run.get('mode') == 'rederive':
+            # Re-derived rows keep their original run's stamp; that run's undo removes them.
+            print(f'{label} run={args.run} is a re-derive: undo the original run instead (see status)')
+            status = 1
+            continue
         docs = store.backfill_run_documents(uid, args.run)
         show(
             label + ' undo scope',
@@ -209,6 +215,10 @@ def cmd_undo(args) -> int:
                 'run': args.run,
                 'donors': sum(1 for d in docs if not d.get('v3_derived')),
                 'derived_rows': sum(1 for d in docs if d.get('v3_derived')),
+                # Donors whose copy the owner deleted stay converted with the copies they share.
+                'donors_deleted_by_owner': sum(
+                    1 for d in docs if not d.get('v3_derived') and store.deleted_after_backfill(d)
+                ),
             },
         )
         if args.dry_run:

@@ -111,6 +111,7 @@ def classify_window(meta):
         'skipped_imported': 0,
         'skipped_locked': 0,
         'skipped_other_source': 0,
+        'skipped_not_completed': 0,
         'already_backfilled': 0,
         'live_v3': 0,
     }
@@ -121,8 +122,10 @@ def classify_window(meta):
             counts['already_backfilled'] += 1
         elif raw.get('recording') or raw.get('v3_derived'):
             counts['live_v3'] += 1
-        elif raw.get('source') not in store.BACKFILL_SOURCES or raw.get('status') != 'completed':
+        elif raw.get('source') not in store.BACKFILL_SOURCES:
             counts['skipped_other_source'] += 1
+        elif raw.get('status') != 'completed':
+            counts['skipped_not_completed'] += 1
         elif raw.get('data_protection_level') == 'private':
             counts['skipped_private'] += 1
         elif raw.get('discarded'):
@@ -403,12 +406,37 @@ def _undo_refused(uid, run_id, reason, firestore_client):
     return {'outcome': 'busy', 'reason': reason}
 
 
+def _kept_by_deletion(donors, derived, kept):
+    """Close the owner's deletions over the run: rows linked to a kept donor stay, and so do their donors.
+
+    Restoring a donor the owner deleted a copy of would resurrect it; deleting a sibling copy that
+    shares a kept donor would drop the rest of that speech from Home. Both stay as backfilled v3.
+    """
+    links = {d['id']: {c.get('conversation_id') for c in d.get('claims') or []} for d in donors}
+    kept_donors, kept_rows = set(kept) & set(links), set()
+    while True:
+        rows = {
+            r['id']
+            for r in derived
+            if kept_donors & set(r.get('v3_recording_ids') or [])
+            or any(r['id'] in links.get(cid, ()) for cid in kept_donors)
+        }
+        more = {rid for r in derived if r['id'] in rows for rid in r.get('v3_recording_ids') or []}
+        more = (more & set(links)) | {cid for cid, claimed in links.items() if claimed & rows}
+        if rows <= kept_rows and more <= kept_donors:
+            return kept_donors, kept_rows
+        kept_rows |= rows
+        kept_donors |= more
+
+
 def undo_run(uid, run_id, *, firestore_client=None):
     """Restore every legacy donor of a run exactly and remove its derived rows.
 
-    Donors are restored before copies are removed, so an interrupted undo can show a duplicate,
-    never hide a conversation; it is idempotent and simply rerun. It refuses while a backfill pass or
-    notes write for this owner is in flight.
+    Undo holds both the backfill and the live builder leases, so no pass commits (or stamps another
+    row with this run) while it enumerates, restores and deletes. Donors are restored before copies
+    are removed, so an interrupted undo can show a duplicate, never hide a conversation; it is
+    idempotent and simply rerun. A donor whose backfilled copy the owner deleted is kept converted,
+    with the copies it shares, so undo never resurrects a deletion; the ledger counts them.
     """
     run = runs.get_run(uid, run_id, firestore_client=firestore_client)
     if run is None:
@@ -416,35 +444,61 @@ def undo_run(uid, run_id, *, firestore_client=None):
     if run.get('mode') == 'rederive':
         # A re-derive keeps each row's original run stamp; undo that run to remove its rows.
         return {'outcome': 'undo_the_original_run'}
-    runs.update_run(uid, run_id, status='undoing', firestore_client=firestore_client)
-    docs = store.backfill_run_documents(uid, run_id, firestore_client=firestore_client)
-    derived = [d['id'] for d in docs if d.get('v3_derived')]
-    donors = [d['id'] for d in docs if not d.get('v3_derived')]
     # 'undoing' is written first so in-flight drains stop (keep_going); a refusal records why.
-    if any(leases.held(uid, 'summary-' + cid, firestore_client=firestore_client) for cid in derived):
-        return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client)
-    token = leases.acquire(uid, store.BACKFILL_LEASE, firestore_client=firestore_client)
-    if token is None:
-        return _undo_refused(uid, run_id, 'backfill_pass_in_flight', firestore_client)
-    restored = removed = 0
+    runs.update_run(uid, run_id, status='undoing', firestore_client=firestore_client)
+    held = []
     try:
-        for start in range(0, len(donors), store.BACKFILL_UNDO_PAGE):
-            restored += store.restore_backfill_donors(
-                uid, token, donors[start : start + store.BACKFILL_UNDO_PAGE], firestore_client=firestore_client
+        for key, reason in ((store.BACKFILL_LEASE, 'backfill_pass_in_flight'), ('builder', 'live_builder_in_flight')):
+            token = leases.acquire(uid, key, firestore_client=firestore_client)
+            if token is None:
+                return _undo_refused(uid, run_id, reason, firestore_client)
+            held.append((key, token))
+        token = held[0][1]
+
+        def renew():
+            for key, held_token in held:
+                leases.renew(uid, key, held_token, firestore_client=firestore_client)
+
+        docs = store.backfill_run_documents(uid, run_id, firestore_client=firestore_client)
+        derived = [d for d in docs if d.get('v3_derived')]
+        donors = [d for d in docs if not d.get('v3_derived')]
+        if any(leases.held(uid, 'summary-' + d['id'], firestore_client=firestore_client) for d in derived):
+            return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client)
+        kept_donors, kept_rows = _kept_by_deletion(
+            donors, derived, {d['id'] for d in donors if store.deleted_after_backfill(d)}
+        )
+        restored = 0
+        restore = [d['id'] for d in donors if d['id'] not in kept_donors]
+        for start in range(0, len(restore), store.BACKFILL_UNDO_PAGE):
+            count, late = store.restore_backfill_donors(
+                uid, token, restore[start : start + store.BACKFILL_UNDO_PAGE], firestore_client=firestore_client
             )
-            leases.renew(uid, store.BACKFILL_LEASE, token, firestore_client=firestore_client)
-        for start in range(0, len(derived), store.BACKFILL_UNDO_PAGE):
+            restored += count
+            if late:
+                # Deleted while undo ran: keep it and every copy it shares.
+                kept_donors, kept_rows = _kept_by_deletion(donors, derived, kept_donors | set(late))
+            renew()
+        removed = 0
+        remove = [d['id'] for d in derived if d['id'] not in kept_rows]
+        for start in range(0, len(remove), store.BACKFILL_UNDO_PAGE):
             removed += store.delete_backfill_rows(
-                uid, token, derived[start : start + store.BACKFILL_UNDO_PAGE], firestore_client=firestore_client
+                uid, token, remove[start : start + store.BACKFILL_UNDO_PAGE], firestore_client=firestore_client
             )
-            leases.renew(uid, store.BACKFILL_LEASE, token, firestore_client=firestore_client)
+            renew()
     finally:
-        leases.release(uid, store.BACKFILL_LEASE, token, firestore_client=firestore_client)
+        for key, held_token in held:
+            leases.release(uid, key, held_token, firestore_client=firestore_client)
+    result = {
+        'donors_restored': restored,
+        'rows_removed': removed,
+        'donors_kept_deleted': len(kept_donors),
+        'rows_kept_deleted': len(kept_rows),
+    }
     runs.update_run(
         uid,
         run_id,
         status='undone',
-        patch={'undo': {'donors_restored': restored, 'rows_removed': removed, 'at': datetime.now(timezone.utc)}},
+        patch={'undo': {**result, 'at': datetime.now(timezone.utc)}},
         firestore_client=firestore_client,
     )
-    return {'outcome': 'undone', 'donors_restored': restored, 'rows_removed': removed}
+    return {'outcome': 'undone', **result}

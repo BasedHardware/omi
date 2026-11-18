@@ -743,7 +743,9 @@ def load_derive(uid, *, since, until, run_id, rederive=False, firestore_client=N
             # A donor this run (or, re-deriving, any run) already converted: resume or rebuild it.
             row = recording_input(uid, snapshot)
             if row is None or row.get('_v3_unreadable'):
-                continue
+                # Its copies are loaded below; planning without it would retire them and leave the
+                # donor hidden with nothing on Home. Block until it reads again.
+                raise Conflict('backfill_source_unreadable')
             recordings[snapshot.id] = {
                 **row,
                 '_v3_derive': True,
@@ -811,13 +813,39 @@ def backfill_run_documents(uid, run_id, *, firestore_client=None):
     query = (
         user_conversations(client, uid)
         .where(filter=FieldFilter('v3_backfill_run', '==', run_id))
-        .select(['v3_derived', 'backfilled', 'recording'])
+        .select(
+            [
+                'v3_derived',
+                'backfilled',
+                'recording',
+                'claims',
+                'deleted_spans',
+                'v3_backfill_prior',
+                'v3_recording_ids',
+            ]
+        )
     )
     return [{**(doc.to_dict() or {}), 'id': doc.id} for doc in query.stream()]
 
 
+def deleted_after_backfill(donor):
+    """The owner deleted a backfilled copy of this donor: restoring it would resurrect what they deleted.
+
+    A delete releases the copy's claim and records its interval in deleted_spans. A converted donor
+    always has a claim, so no claim left also means every copy that covered it was deleted.
+    """
+    prior = donor.get('v3_backfill_prior') or {}
+    before = {s.get('conversation_id') for s in prior.get('deleted_spans') or []}
+    spans = donor.get('deleted_spans') or []
+    return any(s.get('conversation_id') not in before for s in spans) or not donor.get('claims')
+
+
 def restore_backfill_donors(uid, token, ids, *, firestore_client=None):
-    """Undo one page of donors exactly: every tracked field returns to its pre-backfill value."""
+    """Undo one page of donors exactly: every tracked field returns to its pre-backfill value.
+
+    A donor whose backfilled copy the owner deleted stays converted (hidden), so the deletion holds;
+    returns (restored, kept ids).
+    """
     client = firestore_client or get_firestore_client()
     coll = user_conversations(client, uid)
     held = leases.lease_ref(client, uid, BACKFILL_LEASE)
@@ -828,19 +856,22 @@ def restore_backfill_donors(uid, token, ids, *, firestore_client=None):
         snapshots = [(coll.document(cid), coll.document(cid).get(transaction=tx)) for cid in ids]
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('lease_lost')
-        restored = 0
-        for ref, snapshot in snapshots:
+        restored, kept = 0, []
+        for cid, (ref, snapshot) in zip(ids, snapshots):
             row = snapshot.to_dict() or {}
             if not snapshot.exists or row.get('v3_derived') or not row.get('v3_backfill_run'):
                 continue
             prior = row.get('v3_backfill_prior')
             if not isinstance(prior, dict):
                 raise Conflict('backfill_prior_missing')
+            if deleted_after_backfill(row):
+                kept.append(cid)
+                continue
             patch = {k: prior[k] if k in prior else firestore.DELETE_FIELD for k in BACKFILL_TRACKED}
             patch.update(v3_backfill_run=firestore.DELETE_FIELD, v3_backfill_prior=firestore.DELETE_FIELD)
             tx.update(ref, patch)
             restored += 1
-        return restored
+        return restored, kept
 
     return restore(client.transaction())
 

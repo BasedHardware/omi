@@ -4702,10 +4702,6 @@ KNOWN_TERMINAL_WRITERS = {
             'commit_projection.commit',
         ): 'known_extra_writer: lifecycle v3 projection; lease/revision/claim fenced',
         (
-            'database/conversations_v3.py',
-            'restore_backfill_donors.restore',
-        ): 'known_extra_writer: backfill undo restores the donor fields it converted; backfill lease fenced',
-        (
             'utils/conversations/v3/service.py',
             'recording_short_path.guarded',
         ): 'in-memory completion projection after lifecycle.complete',

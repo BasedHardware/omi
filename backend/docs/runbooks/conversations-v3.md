@@ -209,14 +209,20 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --m
   rows that were already backfilled in the window after a pipeline fix. It reuses each row's id,
   re-runs outline (when its inputs changed) and notes, and retires copies that no rebuilt window
   claims. A window that would merge rows from two different runs blocks with `rederive_mixed_runs`,
-  so undo stays scoped to one run. Edits made to backfilled copies are not kept. `undo --run` refuses while a backfill step or
-  notes write for the owner is in flight, and records the refusal in the ledger (`undo.reason`); rerun
-  it. `undo` and `resume` exit 1 when no listed owner has the run. Otherwise it restores every donor field exactly, then
-  deletes the run's derived rows. It writes no tombstones and touches no audio. Undo a re-derive by
-  undoing the original run. Not undone: outline cache entries, speaker-resolution and media-boundary
+  so undo stays scoped to one run. Edits made to backfilled copies are not kept. `undo --run` takes both the backfill and the live
+  builder leases before it lists the run's documents, so no pass commits while it works. It refuses
+  while either is held or a notes write for the owner is in flight, and records the refusal in the
+  ledger (`undo.reason`); rerun it. `undo` and `resume` exit 1 when no listed owner has the run.
+  Otherwise it restores every donor field exactly, then deletes the run's derived rows. It writes no
+  tombstones and touches no audio. A donor whose backfilled copy the owner deleted is not restored
+  (that would resurrect the deletion): it stays a hidden source, together with every copy it shares
+  and those copies' donors. The ledger and `undo --dry-run` count them (`donors_kept_deleted`,
+  `rows_kept_deleted`, `donors_deleted_by_owner`). Undo a re-derive by undoing the original run;
+  `undo` on a re-derive run id says so and exits 1. Not undone: outline cache entries, speaker-resolution and media-boundary
   evidence that the notes path wrote, and gateway spend.
 - **Blocked.** A partition over the loader's 128-document limit, a planned id that is already a live
-  row (`target_exists`), or a tombstoned window blocks the run. The partition and its reason are
+  row (`target_exists`), a tombstoned window, or a converted donor that no longer reads
+  (`backfill_source_unreadable`; its copies are kept) blocks the run. The partition and its reason are
   recorded in the ledger. Fix the cause, then `resume`. Never describe a blocked or partial run as
   complete. `status` shows partitions committed, windows, Home-visible rows, outline calls and
   notes processed or failed.
