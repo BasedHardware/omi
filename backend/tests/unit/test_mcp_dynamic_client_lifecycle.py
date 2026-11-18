@@ -215,7 +215,9 @@ def test_successful_token_response_slides_dynamic_client_expiry(client, oauth_db
     assert _authorize(client).status_code == 200
 
 
-def test_expiry_refresh_failure_does_not_fail_the_token_response(client, oauth_db, fake_db, clock, token_pair, monkeypatch):
+def test_expiry_refresh_failure_does_not_fail_the_token_response(
+    client, oauth_db, fake_db, clock, token_pair, monkeypatch
+):
     def broken_touch(_client):
         raise RuntimeError("firestore down")
 
