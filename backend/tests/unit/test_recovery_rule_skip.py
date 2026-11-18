@@ -162,7 +162,7 @@ def test_recovery_calendar_overlap_does_not_take_the_rule_discard(monkeypatch, i
 
 
 @pytest.mark.parametrize(
-    ('stored', 'owner_edits', 'expects_notes'),
+    ('stored', 'conversation_fields', 'expects_notes'),
     [
         pytest.param(Structured(title='Discussion notes'), {}, False, id='fallback-only'),
         pytest.param(Structured(title='Discussion notes', overview='  '), {}, False, id='blank-overview'),
@@ -188,6 +188,12 @@ def test_recovery_calendar_overlap_does_not_take_the_rule_discard(monkeypatch, i
             id='salience',
         ),
         pytest.param(
+            Structured(title='Call mom before five', salience='highlight', title_provenance='server_minimum'),
+            {},
+            True,
+            id='transcript-title-with-salience',
+        ),
+        pytest.param(
             Structured(title='Discussion notes', category='work', title_provenance='server_minimum'),
             {},
             True,
@@ -199,22 +205,42 @@ def test_recovery_calendar_overlap_does_not_take_the_rule_discard(monkeypatch, i
             True,
             id='owner-corrections',
         ),
+        pytest.param(
+            Structured(title='Discussion notes'),
+            {
+                'transcript_segments': [
+                    TranscriptSegment(
+                        text='Call mom before five to confirm the address and ask what I should bring.',
+                        speaker='SPEAKER_00',
+                        is_user=True,
+                        start=0,
+                        end=5,
+                    )
+                ],
+            },
+            True,
+            id='above-word-floor',
+        ),
     ],
 )
 def test_quiet_recovery_uses_minimum_only_without_protected_content(
-    monkeypatch, isolated_processing_module, stored, owner_edits, expects_notes
+    monkeypatch, isolated_processing_module, stored, conversation_fields, expects_notes
 ):
     monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     pc = isolated_processing_module
     monkeypatch.setattr(pc.redis_db, 'get_user_preferred_app', lambda uid: None)
     conversation = _empty_recovery_conversation().model_copy(
-        update={'structured': stored, 'language': 'en', **owner_edits}
+        update={
+            'structured': stored,
+            'language': 'en',
+            'transcript_segments': [
+                TranscriptSegment(text='Call mom before five.', speaker='SPEAKER_00', is_user=True, start=0, end=1)
+            ],
+            **conversation_fields,
+        }
     )
-    text = 'Call mom before five.'
-    conversation.transcript_segments = [
-        TranscriptSegment(text=text, speaker='SPEAKER_00', is_user=True, start=0, end=1)
-    ]
+    text = conversation.transcript_segments[0].text
     minimum = Structured(title=text, title_provenance='server_minimum')
     with (
         patch.object(pc, 'conversation_transcripts_for_llm', return_value=(text, text, {})),

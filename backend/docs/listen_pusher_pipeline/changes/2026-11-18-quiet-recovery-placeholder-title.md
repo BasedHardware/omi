@@ -1,13 +1,15 @@
 # Quiet recovery of a capture with a placeholder title
 
-An already admitted server-recovery job can use the existing short-clip
-minimum when its stored title is the deterministic fallback and the row
-holds no rich content, Home gist or previously generated metadata.
-Previously, the fallback headline sent the job to paid notes, where empty
-output could dead-letter a capture that could have settled on the minimum.
-Rows with owner corrections continue through normal notes processing.
-Admission, discard eligibility and final-attempt processing are outside
-this change.
+A short, decoded capture with only a fallback label can reuse the quiet recovery
+minimum without calling the notes model. The existing path also accepts a
+transcript-derived `server_minimum` title. For either title, quiet recovery
+requires an empty gist, default structured metadata and no owner corrections.
+Longer captures, captures with previous Home metadata and captures with owner
+corrections continue through normal notes processing.
+
+The [placeholder admission change](2026-11-18-recovery-admits-placeholder-stub.md)
+allows these jobs into recovery. This follow-up guards the short-transcript
+minimum while keeping the batch-audio handoff and final-attempt behavior.
 
 See [the server recovery contract](../../listen_pusher_pipeline.mdx#replay-without-changing-listen-admission).
 

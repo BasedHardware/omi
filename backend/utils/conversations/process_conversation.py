@@ -97,7 +97,7 @@ from utils.conversations.deterministic_minimum import (
     deterministic_minimum_title,
 )
 from utils.conversations.duration import conversation_duration_seconds
-from utils.conversations.home_titles import is_fallback_title, title_for_stability
+from utils.conversations.home_titles import title_for_stability
 from utils.summary_quality import (
     clean_structured,
     stable_title,
@@ -115,10 +115,12 @@ from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingT
 from utils.conversations.recovery import (
     RECOVERY_QUIET_MINIMUM_MAX_WORDS,
     RecoveryStructureUnavailableError,
+    recovery_batch_audio_pending,
     recovery_minimum_terminal_enabled,
     recovery_rule_discard,
     recovery_transcript_below_content_floor,
     recovery_transcript_word_count,
+    stored_structure_is_replaceable,
     structured_is_rich,
     verified_recovery_discard,
 )
@@ -606,7 +608,9 @@ def _get_structured(
                     uid, main_conv.started_at, main_conv.finished_at
                 ),
             )
-            if recovery_rule_discard(ordinary):
+            # A batch-owned capture's live text is a preview; its audio still owes a transcript.
+            batch_audio_owed = recovery_rule_discard(ordinary) and recovery_batch_audio_pending(main_conv)
+            if recovery_rule_discard(ordinary) and not batch_audio_owed:
                 logger.info('selfheal recovery skipped paid notes reason=ordinary_rule_discard')
                 if relevance_observer is not None:
                     relevance_observer(
@@ -614,24 +618,14 @@ def _get_structured(
                     )
                 return Structured(), True
             stored_structured = getattr(main_conv, 'structured', None)
-            stored_title = getattr(stored_structured, 'title', '') or ''
-            stored_title_provenance = getattr(stored_structured, 'title_provenance', None)
-            stored_gist = (getattr(stored_structured, 'gist', '') or '').strip()
-            replaceable_title = not stored_title.strip() or stored_title_provenance == 'server_minimum'
-            if is_fallback_title(stored_title) and isinstance(stored_structured, Structured):
-                # A fallback can be the only content on an old capture stub.
-                # Keep any non-default metadata from a prior notes pass.
-                replaceable_title = not stored_structured.model_dump(
-                    exclude={'title', 'overview', 'gist', 'title_provenance'}, exclude_defaults=True
-                )
-            stored_content_is_replaceable = (
-                not structured_is_rich(stored_structured) and not stored_gist and replaceable_title
-            )
-            if (
-                recovery_transcript_decoded
-                and stored_content_is_replaceable
+            stored_content_is_replaceable = stored_structure_is_replaceable(stored_structured)
+            # Batch audio still owed follows the existing handoff path. The short
+            # transcript minimum also needs to preserve prior notes metadata.
+            if stored_content_is_replaceable and (
+                batch_audio_owed
+                or recovery_transcript_decoded
                 and not getattr(main_conv, 'user_title', None)
-                and not main_conv.user_corrections
+                and not getattr(main_conv, 'user_corrections', None)
                 and not is_release_probe_uid(uid)
                 and not user_kept
                 and not getattr(main_conv, 'photos', None)
@@ -639,11 +633,17 @@ def _get_structured(
                 and not summary_app_selected
                 and english_word_floor(main_conv, discard_transcript)
                 and recovery_transcript_below_content_floor(main_conv)
-            ):
-                if relevance_observer is not None:
-                    relevance_observer(
-                        RelevanceDecision('keep', 'rule', 'content_below_floor', ProcessingTrigger.SERVER_RECOVERY)
+                and not (getattr(stored_structured, 'gist', '') or '').strip()
+                and (
+                    not isinstance(stored_structured, Structured)
+                    or not stored_structured.model_dump(
+                        exclude={'title', 'title_provenance', 'overview', 'gist'}, exclude_defaults=True
                     )
+                )
+            ):
+                reason = 'batch_audio_owed' if batch_audio_owed else 'content_below_floor'
+                if relevance_observer is not None:
+                    relevance_observer(RelevanceDecision('keep', 'rule', reason, ProcessingTrigger.SERVER_RECOVERY))
                 if recovery_minimum_fallback_observer is not None:
                     recovery_minimum_fallback_observer()
                 return (
@@ -2931,7 +2931,7 @@ def process_conversation(
                 {
                     'event': 'selfheal_guard',
                     'outcome': 'kept_minimum',
-                    'reason': 'content_below_floor',
+                    'reason': decisions[-1].reason if decisions else 'content_below_floor',
                     'transcript_words': recovery_transcript_word_count(conversation),
                     'content_floor_words': RECOVERY_QUIET_MINIMUM_MAX_WORDS,
                 }
