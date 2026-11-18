@@ -649,6 +649,7 @@ CAP_HOLD_ENTRIES = tuple(
         ('sealing', 10_000, 'live staging being sealed into a hold', 3600),
         ('retained', 500_000, 'terminal retained hold; not actionable by this census', None),
         ('batch_admitted', 100_000, 'handed to a batch job; the job is the continuing obligation', None),
+        ('owner_cancelled', 10_000, 'owner deleted the upload; erasure removes the row right after the fence', None),
     )
 )
 

@@ -3036,6 +3036,14 @@ FIELD_SITES = {
         ),
         ('_fresh_pick', 'state', "rows[0].get('state')", ('segment_ids', 'state', 'waited')),
     ],
+    'utils/sync/owner_cancel_legacy.py': [
+        (
+            '_fence',
+            'status',
+            "LEDGER_STATUS; literal aliases=[('LEDGER_STATUS', ('owner_cancelled',))]",
+            ('expires_at', 'owner_cancelled_at', 'pending_cap_hold_ids', 'status', 'updated_at'),
+        ),
+    ],
     'utils/batch_pipeline/owner_cancel.py': [
         (
             '_fence',

@@ -33,6 +33,7 @@ def api(monkeypatch):
     monkeypatch.setattr(router, 'FirestoreStore', lambda namespace: store)
     monkeypatch.setattr(router, 'shadow_from_env', lambda primary: primary)
     monkeypatch.setattr(router, 'FirestoreEraser', lambda namespace: eraser)
+    monkeypatch.setattr(router, 'FirestoreLegacyStore', lambda: None)
     app = FastAPI()
     app.include_router(sync_router.router)  # mounts the cancel route beside the status poll
     caller = {'uid': OWNER}
@@ -147,3 +148,36 @@ def test_status_poll_after_cancel_returns_custody(api, monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body['status'] == 'failed' and body['reason_code'] == 'owner_cancelled'
+
+
+def test_legacy_handle_cancels_its_cap_holds_under_the_gate(api, monkeypatch):
+    from tests.unit.test_sync_owner_cancel_legacy import FakeLegacyEraser, MemoryLegacyStore, held_upload
+
+    client, _, _, _, gates = api
+    legacy = MemoryLegacyStore()
+    held_upload(legacy)
+    eraser = FakeLegacyEraser(legacy)
+    monkeypatch.setattr(router, 'FirestoreLegacyStore', lambda: legacy)
+    monkeypatch.setattr(router, 'FirestoreEraser', lambda namespace: eraser)
+    response = client.delete('/v2/sync-local-files/legacy-upload-1')
+    assert response.status_code == 200
+    assert response.json() == {
+        'job_id': 'legacy-upload-1',
+        'outcome': 'cancelled',
+        'erasure': 'complete',
+        'conversation_ids': [],
+    }
+    assert gates and len(eraser.erased) == 2
+
+
+def test_legacy_hold_mid_recovery_is_a_retryable_conflict(api, monkeypatch):
+    from tests.unit.test_sync_owner_cancel_legacy import FakeLegacyEraser, MemoryLegacyStore, held_upload, hold
+
+    client, _, _, _, _ = api
+    legacy = MemoryLegacyStore()
+    held_upload(legacy, {'h1': hold(30, lease_until=4_000_000_000, lease_token='worker')})
+    monkeypatch.setattr(router, 'FirestoreLegacyStore', lambda: legacy)
+    monkeypatch.setattr(router, 'FirestoreEraser', lambda namespace: FakeLegacyEraser(legacy))
+    response = client.delete('/v2/sync-local-files/legacy-upload-1')
+    assert response.status_code == 409 and response.json()['detail'] == 'sync_job_processing'
+    assert legacy.rows[('hold', 'owner-synthetic', 'h1')]['state'] == 'held'

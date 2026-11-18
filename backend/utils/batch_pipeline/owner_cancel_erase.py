@@ -67,8 +67,12 @@ class FirestoreEraser:
                 erase_artifact(uid, self.namespace, artifact, data, self.delete_uri, fence=fence, client=self.client)
         delete_job(self.client, self.namespace, snapshot, retain_ordering=False, fence=fence)
 
+    def erase_hold(self, uid: str, hold_id: str) -> None:
+        from utils.sync.owner_cancel_legacy import FirestoreLegacyEraser
+
+        FirestoreLegacyEraser().erase_hold(uid, hold_id)
+
     def erase_archives(self, uid: str, job_id: str) -> None:
-        if not job_id.startswith(JOB_PREFIX):
-            raise ValueError('batch upload handle required')
-        # Originals carry the router's upload id; the public handle adds the protocol prefix.
-        self.delete_archives(uid, job_id[len(JOB_PREFIX) :])
+        # Originals carry the router's upload id; a batch handle adds the protocol prefix,
+        # and a legacy handle is the upload id itself.
+        self.delete_archives(uid, job_id.removeprefix(JOB_PREFIX))

@@ -132,7 +132,8 @@ the legacy coverage trim is deleted (plan C, C11).
 ## Owner delete of an uploaded recording
 
 When the owner deletes an `uploaded` row that has a job handle, the phone also cancels the server job
-(`DELETE /v2/sync-local-files/{job_id}`, `wal_server_cancel.dart`).
+(`DELETE /v2/sync-local-files/{job_id}`, `wal_server_cancel.dart`). Batch (`bp_`) and legacy handles
+both go there; the server erases a legacy upload's cap holds.
 
 - **Order.** The job id is written to a durable tombstone before the local file goes. If the
   tombstone cannot be saved, the recording is kept.

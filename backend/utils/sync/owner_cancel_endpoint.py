@@ -17,6 +17,7 @@ from utils.batch_pipeline.intake import privacy_blocked_response
 from utils.batch_pipeline.owner_cancel_erase import FirestoreEraser
 from utils.other import endpoints as auth
 from utils.other.account_gate_http import account_gate_busy_http_exception
+from utils.sync.owner_cancel_legacy import FirestoreLegacyStore
 from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll
 from utils.sync.stage import current_stage
 
@@ -45,7 +46,7 @@ def _disabled() -> JSONResponse:
 def cancel_sync_upload(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Owner deletes an uploaded recording that has not been transcribed; its server copy is erased.
 
-    Idempotent. Wrong-owner, unknown and legacy handles share the ``not_found``
+    Batch (``bp_``) uploads and legacy uploads held in cap holds are both covered. Idempotent. Wrong-owner, unknown and legacy handles share the ``not_found``
     answer. Work that a worker is computing, merging or projecting answers 409
     ``sync_job_processing`` (retry later); a committed transcript is never
     deleted here and answers ``already_processed`` with its conversations.
@@ -69,6 +70,7 @@ def cancel_sync_upload(job_id: str, uid: str = Depends(auth.get_current_user_uid
                 job_id,
                 store=shadow_from_env(FirestoreStore(namespace)),
                 eraser=FirestoreEraser(namespace),
+                legacy=FirestoreLegacyStore(),
             )
     except owner_cancel.CancelDisabled:
         return _disabled()

@@ -77,6 +77,9 @@ class Eraser(Protocol):
     def erase_archives(self, uid: str, job_id: str) -> None:
         """Erase the upload's unlinked private-cloud originals. Raises on failure."""
 
+    def erase_hold(self, uid: str, hold_id: str) -> None:
+        """Erase one fenced legacy cap hold's objects and row; a no-op when absent. Raises on failure."""
+
 
 def is_owner_cancelled(job: dict) -> bool:
     """The fence wrote this unit; the eraser re-proves it before deleting anything."""
@@ -87,7 +90,7 @@ def _handle_shape_ok(job_id: str) -> bool:
     return job_id.startswith(JOB_PREFIX) and len(job_id) <= 128 and '/' not in job_id
 
 
-def _ids(result: Any) -> tuple[str, ...]:
+def conversation_ids(result: Any) -> tuple[str, ...]:
     result = result if isinstance(result, dict) else {}
     ids: list[str] = []
     for value in (*(result.get('new_memories') or []), *(result.get('updated_memories') or [])):
@@ -171,7 +174,7 @@ def _fence(tx, uid: str, job_id: str, now: float) -> tuple[CancelResult, tuple[s
     ledger_key = f'{uid}/{content_id}'
     ledger = tx.get('content', ledger_key)
     if _processed(ledger):
-        return CancelResult(Outcome.ALREADY_PROCESSED, _ids(ledger.get('result'))), ()
+        return CancelResult(Outcome.ALREADY_PROCESSED, conversation_ids(ledger.get('result'))), ()
     if ledger and ledger.get('job_id') not in (None, job_id):
         return CancelResult(Outcome.NOT_CANCELLABLE), ()  # another upload owns this content
     jobs = [tx.get('jobs', segment_id) for segment_id in segments]
@@ -220,15 +223,25 @@ def _mark_erased(tx, uid: str, job_id: str, now: float) -> None:
         tx.put('intakes', job_id, {**intake, 'owner_cancel_erased_at': now})
 
 
-def cancel_owner_upload(uid: str, job_id: str, *, store, eraser: Eraser, now: float | None = None) -> CancelResult:
-    """Fence then erase one owner upload. Idempotent; see the module docstring."""
+def cancel_owner_upload(
+    uid: str, job_id: str, *, store, eraser: Eraser, legacy=None, now: float | None = None
+) -> CancelResult:
+    """Fence then erase one owner upload. Idempotent; see the module docstring.
+
+    A legacy (non-``bp_``) handle goes to ``utils.sync.owner_cancel_legacy`` with the
+    ``legacy`` store: its audio sits in cap holds, not batch units.
+    """
     if not sync_owner_cancel.enabled():
         raise CancelDisabled('owner cancellation is switched off')
     if job_id.startswith(WAL_HANDOFF_PREFIX):
         return CancelResult(Outcome.NOT_CANCELLABLE)  # live-record handoff: its conversation already exists
-    if not _handle_shape_ok(job_id):
-        return CancelResult(Outcome.NOT_FOUND)
     now = time.time() if now is None else now
+    if not _handle_shape_ok(job_id):
+        from utils.sync import owner_cancel_legacy
+
+        if legacy is None or not owner_cancel_legacy.is_legacy_handle(job_id):
+            return CancelResult(Outcome.NOT_FOUND)
+        return owner_cancel_legacy.cancel_legacy_upload(uid, job_id, store=legacy, eraser=eraser, now=now)
     result, segments = store.run(lambda tx: _fence(tx, uid, job_id, now))
     if result.outcome is not Outcome.CANCELLED or result.erasure == 'complete':
         logger.info('event=sync_owner_cancel outcome=%s erasure=%s', result.outcome.value, result.erasure)

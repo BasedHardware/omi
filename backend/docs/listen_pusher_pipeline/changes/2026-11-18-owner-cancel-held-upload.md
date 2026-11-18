@@ -25,14 +25,25 @@ gate) now cancels a batch upload (`bp_` handle) and erases its server copies.
 - **Status.** A cancelled upload polls as `failed` with `reason_code=owner_cancelled`. Sibling
   recordings from the same upload that were not deleted return to phone custody and re-upload by
   themselves.
+- **Legacy uploads held in cap holds.** A legacy (non-`bp_`) handle resolves to the owner's one
+  content-ledger row naming that job (`stt_cap_hold_v1`, `held`). One transaction reads the ledger,
+  every hold it names and the held-audio summary. A hold that recovery has leased, completed,
+  handed to batch, or that is still staging/sealing answers 409 `sync_job_processing` and nothing
+  is written. Otherwise each `held`/`retained` hold becomes `owner_cancelled` (unclaimable, unlisted,
+  not redriven, zero remaining seconds), the summary drops its seconds, and the ledger becomes
+  `owner_cancelled`. Erasure then deletes each hold's audio/metadata objects and row
+  (`cap_hold_erasure.erase`, after re-proving the fence) and the unlinked raw originals. A ledger the
+  recovery already completed answers `already_processed`.
 
 Not covered:
 - Coalesced uploads and live-record handoffs (`bp_wh_`) answer 409 `sync_job_not_cancellable`.
-- Legacy Redis jobs (dark since 2026-11-04, 24 h TTL) and legacy cap holds (paid-only recovery).
+- Legacy Redis jobs with no held ledger row (dark since 2026-11-04, 24 h TTL) answer `not_found` or
+  `not_cancellable`.
 - Shadow-evaluation rows, which expire in 7 days.
 
 Kill switch `SYNC_JOB_OWNER_CANCEL_ENABLED` is on unless off. Off answers 503
 `sync_job_cancel_disabled`; fenced uploads stay fenced.
 
-Code and evidence: `utils/sync/owner_cancel_endpoint.py`, `utils/batch_pipeline/owner_cancel.py`, `utils/batch_pipeline/owner_cancel_erase.py`,
+Code and evidence: `utils/sync/owner_cancel_endpoint.py`, `utils/batch_pipeline/owner_cancel.py`,
+`utils/sync/owner_cancel_legacy.py`, `tests/unit/test_sync_owner_cancel_legacy.py`, `utils/batch_pipeline/owner_cancel_erase.py`,
 `tests/unit/test_sync_owner_cancel.py`, `tests/unit/test_sync_owner_cancel_endpoint.py`.
