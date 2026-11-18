@@ -1123,6 +1123,11 @@ class AppLocalizationsSl extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Ime je bilo uspešno posodobljeno!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Beri izbrane koledarje. Novi dogodki uporabljajo $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Nastavitve koledarja';
 
   @override

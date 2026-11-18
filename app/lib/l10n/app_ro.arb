@@ -352,6 +352,7 @@
     "enterYourName": "Introduceți numele dvs.",
     "nameCannotBeEmpty": "Numele nu poate fi gol",
     "nameUpdatedSuccessfully": "Nume actualizat cu succes!",
+    "calendarReadSelectionHelp": "Citește calendarele selectate. Evenimentele noi folosesc {calendar}.",
     "calendarSettings": "Setări calendar",
     "calendarProviders": "Furnizori calendar",
     "macOsCalendar": "Calendar macOS",

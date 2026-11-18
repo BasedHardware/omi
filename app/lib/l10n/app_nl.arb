@@ -352,6 +352,7 @@
     "enterYourName": "Voer uw naam in",
     "nameCannotBeEmpty": "Naam mag niet leeg zijn",
     "nameUpdatedSuccessfully": "Naam succesvol bijgewerkt!",
+    "calendarReadSelectionHelp": "Geselecteerde agenda’s lezen. Nieuwe afspraken gebruiken {calendar}.",
     "calendarSettings": "Agenda-instellingen",
     "calendarProviders": "Agenda-providers",
     "macOsCalendar": "macOS-agenda",

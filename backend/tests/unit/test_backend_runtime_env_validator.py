@@ -542,7 +542,8 @@ def with_conversations_v3_env(payload: str) -> str:
             rf'("{service}":\s*\{{.*?"env":\s*\[)',
             r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "beta"},'
             r'\n        {"name": "CONVERSATIONS_V3_FIRST_APP_BUILD", "value": ""},'
-            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},',
+            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},'
+            r'\n        {"name": "CONVERSATIONS_V3_BACKFILL_QUEUE", "value": "conversations-v3-backfill"},',
             payload,
             count=1,
             flags=re.DOTALL,

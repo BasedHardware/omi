@@ -213,6 +213,7 @@ ALLOWED_COMPONENTS = frozenset(
         'usage_publication',
         'knowledge_graph',
         'agent_tools',
+        'calendar_read',
         'conversation_relevance',
         'conversation_finalization',
         'conversation_notes',

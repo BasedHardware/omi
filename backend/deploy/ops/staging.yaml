@@ -92,6 +92,15 @@ cloud_tasks:
     min_backoff: 30s
     max_backoff: 300s
     log_sampling_ratio: 0.1
+  staging-conversations-v3-backfill:
+    # Operator-planned per-owner v3 backfill/repair steps (utils/conversations/v3/backfill.py). One
+    # dispatch at a time keeps historical outline/notes work off the live conversations-v3 queue
+    # and bounds it to one owner partition; a 503 (owner busy) retries after a minute.
+    max_concurrent_dispatches: 1
+    max_dispatches_per_second: 1
+    max_attempts: 5
+    min_backoff: 60s
+    max_backoff: 600s
   staging-sync-jobs-fresh:
     # Five attempts: sync's 409 leaves the retry to the queue (routers/sync.py), and
     # utils/cloud_tasks.py get_sync_tasks_max_attempts mirrors it. The config-train is

@@ -42,6 +42,30 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('responseErrorHandler — 401 handling', () => {
+  it('an expired operation does not refresh or sign out the replacement owner', async () => {
+    const { client, calls } = fakeClient()
+    await expect(
+      responseErrorHandler(client, err401({ __canSend: () => false }))
+    ).rejects.toBeDefined()
+    expect(h.refreshIdToken).not.toHaveBeenCalled()
+    expect(h.forceReauth).not.toHaveBeenCalled()
+    expect(calls).toHaveLength(0)
+  })
+
+  it('an owner change during refresh cannot reauthenticate the replacement owner', async () => {
+    let current = true
+    h.refreshIdToken.mockImplementation(async () => {
+      current = false
+      return { status: 'dead' }
+    })
+    const { client, calls } = fakeClient()
+    await expect(
+      responseErrorHandler(client, err401({ __canSend: () => current }))
+    ).rejects.toBeDefined()
+    expect(h.forceReauth).not.toHaveBeenCalled()
+    expect(calls).toHaveLength(0)
+  })
+
   it('force-refreshes once and retries with the fresh token', async () => {
     h.refreshIdToken.mockResolvedValue({ status: 'ok', token: 'fresh-token' })
     const { client, calls } = fakeClient()

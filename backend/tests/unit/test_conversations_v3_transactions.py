@@ -393,13 +393,24 @@ def test_multi_batch_backfill_conversion_is_not_its_own_race_and_keeps_an_obliga
         }
         for i in range(128)
     ]
-    donor = {**strict.rows[R], 'recording': True, '_v3_derive': True, '_v3_revision': 1}
+    donor = {
+        **strict.rows[R],
+        'recording': True,
+        '_v3_derive': True,
+        '_v3_revision': 1,
+        '_v3_backfill_run': 'run-1',
+        '_v3_backfill_prior': {},
+    }
     store.commit_projection('synthetic', token, {'r': donor}, {}, rows, [], firestore_client=strict)
     assert len(observations) >= 4
     # Hidden as a recording from the first batch, with a durable obligation until the last one lands.
     assert all(recording is True and pending is True for recording, pending in observations[:-1])
     assert observations[-1] == (True, False)
     assert len(strict.rows[R]['claims']) == 128
+    # Non-destructive: the legacy notes stay, and the donor names its run and its prior state for undo.
+    assert strict.rows[R]['structured'] == {'title': 'Old notes'}
+    assert strict.rows[R]['v3_backfill_run'] == 'run-1' and strict.rows[R]['v3_backfill_prior'] == {}
+    assert strict.rows[R]['v3_audio_purge_pending'] is False
 
 
 def test_metadata_revision_change_does_not_rebill_unchanged_content(strict, monkeypatch):

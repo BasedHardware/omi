@@ -1225,6 +1225,7 @@
     "enterYourName": "הזן את שמך",
     "nameCannotBeEmpty": "השם לא יכול להיות ריק",
     "nameUpdatedSuccessfully": "השם עודכן בהצלחה!",
+    "calendarReadSelectionHelp": "קריאת היומנים שנבחרו. אירועים חדשים משתמשים ב־{calendar}.",
     "calendarSettings": "הגדרות קלנדר",
     "calendarProviders": "ספקי קלנדר",
     "macOsCalendar": "קלנדר macOS",

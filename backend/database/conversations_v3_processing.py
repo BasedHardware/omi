@@ -307,3 +307,39 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
     if changed:
         metrics.terminal_failure('processing')
     return changed
+
+
+def settle_backfill_processing(uid, cid, *, failed, max_attempts, firestore_client=None):
+    """Clear the backfill notes marker once the live processing writer settled the row.
+
+    A raised attempt parks the row (never left on the live sweep's v3_process_pending) and retries
+    on the next backfill drain; after max_attempts it fails like a live exhausted row.
+    """
+    client = firestore_client or store.get_firestore_client()
+    ref = store.user_conversations(client, uid).document(cid)
+
+    @firestore.transactional
+    def settle(tx):
+        snapshot = ref.get(transaction=tx)
+        row = snapshot.to_dict() or {}
+        if not snapshot.exists or not row.get('v3_backfill_process_pending'):
+            return 'absent'
+        if not failed and not row.get('v3_process_pending'):
+            tx.update(ref, {'v3_backfill_process_pending': False})
+            # The live writers settled it: notes written, or a terminal failure (attempts exhausted).
+            return 'failed' if row.get('v3_process_failed') else 'settled'
+        attempts = int(row.get('v3_backfill_attempts') or 0) + 1
+        if attempts >= max_attempts:
+            tx.update(
+                ref,
+                {
+                    **failure_patch(retryable=bool(row.get('transcript_segments'))),
+                    'v3_backfill_process_pending': False,
+                    'v3_backfill_attempts': attempts,
+                },
+            )
+            return 'failed'
+        tx.update(ref, {'v3_process_pending': False, 'v3_backfill_attempts': attempts})
+        return 'retry'
+
+    return settle(client.transaction())

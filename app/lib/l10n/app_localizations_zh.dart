@@ -1109,6 +1109,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nameUpdatedSuccessfully => '姓名更新成功！';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return '读取所选日历。新建活动使用 $calendar。';
+  }
+
+  @override
   String get calendarSettings => '日历设置';
 
   @override

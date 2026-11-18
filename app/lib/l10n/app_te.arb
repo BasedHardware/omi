@@ -1225,6 +1225,7 @@
     "enterYourName": "మీ పేరు నమోదు చేయండి",
     "nameCannotBeEmpty": "పేరు ఖాళీగా ఉండకూడదు",
     "nameUpdatedSuccessfully": "పేరు విజయవంతంగా నవీకరించబడింది!",
+    "calendarReadSelectionHelp": "ఎంచుకున్న క్యాలెండర్‌లను చదవండి. కొత్త ఈవెంట్‌లు {calendar}ను ఉపయోగిస్తాయి.",
     "calendarSettings": "క్యాలెండర్ సెట్టింగ్‌లు",
     "calendarProviders": "క్యాలెండర్ ప్రదాతలు",
     "macOsCalendar": "macOS క్యాలెండర్",

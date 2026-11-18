@@ -352,6 +352,7 @@
     "enterYourName": "Geben Sie Ihren Namen ein",
     "nameCannotBeEmpty": "Name darf nicht leer sein",
     "nameUpdatedSuccessfully": "Name erfolgreich aktualisiert!",
+    "calendarReadSelectionHelp": "Ausgewählte Kalender lesen. Neue Termine verwenden {calendar}.",
     "calendarSettings": "Kalendereinstellungen",
     "calendarProviders": "Kalenderanbieter",
     "macOsCalendar": "macOS Kalender",

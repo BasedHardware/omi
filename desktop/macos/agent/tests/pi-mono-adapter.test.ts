@@ -162,6 +162,24 @@ describe("PiMonoAdapter prompt correlation", () => {
     await expect(prompt).resolves.toMatchObject({ text: "done" });
   });
 
+  it("rejects a prompt that exceeds its total deadline", async () => {
+    const { adapter } = createAdapter({ promptTimeoutMs: 30 } as any);
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "hang forever" }],
+      [],
+      "act",
+      () => {},
+      async () => "",
+    );
+
+    await expect(prompt).rejects.toThrow(/exceeded its .*deadline/);
+    expect((adapter as any).activePromptGeneration).toBe(0);
+    expect((adapter as any).pendingRequests.size).toBe(0);
+  });
+
   it("routes current public web requests for both coordinator and leaf sessions", async () => {
     const { adapter } = createAdapter();
     seedSessions(adapter, "main", "leaf");

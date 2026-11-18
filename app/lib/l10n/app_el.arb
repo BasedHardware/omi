@@ -352,6 +352,7 @@
     "enterYourName": "Εισάγετε το όνομά σας",
     "nameCannotBeEmpty": "Το όνομα δεν μπορεί να είναι κενό",
     "nameUpdatedSuccessfully": "Το όνομα ενημερώθηκε επιτυχώς!",
+    "calendarReadSelectionHelp": "Ανάγνωση επιλεγμένων ημερολογίων. Τα νέα συμβάντα χρησιμοποιούν το {calendar}.",
     "calendarSettings": "Ρυθμίσεις ημερολογίου",
     "calendarProviders": "Πάροχοι Ημερολογίου",
     "macOsCalendar": "Ημερολόγιο macOS",

@@ -352,6 +352,7 @@
     "enterYourName": "Въведете вашето име",
     "nameCannotBeEmpty": "Името не може да бъде празно",
     "nameUpdatedSuccessfully": "Името е актуализирано успешно!",
+    "calendarReadSelectionHelp": "Четене на избраните календари. Новите събития използват {calendar}.",
     "calendarSettings": "Настройки на календар",
     "calendarProviders": "Доставчици на календар",
     "macOsCalendar": "macOS Календар",

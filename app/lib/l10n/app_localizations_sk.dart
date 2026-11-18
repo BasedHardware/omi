@@ -1128,6 +1128,11 @@ class AppLocalizationsSk extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Meno bolo úspešne aktualizované!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Čítať vybrané kalendáre. Nové udalosti používajú $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Nastavenia kalendára';
 
   @override

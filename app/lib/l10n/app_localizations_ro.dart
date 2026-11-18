@@ -1129,6 +1129,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nume actualizat cu succes!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Citește calendarele selectate. Evenimentele noi folosesc $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Setări calendar';
 
   @override

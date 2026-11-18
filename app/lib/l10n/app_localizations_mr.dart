@@ -1125,6 +1125,11 @@ class AppLocalizationsMr extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'नाव यशस्वीरित्या अपडेट केलं!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'निवडलेले कॅलेंडर वाचा. नवीन इव्हेंटसाठी $calendar वापरले जाईल.';
+  }
+
+  @override
   String get calendarSettings => 'कॅलेंडर सेटिंग्ज';
 
   @override
