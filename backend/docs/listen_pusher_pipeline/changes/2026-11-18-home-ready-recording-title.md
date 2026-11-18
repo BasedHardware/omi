@@ -7,7 +7,8 @@ display content.
 
 The legacy list applies the Home step projection before building its wire
 title. The prepared feed uses that step and the receipt from its existing
-document read. With `HOME_STEP_PROJECTION=off`, neither list adds the label.
+document read. It preserves an explicit user title, including one that matches
+a generated fallback. With `HOME_STEP_PROJECTION=off`, neither list adds the label.
 The label uses no transcript content or time-zone lookup and changes no
 stored data. Detail and other non-Home readers keep their current contract.
 

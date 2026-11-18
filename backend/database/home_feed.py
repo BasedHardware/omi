@@ -51,6 +51,7 @@ FEED_FIELDS = [
     'home_status',
     'home_step',
     'record_projection_revision',
+    'user_title',
     'home_starred',
     'home_is_locked',
     'home_has_tasks',
@@ -657,6 +658,13 @@ def feed(
         if display is None or row.get('home_projection_schema') != SCHEMA:
             raise PreparationRequired('home_feed_preparation_required')
         locked = bool(row.get('home_is_locked'))
+        title = display.get('title', '')
+        if kind == 'conversation' and not conversations.effective_user_title(row.get('user_title')):
+            title = display_title(
+                title,
+                display.get('preview', ''),
+                label_recording=bool(row.get('home_step') == home_step.READY and row.get('record_projection_revision')),
+            )
         return {
             'id': f'{kind}:{row["id"]}',
             'kind': kind,
@@ -664,21 +672,7 @@ def feed(
             'sort_at': row['home_sort_at'],
             'started_at': row.get('home_started_at'),
             'finished_at': row.get('home_finished_at'),
-            'title': (
-                ''
-                if locked
-                else (
-                    display_title(
-                        display.get('title', ''),
-                        display.get('preview', ''),
-                        label_recording=bool(
-                            row.get('home_step') == home_step.READY and row.get('record_projection_revision')
-                        ),
-                    )
-                    if kind == 'conversation'
-                    else display.get('title', '')
-                )
-            ),
+            'title': '' if locked else title,
             'emoji': '' if locked else display.get('emoji', ''),
             'preview': '' if locked else display.get('preview', ''),
             'status': row.get('home_status') or 'completed',

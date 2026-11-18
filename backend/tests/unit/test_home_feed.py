@@ -211,6 +211,18 @@ def test_prepared_feed_labels_only_unlocked_receipt_bearing_ready_recordings(sto
     assert [card['preview'] for card in cards] == [preview]
 
 
+@pytest.mark.parametrize('title', ['Discussion notes', 'Discussion 7'])
+def test_prepared_feed_preserves_an_explicit_fallback_shaped_user_title(store, title):
+    row = conversation(user_title=title)
+    row['structured'] = {'title': 'Generated headline'}
+    store.put('users/u/conversations/c', row)
+    drain(store)
+    cards = home_feed.feed('u', firestore_client=store)['items']
+    assert [card['home_step'] for card in cards] == [home_feed.home_step.READY]
+    assert [card['title'] for card in cards] == [title]
+    assert [card['preview'] for card in cards] == ['']
+
+
 def test_projected_get_never_reads_members_transcripts_or_calls_generation(store, monkeypatch):
     store.put('users/u/conversations/c', conversation())
     drain(store)
