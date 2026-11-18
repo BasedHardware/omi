@@ -115,6 +115,7 @@ from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingT
 from utils.conversations.recovery import (
     RECOVERY_QUIET_MINIMUM_MAX_WORDS,
     RecoveryStructureUnavailableError,
+    recovery_batch_audio_pending,
     recovery_minimum_terminal_enabled,
     recovery_rule_discard,
     recovery_transcript_below_content_floor,
@@ -607,7 +608,9 @@ def _get_structured(
                     uid, main_conv.started_at, main_conv.finished_at
                 ),
             )
-            if recovery_rule_discard(ordinary):
+            # A batch-owned capture's live text is a preview; its audio still owes a transcript.
+            batch_audio_owed = recovery_rule_discard(ordinary) and recovery_batch_audio_pending(main_conv)
+            if recovery_rule_discard(ordinary) and not batch_audio_owed:
                 logger.info('selfheal recovery skipped paid notes reason=ordinary_rule_discard')
                 if relevance_observer is not None:
                     relevance_observer(
@@ -616,9 +619,10 @@ def _get_structured(
                 return Structured(), True
             stored_structured = getattr(main_conv, 'structured', None)
             stored_content_is_replaceable = stored_structure_is_replaceable(stored_structured)
-            if (
-                recovery_transcript_decoded
-                and stored_content_is_replaceable
+            # Kept minimum: batch audio owed (the finalizer registers it), or a short decoded transcript.
+            if stored_content_is_replaceable and (
+                batch_audio_owed
+                or recovery_transcript_decoded
                 and not getattr(main_conv, 'user_title', None)
                 and not is_release_probe_uid(uid)
                 and not user_kept
@@ -628,10 +632,9 @@ def _get_structured(
                 and english_word_floor(main_conv, discard_transcript)
                 and recovery_transcript_below_content_floor(main_conv)
             ):
+                reason = 'batch_audio_owed' if batch_audio_owed else 'content_below_floor'
                 if relevance_observer is not None:
-                    relevance_observer(
-                        RelevanceDecision('keep', 'rule', 'content_below_floor', ProcessingTrigger.SERVER_RECOVERY)
-                    )
+                    relevance_observer(RelevanceDecision('keep', 'rule', reason, ProcessingTrigger.SERVER_RECOVERY))
                 if recovery_minimum_fallback_observer is not None:
                     recovery_minimum_fallback_observer()
                 return (
@@ -2919,7 +2922,7 @@ def process_conversation(
                 {
                     'event': 'selfheal_guard',
                     'outcome': 'kept_minimum',
-                    'reason': 'content_below_floor',
+                    'reason': decisions[-1].reason if decisions else 'content_below_floor',
                     'transcript_words': recovery_transcript_word_count(conversation),
                     'content_floor_words': RECOVERY_QUIET_MINIMUM_MAX_WORDS,
                 }

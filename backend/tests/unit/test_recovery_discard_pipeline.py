@@ -413,6 +413,70 @@ async def test_gist_blocks_a_rule_discard(pipeline, monkeypatch):
     assert counters['refused'] == 1
 
 
+def _batch_stub(pipeline, monkeypatch, **overrides):
+    """The 2026-11-18 stuck shape: a batch-owned capture stamped with the placeholder title."""
+    register = MagicMock(return_value=True)
+    monkeypatch.setattr(finalizer, 'reserve_recording', lambda uid, data: data.get('record_lane_owner'))
+    monkeypatch.setattr(finalizer, 'register_recording', register)
+    monkeypatch.setattr(jobs_db, 'stop_quiet_check_for_conversation', lambda *args, **kwargs: None)
+    monkeypatch.setattr(jobs_db, 'invalidate_people_stats_cache', lambda *args: None)
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
+    _seed(
+        pipeline,
+        transcript=[],
+        structured={'title': 'Discussion notes', 'overview': ''},
+        record_lane_owner='batch_live_v1',
+        record_audio_closed=True,
+        private_cloud_sync_enabled=True,
+        has_content=True,
+        **overrides,
+    )
+    return register
+
+
+@pytest.mark.asyncio
+async def test_server_batch_stub_hands_off_to_batch_and_verifies(pipeline, monkeypatch):
+    """Admitted zero-preview stub: registration, batch handoff terminal, then a clean verification."""
+    start = (NOW - timedelta(days=30)).timestamp()
+    register = _batch_stub(
+        pipeline,
+        monkeypatch,
+        external_data={'server_batch_only': True},
+        server_batch_audio_received=True,
+        server_batch_audio_start=start,
+        server_batch_audio_end=start + 120,
+    )
+    response, counters = await _run_and_verify(pipeline)
+    row, job = pipeline.store.rows[CONVERSATION_PATH], pipeline.store.rows[JOB_PATH]
+
+    assert response == {'status': 'done'}
+    assert row['status'] == job['status'] == 'completed'
+    assert job['finalization_outcome'] == 'server_batch_capture'
+    assert row['discarded'] is False and row['home_transcription_pending_at'] == NOW
+    register.assert_called_once()
+    assert counters == {'verified': 1, 'refused': 0, 'errors': 0, 'skipped': 0}
+    pipeline.paid_notes.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_batch_owned_empty_preview_is_kept_and_registered_not_discarded(pipeline, monkeypatch, capsys):
+    """An empty live preview proves nothing about retained batch audio."""
+    register = _batch_stub(pipeline, monkeypatch)
+    response, counters = await _run_and_verify(pipeline)
+    row = pipeline.store.rows[CONVERSATION_PATH]
+
+    assert response == {'status': 'done'}
+    assert row['status'] == 'completed'
+    assert row['discarded'] is False
+    assert row['relevance_decision']['reason'] == 'batch_audio_owed'
+    assert row['structured']['title_provenance'] == 'server_minimum'
+    assert row['terminal_no_derived_effects'] is True
+    register.assert_called_once()
+    assert counters == {'verified': 1, 'refused': 0, 'errors': 0, 'skipped': 0}
+    pipeline.paid_notes.assert_not_called()
+    assert any('"reason": "batch_audio_owed"' in line for line in capsys.readouterr().out.splitlines())
+
+
 @pytest.mark.asyncio
 async def test_restore_before_finalizer_read_never_decides_discard(pipeline, capsys):
     blob = _seed(pipeline, sync_relevance_user_kept=True)

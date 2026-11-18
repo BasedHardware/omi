@@ -2,10 +2,9 @@
 
 No Firestore, model clients, or clock: ``database/conversation_finalization_jobs``
 evaluates these inside its outbox transaction, so nothing here may touch those.
-The one project import, ``utils.summary_quality.valid_title``/``safe_body``, is
-pure policy with no side effects. Firestore document dicts and ``Structured``
-models go through the same definitions so admission and verification cannot
-drift.
+The one project import, ``home_titles.is_fallback_title``, is pure policy with
+no side effects. Firestore document dicts and ``Structured`` models go through
+the same definitions so admission and verification cannot drift.
 """
 
 from __future__ import annotations
@@ -16,7 +15,7 @@ import unicodedata
 from collections.abc import Mapping
 from typing import Any
 
-from utils.summary_quality import valid_title
+from utils.conversations.home_titles import is_fallback_title
 
 RECOVERY_MAX_AUDIO_FILE_IDS = 256
 RECOVERY_QUIET_MINIMUM_MAX_WORDS = 12
@@ -177,9 +176,24 @@ def structured_has_protected_content(structured: Any, user_title: Any = None) ->
         if not isinstance(value, str):
             continue
         # A placeholder label is not a real title; every other text field is content.
-        if valid_title(value) if name == 'title' else value.strip():
+        if _real_title(value) if name == 'title' else value.strip():
             return True
     return any(_field(structured, name) for name in _PROTECTED_STRUCTURED_LIST_FIELDS)
+
+
+def _real_title(value: str) -> bool:
+    """Exactly the stored fallback labels and Home's wait label are not titles."""
+    text = value.strip()
+    return bool(text) and not is_fallback_title(text) and text.rstrip('.…').strip().lower() != 'transcribing'
+
+
+def recovery_batch_audio_pending(conversation: Any) -> bool:
+    """A batch-owned capture with retained audio still owes its batch transcript.
+
+    Its live transcript is only a preview, so a content-free preview proves
+    nothing about the audio; a discard would drop the batch obligation.
+    """
+    return _field(conversation, 'record_lane_owner') == 'batch_live_v1' and bool(_field(conversation, 'audio_files'))
 
 
 def raw_transcript_bytes(conversation: Mapping[str, Any]) -> int:

@@ -343,6 +343,28 @@ def test_placeholder_only_stub_is_admitted_and_real_content_still_refuses(overri
         assert transaction.sets == []
 
 
+@pytest.mark.parametrize(
+    'title,protected',
+    [
+        ('Discussion notes', False),
+        ('Discussion 3', False),
+        ('Transcribing…', False),
+        ('Transcribing...', False),
+        ('  ', False),
+        # Only the stored fallback labels are placeholders; anything else may be a real title.
+        ('Untitled', True),
+        ('Conversation', True),
+        ('Talking', True),
+        ('In progress', True),
+        ('New moment 3', True),
+        ('Speaker discusses pricing', True),
+        ('Transcript unavailable', True),
+    ],
+)
+def test_only_the_fallback_labels_are_placeholder_titles(title, protected):
+    assert structured_has_protected_content({'title': title}) is protected
+
+
 def test_undecodable_transcript_blob_counts_as_content_and_sized_in_bytes():
     blob = 'gzipped-not-json-###'
     transaction, intent = _recover(_recovery_conversation({'transcript_segments': blob}))
