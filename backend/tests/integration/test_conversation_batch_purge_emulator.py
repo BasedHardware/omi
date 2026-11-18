@@ -111,6 +111,9 @@ def test_purge_erases_intake_parked_unit_and_debits_owner_once(plane, monkeypatc
     from database.batch_pipeline_store import FirestoreStore
     from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv('BATCH_ALLOWANCE_PARK_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_ALLOWANCE_INTAKE_PARK_ENABLED', raising=False)
     namespace = 'batch_pipeline_test_allowance_purge'
     store = FirestoreStore(namespace, firestore_client=plane.client)
     now = time.time()

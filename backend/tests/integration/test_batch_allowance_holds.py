@@ -24,7 +24,9 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture
 def h(store_backend, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.delenv('BATCH_ALLOWANCE_PARK_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_ALLOWANCE_INTAKE_PARK_ENABLED', raising=False)
     store_backend.seed_user('owner')
     return store_backend
 
