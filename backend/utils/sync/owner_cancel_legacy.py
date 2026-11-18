@@ -193,6 +193,23 @@ class _FirestoreTx:
         self.transaction.set(self._reference(kind, uid, key), row)
 
 
+def find_legacy_content(uid: str, job_id: str, client: Any = None) -> str | None:
+    """The owner's one ledger row naming this legacy job (the legacy status read's query)."""
+    from google.cloud.firestore_v1.base_query import FieldFilter
+
+    client = client if client is not None else cap_hold.get_firestore_client()
+    candidates = list(
+        client.collection('users')
+        .document(uid)
+        .collection(collection_name('sync_content_ledger'))
+        .where(filter=FieldFilter('job_id', '==', job_id))
+        .select(())
+        .limit(2)
+        .stream()
+    )
+    return candidates[0].id if len(candidates) == 1 else None
+
+
 class FirestoreLegacyStore:
     """Holds and their ledger rows share one client so a single transaction fences both."""
 
@@ -204,18 +221,7 @@ class FirestoreLegacyStore:
         return self._client if self._client is not None else cap_hold.get_firestore_client()
 
     def find_content(self, uid: str, job_id: str) -> str | None:
-        from google.cloud.firestore_v1.base_query import FieldFilter
-
-        candidates = list(
-            self.client.collection('users')
-            .document(uid)
-            .collection(collection_name('sync_content_ledger'))
-            .where(filter=FieldFilter('job_id', '==', job_id))
-            .select(())
-            .limit(2)
-            .stream()
-        )
-        return candidates[0].id if len(candidates) == 1 else None
+        return find_legacy_content(uid, job_id, client=self.client)
 
     def run(self, fn: Callable[[Any], Any]) -> Any:
         from google.cloud import firestore
