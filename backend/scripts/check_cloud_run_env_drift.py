@@ -77,13 +77,8 @@ HASH_LENGTH = 12
 REDACTED_HASH = 'redacted'
 
 
-# backend-listen env names whose prod values can be replaced at deploy time out
-# of band (formerly the LISTEN_PRIVATE_VALUES_YAML privateEnv overlay; empty
-# since private names became chart-declared privateSecretEnv secretKeyRefs). Without the exact deployed override state these chart defaults
-# are not provable exact values, so the comparison degrades them to unchecked
-# instead of asserting the checked-in literal — the same presence-only contract
-# backend/scripts/ops/drift_check.py holds for them. Sourced from that module
-# (single definition) when importable, with an inline fallback for standalone runs.
+# backend-listen env names replaced out of band at deploy time (empty since privateSecretEnv):
+# degraded to presence-only, as in backend/scripts/ops/drift_check.py, which defines them.
 def _listen_private_env() -> frozenset[str]:
     try:
         from ops.drift_check import LISTEN_PRIVATE_ENV
@@ -1010,8 +1005,7 @@ def expected_gke_env_from_values(
         if isinstance(entry.get('valueFrom'), dict) and isinstance(entry['valueFrom'].get('configMapKeyRef'), dict):
             keyref_hashes[name] = env_entry_hash(entry)
         expected[name] = env_entry_hash(entry)
-    # Mirror the listen template's privateSecretEnv: one secretKeyRef per declared
-    # private name, replacing any public entry of the same name.
+    # Mirror the listen template: one secretKeyRef per privateSecretEnv name.
     secret_env = values.get('privateSecretEnv') or {}
     if workload == 'backend-listen' and isinstance(secret_env, dict):
         for name in secret_env.get('keys') or []:
