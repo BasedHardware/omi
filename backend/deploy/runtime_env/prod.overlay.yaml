@@ -1357,8 +1357,9 @@ overlay:
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
             category: rollout
-          # 60 days: under newest-first draining a heavy backlog's oldest audio is what ages out,
-          # and a 422 retires it on the phone. Rollback: '2592000' (30 days) in one config train.
+          # 60 days: checked once at upload admission; a backlog that older app builds or slow
+          # drains cannot clear within 30 days is refused with a terminal 422 on the phone.
+          # Rollback: '2592000' (30 days) in one config train.
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '5184000'
             category: rollout
@@ -1740,8 +1741,9 @@ overlay:
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
             category: rollout
-          # 60 days: under newest-first draining a heavy backlog's oldest audio is what ages out,
-          # and a 422 retires it on the phone. Rollback: '2592000' (30 days) in one config train.
+          # 60 days: checked once at upload admission; a backlog that older app builds or slow
+          # drains cannot clear within 30 days is refused with a terminal 422 on the phone.
+          # Rollback: '2592000' (30 days) in one config train.
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '5184000'
             category: rollout
