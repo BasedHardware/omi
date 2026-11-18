@@ -12,7 +12,7 @@ from prometheus_client import Counter, Histogram
 from config import batch_pipeline_packing as config
 from config.plan_catalog_generated import PAID_PLAN_IDS
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
-from database.batch_pipeline_coalescing import compatibility_key, digest
+from database.batch_pipeline_coalescing_identity import compatibility_key, digest
 from database.firestore_read_origin import read_origin
 from utils.batch_pipeline.audio import RATE
 from utils.executors import db_executor, submit_with_context

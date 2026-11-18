@@ -71,6 +71,13 @@
       "why": "lease-renewal heartbeat for the awaited wipe worker; stopped in finally"
     },
     {
+      "path": "utils/batch_pipeline/packing_counterfactual.py",
+      "function": "PackingMetrics.observe",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "Optional packing telemetry after a successful lease commit. The process admits at most one metadata-only observer with a bounded read and no retries. SIGKILL can lose a diagnostic sample. Job state, custody, billing, recovery and the returned lease have no dependency on the observer."
+    },
+    {
       "path": "utils/batch_pipeline/projection.py",
       "function": "Projector._start_candidate",
       "kind": "executor.submit",
