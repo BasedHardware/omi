@@ -262,6 +262,26 @@ void main() {
     expect(await offerEvents(tester), isEmpty);
   });
 
+  // Play review evidence paired "7 days free, then US$269.91/year" with a monthly Stripe cart.
+  // Tapping the Monthly card must move the trial line to the monthly price before any checkout,
+  // so a paywall that shows the yearly price can never be followed by a monthly cart from the CTA.
+  testWidgets('tapping Monthly moves the trial line to the monthly price and the CTA opens monthly', (tester) async {
+    final usage = _Usage(_subscription());
+    final checkout = _Checkout([PaywallCheckoutOutcome.cancelled]);
+    await _open(tester, usage, checkout);
+
+    expect(_terms(tester), '7 days free, then US\$269.91/year', reason: 'Yearly is preselected');
+
+    await _chooseMonthlyCard(tester);
+    expect(_terms(tester), '7 days free, then US\$29.99/month');
+    expect(find.text('7 days free, then US\$269.91/year'), findsNothing, reason: 'no stale yearly line remains');
+
+    await _tapCta(tester);
+    expect(checkout.opened, hasLength(1));
+    expect(identical(checkout.opened.last, _offer.monthly), isTrue, reason: 'the CTA opens the monthly price');
+    expect(find.text(_title), findsNothing, reason: 'leaving a monthly checkout offers nothing');
+  });
+
   testWidgets('a completed or failed yearly checkout offers nothing', (tester) async {
     final usage = _Usage(_subscription());
     final checkout = _Checkout([PaywallCheckoutOutcome.failed, PaywallCheckoutOutcome.purchased]);
