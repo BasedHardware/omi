@@ -169,34 +169,10 @@ from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
+from utils.conversations.v3 import live_window as v3_live_window
+from utils.conversations import list_page_headers
 
 router = APIRouter()
-
-
-# A v3 window is capped at two hours (``planner.CAP``) and its ``created_at`` is
-# its first speech, so an open window always starts inside this lookback. A
-# window whose last speech is older than the idle bound is not live, whatever
-# its stored status says (a parked or stalled builder leaves it in progress).
-LIVE_WINDOW_MAX_SPAN = timedelta(hours=2)
-LIVE_WINDOW_MAX_IDLE = timedelta(minutes=30)
-# Visible in-progress rows inside the lookback: the open window plus any
-# legacy capture rows created after it started. Recordings are hidden and do
-# not count toward it.
-LIVE_SCAN_ROWS = 10
-
-
-def _is_open_v3_window(row: Dict[str, Any], now: datetime) -> bool:
-    """Only a v3 window the builder is still writing is a live tile.
-
-    Legacy in-progress rows (not ``v3_derived``) never qualify: a stale one
-    left behind by an old capture path rendered as an untitled live tile.
-    """
-    if row.get('recording') or not row.get('v3_derived') or row.get('tile_state') != 'live':
-        return False
-    last = row.get('finished_at') or row.get('started_at') or row.get('created_at')
-    if not isinstance(last, datetime):
-        return False
-    return now - aware_datetime(last) <= LIVE_WINDOW_MAX_IDLE
 
 
 @router.get('/v1/conversations/live', response_model=ConversationsLiveResponse, response_model_exclude_unset=True)
@@ -213,13 +189,13 @@ def get_live_conversation(
     now = datetime.now(timezone.utc)
     rows = conversations_db.get_conversations_without_photos(
         uid,
-        limit=LIVE_SCAN_ROWS,
+        limit=v3_live_window.SCAN_ROWS,
         statuses=['in_progress'],
         hide_home=True,
-        start_date=now - LIVE_WINDOW_MAX_SPAN - LIVE_WINDOW_MAX_IDLE,
+        start_date=v3_live_window.lookback_start(now),
         list_fields_only=True,
     )
-    row = next((r for r in rows if _is_open_v3_window(r, now)), None)
+    row = next((r for r in rows if v3_live_window.is_open(r, now)), None)
     compact = (
         {
             key: row[key]
@@ -1228,7 +1204,7 @@ def get_conversations(
         ),
     )
     if response is not None:
-        _set_list_page_headers(response, page)
+        list_page_headers.apply(response, page)
     _heal_locked_conversations_if_eligible(uid, conversations)
     conversations = [transcribing_hold.project(home_step.project(row), home_list=True) for row in conversations]
     redact_conversations_for_list(conversations)
@@ -1243,30 +1219,6 @@ def get_conversations(
         cacheable=not held_request and not time_dependent and not any(row.get('is_locked') for row in conversations),
     )
     return conversations
-
-
-LIST_HAS_MORE_HEADER = 'X-Omi-Has-More'
-LIST_NEXT_CURSOR_HEADER = 'X-Omi-Next-Cursor'
-
-
-def _set_list_page_headers(response: Response, page: Dict[str, Any]) -> None:
-    """Pagination facts the body cannot carry without changing its shape.
-
-    ``X-Omi-Conversation-Page-Size`` is the storage-row advance for the next
-    ``offset``. Released apps (since #24541) already add it to their offset and
-    treat a value below the page size as the end, so a page cut short by a
-    hidden run still advances past that run and keeps paging. It overrides the
-    membership projection's pre-suppression count, which was the same advance
-    only when no row was hidden.
-    """
-    from utils.episodes import home_membership
-
-    if isinstance(page.get('storage_rows'), int):
-        response.headers[home_membership.PAGE_SIZE_HEADER] = str(page['storage_rows'])
-    if isinstance(page.get('has_more'), bool):
-        response.headers[LIST_HAS_MORE_HEADER] = 'true' if page['has_more'] else 'false'
-        if page['has_more'] and page.get('next_cursor'):
-            response.headers[LIST_NEXT_CURSOR_HEADER] = page['next_cursor']
 
 
 @router.get('/v1/conversations/hidden-noise-counts', tags=['conversations'], response_model=HiddenNoiseCountsResponse)

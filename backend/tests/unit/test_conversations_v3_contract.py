@@ -434,9 +434,9 @@ def test_live_returns_only_a_recent_open_v3_window(monkeypatch, rows, expected):
     assert kw['statuses'] == ['in_progress'] and kw['hide_home'] is True
     lookback = datetime.now(timezone.utc) - kw['start_date']
     assert (
-        routes.LIVE_WINDOW_MAX_SPAN
+        routes.v3_live_window.MAX_SPAN
         < lookback
-        <= routes.LIVE_WINDOW_MAX_SPAN + routes.LIVE_WINDOW_MAX_IDLE + timedelta(seconds=5)
+        <= routes.v3_live_window.MAX_SPAN + routes.v3_live_window.MAX_IDLE + timedelta(seconds=5)
     )
 
 
