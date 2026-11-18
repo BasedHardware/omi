@@ -982,6 +982,7 @@ def is_visible_conversation(
     include_recordings: bool = False,
     hide_home: bool = False,
     capture_only: bool = False,
+    show_held: bool = False,
 ) -> bool:
     """Whether a stored conversation may be put in front of a user or downstream job."""
     if not conversation:
@@ -1002,7 +1003,7 @@ def is_visible_conversation(
             conversation.get('dream_duplicate_of')
             or bridge_pending.hidden(conversation)
             or (
-                is_settling_fragment(conversation)
+                is_settling_fragment(conversation, show_held=show_held)
                 and not (presentation and transcribing_hold.applies(conversation, stored=True))
             )
             or conversation.get('discarded')
@@ -1060,6 +1061,7 @@ def _collect_cursor_conversation_page(
     include_recordings=False,
     hide_home=False,
     capture_only=False,
+    show_held=False,
 ):
     """Bound the scan by page size plus the existing hidden-row allowance."""
     conversations = []
@@ -1081,6 +1083,7 @@ def _collect_cursor_conversation_page(
                     include_recordings=include_recordings,
                     hide_home=hide_home,
                     capture_only=capture_only,
+                    show_held=show_held,
                 ):
                     skipped += 1
                     continue
@@ -1109,6 +1112,7 @@ def _collect_visible_conversation_page(
     include_recordings: bool = False,
     hide_home: bool = False,
     capture_only: bool = False,
+    show_held: bool = False,
 ) -> List[Dict[str, Any]]:
     """Page visible rows.
 
@@ -1162,6 +1166,7 @@ def _collect_visible_conversation_page(
                 include_recordings=include_recordings,
                 hide_home=hide_home,
                 capture_only=capture_only,
+                show_held=show_held,
                 bookmark=BookmarkDict({sort_field: stamp, '__name__': doc_id}),
             )
             return finish(conversations)
@@ -1180,6 +1185,7 @@ def _collect_visible_conversation_page(
                     include_recordings=include_recordings,
                     hide_home=hide_home,
                     capture_only=capture_only,
+                    show_held=show_held,
                 ):
                     continue
                 if skipped_visible < offset:
@@ -1214,6 +1220,7 @@ def _collect_visible_conversation_page(
                 include_recordings=include_recordings,
                 hide_home=hide_home,
                 capture_only=capture_only,
+                show_held=show_held,
             ):
                 continue
             conversations.append(conversation)
@@ -1246,6 +1253,7 @@ def _collect_visible_conversation_page(
                     include_recordings=include_recordings,
                     hide_home=hide_home,
                     capture_only=capture_only,
+                    show_held=show_held,
                 ):
                     continue
                 conversations.append(conversation)
@@ -2281,6 +2289,7 @@ def get_conversations_without_photos(
     include_recordings: bool = False,
     hide_home: bool = False,
     capture_only: bool = False,
+    show_held: bool = False,
     cursor: Optional[str] = None,
     page_envelope: bool = False,
     cursor_page: Optional[Dict[str, Any]] = None,
@@ -2315,6 +2324,8 @@ def get_conversations_without_photos(
                 'home_hidden',
                 'dream_duplicate_of',
                 'sync_bridge_pending',
+                # held_for_notes evidence for the legacy Home list (show_held).
+                'sync_processing_hold',
                 'relevance_decision',
                 'sync_relevance_user_kept',
                 'has_photos',
@@ -2370,6 +2381,7 @@ def get_conversations_without_photos(
         include_recordings=include_recordings,
         hide_home=hide_home,
         capture_only=capture_only,
+        show_held=show_held,
         budget=budget,
         uid=uid,
         cursor=cursor,
