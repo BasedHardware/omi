@@ -15309,4 +15309,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => '服务器报告的任务';
+
+  @override
+  String get finishNothingToProcess => '还没有可处理的内容。';
 }

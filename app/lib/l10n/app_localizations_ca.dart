@@ -15637,4 +15637,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Feina indicada pel servidor';
+
+  @override
+  String get finishNothingToProcess => 'Encara no hi ha res per processar.';
 }

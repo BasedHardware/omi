@@ -12243,5 +12243,6 @@
     "downloadNow": "Preuzmi sada",
     "onWifiLater": "Kasnije na Wi-Fi",
     "conversationWritingSummary": "Pišemo vaš sažetak…",
-    "onTheWayServerWork": "Rad koji je prijavio poslužitelj"
+    "onTheWayServerWork": "Rad koji je prijavio poslužitelj",
+    "finishNothingToProcess": "Još nema ničega za obradu."
 }

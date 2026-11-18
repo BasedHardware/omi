@@ -12243,5 +12243,6 @@
     "downloadNow": "ఇప్పుడే డౌన్‌లోడ్ చేయండి",
     "onWifiLater": "తర్వాత Wi-Fiలో",
     "conversationWritingSummary": "మీ సారాంశం రాస్తున్నాం…",
-    "onTheWayServerWork": "సర్వర్ నివేదించిన పని"
+    "onTheWayServerWork": "సర్వర్ నివేదించిన పని",
+    "finishNothingToProcess": "ఇంకా ప్రాసెస్ చేయడానికి ఏమీ లేదు."
 }

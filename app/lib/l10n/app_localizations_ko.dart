@@ -15339,4 +15339,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => '서버에서 보고한 작업';
+
+  @override
+  String get finishNothingToProcess => '아직 처리할 내용이 없어요.';
 }

@@ -15569,4 +15569,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Arbete rapporterat av servern';
+
+  @override
+  String get finishNothingToProcess => 'Inget att bearbeta än.';
 }

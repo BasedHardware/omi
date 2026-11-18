@@ -15572,4 +15572,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'سرور کی بتائی ہوئی کارروائی';
+
+  @override
+  String get finishNothingToProcess => 'ابھی پروسیس کرنے کے لیے کچھ نہیں ہے۔';
 }

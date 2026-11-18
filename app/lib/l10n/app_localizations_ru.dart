@@ -15610,4 +15610,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Работа по данным сервера';
+
+  @override
+  String get finishNothingToProcess => 'Пока нечего обрабатывать.';
 }

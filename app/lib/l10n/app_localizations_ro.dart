@@ -15625,4 +15625,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Activitate raportată de server';
+
+  @override
+  String get finishNothingToProcess => 'Încă nu este nimic de procesat.';
 }

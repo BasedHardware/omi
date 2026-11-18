@@ -15683,4 +15683,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Trabahong iniulat ng server';
+
+  @override
+  String get finishNothingToProcess => 'Wala pang ipoproseso.';
 }

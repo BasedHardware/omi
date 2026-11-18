@@ -12243,5 +12243,6 @@
     "downloadNow": "Преземи сега",
     "onWifiLater": "Подоцна на Wi-Fi",
     "conversationWritingSummary": "Го пишуваме вашето резиме…",
-    "onTheWayServerWork": "Работа пријавена од серверот"
+    "onTheWayServerWork": "Работа пријавена од серверот",
+    "finishNothingToProcess": "Сè уште нема ништо за обработка."
 }

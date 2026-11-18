@@ -15662,4 +15662,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Εργασία που αναφέρει ο διακομιστής';
+
+  @override
+  String get finishNothingToProcess => 'Δεν υπάρχει ακόμα κάτι για επεξεργασία.';
 }

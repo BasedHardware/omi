@@ -4728,5 +4728,6 @@
     "downloadNow": "Download nu",
     "onWifiLater": "Senere på Wi-Fi",
     "conversationWritingSummary": "Skriver dit resumé…",
-    "onTheWayServerWork": "Arbejde rapporteret af serveren"
+    "onTheWayServerWork": "Arbejde rapporteret af serveren",
+    "finishNothingToProcess": "Intet at behandle endnu."
 }

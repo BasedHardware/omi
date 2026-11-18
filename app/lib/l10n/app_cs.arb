@@ -4686,5 +4686,6 @@
     "downloadNow": "Stáhnout nyní",
     "onWifiLater": "Později přes Wi-Fi",
     "conversationWritingSummary": "Píšeme vaše shrnutí…",
-    "onTheWayServerWork": "Práce hlášená serverem"
+    "onTheWayServerWork": "Práce hlášená serverem",
+    "finishNothingToProcess": "Zatím není co zpracovat."
 }

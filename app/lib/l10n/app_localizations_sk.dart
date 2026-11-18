@@ -15556,4 +15556,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Práca hlásená serverom';
+
+  @override
+  String get finishNothingToProcess => 'Zatiaľ nie je čo spracovať.';
 }

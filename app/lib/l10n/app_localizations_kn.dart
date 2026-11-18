@@ -15611,4 +15611,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'ಸರ್ವರ್ ವರದಿ ಮಾಡಿದ ಕೆಲಸ';
+
+  @override
+  String get finishNothingToProcess => 'ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಏನೂ ಇಲ್ಲ.';
 }

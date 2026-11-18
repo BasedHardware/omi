@@ -4686,5 +4686,6 @@
     "downloadNow": "Lejupielādēt tagad",
     "onWifiLater": "Vēlāk ar Wi-Fi",
     "conversationWritingSummary": "Rakstām jūsu kopsavilkumu…",
-    "onTheWayServerWork": "Servera ziņotais darbs"
+    "onTheWayServerWork": "Servera ziņotais darbs",
+    "finishNothingToProcess": "Pagaidām nav ko apstrādāt."
 }

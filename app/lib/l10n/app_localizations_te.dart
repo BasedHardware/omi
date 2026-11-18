@@ -15623,4 +15623,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'సర్వర్ నివేదించిన పని';
+
+  @override
+  String get finishNothingToProcess => 'ఇంకా ప్రాసెస్ చేయడానికి ఏమీ లేదు.';
 }

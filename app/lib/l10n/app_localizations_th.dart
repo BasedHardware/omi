@@ -15486,4 +15486,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'งานที่เซิร์ฟเวอร์รายงาน';
+
+  @override
+  String get finishNothingToProcess => 'ยังไม่มีอะไรให้ประมวลผล';
 }

@@ -4686,5 +4686,6 @@
     "downloadNow": "Изтегляне сега",
     "onWifiLater": "По-късно през Wi-Fi",
     "conversationWritingSummary": "Пишем вашето резюме…",
-    "onTheWayServerWork": "Работа, отчетена от сървъра"
+    "onTheWayServerWork": "Работа, отчетена от сървъра",
+    "finishNothingToProcess": "Все още няма какво да се обработи."
 }

@@ -15611,4 +15611,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Работа, отчетена от сървъра';
+
+  @override
+  String get finishNothingToProcess => 'Все още няма какво да се обработи.';
 }

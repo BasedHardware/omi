@@ -4686,5 +4686,6 @@
     "downloadNow": "ดาวน์โหลดเลย",
     "onWifiLater": "ภายหลังผ่าน Wi-Fi",
     "conversationWritingSummary": "กำลังเขียนสรุปของคุณ…",
-    "onTheWayServerWork": "งานที่เซิร์ฟเวอร์รายงาน"
+    "onTheWayServerWork": "งานที่เซิร์ฟเวอร์รายงาน",
+    "finishNothingToProcess": "ยังไม่มีอะไรให้ประมวลผล"
 }

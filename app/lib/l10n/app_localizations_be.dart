@@ -15596,4 +15596,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Праца паводле сервера';
+
+  @override
+  String get finishNothingToProcess => 'Пакуль няма чаго апрацоўваць.';
 }

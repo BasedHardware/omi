@@ -15619,4 +15619,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'A szerver által jelzett munka';
+
+  @override
+  String get finishNothingToProcess => 'Még nincs mit feldolgozni.';
 }

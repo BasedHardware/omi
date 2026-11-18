@@ -4686,5 +4686,6 @@
     "downloadNow": "अभी डाउनलोड करें",
     "onWifiLater": "बाद में Wi-Fi पर",
     "conversationWritingSummary": "आपका सारांश लिखा जा रहा है…",
-    "onTheWayServerWork": "सर्वर द्वारा बताया गया काम"
+    "onTheWayServerWork": "सर्वर द्वारा बताया गया काम",
+    "finishNothingToProcess": "अभी प्रोसेस करने के लिए कुछ नहीं है।"
 }

@@ -15584,4 +15584,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Serverio praneštas darbas';
+
+  @override
+  String get finishNothingToProcess => 'Kol kas nėra ką apdoroti.';
 }

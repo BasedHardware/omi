@@ -4686,5 +4686,6 @@
     "downloadNow": "Descarcă acum",
     "onWifiLater": "Mai târziu pe Wi-Fi",
     "conversationWritingSummary": "Se scrie rezumatul tău…",
-    "onTheWayServerWork": "Activitate raportată de server"
+    "onTheWayServerWork": "Activitate raportată de server",
+    "finishNothingToProcess": "Încă nu este nimic de procesat."
 }

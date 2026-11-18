@@ -4686,5 +4686,6 @@
     "downloadNow": "Atsisiųsti dabar",
     "onWifiLater": "Vėliau per Wi-Fi",
     "conversationWritingSummary": "Rašoma jūsų santrauka…",
-    "onTheWayServerWork": "Serverio praneštas darbas"
+    "onTheWayServerWork": "Serverio praneštas darbas",
+    "finishNothingToProcess": "Kol kas nėra ką apdoroti."
 }

@@ -19005,5 +19005,9 @@
     "@conversationWritingSummary": {
         "description": "Shown with a pen over a skeleton while the summary of a conversation in progress is written"
     },
-    "onTheWayServerWork": "Server-reported work"
+    "onTheWayServerWork": "Server-reported work",
+    "finishNothingToProcess": "Nothing to process yet.",
+    "@finishNothingToProcess": {
+        "description": "Brief notice after tapping Finish on the live capture page when nothing was heard since the last conversation, so no conversation is made."
+    }
 }

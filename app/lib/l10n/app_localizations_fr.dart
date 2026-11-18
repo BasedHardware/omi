@@ -15688,4 +15688,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Traitement signalé par le serveur';
+
+  @override
+  String get finishNothingToProcess => 'Rien à traiter pour l\'instant.';
 }

@@ -15589,4 +15589,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Rad prijavljen sa servera';
+
+  @override
+  String get finishNothingToProcess => 'Još nema ništa za obradu.';
 }

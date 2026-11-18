@@ -4782,5 +4782,6 @@
     "downloadNow": "Letöltés most",
     "onWifiLater": "Később Wi-Fin",
     "conversationWritingSummary": "Összefoglaló írása…",
-    "onTheWayServerWork": "A szerver által jelzett munka"
+    "onTheWayServerWork": "A szerver által jelzett munka",
+    "finishNothingToProcess": "Még nincs mit feldolgozni."
 }

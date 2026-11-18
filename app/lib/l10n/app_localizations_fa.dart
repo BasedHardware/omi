@@ -15553,4 +15553,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'کار گزارش‌شده توسط سرور';
+
+  @override
+  String get finishNothingToProcess => 'هنوز چیزی برای پردازش نیست.';
 }

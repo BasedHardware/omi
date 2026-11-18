@@ -15568,4 +15568,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Рад који је пријавио сервер';
+
+  @override
+  String get finishNothingToProcess => 'Још нема ничега за обраду.';
 }

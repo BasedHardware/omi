@@ -4721,5 +4721,6 @@
     "downloadNow": "Baixar agora",
     "onWifiLater": "Depois no Wi-Fi",
     "conversationWritingSummary": "Escrevendo seu resumo…",
-    "onTheWayServerWork": "Trabalho informado pelo servidor"
+    "onTheWayServerWork": "Trabalho informado pelo servidor",
+    "finishNothingToProcess": "Ainda não há nada para processar."
 }

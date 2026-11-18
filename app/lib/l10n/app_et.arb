@@ -4686,5 +4686,6 @@
     "downloadNow": "Laadi kohe alla",
     "onWifiLater": "Hiljem Wi-Fi kaudu",
     "conversationWritingSummary": "Kirjutame sinu kokkuvõtet…",
-    "onTheWayServerWork": "Serveri teatatud töö"
+    "onTheWayServerWork": "Serveri teatatud töö",
+    "finishNothingToProcess": "Veel pole midagi töödelda."
 }

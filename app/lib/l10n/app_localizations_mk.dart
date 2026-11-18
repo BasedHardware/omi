@@ -15625,4 +15625,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Работа пријавена од серверот';
+
+  @override
+  String get finishNothingToProcess => 'Сè уште нема ништо за обработка.';
 }

@@ -15597,4 +15597,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Rad koji je prijavio poslužitelj';
+
+  @override
+  String get finishNothingToProcess => 'Još nema ničega za obradu.';
 }

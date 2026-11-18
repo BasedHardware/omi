@@ -15565,4 +15565,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Palvelimen ilmoittama työ';
+
+  @override
+  String get finishNothingToProcess => 'Ei vielä mitään käsiteltävää.';
 }

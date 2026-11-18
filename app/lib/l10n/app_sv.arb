@@ -4686,5 +4686,6 @@
     "downloadNow": "Ladda ned nu",
     "onWifiLater": "Senare via Wi-Fi",
     "conversationWritingSummary": "Skriver din sammanfattning…",
-    "onTheWayServerWork": "Arbete rapporterat av servern"
+    "onTheWayServerWork": "Arbete rapporterat av servern",
+    "finishNothingToProcess": "Inget att bearbeta än."
 }

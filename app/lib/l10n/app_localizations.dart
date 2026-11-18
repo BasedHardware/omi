@@ -27308,6 +27308,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Server-reported work'**
   String get onTheWayServerWork;
+
+  /// Brief notice after tapping Finish on the live capture page when nothing was heard since the last conversation, so no conversation is made.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to process yet.'**
+  String get finishNothingToProcess;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -15594,4 +15594,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Робота за даними сервера';
+
+  @override
+  String get finishNothingToProcess => 'Поки що нічого обробляти.';
 }

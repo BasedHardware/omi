@@ -15571,4 +15571,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Sunucunun bildirdiği işler';
+
+  @override
+  String get finishNothingToProcess => 'Henüz işlenecek bir şey yok.';
 }

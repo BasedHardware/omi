@@ -15589,4 +15589,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Delo, ki ga poroča strežnik';
+
+  @override
+  String get finishNothingToProcess => 'Še ni ničesar za obdelavo.';
 }

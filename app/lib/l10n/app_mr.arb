@@ -12243,5 +12243,6 @@
     "downloadNow": "आता डाउनलोड करा",
     "onWifiLater": "नंतर Wi-Fi वर",
     "conversationWritingSummary": "तुमचा सारांश लिहित आहे…",
-    "onTheWayServerWork": "सर्व्हरने नोंदवलेले काम"
+    "onTheWayServerWork": "सर्व्हरने नोंदवलेले काम",
+    "finishNothingToProcess": "अजून प्रक्रिया करण्यासाठी काहीही नाही."
 }

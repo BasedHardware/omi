@@ -15664,4 +15664,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'சேவையகம் தெரிவித்த பணி';
+
+  @override
+  String get finishNothingToProcess => 'இன்னும் செயலாக்க எதுவும் இல்லை.';
 }

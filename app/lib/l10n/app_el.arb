@@ -4686,5 +4686,6 @@
     "downloadNow": "Λήψη τώρα",
     "onWifiLater": "Αργότερα μέσω Wi-Fi",
     "conversationWritingSummary": "Γράφεται η σύνοψή σας…",
-    "onTheWayServerWork": "Εργασία που αναφέρει ο διακομιστής"
+    "onTheWayServerWork": "Εργασία που αναφέρει ο διακομιστής",
+    "finishNothingToProcess": "Δεν υπάρχει ακόμα κάτι για επεξεργασία."
 }

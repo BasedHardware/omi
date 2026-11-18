@@ -4686,5 +4686,6 @@
     "downloadNow": "Lataa nyt",
     "onWifiLater": "Myöhemmin Wi-Fillä",
     "conversationWritingSummary": "Kirjoitetaan yhteenvetoasi…",
-    "onTheWayServerWork": "Palvelimen ilmoittama työ"
+    "onTheWayServerWork": "Palvelimen ilmoittama työ",
+    "finishNothingToProcess": "Ei vielä mitään käsiteltävää."
 }

@@ -15564,4 +15564,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Arbeid rapportert av serveren';
+
+  @override
+  String get finishNothingToProcess => 'Ingenting å behandle ennå.';
 }

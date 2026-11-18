@@ -15597,4 +15597,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Kerja yang dilaporkan pelayan';
+
+  @override
+  String get finishNothingToProcess => 'Belum ada apa-apa untuk diproses.';
 }

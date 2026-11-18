@@ -12243,5 +12243,6 @@
     "downloadNow": "ಈಗ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ",
     "onWifiLater": "ನಂತರ Wi-Fi ನಲ್ಲಿ",
     "conversationWritingSummary": "ನಿಮ್ಮ ಸಾರಾಂಶವನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…",
-    "onTheWayServerWork": "ಸರ್ವರ್ ವರದಿ ಮಾಡಿದ ಕೆಲಸ"
+    "onTheWayServerWork": "ಸರ್ವರ್ ವರದಿ ಮಾಡಿದ ಕೆಲಸ",
+    "finishNothingToProcess": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಏನೂ ಇಲ್ಲ."
 }

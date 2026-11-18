@@ -15560,4 +15560,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Práce hlášená serverem';
+
+  @override
+  String get finishNothingToProcess => 'Zatím není co zpracovat.';
 }

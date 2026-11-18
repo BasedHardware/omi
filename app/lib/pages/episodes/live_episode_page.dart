@@ -10,10 +10,12 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_tabs.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/episode_content.dart';
+import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/pages/episodes/previous_episode_link.dart';
 import 'package:omi/pages/episodes/live_transcript_view.dart';
@@ -32,6 +34,15 @@ import 'package:omi/widgets/capture_sources.dart';
 /// the user lands there with no flash of the previous page.
 void switchHomeToConversationsTab(BuildContext context) {
   context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
+}
+
+/// The page Finish opens for the conversation Process Now returned, or null to go back to Home. A v3
+/// answer is the recording document, which no page shows: wait on the processing page for the
+/// conversation made from it.
+Widget? finishedCapturePageFor(ServerConversation? conversation) {
+  if (conversation == null || conversation.discarded) return null;
+  if (conversation.v3?.recording == true) return FinishedCapturePage(recordingId: conversation.id);
+  return ConversationDetailPage(conversation: conversation);
 }
 
 enum LiveEpisodeTab { summary, transcript }
@@ -111,16 +122,26 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   Future<void> debugStopConversation(CaptureProvider provider) => _stopConversation(provider);
 
   /// Finish (and Wrap Up Now): the one stop. No confirmation: it is explicit. It processes the
-  /// conversation (a phone recording stops first), Home shows it as a processing row, and the live
-  /// episode closes while a fresh one starts counting from now. It never pauses the pendant: with
-  /// nothing new since the last boundary there is nothing to process, and the clock still restarts.
+  /// conversation (a phone recording stops first) and opens it: its page when the server already
+  /// made it, otherwise a processing page that turns into it. A fresh live episode starts counting
+  /// from now. It never pauses the pendant: with nothing new since the last boundary there is
+  /// nothing to process, and the clock still restarts. Lines from the on-device preview count as
+  /// something to process: a batch pendant's live page shows only those.
   Future<void> _stopConversation(CaptureProvider provider) async {
-    final hadContent = provider.segments.isNotEmpty || provider.photos.isNotEmpty;
+    final preview = provider.livePreview;
+    final closed = provider.lastServerClose;
+    final recentClose =
+        closed != null && DateTime.now().difference(closed.at) < const Duration(minutes: 5) ? closed : null;
+    final heardSinceClose = preview != null &&
+        (recentClose == null ? preview.lines.isNotEmpty : preview.totalWordsSeen > recentClose.previewWords);
+    final hadContent = provider.segments.isNotEmpty || provider.photos.isNotEmpty || heardSinceClose;
+    Widget? opens;
     if (hadContent) {
       // Ending the capture fires the shared finalize hook, which closes the episode.
-      await provider.finishCapture();
+      final result = await _finish(provider);
       if (!mounted) return;
       switchHomeToConversationsTab(context);
+      opens = finishedCapturePageFor(result?.conversation);
     } else {
       final source = provider.liveCaptureSource;
       if (source == null || source == ConversationSource.phone.name) {
@@ -128,12 +149,33 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
       }
       final episodes = _episodes;
       if (episodes != null && episodes.enabled) episodes.onLiveFinalized();
+      if (!mounted) return;
+      if (recentClose != null) {
+        // The server closed it on its own just before the tap: open that one.
+        switchHomeToConversationsTab(context);
+        opens = FinishedCapturePage(recordingId: recentClose.id);
+      } else {
+        OmiFeedback.info(context, context.l10n.finishNothingToProcess);
+      }
     }
-    if (!mounted) return;
     // A swipe back during the finish has already popped this route; it only stays mounted while it
     // animates out, and a pop then would take Home with it and leave the navigator empty.
     final route = ModalRoute.of(context);
-    if (route != null && route.isCurrent) Navigator.of(context).pop();
+    if (route == null || !route.isCurrent) return;
+    if (opens != null) {
+      unawaited(Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => opens!)));
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
+  /// The Process Now answer, or null when this finish made no request (a phone batch recording).
+  Future<CreateConversationResponse?> _finish(CaptureProvider provider) async {
+    try {
+      return await provider.finishCaptureWithResult();
+    } on StateError {
+      return null;
+    }
   }
 
   @override

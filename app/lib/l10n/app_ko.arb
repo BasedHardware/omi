@@ -4686,5 +4686,6 @@
     "downloadNow": "지금 다운로드",
     "onWifiLater": "나중에 Wi-Fi로",
     "conversationWritingSummary": "요약을 작성하는 중…",
-    "onTheWayServerWork": "서버에서 보고한 작업"
+    "onTheWayServerWork": "서버에서 보고한 작업",
+    "finishNothingToProcess": "아직 처리할 내용이 없어요."
 }

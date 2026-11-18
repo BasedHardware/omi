@@ -15575,4 +15575,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Pekerjaan yang dilaporkan server';
+
+  @override
+  String get finishNothingToProcess => 'Belum ada yang perlu diproses.';
 }

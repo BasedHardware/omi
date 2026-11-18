@@ -12243,5 +12243,6 @@
     "downloadNow": "এখনই ডাউনলোড করুন",
     "onWifiLater": "পরে Wi-Fi-তে",
     "conversationWritingSummary": "আপনার সারাংশ লেখা হচ্ছে…",
-    "onTheWayServerWork": "সার্ভারের জানানো কাজ"
+    "onTheWayServerWork": "সার্ভারের জানানো কাজ",
+    "finishNothingToProcess": "এখনও প্রক্রিয়া করার কিছু নেই।"
 }

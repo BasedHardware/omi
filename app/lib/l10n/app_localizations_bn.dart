@@ -15555,4 +15555,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'সার্ভারের জানানো কাজ';
+
+  @override
+  String get finishNothingToProcess => 'এখনও প্রক্রিয়া করার কিছু নেই।';
 }

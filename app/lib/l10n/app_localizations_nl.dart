@@ -15600,4 +15600,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Door de server gemeld werk';
+
+  @override
+  String get finishNothingToProcess => 'Nog niets om te verwerken.';
 }

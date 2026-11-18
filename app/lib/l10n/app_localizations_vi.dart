@@ -15561,4 +15561,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Công việc do máy chủ báo cáo';
+
+  @override
+  String get finishNothingToProcess => 'Chưa có gì để xử lý.';
 }

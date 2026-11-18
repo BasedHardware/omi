@@ -4721,5 +4721,6 @@
     "downloadNow": "Pobierz teraz",
     "onWifiLater": "Później przez Wi-Fi",
     "conversationWritingSummary": "Piszemy podsumowanie…",
-    "onTheWayServerWork": "Praca zgłoszona przez serwer"
+    "onTheWayServerWork": "Praca zgłoszona przez serwer",
+    "finishNothingToProcess": "Na razie nie ma czego przetworzyć."
 }
