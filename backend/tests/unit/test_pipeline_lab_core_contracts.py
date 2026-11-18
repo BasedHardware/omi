@@ -144,8 +144,8 @@ def test_content_key_is_namespaced_by_kind_and_pinned():
     assert c.content_key('task', 'Enjoys tea') != c.content_key('memory', 'Enjoys tea')
     # Pin the algorithm: verdicts recorded today must keep matching items tomorrow.
     assert c.memory_key('Enjoys tea') == c.content_key('memory', 'enjoys tea')
-    assert c.memory_key('Enjoys tea') == 'e3cf748b6b2e7a01'
-    assert c.task_key('Buy milk') == '542fa5593dc887fa'
+    assert c.memory_key('Enjoys tea') == 'e3cf748b6b2e7a01'  # pragma: allowlist secret - pinned synthetic key
+    assert c.task_key('Buy milk') == '542fa5593dc887fa'  # pragma: allowlist secret - pinned synthetic key
     with pytest.raises(ValueError):
         c.content_key('nope', 'x')
 
