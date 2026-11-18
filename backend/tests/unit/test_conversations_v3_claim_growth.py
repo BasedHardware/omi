@@ -1,0 +1,294 @@
+"""Source claims stay bounded across builder passes (document_too_large incident, 2026-11-18).
+
+A late recording whose speech starts before a finished conversation and overlaps it formed a fresh
+window that sorted before the conversation's retained window. The fresh window time-matched the
+retained id, so two planned rows shared one id; each re-added the source's held claims and the claims
+array doubled on every pass until the recording outgrew Firestore's 1 MiB document limit.
+"""
+
+from database import conversations_v3_leases as leases
+
+from datetime import datetime, timedelta, timezone
+from copy import deepcopy
+import importlib
+import json
+import logging
+
+import pytest
+
+from database import conversations_v3 as store
+from utils.conversations.v3 import service
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
+
+UID = 'synthetic'
+T0 = datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc)
+
+
+def path(cid):
+    return ('users', UID, 'conversations', cid)
+
+
+@pytest.fixture(scope='module', autouse=True)
+def owners_import():
+    importlib.import_module('utils.conversations.lifecycle')
+    return importlib.import_module('utils.speakers.evidence')
+
+
+@pytest.fixture
+def strict(monkeypatch):
+    client = StrictFirestore()
+    monkeypatch.setattr(leases, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
+
+    def transactional(body):
+        def run(tx, *args, **kwargs):
+            with client.lock:
+                return body(tx, *args, **kwargs)
+
+        return run
+
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+    monkeypatch.setattr(
+        StrictFirestoreSnapshot,
+        'update_time',
+        property(lambda s: (s.to_dict() or {}).get('_test_revision', 1)),
+        raising=False,
+    )
+    monkeypatch.setattr(store, 'encrypt', lambda value, uid: value)
+    monkeypatch.setattr(store.conversations, '_prepare_conversation_for_write', lambda row, *a, **kw: deepcopy(row))
+    return client
+
+
+def recording(cid, start, segments, claims, **extra):
+    return {
+        'id': cid,
+        'recording': True,
+        'status': 'completed',
+        'source': 'omi',
+        'started_at': start,
+        'finished_at': start + timedelta(seconds=max(s['end'] for s in segments)),
+        'data_protection_level': 'standard',
+        'claims': claims,
+        'transcript_segments': segments,
+        **extra,
+    }
+
+
+def speech(count, step=30):
+    return [
+        {'text': f'Synthetic speech {i}', 'start': i * step, 'end': i * step + 20, 'is_user': True}
+        for i in range(count)
+    ]
+
+
+def seed(strict, *, a_claims):
+    strict.rows[path('a')] = recording('a', T0, speech(20), a_claims)
+    # "b" synced late: it starts a minute before "x" and overlaps its first twenty seconds.
+    strict.rows[path('b')] = recording(
+        'b',
+        T0 - timedelta(seconds=60),
+        [{'text': 'Synthetic late speech', 'start': 0, 'end': 80, 'is_user': True}],
+        [],
+        v3_pending=True,
+    )
+    strict.rows[path('x')] = {
+        'id': 'x',
+        'v3_derived': True,
+        'status': 'completed',
+        'tile_state': 'done',
+        'started_at': T0,
+        'finished_at': T0 + timedelta(seconds=590),
+        'v3_recording_ids': ['a'],
+        'transcript_segments': [],
+        'structured': {'title': 'Earlier'},
+    }
+
+
+async def run_pass(strict, monkeypatch, sources):
+    for row in strict.rows.values():
+        row['_test_revision'] = 1
+    recordings = {cid: {**deepcopy(strict.rows[path(cid)]), '_v3_revision': 1} for cid in sources}
+    existing = {
+        p[3]: {**deepcopy(r), '_v3_revision': 1}
+        for p, r in strict.rows.items()
+        if p[2] == 'conversations' and r.get('v3_derived')
+    }
+    original_load = store.load
+    committed = []
+
+    async def blocking(pool, fn, *args, **kwargs):
+        if fn is original_load:
+            return deepcopy(recordings), deepcopy(existing), []
+        if fn is store.adoptable:
+            return {}
+        if fn is service._commit:
+            committed.append([row['id'] for row in args[4]])
+        return fn(*args, **kwargs)
+
+    async def no_processing(uid):
+        return None
+
+    def outline(uid, messages):
+        entry = {'first_line': 1, 'kind': 'conversation', 'title': 'Planning', 'line': '', 'people': [], 'sections': []}
+        return json.dumps({'conversations': [entry]})
+
+    monkeypatch.setattr(service, 'run_blocking', blocking)
+    monkeypatch.setattr(service, 'drain_processing', no_processing)
+    monkeypatch.setattr(service, 'has_pending', lambda uid: False)
+    monkeypatch.setattr(service.models, 'outline', outline)
+    monkeypatch.setattr(service.visibility, 'hydrate_recognition', lambda uid, recordings, windows: None)
+    assert await service.reconcile(UID) == 'committed'
+    return committed
+
+
+def claim_keys(cid, strict):
+    return [(c['conversation_id'], c['start'], c['end']) for c in strict.rows[path(cid)].get('claims') or []]
+
+
+@pytest.mark.asyncio
+async def test_late_overlapping_recording_never_plans_a_finished_conversation_twice(strict, monkeypatch):
+    seed(strict, a_claims=[{'conversation_id': 'x', 'start': T0, 'end': T0 + timedelta(seconds=590)}])
+    for _ in range(4):
+        committed = await run_pass(strict, monkeypatch, ['a', 'b'])
+        assert committed and all(len(ids) == len(set(ids)) for ids in committed), committed
+    # Unfixed, "a" held 2**4 copies of x's claim here.
+    assert claim_keys('a', strict) == [('x', T0, T0 + timedelta(seconds=590))]
+    keys = claim_keys('b', strict)
+    assert len(keys) == len(set(keys)) == 1 and keys[0][0] != 'x'
+    # The finished conversation keeps its published boundaries; the late speech is its own conversation.
+    assert strict.rows[path('x')]['started_at'] == T0
+    late = strict.rows[path(keys[0][0])]
+    assert late['v3_derived'] and late['v3_recording_ids'] == ['b']
+
+
+@pytest.mark.asyncio
+async def test_bloated_source_claims_collapse_on_the_next_commit(strict, monkeypatch):
+    claim = {'conversation_id': 'x', 'start': T0, 'end': T0 + timedelta(seconds=590)}
+    seed(strict, a_claims=[dict(claim) for _ in range(4096)] + [{'conversation_id': 'other', 'start': T0, 'end': T0}])
+    await run_pass(strict, monkeypatch, ['a', 'b'])
+    assert sorted(claim_keys('a', strict)) == [('other', T0, T0), ('x', T0, T0 + timedelta(seconds=590))]
+
+
+def test_commit_dedupes_claims_on_untouched_and_moved_sources(strict):
+    span = {'start': T0, 'end': T0 + timedelta(minutes=1)}
+    stale = [{'conversation_id': 'kept', **span}] * 3
+    strict.rows[path('r')] = {'recording': True, 'v3_pending': True, 'claims': stale, '_test_revision': 1}
+    strict.rows[path('m')] = {
+        'recording': True,
+        'v3_pending': True,
+        'claims': stale,
+        'started_at': T0,
+        '_test_revision': 2,
+    }
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    moved_source = {'id': 'm', 'recording': True, 'started_at': T0, 'claims': stale, '_v3_revision': 1}
+    moved_source['_v3_fence'] = store.source_fence(strict.rows[path('m')])
+    row = {
+        'id': 'c',
+        'status': 'processing',
+        'started_at': T0,
+        'finished_at': T0,
+        'v3_recording_ids': ['r', 'm'],
+        'transcript_segments': [],
+        'structured': {},
+        '_v3_claims': {'r': [span, span], 'm': [span, span]},
+    }
+    moved = store.commit_projection(
+        UID,
+        token,
+        {'r': {'id': 'r', 'recording': True, 'claims': stale, '_v3_revision': 1}, 'm': moved_source},
+        {},
+        [row],
+        [],
+        firestore_client=strict,
+    )
+    assert moved == {'m'}
+    for cid in ('r', 'm'):
+        assert claim_keys(cid, strict) == [
+            ('kept', T0, T0 + timedelta(minutes=1)),
+            ('c', T0, T0 + timedelta(minutes=1)),
+        ]
+
+
+def test_too_large_commit_logs_the_document_kind_and_size_only(strict, monkeypatch, caplog):
+    from google.api_core.exceptions import InvalidArgument
+
+    strict.rows[path('r')] = {'recording': True, 'v3_pending': True, 'transcript_segments': 'x' * 50000}
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    original = store.firestore.transactional
+
+    def transactional(body):
+        wrapped = original(body)
+
+        def run(tx, *args):
+            wrapped(tx, *args)
+            raise InvalidArgument('Document cannot be written because its size exceeds the maximum allowed size')
+
+        return run
+
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+    row = {
+        'id': 'secret-conversation-id',
+        'status': 'processing',
+        'started_at': T0,
+        'finished_at': T0,
+        'v3_recording_ids': ['r'],
+        'transcript_segments': [{'text': 'secret words'}],
+        'structured': {},
+    }
+    with caplog.at_level(logging.WARNING, logger=store.logger.name), pytest.raises(InvalidArgument):
+        store.commit_projection(
+            UID, token, {'r': {**strict.rows[path('r')], '_v3_revision': 1}}, {}, [row], [], firestore_client=strict
+        )
+    [record] = [r for r in caplog.records if 'write too large' in r.getMessage()]
+    message = record.getMessage()
+    assert 'kind=recording' in message and 'claims=1' in message and 'batch=0 batches=1' in message
+    assert 'secret' not in message and UID not in message
+
+
+@pytest.mark.asyncio
+async def test_blocked_live_pass_still_drains_committed_notes(monkeypatch):
+    drained, parked = [], []
+
+    async def blocking(pool, fn, *args, **kwargs):
+        if fn is store.backoff_until:
+            return None
+        if fn is leases.acquire:
+            return 'token'
+        if fn is store.load:
+            raise service.Conflict('document_too_large')
+        if fn is store.record_blocked:
+            parked.append(args[2])
+            return True
+        return None
+
+    async def drain(uid):
+        drained.append(uid)
+
+    monkeypatch.setattr(service, 'run_blocking', blocking)
+    monkeypatch.setattr(service, 'drain_processing', drain)
+    assert await service.reconcile(UID) == 'blocked'
+    assert parked == ['document_too_large'] and drained == [UID]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('reason,kwargs', [('account_deletion', {}), ('document_too_large', {'on_open': True})])
+async def test_blocked_pass_skips_drain_for_deletion_and_open(monkeypatch, reason, kwargs):
+    drained = []
+
+    async def blocking(pool, fn, *args, **kwargs):
+        if fn is store.backoff_until:
+            return None
+        if fn is leases.acquire:
+            return 'token'
+        if fn is store.load:
+            raise service.Conflict(reason)
+        return None
+
+    async def drain(uid):
+        drained.append(uid)
+
+    monkeypatch.setattr(service, 'run_blocking', blocking)
+    monkeypatch.setattr(service, 'drain_processing', drain)
+    assert await service.reconcile(UID, **kwargs) == 'blocked'
+    assert drained == []

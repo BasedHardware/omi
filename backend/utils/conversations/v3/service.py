@@ -137,6 +137,7 @@ async def reconcile(
     """
     report = {} if report is None else report
     key = store.BACKFILL_LEASE if derive else 'builder'
+    blocked = None
     # Live passes call the outline-cache writers exactly as before; only a backfill names its lease.
     keyed = {'key': key} if derive else {}
     if not on_open and not derive:
@@ -240,8 +241,12 @@ async def reconcile(
                 cache.append({'fingerprint': fingerprint, 'entries': entries})
 
         async def plan():
-            rows, used = [], set()
             windows = planner.preserve_finished_windows(planner.windows(groups, outlines), existing, recordings)
+            # A retained finished conversation owns its id by claim evidence; a fresh window that sorts
+            # before it (late speech overlapping its start) must not time-match the same id. Two planned
+            # rows with one id each re-add the source's held claims, doubling them every pass until the
+            # recording outgrows Firestore's 1 MiB document limit (document_too_large).
+            rows, used = [], {window['existing_id'] for window in windows if window.get('existing_id')}
             await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
             for window in windows:
                 # An affirmative transcription failure is terminal even before the silence deadline.
@@ -442,12 +447,20 @@ async def reconcile(
         if not derive:
             # A backfill conflict must not park the owner's live builder.
             await run_blocking(db_executor, store.record_blocked, uid, token, reason)
-        return 'blocked'
+        blocked = reason
     except Exception:
         metrics.RECONCILES.labels('error').inc()
         raise
     finally:
         await run_blocking(db_executor, leases.release, uid, key, token)
+    if blocked is not None:
+        if not derive and not on_open and blocked != 'account_deletion':
+            # Windows earlier passes committed still owe their notes; a parked builder must not strand them.
+            try:
+                await drain_processing(uid)
+            except Exception as error:
+                logger.warning('v3 reconcile blocked drain failed exception_type=%s', type(error).__name__)
+        return 'blocked'
     if on_open:
         await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
         return 'committed'

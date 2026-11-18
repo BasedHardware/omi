@@ -5,9 +5,11 @@ codec; cached outlines are encrypted. Nothing is cleared after a lost race.
 """
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from google.api_core.exceptions import InvalidArgument
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -19,6 +21,8 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from utils.encryption import encrypt, decrypt
 from utils.conversations.v3 import Conflict
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
+
+logger = logging.getLogger(__name__)
 
 LIMIT = 128
 # The backfill holds its own builder lease (and outline cache) so a running backfill never makes the
@@ -290,6 +294,41 @@ def load(uid, *, conversation_id=None, firestore_client=None):
     return {**recordings, **unreadable}, existing, cache
 
 
+def unique_claims(claims):
+    """Identical claims (same conversation, same span) are one claim; order of first appearance is kept."""
+    return list({(c.get('conversation_id'), c.get('start'), c.get('end')): c for c in claims}.values())
+
+
+# Firestore's per-document limit is 1 MiB; this message also names request-size failures.
+DOCUMENT_TOO_LARGE = 'exceeds the maximum allowed size'
+
+
+def _encoded_bytes(value):
+    return len(json.dumps(value, default=str).encode())
+
+
+def log_largest_write(staged, *, batch, batches):
+    """Name the largest document the failed transaction staged: kind and estimated bytes, never ids or content."""
+    sizes = [('derived_row', _encoded_bytes(row), None) for row in staged.get('rows') or []]
+    for current, update in (staged.get('recordings') or {}).values():
+        merged = {**current, **update}
+        sizes.append(('recording', _encoded_bytes(merged), len(merged.get('claims') or [])))
+    if staged.get('lease') is not None:
+        sizes.append(('builder_lease', _encoded_bytes({**staged['lease'][0], **staged['lease'][1]}), None))
+    if not sizes:
+        return
+    kind, size, claims = max(sizes, key=lambda item: item[1])
+    logger.warning(
+        'v3 projection write too large kind=%s bytes=%d claims=%s batch=%d batches=%d staged_total_bytes=%d',
+        kind,
+        size,
+        claims if claims is not None else '-',
+        batch,
+        batches,
+        sum(item[1] for item in sizes),
+    )
+
+
 def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     client = firestore_client or get_firestore_client()
     ref = user_conversations(client, uid).document(cid)
@@ -363,10 +402,14 @@ def commit_projection(
                 )
         prepared.append(encoded)
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
+    # What the current transaction attempt writes, kept by reference and sized only after a failure.
+    staged = {}
 
     @firestore.transactional
     def commit(tx, batch_rows, batch_prepared, final):
         observed = {}
+        staged.clear()
+        staged.update(rows=batch_prepared, recordings={})
         now = datetime.now(timezone.utc)
         lease = held.get(transaction=tx).to_dict() or {}
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
@@ -432,16 +475,15 @@ def commit_projection(
                     )
                     claims.extend({'conversation_id': row['id'], **span} for span in spans)
                 # The new speech is still owed to the next pass; leave purge decisions to that pass.
-                tx.update(
-                    coll.document(rid),
-                    {
-                        'claims': claims,
-                        'v3_pending': True,
-                        'v3_pending_since': observed[rid].get('v3_pending_since')
-                        or recording.get('v3_pending_since')
-                        or datetime.now(timezone.utc),
-                    },
-                )
+                update = {
+                    'claims': unique_claims(claims),
+                    'v3_pending': True,
+                    'v3_pending_since': observed[rid].get('v3_pending_since')
+                    or recording.get('v3_pending_since')
+                    or datetime.now(timezone.utc),
+                }
+                staged['recordings'][rid] = (observed[rid], update)
+                tx.update(coll.document(rid), update)
                 continue
             claims = [c for c in recording.get('claims') or [] if c['conversation_id'] not in replaced]
             for row in batch_rows:
@@ -449,46 +491,45 @@ def commit_projection(
                     continue
                 spans = row.get('_v3_claims', {}).get(rid, [{'start': row['started_at'], 'end': row['finished_at']}])
                 claims.extend({'conversation_id': row['id'], **span} for span in spans)
-            tx.update(
-                coll.document(rid),
-                {
-                    'claims': claims,
-                    # A backfill conversion hides its donor as a recording in the first batch; until the
-                    # final batch commits, it keeps a durable obligation so an interrupted run is rebuilt
-                    # by the ordinary builder (backfill's loader skips recordings).
-                    'v3_pending': (
-                        False
-                        if final and clear_pending
-                        else bool(recording.get('v3_pending') or (recording.get('_v3_derive') and not final))
-                    ),
-                    'v3_pending_since': (
-                        None
-                        if final and clear_pending
-                        else recording.get('v3_pending_since')
-                        or (datetime.now(timezone.utc) if recording.get('_v3_derive') and not final else None)
-                    ),
-                    'v3_audio_purge_pending': bool(recording.get('deleted_spans'))
-                    and final
-                    and clear_pending
-                    and not claims
-                    and not recording.get('_v3_derive')
-                    and not recording.get('v3_backfill_run')
-                    and recording.get('status') == 'completed',
-                    **(backfill_conversion(recording) if recording.get('_v3_derive') else {}),
-                },
-            )
-        tx.update(
-            held,
-            {
-                **({'v3_blocked_count': 0, 'v3_backoff_until': None, 'v3_blocked_reason': None} if final else {}),
-                'outline_cache': encrypted_cache,
-                'open_id': (
-                    open_ids[0]
-                    if open_ids
-                    else (lease.get('open_id') if lease.get('open_id') not in existing else None)
+            # Identical copies (left by an earlier duplicate plan) collapse, so a bloated source shrinks
+            # on its next commit instead of failing every pass at the document limit.
+            claims = unique_claims(claims)
+            update = {
+                'claims': claims,
+                # A backfill conversion hides its donor as a recording in the first batch; until the
+                # final batch commits, it keeps a durable obligation so an interrupted run is rebuilt
+                # by the ordinary builder (backfill's loader skips recordings).
+                'v3_pending': (
+                    False
+                    if final and clear_pending
+                    else bool(recording.get('v3_pending') or (recording.get('_v3_derive') and not final))
                 ),
-            },
-        )
+                'v3_pending_since': (
+                    None
+                    if final and clear_pending
+                    else recording.get('v3_pending_since')
+                    or (datetime.now(timezone.utc) if recording.get('_v3_derive') and not final else None)
+                ),
+                'v3_audio_purge_pending': bool(recording.get('deleted_spans'))
+                and final
+                and clear_pending
+                and not claims
+                and not recording.get('_v3_derive')
+                and not recording.get('v3_backfill_run')
+                and recording.get('status') == 'completed',
+                **(backfill_conversion(recording) if recording.get('_v3_derive') else {}),
+            }
+            staged['recordings'][rid] = (observed.get(rid) or {}, update)
+            tx.update(coll.document(rid), update)
+        lease_update = {
+            **({'v3_blocked_count': 0, 'v3_backoff_until': None, 'v3_blocked_reason': None} if final else {}),
+            'outline_cache': encrypted_cache,
+            'open_id': (
+                open_ids[0] if open_ids else (lease.get('open_id') if lease.get('open_id') not in existing else None)
+            ),
+        }
+        staged['lease'] = (lease, lease_update)
+        tx.update(held, lease_update)
         return observed
 
     batches, current, size = [], [], 0
@@ -502,7 +543,14 @@ def commit_projection(
     if current or not batches:
         batches.append(current)
     for index, batch in enumerate(batches):
-        observed = commit(client.transaction(), [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1)
+        try:
+            observed = commit(
+                client.transaction(), [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
+            )
+        except InvalidArgument as error:
+            if DOCUMENT_TOO_LARGE in str(error):
+                log_largest_write(staged, batch=index, batches=len(batches))
+            raise
         from utils.conversations.v3 import metrics
 
         for row, _encoded in batch:
