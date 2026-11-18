@@ -97,6 +97,15 @@ from utils.conversations.deterministic_minimum import (
     deterministic_minimum_title,
 )
 from utils.conversations.duration import conversation_duration_seconds
+from utils.conversations.home_titles import title_for_stability
+from utils.summary_quality import (
+    clean_structured,
+    stable_title,
+    valid_title,
+    title_or_fallback,
+    content_units,
+    title_basis,
+)
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit, defer_held_budget_denial
 from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
@@ -196,12 +205,13 @@ from utils.managed_compute import (
     managed_compute_decision_for as _managed_compute_decision_for,
 )
 from models.other import Person
-from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
+from models.structured import Section, Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
 from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID, default_summary_app
 from utils.apps import get_available_app_model_by_id, get_available_apps, update_persona_prompt
+from utils import ai_profile_refresh
 from utils.executors import llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
     get_app_result,
@@ -291,6 +301,9 @@ from utils.other.storage import (
     precache_conversation_audio,
 )
 
+from utils.conversations.v3 import policy as v3_policy
+from utils.conversations.v3 import service as v3_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -379,11 +392,13 @@ def _get_structured(
     recovery_minimum_fallback_observer: Optional[Callable[[], None]] = None,
     llm_hashes: dict[str, str] | None = None,
     open_loop_out: Optional[dict[str, Any]] = None,
-    meeting_context_override: Optional[CalendarMeetingContext] = None,
+    meeting_context_override: Optional[CalendarMeetingContext | str] = None,
     finalization_fence: tuple[str, int, int] | None = None,
     revision_checkpoint: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Structured, bool]:
     try:
+        full_v3_notes = v3_policy.full_notes(conversation, trigger)
+        user_kept = user_kept or v3_policy.manual_intent(conversation)
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
             return Structured(), False
 
@@ -391,7 +406,11 @@ def _get_structured(
         def occasion_reason():
             return occasion_retention(uid, conversation, conversation_id)
 
-        media_minimum = None if is_release_probe_uid(uid) else content_minimum(uid, conversation, user_kept=user_kept)
+        media_minimum = (
+            None
+            if full_v3_notes or is_release_probe_uid(uid)
+            else content_minimum(uid, conversation, user_kept=user_kept)
+        )
         if media_minimum is not None:
             hidden = noise_hidden_from_home(
                 uid,
@@ -408,12 +427,16 @@ def _get_structured(
         tz_str: str = tz or ''
         user_language = resolve_output_language(uid, language_code, getattr(conversation, 'transcript_segments', None))
         summary_app_selected = selected_summary_app(uid, summary_app_selected, redis_db.get_user_preferred_app)
-        minimum = quiet_minimum(
-            uid,
-            conversation,
-            tz=tz,
-            user_kept=user_kept,
-            summary_app_selected=summary_app_selected,
+        minimum = (
+            None
+            if full_v3_notes
+            else quiet_minimum(
+                uid,
+                conversation,
+                tz=tz,
+                user_kept=user_kept,
+                summary_app_selected=summary_app_selected,
+            )
         )
         if minimum is not None:
             decision = short_clip_relevance(uid, conversation, trigger, _calendar_overlap_retains_conversation)
@@ -422,6 +445,21 @@ def _get_structured(
             if not decision.discard and is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
                 recovery_minimum_fallback_observer()
             return minimum, decision.discard
+        if v3_policy.flag(conversation, 'v3_derived'):
+            words = sum(len(s.text.split()) for s in conversation.transcript_segments)
+            if not full_v3_notes and (conversation.kind in {'media', 'background'} or words < 20):
+                return conversation.structured, True
+            if words < 300 and not full_v3_notes:
+                return v3_service.models.short_tasks(uid, conversation), False
+            covers = getattr(conversation, 'summary_covers_through', None)
+            if (
+                not v3_service.models.foreground()
+                and not v3_policy.explicit_retry(conversation, trigger)
+                and covers
+                and conversation.finished_at
+                and covers >= conversation.finished_at
+            ):
+                return conversation.structured, False
         prompt_conversation_id = (
             conversation_id
             or getattr(conversation, 'id', None)
@@ -429,7 +467,7 @@ def _get_structured(
             or str(uuid.uuid4())
         )
 
-        calendar_context = meeting_context_override
+        calendar_context = None if isinstance(meeting_context_override, str) else meeting_context_override
         if calendar_context is None:
             direct_calendar_context = getattr(conversation, 'calendar_meeting_context', None)
             calendar_context = (
@@ -660,9 +698,18 @@ def _get_structured(
             main_conv,
             calendar_context,
             tz_str,
-            include_background=True,
+            include_background=not v3_policy.flag(conversation, 'v3_derived'),
             include_screen_text=True,
         )
+        if v3_policy.flag(conversation, 'v3_derived'):
+            from utils.conversations.v3 import context as v3_context
+
+            corrections_block = meeting_context_block or ''
+            meeting_context_block = (
+                meeting_context_override
+                if isinstance(meeting_context_override, str)
+                else v3_context.summary(uid, conversation, user_language, tz_str)
+            ) + corrections_block
         prefix = build_conversation_prompt_prefix(
             known_spellings=conversation_known_spellings(uid),
             uid=uid,
@@ -725,7 +772,38 @@ def _get_conversation_obj(
     relevance_discarded: Optional[bool] = None,
     user_kept: bool = False,
 ) -> Conversation:
+    if relevance_discarded is False:
+        cleaned = clean_structured(structured.model_dump())
+        if not valid_title(structured.title):
+            cleaned['title'] = title_or_fallback(
+                deterministic_minimum_title(
+                    conversation, tz_name_provider=lambda: notification_db.get_user_time_zone(uid)
+                )
+            )
+        old_title = title_for_stability(conversation)
+        cleaned['title'], title_reason = stable_title(
+            old_title,
+            cleaned['title'],
+            previous_units=getattr(conversation, 'title_content_units', 0),
+            current_units=content_units(getattr(conversation, 'transcript_segments', [])),
+        )
+        if isinstance(conversation, Conversation):
+            conversation.title_content_units = title_basis(
+                conversation.title_content_units, content_units(conversation.transcript_segments), title_reason
+            )
+        if str(getattr(conversation, 'user_title', '') or '').strip():
+            cleaned['title'] = conversation.user_title
+        # Preserve private notes identity carried on the model instance.
+        for key in ('title', 'overview', 'gist'):
+            if key in cleaned:
+                setattr(structured, key, cleaned[key])
+        if 'sections' in cleaned:
+            structured.sections = [Section.model_validate(section) for section in cleaned['sections']]
     structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
+    # Apply the durable v3 lock after generated-title cleanup and salience projection.
+    if v3_policy.flag(conversation, 'title_locked'):
+        structured.title = conversation.structured.title
+        structured.emoji = conversation.structured.emoji
     if relevance_discarded is False and not structured.title.strip():
         # Give kept partial outputs a deterministic title; explicit discards keep theirs empty.
         structured.title = deterministic_minimum_title(
@@ -2174,6 +2252,9 @@ def _save_action_items(
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> bool:
+    if v3_policy.flag(conversation, 'recording'):
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_recording').inc()
+        return True
     if is_server_minimum(conversation):
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_server_minimum').inc()
         return True
@@ -2579,6 +2660,7 @@ def _preserve_capture_on_budget_denial(function):
     return preserve_capture
 
 
+@v3_service.recording_short_path
 @_preserve_capture_on_budget_denial
 @funded_processing.scoped
 @spelling_context_run
@@ -2637,6 +2719,14 @@ def process_conversation(
         )
 
     def _observe_owner_recognition_completion(completed: Conversation) -> None:
+        # Keep current-revision observation inside the telemetry boundary:
+        # importing or emitting optional metrics must not interrupt persistence.
+        try:
+            from database.owner_identity_availability import observe_safely
+
+            observe_safely(uid, completed.id)
+        except Exception:
+            logger.warning('event=owner_identity_availability outcome=observation_unavailable')
         # One observation per conversation, on every successful persist. The
         # completed stores return through report_persistence, so a new
         # early return that reports a
@@ -2816,7 +2906,7 @@ def process_conversation(
         relevance_observer=decisions.append,
         recovery_transcript_decoded=recovery_transcript_decoded,
         recovery_minimum_fallback_observer=_mark_recovery_minimum_fallback,
-        llm_hashes=llm_hashes,
+        llm_hashes=None if v3_policy.explicit_retry(conversation, trigger) else llm_hashes,
         open_loop_out=open_loop_sink,
         meeting_context_override=meeting_context_override,
         finalization_fence=finalization_fence,
@@ -2924,6 +3014,8 @@ def process_conversation(
     if NOTES_OUTPUT_HASH in llm_hashes:
         llm_hashes[NOTES_OUTPUT_HASH] = output_fingerprint(structured)
     payload.update(llm_hashes)
+    if not conversation.discarded:
+        payload['content_word_units'] = content_units(conversation.transcript_segments)
     if 'extractions' in open_loop_sink:
         # Server-only derived field, deliberately outside the client wire
         # model, like RELEVANCE_DECISION_FIELD below. None is a fresh parse
@@ -3151,8 +3243,10 @@ def process_conversation(
                 submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people, trigger)
             if not (template_only or app_failed):
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
+            # Daily backend-owned AI profile refresh: no-op unless stale, bounded per process.
+            ai_profile_refresh.schedule_refresh(uid)
         # Recovery preserves admitted audio ids instead of rebuilding old chunks.
-        capture_audio = not is_recovery_trigger(trigger)
+        capture_audio = not is_recovery_trigger(trigger) and not v3_policy.flag(conversation, 'v3_derived')
         if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:
             try:
                 audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)

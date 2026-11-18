@@ -389,6 +389,14 @@ def worker_silence_disposition_enabled() -> bool:
     )
 
 
+def silence_read_skip_enabled() -> bool:
+    """R9: false restores the full silent-unit projection/accounting path."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED',
+        os.getenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', 'true').strip().lower() not in {'false', 'off', '0'},
+    )
+
+
 LONG_SPEECH_HANDOFF_SECONDS = 5.0
 
 
@@ -728,6 +736,16 @@ def owner_drain_enabled() -> bool:
 def owner_drain_admission_diagnostics_enabled() -> bool:
     """Process-local diagnostics only; 0/off/false disable without changing drains."""
     return os.getenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', '1').strip().lower() not in {
+        '0',
+        'off',
+        'false',
+        'no',
+    }
+
+
+def projection_overlap_diagnostics_enabled() -> bool:
+    """Default-on diagnostics; disable before startup without changing discovery."""
+    return os.getenv('BATCH_PIPELINE_PROJECTION_OVERLAP_DIAGNOSTICS', '1').strip().lower() not in {
         '0',
         'off',
         'false',

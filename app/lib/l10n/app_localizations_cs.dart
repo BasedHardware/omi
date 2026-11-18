@@ -1991,6 +1991,15 @@ class AppLocalizationsCs extends AppLocalizations {
   String get memoryHistory => 'Historie';
 
   @override
+  String get recordingWithYourPhone => 'Nahrává se telefonem';
+
+  @override
+  String get wrapUp => 'Uzavřít';
+
+  @override
+  String get recordingDiscarded => 'Nahrávka zahozena';
+
+  @override
   String get undo => 'Vrátit zpět';
 
   @override
@@ -12219,7 +12228,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Od spárování: výpadků $drops, neúspěšných připojení $failed.';
+    return 'Od spárování: $drops opětovných připojení, $failed neúspěšných připojení.';
   }
 
   @override
@@ -13456,16 +13465,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Převod $amount na konverzace';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Hotovo $done z $total · tuto obrazovku můžete opustit';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount připraveno k synchronizaci';
   }
@@ -13489,7 +13488,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Čeká v tomto telefonu';
 
   @override
-  String get syncDetailsTranscribing => 'Přepisuje se v Omi';
+  String get syncDetailsTranscribing => 'Nahráno, čeká na server';
 
   @override
   String get syncDetailsAudioFiles => 'Zvukové soubory';
@@ -13946,6 +13945,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi už na této konverzaci pracuje. Shrnutí se zde zobrazí, až bude hotové.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Zatím nepřepsáno';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Shrnutí se zobrazí, až bude přepis hotový.';
 
   @override
   String get summaryCheckAgain => 'Zkontrolovat znovu';
@@ -15463,4 +15468,91 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Seznam zpracování se změnil. Zkontrolujte jej a zkuste to znovu.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Využili jste letošních měsíčních $minutes minut';
+  }
+
+  @override
+  String get freeCapBody => 'Omi stále nahrává. Vyberte, jak pokračovat v přepisu.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Neomezený přepis v cloudu';
+
+  @override
+  String get freeCapProAccuracy => 'Nejvyšší přesnost';
+
+  @override
+  String get freeCapProWaiting => 'Přepíše vaše čekající nahrávky';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Zdarma. Zůstane zapnuté, dokud se nepřepnete zpět.';
+
+  @override
+  String get transcribingOnThisPhone => 'Přepis v tomto telefonu';
+
+  @override
+  String get getPro => 'Získat Pro';
+
+  @override
+  String get unlock => 'Odemknout';
+
+  @override
+  String get transcribeWith => 'Přepisovat pomocí';
+
+  @override
+  String get omiCloud => 'Cloud Omi';
+
+  @override
+  String get thisPhone => 'Tento telefon';
+
+  @override
+  String get onDeviceReady => 'Připraveno';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Zbývá $left z $limit min · obnoví se $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'K dispozici $minutes cloudových minut';
+  }
+
+  @override
+  String get switchBack => 'Přepnout zpět';
+
+  @override
+  String get setUpThisPhone => 'Nastavit tento telefon';
+
+  @override
+  String get speechRecognition => 'Rozpoznávání řeči';
+
+  @override
+  String get audioStaysOnPhone => 'Zvuk zůstává v telefonu';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Stažení $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Stáhnout nyní';
+
+  @override
+  String get onWifiLater => 'Později přes Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Píšeme vaše shrnutí…';
+
+  @override
+  String get onTheWayServerWork => 'Práce hlášená serverem';
 }

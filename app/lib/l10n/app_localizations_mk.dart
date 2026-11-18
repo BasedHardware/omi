@@ -1997,6 +1997,15 @@ class AppLocalizationsMk extends AppLocalizations {
   String get memoryHistory => 'Историја';
 
   @override
+  String get recordingWithYourPhone => 'Снима со телефонот';
+
+  @override
+  String get wrapUp => 'Заврши';
+
+  @override
+  String get recordingDiscarded => 'Снимката е отфрлена';
+
+  @override
   String get undo => 'Врати';
 
   @override
@@ -12277,7 +12286,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Од спарувањето: $drops прекини, $failed неуспешни поврзувања.';
+    return 'Од спарувањето: $drops повторни поврзувања, $failed неуспешни поврзувања.';
   }
 
   @override
@@ -13516,16 +13525,6 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Претворање на $amount во разговори';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Завршено $done од $total · можете да го напуштите екранот';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount подготвени за синхронизација';
   }
@@ -13549,7 +13548,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Чека на овој телефон';
 
   @override
-  String get syncDetailsTranscribing => 'Се транскрибира на Omi';
+  String get syncDetailsTranscribing => 'Прикачено, се чека серверот';
 
   @override
   String get syncDetailsAudioFiles => 'Аудио датотеки';
@@ -14007,6 +14006,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi веќе работи на овој разговор. Резимето ќе се појави тука кога ќе заврши.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Сè уште не е транскрибирано';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Резимето ќе се појави кога транскриптот ќе биде подготвен.';
 
   @override
   String get summaryCheckAgain => 'Провери повторно';
@@ -15528,4 +15533,91 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Списокот за обработка се промени. Прегледајте го и обидете се повторно.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Ги искористивте $minutes минути за овој месец';
+  }
+
+  @override
+  String get freeCapBody => 'Omi сè уште снима. Изберете како да продолжи транскрипцијата.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Неограничена транскрипција во облак';
+
+  @override
+  String get freeCapProAccuracy => 'Најдобра точност';
+
+  @override
+  String get freeCapProWaiting => 'Ги транскрибира вашите снимки што чекаат';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Бесплатно. Останува вклучено додека не се вратите.';
+
+  @override
+  String get transcribingOnThisPhone => 'Транскрипција на овој телефон';
+
+  @override
+  String get getPro => 'Земете Pro';
+
+  @override
+  String get unlock => 'Отклучи';
+
+  @override
+  String get transcribeWith => 'Транскрибирај со';
+
+  @override
+  String get omiCloud => 'Omi облак';
+
+  @override
+  String get thisPhone => 'Овој телефон';
+
+  @override
+  String get onDeviceReady => 'Подготвено';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Преостануваат $left од $limit мин · се обновува на $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Достапни се $minutes минути во облак';
+  }
+
+  @override
+  String get switchBack => 'Врати се';
+
+  @override
+  String get setUpThisPhone => 'Поставете го овој телефон';
+
+  @override
+  String get speechRecognition => 'Препознавање говор';
+
+  @override
+  String get audioStaysOnPhone => 'Аудиото останува на вашиот телефон';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Преземање $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Преземи сега';
+
+  @override
+  String get onWifiLater => 'Подоцна на Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Го пишуваме вашето резиме…';
+
+  @override
+  String get onTheWayServerWork => 'Работа пријавена од серверот';
 }

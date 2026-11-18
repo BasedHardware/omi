@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:collection';
 
@@ -23,6 +24,20 @@ List<Wal> pendingSyncRows(Iterable<Wal> wals) {
   return _visibleSyncRows(pending, hidden.contains);
 }
 
+/// One display inventory for every pending-work amount. A completed phone
+/// twin suppresses its device row even when its server handle has expired.
+List<Wal> pendingWorkRows(Iterable<Wal> wals, {int? nowSeconds}) {
+  final rows = wals.toList(growable: false);
+  final hidden = {
+    for (final w in rows)
+      if (!_onDevice(w) && (w.status == WalStatus.uploaded || w.status == WalStatus.synced)) w.id,
+  };
+  return _pendingWorkRows(rows, hidden.contains, nowSeconds);
+}
+
+List<Wal> _pendingWorkRows(Iterable<Wal> rows, bool Function(String) hidden, int? nowSeconds) =>
+    _visibleSyncRows(rows.where((w) => w.countsAsPendingWork(nowSeconds: nowSeconds)).toList(), hidden);
+
 List<Wal> _visibleSyncRows(List<Wal> pending, bool Function(String) hidden) {
   final visible = pending.where((w) => !(_onDevice(w) && hidden(w.id))).toList();
   final sources = visible.where(_onDevice).toList();
@@ -40,7 +55,8 @@ List<Wal> _visibleSyncRows(List<Wal> pending, bool Function(String) hidden) {
 /// changes install a new inventory revision. Lists materialize lazily and are
 /// shared by all selectors; pending selection visits only forward-moving work.
 class WalDerivedViews {
-  WalDerivedViews(Iterable<Wal> wals) {
+  WalDerivedViews(Iterable<Wal> wals, {this.onPendingWorkExpired, DateTime Function()? clock})
+      : _clock = clock ?? DateTime.now {
     var order = 0;
     for (final w in wals) {
       _order[w] = order++;
@@ -48,6 +64,10 @@ class WalDerivedViews {
       _apply(w);
     }
   }
+
+  final void Function()? onPendingWorkExpired;
+  final DateTime Function() _clock;
+  Timer? _pendingWorkTimer;
 
   int sortRevision = 0;
   final _entries = HashMap<Wal, _ViewEntry>.identity();
@@ -79,6 +99,7 @@ class WalDerivedViews {
   }
 
   void dispose() {
+    _pendingWorkTimer?.cancel();
     for (final w in _entries.keys) {
       w.removeViewChangeListener(_changed);
     }
@@ -119,6 +140,9 @@ class WalDerivedViews {
     _entries[w] = next;
     _syncing = null;
     _pendingWork = null;
+    _stalledUploads = null;
+    _pendingWorkTimer?.cancel();
+    _pendingWorkTimer = null;
     _pendingSecondsByDay = null;
     _refusalSummary = null;
   }
@@ -144,12 +168,70 @@ class WalDerivedViews {
       _syncing ??= List.unmodifiable(_visibleSyncRows(_buckets[9].members.toList(), _hidden.containsKey)
         ..sort((a, b) => b.timerStart.compareTo(a.timerStart)));
   List<Wal>? _pendingWork;
-  List<Wal> get pendingWork => _pendingWork ??= List.unmodifiable([...uploaded, ...syncing]);
+  List<Wal> get pendingWork => pendingWorkAt();
+  int? _pendingWorkComputedAt;
+  int? _pendingWorkDeadline;
+  List<Wal> pendingWorkAt({int? nowSeconds}) {
+    final now = nowSeconds ?? _clock().millisecondsSinceEpoch ~/ 1000;
+    if (_pendingWork == null ||
+        (_pendingWorkDeadline != null && now >= _pendingWorkDeadline!) ||
+        (_pendingWorkComputedAt != null && now < _pendingWorkComputedAt!)) {
+      _pendingWorkComputedAt = now;
+      _stalledUploads = null;
+      final candidates = [...uploaded, ...syncing];
+      _pendingWork = List.unmodifiable(_pendingWorkRows(candidates, _hidden.containsKey, now));
+      final deadlines = candidates.map((w) => w.pendingWorkExpiresAt).whereType<int>().where((t) => t > now);
+      _pendingWorkDeadline = deadlines.isEmpty ? null : deadlines.reduce(min);
+      _pendingWorkTimer?.cancel();
+      if (onPendingWorkExpired != null && _pendingWorkDeadline != null) {
+        // Same timebase as the deadline (the caller's `now`), so an injected clock can never
+        // produce a past deadline and a zero-delay re-arm loop; at least 1 s between expiries.
+        final delay = max(1000, (_pendingWorkDeadline! - now) * 1000);
+        _pendingWorkTimer = Timer(Duration(milliseconds: delay), () {
+          _pendingWorkTimer = null;
+          _pendingWork = null;
+          _stalledUploads = null;
+          _pendingSecondsByDay = null;
+          onPendingWorkExpired!();
+        });
+      }
+    }
+    return _pendingWork!;
+  }
+
+  /// Retained uploads with no recent server confirmation. Display only: these
+  /// rows never enter deletion/retry eligibility or mutate the custody ledger.
+  List<Wal>? _stalledUploads;
+  List<Wal> stalledUploadsAt({int? nowSeconds}) {
+    pendingWorkAt(nowSeconds: nowSeconds);
+    return _stalledUploads ??= List.unmodifiable(_visibleSyncRows(
+        uploaded.where((w) => !w.countsAsPendingWork(nowSeconds: nowSeconds)).toList(), _hidden.containsKey));
+  }
+
   Map<DateTime, int>? _pendingSecondsByDay;
-  Map<DateTime, int> get pendingSecondsByDay => _pendingSecondsByDay ??= _dayTotals();
-  Map<DateTime, int> _dayTotals() {
+  int? _pendingSecondsComputedAt;
+  int? _pendingSecondsDeadline;
+  Map<DateTime, int> get pendingSecondsByDay => pendingSecondsByDayAt();
+  Map<DateTime, int> pendingSecondsByDayAt({int? nowSeconds}) {
+    final now = nowSeconds ?? _clock().millisecondsSinceEpoch ~/ 1000;
+    if (_pendingSecondsByDay == null ||
+        (_pendingSecondsDeadline != null && now >= _pendingSecondsDeadline!) ||
+        (_pendingSecondsComputedAt != null && now < _pendingSecondsComputedAt!)) {
+      _pendingSecondsComputedAt = now;
+      _pendingSecondsByDay = _dayTotals(now);
+    }
+    return _pendingSecondsByDay!;
+  }
+
+  Map<DateTime, int> _dayTotals(int nowSeconds) {
     final totals = <DateTime, int>{};
-    for (final w in pendingWork) {
+    _pendingSecondsDeadline = null;
+    for (final w in pendingWorkAt(nowSeconds: nowSeconds)) {
+      if (!w.countsAsPendingWork(nowSeconds: nowSeconds)) continue;
+      final expires = w.pendingWorkExpiresAt;
+      if (expires != null) {
+        _pendingSecondsDeadline = _pendingSecondsDeadline == null ? expires : min(_pendingSecondsDeadline!, expires);
+      }
       final date = DateTime.fromMillisecondsSinceEpoch(w.timerStart * 1000);
       final day = DateTime(date.year, date.month, date.day);
       totals[day] = (totals[day] ?? 0) + max(0, w.seconds);
@@ -163,7 +245,7 @@ class WalDerivedViews {
   int? _refusalDeadline;
   int? _refusalComputedAt;
   WalRefusalSummary refusalSummary({int? nowSeconds}) {
-    final now = nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final now = nowSeconds ?? _clock().millisecondsSinceEpoch ~/ 1000;
     if (_refusalSummary == null ||
         (_refusalDeadline != null && now >= _refusalDeadline!) ||
         (_refusalComputedAt != null && now < _refusalComputedAt!)) {

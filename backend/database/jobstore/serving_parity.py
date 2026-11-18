@@ -16,6 +16,7 @@ from prometheus_client import Counter
 
 import database.jobstore.codec as codec
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
+from database.jobstore.connection import sql
 from database import rpc_deadline
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from database.batch_pipeline_projection_followup_backfill import (
@@ -52,6 +53,7 @@ STORE_QUERIES = frozenset(
 TRANSACTION_QUERIES = frozenset(
     {
         'get',
+        'get_existing',
         'first_pending',
         'first_ready_pending',
         'fresh_first_pending',
@@ -98,7 +100,9 @@ class _ParityPostgresStore(PostgresStore):
                 budget = min(budget, remaining) if remaining is not None else budget
                 if budget <= 0:
                     raise TimeoutError('serving observation deadline exceeded')
-                conn.execute(f'SET LOCAL statement_timeout = {max(1, int(budget * 1000))}')
+                conn.execute(
+                    sql().SQL('SET LOCAL statement_timeout = {}').format(sql().Literal(max(1, int(budget * 1000))))
+                )
                 yield conn
 
     read_connection = _read_conn
@@ -118,7 +122,7 @@ def query_value(store, query: str, args: tuple, kwargs: dict, *, transaction: bo
     allowed = TRANSACTION_QUERIES if transaction else STORE_QUERIES
     if query not in allowed:
         raise ValueError('only enumerated serving reads may be compared')
-    if query == 'get':
+    if query in {'get', 'get_existing'}:
         from database.jobstore.dual_store import MIRRORED_TABLES
 
         if (args[0] if args else kwargs.get('table')) not in MIRRORED_TABLES:
@@ -172,7 +176,7 @@ def compare_serving_query(
 
         def read(store):
             value = query_value(store, query, args, kwargs, transaction=transaction, budget_s=budget_s)
-            if query == 'get' and store is primary and isinstance(value, dict):
+            if query in {'get', 'get_existing'} and store is primary and isinstance(value, dict):
                 # Only the table's own exception (a GPU reservation's segment id) is taken off, and only from
                 # the primary side: a copy that still holds it must read as a mismatch. The fields the mirror
                 # omits for every table (repair_lineage) stay in: that omission is a serving mismatch and an

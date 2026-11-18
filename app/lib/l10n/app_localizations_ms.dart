@@ -1995,6 +1995,15 @@ class AppLocalizationsMs extends AppLocalizations {
   String get memoryHistory => 'Sejarah';
 
   @override
+  String get recordingWithYourPhone => 'Merakam dengan telefon anda';
+
+  @override
+  String get wrapUp => 'Selesaikan';
+
+  @override
+  String get recordingDiscarded => 'Rakaman dibuang';
+
+  @override
   String get undo => 'Buat Asal';
 
   @override
@@ -12243,7 +12252,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Sejak pemasangan: $drops pemutusan, $failed sambungan gagal.';
+    return 'Sejak dipasangkan: $drops sambungan semula, $failed sambungan gagal.';
   }
 
   @override
@@ -13486,16 +13495,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Menukar $amount kepada perbualan';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done daripada $total selesai · anda boleh tinggalkan skrin ini';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount sedia untuk disegerakkan';
   }
@@ -13519,7 +13518,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Menunggu telefon ini';
 
   @override
-  String get syncDetailsTranscribing => 'Mentranskripsi di Omi';
+  String get syncDetailsTranscribing => 'Dimuat naik, menunggu pelayan';
 
   @override
   String get syncDetailsAudioFiles => 'Fail audio';
@@ -13978,6 +13977,12 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get summaryBusyBody =>
       'Omi sedang memproses perbualan ini. Ringkasan akan dipaparkan di sini apabila selesai.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Belum ditranskripsikan';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Ringkasan akan dipaparkan apabila transkrip sedia.';
 
   @override
   String get summaryCheckAgain => 'Semak semula';
@@ -15500,4 +15505,91 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Senarai pemprosesan telah berubah. Semak senarai dan cuba lagi.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Anda telah menggunakan $minutes minit bulan ini';
+  }
+
+  @override
+  String get freeCapBody => 'Omi masih merakam. Pilih cara untuk terus mentranskripsi.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Transkripsi awan tanpa had';
+
+  @override
+  String get freeCapProAccuracy => 'Ketepatan terbaik';
+
+  @override
+  String get freeCapProWaiting => 'Mentranskripsi rakaman anda yang menunggu';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Percuma. Kekal aktif sehingga anda bertukar semula.';
+
+  @override
+  String get transcribingOnThisPhone => 'Mentranskripsi pada telefon ini';
+
+  @override
+  String get getPro => 'Dapatkan Pro';
+
+  @override
+  String get unlock => 'Buka kunci';
+
+  @override
+  String get transcribeWith => 'Transkripsi dengan';
+
+  @override
+  String get omiCloud => 'Awan Omi';
+
+  @override
+  String get thisPhone => 'Telefon ini';
+
+  @override
+  String get onDeviceReady => 'Sedia';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Baki $left daripada $limit min · ditetapkan semula $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes minit awan tersedia';
+  }
+
+  @override
+  String get switchBack => 'Tukar Semula';
+
+  @override
+  String get setUpThisPhone => 'Sediakan telefon ini';
+
+  @override
+  String get speechRecognition => 'Pengecaman pertuturan';
+
+  @override
+  String get audioStaysOnPhone => 'Audio kekal pada telefon anda';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Muat turun $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Muat Turun Sekarang';
+
+  @override
+  String get onWifiLater => 'Kemudian melalui Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Menulis ringkasan anda…';
+
+  @override
+  String get onTheWayServerWork => 'Kerja yang dilaporkan pelayan';
 }

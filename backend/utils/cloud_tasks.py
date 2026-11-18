@@ -562,8 +562,14 @@ def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
     if not handler.endswith('/v2/sync-jobs/run'):
         raise RuntimeError('sync task handler URL is not the expected v2 route')
     wake_url = handler.removesuffix('/v2/sync-jobs/run') + '/v2/sync-backfill-sequencer/wake'
+    # A backfill wake must not spend the fresh queue's dispatch budget new recordings need
+    # (2026-11-16 fresh-vs-backlog audit). Same handler; only the delivering queue moves.
+    queue = os.getenv('SYNC_TASKS_QUEUE', '')
+    backfill_queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
+    if backfill_queue and is_sync_backfill_routing_enabled():
+        queue = backfill_queue
     enqueue_named_task(
-        os.getenv('SYNC_TASKS_QUEUE', ''),
+        queue,
         wake_url,
         f'sbu-{uid_hash}-{deadline}',
         {'uid': uid},

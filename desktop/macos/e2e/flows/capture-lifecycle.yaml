@@ -55,7 +55,7 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/ProactiveStorage.swift
   - desktop/macos/Desktop/Sources/LiveNotes/NoteStorage.swift
   - desktop/macos/Desktop/Sources/FileIndexing/KnowledgeGraphStorage.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/AIUserProfileService.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/LocalProfileHistoryRetirement.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
   - desktop/macos/Desktop/Sources/OmiWAL/WALModel.swift
   - desktop/macos/Desktop/Sources/WAL/StorageSyncService.swift

@@ -43,7 +43,10 @@ def test_queue_is_provisioned_on_every_prod_deploy_before_traffic_moves():
     index = next(i for i, step in enumerate(steps) if step['name'] == STEP)
     # Preserve ordinary production provisioning while the integration-only
     # restoration leaves every queue writer outside its selected scope.
-    assert steps[index]['if'] == "${{ inputs.integration_only != 'true' && (inputs.runtime_env == 'prod') }}"
+    assert (
+        steps[index]['if']
+        == "${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && (inputs.runtime_env == 'prod')) }}"
+    )
     assert index < next(
         i for i, step in enumerate(steps) if step['name'] == 'Shift Cloud Run traffic to validated revisions'
     )

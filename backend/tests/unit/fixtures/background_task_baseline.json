@@ -1,6 +1,13 @@
 {
   "entries": [
     {
+      "path": "utils/ai_profile_refresh.py",
+      "function": "schedule_refresh",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "AI profile refresh (2026-11-16), at most MAX_CONCURRENT_AUTOMATIC per process: a daily, idempotent rewrite of a derived summary; losing it at SIGKILL only leaves the profile stale until the next trigger once its hourly cooldown expires"
+    },
+    {
       "path": "utils/sync/worker_runtime.py",
       "function": "Runtime.execute",
       "kind": "start_background_task",
@@ -405,6 +412,20 @@
       "kind": "submit_with_context",
       "count": 1,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/v3/context.py",
+      "function": "outline_sources",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "Read-only, deadline-bounded context load for the v3 outline prompt (profile, people, earlier titles). The caller waits on it up to the outline deadline and falls back to no context; it writes nothing, so losing it at SIGKILL only drops optional prompt context from a request that is itself lost."
+    },
+    {
+      "path": "utils/conversations/v3/renewal.py",
+      "function": "leased_work",
+      "kind": "start_background_task",
+      "count": 2,
+      "why": "Joined worker and lease keeper, not detached work: leased_work awaits (shielded) the worker and then the keeper before returning, so both live exactly as long as the request. At SIGKILL the v3 builder lease expires and the named Cloud Tasks reconcile plus the sweeper redrive the user; no partial write is committed without the lease token."
     }
   ]
 }

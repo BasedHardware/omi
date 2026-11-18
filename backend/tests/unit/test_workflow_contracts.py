@@ -39,6 +39,13 @@ def _load_repo_script(name: str):
     return module
 
 
+@pytest.fixture(autouse=True)
+def graph_selection_on(monkeypatch):
+    # Graph assertions must not depend on the ambient kill switch; tests that
+    # exercise the switch set it off explicitly.
+    monkeypatch.setenv("BACKEND_UNIT_GRAPH_SELECTION", "1")
+
+
 @pytest.fixture(scope="module")
 def selector_and_all_tests():
     selector = _load_script("select_backend_unit_tests")
@@ -76,20 +83,27 @@ def test_background_task_ratchet_change_selects_the_ratchet(selector_and_all_tes
         assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
     # Negatives: narrow-area paths outside the ratchet's scanned directories.
-    # (backend/database/_client.py is not a valid negative: database/ changes
-    # fall back to the full suite, which includes the ratchet.)
+    # (backend/database/_client.py is not a valid negative: almost every test
+    # reaches it through the import graph, including the ratchet.)
     for path in ("backend/models/users.py", "backend/database/csat.py"):
         selected, reason = selector.tests_for_changed_paths([path], all_tests)
         assert ratchet not in selected, path
         assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
-def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests):
+GRAPH_REASON_PREFIX = "selected backend unit tests from changed paths, workflow contracts and the import graph"
+
+
+def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests, monkeypatch):
     selector, all_tests = selector_and_all_tests
 
-    full_run_cases = {
+    # Blanket database/ prefix paths now select through the import graph, and
+    # still include their workflow-contract tests (union, never replace).
+    graph_cases = {
         "backend/database/memory_vector_repair_outbox_worker.py": "tests/unit/test_vector_repair_outbox_worker.py",
         "backend/database/projection_repair.py": "tests/unit/test_memory_ledger.py",
+    }
+    full_run_cases = {
         "backend/main.py": "tests/unit/test_vector_repair_outbox_worker.py",
         "backend/utils/executors.py": "tests/unit/test_vector_repair_outbox_worker.py",
     }
@@ -131,6 +145,19 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
     for source_path, expected_test in full_run_cases.items():
         selected, reason = selector.tests_for_changed_paths([source_path], all_tests)
         assert expected_test in selected, source_path
+        assert reason == f"{source_path} requires the full backend unit suite"
+        assert selected == all_tests
+
+    for source_path, expected_test in graph_cases.items():
+        selected, reason = selector.tests_for_changed_paths([source_path], all_tests)
+        assert expected_test in selected, source_path
+        assert reason.startswith(GRAPH_REASON_PREFIX), (source_path, reason)
+        assert selected != all_tests, source_path
+
+    # Kill switch: graph selection off restores the full-suite fallback.
+    monkeypatch.setenv(selector.GRAPH_SELECTION_ENV, "0")
+    for source_path in graph_cases:
+        selected, reason = selector.tests_for_changed_paths([source_path], all_tests)
         assert reason == f"{source_path} requires the full backend unit suite"
         assert selected == all_tests
 
@@ -188,9 +215,10 @@ def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
     selected, reason = selector.tests_for_changed_paths(["backend/utils/metrics.py"], all_tests)
-    # Not a FULL_RUN_GLOBS path; unmapped flat utils still use the fallback.
-    assert reason == "backend/utils/metrics.py did not match a backend test-selection contract", reason
-    assert selected == all_tests
+    # Not a FULL_RUN_GLOBS path; an unmapped module selects its importers.
+    assert reason.startswith(GRAPH_REASON_PREFIX), reason
+    assert selected != all_tests
+    assert "tests/unit/test_auth_callback_failure_class_cardinality.py" in selected  # imports utils.metrics
 
     selected, reason = selector.tests_for_changed_paths(["backend/routers/sync.py"], all_tests)
     assert "tests/unit/test_sync_v2.py" in selected
@@ -203,7 +231,10 @@ def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector
         assert reason == f"{path} requires the full backend unit suite"
 
 
-def test_unmapped_source_forces_full_suite_even_when_direct_test_changed(selector_and_all_tests):
+def test_absent_unmapped_source_forces_full_suite_even_when_direct_test_changed(selector_and_all_tests):
+    """A deleted or not-yet-existing unmapped source cannot be resolved by the
+    import graph, so one direct test must not narrow it. (A present unmapped
+    module selects its importers; see the utils/metrics.py case above.)"""
     selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(
@@ -285,9 +316,16 @@ def test_query_guard_paths_select_firestore_shape_guard_tests(selector_and_all_t
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
-def test_regular_conversations_path_remains_full_run(selector_and_all_tests):
+def test_regular_conversations_path_selects_its_importers(selector_and_all_tests, monkeypatch):
     selector, all_tests = selector_and_all_tests
 
+    selected, reason = selector.tests_for_changed_paths(["backend/database/conversations.py"], all_tests)
+    assert reason.startswith(GRAPH_REASON_PREFIX), reason
+    assert selected != all_tests
+    # A direct importer and a conftest-free router test that loads it transitively.
+    assert "tests/unit/test_conversation_lifecycle_contract.py" in selected
+
+    monkeypatch.setenv(selector.GRAPH_SELECTION_ENV, "off")
     selected, reason = selector.tests_for_changed_paths(["backend/database/conversations.py"], all_tests)
     assert selected == all_tests
     assert reason == "backend/database/conversations.py requires the full backend unit suite"

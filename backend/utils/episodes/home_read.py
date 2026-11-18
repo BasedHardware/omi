@@ -107,6 +107,8 @@ def wire_episode(episode: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 MEMBER_FIELDS = [
+    'recording',
+    'home_hidden',
     'structured',
     'user_title',
     'data_protection_level',

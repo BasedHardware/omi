@@ -49,6 +49,32 @@ Mixed fleets may write an ordinary clock again on a state change; newer sweep
 readers reclassify it safely. No new clock delays transcript assignment or async
 follow-up execution.
 
+## Ready-state writer coverage (SCA-2280 follow-up)
+
+The November 16 production verification found 569,250 finish rows read in the
+04:00-05:00Z hour versus the corrected 502,606/hour baseline. Positive-clock
+stock fell by only about 3.5-4k/hour while classification retired about 21k/hour;
+60 sampled positive-clock jobs all had async policy. These observations do not
+prove which writer accounts for all replenishment.
+
+Held-ready settlement, durable sibling completion, privacy resume and ghost
+settlement previously stamped positive finish clocks even for pinned async jobs.
+These paths now pass the pinned policy to the existing clock primitive.
+Sibling transitions use each sibling's policy from the job already read in the
+transaction, rather than inheriting the initiating segment's policy. Missing
+policies remain positive for later classification. Whole-document privacy
+resume now accepts the same async hint as patch writes. Both forms continue to
+stamp the independent follow-up clock due now; no receipt or effect is skipped.
+
+This correction adds no document reads, write operations, index, marker, rollout
+setting or classification budget. It prevents replenishment from these known
+writers; existing positive-clock rows still require bounded classification.
+After a source-containing ordinary release, measure net positive-clock drain
+against classification throughput, then a full hour of finish reads below the
+502,606 baseline. The 14,400/hour example below is an empty-page asymptote, not a
+production result or an immediate target. Keep savings unbooked until the cost
+owner reads both caller counters and Quality supplies matched p50/p90.
+
 ## Bounded classification and progress
 
 `BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT` defaults to **8 attempts per page**;

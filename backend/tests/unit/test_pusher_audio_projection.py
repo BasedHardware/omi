@@ -29,6 +29,8 @@ def world(monkeypatch):
     monkeypatch.delenv('PUSHER_PROJECTION_DEBT_DURABLE_ENABLED', raising=False)
     monkeypatch.setattr(projection.record_projection_rebuild, 'mark_due', MagicMock())
     monkeypatch.setattr(projection.record_projection_rebuild, 'mark_many', MagicMock())
+    # Cold rebuilds now check privacy before discovering any original audio.
+    monkeypatch.setattr(projection.record_projection_rebuild, 'preflight_projection', MagicMock(return_value=True))
     monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
     monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: False)
     monkeypatch.setattr(projection, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
@@ -736,9 +738,11 @@ def test_rebuild_refuses_incomplete_raw_index_without_metadata_write(world, monk
     world.add(100)
     monkeypatch.setattr(full_projection, 'projection_owner_gone', lambda *_: False)
     monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
-    monkeypatch.setattr(storage, 'list_packs', MagicMock(side_effect=OSError()))
+    read_originals = MagicMock(side_effect=OSError('synthetic raw index failure'))
+    monkeypatch.setattr(full_projection, 'validated_uncovered_packs', read_originals)
     with pytest.raises(OSError):
         full_projection.rebuild('u', 'c')
+    read_originals.assert_called_once()
     assert not world.writes
 
 

@@ -1975,6 +1975,15 @@ class AppLocalizationsDa extends AppLocalizations {
   String get memoryHistory => 'Historik';
 
   @override
+  String get recordingWithYourPhone => 'Optager med din telefon';
+
+  @override
+  String get wrapUp => 'Afslut';
+
+  @override
+  String get recordingDiscarded => 'Optagelsen er kasseret';
+
+  @override
   String get undo => 'Fortryd';
 
   @override
@@ -12204,7 +12213,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Siden parring: $drops afbrydelser, $failed mislykkede forbindelser.';
+    return 'Siden parring: $drops genforbindelser, $failed mislykkede forbindelser.';
   }
 
   @override
@@ -13441,16 +13450,6 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Omdanner $amount til samtaler';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done af $total færdig · du kan forlade denne skærm';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount klar til synkronisering';
   }
@@ -13474,7 +13473,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Venter på denne telefon';
 
   @override
-  String get syncDetailsTranscribing => 'Transskriberer på Omi';
+  String get syncDetailsTranscribing => 'Uploadet, afventer server';
 
   @override
   String get syncDetailsAudioFiles => 'Lydfiler';
@@ -13932,6 +13931,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi arbejder allerede på denne samtale. Opsummeringen vises her, når den er færdig.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Ikke transskriberet endnu';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Opsummeringen vises, når transskriptionen er klar.';
 
   @override
   String get summaryCheckAgain => 'Tjek igen';
@@ -15454,4 +15459,91 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Listen under behandling er ændret. Gennemgå den, og prøv igen.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Du har brugt månedens $minutes minutter';
+  }
+
+  @override
+  String get freeCapBody => 'Omi optager stadig. Vælg, hvordan du vil fortsætte med at transskribere.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Ubegrænset transskription i skyen';
+
+  @override
+  String get freeCapProAccuracy => 'Bedste nøjagtighed';
+
+  @override
+  String get freeCapProWaiting => 'Transskriberer dine ventende optagelser';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Gratis. Forbliver slået til, indtil du skifter tilbage.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transskriberer på denne telefon';
+
+  @override
+  String get getPro => 'Få Pro';
+
+  @override
+  String get unlock => 'Lås op';
+
+  @override
+  String get transcribeWith => 'Transskriber med';
+
+  @override
+  String get omiCloud => 'Omi-sky';
+
+  @override
+  String get thisPhone => 'Denne telefon';
+
+  @override
+  String get onDeviceReady => 'Klar';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left af $limit min tilbage · nulstilles $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes skyminutter tilgængelige';
+  }
+
+  @override
+  String get switchBack => 'Skift tilbage';
+
+  @override
+  String get setUpThisPhone => 'Konfigurer denne telefon';
+
+  @override
+  String get speechRecognition => 'Talegenkendelse';
+
+  @override
+  String get audioStaysOnPhone => 'Lyden bliver på din telefon';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB download';
+  }
+
+  @override
+  String get downloadNow => 'Download nu';
+
+  @override
+  String get onWifiLater => 'Senere på Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Skriver dit resumé…';
+
+  @override
+  String get onTheWayServerWork => 'Arbejde rapporteret af serveren';
 }

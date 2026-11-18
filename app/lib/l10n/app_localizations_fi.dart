@@ -1991,6 +1991,15 @@ class AppLocalizationsFi extends AppLocalizations {
   String get memoryHistory => 'Historia';
 
   @override
+  String get recordingWithYourPhone => 'Tallennetaan puhelimella';
+
+  @override
+  String get wrapUp => 'Päätä';
+
+  @override
+  String get recordingDiscarded => 'Tallenne hylätty';
+
+  @override
   String get undo => 'Kumoa';
 
   @override
@@ -12221,7 +12230,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Parituksen jälkeen: katkoksia $drops, epäonnistuneita yhteyksiä $failed.';
+    return 'Pariliitoksen jälkeen: $drops uudelleenyhdistämistä, $failed epäonnistunutta yhteyttä.';
   }
 
   @override
@@ -13459,16 +13468,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Muutetaan $amount keskusteluiksi';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total valmis · voit poistua tästä näkymästä';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount valmiina synkronoitavaksi';
   }
@@ -13492,7 +13491,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Odottaa tässä puhelimessa';
 
   @override
-  String get syncDetailsTranscribing => 'Litteroidaan Omissa';
+  String get syncDetailsTranscribing => 'Lähetetty, odottaa palvelinta';
 
   @override
   String get syncDetailsAudioFiles => 'Äänitiedostot';
@@ -13949,6 +13948,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi käsittelee jo tätä keskustelua. Tiivistelmä näkyy tässä, kun se on valmis.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Ei vielä litteroitu';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Tiivistelmä näkyy, kun litterointi on valmis.';
 
   @override
   String get summaryCheckAgain => 'Tarkista uudelleen';
@@ -15468,4 +15473,91 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Käsittelylista muuttui. Tarkista lista ja yritä uudelleen.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Olet käyttänyt tämän kuun $minutes minuuttia';
+  }
+
+  @override
+  String get freeCapBody => 'Omi tallentaa yhä. Valitse, miten litterointi jatkuu.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Rajaton pilvilitterointi';
+
+  @override
+  String get freeCapProAccuracy => 'Paras tarkkuus';
+
+  @override
+  String get freeCapProWaiting => 'Litteroi odottavat tallenteesi';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Ilmainen. Pysyy päällä, kunnes vaihdat takaisin.';
+
+  @override
+  String get transcribingOnThisPhone => 'Litteroidaan tällä puhelimella';
+
+  @override
+  String get getPro => 'Hanki Pro';
+
+  @override
+  String get unlock => 'Avaa';
+
+  @override
+  String get transcribeWith => 'Litteroi käyttäen';
+
+  @override
+  String get omiCloud => 'Omi-pilvi';
+
+  @override
+  String get thisPhone => 'Tämä puhelin';
+
+  @override
+  String get onDeviceReady => 'Valmis';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit min jäljellä · nollautuu $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes pilviminuuttia käytettävissä';
+  }
+
+  @override
+  String get switchBack => 'Vaihda takaisin';
+
+  @override
+  String get setUpThisPhone => 'Määritä tämä puhelin';
+
+  @override
+  String get speechRecognition => 'Puheentunnistus';
+
+  @override
+  String get audioStaysOnPhone => 'Ääni pysyy puhelimessasi';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size Mt:n lataus';
+  }
+
+  @override
+  String get downloadNow => 'Lataa nyt';
+
+  @override
+  String get onWifiLater => 'Myöhemmin Wi-Fillä';
+
+  @override
+  String get conversationWritingSummary => 'Kirjoitetaan yhteenvetoasi…';
+
+  @override
+  String get onTheWayServerWork => 'Palvelimen ilmoittama työ';
 }

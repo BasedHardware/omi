@@ -38,11 +38,11 @@ class Conn:
         yield
 
     def execute(self, sql, params=()):
-        sql = sql.as_string() if hasattr(sql, 'as_string') else sql
-        self.sql.append(sql)
-        if self.fail and self.fail[0] in sql:
+        text = sql.as_string(None) if hasattr(sql, 'as_string') else sql
+        self.sql.append(text)
+        if self.fail and self.fail[0] in text:
             raise self.fail[1]
-        if sql.startswith('SELECT doc FROM'):
+        if text.startswith('SELECT doc FROM'):
             key = params[-1]
             return Result((self.docs[key],) if key in self.docs else None)
         return Result()
@@ -165,3 +165,18 @@ def test_observation_never_starts_a_connection_or_credential_refresh():
         with pool.connection(existing_only=True):
             pytest.fail('an empty pool cannot lend a connection')
     pool.close()
+
+
+def test_get_existing_distinguishes_absent_and_empty_after_legacy_get_and_buffered_put():
+    conn = Conn(docs={'empty': {}})
+
+    def body(tx):
+        assert tx.get('backlog_release', 'empty') == {}
+        assert tx.get('backlog_release', 'absent') == {}
+        assert tx.get_existing('backlog_release', 'empty') == {}
+        assert tx.get_existing('backlog_release', 'absent') is None
+        tx.put('backlog_release', 'absent', {})
+        assert tx.get_existing('backlog_release', 'absent') == {}
+
+    store(conn).run(body)
+    assert sum('pg_advisory_xact_lock' in sql for sql in conn.sql) == 1

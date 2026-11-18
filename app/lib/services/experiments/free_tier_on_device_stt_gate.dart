@@ -17,8 +17,18 @@ abstract final class FreeTierOnDeviceSttGate {
 
   static DateTime? _lastRefresh;
 
+  /// The last answer [killed] returned, for synchronous eligibility checks (false until one read).
+  static bool get lastKnownKilled => _lastKnownKilled;
+  static bool _lastKnownKilled = false;
+
   @visibleForTesting
-  static void debugReset() => _lastRefresh = null;
+  static set debugLastKnownKilled(bool value) => _lastKnownKilled = value;
+
+  @visibleForTesting
+  static void debugReset() {
+    _lastRefresh = null;
+    _lastKnownKilled = false;
+  }
 
   static Future<bool> killed({
     Future<bool> Function(String key)? readFlag,
@@ -36,8 +46,8 @@ abstract final class FreeTierOnDeviceSttGate {
       }
     }
     try {
-      return await (readFlag ?? AnalyticsManager().isFeatureEnabled)(killSwitchFlag)
-          .timeout(const Duration(seconds: 1));
+      return _lastKnownKilled =
+          await (readFlag ?? AnalyticsManager().isFeatureEnabled)(killSwitchFlag).timeout(const Duration(seconds: 1));
     } catch (_) {
       return false;
     }

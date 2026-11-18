@@ -729,3 +729,55 @@ def test_backend_deploy_workflows_do_not_materialize_an_ignored_service_account_
         text = (repo_root / '.github' / 'workflows' / workflow).read_text(encoding='utf-8')
         assert 'GCP_SERVICE_ACCOUNT' not in text
         assert 'backend/google-credentials.json' not in text
+
+
+def test_selected_secret_check_ignores_missing_omitted_service(monkeypatch, tmp_path):
+    preflight = load_preflight()
+    manifest = tmp_path / 'manifest.yaml'
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                'environments': {
+                    'prod': {
+                        'cloud_run': {
+                            'services': {
+                                'backend': {'secrets': {'ONLY_BACKEND': {'secret': 'omitted', 'version': 'latest'}}},
+                                'backend-sync': {'secrets': {'ONLY_SYNC': {'secret': 'selected', 'version': 'latest'}}},
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    )
+    seen = []
+
+    def exists(**kwargs):
+        seen.append(kwargs['secret_name'])
+        return kwargs['secret_name'] == 'selected'
+
+    monkeypatch.setattr(preflight, '_secret_exists', exists)
+    assert (
+        preflight.check_rendered_secrets(
+            env='prod', manifest_path=manifest, project='synthetic', services=('backend-sync',)
+        )
+        == []
+    )
+    assert seen == ['selected']
+    seen.clear()
+    missing = preflight.check_rendered_secrets(env='prod', manifest_path=manifest, project='synthetic')
+    assert [m.secret_name for m in missing] == ['omitted']
+    assert set(seen) == {'omitted', 'selected'}
+
+
+def test_selected_secret_cli_passes_its_scope_to_secret_preflight(monkeypatch):
+    preflight = load_preflight()
+    check = Mock(return_value=[])
+    monkeypatch.setattr(preflight, 'check_rendered_secrets', check)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['preflight', '--env', 'prod', '--project', 'synthetic', '--service', 'backend-sync', '--check-secrets'],
+    )
+    assert preflight.main() == 0
+    assert check.call_args.kwargs['services'] == ('backend-sync',)

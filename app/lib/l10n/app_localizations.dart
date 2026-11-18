@@ -3867,6 +3867,24 @@ abstract class AppLocalizations {
   /// **'History'**
   String get memoryHistory;
 
+  /// Home's recording bar, line 1: this phone is recording a live conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Recording with your phone'**
+  String get recordingWithYourPhone;
+
+  /// Button on Home's recording bar: end the phone recording and process it
+  ///
+  /// In en, this message translates to:
+  /// **'Wrap Up'**
+  String get wrapUp;
+
+  /// Confirmation after Undo on Home's recording bar: the accidental recording was thrown away
+  ///
+  /// In en, this message translates to:
+  /// **'Recording discarded'**
+  String get recordingDiscarded;
+
   /// Undo button text
   ///
   /// In en, this message translates to:
@@ -21774,7 +21792,7 @@ abstract class AppLocalizations {
   /// Device Diagnostics footnote under the 7-day summary with lifetime counts
   ///
   /// In en, this message translates to:
-  /// **'Since pairing: {drops} drops, {failed} failed connections.'**
+  /// **'Since pairing: {drops} reconnections, {failed} failed connections.'**
   String diagnosticsSincePairingSummary(int drops, int failed);
 
   /// Caption beside the live signal chart title; duration is the chart window, e.g. 60s
@@ -23919,18 +23937,6 @@ abstract class AppLocalizations {
   /// **'Uploading · {done} of {total}'**
   String syncStepUploadingAmount(String done, String total);
 
-  /// Offline Sync status card title while the server transcribes uploaded audio; amount is a compact audio length.
-  ///
-  /// In en, this message translates to:
-  /// **'Turning {amount} into conversations'**
-  String syncCardTranscribingAmount(String amount);
-
-  /// Offline Sync status card subtitle while the server transcribes: compact audio lengths done and total.
-  ///
-  /// In en, this message translates to:
-  /// **'{done} of {total} done · you can leave this screen'**
-  String syncCardTranscribedOf(String done, String total);
-
   /// Offline Sync status card title when recordings wait for a manual sync; amount is a compact audio length.
   ///
   /// In en, this message translates to:
@@ -23973,10 +23979,10 @@ abstract class AppLocalizations {
   /// **'Waiting on this phone'**
   String get syncDetailsWaitingOnPhone;
 
-  /// Sync details row label: audio uploaded and still being transcribed by Omi.
+  /// Sync details stage label for uploaded audio awaiting a confirmed server outcome.
   ///
   /// In en, this message translates to:
-  /// **'Transcribing on Omi'**
+  /// **'Uploaded, awaiting server'**
   String get syncDetailsTranscribing;
 
   /// Sync details row label: number of raw audio files the app holds.
@@ -24788,6 +24794,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Omi is already working on this conversation. The summary will appear here when it finishes.'**
   String get summaryBusyBody;
+
+  /// Status shown in place of a summary when the recording has no transcript yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not transcribed yet'**
+  String get summaryTranscriptionPendingTitle;
+
+  /// Shown when a recording has no transcript yet, so its summary cannot be made. Tells the user the summary will come after the transcript.
+  ///
+  /// In en, this message translates to:
+  /// **'The summary will appear once the transcript is ready.'**
+  String get summaryTranscriptionPendingBody;
 
   /// Button that re-reads the conversation to see if processing finished.
   ///
@@ -27128,6 +27146,162 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Processing changed. Review the list and try again.'**
   String get processingDeleteScopeChanged;
+
+  /// No description provided for @syncTooOldExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.'**
+  String get syncTooOldExplanation;
+
+  /// Title of the sheet shown when a free plan has used all of its monthly cloud transcription minutes
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve used this month\'s {minutes} minutes'**
+  String freeCapTitle(int minutes);
+
+  /// Body of the free-plan cap sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is still recording. Choose how to keep transcribing.'**
+  String get freeCapBody;
+
+  /// Product name of the paid plan; keep the brand name
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Pro'**
+  String get omiProPlanName;
+
+  /// Omi Pro benefit on the cap sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited cloud transcription'**
+  String get freeCapProUnlimited;
+
+  /// Omi Pro benefit on the cap sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Best accuracy'**
+  String get freeCapProAccuracy;
+
+  /// Omi Pro benefit: recordings held at the cap get transcribed
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribes your waiting recordings'**
+  String get freeCapProWaiting;
+
+  /// Subtitle of the 'Transcribe on this phone' option at the cap; the choice is permanent until switched back
+  ///
+  /// In en, this message translates to:
+  /// **'Free. Stays on until you switch back.'**
+  String get freeCapPhoneSubtitle;
+
+  /// Banner during recording when transcription runs on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing on this phone'**
+  String get transcribingOnThisPhone;
+
+  /// Short button label to open the Omi Pro plans; keep 'Pro'
+  ///
+  /// In en, this message translates to:
+  /// **'Get Pro'**
+  String get getPro;
+
+  /// Button on a recording held at the cap; opens the plans
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock'**
+  String get unlock;
+
+  /// Settings section header above the transcription source choices
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe with'**
+  String get transcribeWith;
+
+  /// Transcription source: Omi's cloud service; keep 'Omi'
+  ///
+  /// In en, this message translates to:
+  /// **'Omi cloud'**
+  String get omiCloud;
+
+  /// Transcription source: on this phone
+  ///
+  /// In en, this message translates to:
+  /// **'This phone'**
+  String get thisPhone;
+
+  /// Status: this phone can transcribe now
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get onDeviceReady;
+
+  /// Cloud transcription minutes left this month and the reset date, e.g. '258 of 300 min left · resets Dec 1'
+  ///
+  /// In en, this message translates to:
+  /// **'{left} of {limit} min left · resets {date}'**
+  String cloudMinutesLeft(int left, int limit, String date);
+
+  /// Shown to a free plan on the phone after the monthly reset: cloud minutes available again
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} cloud minutes available'**
+  String cloudMinutesAvailable(int minutes);
+
+  /// Button: switch transcription back to Omi's cloud
+  ///
+  /// In en, this message translates to:
+  /// **'Switch Back'**
+  String get switchBack;
+
+  /// Settings section header: steps before the phone can transcribe
+  ///
+  /// In en, this message translates to:
+  /// **'Set up this phone'**
+  String get setUpThisPhone;
+
+  /// Row title: the iOS speech recognition permission
+  ///
+  /// In en, this message translates to:
+  /// **'Speech recognition'**
+  String get speechRecognition;
+
+  /// Subtitle: on-device transcription keeps audio on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Audio stays on your phone'**
+  String get audioStaysOnPhone;
+
+  /// Download size of the on-device speech model in megabytes
+  ///
+  /// In en, this message translates to:
+  /// **'{size} MB download'**
+  String onDeviceModelDownloadSize(int size);
+
+  /// Button: download the speech model now on any network
+  ///
+  /// In en, this message translates to:
+  /// **'Download Now'**
+  String get downloadNow;
+
+  /// Button: download the speech model later, when on Wi-Fi
+  ///
+  /// In en, this message translates to:
+  /// **'On Wi-Fi Later'**
+  String get onWifiLater;
+
+  /// Shown with a pen over a skeleton while the summary of a conversation in progress is written
+  ///
+  /// In en, this message translates to:
+  /// **'Writing your summary…'**
+  String get conversationWritingSummary;
+
+  /// No description provided for @onTheWayServerWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Server-reported work'**
+  String get onTheWayServerWork;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -1967,6 +1967,15 @@ class AppLocalizationsHi extends AppLocalizations {
   String get memoryHistory => 'इतिहास';
 
   @override
+  String get recordingWithYourPhone => 'आपके फ़ोन से रिकॉर्ड हो रहा है';
+
+  @override
+  String get wrapUp => 'समाप्त करें';
+
+  @override
+  String get recordingDiscarded => 'रिकॉर्डिंग हटा दी गई';
+
+  @override
   String get undo => 'पूर्ववत करें';
 
   @override
@@ -12201,7 +12210,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'पेयरिंग के बाद से: $drops रुकावटें, $failed विफल कनेक्शन।';
+    return 'पेयरिंग के बाद से: $drops पुनः कनेक्शन, $failed असफल कनेक्शन।';
   }
 
   @override
@@ -13437,16 +13446,6 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount को बातचीत में बदला जा रहा है';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total पूरा · आप इस स्क्रीन से बाहर जा सकते हैं';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount सिंक के लिए तैयार';
   }
@@ -13470,7 +13469,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'इस फ़ोन पर प्रतीक्षारत';
 
   @override
-  String get syncDetailsTranscribing => 'Omi पर ट्रांसक्राइब हो रहा है';
+  String get syncDetailsTranscribing => 'अपलोड हो गया, सर्वर की प्रतीक्षा में';
 
   @override
   String get syncDetailsAudioFiles => 'ऑडियो फ़ाइलें';
@@ -13927,6 +13926,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi पहले से ही इस बातचीत पर काम कर रहा है। पूरा होने पर सारांश यहां दिखाई देगा।';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'अभी तक ट्रांसक्राइब नहीं हुआ';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'ट्रांसक्रिप्ट तैयार होने पर सारांश दिखाई देगा।';
 
   @override
   String get summaryCheckAgain => 'फिर से जांचें';
@@ -15446,4 +15451,91 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'प्रोसेसिंग की सूची बदल गई है। सूची देखें और फिर कोशिश करें।';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'आपने इस महीने के $minutes मिनट इस्तेमाल कर लिए हैं';
+  }
+
+  @override
+  String get freeCapBody => 'Omi अभी भी रिकॉर्ड कर रहा है। चुनें कि ट्रांसक्रिप्शन कैसे जारी रखें।';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'असीमित क्लाउड ट्रांसक्रिप्शन';
+
+  @override
+  String get freeCapProAccuracy => 'सबसे अच्छी सटीकता';
+
+  @override
+  String get freeCapProWaiting => 'आपकी प्रतीक्षारत रिकॉर्डिंग ट्रांसक्राइब करता है';
+
+  @override
+  String get freeCapPhoneSubtitle => 'मुफ़्त। जब तक आप वापस न बदलें, चालू रहता है।';
+
+  @override
+  String get transcribingOnThisPhone => 'इस फ़ोन पर ट्रांसक्राइब हो रहा है';
+
+  @override
+  String get getPro => 'Pro लें';
+
+  @override
+  String get unlock => 'अनलॉक करें';
+
+  @override
+  String get transcribeWith => 'इससे ट्रांसक्राइब करें';
+
+  @override
+  String get omiCloud => 'Omi क्लाउड';
+
+  @override
+  String get thisPhone => 'यह फ़ोन';
+
+  @override
+  String get onDeviceReady => 'तैयार';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit मिनट बाकी · $date को रीसेट';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes क्लाउड मिनट उपलब्ध';
+  }
+
+  @override
+  String get switchBack => 'वापस बदलें';
+
+  @override
+  String get setUpThisPhone => 'यह फ़ोन सेट अप करें';
+
+  @override
+  String get speechRecognition => 'वाक् पहचान';
+
+  @override
+  String get audioStaysOnPhone => 'ऑडियो आपके फ़ोन पर ही रहता है';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB डाउनलोड';
+  }
+
+  @override
+  String get downloadNow => 'अभी डाउनलोड करें';
+
+  @override
+  String get onWifiLater => 'बाद में Wi-Fi पर';
+
+  @override
+  String get conversationWritingSummary => 'आपका सारांश लिखा जा रहा है…';
+
+  @override
+  String get onTheWayServerWork => 'सर्वर द्वारा बताया गया काम';
 }

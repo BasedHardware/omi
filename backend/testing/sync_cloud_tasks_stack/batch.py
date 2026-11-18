@@ -650,10 +650,12 @@ def _assert_recovery_failed(stack: BatchStack, upload: Upload) -> dict[str, Any]
 
 
 def _quarantine(stack: BatchStack, upload: Upload) -> dict[str, Any]:
+    # Periodic maintenance may prepare recovery before this observer polls.
+    # Prepared still holds the quarantined source and has not started paid work.
     _wait_job(
         stack,
         upload,
-        lambda job: job.get('state') == 'quarantined' and job.get('recovery_state') == 'held',
+        lambda job: job.get('state') == 'quarantined' and job.get('recovery_state') in {'held', 'prepared'},
         label='empty-ASR quarantine',
         timeout=60.0,
     )
@@ -691,8 +693,10 @@ def _await_recovery_task(stack: BatchStack, upload: Upload) -> dict[str, Any]:
 
 def _empty_asr_recovery(stack: BatchStack) -> None:
     upload = _upload(stack, 'batch-empty-asr', words='empty')
-    _quarantine(stack, upload)
     task = _await_recovery_task(stack, upload)
+    # Maintenance can prepare the task before the quarantine observer polls.
+    # Exercise that ordering through the real recorder and durable job state.
+    _quarantine(stack, upload)
     _assert_recovery_pending(stack, upload, 'with prepared recovery')
     first = stack.deliver_recovery(task, retry_count=0)
     if first.status_code != 200 or first.json().get('status') != 'recovered':

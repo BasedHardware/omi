@@ -1996,6 +1996,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get memoryHistory => 'Vēsture';
 
   @override
+  String get recordingWithYourPhone => 'Ieraksta ar tālruni';
+
+  @override
+  String get wrapUp => 'Pabeigt';
+
+  @override
+  String get recordingDiscarded => 'Ieraksts atmests';
+
+  @override
   String get undo => 'Atsaukt';
 
   @override
@@ -12247,7 +12256,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Kopš savienošanas pārī: pārrāvumi $drops, neveiksmīgi savienojumi $failed.';
+    return 'Kopš savienošanas pārī: $drops atkārtoti savienojumi, $failed neizdevušies savienojumi.';
   }
 
   @override
@@ -13487,16 +13496,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount pārvēršana sarunās';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Gatavs $done no $total · varat atstāt šo ekrānu';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount gatavs sinhronizācijai';
   }
@@ -13520,7 +13519,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Gaida šajā tālrunī';
 
   @override
-  String get syncDetailsTranscribing => 'Atšifrē Omi';
+  String get syncDetailsTranscribing => 'Augšupielādēts, gaida serveri';
 
   @override
   String get syncDetailsAudioFiles => 'Audio faili';
@@ -13978,6 +13977,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi jau apstrādā šo sarunu. Kopsavilkums parādīsies šeit, kad tas būs gatavs.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Vēl nav transkribēts';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Kopsavilkums parādīsies, kad transkripcija būs gatava.';
 
   @override
   String get summaryCheckAgain => 'Pārbaudīt vēlreiz';
@@ -15498,4 +15503,91 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Esat izmantojis šī mēneša $minutes minūtes';
+  }
+
+  @override
+  String get freeCapBody => 'Omi joprojām ieraksta. Izvēlieties, kā turpināt transkribēšanu.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Neierobežota mākoņa transkripcija';
+
+  @override
+  String get freeCapProAccuracy => 'Vislabākā precizitāte';
+
+  @override
+  String get freeCapProWaiting => 'Transkribē jūsu gaidošos ierakstus';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Bez maksas. Paliek ieslēgts, līdz pārslēdzat atpakaļ.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transkribē šajā tālrunī';
+
+  @override
+  String get getPro => 'Iegūt Pro';
+
+  @override
+  String get unlock => 'Atbloķēt';
+
+  @override
+  String get transcribeWith => 'Transkribēt ar';
+
+  @override
+  String get omiCloud => 'Omi mākonis';
+
+  @override
+  String get thisPhone => 'Šis tālrunis';
+
+  @override
+  String get onDeviceReady => 'Gatavs';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Atlikušas $left no $limit min · atjaunojas $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Pieejamas $minutes mākoņa minūtes';
+  }
+
+  @override
+  String get switchBack => 'Pārslēgt atpakaļ';
+
+  @override
+  String get setUpThisPhone => 'Iestatīt šo tālruni';
+
+  @override
+  String get speechRecognition => 'Runas atpazīšana';
+
+  @override
+  String get audioStaysOnPhone => 'Audio paliek jūsu tālrunī';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB lejupielāde';
+  }
+
+  @override
+  String get downloadNow => 'Lejupielādēt tagad';
+
+  @override
+  String get onWifiLater => 'Vēlāk ar Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Rakstām jūsu kopsavilkumu…';
+
+  @override
+  String get onTheWayServerWork => 'Servera ziņotais darbs';
 }

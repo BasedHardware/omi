@@ -2009,6 +2009,15 @@ class AppLocalizationsDe extends AppLocalizations {
   String get memoryHistory => 'Verlauf';
 
   @override
+  String get recordingWithYourPhone => 'Aufnahme mit deinem Handy';
+
+  @override
+  String get wrapUp => 'Abschließen';
+
+  @override
+  String get recordingDiscarded => 'Aufnahme verworfen';
+
+  @override
   String get undo => 'Rückgängig';
 
   @override
@@ -12313,7 +12322,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Seit der Kopplung: $drops Abbrüche, $failed fehlgeschlagene Verbindungen.';
+    return 'Seit der Kopplung: $drops Wiederverbindungen, $failed fehlgeschlagene Verbindungen.';
   }
 
   @override
@@ -13556,16 +13565,6 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount werden in Unterhaltungen umgewandelt';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done von $total fertig · du kannst diesen Bildschirm verlassen';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount bereit zur Synchronisierung';
   }
@@ -13589,7 +13588,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Wartet auf dieses Handy';
 
   @override
-  String get syncDetailsTranscribing => 'Wird bei Omi transkribiert';
+  String get syncDetailsTranscribing => 'Hochgeladen, wartet auf Server';
 
   @override
   String get syncDetailsAudioFiles => 'Audiodateien';
@@ -14051,6 +14050,12 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get summaryBusyBody =>
       'Omi arbeitet bereits an diesem Gespräch. Die Zusammenfassung erscheint hier, sobald sie fertig ist.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Noch nicht transkribiert';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Die Zusammenfassung erscheint, sobald das Transkript fertig ist.';
 
   @override
   String get summaryCheckAgain => 'Erneut prüfen';
@@ -15578,4 +15583,91 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'Die Verarbeitungsliste hat sich geändert. Prüfe sie und versuche es erneut.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Du hast die $minutes Minuten dieses Monats verbraucht';
+  }
+
+  @override
+  String get freeCapBody => 'Omi nimmt weiter auf. Wähle, wie weiter transkribiert wird.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Unbegrenzte Cloud-Transkription';
+
+  @override
+  String get freeCapProAccuracy => 'Beste Genauigkeit';
+
+  @override
+  String get freeCapProWaiting => 'Transkribiert deine wartenden Aufnahmen';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Kostenlos. Bleibt aktiv, bis du zurückwechselst.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transkription auf diesem Telefon';
+
+  @override
+  String get getPro => 'Pro holen';
+
+  @override
+  String get unlock => 'Freischalten';
+
+  @override
+  String get transcribeWith => 'Transkribieren mit';
+
+  @override
+  String get omiCloud => 'Omi Cloud';
+
+  @override
+  String get thisPhone => 'Dieses Telefon';
+
+  @override
+  String get onDeviceReady => 'Bereit';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left von $limit Min. übrig · erneuert am $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes Cloud-Minuten verfügbar';
+  }
+
+  @override
+  String get switchBack => 'Zurückwechseln';
+
+  @override
+  String get setUpThisPhone => 'Dieses Telefon einrichten';
+
+  @override
+  String get speechRecognition => 'Spracherkennung';
+
+  @override
+  String get audioStaysOnPhone => 'Audio bleibt auf deinem Telefon';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB Download';
+  }
+
+  @override
+  String get downloadNow => 'Jetzt laden';
+
+  @override
+  String get onWifiLater => 'Später über WLAN';
+
+  @override
+  String get conversationWritingSummary => 'Deine Zusammenfassung wird geschrieben…';
+
+  @override
+  String get onTheWayServerWork => 'Vom Server gemeldete Arbeit';
 }

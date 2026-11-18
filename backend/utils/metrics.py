@@ -18,6 +18,9 @@ from prometheus_client import (
 )
 from utils import omi_flag_metrics as _omi_flag_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.conversations import phase_shadow as _phase_shadow  # pyright: ignore[reportUnusedImport]  # noqa: F401
+from utils.conversations import (
+    processing_metrics as _retry_metrics,  # pyright: ignore[reportUnusedImport]  # noqa: F401
+)
 from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.sync import absorption_metrics as _absorption_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 
@@ -1109,7 +1112,7 @@ OMI_SYNC_RECORDING_AGE_SECONDS = Histogram(
     'omi_sync_recording_age_seconds',
     'Oldest recording age at sync admission by lane',
     ['lane'],
-    buckets=(300, 1800, 3600, 21600, 86400, 259200, 604800, 1209600, 2592000),
+    buckets=(300, 1800, 3600, 21600, 86400, 259200, 604800, 1209600, 2592000, 5184000),
 )
 
 OMI_SYNC_QUEUE_WAIT_SECONDS = Histogram(

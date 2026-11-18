@@ -1978,6 +1978,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get memoryHistory => 'Historial';
 
   @override
+  String get recordingWithYourPhone => 'Grabando con tu teléfono';
+
+  @override
+  String get wrapUp => 'Terminar';
+
+  @override
+  String get recordingDiscarded => 'Grabación descartada';
+
+  @override
   String get undo => 'Deshacer';
 
   @override
@@ -12255,7 +12264,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Desde el emparejamiento: $drops cortes, $failed conexiones fallidas.';
+    return 'Desde el emparejamiento: $drops reconexiones, $failed conexiones fallidas.';
   }
 
   @override
@@ -13495,16 +13504,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Convirtiendo $amount en conversaciones';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done de $total listo · puedes salir de esta pantalla';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount listos para sincronizar';
   }
@@ -13528,7 +13527,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Esperando a este teléfono';
 
   @override
-  String get syncDetailsTranscribing => 'Transcribiendo en Omi';
+  String get syncDetailsTranscribing => 'Subido, esperando al servidor';
 
   @override
   String get syncDetailsAudioFiles => 'Archivos de audio';
@@ -13987,6 +13986,12 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get summaryBusyBody =>
       'Omi ya está trabajando en esta conversación. El resumen aparecerá aquí cuando termine.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Aún sin transcribir';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'El resumen aparecerá cuando la transcripción esté lista.';
 
   @override
   String get summaryCheckAgain => 'Volver a comprobar';
@@ -15507,4 +15512,91 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'La lista de procesamiento ha cambiado. Revísala e inténtalo de nuevo.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Has usado los $minutes minutos de este mes';
+  }
+
+  @override
+  String get freeCapBody => 'Omi sigue grabando. Elige cómo seguir transcribiendo.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Transcripción en la nube ilimitada';
+
+  @override
+  String get freeCapProAccuracy => 'La mejor precisión';
+
+  @override
+  String get freeCapProWaiting => 'Transcribe tus grabaciones en espera';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Gratis. Se mantiene hasta que vuelvas a cambiar.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transcribiendo en este teléfono';
+
+  @override
+  String get getPro => 'Obtener Pro';
+
+  @override
+  String get unlock => 'Desbloquear';
+
+  @override
+  String get transcribeWith => 'Transcribir con';
+
+  @override
+  String get omiCloud => 'Nube de Omi';
+
+  @override
+  String get thisPhone => 'Este teléfono';
+
+  @override
+  String get onDeviceReady => 'Listo';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Quedan $left de $limit min · se renueva el $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes minutos en la nube disponibles';
+  }
+
+  @override
+  String get switchBack => 'Volver';
+
+  @override
+  String get setUpThisPhone => 'Configurar este teléfono';
+
+  @override
+  String get speechRecognition => 'Reconocimiento de voz';
+
+  @override
+  String get audioStaysOnPhone => 'El audio se queda en tu teléfono';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Descarga de $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Descargar ahora';
+
+  @override
+  String get onWifiLater => 'Luego con Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Escribiendo tu resumen…';
+
+  @override
+  String get onTheWayServerWork => 'Trabajo indicado por el servidor';
 }

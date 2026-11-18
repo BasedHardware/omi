@@ -113,8 +113,8 @@ export function getPiMonoSession(): PiMonoSession | null {
 /**
  * The managed-cloud OMI chat API base for the pi subprocess → its
  * `OMI_API_BASE_URL`. The relayed `desktopApiBase` is intentionally version-less
- * (siblings append their own version — `${desktopApiBase}/v2/chat/completions` in
- * aiUserProfile/service.ts, `${desktopApiBase}/v1/...` in rewind/embeddingClient.ts).
+ * (siblings append their own version — `${desktopApiBase}/v1/...` in
+ * rewind/embeddingClient.ts).
  * pi-mono's managed `openai-completions` provider needs the `/v2` segment baked in,
  * because the OpenAI SDK resolves `<base>/chat/completions` — without `/v2` every
  * request 404s at `.../chat/completions` instead of `.../v2/chat/completions`.

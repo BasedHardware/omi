@@ -1996,6 +1996,15 @@ class AppLocalizationsSk extends AppLocalizations {
   String get memoryHistory => 'História';
 
   @override
+  String get recordingWithYourPhone => 'Nahráva sa telefónom';
+
+  @override
+  String get wrapUp => 'Uzavrieť';
+
+  @override
+  String get recordingDiscarded => 'Nahrávka zahodená';
+
+  @override
   String get undo => 'Vrátiť späť';
 
   @override
@@ -12212,7 +12221,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Od spárovania: výpadkov $drops, neúspešných pripojení $failed.';
+    return 'Od spárovania: $drops opätovných pripojení, $failed neúspešných pripojení.';
   }
 
   @override
@@ -13451,16 +13460,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Premena $amount na konverzácie';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Hotovo $done z $total · túto obrazovku môžete opustiť';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount pripravené na synchronizáciu';
   }
@@ -13484,7 +13483,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Čaká v tomto telefóne';
 
   @override
-  String get syncDetailsTranscribing => 'Prepisuje sa v Omi';
+  String get syncDetailsTranscribing => 'Nahrané, čaká na server';
 
   @override
   String get syncDetailsAudioFiles => 'Zvukové súbory';
@@ -13941,6 +13940,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi už na tomto rozhovore pracuje. Zhrnutie sa tu zobrazí po dokončení.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Zatiaľ neprepísané';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Zhrnutie sa zobrazí, keď bude prepis hotový.';
 
   @override
   String get summaryCheckAgain => 'Skontrolovať znova';
@@ -15459,4 +15464,91 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Zoznam spracovania sa zmenil. Skontrolujte ho a skúste to znova.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Využili ste tohtomesačných $minutes minút';
+  }
+
+  @override
+  String get freeCapBody => 'Omi stále nahráva. Vyberte, ako pokračovať v prepise.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Neobmedzený prepis v cloude';
+
+  @override
+  String get freeCapProAccuracy => 'Najvyššia presnosť';
+
+  @override
+  String get freeCapProWaiting => 'Prepíše vaše čakajúce nahrávky';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Zadarmo. Zostane zapnuté, kým sa neprepnete späť.';
+
+  @override
+  String get transcribingOnThisPhone => 'Prepis v tomto telefóne';
+
+  @override
+  String get getPro => 'Získať Pro';
+
+  @override
+  String get unlock => 'Odomknúť';
+
+  @override
+  String get transcribeWith => 'Prepisovať pomocou';
+
+  @override
+  String get omiCloud => 'Cloud Omi';
+
+  @override
+  String get thisPhone => 'Tento telefón';
+
+  @override
+  String get onDeviceReady => 'Pripravené';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Zostáva $left z $limit min · obnoví sa $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'K dispozícii $minutes cloudových minút';
+  }
+
+  @override
+  String get switchBack => 'Prepnúť späť';
+
+  @override
+  String get setUpThisPhone => 'Nastaviť tento telefón';
+
+  @override
+  String get speechRecognition => 'Rozpoznávanie reči';
+
+  @override
+  String get audioStaysOnPhone => 'Zvuk zostáva v telefóne';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Stiahnutie $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Stiahnuť teraz';
+
+  @override
+  String get onWifiLater => 'Neskôr cez Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Píšeme vaše zhrnutie…';
+
+  @override
+  String get onTheWayServerWork => 'Práca hlásená serverom';
 }

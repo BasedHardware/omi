@@ -1952,6 +1952,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryHistory => '历史';
 
   @override
+  String get recordingWithYourPhone => '正在用手机录音';
+
+  @override
+  String get wrapUp => '结束';
+
+  @override
+  String get recordingDiscarded => '已舍弃录音';
+
+  @override
   String get undo => '撤销';
 
   @override
@@ -12020,7 +12029,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return '配对以来：断开 $drops 次，连接失败 $failed 次。';
+    return '自配对以来：重连 $drops 次，连接失败 $failed 次。';
   }
 
   @override
@@ -13247,16 +13256,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '正在将 $amount 转为对话';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '已完成 $done / $total · 你可以离开此屏幕';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount 可同步';
   }
@@ -13280,7 +13279,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => '等待此手机上传';
 
   @override
-  String get syncDetailsTranscribing => 'Omi 正在转录';
+  String get syncDetailsTranscribing => '已上传，等待服务器';
 
   @override
   String get syncDetailsAudioFiles => '音频文件';
@@ -13730,6 +13729,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi 已在处理此对话。完成后，摘要将显示在这里。';
+
+  @override
+  String get summaryTranscriptionPendingTitle => '尚未转录';
+
+  @override
+  String get summaryTranscriptionPendingBody => '转录完成后将显示摘要。';
 
   @override
   String get summaryCheckAgain => '再次检查';
@@ -15212,4 +15217,91 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => '处理列表已更改。请检查列表后重试。';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return '本月的 $minutes 分钟已用完';
+  }
+
+  @override
+  String get freeCapBody => 'Omi 仍在录音。选择继续转录的方式。';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => '无限云端转录';
+
+  @override
+  String get freeCapProAccuracy => '最佳准确度';
+
+  @override
+  String get freeCapProWaiting => '转录你等待中的录音';
+
+  @override
+  String get freeCapPhoneSubtitle => '免费。在你切换回来之前保持开启。';
+
+  @override
+  String get transcribingOnThisPhone => '正在此手机上转录';
+
+  @override
+  String get getPro => '获取 Pro';
+
+  @override
+  String get unlock => '解锁';
+
+  @override
+  String get transcribeWith => '转录方式';
+
+  @override
+  String get omiCloud => 'Omi 云端';
+
+  @override
+  String get thisPhone => '此手机';
+
+  @override
+  String get onDeviceReady => '已就绪';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '剩余 $left/$limit 分钟 · $date 重置';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '可用 $minutes 分钟云端转录';
+  }
+
+  @override
+  String get switchBack => '切换回来';
+
+  @override
+  String get setUpThisPhone => '设置此手机';
+
+  @override
+  String get speechRecognition => '语音识别';
+
+  @override
+  String get audioStaysOnPhone => '音频保留在你的手机上';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '下载 $size MB';
+  }
+
+  @override
+  String get downloadNow => '立即下载';
+
+  @override
+  String get onWifiLater => '稍后通过 Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => '正在撰写你的摘要…';
+
+  @override
+  String get onTheWayServerWork => '服务器报告的任务';
 }

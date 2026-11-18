@@ -1,0 +1,21 @@
+{
+  "id": "pendant-ring-read-disconnects",
+  "kind": "question",
+  "owner": "Mobile reliability",
+  "question": "Are daily ring-read disconnect observations present for the selected mobile namespace and build? Ring-read counts and RSSI splits support correlation research; presence and overlap do not establish a BLE-drop cause.",
+  "query": "contracts/analytics/consumers/pendant-ring-read-disconnects-presence.sql",
+  "events": [
+    "mobileDeviceHealthDailyRingRead"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "disconnects_during_ring_read",
+    "disconnects_with_ring_read_state",
+    "ring_read_disconnect_rssi_below_minus90",
+    "ring_read_disconnect_rssi_minus90_to_minus80",
+    "ring_read_disconnect_rssi_minus80_to_minus60",
+    "ring_read_disconnect_rssi_at_least_minus60",
+    "ring_read_disconnect_rssi_unknown"
+  ],
+  "zero_policy": "Zero ring-read disconnects with zero disconnects_with_ring_read_state is unobserved, including old histories. Compare ring-read counts only within the observed denominator. Missing RSSI is separate. No event means no eligible day or no emission, not healthy BLE. The presence query proves only cohort selection, not device acceptance or causality."
+}

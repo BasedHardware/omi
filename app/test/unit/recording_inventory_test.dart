@@ -141,9 +141,28 @@ void main() {
       ]
     });
     final result = await captureRecordingInventory(documents: dir.path, phoneSeconds: now, memoryBuckets: {});
-    expect(result['invalid_minimum_schema_rows'], 1);
+    expect(result['invalid_minimum_schema_rows'], 2);
     expect(result['rows_without_file_reference'], 1);
     expect(result['orphan_census_complete'], false);
     expect(jsonEncode(result), isNot(contains('private')));
+  });
+  test('directory walk stats every file across parallel batches, preserving counts and bytes', () async {
+    // More files than one stat batch, plus a partial final batch.
+    const count = 64 * 3 + 7;
+    for (var i = 0; i < count; i++) {
+      await file('audio_private-$i.bin', List.filled(i % 5 + 1, 0));
+    }
+    await json('wals.json', {
+      'wals': [row('audio_private-0.bin'), row('audio_private-1.bin')]
+    });
+    final result = await captureRecordingInventory(documents: dir.path, phoneSeconds: now, memoryBuckets: {});
+    final documents = (result['directories'] as List).single as Map;
+    expect(documents['audio_files'], count);
+    expect(documents['regular_files_seen'], count + 1);
+    expect(documents['referenced_audio_files'], 2);
+    expect(documents['unreferenced_audio_files'], count - 2);
+    expect(documents['audio_bytes'], List.generate(count, (i) => i % 5 + 1).fold<int>(0, (a, b) => a + b));
+    expect(result['file_stat_errors'], 0);
+    expect((result['buckets'] as Map)['main_index']['rows_with_missing_file'], 0);
   });
 }

@@ -21,6 +21,13 @@ from scripts.runtime_env_validation import manifest as manifest_validation
 ROOT = Path(__file__).resolve().parents[3]
 
 
+@pytest.fixture(autouse=True)
+def action_runner_scope(tmp_path, monkeypatch):
+    # Execute snippets with the actual runner's environment-file protocol.
+    monkeypatch.setenv('GITHUB_ENV', str(tmp_path / 'github-env'))
+    monkeypatch.setenv('SELECTED_CLOUD_RUN_SERVICES', ' '.join(SERVICES))
+
+
 def snapshot():
     return {
         'source': SOURCE,
@@ -644,9 +651,12 @@ def test_full_validator_checks_selected_integration_composition_and_ignores_no_c
     selected['services']['backend-integration']['revision']['spec']['containers'][0]['env'] = deepcopy(
         rendered['services']['backend-integration']['env']
     )
-    selected['services']['backend-integration']['revision']['spec']['containers'][0]['env'].extend(
-        {'name': key, 'value': value} for key, value in RESTORED_DEFAULTS.items()
-    )
+    # The runtime manifest now carries cadence explicitly. Replace those values
+    # for this retained inverse instead of duplicating their env names.
+    env = selected['services']['backend-integration']['revision']['spec']['containers'][0]['env']
+    env[:] = [entry for entry in env if entry['name'] not in RESTORED_DEFAULTS]
+    env.extend({'name': key, 'value': value} for key, value in RESTORED_DEFAULTS.items())
+    assert len({entry['name'] for entry in env}) == len(env)
     private.write_text(json.dumps(selected))
     renderer = runpy.run_path(str(ROOT / 'backend/scripts/render_backend_runtime_env.py'))
     original = parsed_canary_validation_inputs[ROOT / 'backend/deploy/runtime_env.yaml']['environments']['prod']

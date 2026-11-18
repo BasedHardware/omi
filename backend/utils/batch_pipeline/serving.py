@@ -40,6 +40,7 @@ from utils.batch_pipeline.ready_discovery import ReadyDiscovery
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
 from utils.batch_pipeline.allowance_hold import AllowanceHolds, entitlement
 from utils.batch_pipeline.retention import cleanup_completed_artifacts
 from utils.sync.stage import current_stage
@@ -215,7 +216,10 @@ class Serving:
                 raise ValueError('owner-only recovery requires an owner and recovered unit')
             return self._reconcile_owner(owner_id, recovered)
         if self._leads(periodic):
-            self._maintain(recover_quarantine=recover_quarantine)
+            self._maintain(
+                recover_quarantine=recover_quarantine,
+                recovery_caller=RecoveryCaller.SERVING if periodic else RecoveryCaller.RECONCILE,
+            )
         elif self.metrics:
             self.metrics.fresh_guard.deactivate()
             self.metrics.delivered_share.deactivate()
@@ -319,7 +323,7 @@ class Serving:
             self.metrics.fresh_guard.deactivate()
         return leads
 
-    def _maintain(self, *, recover_quarantine: bool):
+    def _maintain(self, *, recover_quarantine: bool, recovery_caller=None):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
         leads = self.refresh_fresh_guard()
         if self.metrics:
@@ -387,7 +391,7 @@ class Serving:
             logging.getLogger(__name__).error(
                 'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
             )
-        self.queue().recover(time.time())
+        self.queue().recover(time.time(), caller=recovery_caller)
         if time.monotonic() >= self.allowance_hold_due and self._leads(True):
             self.allowance_hold_due = time.monotonic() + 30
             AllowanceHolds(self.store, entitlement).tick(time.time())
@@ -453,6 +457,27 @@ def serving_for_stage(stage: str) -> Serving:
 @lru_cache(maxsize=1)
 def _metrics() -> QueueMetrics:
     return QueueMetrics(min_refresh_seconds=serving_metrics_min_refresh_seconds())
+
+
+async def _supervise_backlog_heartbeat(stop):
+    from utils.batch_pipeline.backlog_heartbeat import HeartbeatAuthority, TICK_SECONDS
+
+    authority = None
+    while not stop.is_set():
+        try:
+            if authority is None:
+                service = await run_blocking(db_executor, serving_for_stage, current_stage())
+                authority = HeartbeatAuthority(service.store)
+            await run_blocking(db_executor, authority.tick)
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_backlog_heartbeat outcome=stopped exception_type=%s', type(error).__name__
+            )
+            return  # Fail closed until restart, even for config/ambiguous-commit errors.
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=TICK_SECONDS)
+        except asyncio.TimeoutError:
+            pass
 
 
 async def _supervise_fresh_guard(stop):
@@ -617,7 +642,12 @@ def start_serving_from_env():
                 await asyncio.gather(projection_pump(), drain_upload_holds())
             else:
                 await asyncio.gather(
-                    supervise(), drain(), dispatch_recovery(), drain_upload_holds(), _supervise_fresh_guard(stop)
+                    supervise(),
+                    drain(),
+                    dispatch_recovery(),
+                    drain_upload_holds(),
+                    _supervise_fresh_guard(stop),
+                    _supervise_backlog_heartbeat(stop),
                 )
         finally:
             set_recurring_sweep(None)
