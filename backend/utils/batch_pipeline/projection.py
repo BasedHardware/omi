@@ -48,6 +48,7 @@ from utils.batch_pipeline.projection_privacy import PRIVACY_HELD, settle_refusal
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
+from utils.conversations import historical_ingest
 from utils.batch_pipeline.projection_walk_stop import walk_block_stop, walk_head_stop
 from utils.batch_pipeline import projection_drain_diagnostics as drain_diagnostics
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
@@ -318,12 +319,18 @@ def build_incoming(
         client_platform=binding.client_platform,
         geolocation=geolocation,
     )
+    # An untrusted (clamped or estimated) capture clock proves no age: such rows keep full processing.
+    historical = historical_ingest.applies_at_create(
+        started, trusted=item.capture_time_trust is None, now=datetime.now(timezone.utc)
+    )
     incoming = Conversation(
         id=chunk_identity(item.owner_id, binding.source, binding.client_device_id, binding.is_locked, item.capture_at),
         created_at=started,
-        structured=build_deterministic_minimum_structured(create, uid=item.owner_id),
+        structured=build_deterministic_minimum_structured(create, uid=item.owner_id, provenance=not historical),
         **create.model_dump(),
     ).model_dump()
+    if historical:
+        historical_ingest.stamp(incoming, producer='batch')
     incoming['data_protection_level'] = binding.data_protection_level
     # Consumed by the existing assignment transaction, never a separate write.
     incoming['_episode_transcript_receipt'] = True
@@ -1274,6 +1281,12 @@ class Projector:
                 if (receipt.get('speaker_scope') or '').startswith('final:batch:'):
                     for output in outputs:
                         prepare_voice_evidence(self, item, binding, output['conversation_id'])
+                if receipt.get('historical'):
+                    # Old backfill owes no automatic summary: settle its hold, then acknowledge.
+                    for output in outputs:
+                        historical_ingest.settle(binding.owner_id, output['conversation_id'], producer='batch')
+                    self.store.ready(item.segment_id, binding, self.clock(), part_index=index, policy=policy)
+                    return
                 with projection_phase('enrichment', policy):
                     self.store.mark_enrichment(
                         item.segment_id,

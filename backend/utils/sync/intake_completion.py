@@ -28,6 +28,9 @@ from utils.sync.assignment_telemetry import CREATED_UNKNOWN_REASONS
 from utils.sync.bridge_observation import log_bridge_observation
 from utils.sync.absorption_metrics import record_assignment_metrics
 
+# Internal response set: rows created historical (T1+) settle instead of enrolling enrichment.
+HISTORICAL_RESPONSE_KEY = '_historical'
+
 logger = logging.getLogger(__name__)
 
 
@@ -254,6 +257,8 @@ def complete_sync_intake(
             response['new_memories' if created else 'updated_memories'].add(conversation_id)
             if assigned['sync_relevance'] == 'keep' or assigned.get('sync_bridge_pending'):
                 response.setdefault('_merged', {})[conversation_id] = language
+            if assigned.get('processing_tier') == 'historical':
+                response.setdefault(HISTORICAL_RESPONSE_KEY, set()).add(conversation_id)
         elif existing_completion:
             response.setdefault('_merged', {})[conversation_id] = language
     if attach_episode is not None and (not repeat_only or existing_completion):

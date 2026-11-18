@@ -39,6 +39,7 @@ from utils.batch_pipeline.projection import (
     projection_phase,
 )
 from utils.batch_pipeline.scheduler import owner_key
+from utils.conversations import historical_ingest
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 from utils.batch_pipeline.projection_followup_clock import FollowupClock
@@ -553,7 +554,12 @@ class ProjectionFollowups:
                         )
                 canonicals.append(canonical)
             canonical = canonicals[0]
-            if receipt['enrichment_required']:
+            if receipt['enrichment_required'] and receipt.get('historical'):
+                for output_id in canonicals:
+                    await run_blocking(
+                        db_executor, historical_ingest.settle, binding.owner_id, output_id, producer='batch'
+                    )
+            elif receipt['enrichment_required']:
                 await self.step(
                     policy,
                     'enrichment',

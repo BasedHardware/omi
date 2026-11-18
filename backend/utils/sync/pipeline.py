@@ -126,6 +126,8 @@ from config.occasion_relevance import enabled as occasion_relevance_enabled
 from utils.sync import processing_hold, bridge_pending, bridge
 from utils.enrichment.smart_refresh import settle_survivor
 from utils.conversations.sync_hold_completion import complete_explicit
+from utils.conversations import historical_ingest
+from utils.sync.intake_completion import HISTORICAL_RESPONSE_KEY
 from utils.conversations.smart_merge_policy import refresh_owed
 from utils.enrichment.admission import ConversationAbsorbed
 from utils.conversations.relevance import sync_intake_decision
@@ -1205,13 +1207,21 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         refreshed = conversations_db.get_conversation(uid, conversation_id)
         if (
             refreshed
-            and (refreshed.get('discarded') or summary_output_present(refreshed.get('structured')))
+            and (
+                refreshed.get('discarded')
+                or summary_output_present(refreshed.get('structured'))
+                or historical_ingest.settled(refreshed)
+            )
             and context.get('hold_snapshot') is not None
             and not conversations_db.complete_sync_processing_hold(
                 uid,
                 conversation_id,
                 conversation_data.get('sync_content_revision'),
-                context['hold_snapshot'] if summary_output_present(refreshed.get('structured')) else None,
+                (
+                    context['hold_snapshot']
+                    if summary_output_present(refreshed.get('structured')) or historical_ingest.settled(refreshed)
+                    else None
+                ),
             )
         ):
             raise SyncConversationPersistenceFenced('hold completion snapshot changed')
@@ -1271,12 +1281,21 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     if (
         context is not None
         and context.get('hold_snapshot') is not None
-        and (processed_conversation.discarded or summary_output_present(processed_conversation.structured))
+        and (
+            processed_conversation.discarded
+            or summary_output_present(processed_conversation.structured)
+            or historical_ingest.settled(processed_conversation)
+        )
         and not conversations_db.complete_sync_processing_hold(
             uid,
             conversation_id,
             conversation_data.get('sync_content_revision'),
-            context['hold_snapshot'] if summary_output_present(processed_conversation.structured) else None,
+            (
+                context['hold_snapshot']
+                if summary_output_present(processed_conversation.structured)
+                or historical_ingest.settled(processed_conversation)
+                else None
+            ),
         )
     ):
         raise SyncConversationPersistenceFenced('hold completion snapshot changed')
@@ -1853,6 +1872,10 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             client_platform=client_platform,
             geolocation=geolocation,
         )
+        # A shifted, clamped or estimated clock proves no age: such rows keep full processing.
+        historical = historical_ingest.applies_at_create(
+            started_at, trusted=not clock_run and not capture_time_offset, now=stored_now
+        )
         incoming = Conversation(
             id=chunk_identity(
                 uid,
@@ -1868,9 +1891,11 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 **({'clock_run': clock_run} if clock_run else {}),
             ),
             created_at=started_at,
-            structured=build_deterministic_minimum_structured(create_memory, uid=uid),
+            structured=build_deterministic_minimum_structured(create_memory, uid=uid, provenance=not historical),
             **create_memory.model_dump(),
         ).model_dump()
+        if historical:
+            historical_ingest.stamp(incoming, producer='sync')
         incoming['data_protection_level'] = data_protection_level
         if clock_run:
             incoming[SYNC_CLOCK_RUN_FIELD] = clock_run
@@ -2115,11 +2140,15 @@ def _reprocess_merged_conversations(
         for conversation_id in response.get('new_memories', set()) | response.get('updated_memories', set()):
             merged.setdefault(conversation_id, _LINEAGE_RETRY_LANGUAGE)
     fenced_ids = set()
+    historical_ids = response.pop(HISTORICAL_RESPONSE_KEY, set())
     for conversation_id, language in merged.items():
         try:
             if user_selected and not lifecycle_service.restore_discarded(uid, conversation_id):
                 raise SyncConversationPersistenceFenced('selected recording no longer exists')
-            if coalescing:
+            if conversation_id in historical_ids and not user_selected:
+                # Old backfill owes no automatic summary: settle its hold instead of enrolling enrichment.
+                historical_ingest.settle(uid, conversation_id, producer='sync')
+            elif coalescing:
                 from utils.sync.reprocess import mark
 
                 mark(uid, conversation_id, language, sync_hold=hold)

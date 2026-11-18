@@ -1884,6 +1884,37 @@ claims all retain this content boundary. Invisible effects remain independently
 coalesced and may run immediately on explicit demand. See the
 [demand-processing runbook](runbooks/demand-driven-processing.md).
 
+## Historical processing tier (T1+)
+
+A new sync or batch row is created with `processing_tier: 'historical'` when its
+capture start is strictly older than `SYNC_HISTORICAL_TIER_MIN_AGE_SECONDS`
+(default 259200, clamped to 72 h..60 days) on a trusted clock. Shifted, clamped,
+estimated and batch `capture_time_trust='untrusted'` clocks always keep full
+processing. `SYNC_HISTORICAL_TIER_ENABLED` (default on) gates only new stamps.
+The marker is set once at create; appends never add or remove it.
+
+- **Stored at create:** a deterministic title with no `title_provenance`, plus
+  `terminal_no_derived_effects: true` and `summary_blocked_reason: 'historical_on_open'`.
+  The row has no `summary_due_at` and no `summary_title_provenance`.
+- **Ingest:** sync completes the processing hold with the content snapshot (no
+  outbox mark), and the batch projection receipt carries `historical: true` and
+  acknowledges with `ready`. Explicit Process now still runs (summary-only).
+- **Processing:** `process_conversation` stores the minimum, without a model call
+  and before the funded-budget block, for every trigger outside
+  `{historical_open, user_reprocess, merge, backlog_choice}`. Those owner triggers
+  take the summary-only seam.
+- **Wire:** `processing_tier` is wire-visible. `summary_on_open: true` is a read
+  projection on list and detail while no summary exists, the row is neither
+  locked nor discarded, and `HISTORICAL_SUMMARY_ON_OPEN_ENABLED` is on.
+- **Open:** `POST /v1/conversations/{id}/summary/open` answers
+  `X-Omi-Summary-Outcome: existing|generated`. Caps: 30/hour and 100/day per user,
+  `HISTORICAL_SUMMARY_GLOBAL_DAILY_LIMIT` (default 10000, fails open), and 3
+  attempts per row per day. `HISTORICAL_SUMMARY_VECTOR_ENABLED` indexes the
+  summary vector after it lands. `GET .../summary/stream` never generates for
+  these rows.
+- **Metrics:** `omi_historical_tier_rows_total{producer,outcome}`,
+  `omi_historical_summary_open_total{outcome}` and `omi_historical_summary_latency_seconds`.
+
 ## Summary vectors during durable finalization
 
 The finalizer writes summary vectors only after successful lifecycle persistence

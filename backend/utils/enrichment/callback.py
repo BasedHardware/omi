@@ -29,6 +29,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.process_conversation import process_conversation
+from utils.conversations import historical_ingest
 from utils.sync import processing_hold, bridge_pending, bridge
 from database import capture_end as capture_end_db
 from utils.enrichment.smart_refresh import settle_survivor
@@ -197,13 +198,21 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
         refreshed = conversations_db.get_conversation(uid, conversation_id)
         if (
             refreshed
-            and (refreshed.get('discarded') or summary_output_present(refreshed.get('structured')))
+            and (
+                refreshed.get('discarded')
+                or summary_output_present(refreshed.get('structured'))
+                or historical_ingest.settled(refreshed)
+            )
             and context.get('hold_snapshot') is not None
             and not conversations_db.complete_sync_processing_hold(
                 uid,
                 conversation_id,
                 conversation_data.get('sync_content_revision'),
-                context['hold_snapshot'] if summary_output_present(refreshed.get('structured')) else None,
+                (
+                    context['hold_snapshot']
+                    if summary_output_present(refreshed.get('structured')) or historical_ingest.settled(refreshed)
+                    else None
+                ),
             )
         ):
             raise SyncConversationPersistenceFenced('hold completion snapshot changed')
@@ -263,12 +272,21 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
     if (
         context is not None
         and context.get('hold_snapshot') is not None
-        and (processed_conversation.discarded or summary_output_present(processed_conversation.structured))
+        and (
+            processed_conversation.discarded
+            or summary_output_present(processed_conversation.structured)
+            or historical_ingest.settled(processed_conversation)
+        )
         and not conversations_db.complete_sync_processing_hold(
             uid,
             conversation_id,
             conversation_data.get('sync_content_revision'),
-            context['hold_snapshot'] if summary_output_present(processed_conversation.structured) else None,
+            (
+                context['hold_snapshot']
+                if summary_output_present(processed_conversation.structured)
+                or historical_ingest.settled(processed_conversation)
+                else None
+            ),
         )
     ):
         raise SyncConversationPersistenceFenced('hold completion snapshot changed')
