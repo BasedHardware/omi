@@ -46,16 +46,59 @@ def decode_row(uid, snapshot) -> dict[str, Any] | None:
     return data
 
 
+# A source recording whose revision moved during a pass may still be committed against when only its
+# speech moved (appended segments, audio files, status, pending/manual-end markers). Any change to
+# these fields (deletion, merge, privacy, lock, claims, identity) keeps the strict source_changed fence.
+SOURCE_FENCE_FIELDS = (
+    'recording',
+    'deleted',
+    'deleted_spans',
+    'sync_merged_into',
+    'data_protection_level',
+    'is_locked',
+    'started_at',
+    'claims',
+    'v3_derived',
+)
+
+
+def source_fence(raw):
+    return {key: (raw or {}).get(key) for key in SOURCE_FENCE_FIELDS}
+
+
 def recording_input(uid, snapshot):
     if not snapshot.exists:
         return None
     raw = snapshot.to_dict() or {}
     if raw.get('data_protection_level') != 'private' and raw.get('started_at'):
         try:
-            return decode_row(uid, snapshot)
+            row = decode_row(uid, snapshot)
         except (ValueError, TypeError, FileNotFoundError, TranscriptBlobAbsent, TranscriptShredded, Conflict):
-            pass
-    return {**raw, 'id': snapshot.id, '_v3_revision': snapshot.update_time, '_v3_unreadable': True}
+            row = None
+        if row is not None:
+            row['_v3_fence'] = source_fence(raw)
+            return row
+    return {
+        **raw,
+        'id': snapshot.id,
+        '_v3_revision': snapshot.update_time,
+        '_v3_unreadable': True,
+        '_v3_fence': source_fence(raw),
+    }
+
+
+def speech_moved(recording, current):
+    """True when a loaded source recording changed only by receiving more speech."""
+    fence = recording.get('_v3_fence')
+    return bool(
+        fence is not None
+        and current
+        and not recording.get('_v3_derive')
+        and not recording.get('deleted')
+        and not recording.get('sync_merged_into')
+        and current.get('recording')
+        and source_fence(current) == fence
+    )
 
 
 def speech_end(row):
@@ -263,7 +306,15 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
 
 
 def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pending=True, firestore_client=None):
+    """Commit derived rows and source claims; returns the ids of source recordings that kept moving.
+
+    A recording that only received more speech during the pass does not fail the commit (a live
+    wearer would otherwise starve every pass): the windows planned from the loaded snapshot commit,
+    its claims merge onto the re-read document and it stays v3_pending so the next pass reads the
+    new speech. Derived rows and any other source change keep the strict source_changed fence.
+    """
     client = firestore_client or get_firestore_client()
+    moved = set()
     coll = user_conversations(client, uid)
     held = leases.lease_ref(client, uid, 'builder')
     open_ids = [r['id'] for r in rows if r['status'] == 'in_progress' and not r.get('deleted')]
@@ -313,9 +364,12 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
         # Firestore requires every read before every write, including tombstones.
         for rid, row in {**recordings, **existing}.items():
             snapshot = coll.document(rid).get(transaction=tx)
+            current = snapshot.to_dict() or {} if snapshot.exists else None
             if not snapshot.exists or snapshot.update_time != row['_v3_revision']:
-                raise Conflict('source_changed')
-            observed[rid] = snapshot.to_dict() or {}
+                if rid in existing or rid not in recordings or not speech_moved(row, current):
+                    raise Conflict('source_changed')
+                moved.add(rid)
+            observed[rid] = current or {}
         for row in batch_rows:
             tombstone = (
                 client.collection('users')
@@ -344,6 +398,28 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
                 tx.update(coll.document(rid), {'v3_pending': False, 'v3_pending_since': None})
                 continue
             replaced = {r['id'] for r in batch_rows}
+            if rid in moved:
+                # Merge onto the re-read document; never write the stale snapshot's view of a live source.
+                claims = [c for c in observed[rid].get('claims') or [] if c['conversation_id'] not in replaced]
+                for row in batch_rows:
+                    if rid not in row.get('v3_recording_ids', []) or row.get('deleted'):
+                        continue
+                    spans = row.get('_v3_claims', {}).get(
+                        rid, [{'start': row['started_at'], 'end': row['finished_at']}]
+                    )
+                    claims.extend({'conversation_id': row['id'], **span} for span in spans)
+                # The new speech is still owed to the next pass; leave purge decisions to that pass.
+                tx.update(
+                    coll.document(rid),
+                    {
+                        'claims': claims,
+                        'v3_pending': True,
+                        'v3_pending_since': observed[rid].get('v3_pending_since')
+                        or recording.get('v3_pending_since')
+                        or datetime.now(timezone.utc),
+                    },
+                )
+                continue
             claims = [c for c in recording.get('claims') or [] if c['conversation_id'] not in replaced]
             for row in batch_rows:
                 if rid not in row.get('v3_recording_ids', []) or row.get('deleted'):
@@ -425,11 +501,18 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
                 if {k: v for k, v in current.items() if k not in owned} != {
                     k: v for k, v in observed[rid].items() if k not in owned
                 }:
-                    raise Conflict('source_changed')
+                    # Claims are ours between batches; any other protected change still conflicts.
+                    fence = recordings[rid].get('_v3_fence')
+                    if fence is None or not speech_moved(
+                        {**recordings[rid], '_v3_fence': {**fence, 'claims': current.get('claims')}}, current
+                    ):
+                        raise Conflict('source_changed')
+                    moved.add(rid)
                 recordings[rid] = {
                     **recordings[rid],
                     'claims': current.get('claims') or [],
                     '_v3_revision': snapshot.update_time,
+                    **({'_v3_fence': source_fence(current)} if recordings[rid].get('_v3_fence') is not None else {}),
                 }
             for raw, encoded in batch:
                 snapshot = coll.document(raw['id']).get()
@@ -438,6 +521,7 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
                     if any(current.get(k) != value for k, value in encoded.items()):
                         raise Conflict('source_changed')
                     existing[raw['id']] = {**raw, '_v3_revision': snapshot.update_time}
+    return moved
 
 
 def release_claims(uid, row, *, firestore_client=None):

@@ -44,6 +44,7 @@ def entries():
             patchers=(_decode,),
         ),
         DriverEntry('database.conversations_v3.load_derive', base={'uid': SHAPE_UID}),
+        DriverEntry('database.conversations_v3_processing.pending_created', base={'uid': SHAPE_UID}),
         DriverEntry('utils.conversations.v3.service.has_pending', base={'uid': SHAPE_UID}),
         DriverEntry('utils.conversations.v3.service.pending_processing', base={'uid': SHAPE_UID}),
         DriverEntry('utils.conversations.v3.service.sweep'),

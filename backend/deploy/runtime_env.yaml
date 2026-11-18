@@ -3860,6 +3860,9 @@ environments:
             source: environment
           SYNC_TASKS_INVOKER_SA:
             source: environment
+          CONVERSATIONS_V3:
+            source: literal
+            value: 'off'
           CONVERSATIONS_V3_STAGE:
             source: literal
             value: all
@@ -4575,6 +4578,9 @@ environments:
               env_var: SYNC_TASKS_HANDLER_URL
               default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
               category: reliability
+            CONVERSATIONS_V3:
+              value: 'off'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -5134,6 +5140,9 @@ environments:
             SYNC_TASKS_QUEUE:
               value: sync-jobs-fresh
               category: reliability
+            CONVERSATIONS_V3:
+              value: 'off'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -5658,6 +5667,9 @@ environments:
             SYNC_TASKS_QUEUE:
               value: sync-backfill-fresh
               category: reliability
+            CONVERSATIONS_V3:
+              value: 'off'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -6130,6 +6142,9 @@ environments:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
+            CONVERSATIONS_V3:
+              value: 'off'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -6206,6 +6221,9 @@ environments:
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3:
+              value: 'off'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -6280,6 +6298,9 @@ environments:
               value: 'on'
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3:
+              value: 'off'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -6327,6 +6348,9 @@ environments:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3:
+              value: 'off'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -6385,6 +6409,9 @@ environments:
               value: based-hardware
             BASE_API_URL:
               value: https://api.omi.me
+            CONVERSATIONS_V3:
+              value: 'off'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
