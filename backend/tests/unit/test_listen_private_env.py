@@ -106,6 +106,16 @@ def literal_live():
     }
 
 
+def full_secret(**changes):
+    secret = {
+        "STT_CAP_DISPATCH_ENFORCEMENT": "true",
+        "STT_CAP_DISPATCH_COHORT": COHORT,
+        "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST,
+    }
+    secret.update(changes)
+    return secret
+
+
 def ref(key):
     return {"valueFrom": {"secretKeyRef": {"name": SECRET_NAME, "key": key, "optional": False}}}
 
@@ -117,15 +127,16 @@ def guard(capsys, timeout="5"):
     return rc, out.out, out.err
 
 
-def test_prod_chart_declares_only_uid_bearing_names():
+def test_prod_chart_declares_the_private_names():
     values = yaml.safe_load(PROD_VALUES.read_text())
-    assert HELPER.declared(values) == (SECRET_NAME, ["STT_CAP_DISPATCH_COHORT", "MEDIA_NOISE_MODE_SERVE_UID_SHA256S"])
+    assert HELPER.declared(values) == (
+        SECRET_NAME,
+        ["STT_CAP_DISPATCH_ENFORCEMENT", "STT_CAP_DISPATCH_COHORT", "MEDIA_NOISE_MODE_SERVE_UID_SHA256S"],
+    )
 
 
 def test_guard_passes_when_secret_matches_live_literals(cluster, capsys):
-    cluster(
-        live=literal_live(), secret={"STT_CAP_DISPATCH_COHORT": COHORT, "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST}
-    )
+    cluster(live=literal_live(), secret=full_secret())
     rc, out, _ = guard(capsys)
     assert rc == 0
     assert "key=STT_CAP_DISPATCH_COHORT effect=same" in out
@@ -142,14 +153,11 @@ def test_guard_refuses_a_changed_or_missing_value_before_any_roll(cluster, capsy
 
 
 def test_guard_after_cutover_checks_references_and_presence(cluster, capsys):
-    live = {
-        "STT_CAP_DISPATCH_COHORT": ref("STT_CAP_DISPATCH_COHORT"),
-        "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": ref("MEDIA_NOISE_MODE_SERVE_UID_SHA256S"),
-    }
-    cluster(live=live, secret={"STT_CAP_DISPATCH_COHORT": COHORT, "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST})
+    live = {key: ref(key) for key in full_secret()}
+    cluster(live=live, secret=full_secret())
     assert guard(capsys)[0] == 0
     # An emptied key would deny every capped dispatch (empty cohort with enforcement on).
-    cluster(live=live, secret={"STT_CAP_DISPATCH_COHORT": "", "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST})
+    cluster(live=live, secret=full_secret(STT_CAP_DISPATCH_COHORT=""))
     rc, out, _ = guard(capsys)
     assert rc == 2 and "key=STT_CAP_DISPATCH_COHORT effect=missing-from-secret" in out
 
@@ -200,12 +208,15 @@ def test_migrate_writes_only_the_declared_private_names(cluster, capsys, monkeyp
     fake = cluster(live=literal_live(), secret=None)
     rc, out, _ = migrate(capsys, monkeypatch, full_overlay())
     assert rc == 0, out
-    assert fake.written == {"STT_CAP_DISPATCH_COHORT": COHORT, "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST}
+    assert fake.written == {
+        "STT_CAP_DISPATCH_ENFORCEMENT": "true",
+        "STT_CAP_DISPATCH_COHORT": COHORT,
+        "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST,
+    }
     assert "version=3" in out
     for key in (
         "MEDIA_NOISE_MODE",
         "MEDIA_NOISE_MODE_SERVE_PERCENT",
-        "STT_CAP_DISPATCH_ENFORCEMENT",
         "STT_CAP_DISPATCH_LANES",
     ):
         assert f"key={key} effect=public-same" in out
@@ -215,7 +226,7 @@ def test_migrate_writes_only_the_declared_private_names(cluster, capsys, monkeyp
 @pytest.mark.parametrize(
     ("overlay", "effect"),
     [
-        (full_overlay(STT_CAP_DISPATCH_ENFORCEMENT="false"), "key=STT_CAP_DISPATCH_ENFORCEMENT effect=public-changed"),
+        (full_overlay(STT_CAP_DISPATCH_LANES="live,sync"), "key=STT_CAP_DISPATCH_LANES effect=public-changed"),
         (full_overlay(EDGE_SHADOW_TOKEN="x" * 30), "key=EDGE_SHADOW_TOKEN effect=undeclared"),
         (
             private_yaml(STT_CAP_DISPATCH_COHORT=COHORT),
@@ -246,7 +257,7 @@ def test_sync_waits_for_a_fresh_sync_after_force_sync(cluster, capsys):
 
 
 def test_guard_checks_every_serving_replicaset_not_only_the_template(cluster, capsys):
-    secret = {"STT_CAP_DISPATCH_COHORT": COHORT, "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST}
+    secret = full_secret()
     fake = cluster(live=literal_live(), secret=secret)
     older = dict(literal_live(), STT_CAP_DISPATCH_COHORT={"value": "uid:older"})
     fake.replicasets = [

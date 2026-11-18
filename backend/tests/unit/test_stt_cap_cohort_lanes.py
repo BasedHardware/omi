@@ -167,14 +167,14 @@ def test_original_hold_mapping(meta, lane):
 
 def test_runtime_manifests_are_live_only_with_prod_api_and_sync_enforcement():
     # Prod recovery runs only when API (backend) and backend-sync both enforce;
-    # prod listen also enforces (live since 2026-10-20, folded from the retired
-    # privateEnv overlay, lead2 4e5e71/45689e) and reads its uid-bearing env
-    # cohort from Secret Manager; every other host stays dark with an empty
-    # manifest cohort (runtime-doc driven), and lanes are live-only everywhere.
+    # every other host stays dark, and the cohort is runtime-doc driven (empty
+    # in the manifest) with lanes live-only everywhere. Prod listen's enforcement
+    # and env cohort are private Secret Manager references (privateSecretEnv), so
+    # the manifest names the reference, never a value.
     root = Path(__file__).parents[2]
     manifest = yaml.load((root / 'deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
-    prod_enforcing = {f'cloud_run:{service}' for service in ('backend', 'backend-sync')} | {'gke:backend-listen'}
-    private_cohort = {'secret': {'name': 'prod-omi-backend-listen-private-env', 'key': 'STT_CAP_DISPATCH_COHORT'}}
+    prod_enforcing = {f'cloud_run:{service}' for service in ('backend', 'backend-sync')}
+    private = lambda key: {'secret': {'name': 'prod-omi-backend-listen-private-env', 'key': key}}
     for env in ('dev', 'prod'):
         config = manifest['environments'][env]
         hosts = [
@@ -186,10 +186,11 @@ def test_runtime_manifests_are_live_only_with_prod_api_and_sync_enforcement():
         for name, host in hosts:
             enforcing = str(env == 'prod' and name in prod_enforcing).lower()
             values = host['env']
-            assert values['STT_CAP_DISPATCH_ENFORCEMENT']['value'] == enforcing
             if env == 'prod' and name == 'gke:backend-listen':
-                assert values['STT_CAP_DISPATCH_COHORT'] == private_cohort
+                for key in ('STT_CAP_DISPATCH_ENFORCEMENT', 'STT_CAP_DISPATCH_COHORT'):
+                    assert values[key] == private(key)
             else:
+                assert values['STT_CAP_DISPATCH_ENFORCEMENT']['value'] == enforcing
                 assert values['STT_CAP_DISPATCH_COHORT']['value'] == ''
             assert values['STT_CAP_DISPATCH_LANES']['value'] == 'live'
 

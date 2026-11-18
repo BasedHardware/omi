@@ -1,9 +1,11 @@
 # Private backend-listen env (Secret Manager)
 
-Private listen env values are uid-bearing (for example the STT cap fallback
-cohort `STT_CAP_DISPATCH_COHORT` and the media/noise digest serve list
-`MEDIA_NOISE_MODE_SERVE_UID_SHA256S`). Their **names** live in Git; their
-**values** live only in Secret Manager.
+Private listen env values are the uid-bearing STT cap fallback cohort
+`STT_CAP_DISPATCH_COHORT` and media/noise digest serve list
+`MEDIA_NOISE_MODE_SERVE_UID_SHA256S`, plus `STT_CAP_DISPATCH_ENFORCEMENT`, which
+stays private by ruling (lead2 4e5e71/45689e, b2cf73) so that a code deploy can
+never change it. Their **names** live in Git; their **values** live only in
+Secret Manager.
 
 | piece | where |
 |---|---|

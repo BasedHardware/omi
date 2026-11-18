@@ -106,6 +106,7 @@ envFrom:
 privateSecretEnv:
   secretName: prod-omi-backend-listen-private-env
   keys:
+    - STT_CAP_DISPATCH_ENFORCEMENT
     - STT_CAP_DISPATCH_COHORT
     - MEDIA_NOISE_MODE_SERVE_UID_SHA256S
 
@@ -198,11 +199,9 @@ env:
   # Production retirement; false restores the old routes only after GPUs are ready.
   - name: STT_GPU_FLEET_OFF
     value: "true"
-  # Funded cap admission stays on for listen (lead2 4e5e71/45689e: a roll must not relax spend
-  # control). Live true since 2026-10-20 through the retired privateEnv overlay; folded unchanged.
-  # STT_CAP_DISPATCH_COHORT is private: see privateSecretEnv above.
-  - name: STT_CAP_DISPATCH_ENFORCEMENT
-    value: "true"
+  # STT_CAP_DISPATCH_ENFORCEMENT and STT_CAP_DISPATCH_COHORT are private (privateSecretEnv above;
+  # enforcement by ruling, lead2 4e5e71/45689e, b2cf73): no public literal, so none can be mistaken
+  # for the live value.
   - name: STT_CAP_DISPATCH_LANES
     value: "live"
   # Media/noise classifier: live shadow/0 (folded 2026-11-18, unchanged). The digest serve list is

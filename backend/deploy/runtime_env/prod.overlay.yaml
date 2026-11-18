@@ -46,10 +46,13 @@ overlay:
     backend-listen:
       env:
         # Mirrors the listen chart (2026-11-18 fold of live values).
-        # Funded cap admission stays on for listen (lead2 4e5e71/45689e), live since 2026-10-20.
-        STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
-        # Private (uid-bearing): names only; values are the Secret Manager document
-        # LISTEN_PRIVATE_ENV synced by the backend-secrets chart (listen chart privateSecretEnv).
+        # Private: names only; values are the Secret Manager document LISTEN_PRIVATE_ENV
+        # synced by the backend-secrets chart (listen chart privateSecretEnv). Enforcement
+        # stays private by ruling (lead2 4e5e71/45689e, b2cf73); the cohort and digests are uid-bearing.
+        STT_CAP_DISPATCH_ENFORCEMENT:
+          secret:
+            name: prod-omi-backend-listen-private-env
+            key: STT_CAP_DISPATCH_ENFORCEMENT
         STT_CAP_DISPATCH_COHORT:
           secret:
             name: prod-omi-backend-listen-private-env
