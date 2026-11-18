@@ -86,16 +86,56 @@ async def test_deterministic_conflict_answers_the_task_and_backs_the_owner_off(b
 
 
 @pytest.mark.asyncio
-async def test_race_conflicts_still_raise_for_a_task_retry(builder, monkeypatch):
+@pytest.mark.parametrize('reason', ['source_changed', 'lease_lost'])
+async def test_live_capture_race_answers_the_task_and_wakes_the_owner_next_minute(builder, monkeypatch, reason):
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': source()}, {}, []))
+
+    def conflict(*a, **kw):
+        raise Conflict(reason)
+
+    monkeypatch.setattr(service, '_commit', conflict)
+    monkeypatch.setattr(store, 'record_blocked', lambda *a: pytest.fail('a race is not a blocked owner'))
+    wakes = []
+    monkeypatch.setattr(service, 'enqueue', lambda uid, at=None, **kw: wakes.append((uid, at, kw)))
+    raced = service.metrics.RACES.labels(reason)._value.get()
+    outcomes = service.metrics.RECONCILES.labels('raced')._value.get()
+    before = datetime.now(timezone.utc)
+    assert await service.reconcile('u') == 'raced'
+    # One coalesced named wake for a later minute than the executing task's, never a 500 retry.
+    assert len(wakes) == 1 and wakes[0][0] == 'u' and wakes[0][2] == {}
+    assert int(wakes[0][1].timestamp()) // 60 > int(before.timestamp()) // 60
+    assert wakes[0][1] - before <= service.RACE_RETRY + timedelta(seconds=5)
+    assert service.metrics.RACES.labels(reason)._value.get() == raced + 1
+    assert service.metrics.RECONCILES.labels('raced')._value.get() == outcomes + 1
+
+
+@pytest.mark.asyncio
+async def test_race_without_a_scheduled_wake_still_raises_for_a_task_retry(builder, monkeypatch):
     monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': source()}, {}, []))
 
     def conflict(*a, **kw):
         raise Conflict('source_changed')
 
+    def unavailable(*a, **kw):
+        raise RuntimeError('conversations_v3_task_target_unconfigured')
+
     monkeypatch.setattr(service, '_commit', conflict)
-    monkeypatch.setattr(store, 'record_blocked', lambda *a: pytest.fail('a race is not a blocked owner'))
-    with pytest.raises(Conflict):
+    monkeypatch.setattr(service, 'enqueue', unavailable)
+    with pytest.raises(Conflict, match='source_changed'):
         await service.reconcile('u')
+
+
+@pytest.mark.asyncio
+async def test_backfill_race_still_raises_for_its_own_task_retry(builder, monkeypatch):
+    monkeypatch.setattr(store, 'load_derive', lambda *a, **kw: ({'r': source()}, {}, []))
+
+    def conflict(*a, **kw):
+        raise Conflict('source_changed')
+
+    monkeypatch.setattr(service, '_commit', conflict)
+    monkeypatch.setattr(service, 'enqueue', lambda *a, **kw: pytest.fail('backfill owns its own retry'))
+    with pytest.raises(Conflict):
+        await service.reconcile('u', derive=True)
 
 
 @pytest.mark.asyncio

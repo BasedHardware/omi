@@ -1,6 +1,6 @@
 """Synthetic v3 switch, read boundaries, capture and released-wire contracts."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import importlib.util
@@ -44,32 +44,92 @@ def test_manual_end_wake_survives_a_completed_live_task_in_same_minute(monkeypat
 
 
 @pytest.mark.parametrize(
-    'stage,seen,cohort,expected',
+    'stage,seen,capable,cohort,expected',
     [
-        ('beta', False, False, False),
-        ('beta', True, False, True),
-        ('cohort', True, False, False),
-        ('cohort', False, True, True),
-        ('all', False, False, True),
-        ('invalid', True, False, False),
+        ('beta', False, False, False, False),
+        ('beta', True, True, False, True),
+        # A stale episodes marker from a pre-v3 store build is not v3 capability.
+        ('beta', True, False, False, False),
+        # The capability marker alone does not widen beta past TestFlight.
+        ('beta', False, True, False, False),
+        ('beta', False, False, True, True),
+        ('cohort', True, True, False, False),
+        ('cohort', False, False, True, True),
+        # all admits any owner with a v3-capable app, never an owner whose apps all predate v3.
+        ('all', False, False, False, False),
+        ('all', False, True, False, True),
+        ('all', True, False, False, False),
+        ('all', False, False, True, True),
+        ('invalid', True, True, False, False),
     ],
 )
-def test_switch_is_per_owner_not_device(monkeypatch, stage, seen, cohort, expected):
+def test_switch_is_per_owner_not_device(monkeypatch, stage, seen, capable, cohort, expected):
     monkeypatch.setenv('CONVERSATIONS_V3_STAGE', stage)
     monkeypatch.delenv('CONVERSATIONS_V3', raising=False)
     monkeypatch.setattr(switch.client_gate, 'client_seen_cached', lambda uid: seen)
+    monkeypatch.setattr(switch.client_capability, 'capable_cached', lambda uid: capable)
     monkeypatch.setattr(switch, 'in_rollout_cohort', lambda uid, key: cohort)
     assert switch.conversations_v3_enabled('synthetic') is expected
     monkeypatch.setenv('CONVERSATIONS_V3', 'off')
     assert switch.conversations_v3_enabled('synthetic') is False
 
 
-def test_beta_call_refreshes_marker_before_v3_check(monkeypatch):
+@pytest.mark.parametrize('channel,expected', [('beta', ['seen', 'capable', 'check']), ('store', ['capable', 'check'])])
+def test_live_call_marks_capability_before_v3_check(monkeypatch, channel, expected):
     calls = []
     monkeypatch.setattr(routes.client_gate, 'note_client_seen', lambda uid: calls.append('seen'))
+    monkeypatch.setattr(routes.v3_client_capability, 'note_capable', lambda uid: calls.append('capable'))
     monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: calls.append('check') or False)
-    assert routes.get_live_conversation('synthetic', 'beta') == {'v3': False, 'conversation': None}
-    assert calls == ['seen', 'check']
+    assert routes.get_live_conversation('synthetic', channel) == {'v3': False, 'conversation': None}
+    assert calls == expected
+
+
+class _FakeRedis:
+    def __init__(self):
+        self.store, self.sets, self.fail = {}, [], False
+
+    def set(self, key, value, ex=None):
+        if self.fail:
+            raise ConnectionError('redis down')
+        self.sets.append((key, ex))
+        self.store[key] = value
+
+    def exists(self, key):
+        if self.fail:
+            raise ConnectionError('redis down')
+        return 1 if key in self.store else 0
+
+
+def test_capability_marker_refreshes_hourly_and_fails_closed(monkeypatch):
+    from database import redis_db
+    from utils.conversations.v3 import client_capability as capability
+
+    fake = _FakeRedis()
+    monkeypatch.setattr(redis_db, 'r', fake)
+    capability.reset_for_tests()
+    assert capability.capable_cached('u', now=0) is False
+    capability.note_capable('u', now=10)
+    # The noting process admits at once, despite its cached miss.
+    assert capability.capable_cached('u', now=11) is True
+    capability.note_capable('u', now=20)
+    assert fake.sets == [('conversations_v3:client_capable:u', capability.TTL_SECONDS)]
+    capability.note_capable('u', now=10 + capability.REFRESH_SECONDS)
+    assert len(fake.sets) == 2
+    # Another process (empty cache) reads the shared marker.
+    capability.reset_for_tests()
+    assert capability.capable_cached('u', now=0) is True
+    capability.reset_for_tests()
+    fake.fail = True
+    capability.note_capable('v', now=0)  # never raises
+    # A failed write does not make this process answer v3 for an owner the shared marker lacks.
+    assert capability.capable_cached('v', now=1) is False
+    capability.reset_for_tests()
+    assert capability.capable_cached('u', now=0) is False  # read error fails closed
+    fake.fail = False
+    assert capability.capable_cached('u', now=1) is False  # and the miss is cached briefly
+    capability.note_capable('v', now=2)  # a failed write is retried, not memoized
+    assert fake.sets[-1][0] == 'conversations_v3:client_capable:v'
+    capability.reset_for_tests()
 
 
 @pytest.mark.parametrize('include', [False, True])
@@ -289,6 +349,35 @@ def test_cursor_refills_after_recording_and_hidden_rows(include_recordings, hide
     assert last.id == expected
 
 
+def _open_row(cid, last, **extra):
+    return {'id': cid, 'status': 'in_progress', 'created_at': last, 'started_at': last, 'finished_at': last, **extra}
+
+
+def test_live_skips_a_capture_that_never_closed(monkeypatch):
+    now = datetime.now(timezone.utc)
+    seen = {}
+
+    def rows(*a, **kw):
+        seen.update(kw)
+        return seen['rows']
+
+    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setattr(db, 'get_conversations_without_photos', rows)
+    stale = _open_row('stale', now - routes.v3_live.MAX_IDLE - timedelta(minutes=1))
+    # Only a days-old open row: nothing is in progress, so the client keeps its capture card.
+    seen['rows'] = [stale]
+    assert routes.get_live_conversation('u', 'beta') == {'v3': True, 'conversation': None}
+    assert seen['limit'] == routes.v3_live.SCAN and seen['statuses'] == ['in_progress']
+    # A newer stale stub sorts first; the open conversation behind it is still the live row.
+    seen['rows'] = [stale, _open_row('rec', now, recording=True), _open_row('open', now - timedelta(minutes=10))]
+    assert routes.get_live_conversation('u', 'beta')['conversation']['id'] == 'open'
+    # Naive stored times read as UTC; a row with no time at all is not served.
+    seen['rows'] = [_open_row('naive', now.replace(tzinfo=None))]
+    assert routes.get_live_conversation('u', 'beta')['conversation']['id'] == 'naive'
+    seen['rows'] = [{'id': 'bare', 'status': 'in_progress'}]
+    assert routes.get_live_conversation('u', 'beta')['conversation'] is None
+
+
 @pytest.mark.parametrize('recording', [False, True])
 def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording):
     monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
@@ -298,9 +387,9 @@ def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording):
         lambda *a, **kw: [
             {
                 'id': 'c',
-                'started_at': datetime(2026, 11, 16, tzinfo=timezone.utc),
+                'started_at': datetime.now(timezone.utc),
                 'status': 'in_progress',
-                'created_at': datetime(2026, 11, 16, tzinfo=timezone.utc),
+                'created_at': datetime.now(timezone.utc),
                 'recording': recording,
                 'transcript_segments': [{'text': 'private capture'}],
                 'structured': {'title': 'Plan', 'emoji': '🌳', 'overview': 'omit'},

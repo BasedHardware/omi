@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace, MethodType
 from unittest.mock import MagicMock, AsyncMock
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 import pytest
 
 from database import conversation_tombstones as tombstones
@@ -75,6 +75,7 @@ class Ref:
 
 def function(path, name, namespace):
     if path == 'routers/conversations.py' and name == 'delete_conversation':
+        namespace['Response'] = Response
         namespace['nullcontext'] = nullcontext
         namespace['ExitStack'] = ExitStack
         namespace.setdefault('accepts_conversation_deletes', lambda: False)
@@ -146,7 +147,7 @@ def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_
     delete = function('routers/conversations.py', 'delete_conversation', namespace)
     # The handler returns no body: the route is 204 No Content, the contract the
     # released mobile client gates on (test_conversation_delete_wire_contract.py).
-    assert delete('c', MagicMock(), False, None, 'u') is None
+    assert delete('c', MagicMock(), False, None, 'u').status_code == 204
     assert calls == [('prompt', True), ('parent', True)]
     audio.assert_not_called()
 
@@ -199,7 +200,7 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         assert 'users/u/conversations/c' in store.rows
     else:
         tasks = MagicMock()
-        assert delete('c', tasks, True, None, 'u') is None
+        assert delete('c', tasks, True, None, 'u').status_code == 204
         tasks.add_task.assert_called_once_with(
             namespace['delete_privacy_conversation_audio'], 'u', 'c', source_ids=['donor']
         )

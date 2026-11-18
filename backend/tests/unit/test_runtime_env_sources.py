@@ -90,3 +90,15 @@ def test_shared_v3_settings_are_public_runtime_configuration(name):
         for service in env['cloud_run']['services'].values():
             assert name in service['env']
             assert name not in service.get('secrets', {})
+
+
+def test_prod_v3_kill_switch_reaches_every_writer():
+    manifest = COMPOSER['compose_manifest']()
+    prod = manifest['environments']['prod']
+    values = {service['env']['CONVERSATIONS_V3']['value'] for service in prod['cloud_run']['services'].values()}
+    for job in prod['cloud_run'].get('jobs', {}).values():
+        if isinstance(job, dict):
+            values.add(job['env']['CONVERSATIONS_V3']['value'])
+    values.add(prod['gke']['config_map']['entries']['CONVERSATIONS_V3']['value'])
+    assert len(values) == 1 and values <= {'on', 'off'}
+    assert 'CONVERSATIONS_V3' not in manifest['environments']['dev']['gke']['config_map']['entries']

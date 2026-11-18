@@ -1225,6 +1225,7 @@
     "enterYourName": "Ilagay ang iyong pangalan",
     "nameCannotBeEmpty": "Ang pangalan ay hindi maaaring walang laman",
     "nameUpdatedSuccessfully": "Ang pangalan ay na-update na!",
+    "calendarReadSelectionHelp": "Basahin ang mga napiling kalendaryo. Gagamit ang mga bagong event ng {calendar}.",
     "calendarSettings": "Mga setting ng Calendar",
     "calendarProviders": "Mga Calendar Provider",
     "macOsCalendar": "macOS Calendar",

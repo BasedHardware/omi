@@ -389,8 +389,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA",
             "PUBLIC_SHARED_CONVERSATION_CHAT_MODE",
             "REFERRAL_PUBLIC_BASE_URL",
-            "SYNC_TASKS_LOCATION",
-            "SYNC_TASKS_PROJECT",
             "TRANSLATION_SERVICE_MODELS",
             # HTTP read-aloud routers mount only on backend-listen, not pusher.
             "TTS_PROVIDER",

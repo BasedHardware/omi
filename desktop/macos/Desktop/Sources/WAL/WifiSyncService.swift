@@ -452,7 +452,7 @@ final class WifiSyncService: ObservableObject {
     guard let wal = currentWal else { return }
 
     // Save downloaded data
-    activeWalService.updateWalWithDownloadedData(
+    await activeWalService.updateWalWithDownloadedData(
       walId: wal.id,
       downloadedBytes: totalBytesDownloaded,
       frames: downloadedFrames

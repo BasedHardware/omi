@@ -148,6 +148,11 @@ env:
     value: "true"
   - name: CONVERSATION_NOTES_SCALED_DETAIL_ENABLED
     value: "true"
+  # Cloud Tasks binding for the conversations v3 reconcile dispatch (same values as backend-listen).
+  - name: SYNC_TASKS_PROJECT
+    value: "based-hardware"
+  - name: SYNC_TASKS_LOCATION
+    value: "us-central1"
   - name: CONVERSATIONS_V3_STAGE
     valueFrom:
       configMapKeyRef: {name: prod-omi-backend-config, key: CONVERSATIONS_V3_STAGE}

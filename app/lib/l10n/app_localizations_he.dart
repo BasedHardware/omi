@@ -1116,6 +1116,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'השם עודכן בהצלחה!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'קריאת היומנים שנבחרו. אירועים חדשים משתמשים ב־$calendar.';
+  }
+
+  @override
   String get calendarSettings => 'הגדרות קלנדר';
 
   @override

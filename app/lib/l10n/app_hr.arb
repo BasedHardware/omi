@@ -1225,6 +1225,7 @@
     "enterYourName": "Unesite svoje ime",
     "nameCannotBeEmpty": "Ime ne može biti prazno",
     "nameUpdatedSuccessfully": "Ime uspješno ažurirano!",
+    "calendarReadSelectionHelp": "Čitaj odabrane kalendare. Novi događaji koriste {calendar}.",
     "calendarSettings": "Postavke kalendara",
     "calendarProviders": "Pružatelji Kalendara",
     "macOsCalendar": "macOS Kalendar",

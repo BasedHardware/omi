@@ -59,6 +59,8 @@ HELD_PARTIAL_TICK_SECONDS = 20.0
 # + the query read; steady replays cost 14).
 HELD_PARTIAL_READS_PER_HOUR = 120_000
 HELD_PARTIAL_READS_PER_UNIT = 16
+# One lookup and one normal CAS read per sweep segment. Charge retries after execution.
+HELD_PARTIAL_CHECKPOINT_READ_RESERVE = 2
 HELD_PARTIAL_WINDOW_SECONDS = 3600.0
 # Re-examine landed targets at most once per minute on the maintenance leader.
 # One page has its own inter-row time budget, so fresh projection resumes.
@@ -265,7 +267,8 @@ class Serving:
             charged for charged in self.held_partial_reads if now - charged[0] < HELD_PARTIAL_WINDOW_SECONDS
         ]
         spent = sum(reads for _, reads in self.held_partial_reads)
-        return (HELD_PARTIAL_READS_PER_HOUR - spent) // (HELD_PARTIAL_PAGE * HELD_PARTIAL_READS_PER_UNIT)
+        remaining = max(0, HELD_PARTIAL_READS_PER_HOUR - spent - HELD_PARTIAL_CHECKPOINT_READ_RESERVE)
+        return remaining // (HELD_PARTIAL_PAGE * HELD_PARTIAL_READS_PER_UNIT)
 
     def _log_held_partial_segment(self, counts: dict, segment_started: float, budget_pages: int) -> None:
         """One INFO line per sweep segment; a wrapped scan closes the pass with
@@ -298,8 +301,9 @@ class Serving:
         )
         if not counts.get('more'):
             logging.getLogger(__name__).info(
-                'event=batch_held_partial action=pass outcome=completed segments=%d pages=%d units=%d partial=%d '
+                'event=batch_held_partial action=pass outcome=%s segments=%d pages=%d units=%d partial=%d '
                 'waiting=%d error=%d reads=%d pass_seconds=%.1f',
+                'cursor_unconfirmed' if counts.get('wrap_unconfirmed') else 'completed',
                 self.held_pass_segments,
                 self.held_pass_counts['pages'],
                 self.held_pass_counts['units'],

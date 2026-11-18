@@ -1131,6 +1131,11 @@ class AppLocalizationsCa extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nom actualitzat correctament!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Llegeix els calendaris seleccionats. Els esdeveniments nous utilitzen $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Configuració del calendari';
 
   @override

@@ -99,6 +99,8 @@ run_proof "summary task recovery, concurrency and expiry" \
   "$PYTHON" -m pytest \
   tests/integration/test_summary_task_promotion_emulator.py \
   tests/integration/test_candidate_accept_expiry_emulator.py -q
+run_proof "desktop screen sync frame request delivery, expiry and quota" \
+  "$PYTHON" -m pytest -q tests/integration/test_screen_sync_frame_queue_emulator.py
 
 # Silent receipts can become ready at assignment; keep the paginated follow-up
 # and mixed-completion read guards in the hosted emulator acceptance suite.
@@ -106,6 +108,9 @@ run_proof "batch projection follow-up (silent ready, rollback and mixed completi
   "$PYTHON" -m pytest -q -p no:cacheprovider \
   tests/integration/test_batch_pipeline_projection_followup_firestore.py \
   tests/integration/test_batch_pipeline_silence_sizing_firestore.py
+
+run_proof "held-partial cursor concurrency (advance and wrap fence)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_held_partial_cursor_emulator.py
 
 run_proof "projection ghost-hold release gaps and ready-hint repair follow-up" \
   "$PYTHON" -m pytest -q -rxX -p no:cacheprovider \
@@ -191,6 +196,10 @@ run_proof "pending deletion and restore conformance (sim + emulator required)" \
 run_proof "provider merge conformance (sim + emulator required; Postgres when available)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/provider_merge_emulator_test.py
+
+run_proof "stale merge-head promotion (real transactions, privacy fence, stale hints, demotion)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/merge_stale_head_emulator_test.py
 
 run_proof "Firestore read budget: batch unit end-to-end (M3 scenario 1)" \
   "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_batch_unit.py

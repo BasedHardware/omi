@@ -271,10 +271,32 @@ export interface AcpRuntimeAdapterOptions {
   sessionMcpServersMode?: "passthrough" | "empty";
   supportsSessionSetModel?: boolean;
   noProgressTimeoutMs?: number;
+  /**
+   * How long `stop()` waits for SIGTERM before escalating to SIGKILL, and then
+   * how long it waits for SIGKILL to take effect. Kept below the worker pool's
+   * own bounded stop wait so a healthy process is actually torn down instead of
+   * being abandoned while still running.
+   */
+  stopGraceTimeoutMs?: number;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS = 150_000;
+export const DEFAULT_ACP_STOP_GRACE_TIMEOUT_MS = 2_000;
+
+function waitForExitOrTimeout(exit: Promise<void>, timeoutMs: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, Math.max(0, timeoutMs));
+    void exit.then(finish);
+  });
+}
 
 function parsePositiveInt(value: string | undefined): number | undefined {
   if (!value) return undefined;
@@ -302,6 +324,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   private readonly sessionMcpServersMode: "passthrough" | "empty";
   private readonly supportsSessionSetModel: boolean;
   private readonly noProgressTimeoutMs: number;
+  private readonly stopGraceTimeoutMs: number;
 
   constructor(options: AcpRuntimeAdapterOptions = {}) {
     this.adapterId = options.adapterId ?? "acp";
@@ -317,6 +340,9 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     this.noProgressTimeoutMs = options.noProgressTimeoutMs
       ?? parsePositiveInt(process.env.OMI_ACP_NO_PROGRESS_TIMEOUT_MS)
       ?? (this.adapterId === "hermes" || this.adapterId === "openclaw" ? DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS : 0);
+    this.stopGraceTimeoutMs = options.stopGraceTimeoutMs
+      ?? parsePositiveInt(process.env.OMI_ACP_STOP_GRACE_TIMEOUT_MS)
+      ?? DEFAULT_ACP_STOP_GRACE_TIMEOUT_MS;
   }
 
   async start(): Promise<void> {
@@ -367,22 +393,9 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       });
     }
     const proc = this.process;
-    let finalized = false;
     let recentStderr = "";
     const finalizeProcess = (error: Error): void => {
-      if (finalized || this.process !== proc) return;
-      finalized = true;
-      this.log(error.message);
-      this.process = null;
-      this.stdinWriter = null;
-      this.readline = null;
-      this.initialized = false;
-      this.initializePromise = null;
-      for (const [, handler] of this.responseHandlers) {
-        handler.reject(error);
-      }
-      this.responseHandlers.clear();
-      this.onProcessExit?.();
+      this.teardownProcess(proc, error);
     };
 
     if (!proc.stdin || !proc.stdout || !proc.stderr) {
@@ -428,28 +441,86 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     });
   }
 
+  /**
+   * Detaches a process that will not exit and rejects every in-flight request.
+   * This is what keeps a surviving subprocess from being inherited by a later
+   * `start()`: the adapter forgets it and the next worker spawns a fresh one.
+   */
+  private teardownProcess(proc: ChildProcess, error: Error): void {
+    if (this.process !== proc) return;
+    this.log(error.message);
+    this.process = null;
+    this.stdinWriter = null;
+    this.readline = null;
+    this.initialized = false;
+    this.initializePromise = null;
+    for (const [, handler] of this.responseHandlers) {
+      handler.reject(error);
+    }
+    this.responseHandlers.clear();
+    this.onProcessExit?.();
+  }
+
   async stop(): Promise<void> {
-    if (!this.process) return;
     const proc = this.process;
+    if (!proc) return;
+    let exited = false;
     const exitPromise = new Promise<void>((resolve) => {
-      proc.once("exit", () => resolve());
+      proc.once("exit", () => {
+        exited = true;
+        resolve();
+      });
     });
     // For shell-spawned external commands (detached process group), send the
     // signal to the entire group so the real adapter child is terminated too.
-    try {
-      if (proc.pid) {
-        process.kill(-proc.pid, "SIGTERM");
+    const signalProcess = (signal: NodeJS.Signals): void => {
+      try {
+        if (proc.pid) {
+          process.kill(-proc.pid, signal);
+          return;
+        }
+      } catch {
+        // ESRCH/EPERM — fall back to the direct child handle.
       }
-    } catch {
-      // EPERM/E SRCH — fall back to direct kill.
-      proc.kill();
+      try {
+        proc.kill(signal);
+      } catch {
+        // The process is already gone; `exit` (or the timeout below) settles.
+      }
+    };
+
+    signalProcess("SIGTERM");
+    if (this.stopGraceTimeoutMs > 0) {
+      await waitForExitOrTimeout(exitPromise, this.stopGraceTimeoutMs);
     }
-    await exitPromise;
+    if (!exited) {
+      // A subprocess that ignores SIGTERM must not survive to be reused by a
+      // replacement worker. Escalate, then detach if even SIGKILL is not
+      // observed so the next `start()` cannot silently adopt it.
+      this.log(
+        `${this.adapterId} ACP subprocess ignored SIGTERM for ${this.stopGraceTimeoutMs}ms; sending SIGKILL`,
+      );
+      signalProcess("SIGKILL");
+      await waitForExitOrTimeout(exitPromise, Math.max(this.stopGraceTimeoutMs, 250));
+    }
+    if (!exited) {
+      const error = new Error(
+        `${this.adapterId} ACP subprocess did not exit after SIGKILL; detaching it`,
+      );
+      this.teardownProcess(proc, error);
+      throw error;
+    }
   }
 
   async restart(): Promise<void> {
     if (this.process) {
-      await this.stop();
+      try {
+        await this.stop();
+      } catch (error) {
+        // Bounded stop reports a child that could not be killed after detaching
+        // it. A fresh process is still safe; never reuse a child still owned here.
+        if (this.process) throw error;
+      }
     }
     await this.start();
   }
@@ -568,8 +639,15 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     let syntheticToolIdCounter = 0;
     const previousHandler = this.notificationHandler;
     let lastProgressAt = Date.now();
-    this.notificationHandler = (method, params) => {
+    let handlerReleased = false;
+    const attemptHandler: AcpNotificationHandler = (method, params) => {
+      // Deliver to any outer handler first so chained observers keep receiving
+      // notifications even while a newer attempt owns the stream.
       previousHandler?.(method, params);
+      // Handler ownership is fenced: only the newest attempt may consume the
+      // shared adapter's notification stream. A late abandoned attempt must
+      // never swallow updates that belong to its replacement.
+      if (this.notificationHandler !== attemptHandler) return;
       if (signal.aborted || method !== "session/update") return;
       const updateSessionId = (params as { sessionId?: unknown } | undefined)?.sessionId;
       if (typeof updateSessionId === "string" && updateSessionId !== adapterSessionId) {
@@ -590,6 +668,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         lastProgressAt = Date.now();
       }
     };
+    this.notificationHandler = attemptHandler;
 
     try {
       const promptRequest = this.request("session/prompt", {
@@ -637,7 +716,15 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         cacheWriteTokens: result.usage?.cachedWriteTokens ?? 0,
       };
     } finally {
-      this.notificationHandler = previousHandler;
+      // Restore only if this attempt still owns the handler. A newer attempt
+      // may already have installed its own; overwriting it here was the bug
+      // that silently muted the follow-up run.
+      if (!handlerReleased) {
+        handlerReleased = true;
+        if (this.notificationHandler === attemptHandler) {
+          this.notificationHandler = previousHandler;
+        }
+      }
     }
   }
 
