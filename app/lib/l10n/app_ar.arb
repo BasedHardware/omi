@@ -352,6 +352,7 @@
     "enterYourName": "أدخل اسمك",
     "nameCannotBeEmpty": "لا يمكن أن يكون الاسم فارغاً",
     "nameUpdatedSuccessfully": "تم تحديث الاسم بنجاح!",
+    "calendarReadSelectionHelp": "اقرأ التقاويم المحددة. تستخدم الأحداث الجديدة {calendar}.",
     "calendarSettings": "إعدادات التقويم",
     "calendarProviders": "موفرو التقويم",
     "macOsCalendar": "تقويم macOS",

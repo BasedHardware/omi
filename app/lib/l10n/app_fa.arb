@@ -1225,6 +1225,7 @@
     "enterYourName": "نام خود را وارد کنید",
     "nameCannotBeEmpty": "نام نمی‌تواند خالی باشد",
     "nameUpdatedSuccessfully": "نام با موفقیت به‌روزرسانی شد!",
+    "calendarReadSelectionHelp": "تقویم‌های انتخاب‌شده خوانده می‌شوند. رویدادهای جدید از {calendar} استفاده می‌کنند.",
     "calendarSettings": "تنظیمات تقویم",
     "calendarProviders": "ارائه‌دهندگان تقویم",
     "macOsCalendar": "تقویم macOS",

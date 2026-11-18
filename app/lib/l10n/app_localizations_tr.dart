@@ -1126,6 +1126,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'İsim başarıyla güncellendi!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Seçili takvimleri oku. Yeni etkinlikler $calendar takvimini kullanır.';
+  }
+
+  @override
   String get calendarSettings => 'Takvim ayarları';
 
   @override

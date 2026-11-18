@@ -1130,6 +1130,11 @@ class AppLocalizationsTl extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Ang pangalan ay na-update na!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Basahin ang mga napiling kalendaryo. Gagamit ang mga bagong event ng $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Mga setting ng Calendar';
 
   @override

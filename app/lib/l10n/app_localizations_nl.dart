@@ -1126,6 +1126,11 @@ class AppLocalizationsNl extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Naam succesvol bijgewerkt!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Geselecteerde agenda’s lezen. Nieuwe afspraken gebruiken $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Agenda-instellingen';
 
   @override

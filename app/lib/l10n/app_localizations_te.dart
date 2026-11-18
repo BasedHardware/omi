@@ -1126,6 +1126,11 @@ class AppLocalizationsTe extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'పేరు విజయవంతంగా నవీకరించబడింది!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'ఎంచుకున్న క్యాలెండర్‌లను చదవండి. కొత్త ఈవెంట్‌లు $calendarను ఉపయోగిస్తాయి.';
+  }
+
+  @override
   String get calendarSettings => 'క్యాలెండర్ సెట్టింగ్‌లు';
 
   @override

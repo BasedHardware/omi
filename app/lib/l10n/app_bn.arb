@@ -1225,6 +1225,7 @@
     "enterYourName": "আপনার নাম লিখুন",
     "nameCannotBeEmpty": "নাম খালি থাকতে পারে না",
     "nameUpdatedSuccessfully": "নাম সফলভাবে আপডেট করা হয়েছে!",
+    "calendarReadSelectionHelp": "নির্বাচিত ক্যালেন্ডার পড়ুন। নতুন ইভেন্টে {calendar} ব্যবহার হবে।",
     "calendarSettings": "ক্যালেন্ডার সেটিংস",
     "calendarProviders": "ক্যালেন্ডার প্রদানকারীরা",
     "macOsCalendar": "macOS ক্যালেন্ডার",

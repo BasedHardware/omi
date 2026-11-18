@@ -352,6 +352,7 @@
     "enterYourName": "Introduïu el vostre nom",
     "nameCannotBeEmpty": "El nom no pot estar buit",
     "nameUpdatedSuccessfully": "Nom actualitzat correctament!",
+    "calendarReadSelectionHelp": "Llegeix els calendaris seleccionats. Els esdeveniments nous utilitzen {calendar}.",
     "calendarSettings": "Configuració del calendari",
     "calendarProviders": "Proveïdors de calendari",
     "macOsCalendar": "Calendari de macOS",
