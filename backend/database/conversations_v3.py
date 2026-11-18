@@ -847,6 +847,13 @@ def deleted_after_backfill(donor):
     return any(s.get('conversation_id') not in before for s in donor.get('deleted_spans') or [])
 
 
+def deleted_copy_ids(uid, ids, *, firestore_client=None):
+    """Copy ids that now have a deletion tombstone (ids and existence only)."""
+    client = firestore_client or get_firestore_client()
+    tombstones = client.collection('users').document(uid).collection('deleted_conversations')
+    return [cid for cid in ids if tombstones.document(cid).get().exists]
+
+
 def undo_backfill_group(uid, token, donor_ids, row_ids, *, firestore_client=None):
     """Undo one connected group of a run in one transaction: restore its donors exactly, remove its copies.
 

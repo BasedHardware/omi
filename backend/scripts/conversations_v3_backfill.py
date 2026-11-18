@@ -138,6 +138,7 @@ def cmd_run(args) -> int:
             print(
                 f'{label} skipped: a run is planned, running, blocked or undoing; resume or undo it first (see status)'
             )
+            status = 1
             continue
         try:
             counts, partitions, estimate = plan_owner(uid, label, since, until, args.mode)

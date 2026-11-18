@@ -218,7 +218,10 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --m
   hidden or doubled partway. It writes no tombstones and touches no audio. A group in which the owner
   deleted a copy (a deletion tombstone for a copy id, or a donor deleted span added after the run;
   both read inside the transaction, so a delete racing undo is seen) stays as backfilled v3, so undo
-  never resurrects a deletion; its copies' owed notes move to the live notes marker. The ledger
+  never resurrects a deletion; its surviving copies' owed notes move to the live notes marker (the
+  deleted copy's notes are never written). Totals are saved after every group. If the owner deletes
+  a copy in the instant undo removes it (before the delete path writes its tombstone), the legacy
+  row is visible again; undo counts these as `deleted_during_undo`, so delete those rows by hand. The ledger
   records `groups_kept_deleted` and `donors_kept_deleted`; `undo --dry-run` prints the group count
   and `donors_deleted_by_owner_min`, a lower bound (it sees deleted spans, not tombstone-only
   deletes). A group over 400 documents is refused (`undo_group_too_large`); partitions keep groups

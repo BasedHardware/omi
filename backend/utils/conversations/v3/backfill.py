@@ -502,6 +502,7 @@ def undo_run(uid, run_id, *, firestore_client=None):
         earlier = run.get('undo') or {}
         result = {key: int(earlier.get(key) or 0) for key in ('donors_restored', 'rows_removed')}
         result.update(groups_kept_deleted=0, donors_kept_deleted=0)
+        removed_ids = []
         for donors, rows in undo_groups(docs):
             try:
                 outcome, restored, removed = store.undo_backfill_group(
@@ -523,8 +524,20 @@ def undo_run(uid, run_id, *, firestore_client=None):
             if outcome == 'kept':
                 result['groups_kept_deleted'] += 1
                 result['donors_kept_deleted'] += len(donors)
+            else:
+                removed_ids += rows
+            # Durable after every group: a crash never loses the totals of groups already undone.
+            runs.update_run(
+                uid,
+                run_id,
+                patch={'undo': {**result, 'outcome': 'in_progress', 'at': datetime.now(timezone.utc)}},
+                firestore_client=firestore_client,
+            )
             for key, held_token in held:
                 leases.renew(uid, key, held_token, firestore_client=firestore_client)
+        # A delete whose tombstone landed after its group was undone raced undo (the shared delete path
+        # reads the copy before it writes the tombstone); the legacy row is visible again. Surface it.
+        result['deleted_during_undo'] = len(store.deleted_copy_ids(uid, removed_ids, firestore_client=firestore_client))
     finally:
         for key, held_token in held:
             leases.release(uid, key, held_token, firestore_client=firestore_client)

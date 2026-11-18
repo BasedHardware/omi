@@ -825,6 +825,7 @@ def _undo_leases(monkeypatch, busy=()):
     monkeypatch.setattr(leases, 'renew', lambda *a, **kw: None)
     monkeypatch.setattr(leases, 'release', lambda uid, key, token, **kw: events.append(('release', key)))
     monkeypatch.setattr(leases, 'held', lambda *a, **kw: False)
+    monkeypatch.setattr(store, 'deleted_copy_ids', lambda *a, **kw: [])
     return events
 
 
@@ -855,6 +856,7 @@ def test_undo_works_one_group_per_call_and_refuses_while_notes_are_in_flight(mon
         'rows_removed': 1,
         'groups_kept_deleted': 0,
         'donors_kept_deleted': 0,
+        'deleted_during_undo': 0,
     }
     # Each group's restore and copy removal is one transaction: never hidden or doubled partway.
     assert groups == [(['d1'], ['c1'])] and ledger.run['status'] == 'undone'
@@ -918,6 +920,7 @@ def _strict_undo(strict, monkeypatch):
         ]
 
     monkeypatch.setattr(store, 'backfill_run_documents', documents)
+    monkeypatch.setattr(store, 'deleted_copy_ids', lambda *a, **kw: [])
 
 
 def test_undo_never_resurrects_a_donor_whose_copy_the_owner_deleted(strict, monkeypatch):
@@ -1054,7 +1057,8 @@ def test_operator_refuses_a_new_run_while_one_is_blocked(tmp_path, monkeypatch, 
     owners.write_text('synthetic-owner\n')
     monkeypatch.setattr(runs, 'list_runs', lambda uid: [{'run_id': RUN, 'status': 'blocked'}])
     monkeypatch.setattr(store, 'backfill_window_metadata', lambda *a: pytest.fail('planned over a blocked run'))
-    assert script.main(['run', '--owners-file', str(owners), '--dry-run']) == 0
+    # Skipped owners fail the exit code so automation never reads a partial batch as done.
+    assert script.main(['run', '--owners-file', str(owners), '--dry-run']) == 1
     assert 'resume or undo it first' in capsys.readouterr().out
 
 
@@ -1262,3 +1266,37 @@ def test_the_loader_reads_the_deletion_marker_on_its_own_data_plane(loader, monk
     store.load_derive('u', since=AT, until=AT + timedelta(hours=1), run_id=RUN, firestore_client=Client({}))
     # Never the conversations client it was handed: the marker lives on the data plane.
     assert calls == [{}]
+
+
+def test_undo_saves_totals_after_each_group_and_surfaces_a_delete_that_raced_it(monkeypatch):
+    ledger = _undo_ledger(monkeypatch)
+    _undo_leases(monkeypatch)
+    docs = [
+        {'id': 'd1', 'claims': [{'conversation_id': 'c1'}]},
+        {'id': 'c1', 'v3_derived': True, 'v3_recording_ids': ['d1']},
+        {'id': 'd2', 'claims': [{'conversation_id': 'c2'}]},
+        {'id': 'c2', 'v3_derived': True, 'v3_recording_ids': ['d2']},
+    ]
+    monkeypatch.setattr(store, 'backfill_run_documents', lambda *a, **kw: docs)
+    saved = []
+
+    def group(uid, token, donors, rows, **kw):
+        saved.append(deepcopy(ledger.run.get('undo') or {}))
+        return 'undone', 1, 1
+
+    monkeypatch.setattr(store, 'undo_backfill_group', group)
+    monkeypatch.setattr(store, 'deleted_copy_ids', lambda uid, ids, **kw: [i for i in ids if i == 'c2'])
+    result = backfill.undo_run('u', RUN)
+    # The second group saw the first group's totals already persisted.
+    assert saved[1]['donors_restored'] == 1 and saved[1]['outcome'] == 'in_progress'
+    assert result['deleted_during_undo'] == 1 and ledger.run['undo']['deleted_during_undo'] == 1
+
+
+def test_an_owner_skipped_for_an_active_run_fails_the_exit_code(tmp_path, monkeypatch):
+    from scripts import conversations_v3_backfill as script
+
+    owners = tmp_path / 'owners.txt'
+    owners.write_text('owner-one\nowner-two\n')
+    monkeypatch.setattr(runs, 'list_runs', lambda uid: [{'status': 'running'}] if uid == 'owner-one' else [])
+    monkeypatch.setattr(script, 'plan_owner', lambda *a: ({}, [], {}))
+    assert script.main(['run', '--owners-file', str(owners), '--dry-run']) == 1
