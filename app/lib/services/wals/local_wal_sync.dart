@@ -364,7 +364,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final Future<SyncJobFetch> Function(String jobId)? _jobStatusFetcherOverride;
   final Future<SyncJobCancelResult> Function(String jobId)? _serverCancelOverride;
   final WalServerCancelStore _serverCancelStore;
-  Future<void> _serverCancelTail = Future<void>.value();
+  Completer<void>? _serverCancelBusy;
   final Future<void> Function(List<Wal> wals)? _persistWalsOverride;
   final Future<bool> Function()? _deltaIndexAllowedOverride;
   final Future<List<Wal>> Function()? _loadWalsOverride;

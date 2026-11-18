@@ -119,10 +119,20 @@ class _ServerCancelPass {
 }
 
 extension _WalServerCancel on LocalWalSyncImpl {
-  Future<T> _serverCancelLocked<T>(Future<T> Function() body) {
-    final run = _serverCancelTail.then((_) => body());
-    _serverCancelTail = run.then<void>((_) {}, onError: (_) {});
-    return run;
+  /// One tombstone operation at a time. An idle lock runs [body] directly: chaining onto an already
+  /// completed future would schedule on the zone that created it, which a test's fake clock may
+  /// never drain.
+  Future<T> _serverCancelLocked<T>(Future<T> Function() body) async {
+    while (_serverCancelBusy != null) {
+      await _serverCancelBusy!.future;
+    }
+    final busy = _serverCancelBusy = Completer<void>();
+    try {
+      return await body();
+    } finally {
+      _serverCancelBusy = null;
+      busy.complete();
+    }
   }
 
   /// Persists the tombstone before the caller deletes local audio. False keeps the recording.
