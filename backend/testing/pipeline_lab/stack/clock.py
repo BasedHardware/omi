@@ -28,6 +28,7 @@ from contextlib import ExitStack, contextmanager
 import datetime as _dt
 import threading
 import time as _time
+import sys
 import types
 from typing import Iterator
 
@@ -208,14 +209,60 @@ class LabDate(_REAL_DATE, metaclass=type('LabDateMeta', (_DateMeta, type(_REAL_D
         return _REAL_DATE(*args, **kwargs)
 
 
+# Transport and runtime libraries compute deadlines and expiries from ``time.time()``: gRPC's
+# ``_channel._deadline`` is ``time.time() + timeout`` and the C core compares it with the real
+# clock, so a virtual "earlier" instant makes every Firestore RPC already expired (504). Calls
+# whose direct caller lives in one of these packages get real time; everything else, product
+# code included, keeps the process-wide virtual ``time.time`` (DESIGN L3).
+REAL_TIME_CALLERS = (
+    'grpc',
+    'google.api_core',
+    'google.auth',
+    'google.cloud',
+    'google.protobuf',
+    'firebase_admin',
+    'urllib3',
+    'requests',
+    'httpx',
+    'httpcore',
+    'h11',
+    'h2',
+    'anyio',
+    'aiohttp',
+    'ssl',
+    'socket',
+    'selectors',
+    'asyncio',
+    'concurrent',
+    'threading',
+    'queue',
+    'redis',
+    'logging',
+)
+_REAL_TIME_ROOTS = frozenset(REAL_TIME_CALLERS)
+
+
+def _real_caller(depth: int = 2) -> bool:
+    try:
+        name = sys._getframe(depth).f_globals.get('__name__') or ''
+    except ValueError:
+        return False
+    parts = name.split('.')
+    return parts[0] in _REAL_TIME_ROOTS or '.'.join(parts[:2]) in _REAL_TIME_ROOTS
+
+
 def _time_now() -> float:
     clock = _clock()
-    return clock.timestamp() if clock is not None else _REAL_TIME()
+    if clock is None or _real_caller():
+        return _REAL_TIME()
+    return clock.timestamp()
 
 
 def _time_now_ns() -> int:
     clock = _clock()
-    return int(clock.timestamp() * 1_000_000_000) if clock is not None else _REAL_TIME_NS()
+    if clock is None or _real_caller():
+        return _REAL_TIME_NS()
+    return int(clock.timestamp() * 1_000_000_000)
 
 
 @contextmanager

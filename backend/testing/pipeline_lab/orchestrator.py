@@ -114,6 +114,7 @@ class StageContext:
     upstream: dict[str, dict[str, Any]]
     llm_proxy_url: Optional[str] = None
     engine: str = 'product'
+    arm_backend: Optional[Path] = None  # in-place runs: this checkout's backend/, run unpinned
     warnings: list[str] = field(default_factory=list)
     run_extra: dict[str, Any] = field(
         default_factory=dict
@@ -156,14 +157,18 @@ class StageContext:
         return worktrees.run_arm(self.worktree.backend, module, args, overlay=self.env, timeout=timeout, **kwargs)
 
     def run_module(self, module: str, args: Sequence[str] = (), *, timeout: Optional[float] = None) -> int:
-        """Run a lab entry module for this stage: in the pinned arm (fresh ``python -I``) when there is one,
-        else in this process (in-place checkout or tests) with ``env`` overlaid on ``os.environ``."""
-        if self.worktree is not None:
-            result = self.run_arm(module, args, timeout=timeout)
-            if result.returncode != 0:
-                atomic_write_bytes(
-                    self.run_dir / f'{self.stage}.stderr.log', (result.stderr or '').encode('utf-8', errors='replace')
-                )
+        """Run a lab entry module for this stage in a fresh ``python -I`` process: against the pinned
+        arm, or against the in-place checkout's ``backend/``. Only runs with neither (tests that pass a
+        bare ``backend_tree``) call ``main`` in this process, with ``env`` overlaid on ``os.environ``.
+
+        A separate process matters: the chain installs a deny-by-default network guard and a
+        process-wide clock, which must not reach the LLM proxy serving from this process.
+        """
+        backend = self.worktree.backend if self.worktree is not None else self.arm_backend
+        if backend is not None:
+            result = worktrees.run_arm(backend, module, args, overlay=self.env, timeout=timeout)
+            log = (result.stderr or '') + (result.stdout or '')
+            atomic_write_bytes(self.run_dir / f'{self.stage}.process.log', log.encode('utf-8', errors='replace'))
             return result.returncode
         import importlib
         import os
@@ -292,6 +297,7 @@ def run_pipeline(
                 upstream=dict(upstream),
                 llm_proxy_url=proxy.url if proxy else None,
                 engine=request.engine,
+                arm_backend=Path(in_place_repo) / 'backend' if in_place_repo is not None else None,
             )
             run.stages[stage].status = StageState.RUNNING.value
             store.write_run(run)

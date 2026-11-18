@@ -107,7 +107,7 @@ class ChainComposite:
         )
         summary = read_json(ctx.run_dir / 'chain_entry.json')
         if code != 0 or summary is None:
-            raise ChainFailed(f'chain entry exited {code}; traceback in runs/{ctx.run_id}/errors.log')
+            raise ChainFailed(f'chain entry exited {code}; traceback in runs/{ctx.run_id}/chain_errors.log')
         transcripts = summary.get('transcripts') or {}
         if not transcripts.get('replayed'):
             ctx.run_extra.setdefault('stt', 'stored production transcripts')

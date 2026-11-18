@@ -178,12 +178,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(argv)
     try:
         summary = run(Path(args.root), args.run, args.engine)
-    except Exception:  # noqa: BLE001 - the driver reads the traceback from errors.log
+    except Exception:  # noqa: BLE001 - the traceback goes to chain_errors.log
         trace = traceback.format_exc()
         try:
             from testing.pipeline_lab.store import atomic_write_bytes, safe_segment
 
-            atomic_write_bytes(Path(args.root) / 'runs' / safe_segment(args.run) / 'errors.log', trace.encode())
+            atomic_write_bytes(Path(args.root) / 'runs' / safe_segment(args.run) / 'chain_errors.log', trace.encode())
         except Exception:  # noqa: BLE001
             pass
         print(trace, file=sys.stderr)

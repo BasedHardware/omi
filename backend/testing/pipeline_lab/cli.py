@@ -132,6 +132,19 @@ def build_parser() -> argparse.ArgumentParser:
     proxy.add_argument('--prices', help='price table JSON file')
     proxy.add_argument('--budget-usd', type=float, help='defaults to the run budget')
 
+    overlay = sub.add_parser('overlay', parents=[common], help='build run overlays')
+    overlay_sub = overlay.add_subparsers(dest='overlay_command', required=True)
+    from_env = overlay_sub.add_parser(
+        'from-runtime-env', parents=[common], help="production flags from the ref's deploy/runtime_env.yaml"
+    )
+    from_env.add_argument('--runtime-env', help='runtime_env.yaml (default: backend/deploy/runtime_env.yaml here)')
+    from_env.add_argument('--environment', default='prod')
+    from_env.add_argument('--service', default='backend-listen', help='gke or cloud_run service whose env to use')
+    from_env.add_argument(
+        '--owner-uid-env', help='name of an env var holding the owner uid, to resolve partial cohorts (never written)'
+    )
+    from_env.add_argument('--out', help='write the overlay here (outside git) instead of stdout')
+
     sub.add_parser('stages', parents=[common], help='stages in order and their registered drivers')
     sub.add_parser('doctor', parents=[common], help='roots, permissions and plugins')
     return parser
@@ -199,6 +212,8 @@ def dispatch(args: argparse.Namespace, store: Store, registry: Registry, as_json
         return worktrees.ensure_worktree(repo, args.ref).to_json(), 0
     if command == 'llm-proxy':
         return _llm_proxy(args, store), 0
+    if command == 'overlay':
+        return _overlay_from_runtime_env(args), 0
     if command == 'stages':
         return registry.describe(), 0
     if command == 'doctor':
@@ -331,6 +346,34 @@ def _verdicts(args: argparse.Namespace, store: Store) -> tuple[Any, int]:
             return {'exported': len(payload), 'out': str(out)}, 0
         return _Raw(text), 0
     return payload, 0
+
+
+def _overlay_from_runtime_env(args: argparse.Namespace) -> Any:
+    import os
+
+    from testing.pipeline_lab.stack.runtime_env import overlay_from_runtime_env
+
+    path = (
+        Path(args.runtime_env)
+        if args.runtime_env
+        else Path(__file__).resolve().parents[2] / 'deploy' / 'runtime_env.yaml'
+    )
+    owner_uid = os.environ.get(args.owner_uid_env) if args.owner_uid_env else None
+    if args.owner_uid_env and not owner_uid:
+        raise CliError(f'{args.owner_uid_env} is not set')
+    overlay, report = overlay_from_runtime_env(
+        path, environment=args.environment, service=args.service, owner_uid=owner_uid
+    )
+    report.pop('dropped_names', None)
+    if args.out:
+        out = Path(args.out).expanduser().resolve()
+        if any((parent / '.git').exists() for parent in (out.parent, *out.parent.parents)):
+            raise CliError('overlays are written outside every git worktree')
+        from testing.pipeline_lab.store import atomic_write_json
+
+        atomic_write_json(out, overlay)
+        return {'out': str(out), **report}
+    return {'overlay': overlay, 'report': report}
 
 
 def _llm_proxy(args: argparse.Namespace, store: Store) -> Any:

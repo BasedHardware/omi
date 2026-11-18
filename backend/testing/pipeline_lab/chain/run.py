@@ -58,6 +58,30 @@ class ChainRunSpec:
     production_recap_at: Any = None
 
 
+def _record_processing_failures(stack: ExitStack, path: Path) -> None:
+    """The product logs only the exception class of a failed ``process_conversation``; keep the
+    full traceback in the run's private store so a failed conversation can be diagnosed."""
+    import traceback
+
+    from testing.pipeline_lab.stack.io import append_jsonl
+    from testing.pipeline_lab.stack.patching import replace_everywhere
+    from utils.llm import gateway_error_contract
+
+    original = gateway_error_contract.conversation_processing_http_exception
+
+    def recorded(error: BaseException, *args: Any, **kwargs: Any) -> Any:
+        append_jsonl(
+            path,
+            {
+                'error': type(error).__name__,
+                'traceback': ''.join(traceback.format_exception(type(error), error, error.__traceback__)),
+            },
+        )
+        return original(error, *args, **kwargs)
+
+    replace_everywhere(stack, original, recorded)
+
+
 async def replay_chain(spec: ChainRunSpec) -> dict[str, Any]:
     from testing.pipeline_lab.vector import install_vector_index
     from testing.pipeline_lab.vector.embed import install_embeddings
@@ -83,6 +107,7 @@ async def replay_chain(spec: ChainRunSpec) -> dict[str, Any]:
         ).install(stack)
         barrier = ExecutorBarrier()
         result['executors'] = barrier.instrument_product(stack)
+        _record_processing_failures(stack, Path(spec.run_dir) / 'processing_errors.log')
         stack.enter_context(installed_clock(clock))
         if spec.start_state is not None:
             writer = ProductSeedWriter(env.firestore)

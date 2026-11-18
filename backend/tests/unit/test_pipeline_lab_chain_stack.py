@@ -171,6 +171,13 @@ def test_clock_patches_product_scope_only_then_restores():
             assert time.monotonic() > 0  # monotonic is untouched
         assert abs(fixture.ts() - time.time()) < 5
         assert fixture.datetime is dt.datetime and fixture.dtmod is dt
+        # Transport libraries keep real time.time even under the clock: gRPC deadlines are wall-clock.
+        grpc_like = types.ModuleType('grpc._plab_fixture')
+        exec('import time\ndef deadline():\n    return time.time() + 1\n', grpc_like.__dict__)
+        with installed_clock(LabClock(T0, tick=False), scope=('plab_clock_fixture',)):
+            assert abs(grpc_like.deadline() - real_now().timestamp() - 1) < 5
+            assert real_now().timestamp() - T0.timestamp() > 3600
+            assert fixture.ts() == T0.timestamp()
     finally:
         sys.modules.pop('plab_clock_fixture')
         sys.modules.pop('plab_clock_library')
