@@ -138,37 +138,48 @@ def test_replace_everywhere_swaps_bound_names_and_restores():
 # -- clock ----------------------------------------------------------------------------------
 
 
-def test_clock_patches_datetime_and_time_everywhere_then_restores():
-    fixture = types.ModuleType('plab_clock_fixture')
-    exec(
-        'from datetime import datetime, timezone, date\nimport time\n'
+def test_clock_patches_product_scope_only_then_restores():
+    source = (
+        'from datetime import datetime, timezone, date\nimport datetime as dtmod\nimport time\n'
         'def now():\n    return datetime.now(timezone.utc)\n'
+        'def via_module():\n    return dtmod.datetime.now(dtmod.timezone.utc)\n'
         'def utc():\n    return datetime.utcnow()\n'
         'def today():\n    return date.today()\n'
-        'def ts():\n    return time.time()\n',
-        fixture.__dict__,
+        'def ts():\n    return time.time()\n'
     )
-    sys.modules['plab_clock_fixture'] = fixture
+    fixture = types.ModuleType('plab_clock_fixture')
+    library = types.ModuleType('plab_clock_library')
+    exec(source, fixture.__dict__)
+    exec(source, library.__dict__)
+    sys.modules.update({'plab_clock_fixture': fixture, 'plab_clock_library': library})
     try:
         clock = LabClock(T0, tick=False)
-        with installed_clock(clock):
-            assert fixture.now() == T0
+        with installed_clock(clock, scope=('plab_clock_fixture',)):
+            assert fixture.now() == T0 and fixture.via_module() == T0
             assert type(fixture.now()) is type(real_now())  # plain datetime, nothing lab-typed leaks
             assert fixture.utc() == T0.replace(tzinfo=None)
-            assert fixture.ts() == T0.timestamp()
-            assert dt.datetime.now(dt.timezone.utc) == T0
-            assert isinstance(real_now(), dt.datetime)  # isinstance against the lab type still works
-            assert isinstance(T0, fixture.datetime)
+            assert fixture.today() == T0.astimezone().date()
+            assert fixture.ts() == T0.timestamp() == library.ts()  # time.time is process-wide
+            # Out-of-scope code (pydantic, protobuf, Firestore) keeps the real classes and real now.
+            assert library.datetime is dt.datetime and library.now() != T0
+            assert isinstance(real_now(), fixture.datetime)  # isinstance against the lab type still works
             assert fixture.datetime(2020, 1, 1).year == 2020
             assert fixture.datetime.fromisoformat('2020-01-02T00:00:00+00:00').day == 2
+            assert fixture.dtmod.timedelta is dt.timedelta
             clock.set(T0 + dt.timedelta(days=1))
             assert fixture.now() == T0 + dt.timedelta(days=1)
             assert time.monotonic() > 0  # monotonic is untouched
         assert abs(fixture.ts() - time.time()) < 5
-        assert fixture.now().year >= 2026 and fixture.now() != T0 + dt.timedelta(days=1)
-        assert dt.datetime.__name__ == 'datetime'
+        assert fixture.datetime is dt.datetime and fixture.dtmod is dt
     finally:
         sys.modules.pop('plab_clock_fixture')
+        sys.modules.pop('plab_clock_library')
+
+
+def test_global_clock_scope_patches_the_datetime_module():
+    with installed_clock(LabClock(T0, tick=False), scope=None):
+        assert dt.datetime.now(dt.timezone.utc) == T0
+    assert dt.datetime.now(dt.timezone.utc) != T0 and dt.datetime.__name__ == 'datetime'
 
 
 def test_ticking_clock_advances_from_the_set_instant():

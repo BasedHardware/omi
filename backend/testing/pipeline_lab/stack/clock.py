@@ -6,6 +6,13 @@ module that bound those names (``from datetime import datetime``). Not patched:
 ``time.monotonic``/``perf_counter`` and the asyncio loop clock, so timeouts,
 leases measured on monotonic time and executor waits stay real.
 
+Scope: ``time.time``/``time_ns`` are patched process-wide (plain functions, no type
+identity involved). The ``datetime``/``date`` *classes* are swapped only inside product
+packages (:data:`PRODUCT_PACKAGES`): bound names (``from datetime import datetime``) and
+module references (``import datetime`` -> a proxy module whose ``datetime``/``date`` are
+the lab types). Libraries such as pydantic, protobuf and the Firestore client keep the
+real classes, so building a schema or encoding a timestamp mid-run is unaffected.
+
 By default the clock *ticks*: after :meth:`LabClock.set` it reads the target
 instant plus the real time elapsed since. A strictly frozen clock would hang any
 product loop that waits for ``time.time()`` to pass a deadline. Pass
@@ -21,6 +28,7 @@ from contextlib import ExitStack, contextmanager
 import datetime as _dt
 import threading
 import time as _time
+import types
 from typing import Iterator
 
 from testing.pipeline_lab.stack.patching import replace_everywhere
@@ -31,6 +39,22 @@ _REAL_TIME = _time.time
 _REAL_TIME_NS = _time.time_ns
 
 _ACTIVE: 'LabClock | None' = None
+
+# Backend packages whose code reads the wall clock. ``testing.pipeline_lab.stack`` is
+# always skipped by the patcher, so the clock itself keeps the real types.
+PRODUCT_PACKAGES = (
+    'utils',
+    'database',
+    'routers',
+    'models',
+    'config',
+    'services',
+    'modal',
+    'jobs',
+    'pusher',
+    'llm_gateway',
+    'testing',
+)
 
 
 class LabClock:
@@ -195,8 +219,8 @@ def _time_now_ns() -> int:
 
 
 @contextmanager
-def installed_clock(clock: LabClock) -> Iterator[LabClock]:
-    """Install ``clock`` process-wide for the block. Not re-entrant across clocks."""
+def installed_clock(clock: LabClock, *, scope: tuple[str, ...] | None = PRODUCT_PACKAGES) -> Iterator[LabClock]:
+    """Install ``clock`` for the block. ``scope=None`` swaps datetime in every module."""
     global _ACTIVE
     if _ACTIVE is not None and _ACTIVE is not clock:
         raise RuntimeError('another lab clock is already installed')
@@ -208,15 +232,6 @@ def installed_clock(clock: LabClock) -> Iterator[LabClock]:
             _ACTIVE = None
 
         stack.callback(clear)
-        # Order matters: the module attributes first so later imports see the lab types.
-        _dt.datetime = LabDatetime  # type: ignore[misc]
-        _dt.date = LabDate  # type: ignore[misc]
-
-        def restore_module() -> None:
-            _dt.datetime = _REAL_DATETIME  # type: ignore[misc]
-            _dt.date = _REAL_DATE  # type: ignore[misc]
-
-        stack.callback(restore_module)
         _time.time = _time_now
         _time.time_ns = _time_now_ns
 
@@ -225,11 +240,31 @@ def installed_clock(clock: LabClock) -> Iterator[LabClock]:
             _time.time_ns = _REAL_TIME_NS
 
         stack.callback(restore_time)
-        replace_everywhere(stack, _REAL_DATETIME, LabDatetime)
-        replace_everywhere(stack, _REAL_DATE, LabDate)
         replace_everywhere(stack, _REAL_TIME, _time_now)
         replace_everywhere(stack, _REAL_TIME_NS, _time_now_ns)
+        if scope is None:
+            _dt.datetime = LabDatetime  # type: ignore[misc]
+            _dt.date = LabDate  # type: ignore[misc]
+
+            def restore_module() -> None:
+                _dt.datetime = _REAL_DATETIME  # type: ignore[misc]
+                _dt.date = _REAL_DATE  # type: ignore[misc]
+
+            stack.callback(restore_module)
+        else:
+            replace_everywhere(stack, _dt, _datetime_module_proxy(), only_prefixes=scope)
+        replace_everywhere(stack, _REAL_DATETIME, LabDatetime, only_prefixes=scope)
+        replace_everywhere(stack, _REAL_DATE, LabDate, only_prefixes=scope)
         yield clock
+
+
+def _datetime_module_proxy() -> types.ModuleType:
+    """A stand-in for ``import datetime`` inside product modules: lab classes, real everything else."""
+    proxy = types.ModuleType('datetime')
+    proxy.__dict__.update({k: v for k, v in vars(_dt).items() if not k.startswith('__')})
+    proxy.datetime = LabDatetime
+    proxy.date = LabDate
+    return proxy
 
 
 def real_now() -> _dt.datetime:

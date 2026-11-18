@@ -125,7 +125,13 @@ def lab_environment(
     redis_client: Any = None,
     install_product: bool = True,
     network_policy: NetworkPolicy | None = None,
+    preimport: Sequence[str] = (),
 ) -> Iterator[LabEnvironment]:
+    """``preimport``: product modules to import under the lab env *before* any patching,
+    so their ``from x import f`` bindings are swapped (and restored) with everything else.
+    Run the lab in a fresh process: modules imported earlier under ambient env keep any
+    import-time constants they read then.
+    """
     config = config or LabStackConfig.from_env()
     overlay = overlay or Overlay()
     settings = compose_settings(config, overlay)
@@ -148,7 +154,12 @@ def lab_environment(
         )
         decisions.record('overlay', overlay.digest(), 'overlay', overlay_name=overlay.name)
         if install_product:
+            import importlib
+
             import google.auth
+
+            for module_name in preimport:
+                importlib.import_module(module_name)
 
             stack.enter_context(patch.object(google.auth, 'default', _refuse))
             resolve_pins(overlay, decisions, environ=os.environ, uid=config.uid)

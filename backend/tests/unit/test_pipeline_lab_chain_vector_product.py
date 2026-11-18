@@ -64,3 +64,27 @@ def test_conversation_summary_vector_round_trip(lab_vectors):
     assert record['metadata'] == {'uid': UID, 'memory_id': 'c1', 'created_at': 1_700_000_000}
     assert vector_db.query_vectors('compost bin repair', UID, k=3) == ['c1']
     assert vector_db.query_vectors('compost bin repair', UID, starts_at=1_800_000_000, k=3) == []
+
+
+def test_product_embedder_binds_the_real_client_before_install(monkeypatch, tmp_path):
+    from utils.llm import clients
+
+    from testing.pipeline_lab.vector.embed import CachedEmbedder, ProductEmbedder
+
+    class FakeClient:
+        calls = 0
+
+        def embed_documents(self, texts):
+            FakeClient.calls += 1
+            return [[1.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(clients, 'embeddings', FakeClient())
+    embedder = CachedEmbedder(ProductEmbedder(dimension=2), tmp_path)
+    with ExitStack() as stack:
+        adapter = install_embeddings(stack, embedder)
+        assert clients.embeddings is adapter
+        # Through the swapped module name: adapter -> cache -> product client, no recursion.
+        assert clients.generate_embedding('hello') == [1.0, 0.0]
+        assert clients.generate_embedding('hello') == [1.0, 0.0]
+    assert FakeClient.calls == 1 and embedder.hits == 1
+    assert isinstance(clients.embeddings, FakeClient)

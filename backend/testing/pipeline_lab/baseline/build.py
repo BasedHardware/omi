@@ -1,0 +1,39 @@
+"""File-level entry: read a day's baseline and a run's conversations, write ``baseline.json``.
+
+Reads ``$ROOT/corpus/<day_id>/baseline/*.jsonl`` and ``$ROOT/runs/<run_id>/conversations/*.json``
+per the store contract. The normalized production conversations are also written to
+``runs/<run_id>/baseline/conversations/<id>.json`` in the replay's own shape so the
+inspector can diff two files of identical structure.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from testing.pipeline_lab.baseline.compare import baseline_view, production_view
+from testing.pipeline_lab.stack.io import read_json, read_jsonl, write_json
+
+
+def load_production(baseline_dir: Path) -> list[dict[str, Any]]:
+    baseline_dir = Path(baseline_dir)
+    return production_view(
+        list(read_jsonl(baseline_dir / 'conversations.jsonl')),
+        memories=list(read_jsonl(baseline_dir / 'memories.jsonl')),
+        action_items=list(read_jsonl(baseline_dir / 'action_items.jsonl')),
+        notifications=list(read_jsonl(baseline_dir / 'notifications.jsonl')),
+    )
+
+
+def load_replay(run_dir: Path) -> list[dict[str, Any]]:
+    return [read_json(path) for path in sorted((Path(run_dir) / 'conversations').glob('*.json'))]
+
+
+def build_baseline(run_dir: Path, baseline_dir: Path, *, min_iou: float = 0.3) -> dict[str, Any]:
+    production = load_production(baseline_dir)
+    replay = load_replay(run_dir)
+    for conversation in production:
+        write_json(Path(run_dir) / 'baseline' / 'conversations' / f'{conversation["id"]}.json', conversation)
+    view = baseline_view(replay, production, min_iou=min_iou)
+    write_json(Path(run_dir) / 'baseline.json', view)
+    return view

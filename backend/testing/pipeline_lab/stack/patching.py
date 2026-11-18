@@ -39,12 +39,19 @@ def replace_everywhere(
     replacement: Any,
     *,
     skip_prefixes: Iterable[str] = DEFAULT_SKIP_PREFIXES,
+    only_prefixes: Iterable[str] | None = None,
 ) -> int:
-    """Swap ``original`` for ``replacement`` in loaded modules; return the count."""
+    """Swap ``original`` for ``replacement`` in loaded modules; return the count.
+
+    ``only_prefixes`` limits the walk to those packages (e.g. product code only).
+    """
     skip = tuple(skip_prefixes)
+    only = tuple(only_prefixes) if only_prefixes is not None else None
     restored: list[tuple[dict, str]] = []
     for name, module in list(sys.modules.items()):
         if module is None or _skipped(name, skip):
+            continue
+        if only is not None and not _skipped(name, only):
             continue
         namespace = getattr(module, '__dict__', None)
         if not isinstance(namespace, dict):

@@ -64,19 +64,25 @@ class FakeEmbedder:
 
 
 class ProductEmbedder:
-    """The production embedding client; requests go through the lab proxy and its cap."""
+    """The production embedding client; requests go through the lab proxy and its cap.
+
+    The client is bound lazily (inside the lab env, so the product module reads lab
+    settings), and :func:`install_embeddings` binds it before swapping the module name.
+    """
 
     def __init__(self, model: str = 'text-embedding-3-large', dimension: int = 3072, client: Any = None):
         self.model = model
         self.dimension = dimension
-        if client is None:
-            # Bind the real client now, before install_embeddings() swaps the module name.
-            from utils.llm import clients
-
-            client = clients.embeddings
         self._client = client
 
+    def bind(self) -> None:
+        if self._client is None:
+            from utils.llm import clients
+
+            self._client = clients.embeddings
+
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        self.bind()
         return [list(map(float, row)) for row in self._client.embed_documents(list(texts))]
 
 
@@ -169,6 +175,9 @@ def install_embeddings(stack: ExitStack, embedder: Embedder) -> LangchainEmbeddi
     from testing.pipeline_lab.stack.patching import replace_everywhere
     from utils.llm import clients
 
+    for candidate in (embedder, getattr(embedder, 'inner', None)):
+        if isinstance(candidate, ProductEmbedder):
+            candidate.bind()  # capture the real client before its module name is swapped
     adapter = LangchainEmbeddingsAdapter(embedder)
     replace_everywhere(stack, clients.embeddings, adapter)
     return adapter
