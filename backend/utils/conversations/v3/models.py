@@ -140,12 +140,25 @@ def short_tasks(uid, conversation):
             feature='conv_action_items',
         )
         metrics.MODEL_CALLS.labels('short_tasks').inc()
-        response = model.bind(reasoning_effort='low', response_format={'type': 'json_object'}).invoke(messages)
+        # No response_format: the conv_action_items gateway lane declares no structured output and
+        # rejects json_object with 400 capability_not_supported, which failed every short v3 tile
+        # (2026-11-18). The prompt asks for JSON; _action_items parses it defensively.
+        response = model.bind(reasoning_effort='low').invoke(messages)
     if not isinstance(response.content, str):
         raise ValueError('short_tasks_non_text_response')
     structured = conversation.structured.model_copy(deep=True)
     structured.action_items = [
-        ExtractedActionItem.model_validate(item).to_action_item()
-        for item in json.loads(response.content).get('action_items', [])
+        ExtractedActionItem.model_validate(item).to_action_item() for item in _action_items(response.content)
     ]
     return structured
+
+
+def _action_items(text):
+    """The JSON object the prompt asked for, tolerating a code fence or prose around it."""
+    start, end = text.find('{'), text.rfind('}')
+    if start < 0 or end < start:
+        raise ValueError('short_tasks_no_json_object')
+    items = json.loads(text[start : end + 1]).get('action_items', [])
+    if not isinstance(items, list):
+        raise ValueError('short_tasks_action_items_not_list')
+    return items

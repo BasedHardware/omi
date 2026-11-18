@@ -268,3 +268,30 @@ async def test_late_audio_metadata_gives_a_finished_conversation_its_pieces(buil
     rebuilt = committed[-1][4][0]
     assert rebuilt['id'] == row['id']
     assert rebuilt['recording_pieces'] == [{'recording_id': 'r', 'audio_file_id': 'f', 'start': 0.0, 'end': 10.0}]
+
+
+def test_short_tasks_requests_no_response_format_and_parses_fenced_json(monkeypatch):
+    # 2026-11-18: the conv_action_items gateway lane rejects response_format json_object (400
+    # capability_not_supported), which failed every short v3 tile.
+    from types import SimpleNamespace
+
+    from utils.conversations.v3 import models as v3_models
+
+    bound = {}
+
+    class Model:
+        def bind(self, **kwargs):
+            bound.update(kwargs)
+            return self
+
+        def invoke(self, messages):
+            return SimpleNamespace(content='```json\n{"action_items": [{"description": "Send the deck to Sam"}]}\n```')
+
+    monkeypatch.setattr(v3_models, 'require_current_generated_compute', lambda *a, **kw: None)
+    monkeypatch.setattr(v3_models, 'get_or_create_omi_gateway_llm', lambda *a, **kw: Model())
+    short = conversation().model_copy(update={'transcript_segments': conversation().transcript_segments[:1]})
+    structured = v3_models.short_tasks('u', short)
+    assert 'response_format' not in bound
+    assert [item.description for item in structured.action_items] == ['Send the deck to Sam']
+    with pytest.raises(ValueError):
+        v3_models._action_items('no json here')
