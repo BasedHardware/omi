@@ -631,6 +631,7 @@ def _get_structured(
                 recovery_transcript_decoded
                 and stored_content_is_replaceable
                 and not getattr(main_conv, 'user_title', None)
+                and not main_conv.user_corrections
                 and not is_release_probe_uid(uid)
                 and not user_kept
                 and not getattr(main_conv, 'photos', None)

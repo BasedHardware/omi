@@ -162,45 +162,83 @@ def test_recovery_calendar_overlap_does_not_take_the_rule_discard(monkeypatch, i
 
 
 @pytest.mark.parametrize(
-    ('stored', 'user_title'),
+    ('stored', 'owner_edits', 'expects_notes'),
     [
-        (Structured(title='Discussion notes', gist='Existing Home preview'), None),
-        (Structured(title='Project update'), None),
-        (Structured(title='Discussion 3', overview='Existing notes'), None),
-        (Structured(title='Discussion notes'), 'Discussion notes'),
-        (Structured(title='Discussion notes', participants=[{'source': 'roster', 'name': 'Test reviewer'}]), None),
-        (Structured(title='Discussion notes', salience='highlight'), None),
-        (Structured(title='Discussion notes', category='work'), None),
+        pytest.param(Structured(title='Discussion notes'), {}, False, id='fallback-only'),
+        pytest.param(
+            Structured(title='Discussion notes', gist='Existing Home preview', title_provenance='server_minimum'),
+            {},
+            True,
+            id='gist',
+        ),
+        pytest.param(Structured(title='Project update'), {}, True, id='real-title'),
+        pytest.param(Structured(title='Discussion 3', overview='Existing notes'), {}, True, id='notes'),
+        pytest.param(Structured(title='Discussion notes'), {'user_title': 'Discussion notes'}, True, id='user-title'),
+        pytest.param(
+            Structured(title='Discussion notes', participants=[{'source': 'roster', 'name': 'Test reviewer'}]),
+            {},
+            True,
+            id='participant',
+        ),
+        pytest.param(
+            Structured(title='Discussion notes', salience='highlight', title_provenance='server_minimum'),
+            {},
+            True,
+            id='salience',
+        ),
+        pytest.param(
+            Structured(title='Discussion notes', category='work', title_provenance='server_minimum'),
+            {},
+            True,
+            id='category',
+        ),
+        pytest.param(
+            Structured(title='Discussion notes'),
+            {'user_corrections': [{'text': 'Keep the speaker name'}]},
+            True,
+            id='owner-corrections',
+        ),
     ],
-    ids=['gist', 'real-title', 'notes', 'user-title', 'participant', 'salience', 'category'],
 )
-def test_quiet_recovery_preserves_the_normal_notes_path_for_protected_rows(
-    monkeypatch, isolated_processing_module, stored, user_title
+def test_quiet_recovery_uses_minimum_only_without_protected_content(
+    monkeypatch, isolated_processing_module, stored, owner_edits, expects_notes
 ):
     monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     pc = isolated_processing_module
-    conversation = _empty_recovery_conversation()
-    conversation.structured = stored
-    conversation.user_title = user_title
+    monkeypatch.setattr(pc.redis_db, 'get_user_preferred_app', lambda uid: None)
+    conversation = _empty_recovery_conversation().model_copy(
+        update={'structured': stored, 'language': 'en', **owner_edits}
+    )
     text = 'Call mom before five.'
     conversation.transcript_segments = [
         TranscriptSegment(text=text, speaker='SPEAKER_00', is_user=True, start=0, end=1)
     ]
+    minimum = Structured(title=text, title_provenance='server_minimum')
     with (
         patch.object(pc, 'conversation_transcripts_for_llm', return_value=(text, text, {})),
         patch.object(pc, 'has_structural_wake_word_marker', return_value=False),
         patch.object(pc, 'is_release_probe_uid', return_value=False),
         patch.object(pc, '_calendar_overlap_retains_conversation', return_value=False),
-        patch.object(pc, 'get_conversation_notes', return_value=Structured()) as paid_notes,
+        patch.object(pc, 'get_conversation_notes', return_value=stored) as paid_notes,
+        patch.object(pc, 'build_deterministic_minimum_structured', return_value=minimum) as build_minimum,
     ):
-        pc._get_structured(
+        result, discarded = pc._get_structured(
             'uid-recovery',
             'en',
             conversation,
             trigger=ProcessingTrigger.SERVER_RECOVERY,
             recovery_transcript_decoded=True,
         )
-    paid_notes.assert_called_once()
+
+    assert discarded is False
+    assert result is (stored if expects_notes else minimum)
+    if expects_notes:
+        paid_notes.assert_called_once()
+        build_minimum.assert_not_called()
+    else:
+        paid_notes.assert_not_called()
+        build_minimum.assert_called_once()
 
 
 @pytest.mark.parametrize(
