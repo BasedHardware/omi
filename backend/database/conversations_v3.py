@@ -882,9 +882,13 @@ def undo_backfill_group(uid, token, donor_ids, row_ids, *, firestore_client=None
             and (snapshot.to_dict() or {}).get('v3_backfill_run')
         ]
         if any(deleted) or any(deleted_after_backfill(row) for _, row in converted):
-            for cid, snapshot in rows:
+            for (cid, snapshot), gone in zip(rows, deleted):
                 if snapshot.exists and (snapshot.to_dict() or {}).get('v3_backfill_process_pending'):
-                    tx.update(coll.document(cid), {'v3_backfill_process_pending': False, 'v3_process_pending': True})
+                    # A copy the owner deleted never goes to the notes model; the others still get notes.
+                    patch = {'v3_backfill_process_pending': False}
+                    if not gone:
+                        patch['v3_process_pending'] = True
+                    tx.update(coll.document(cid), patch)
             return 'kept', 0, 0
         for cid, row in converted:
             prior = row.get('v3_backfill_prior')

@@ -939,10 +939,18 @@ def test_a_deletion_racing_undo_keeps_the_group_and_hands_owed_notes_to_live(str
     # Delete intent written; the claim release has not run yet (the window undo used to race).
     strict.rows[('users', 'synthetic', 'deleted_conversations', 'c0')] = {'conversation_id': 'c0'}
     strict.rows[COPY] = {**strict.rows[COPY], 'v3_backfill_process_pending': True}
-    assert store.undo_backfill_group('synthetic', token, ['r'], ['c0'], firestore_client=strict) == ('kept', 0, 0)
+    sibling = ('users', 'synthetic', 'conversations', 'c1')
+    strict.rows[sibling] = {**strict.rows[COPY], 'id': 'c1', 'v3_process_pending': False}
+    result = store.undo_backfill_group('synthetic', token, ['r'], ['c0', 'c1'], firestore_client=strict)
+    assert result == ('kept', 0, 0)
     assert strict.rows[R]['recording'] is True and COPY in strict.rows
-    # A kept copy still owes notes; once the run is undone only the live drain can write them.
-    assert strict.rows[COPY]['v3_backfill_process_pending'] is False and strict.rows[COPY]['v3_process_pending'] is True
+    # The deleted copy never goes to the notes model; a kept sibling's owed notes move to the live drain.
+    assert strict.rows[COPY]['v3_backfill_process_pending'] is False
+    assert not strict.rows[COPY].get('v3_process_pending')
+    assert (
+        strict.rows[sibling]['v3_backfill_process_pending'] is False
+        and strict.rows[sibling]['v3_process_pending'] is True
+    )
 
 
 def test_an_interrupted_conversion_with_no_claim_is_restored(strict):
