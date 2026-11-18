@@ -3766,6 +3766,21 @@ def test_prod_sync_backfill_lookback_is_sixty_days_and_no_release_reach_undercut
         assert reach == 0 or reach >= lookback
 
 
+def test_prod_unlimited_backfill_day_cap_is_on_at_24_hours_on_every_declaring_surface():
+    # Enforced only at sync upload (retryable 503 backfill_capacity); dev keeps it off.
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    for stage, expected in (('prod', 'true'), ('dev', 'false')):
+        environment = manifest['environments'][stage]
+        enabled = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED'))
+        hours = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS'))
+        assert len(enabled) == len(hours) >= 5
+        assert {setting['value'] for setting in enabled} == {expected}
+        assert {setting['value'] for setting in hours} == {'24'}
+    services = manifest['environments']['prod']['cloud_run']['services']
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED']['value'] == 'true'
+
+
 # M7: compose and validate declarations offline; no cloud clients or rollout writes.
 @pytest.fixture(scope='module')
 def read_lever_sources():

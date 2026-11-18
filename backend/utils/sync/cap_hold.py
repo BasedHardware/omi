@@ -392,9 +392,7 @@ def hold_segment(uid: str, path: str, metadata: dict[str, Any], *, receipt: dict
     return _finish(
         identity,
         seconds,
-        funded_allowance(
-            uid, lane=metadata.get('origin', 'sync'), backfill=metadata.get('sync_lane') == 'backfill'
-        ).reason,
+        funded_allowance(uid, lane=metadata.get('origin', 'sync')).reason,
         receipt,
         created,
     )
