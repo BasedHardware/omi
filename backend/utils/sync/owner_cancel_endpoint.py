@@ -43,7 +43,9 @@ def _disabled() -> JSONResponse:
 
 @router.delete('/v2/sync-local-files/{job_id}', response_model=SyncJobCancelResponse, response_model_exclude_none=True)
 def cancel_sync_upload(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    """Idempotent. Wrong-owner, unknown and legacy handles share the ``not_found``
+    """Owner deletes an uploaded recording that has not been transcribed; its server copy is erased.
+
+    Idempotent. Wrong-owner, unknown and legacy handles share the ``not_found``
     answer. Work that a worker is computing, merging or projecting answers 409
     ``sync_job_processing`` (retry later); a committed transcript is never
     deleted here and answers ``already_processed`` with its conversations.
