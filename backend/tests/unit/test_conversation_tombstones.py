@@ -228,6 +228,8 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
         'delete_user_data',
         {
             'db': store,
+            'account_authority_writer_enabled': lambda: True,
+            'get_data_plane_firestore_client': lambda: store,
             'logger': MagicMock(),
             'delete_collection_recursive': purge,
         },

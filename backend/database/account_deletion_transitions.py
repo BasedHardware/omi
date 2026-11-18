@@ -6,6 +6,7 @@ from typing import Any
 from database._client import get_firestore_client
 from google.cloud.firestore_v1 import transactional
 
+from database.batch_account_authority import write_account_authority
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 
@@ -39,16 +40,20 @@ def mark_wipe_completed(transaction, doc_ref) -> bool:
     snapshot = doc_ref.get(transaction=transaction)
     data = (snapshot.to_dict() or {}) if snapshot.exists else {}
     if data.get('late_agent_vm_cleanup'):
-        transaction.set(
+        write_account_authority(
+            transaction,
             doc_ref,
             {'wipe_status': 'failed', 'wipe_failed_at': datetime.now(timezone.utc)},
             merge=True,
+            preimage=snapshot,
         )
         return False
-    transaction.set(
+    write_account_authority(
+        transaction,
         doc_ref,
         {'wipe_status': 'completed', 'wipe_completed_at': datetime.now(timezone.utc)},
         merge=True,
+        preimage=snapshot,
     )
     return True
 
@@ -71,7 +76,8 @@ def record_late_agent_vm_cleanup(
     pending = {'vmName': vm_name, 'zone': zone}
     if expected_instance_id is not None:
         pending['expectedInstanceId'] = expected_instance_id
-    transaction.set(
+    write_account_authority(
+        transaction,
         doc_ref,
         {
             'late_agent_vm_cleanup': pending,
@@ -79,6 +85,7 @@ def record_late_agent_vm_cleanup(
             'wipe_failed_at': datetime.now(timezone.utc),
         },
         merge=True,
+        preimage=snapshot,
     )
     return True
 

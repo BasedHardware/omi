@@ -93,7 +93,12 @@ class CustomerData:
         """Advance the privacy generation and block, as ``advance_privacy_generation(blocked=True)`` does."""
         key = (PRIVACY_COLLECTION, privacy_owner_key(uid))
         previous = self.client.rows.get(key, {})
-        self.client.rows[key] = {'generation': int(previous.get('generation', 0)) + 1, 'blocked': True, 'purging': True}
+        self.client.rows[key] = {
+            **previous,
+            'generation': int(previous.get('generation', 0)) + 1,
+            'blocked': True,
+            'purging': True,
+        }
 
     def delete_account(self, uid: str) -> None:
         self.client.rows[('account_deletions', uid)] = {'wipe_status': 'pending'}

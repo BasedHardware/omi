@@ -17,6 +17,8 @@ import types
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 os.environ.setdefault('ENCRYPTION_SECRET', 'test-secret-for-ci')
 
 # ---------------------------------------------------------------------------
@@ -96,6 +98,13 @@ if _db_pkg is not None:
     for _attribute in ('users', 'account_deletion_grace'):
         if hasattr(_db_pkg, _attribute):
             delattr(_db_pkg, _attribute)
+
+
+@pytest.fixture(autouse=True)
+def legacy_transition_fixture(monkeypatch):
+    # These stubbed references test transition guards only. The emulator suite
+    # exercises those guards with the atomic writer and actual SDK transactions.
+    monkeypatch.setenv('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'false')
 
 
 def _make_snapshot(data):

@@ -12,6 +12,7 @@ from database.account_deletion_marker import (
     account_deletion_document,
     account_deletion_firestore_client,
 )
+from database.batch_account_authority import write_account_authority
 from database.account_deletion_policy import ACCOUNT_DELETION_GRACE_STATUS
 from database.fsr_read_cache import cache_writer
 
@@ -58,7 +59,8 @@ def _mark_user_deletion_grace_intent_txn(transaction, doc_ref, wipe_job_id: str,
         }
 
     now = datetime.now(timezone.utc)
-    transaction.set(
+    write_account_authority(
+        transaction,
         doc_ref,
         {
             'uid': doc_ref.id,
@@ -71,6 +73,8 @@ def _mark_user_deletion_grace_intent_txn(transaction, doc_ref, wipe_job_id: str,
             'wipe_requested_erase_now': False,
         },
         merge=True,
+        preimage=snapshot,
+        operation_id=f'wipe-grace:{wipe_job_id}',
     )
     return {
         'wipe_job_id': wipe_job_id,
@@ -104,7 +108,8 @@ def _promote_grace_to_immediate_txn(transaction, doc_ref, generated_job_id: str)
     if not isinstance(job_id, str) or not job_id:
         job_id = generated_job_id
     now = datetime.now(timezone.utc)
-    transaction.update(
+    write_account_authority(
+        transaction,
         doc_ref,
         {
             'wipe_status': 'pending',
@@ -113,6 +118,8 @@ def _promote_grace_to_immediate_txn(transaction, doc_ref, generated_job_id: str)
             'wipe_queued_at': now,
             'wipe_requested_erase_now': True,
         },
+        preimage=snapshot,
+        operation_id=f'promote-grace:{job_id}',
     )
     return {'wipe_job_id': job_id, 'dispatch_claimed': True}
 
@@ -165,7 +172,12 @@ def _restore_user_deletion_txn(transaction, doc_ref) -> str:
     now = datetime.now(timezone.utc)
     if due_at is None or due_at <= now:
         return 'window_expired'
-    transaction.update(doc_ref, {'wipe_status': 'cancelled', 'wipe_cancelled_at': now, 'wipe_restored_at': now})
+    write_account_authority(
+        transaction,
+        doc_ref,
+        {'wipe_status': 'cancelled', 'wipe_cancelled_at': now, 'wipe_restored_at': now},
+        preimage=snapshot,
+    )
     return 'restored'
 
 
@@ -196,8 +208,10 @@ def pending_grace_wipes(docs, limit: int, now: datetime) -> list[dict]:
     return results
 
 
-def claim_due_grace_txn(transaction, doc_ref, uid: str, data: dict, now: datetime) -> str | None:
+def claim_due_grace_txn(transaction, doc_ref, uid: str, data: dict, now: datetime, *, preimage=None) -> str | None:
     if not grace_wipe_is_due(data, now):
         return None
-    transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+    write_account_authority(
+        transaction, doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now}, preimage=preimage
+    )
     return uid
