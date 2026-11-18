@@ -188,8 +188,14 @@ def record_blocked(uid, token, reason, *, firestore_client=None):
 
 
 def backoff_until(uid, *, firestore_client=None):
+    return backoff_state(uid, firestore_client=firestore_client)[0]
+
+
+def backoff_state(uid, *, firestore_client=None):
+    """(v3_backoff_until, v3_blocked_reason) from the owner's builder lease doc."""
     client = firestore_client or get_firestore_client()
-    return (leases.lease_ref(client, uid, 'builder').get().to_dict() or {}).get('v3_backoff_until')
+    row = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
+    return row.get('v3_backoff_until'), row.get('v3_blocked_reason')
 
 
 def load(uid, *, conversation_id=None, firestore_client=None):
@@ -299,8 +305,38 @@ def unique_claims(claims):
     return list({(c.get('conversation_id'), c.get('start'), c.get('end')): c for c in claims}.values())
 
 
-# Firestore's per-document limit is 1 MiB; this message also names request-size failures.
+# Firestore's per-document limit is 1 MiB ("... exceeds the maximum allowed size"); a commit request is
+# separately capped ("Request payload size exceeds the limit: N bytes").
 DOCUMENT_TOO_LARGE = 'exceeds the maximum allowed size'
+REQUEST_TOO_LARGE = 'Request payload size exceeds the limit'
+# Derived-row bytes per transaction, and every write in it (rows, source claim updates, lease): batches
+# split on whichever fills first, so the source rewrites each batch repeats count against the request.
+BATCH_ROW_BYTES = 2 * 1024 * 1024
+BATCH_WRITE_BYTES = 8 * 1024 * 1024
+
+
+def size_error(error):
+    """'document' or 'request' when a Firestore InvalidArgument is a size limit, else None."""
+    text = str(error)
+    if DOCUMENT_TOO_LARGE in text:
+        return 'document'
+    if REQUEST_TOO_LARGE in text:
+        return 'request'
+    return None
+
+
+def fixed_write_bytes(recordings, rows, encrypted_cache):
+    """Estimated bytes every batch writes besides its rows: each source's claim update and the lease."""
+    total = _encoded_bytes(encrypted_cache)
+    for rid, recording in recordings.items():
+        spans = sum(
+            len(row.get('_v3_claims', {}).get(rid) or [None]) for row in rows if rid in row.get('v3_recording_ids', [])
+        )
+        claims = unique_claims(recording.get('claims') or [])
+        total += _encoded_bytes(claims) + spans * 120 + 200
+        if recording.get('_v3_derive'):
+            total += _encoded_bytes(backfill_conversion(recording))
+    return total
 
 
 def _encoded_bytes(value):
@@ -309,7 +345,9 @@ def _encoded_bytes(value):
 
 def log_largest_write(staged, *, batch, batches):
     """Name the largest document the failed transaction staged: kind and estimated bytes, never ids or content."""
-    sizes = [('derived_row', _encoded_bytes(row), None) for row in staged.get('rows') or []]
+    sizes: list[tuple[str, int, int | None]] = [
+        ('derived_row', _encoded_bytes(row), None) for row in staged.get('rows') or []
+    ]
     for current, update in (staged.get('recordings') or {}).values():
         merged = {**current, **update}
         sizes.append(('recording', _encoded_bytes(merged), len(merged.get('claims') or [])))
@@ -532,10 +570,11 @@ def commit_projection(
         tx.update(held, lease_update)
         return observed
 
+    fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
     batches, current, size = [], [], 0
     for raw, encoded in zip(rows, prepared):
         amount = len(json.dumps(encoded, default=str).encode())
-        if current and size + amount > 2 * 1024 * 1024:
+        if current and (size + amount > BATCH_ROW_BYTES or fixed + size + amount > BATCH_WRITE_BYTES):
             batches.append(current)
             current, size = [], 0
         current.append((raw, encoded))
@@ -548,7 +587,7 @@ def commit_projection(
                 client.transaction(), [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
             )
         except InvalidArgument as error:
-            if DOCUMENT_TOO_LARGE in str(error):
+            if size_error(error):
                 log_largest_write(staged, batch=index, batches=len(batches))
             raise
         from utils.conversations.v3 import metrics

@@ -251,8 +251,8 @@ async def test_blocked_live_pass_still_drains_committed_notes(monkeypatch):
     drained, parked = [], []
 
     async def blocking(pool, fn, *args, **kwargs):
-        if fn is store.backoff_until:
-            return None
+        if fn is store.backoff_state:
+            return None, None
         if fn is leases.acquire:
             return 'token'
         if fn is store.load:
@@ -277,8 +277,8 @@ async def test_blocked_pass_skips_drain_for_deletion_and_open(monkeypatch, reaso
     drained = []
 
     async def blocking(pool, fn, *args, **kwargs):
-        if fn is store.backoff_until:
-            return None
+        if fn is store.backoff_state:
+            return None, None
         if fn is leases.acquire:
             return 'token'
         if fn is store.load:
@@ -292,3 +292,136 @@ async def test_blocked_pass_skips_drain_for_deletion_and_open(monkeypatch, reaso
     monkeypatch.setattr(service, 'drain_processing', drain)
     assert await service.reconcile(UID, **kwargs) == 'blocked'
     assert drained == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('parked,drains', [('document_too_large', True), ('account_deletion', False)])
+async def test_backoff_pass_drains_committed_notes_except_for_deletion(monkeypatch, parked, drains):
+    drained = []
+
+    async def blocking(pool, fn, *args, **kwargs):
+        if fn is store.backoff_state:
+            return datetime.now(timezone.utc) + timedelta(minutes=30), parked
+        raise AssertionError('a parked owner takes no lease and loads nothing')
+
+    async def drain(uid):
+        drained.append(uid)
+
+    monkeypatch.setattr(service, 'run_blocking', blocking)
+    monkeypatch.setattr(service, 'drain_processing', drain)
+    assert await service.reconcile(UID) == 'backoff'
+    assert drained == ([UID] if drains else [])
+
+
+@pytest.mark.parametrize(
+    'message,reason',
+    [
+        (
+            'Document cannot be written because its size (1100000 bytes) exceeds the maximum allowed size',
+            'document_too_large',
+        ),
+        ('Request payload size exceeds the limit: 18874368 bytes.', 'request_too_large'),
+    ],
+)
+def test_commit_maps_both_size_limits_to_blocked_conflicts(monkeypatch, message, reason):
+    from google.api_core.exceptions import InvalidArgument
+    from utils.conversations import lifecycle
+
+    def fail(*args, **kwargs):
+        raise InvalidArgument(message)
+
+    monkeypatch.setattr(lifecycle, 'commit_v3_projection', fail)
+    with pytest.raises(service.Conflict, match=reason) as raised:
+        service._commit(UID, 'token', {}, {}, [], [])
+    assert reason in service.BLOCKED and isinstance(raised.value.__cause__, InvalidArgument)
+
+
+def test_other_invalid_argument_still_raises(monkeypatch):
+    from google.api_core.exceptions import InvalidArgument
+    from utils.conversations import lifecycle
+
+    def fail(*args, **kwargs):
+        raise InvalidArgument('Cannot have an array inside an array')
+
+    monkeypatch.setattr(lifecycle, 'commit_v3_projection', fail)
+    with pytest.raises(InvalidArgument):
+        service._commit(UID, 'token', {}, {}, [], [])
+
+
+@pytest.mark.asyncio
+async def test_blocked_log_names_cause_and_owner_hash_without_ids(monkeypatch, caplog):
+    from google.api_core.exceptions import InvalidArgument
+
+    secret_uid = 'AbCdEfGhIjKlMnOpQrStUvWxYz12'
+
+    async def blocking(pool, fn, *args, **kwargs):
+        if fn is store.backoff_state:
+            return None, None
+        if fn is leases.acquire:
+            return 'token'
+        if fn is store.load:
+            try:
+                raise InvalidArgument(
+                    f'Document projects/p/databases/(default)/documents/users/{secret_uid}/conversations/c1 cannot '
+                    'be written because its size (1100000 bytes) exceeds the maximum allowed size'
+                )
+            except InvalidArgument as error:
+                raise service.Conflict('document_too_large') from error
+        return None
+
+    async def drain(uid):
+        return None
+
+    monkeypatch.setattr(service, 'run_blocking', blocking)
+    monkeypatch.setattr(service, 'drain_processing', drain)
+    with caplog.at_level(logging.WARNING, logger=service.logger.name):
+        assert await service.reconcile(secret_uid) == 'blocked'
+    [message] = [r.getMessage() for r in caplog.records if 'reconcile blocked reason=' in r.getMessage()]
+    assert 'cause=InvalidArgument' in message and '1100000 bytes' in message
+    assert f'owner={service.owner_tag(secret_uid)}' in message and secret_uid not in message
+
+
+def test_batches_count_source_claim_rewrites_against_the_request(strict, monkeypatch):
+    strict.rows[path('r')] = {'id': 'r', 'recording': True, 'v3_pending': True, 'status': 'completed'}
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    commits = []
+    original = store.firestore.transactional
+
+    def transactional(body):
+        wrapped = original(body)
+
+        def run(tx, *args):
+            commits.append(len(args[0]))
+            return wrapped(tx, *args)
+
+        return run
+
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+    # Rows alone (8 x ~100 KB) fit one 2 MiB batch; the sources each batch rewrites do not.
+    monkeypatch.setattr(store, 'fixed_write_bytes', lambda *a: store.BATCH_WRITE_BYTES - 300 * 1024)
+    rows = [
+        {
+            'id': f'c{i}',
+            'status': 'processing',
+            'started_at': T0,
+            'finished_at': T0,
+            'v3_recording_ids': ['r'],
+            'transcript_segments': [{'text': 'x' * 100000}],
+        }
+        for i in range(8)
+    ]
+    store.commit_projection(
+        UID, token, {'r': {**strict.rows[path('r')], '_v3_revision': 1}}, {}, rows, [], firestore_client=strict
+    )
+    assert len(commits) > 1 and sum(commits) == 8 and max(commits) <= 3
+
+
+def test_fixed_write_bytes_counts_every_source_claim_update():
+    claim = {'conversation_id': 'x', 'start': T0, 'end': T0}
+    small = store.fixed_write_bytes({'r': {'claims': [claim]}}, [], 'cache')
+    large = store.fixed_write_bytes(
+        {'r': {'claims': [claim]}, 's': {'claims': [dict(claim, conversation_id=str(i)) for i in range(500)]}},
+        [],
+        'cache',
+    )
+    assert large - small > 500 * 40
