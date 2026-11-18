@@ -83,7 +83,7 @@ def is_owner_cancelled(job: dict) -> bool:
 
 
 def _handle_shape_ok(job_id: str) -> bool:
-    return isinstance(job_id, str) and job_id.startswith(JOB_PREFIX) and len(job_id) <= 128 and '/' not in job_id
+    return job_id.startswith(JOB_PREFIX) and len(job_id) <= 128 and '/' not in job_id
 
 
 def _ids(result: Any) -> tuple[str, ...]:
@@ -222,7 +222,7 @@ def cancel_owner_upload(uid: str, job_id: str, *, store, eraser: Eraser, now: fl
     """Fence then erase one owner upload. Idempotent; see the module docstring."""
     if not sync_owner_cancel.enabled():
         raise CancelDisabled('owner cancellation is switched off')
-    if isinstance(job_id, str) and job_id.startswith(WAL_HANDOFF_PREFIX):
+    if job_id.startswith(WAL_HANDOFF_PREFIX):
         return CancelResult(Outcome.NOT_CANCELLABLE)  # live-record handoff: its conversation already exists
     if not _handle_shape_ok(job_id):
         return CancelResult(Outcome.NOT_FOUND)
