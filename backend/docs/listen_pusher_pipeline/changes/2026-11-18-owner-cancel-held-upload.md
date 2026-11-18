@@ -34,5 +34,5 @@ Not covered:
 Kill switch `SYNC_JOB_OWNER_CANCEL_ENABLED` is on unless off. Off answers 503
 `sync_job_cancel_disabled`; fenced uploads stay fenced.
 
-Code and evidence: `utils/batch_pipeline/owner_cancel.py`, `utils/batch_pipeline/owner_cancel_erase.py`,
+Code and evidence: `utils/sync/owner_cancel_endpoint.py`, `utils/batch_pipeline/owner_cancel.py`, `utils/batch_pipeline/owner_cancel_erase.py`,
 `tests/unit/test_sync_owner_cancel.py`, `tests/unit/test_sync_owner_cancel_endpoint.py`.

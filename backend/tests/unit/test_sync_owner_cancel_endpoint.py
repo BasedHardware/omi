@@ -6,7 +6,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-import routers.sync as router
+import routers.sync as sync_router
+import utils.sync.owner_cancel_endpoint as router
 from database.legal_holds import LegalHoldActive
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from tests.unit.test_sync_owner_cancel import FakeEraser, JOB, OWNER, OTHER, admit
@@ -27,12 +28,13 @@ def api(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.delenv('SYNC_JOB_OWNER_CANCEL_ENABLED', raising=False)
     monkeypatch.setattr(router, 'admit_sync_job_poll', lambda uid: True)
+    monkeypatch.setattr(sync_router, 'admit_sync_job_poll', lambda uid: True)
     monkeypatch.setattr(router, 'destructive_operation_gate', gate)
     monkeypatch.setattr(router, 'FirestoreStore', lambda namespace: store)
     monkeypatch.setattr(router, 'shadow_from_env', lambda primary: primary)
     monkeypatch.setattr(router, 'FirestoreEraser', lambda namespace: eraser)
     app = FastAPI()
-    app.include_router(router.router)
+    app.include_router(sync_router.router)  # mounts the cancel route beside the status poll
     caller = {'uid': OWNER}
     app.dependency_overrides[auth.get_current_user_uid] = lambda: caller['uid']
     with TestClient(app) as client:
