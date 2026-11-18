@@ -309,6 +309,12 @@ overlay:
           category: rollout
     pusher:
       env:
+        # The conversations v3 reconcile dispatch (utils/conversations/v3/triggers.py) runs on the
+        # recording writes pusher makes. Without this binding each enqueue raised RuntimeError and the
+        # owner waited for the 5-minute sweeper (rows pending 10+ minutes). HANDLER_URL/INVOKER_SA come
+        # from the shared ConfigMap; pusher-runtime holds cloudtasks.enqueuer and actAs on the invoker.
+        SYNC_TASKS_PROJECT: {value: based-hardware, category: reliability}
+        SYNC_TASKS_LOCATION: {value: us-central1, category: reliability}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
