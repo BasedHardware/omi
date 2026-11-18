@@ -63,9 +63,8 @@
     },
     "BATCH_HELD_POLL_SKIP_ENABLED": {
       "owner": "firestore-lead",
-      "review_by": "2026-11-25",
-      "registry": "config/feature-flags.yaml",
-      "reason": "Renewed one week 2026-11-18: code default off, but the prod overlay runs it true on all four workloads; registry decision keep/terminal keep. Owner to confirm keep and record the prod-on state, or delete, by review_by"
+      "review_by": "2026-11-18",
+      "registry": "config/feature-flags.yaml"
     },
     "BATCH_LEGACY_CAPACITY_FALLBACK_ENABLED": {
       "owner": "overflow / two-lane lead",
