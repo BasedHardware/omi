@@ -74,7 +74,7 @@ def _detached(row: dict, now: float) -> bool:
     return row.get('state') in DETACHED_HOLD_STATES and float(row.get('lease_until') or 0) <= now
 
 
-def _fence(tx, uid: str, job_id: str, content_id: str, now: float) -> tuple[CancelResult, tuple[str, ...]]:
+def _fence(tx: Any, uid: str, job_id: str, content_id: str, now: float) -> tuple[CancelResult, tuple[str, ...]]:
     ledger = tx.get('ledger', uid, content_id)
     if not ledger or ledger.get('job_id') != job_id:
         return CancelResult(Outcome.NOT_FOUND), ()
@@ -135,7 +135,7 @@ def _fence(tx, uid: str, job_id: str, content_id: str, now: float) -> tuple[Canc
     return CancelResult(Outcome.CANCELLED, erasure='pending'), hold_ids
 
 
-def _mark_erased(tx, uid: str, job_id: str, content_id: str, now: float) -> None:
+def _mark_erased(tx: Any, uid: str, job_id: str, content_id: str, now: float) -> None:
     ledger = tx.get('ledger', uid, content_id)
     if ledger.get('job_id') == job_id and ledger.get('status') == LEDGER_STATUS:
         if ledger.get('owner_cancel_erased_at') is None:
