@@ -6,8 +6,10 @@ import time
 from google.api_core.exceptions import Aborted, FailedPrecondition, GoogleAPICallError
 
 from config.batch_pipeline import (
+    MERGE_STALE_HEAD_SECONDS,
     merge_catch_up_depth,
     merge_head_wait_seconds,
+    merge_stale_head_skip,
     provider_backlog_release_enabled,
     provider_merge_membership_enabled,
     recovered_merge_release_enabled,
@@ -124,6 +126,21 @@ def _record_sibling_pending(tx, job: dict) -> bool:
     """Every merge route preserves the immutable native recording's unit order."""
     if not record_fresh_merge_enabled():
         return False
+    return _native_sibling_pending(tx, job)
+
+
+def _stale_head(job: dict, now: float) -> bool:
+    """An unready head admitted long ago (a starved retry): there is no live unit to wait for."""
+    enqueued = job.get('enqueued_at')
+    return (
+        job.get('state') != 'result_ready'
+        and isinstance(enqueued, (int, float))
+        and not isinstance(enqueued, bool)
+        and now - enqueued >= MERGE_STALE_HEAD_SECONDS
+    )
+
+
+def _native_sibling_pending(tx, job: dict) -> bool:
     binding = job.get('projection_binding') or {}
     if binding.get('native_record') is not True:
         return False
@@ -273,6 +290,7 @@ class OrderedMerge:
             skipped: dict | None = None,
             exact: str | None = None,
             tx_fresh: bool = False,
+            stale: bool = False,
         ):
             blocked.clear()  # Firestore may retry this callback.
             backlog.clear()
@@ -404,8 +422,12 @@ class OrderedMerge:
                 candidate = current
             elif candidate and candidate['state'] != 'result_ready':
                 if waiter is None:
-                    blocked.update(head_state=candidate['state'], catch_up=_catch_up(candidate))
+                    blocked.update(
+                        head_state=candidate['state'], catch_up=_catch_up(candidate), stale=_stale_head(candidate, now)
+                    )
                     return None
+                if stale and not _stale_head(candidate, now):
+                    return None  # The head changed since the probe: the ordinary wait applies.
                 # Bounded head wait (David, 2026-10-20): the probed waiter must
                 # still be pending and ready; then release the owner's ready
                 # rows in capture order. The bypassed head later appends as
@@ -423,6 +445,16 @@ class OrderedMerge:
                     candidate = tx.first_ready_pending(key)
                 except FailedPrecondition as error:
                     raise HeadWaitUnavailable from error
+                if stale:
+                    # Only a native recording unit whose earlier units are all
+                    # settled skips the wait; anything else keeps it.
+                    if (
+                        not candidate
+                        or (candidate.get('projection_binding') or {}).get('native_record') is not True
+                        or _native_sibling_pending(tx, candidate)
+                    ):
+                        return None
+                    bypass['stale'] = True
             if not candidate or candidate['state'] != 'result_ready':
                 return None
             if _record_sibling_pending(tx, candidate):
@@ -712,10 +744,13 @@ class OrderedMerge:
                     )
                     return None
             since = _ready_since(waiter) if waiter else None
-            if since is None or now - since < wait:
+            if since is None:
+                return None
+            stale = now - since < wait
+            if stale and not (strict_blocked.get('stale') and merge_stale_head_skip(owner_id)):
                 return None
             try:
-                entry = self.store.run(lambda tx: commit(tx, waiter))
+                entry = self.store.run(lambda tx: commit(tx, waiter, stale=stale))
             except BatchPrivacyBlocked:
                 # An owner-wide fence (often the reason the head is blocked)
                 # also refuses the successor; strict order commits nothing here.
@@ -792,6 +827,8 @@ class OrderedMerge:
                     head_state,
                     _wait_bucket(bypass['waited']),
                 )
+                if bypass.get('stale'):
+                    logger.info('event=batch_merge outcome=stale_head_skip source=%s count=1', self.commit_source)
         return entry
 
     def committed_result(self, segment_id: str) -> dict:

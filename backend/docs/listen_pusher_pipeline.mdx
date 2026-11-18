@@ -10123,6 +10123,20 @@ The Home histogram admits only recordings ended within 30 minutes and notes
 written at or after that end. Old Home history, untrusted/future end clocks and
 prior in-recording notes do not contaminate the post-seal latency cohort.
 
+### Stale merge head skip (canary)
+
+`BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST` (comma-separated uids, default
+empty) is read on every ordered-merge commit. For a listed owner whose strict
+head is unready and was enqueued at least 1,800 s ago, the bounded head wait is
+skipped: the owner's earliest ready pending row commits at once through the
+ordinary head-wait transaction, and the head later appends as `late_capture`.
+The committed row must be a native record unit whose earlier binding units are
+committed or held without recovery; the transaction re-checks that the head is
+still stale. Unlisted owners, head wait off, non-record rows and unready
+earlier units of the same recording keep the ordinary wait. Writers without
+this code keep the wait. Log `event=batch_merge outcome=stale_head_skip`.
+[Change note](listen_pusher_pipeline/changes/2026-11-18-merge-stale-head-skip.md).
+
 ### Staged source-frame close protocol
 
 `PUSHER_RECORD_CLOSE_NOTIFY_ENABLED` remains default off. The experimental wire
