@@ -92,11 +92,10 @@ def display_title(title: Any, preview: Any) -> Any:
 
 
 def placeholder_title_wire(row: dict[str, Any]) -> dict[str, Any]:
-    """Serve a row that carries only a deterministic placeholder as untitled.
+    """Hide a bare fallback label and keep ready recordings identifiable.
 
-    Capture stubs written 2026-11-16..17 were stamped "Discussion notes" before
-    any notes existed. Read-only: clients keep their own untitled presentation,
-    a user title or any summary keeps the stored title, and nothing is rewritten.
+    A ready row with a batch projection receipt can be opened for its
+    transcript, even with no notes. Give it a neutral title on the wire.
     """
     structured = row.get('structured')
     if not isinstance(structured, Mapping):
@@ -107,7 +106,10 @@ def placeholder_title_wire(row: dict[str, Any]) -> dict[str, Any]:
         or not notes_pending(structured)
     ):
         return row
-    return {**row, 'structured': {**structured, 'title': ''}}
+    title = ''
+    if row.get('home_step') == 'ready' and row.get('record_projection_revision') and not row.get('is_locked'):
+        title = fallback_title(None)
+    return {**row, 'structured': {**structured, 'title': title}}
 
 
 def is_deferred_preview_title(row: Any) -> bool:

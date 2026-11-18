@@ -209,6 +209,24 @@ def test_wire_rule_touches_nothing_else(changes):
     assert home_titles.placeholder_title_wire(row) is row
 
 
+@pytest.mark.parametrize('fallback', [FALLBACK, 'Discussion 3'])
+def test_list_wire_labels_ready_captures_whose_transcript_landed(fallback):
+    row = capture(record_projection_revision=2, structured={'title': fallback, 'overview': ''})
+    before = deepcopy(row)
+    wire = transcribing_hold.project(home_step.project(row))
+    assert wire['home_step'] == home_step.READY
+    assert wire['structured']['title'] == 'Recording'
+    assert wire['structured']['overview'] == ''
+    assert wire['status'] == 'completed'
+    assert row == before
+
+
+def test_list_wire_does_not_label_a_locked_capture():
+    row = capture(record_projection_revision=2, is_locked=True, structured={'title': FALLBACK})
+    wire = transcribing_hold.project(home_step.project(row))
+    assert wire['structured']['title'] == ''
+
+
 def test_expired_empty_capture_is_noise_even_when_stamped():
     row = placeholder(structured={'title': FALLBACK, 'overview': ''})
     assert empty_capture.applies(row, now=NOW)
