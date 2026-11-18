@@ -31,11 +31,6 @@ logger = logging.getLogger(__name__)
 MAX_MEMBERS = 16
 ASSOCIATION_CHUNK = 100
 SWITCH = 'CONVERSATION_BATCH_PURGE_COALESCING_ENABLED'
-# Reserved metadata ID cannot collide with SHA-256 obligation IDs. It has no
-# uid/due_at, so old/new owner enumeration and due queries never dispatch it.
-READINESS_COLLECTION = jobs.COLLECTION
-READINESS_DOCUMENT = '_owner_scan_v1_readiness'
-READINESS_MAX_SECONDS = 86400
 
 
 def _now() -> datetime:
@@ -52,26 +47,6 @@ def _in_transaction(client: Any, body: Callable[[Any], Any]) -> Any:
 
 def enabled() -> bool:
     return kill_switch(SWITCH, log=False)
-
-
-def consumers_ready(client: Any, transaction: Any = None) -> bool:
-    """Release attests all task consumers are new; absent/stale/malformed denies.
-
-    This is control-plane state, not a route-presence probe. Unknown read outcomes
-    propagate for retry. Read inside the same transaction as enrollment/fencing.
-    """
-    row = (
-        client.collection(READINESS_COLLECTION).document(READINESS_DOCUMENT).get(transaction=transaction).to_dict()
-        or {}
-    )
-    until = row.get('valid_until')
-    now = _now()
-    return (
-        row.get('all_consumers_new') is True
-        and isinstance(until, datetime)
-        and until.tzinfo is not None
-        and now < until <= now + timedelta(seconds=READINESS_MAX_SECONDS)
-    )
 
 
 def owner_candidates(uid: str, *, firestore_client: Any = None) -> list[Any]:
@@ -161,13 +136,13 @@ def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] 
         return 'missing', None
     if int(row.get('generation') or 0) != generation:
         return 'superseded', None
-    ready = enabled() and consumers_ready(client)
+    coalescing = enabled()
     leader = row.get('scan_leader')
     if leader:
         leader_row = row if leader == job else _ref(client, leader).get().to_dict() or {}
         scan = leader_row.get('owner_scan') or {}
         if scan.get('epoch') is not None and scan.get('epoch') == row.get('scan_epoch'):
-            if not ready:
+            if not coalescing:
                 handback(client, leader, scan['epoch'], scan['token'])
                 return 'legacy', None
             if leader != job:
@@ -181,7 +156,7 @@ def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] 
         # A legacy leader may have completed after lease expiry. Its followers
         # keep their own journals and resume independently.
         return 'legacy', None
-    if not ready or row.get('progress') or jobs.lease_held(row):
+    if not coalescing or row.get('progress') or jobs.lease_held(row):
         return 'legacy', None
     candidates = owner_candidates(str(row['uid']), firestore_client=client)
     refs = {snapshot.id: snapshot.reference for snapshot in candidates}
@@ -191,7 +166,7 @@ def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] 
     now, token, epoch = _now(), uuid4().hex, uuid4().hex
 
     def body(transaction):
-        if not consumers_ready(client, transaction):
+        if not enabled():
             return 'legacy', None
         snapshots = {key: ref.get(transaction=transaction) for key, ref in refs.items()}
         current = snapshots[job].to_dict() or {}
@@ -258,7 +233,7 @@ def _resume(client: Any, leader: str, generation: int, observed: dict[str, Any])
     now, token = _now(), uuid4().hex
 
     def body(transaction):
-        if not consumers_ready(client, transaction):
+        if not enabled():
             return 'handback', observed
         row = _ref(client, leader).get(transaction=transaction).to_dict() or {}
         scan: dict[str, Any] = row.get('owner_scan') or {}
@@ -313,7 +288,7 @@ class ScanProgress(jobs.RunProgress):
         self.scan = scan
 
     def _owned(self, transaction: Any) -> None:
-        if not enabled() or not consumers_ready(self.client, transaction):
+        if not enabled():
             raise jobs.RunSuperseded()
         rows = _read_members(self.client, transaction, self.scan)
         for job, member in self.scan['members'].items():

@@ -158,7 +158,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
-    'database.batch_pipeline_conversation_purge_scans._claim': 'a0c54821175dbc883d89f41bea6e5d2d6b25c6f25733362556db13a13e87c2bc',
+    'database.batch_pipeline_conversation_purge_scans._claim': '565e90ab0062130097968d1548eebb338390c2e7bfae2bdcacddd97ac8ba5881',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'b73e589c1018bfb3a8eefc51bd7ba4ef29a0c9876fd670d74efae3e1ba4cff30',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
