@@ -21,7 +21,7 @@ final class SdCardSyncParityTests: XCTestCase {
   }
 
   private func finishSyncBody(from source: String) throws -> String {
-    guard let start = source.range(of: "func finishSync()") else {
+    guard let start = source.range(of: "func finishSync(") else {
       throw XCTSkip("finishSync() not found")
     }
     let tail = source[start.lowerBound...]
