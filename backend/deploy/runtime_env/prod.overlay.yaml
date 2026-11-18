@@ -45,6 +45,10 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        # Mirrors the listen chart (2026-11-18 fold of live values; media noise is also carried by the privateEnv overlay).
+        MEDIA_NOISE_MODE: {value: shadow, category: rollout}
+        MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+        NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
         # Shared backend routes: keep the silence kill switch off on listen too.
         BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}

@@ -3256,6 +3256,9 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          MEDIA_NOISE_MODE: {value: shadow, category: rollout}
+          MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+          NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
             value: 'false'
             category: ops_kill
