@@ -404,6 +404,9 @@ runs:
       run: |
         set -euo pipefail
         umask 077
+        git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+        python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
+          --revision "$ROLLBACK_REVISION" --project "${{ inputs.project_id }}" --region "${{ inputs.region }}"
         extension_args=()
         if [[ "${{ inputs.integration_only }}" == true ]]; then extension_args=(--integration-only); fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" prepare \
