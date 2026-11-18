@@ -15495,4 +15495,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'กลับไปหน้าหลัก';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'กำลังเขียนสรุปฉบับเต็ม…';
 }

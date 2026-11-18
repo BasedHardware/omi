@@ -495,11 +495,11 @@ def test_efficiency_switch_restores_prompt_tools_packet_and_charging(monkeypatch
     monkeypatch.delenv(policy.LOOKUP_EFFICIENCY)
     assert policy.lookup_efficiency_enabled()
     assert 'five to eight' not in prompt.instructions_for_run()
-    assert prompt.INSTRUCTIONS.count('then confirm with search_people,') == 1
-    assert (
-        'then confirm with the packet’s matched_people records or batched search_people(names=[...]),'
-        in prompt.instructions_for_run()
-    )
+    assert prompt.INSTRUCTIONS.count('the calendar and search_people to spell names correctly.') == 1
+    efficient = prompt.instructions_for_run()
+    assert 'the packet’s matched_people records or batched search_people(names=[...])' in efficient
+    assert 'The packet already includes calendar_overlap, screen_activity and matched_people' in efficient
+    assert 'Your first submission is final' in efficient
     assert 'names' in next(
         t['function']['parameters']['properties']
         for t in prompt.tools_for_run()
@@ -508,7 +508,7 @@ def test_efficiency_switch_restores_prompt_tools_packet_and_charging(monkeypatch
     monkeypatch.setenv(policy.LOOKUP_EFFICIENCY, 'off')
     assert prompt.instructions_for_run() == prompt.INSTRUCTIONS
     assert prompt.tools_for_run() == prompt.TOOL_SCHEMAS
-    assert prompt.version_for_run() == 'notes-agent-v9-legacy'
+    assert prompt.version_for_run() == 'notes-agent-v10-legacy'
     box = CountingToolbox()
     result = run_agent(
         ScriptedModel(lookups_per_turn=4),
@@ -573,12 +573,13 @@ def test_bad_submission_is_returned_once_per_failure_class_then_repaired():
 
     model = TwiceBad()
     result = run_agent(model, policy.NotesAgentBudget(max_turns=5, max_tool_calls=6), words=2000)
-    # Format goes back first, alone; then the length (content) check gets its own send-back.
-    assert len(result.rejections) == 2 and 'Action items' in result.rejections[0]
-    assert 'at least' not in result.rejections[0] and 'at least 480' in result.rejections[1]
+    # Format goes back once, alone. The length (content) finding never costs a full rewrite: the
+    # resubmission is accepted as it is and repaired.
+    assert len(result.rejections) == 1 and 'Action items' in result.rejections[0]
+    assert 'at least' not in result.rejections[0]
+    assert len(model.choices) == 2, 'one send-back, then accepted'
     assert [s['heading'] for s in result.submission['sections']] == ['Discussion']
     assert 'action_section_dropped' in result.repairs
-    assert result.force_reason == 'submission_rejected'
 
 
 def test_text_only_reply_is_nudged_into_a_forced_submit():
@@ -652,26 +653,19 @@ def test_validator_flags_thin_notes_on_long_meetings():
     assert check_notes(submission(), transcript_words=900).ok
 
 
-def test_long_meetings_must_investigate_before_submitting():
+def test_a_first_submission_without_lookups_is_accepted_at_any_length():
+    """No lookup minimum: the packet carries the prefetched evidence, so an immediate submit is final."""
+
     class Eager(ScriptedModel):
-        # Submits immediately unless told to investigate; then looks up and resubmits.
         async def __call__(self, messages, tool_choice):
             self.choices.append(tool_choice)
-            told = any(
-                m.get('role') == 'tool' and 'Investigate before submitting' in str(m.get('content')) for m in messages
-            )
-            looked = sum(m.get('role') == 'tool' and 'people' in str(m.get('content')) for m in messages)
-            if told and looked < 4 and not isinstance(tool_choice, dict):
-                calls = [call('search_people', {'query': 'x'}, len(self.choices) * 10 + i) for i in range(4)]
-            else:
-                calls = [call(prompt.SUBMIT, submission(), len(self.choices))]
-            return agent.CompletionTurn(tool_calls=calls, prompt_tokens=100)
+            return agent.CompletionTurn(tool_calls=[call(prompt.SUBMIT, submission(), 1)], prompt_tokens=100)
 
-    toolbox = CountingToolbox()
-    result = run_agent(Eager(), policy.budget_for_words(2000), toolbox=toolbox, words=800)
-    assert 'Investigate before submitting' in result.rejections[0]
-    assert toolbox.calls == 4 and result.submission is not None
-    assert policy.budget_for_words(9000).min_tool_calls == 5
+    model, toolbox = Eager(), CountingToolbox()
+    result = run_agent(model, policy.budget_for_words(2000), toolbox=toolbox, words=800)
+    assert result.rejections == [] and result.stop == 'submitted' and len(model.choices) == 1
+    assert toolbox.calls == 0 and result.submission is not None
+    assert all(policy.budget_for_words(words).min_tool_calls == 0 for words in (400, 2000, 9000))
 
 
 def test_validator_flags_overlong_notes():
@@ -892,12 +886,8 @@ def test_packet_carries_screen_leads_in_utc(monkeypatch, efficient):
         assert not tools.prefetched_results(packet)
 
 
-def test_unnamed_speaker_is_sent_back_and_the_name_reaches_participants_and_notes():
-    named = submission(
-        title='Maya Okafor: pricing',
-        participants=[{'name': 'Maya Okafor', 'speaker': '1', 'evidence_kind': 'screen', 'evidence': 'Telegram call'}],
-        sections=[{'heading': 'Pricing', 'body_markdown': '- Maya proposed per-seat pricing\n  - $40 a seat'}],
-    )
+def test_a_naming_lead_never_costs_a_rewrite_and_neutral_attribution_stands():
+    """A packet lead (a call-tile name) is spelling data, not a speaker binding; the neutral note is final."""
     unnamed = submission(
         title='Pricing call',
         sections=[{'heading': 'Pricing', 'body': '- The other founder proposed per-seat\n  - $40'}],
@@ -906,21 +896,50 @@ def test_unnamed_speaker_is_sent_back_and_the_name_reaches_participants_and_note
     class Model(ScriptedModel):
         async def __call__(self, messages, tool_choice):
             self.choices.append(tool_choice)
-            told = any('Maya Okafor' in str(m.get('content')) and m.get('role') == 'tool' for m in messages)
-            payload = named if told else unnamed
+            return agent.CompletionTurn(tool_calls=[call(prompt.SUBMIT, unnamed, len(self.choices))], prompt_tokens=10)
+
+    model = Model()
+    result = run_agent(
+        model,
+        policy.NotesAgentBudget(max_turns=4, max_tool_calls=6),
+        words=800,
+        naming_leads=['Maya Okafor'],
+        identity=NotesIdentity(speaker_names=(('1', None),)),
+    )
+    assert result.rejections == [] and len(model.choices) == 1
+    # The `body` key slip is normalized, not mistaken for prose.
+    structured = agent.AgentNotesSubmission.model_validate(result.submission).to_structured()
+    assert structured.participants == [] and 'Maya' not in structured.title
+    assert 'other founder proposed per-seat' in structured.sections[0].body_markdown
+
+
+def test_a_server_bound_name_left_out_still_gets_one_send_back():
+    """A screen binding is proof no static repair can supply, so leaving it out is worth one rewrite."""
+    unnamed = submission(
+        title='Pricing call', sections=[{'heading': 'Pricing', 'body_markdown': '- Per-seat\n  - $40'}]
+    )
+    named = submission(
+        title='Maya Okafor: pricing',
+        participants=[{'name': 'Maya Okafor', 'speaker': '1', 'evidence_kind': 'screen', 'evidence': 'Zoom tile'}],
+        sections=[{'heading': 'Pricing', 'body_markdown': '- Maya proposed per-seat\n  - $40'}],
+    )
+
+    class Model(ScriptedModel):
+        async def __call__(self, messages, tool_choice):
+            self.choices.append(tool_choice)
+            payload = named if len(self.choices) > 1 else unnamed
             return agent.CompletionTurn(tool_calls=[call(prompt.SUBMIT, payload, len(self.choices))], prompt_tokens=10)
 
     model = Model()
     result = run_agent(
-        model, policy.NotesAgentBudget(max_turns=4, max_tool_calls=6), words=800, naming_leads=['Maya Okafor']
+        model,
+        policy.NotesAgentBudget(max_turns=4, max_tool_calls=6),
+        words=800,
+        naming_leads=['Maya Okafor'],
+        identity=NotesIdentity(screen_bindings=(('1', 'Maya Okafor'),)),
     )
-    # One send-back, about naming only: the `body` key slip is normalized, not mistaken for prose.
     assert len(result.rejections) == 1 and 'Maya Okafor' in result.rejections[0]
-    assert 'prose' not in result.rejections[0]
-    structured = agent.AgentNotesSubmission.model_validate(result.submission).to_structured()
-    assert [person.name for person in structured.participants] == ['Maya Okafor']
-    assert structured.participants[0].evidence == 'Telegram call'
-    assert 'Maya' in structured.title and 'Maya' in structured.sections[0].body_markdown
+    assert [person['name'] for person in result.submission['participants']] == ['Maya Okafor']
 
 
 def test_no_send_back_without_leads_or_when_someone_is_named():
@@ -982,7 +1001,7 @@ def test_v2_retains_one_shot_fallback_when_no_usable_submission_exists():
 
 @pytest.mark.parametrize('contract_v2', [False, True])
 @pytest.mark.parametrize('enabled', [False, True])
-def test_people_only_speaker_binding_is_rejected_then_sanitized_at_budget_exhaustion(contract_v2, enabled, monkeypatch):
+def test_people_only_speaker_binding_is_sanitized_without_a_rewrite(contract_v2, enabled, monkeypatch):
     monkeypatch.setenv('SPEAKER_IDENTITY_REPAIR_ENABLED', 'on' if enabled else 'off')
     repairs = []
     monkeypatch.setattr(agent, 'record_identity_repair', lambda: repairs.append(True))
@@ -1012,7 +1031,8 @@ def test_people_only_speaker_binding_is_rejected_then_sanitized_at_budget_exhaus
         assert result.rejections == []
         assert repairs == []
         return
-    assert any('Unsupported speaker identity' in rejection for rejection in result.rejections)
+    # The identity rule is enforced by the static repair, not by a full rewrite.
+    assert not any('Unsupported speaker identity' in rejection for rejection in result.rejections)
     assert result.submission is not None
     assert result.submission['participants'] == []
     assert 'Michael' not in str(result.submission)
@@ -1034,7 +1054,8 @@ def test_people_only_binding_cannot_escape_through_salvaged_submission():
                         title='Michael Liebmann: agents',
                         overview='Michael proposed agents.',
                         participants=[{'name': 'Michael Liebmann', 'speaker': 'c1', 'evidence': 'People match'}],
-                        sections=[{'heading': 'Agents', 'body_markdown': '- Michael proposed agents.'}],
+                        # Prose, a format slip: it still earns one send-back, so the deadline hits the rewrite.
+                        sections=[{'heading': 'Agents', 'body_markdown': 'Michael proposed agents.'}],
                     ),
                 )
             ]
@@ -1047,7 +1068,7 @@ def test_people_only_binding_cannot_escape_through_salvaged_submission():
         contract_v2=True,
         identity=NotesIdentity(),
     )
-    assert 'salvaged_submission' in result.repairs
+    assert len(turns) == 2 and 'salvaged_submission' in result.repairs
     assert 'Michael' not in str(result.submission)
 
 

@@ -19017,5 +19017,9 @@
     "finishBackToHome": "Back to Home",
     "@finishBackToHome": {
         "description": "Button that leaves the processing page for the Home conversation list."
+    },
+    "quickSummaryWritingFullSummary": "Writing the full summary…",
+    "@quickSummaryWritingFullSummary": {
+        "description": "Conversation summary tab: a short Quick Summary is shown and the full summary is still being generated"
     }
 }

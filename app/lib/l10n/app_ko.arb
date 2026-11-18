@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "서버에서 보고한 작업",
     "finishNothingToProcess": "아직 처리할 내용이 없어요.",
     "finishStillProcessing": "아직 처리 중이에요. 홈에 표시될 거예요.",
-    "finishBackToHome": "홈으로 돌아가기"
+    "finishBackToHome": "홈으로 돌아가기",
+    "quickSummaryWritingFullSummary": "전체 요약을 작성하는 중…"
 }

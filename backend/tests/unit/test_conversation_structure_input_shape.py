@@ -87,7 +87,9 @@ def test_segment_models_use_transcript_even_with_integration_provenance(
     processing._fetch_dedup_candidates_for_query.assert_called_once_with(
         'synthetic-uid', 'Synthetic transcript', conversation
     )
-    assert prefix.call_args.kwargs['transcript_segment_ids'] == ['segment-1']
+    # The notes prompt cites short aliases; _get_structured restores them to stored ids before validation.
+    assert prefix.call_args.kwargs['transcript_segment_ids'] == ['seg1']
+    assert prefix.call_args.kwargs['transcript'] == '[seg1] Synthetic transcript'
 
 
 @pytest.mark.parametrize('source', ['workflow', 'external_integration'])

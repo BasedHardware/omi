@@ -4724,5 +4724,6 @@
     "onTheWayServerWork": "Praca zgłoszona przez serwer",
     "finishNothingToProcess": "Na razie nie ma czego przetworzyć.",
     "finishStillProcessing": "Nadal trwa przetwarzanie. Pojawi się na ekranie głównym.",
-    "finishBackToHome": "Wróć do ekranu głównego"
+    "finishBackToHome": "Wróć do ekranu głównego",
+    "quickSummaryWritingFullSummary": "Trwa pisanie pełnego podsumowania…"
 }

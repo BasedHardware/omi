@@ -15692,4 +15692,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Bumalik sa Home';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Isinusulat ang buong buod…';
 }

@@ -1258,7 +1258,8 @@ class _ConversationsPageState extends State<ConversationsPage>
               // never the new-account empty state. Unset (data) keeps production.
               // The skeleton is Home's only loading state: it stays up until the first
               // episode read settles, so no second loader replaces it.
-              if (cardsOn && feed.partial)
+              // Preparation is routine (every conversation write requires one) until it stalls.
+              if (cardsOn && feed.partial && !(feed.preparing && !feed.preparationStalled && feed.items.isNotEmpty))
                 SliverToBoxAdapter(
                     child: feed.items.isEmpty && feed.problem != null
                         ? OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: feed.refresh)

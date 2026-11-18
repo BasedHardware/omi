@@ -15562,4 +15562,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'بازگشت به صفحه اصلی';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'در حال نوشتن خلاصهٔ کامل…';
 }

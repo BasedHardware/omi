@@ -414,6 +414,9 @@ def _store_capture_end(uid: str, recording_session_id: str, marker: dict) -> str
             end_observed_at=marker['end_observed_at'],
             last_speech_at=marker['last_speech_at'],
         )
+        if marker['pending_wals'] == 0:
+            # Nothing left to upload: end the quiet wait now if the speech has landed too (fail-open).
+            capture_end_db.expedite_if_proven(uid, conversation_id, now=time.time())
     return outcome
 
 

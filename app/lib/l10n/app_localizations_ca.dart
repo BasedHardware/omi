@@ -15646,4 +15646,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Torna a l\'inici';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'S\'està escrivint el resum complet…';
 }

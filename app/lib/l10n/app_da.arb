@@ -4731,5 +4731,6 @@
     "onTheWayServerWork": "Arbejde rapporteret af serveren",
     "finishNothingToProcess": "Intet at behandle endnu.",
     "finishStillProcessing": "Behandles stadig. Den vises på Hjem.",
-    "finishBackToHome": "Tilbage til Hjem"
+    "finishBackToHome": "Tilbage til Hjem",
+    "quickSummaryWritingFullSummary": "Skriver det fulde resumé…"
 }

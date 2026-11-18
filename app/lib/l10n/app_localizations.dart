@@ -27326,6 +27326,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Back to Home'**
   String get finishBackToHome;
+
+  /// Conversation summary tab: a short Quick Summary is shown and the full summary is still being generated
+  ///
+  /// In en, this message translates to:
+  /// **'Writing the full summary…'**
+  String get quickSummaryWritingFullSummary;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

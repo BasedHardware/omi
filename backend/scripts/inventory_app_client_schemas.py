@@ -30,6 +30,7 @@ LOCAL_NON_REST_SCHEMA_FILES = frozenset(
         APP_SCHEMA_DIR / 'bt_device' / 'bt_device.dart',
         APP_SCHEMA_DIR / 'message_event.dart',  # local SSE/WS event schema, not a REST DTO
         APP_SCHEMA_DIR / 'capture_committed_event.dart',  # exact-frame WS receipt; covered by L5 parser tests
+        APP_SCHEMA_DIR / 'interim_summary_event.dart',  # Quick Summary SSE events; covered by parser tests
     }
 )
 
@@ -40,6 +41,7 @@ STREAM_PROTOCOL_DECODER_FUNCTIONS = frozenset(
     {
         (APP_API_DIR / 'messages.dart', 'parseMessageChunk'),
         (APP_API_DIR / 'messages.dart', 'parseVoiceMessageStreamChunk'),
+        (APP_API_DIR / 'interim_summary.dart', 'parseInterimSummaryStream'),
     }
 )
 

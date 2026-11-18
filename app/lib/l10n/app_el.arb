@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "Εργασία που αναφέρει ο διακομιστής",
     "finishNothingToProcess": "Δεν υπάρχει ακόμα κάτι για επεξεργασία.",
     "finishStillProcessing": "Ακόμα σε επεξεργασία. Θα εμφανιστεί στην Αρχική.",
-    "finishBackToHome": "Πίσω στην Αρχική"
+    "finishBackToHome": "Πίσω στην Αρχική",
+    "quickSummaryWritingFullSummary": "Γράφεται η πλήρης σύνοψη…"
 }

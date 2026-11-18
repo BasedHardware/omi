@@ -8,6 +8,7 @@ from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 import logging
 import re
+import time
 from typing import Any
 
 from google.cloud import firestore
@@ -16,6 +17,7 @@ from config.batch_pipeline import projection_followup_page_enabled, projection_s
 from config.record_latency import recent_native_record_notes, record_notes_eager_enabled
 from utils.enrichment import outbox as reprocess
 from database.outbox_firestore import FirestoreEnrichmentOutbox
+from database import capture_end as capture_end_db
 from config.sync_reprocess import settle_seconds
 from utils.batch_pipeline.held_terminal import OPERATOR_INTENTS, held_without_recovery
 from config.record_audio import require_record_audio_barrier
@@ -531,6 +533,7 @@ class ProjectionStore:
             sibling_held = session.write_receipt(transaction, receipt)
             return result, finished, sibling_held
 
+        waiting = False
         while True:
             committed = self.run(firestore.transactional(commit), policy=policy)
             if committed is None:
@@ -540,9 +543,16 @@ class ProjectionStore:
                 log_projection_hold('sibling')
             if result is not None and result.wake_token:
                 outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
+            # A new or reopened obligation is woken at its settle deadline, so it waits too.
+            waiting = waiting or result is not None
             if finished:
                 break
         self._mirror(binding)  # after the wake: the first-summary dispatch path never waits on the shadow
+        if waiting:
+            # This piece may complete a recording the phone already reported ended; if so, end the wait now.
+            capture_end_db.expedite_if_proven(
+                binding.owner_id, canonical, now=time.time(), firestore_client=self.client
+            )
 
     @staticmethod
     def _backfill_dispatch() -> dict[str, str] | None:

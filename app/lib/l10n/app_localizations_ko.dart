@@ -15348,4 +15348,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get finishBackToHome => '홈으로 돌아가기';
+
+  @override
+  String get quickSummaryWritingFullSummary => '전체 요약을 작성하는 중…';
 }

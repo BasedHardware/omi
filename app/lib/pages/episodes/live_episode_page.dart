@@ -9,9 +9,12 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_tabs.dart';
+import 'package:omi/pages/conversation_detail/widgets/quick_summary_card.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/episode_content.dart';
@@ -23,6 +26,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/services/experiments/quick_summary_gate.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/ui/ui.dart';
@@ -43,6 +47,30 @@ void switchHomeToConversationsTab(BuildContext context) {
 /// process in it (no transcript and no stored audio), so no conversation will come from it.
 bool processRefusedNothing(ServerConversation? conversation) =>
     conversation != null && conversation.v3?.recording == true && conversation.status == ConversationStatus.in_progress;
+
+/// With Quick Summary, the page Finish opens before Process Now answers: the conversation being
+/// processed, carrying the transcript heard so far (a batch pendant's is the on-device preview), so
+/// its Quick Summary streams while the server writes the full one. Null without an id to open; the
+/// answer then decides, as without Quick Summary.
+ConversationDetailPage? quickSummaryFinishPage({
+  required String? conversationId,
+  DateTime? createdAt,
+  DateTime? startedAt,
+  required List<TranscriptSegment> segments,
+  required List<LivePreviewLine> previewLines,
+}) {
+  if (conversationId == null || conversationId.isEmpty) return null;
+  return ConversationDetailPage(
+    conversation: ServerConversation(
+      id: conversationId,
+      createdAt: createdAt ?? DateTime.now(),
+      startedAt: startedAt,
+      structured: Structured('', ''),
+      transcriptSegments: segments.isNotEmpty ? List.of(segments) : transcriptFromPreview(previewLines),
+      status: ConversationStatus.processing,
+    ),
+  );
+}
 
 Widget? finishedCapturePageFor(ServerConversation? conversation) {
   if (conversation == null || conversation.discarded) return null;
@@ -169,11 +197,35 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     if (hadContent) {
       final previousFinish = provider.lastClientFinish;
       provider.noteClientFinish();
-      // Ending the capture fires the shared finalize hook, which closes the episode.
-      final result = await _finish(provider);
+      // Quick Summary opens the conversation now instead of after the answer. Read before the finish
+      // clears the capture.
+      final live = provider.speakerAssignmentConversation;
+      final early = QuickSummaryGate.isEnabled
+          ? quickSummaryFinishPage(
+              conversationId: live?.id ?? provider.activeRecordingId,
+              createdAt: live?.createdAt,
+              startedAt: live?.startedAt,
+              segments: provider.segments,
+              previewLines: preview?.sessionLines ?? const [],
+            )
+          : null;
+      // Leaving early must not change how the server transcribes the tail being processed: hold
+      // "transcript visible" until the finish completes.
+      final listenState = early == null ? null : (ListenClientState.instance..capturePageOpened());
+      if (early != null) {
+        switchHomeToConversationsTab(context);
+        _leaveFor(early);
+      }
+      CreateConversationResponse? result;
+      try {
+        // Ending the capture fires the shared finalize hook, which closes the episode.
+        result = await _finish(provider);
+      } finally {
+        listenState?.capturePageClosed();
+      }
       // No answer (offline, a server error): nothing was processed, so a retry must still send it.
       if (result == null) provider.lastClientFinish = previousFinish;
-      if (!mounted) return;
+      if (early != null || !mounted) return;
       switchHomeToConversationsTab(context);
       nothing = processRefusedNothing(result?.conversation);
       opens = nothing ? null : finishedCapturePageFor(result?.conversation);
@@ -196,10 +248,15 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     if (nothing) OmiFeedback.info(context, context.l10n.finishNothingToProcess);
     // A swipe back during the finish has already popped this route; it only stays mounted while it
     // animates out, and a pop then would take Home with it and leave the navigator empty.
+    _leaveFor(opens);
+  }
+
+  /// Replaces the live page with [opens], or pops to Home without one.
+  void _leaveFor(Widget? opens) {
     final route = ModalRoute.of(context);
     if (route == null || !route.isCurrent) return;
     if (opens != null) {
-      unawaited(Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => opens!)));
+      unawaited(Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => opens)));
     } else {
       Navigator.of(context).pop();
     }

@@ -2,8 +2,11 @@
 
 Owns: the shape of the phone's end marker, the rule that turns a marker into
 proof that a recording's speech has fully landed, and the upload trace header.
-The marker lets full processing start without the arrival-quiet wait; it never
-changes custody, and a marker that proves nothing leaves the quiet rule as is.
+The marker lets full processing start without the arrival-quiet wait: hold
+admission asks for the proof, and ``database.capture_end.expedite_if_proven``
+asks again when the marker arrives or a piece lands, waking the waiting
+obligation early. It never changes custody, and a marker that proves nothing
+leaves the quiet rule as is.
 A batch-owned live record needs no marker: the server's own seal is its proof.
 
 Lifecycle: ops kill switch ``SYNC_UPLOAD_WATERMARK_ENABLED``, default on; owner

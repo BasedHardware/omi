@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "Vom Server gemeldete Arbeit",
     "finishNothingToProcess": "Noch nichts zu verarbeiten.",
     "finishStillProcessing": "Wird noch verarbeitet. Es erscheint auf der Startseite.",
-    "finishBackToHome": "Zur Startseite"
+    "finishBackToHome": "Zur Startseite",
+    "quickSummaryWritingFullSummary": "Vollständige Zusammenfassung wird geschrieben…"
 }

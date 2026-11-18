@@ -15569,4 +15569,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Zpět domů';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Píše se úplné shrnutí…';
 }

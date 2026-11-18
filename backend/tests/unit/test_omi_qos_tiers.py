@@ -380,6 +380,7 @@ class TestModelQosProfiles:
             'persona_chat',
             'sync_redrive_title',
             'episode_incremental',
+            'interim_summary',
             'open_loop_card',
         }
         expected_openai = {

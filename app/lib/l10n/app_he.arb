@@ -12246,5 +12246,6 @@
     "onTheWayServerWork": "עבודה שדווחה מהשרת",
     "finishNothingToProcess": "עדיין אין מה לעבד.",
     "finishStillProcessing": "עדיין בעיבוד. זה יופיע במסך הבית.",
-    "finishBackToHome": "חזרה למסך הבית"
+    "finishBackToHome": "חזרה למסך הבית",
+    "quickSummaryWritingFullSummary": "כותב את הסיכום המלא…"
 }

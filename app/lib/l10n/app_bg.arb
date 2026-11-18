@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "Работа, отчетена от сървъра",
     "finishNothingToProcess": "Все още няма какво да се обработи.",
     "finishStillProcessing": "Все още се обработва. Ще се появи на началния екран.",
-    "finishBackToHome": "Към началото"
+    "finishBackToHome": "Към началото",
+    "quickSummaryWritingFullSummary": "Пише се пълното резюме…"
 }

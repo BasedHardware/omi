@@ -15577,4 +15577,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Назад на почетну';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Пише се цео резиме…';
 }

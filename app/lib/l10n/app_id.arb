@@ -4724,5 +4724,6 @@
     "onTheWayServerWork": "Pekerjaan yang dilaporkan server",
     "finishNothingToProcess": "Belum ada yang perlu diproses.",
     "finishStillProcessing": "Masih diproses. Ini akan muncul di Beranda.",
-    "finishBackToHome": "Kembali ke Beranda"
+    "finishBackToHome": "Kembali ke Beranda",
+    "quickSummaryWritingFullSummary": "Menulis ringkasan lengkap…"
 }

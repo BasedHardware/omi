@@ -3376,6 +3376,22 @@ export interface IntegrationResponse {
   read_selection_configured?: boolean | null;
 }
 
+export interface InterimSegment {
+  end?: number | null;
+  is_user?: boolean;
+  speaker?: string | null;
+  start?: number | null;
+  text?: string;
+}
+
+export interface InterimSummaryRequest {
+  language?: string | null;
+  segments?: Array<InterimSegment>;
+  started_at?: string | null;
+  text?: string | null;
+  timezone?: string | null;
+}
+
 export interface InterventionCreate {
   dedupe_key: string;
   evidence_refs?: Array<EvidenceRef>;
@@ -7223,6 +7239,8 @@ export interface OmiApiSchemas {
   "IntegrationMutationResponse": IntegrationMutationResponse;
   "IntegrationNotificationResponse": IntegrationNotificationResponse;
   "IntegrationResponse": IntegrationResponse;
+  "InterimSegment": InterimSegment;
+  "InterimSummaryRequest": InterimSummaryRequest;
   "InterventionCreate": InterventionCreate;
   "InterventionRecord": InterventionRecord;
   "InterventionSurface": InterventionSurface;
@@ -9022,6 +9040,16 @@ export interface OmiApiPaths {
         "200": ConversationMutationResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/interim-summary": {
+    post: {
+      operationId: "interim_summary_v1_conversations__conversation_id__interim_summary_post";
+      responses: {
+        "200": unknown;
+        "401": void;
         "422": HTTPValidationError;
       };
     };

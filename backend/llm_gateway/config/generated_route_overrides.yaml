@@ -86,6 +86,9 @@ generated_route_overrides:
   - feature: goals_advice
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: medium}
+  - feature: interim_summary
+    primary: {provider: openai, model: gpt-5-nano}
+    provider_options: {reasoning_effort: minimal}
   - feature: knowledge_graph
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: low}

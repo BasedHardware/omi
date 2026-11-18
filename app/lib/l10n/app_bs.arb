@@ -12246,5 +12246,6 @@
     "onTheWayServerWork": "Rad prijavljen sa servera",
     "finishNothingToProcess": "Još nema ništa za obradu.",
     "finishStillProcessing": "Još se obrađuje. Pojavit će se na početnoj.",
-    "finishBackToHome": "Nazad na početnu"
+    "finishBackToHome": "Nazad na početnu",
+    "quickSummaryWritingFullSummary": "Piše se puni sažetak…"
 }

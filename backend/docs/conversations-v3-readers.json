@@ -31,6 +31,10 @@
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
+  "backend/database/capture_end.py:collection": {
+    "policy": "both",
+    "reason": "Sync end-of-recording proof: reads only the owner's own conversation clocks (finished_at, external_data, sync_processing_hold) to decide whether a waiting summary may run early; never content, never shown."
+  },
   "backend/database/capture_group_notes.py:collection": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
@@ -384,6 +388,10 @@
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
   "backend/routers/integration.py:get_conversations_by_id": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/routers/interim_summary.py:get_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },

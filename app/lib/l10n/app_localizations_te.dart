@@ -15632,4 +15632,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'హోమ్‌కు తిరిగి వెళ్లండి';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'పూర్తి సారాంశం రాస్తోంది…';
 }

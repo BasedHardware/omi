@@ -15573,4 +15573,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Tilbake til Hjem';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Skriver hele sammendraget…';
 }

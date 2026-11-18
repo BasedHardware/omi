@@ -15609,4 +15609,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Terug naar Home';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Volledige samenvatting wordt geschreven…';
 }

@@ -15,10 +15,12 @@ import 'package:omi/pages/conversation_detail/widgets/calendar_event_sheets.dart
 import 'package:omi/pages/conversation_detail/widgets/capture_recordings.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_entity_chips.dart';
+import 'package:omi/pages/conversation_detail/widgets/quick_summary_card.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/transcription_pending_conversations.dart';
+import 'package:omi/services/experiments/quick_summary_gate.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
@@ -108,6 +110,33 @@ class ConversationDetailHeader extends StatelessWidget {
   Widget _titleRow(BuildContext context, ConversationDetailProvider provider, ServerConversation conversation) {
     final titleStyle = OmiType.title1.copyWith(height: 1.15, letterSpacing: -0.4);
     if (conversation.discarded) return Text(context.l10n.discardedConversation, style: titleStyle);
+    final field = _titleField(context, provider, conversation, titleStyle);
+    if (!QuickSummaryGate.isEnabled) return field;
+    // The Quick Summary's title stands in until the stored title lands, then cross-fades to it.
+    return ValueListenableBuilder<Map<String, String>>(
+      valueListenable: QuickSummarySliver.titles,
+      builder: (context, titles, _) {
+        final quickTitle = conversation.structured.title.trim().isEmpty ? titles[conversation.id] : null;
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 450),
+          layoutBuilder: (current, previous) =>
+              Stack(alignment: Alignment.topLeft, children: [...previous, if (current != null) current]),
+          child: quickTitle == null
+              ? KeyedSubtree(key: const ValueKey('stored_title'), child: field)
+              : Text(
+                  quickTitle,
+                  key: const ValueKey('quick_summary_title'),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: titleStyle,
+                ),
+        );
+      },
+    );
+  }
+
+  Widget _titleField(BuildContext context, ConversationDetailProvider provider, ServerConversation conversation,
+      TextStyle titleStyle) {
     // Once the server says the audio is still waiting for a transcript, its "Couldn't transcribe"
     // stand-in title would contradict the Summary tab, so the page shows the untitled fallback.
     return ValueListenableBuilder<Map<String, DateTime>>(

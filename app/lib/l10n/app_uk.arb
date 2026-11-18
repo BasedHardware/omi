@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "Робота за даними сервера",
     "finishNothingToProcess": "Поки що нічого обробляти.",
     "finishStillProcessing": "Ще обробляється. З'явиться на головній.",
-    "finishBackToHome": "На головну"
+    "finishBackToHome": "На головну",
+    "quickSummaryWritingFullSummary": "Пишеться повне резюме…"
 }

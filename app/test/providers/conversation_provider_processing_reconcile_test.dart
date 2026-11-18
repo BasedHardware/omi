@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
+import 'package:omi/services/experiments/quick_summary_gate.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/home_rows.dart';
 
@@ -1437,6 +1438,123 @@ void main() {
       provider.conversations.where((conversation) => conversation.status != ConversationStatus.completed),
       isEmpty,
     );
+  });
+
+  group('processing poll cadence', () {
+    setUp(() => QuickSummaryGate.debugOverride = true);
+    tearDown(() => QuickSummaryGate.debugOverride = null);
+
+    ConversationProvider stillProcessingProvider(void Function() onProbe) => ConversationProvider(
+          conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+          conversationLifecycleFetcher: (id) async {
+            onProbe();
+            return (item: _conversation(id, status: ConversationStatus.processing), ok: true);
+          },
+          isSignedIn: () => true,
+        );
+
+    testWidgets('polls every 3 s for about 90 s, then every 15 s', (tester) async {
+      var probes = 0;
+      final provider = stillProcessingProvider(() => probes++);
+      addTearDown(provider.dispose);
+      provider.addProcessingConversation(_conversation('real', status: ConversationStatus.processing));
+
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump();
+      expect(probes, 1, reason: 'the first check comes after 3 s, not 15 s');
+
+      for (var i = 1; i < 30; i++) {
+        await tester.pump(const Duration(seconds: 3));
+        await tester.pump();
+      }
+      expect(probes, 30, reason: 'fast window: one check every 3 s for ~90 s');
+
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump();
+      expect(probes, 30, reason: 'after the fast window the next check waits 15 s');
+      await tester.pump(const Duration(seconds: 12));
+      await tester.pump();
+      expect(probes, 31);
+
+      provider.removeProcessingConversation('real');
+      await tester.pump(const Duration(seconds: 3));
+    });
+
+    testWidgets('with Quick Summary off, polls every 15 s as before', (tester) async {
+      QuickSummaryGate.debugOverride = false;
+      var probes = 0;
+      final provider = stillProcessingProvider(() => probes++);
+      addTearDown(provider.dispose);
+      provider.addProcessingConversation(_conversation('real', status: ConversationStatus.processing));
+
+      await tester.pump(const Duration(seconds: 14));
+      await tester.pump();
+      expect(probes, 0);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(probes, 1);
+
+      provider.removeProcessingConversation('real');
+      await tester.pump(const Duration(seconds: 15));
+    });
+
+    testWidgets('a new processing row restarts the fast window', (tester) async {
+      var probes = 0;
+      final provider = stillProcessingProvider(() => probes++);
+      addTearDown(provider.dispose);
+      provider.addProcessingConversation(_conversation('first', status: ConversationStatus.processing));
+      for (var i = 0; i < 31; i++) {
+        await tester.pump(const Duration(seconds: 3));
+        await tester.pump();
+      }
+      final slowPhaseProbes = probes;
+
+      provider.addProcessingConversation(_conversation('second', status: ConversationStatus.processing));
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump();
+      expect(probes, greaterThan(slowPhaseProbes), reason: 'the new row is checked within 3 s');
+
+      provider.removeProcessingConversation('first');
+      provider.removeProcessingConversation('second');
+      await tester.pump(const Duration(seconds: 3));
+    });
+
+    testWidgets('skips a round while the previous checks still wait on the server', (tester) async {
+      var probes = 0;
+      final hanging = <Completer<({ServerConversation? item, bool ok})>>[];
+      final provider = ConversationProvider(
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+        conversationLifecycleFetcher: (_) {
+          probes++;
+          final completer = Completer<({ServerConversation? item, bool ok})>();
+          hanging.add(completer);
+          return completer.future;
+        },
+        isSignedIn: () => true,
+      );
+      addTearDown(provider.dispose);
+      provider.addProcessingConversation(_conversation('real', status: ConversationStatus.processing));
+
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(seconds: 2)); // past the round's 2 s deadline
+      expect(probes, 1);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(seconds: 3));
+      }
+      expect(probes, 1, reason: 'no new checks pile onto a check the server has not answered');
+
+      hanging.single.complete((item: _conversation('real', status: ConversationStatus.processing), ok: true));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump();
+      expect(probes, 2, reason: 'polling resumes once the server answers');
+
+      for (final completer in hanging.where((c) => !c.isCompleted)) {
+        completer.complete((item: null, ok: false));
+      }
+      provider.removeProcessingConversation('real');
+      await tester.pump(const Duration(seconds: 3));
+    });
   });
 }
 

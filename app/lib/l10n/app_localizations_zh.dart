@@ -15318,4 +15318,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get finishBackToHome => '返回首页';
+
+  @override
+  String get quickSummaryWritingFullSummary => '正在撰写完整摘要…';
 }

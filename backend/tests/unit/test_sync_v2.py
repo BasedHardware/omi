@@ -4099,9 +4099,10 @@ class TestV2EndpointExecution:
     ):
         _, _, module = sync_endpoint_module
         monkeypatch.delenv('SYNC_UPLOAD_WATERMARK_ENABLED', raising=False)
-        saved, ended = [], []
+        saved, ended, expedited = [], [], []
         module.capture_end_db = SimpleNamespace(
-            store=lambda uid, session, marker: saved.append((uid, session, marker)) or (stored, 'conversation')
+            store=lambda uid, session, marker: saved.append((uid, session, marker)) or (stored, 'conversation'),
+            expedite_if_proven=lambda uid, cid, *, now: expedited.append((uid, cid)) or True,
         )
         module.pipeline_ledger = SimpleNamespace(record_end=lambda uid, cid, **kw: ended.append((uid, cid, kw)))
 
@@ -4121,8 +4122,27 @@ class TestV2EndpointExecution:
         if stored == 'stored':
             assert ended[0][:2] == ('synthetic', 'conversation')
             assert ended[0][2]['end_at'] == marker['end_at'] and ended[0][2]['last_speech_at'] == 1000.0
+            # "Nothing left to upload" asks whether the quiet wait can end now.
+            assert expedited == [('synthetic', 'conversation')]
         else:
-            assert not ended
+            assert not ended and not expedited
+
+    async def test_capture_end_with_files_still_pending_keeps_the_quiet_wait(self, sync_endpoint_module, monkeypatch):
+        _, _, module = sync_endpoint_module
+        monkeypatch.delenv('SYNC_UPLOAD_WATERMARK_ENABLED', raising=False)
+        expedite = MagicMock()
+        module.capture_end_db = SimpleNamespace(
+            store=lambda uid, session, marker: ('stored', 'conversation'), expedite_if_proven=expedite
+        )
+        module.pipeline_ledger = SimpleNamespace(record_end=lambda uid, cid, **kw: None)
+
+        async def run(executor, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        module.run_blocking = run
+        result = await module.record_sync_capture_end(self._capture_end_payload(pending_wals=2), uid='synthetic')
+        assert result.accepted
+        expedite.assert_not_called()
 
     async def test_capture_end_refuses_a_malformed_marker_and_reports_a_store_outage(
         self, sync_endpoint_module, monkeypatch

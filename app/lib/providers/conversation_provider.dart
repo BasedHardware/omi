@@ -22,6 +22,7 @@ import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
+import 'package:omi/services/experiments/quick_summary_gate.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/siri_integration.dart';
@@ -125,6 +126,15 @@ class ConversationProvider extends ChangeNotifier {
   final Set<String> _failedHomeProcessingIds = {};
   Timer? _processingPlaceholderTimeout;
   Timer? _processingReconcileTimer;
+
+  /// Reconcile ticks since a processing row last appeared; the first ones poll fast.
+  int _processingReconcileTicks = 0;
+
+  /// Lifecycle probes still awaiting the server, including ones a round's deadline gave up on.
+  int _processingProbesInFlight = 0;
+  static const Duration _processingFastReconcileInterval = Duration(seconds: 3);
+  static const int _processingFastReconcileTicks = 30;
+  static const Duration _processingSlowReconcileInterval = Duration(seconds: 15);
 
   /// Replacement processing telemetry. Production uses the process-wide client.
   ClientTelemetry? clientTelemetry;

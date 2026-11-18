@@ -12246,5 +12246,6 @@
     "onTheWayServerWork": "Delo, ki ga poroča strežnik",
     "finishNothingToProcess": "Še ni ničesar za obdelavo.",
     "finishStillProcessing": "Še v obdelavi. Prikazalo se bo na začetni strani.",
-    "finishBackToHome": "Nazaj na začetno"
+    "finishBackToHome": "Nazaj na začetno",
+    "quickSummaryWritingFullSummary": "Pišem celoten povzetek…"
 }

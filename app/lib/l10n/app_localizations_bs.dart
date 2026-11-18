@@ -15598,4 +15598,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Nazad na početnu';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Piše se puni sažetak…';
 }

@@ -1878,6 +1878,7 @@ Mac visibility is sampled again after asynchronous header preparation.
 Tier priority does not bypass sync append settlement: the existing
 `SYNC_REPROCESS_SETTLE_SECONDS` (production 600 seconds) extends one durable
 reprocess obligation, with a 59-minute demand ceiling for continuous appends.
+Only a holding end-of-recording proof (below) makes it due early.
 Redis scheduling, open-time priority promotion, Redis-loss fallback and worker
 claims all retain this content boundary. Invisible effects remain independently
 coalesced and may run immediately on explicit demand. See the
@@ -9458,6 +9459,11 @@ ahead is stored shifted onto the server clock, the hold state keeps that shift b
 (`content_clock_offset`, `content_clock_end`), and the proof adds it back before comparing. If the row's end
 has since moved for another reason the result is `clock_unknown` and the quiet rule applies. Unchanged, immaterial
 and late-cap rules still apply. Any other result, a read failure included, leaves the quiet rule as it is.
+The proof is also asked as soon as it can change, so a waiting obligation does not sit out the settle window:
+on a stored marker with `pending_wals == 0`, and after a projection that extends a waiting obligation. It
+reads only `finished_at`, `external_data` and `sync_processing_hold` from the conversation, plus the session
+document. When proven, the obligation becomes due now under a fresh wake with its `version` unchanged; leased,
+dormant and already-due rows are left alone, and admission above still decides the run.
 `omi_sync_capture_end_total{end_type,outcome}` counts markers and
 `omi_sync_capture_end_proof_total{result}` counts evaluations (`proven`, `absent`, `pending`,
 `no_speech_clock`, `content_behind`, `resumed`, `sealed`, `sealed_held`).
@@ -9489,7 +9495,7 @@ never creates, reopens or re-leases an obligation. The recovered unit later coun
 [Change note](listen_pusher_pipeline/changes/2026-11-17-sealed-record-first-notes-latency.md).
 
 `SYNC_UPLOAD_WATERMARK_ENABLED` is the default-on kill switch: off, the route stores nothing, admission
-reads nothing, and phones are told no silence timer. `SYNC_CAPTURE_END_SILENCE_SECONDS` (default 120,
+reads nothing, nothing wakes early, and phones are told no silence timer. `SYNC_CAPTURE_END_SILENCE_SECONDS` (default 120,
 clamped to 60..1800, `0` withdraws it) is sent to phones as `end_silence_seconds` on the
 `mobile_batch_admission` status event; a phone that receives none sends no silence end.
 

@@ -15603,4 +15603,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'На головну';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Пишеться повне резюме…';
 }

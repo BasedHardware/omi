@@ -26,7 +26,10 @@ for every tier. Sync append reprocessing retains its existing trailing-edge
 `SYNC_REPROCESS_SETTLE_SECONDS` (600 seconds in production), including tier 0,
 open/tool priority promotion, Redis failure and durable worker claims. Each append
 extends the same outbox obligation instead of causing another processing pass;
-continuous appends retain the 59-minute ceiling. This content-settlement boundary
+continuous appends retain the 59-minute ceiling. The one early exit is the phone's
+end-of-recording proof (`SYNC_UPLOAD_WATERMARK_ENABLED`): when it holds, the marker
+or the projection that completes the recording makes the obligation due now,
+without a version bump, and admission still re-checks it. This content-settlement boundary
 is separate from priority admission. Keep warm capacity: tiers
 order ready work only under contention and never impose an idle-capacity timer.
 Future lazy enrichment does not block ready visible work. Ready work drains tiers

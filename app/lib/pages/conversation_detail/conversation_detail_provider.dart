@@ -934,6 +934,11 @@ class ConversationDetailProvider extends ChangeNotifier
   // omi-perf-allow: proxy-hook-notify -- the open detail page derives its conversation from upstream
   void setProviders(AppProvider provider, ConversationProvider conversationProvider) {
     this.conversationProvider = conversationProvider;
+    // The open conversation may have been updated by a list read; its title lands after this build.
+    if (titleController?.text.isEmpty ?? false) {
+      final stored = conversationOrNull?.structured.title;
+      if (stored != null && stored.trim().isNotEmpty) scheduleMicrotask(() => _adoptStoredTitle(stored));
+    }
     appProvider = provider;
     notifyListeners();
   }
@@ -1281,6 +1286,15 @@ class ConversationDetailProvider extends ChangeNotifier
   /// Re-reads the open conversation. With [trackLoad] the outcome is kept in [detailLoad] so a tab
   /// with nothing to show can say it is loading or offer Try Again; untracked refreshes stay
   /// silent and never overwrite a tracked failure with "loading".
+  /// A page opened before its summary was stored (right after Finish, or on a processing row) built
+  /// an empty title field. Once a title is stored it fills the field, unless the user is editing it.
+  void _adoptStoredTitle(String? stored) {
+    final controller = titleController;
+    if (_isDisposed || controller == null || controller.text.isNotEmpty) return;
+    if (stored == null || stored.trim().isEmpty || (titleFocusNode?.hasFocus ?? false)) return;
+    controller.text = stored;
+  }
+
   Future<bool> refreshConversation({bool trackLoad = false}) async {
     final openedId = conversationOrNull?.id;
     if (openedId == null) return false;
@@ -1323,6 +1337,7 @@ class ConversationDetailProvider extends ChangeNotifier
                 updatedConversation.status == ConversationStatus.merging)) {
           updatedConversation = updatedConversation.withHomeStep('failed');
         }
+        _adoptStoredTitle(updatedConversation.structured.title);
         // A transcript in the detail copy proves transcription finished; a missing Home step proves nothing.
         TranscriptionPendingConversations.observe(updatedConversation);
         conversationProvider?.updateConversation(updatedConversation);
