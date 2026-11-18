@@ -498,6 +498,12 @@ def test_other_services_still_restore_when_integration_rollback_refuses_foreign_
         'case "$1" in *integration_canary_controller.py) exit 42;; esac\n'
     )
     path.chmod(0o700)
+    git = tmp_path / 'git'
+    git.write_text(
+        '#!/bin/sh\nprintf "%s\\n" "git $*" >> "$CALLS"\n'
+        'case "$1" in rev-parse) printf "true\\n";; fetch) exit 0;; *) exit 1;; esac\n'
+    )
+    git.chmod(0o700)
     result = subprocess.run(
         ['bash', '-c', step_script('Restore Cloud Run traffic snapshot after failed promotion')],
         env=dict(
@@ -505,6 +511,7 @@ def test_other_services_still_restore_when_integration_rollback_refuses_foreign_
             PATH=str(tmp_path) + ':' + os.environ['PATH'],
             CALLS=str(log),
             DEPLOY_CONTROL_SCRIPTS='/controls',
+            DEPLOY_WORKFLOW_ROOT='/workflow',
             RUNNER_TEMP=str(tmp_path),
         ),
         capture_output=True,
@@ -513,10 +520,13 @@ def test_other_services_still_restore_when_integration_rollback_refuses_foreign_
     )
     assert result.returncode == 42
     calls = log.read_text().splitlines()
-    assert len(calls) == 2
+    assert len(calls) == 4
     assert 'integration_canary_controller.py rollback' in calls[0]
-    assert 'cloud_run_traffic_snapshot.py restore' in calls[1]
-    assert '--exclude-service backend-integration' in calls[1]
+    assert calls[1] == 'git rev-parse --is-shallow-repository'
+    assert calls[2] == 'git fetch --no-tags --unshallow origin +refs/heads/main:refs/remotes/origin/main'
+    assert 'cloud_run_traffic_snapshot.py restore' in calls[3]
+    assert '--exclude-service backend-integration' in calls[3]
+    assert '--release-floor-check /workflow/.github/scripts/verify_backend_release_floor.py' in calls[3]
 
 
 def test_actual_renderer_and_native_cloud_validator_share_same_canary_composition(monkeypatch, tmp_path):

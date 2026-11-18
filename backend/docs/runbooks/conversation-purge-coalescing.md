@@ -79,8 +79,9 @@ Release must enforce the workspace rollback floor for every purge consumer.
 Use the floor-guarded workspace tooling for deploy and rollback admission. For
 other manual traffic moves, verify the target against the workspace floor first.
 The direct backend workflow checks the floor from product main for the requested
-release, traffic repair, integration canary rollback, and failed-promotion
-traffic restoration.
+release, traffic repair, integration-only canary rollback, and failed-promotion
+traffic restoration. Supply a floor-qualified retained revision when dispatching
+an integration-only canary.
 Keep renewing the readiness marker daily while marker-gated #25608 binaries
 still serve, until every purge consumer runs the marker-free release.
 Verify traffic, tagged revisions and queued revision-specific task targets before
