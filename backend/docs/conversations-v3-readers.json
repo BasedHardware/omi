@@ -771,6 +771,10 @@
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
+  "backend/utils/conversations/v3/created.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Owner-scoped re-read of one claimed v3-derived conversation (claim requires v3_derived and not recording) for its conversation-created webhook payload."
+  },
   "backend/utils/conversations/v3/service.py:collection_group": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."

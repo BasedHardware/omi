@@ -212,6 +212,19 @@ def _staging_substitute(value: str, *, run_url_template: str, inputs: dict[str, 
 def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
     """One stage source moves API, capture, finalizers and jobs together (staging mirrors prod)."""
     stage = env_config.pop('conversations_v3_stage', None)
+    # Kill switch (CONVERSATIONS_V3=off): stops new v3 admission on every writer; marked rows keep draining.
+    kill = env_config.pop('conversations_v3', None)
+    if kill is not None:
+        kill_descriptor = {'value': str(kill), 'category': 'ops_kill'}
+        cloud_run = env_config.get('cloud_run', {})
+        for group in ('services', 'jobs'):
+            for service in cloud_run.get(group, {}).values():
+                if isinstance(service, dict):
+                    service.setdefault('env', {})['CONVERSATIONS_V3'] = deepcopy(kill_descriptor)
+        config_map = env_config.get('gke', {}).get('config_map')
+        if isinstance(config_map, dict):
+            # backend-listen and pusher load the whole ConfigMap through envFrom.
+            config_map.setdefault('entries', {})['CONVERSATIONS_V3'] = {'source': 'literal', 'value': str(kill)}
     if stage is not None:
         descriptor = {'value': str(stage), 'category': 'rollout'}
         first_build = env_config.pop('conversations_v3_first_app_build', '')

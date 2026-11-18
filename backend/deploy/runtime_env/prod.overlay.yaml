@@ -3,6 +3,9 @@ environment: prod
 compute_project: based-hardware
 data_plane_project: based-hardware
 overlay:
+  # Incident 2026-11-18 07:03Z (David): v3 kill switch; beta admitted public store builds and the
+  # conversations-v3 queue fell behind. Remove to re-enable after the v3-app admission gate (#25658) ships.
+  conversations_v3: 'off'
   llm_gateway:
     env:
       OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
