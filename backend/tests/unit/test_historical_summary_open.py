@@ -300,3 +300,15 @@ def test_historical_minimum_is_a_ready_home_row_with_no_summary_debt(monkeypatch
     assert 'summary_due_at' not in write and write['summary_output_present'] is False
     assert summary_delivery.refusal(write) == 'local_only'
     assert home_step.classify(write) == 'ready'
+
+
+def test_an_empty_open_time_run_never_arms_automatic_summary_debt():
+    # The notes pipeline can return its provenance-stamped minimum for a short or empty
+    # transcript; the historical row must still owe nothing the age gate will park.
+    write = {
+        **_row(structured={'title': 'Recording', 'title_provenance': 'server_minimum', 'overview': ''}),
+        'terminal_no_derived_effects': True,
+    }
+    summary_delivery.prepare(write, 'u1', now=NOW.timestamp())
+    assert write['summary_due_at'] is None
+    assert summary_delivery.refusal(write) == 'local_only'

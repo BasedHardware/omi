@@ -145,6 +145,10 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
     data['summary_output_present'] = present(structured)
     if field(structured, 'title_provenance') == 'server_minimum' and not present(structured):
         data['summary_title_provenance'] = 'server_minimum'
+        if data.get('processing_tier') == 'historical':
+            # T1+: only the owner's open generates; an empty open-time run owes nothing automatic.
+            data['summary_due_at'] = None
+            return
         if intentional_short_clip_minimum(data):
             data['summary_due_at'] = None
             return
