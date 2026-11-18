@@ -72,7 +72,7 @@ See the module docstring of `server.py`. Every route is JSON except `/audio/<day
 
 ```bash
 cd backend
-/Users/dazheng/workspace/omi/bin/omi-heavy run -- .venv/bin/python -m pytest \
+<workspace>/bin/omi-heavy run -- .venv/bin/python -m pytest \
   tests/unit/test_pipeline_lab_inspector_server.py tests/unit/test_pipeline_lab_inspector_sample_run.py -q
 ```
 
