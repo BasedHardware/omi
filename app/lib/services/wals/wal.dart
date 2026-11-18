@@ -297,6 +297,7 @@ class Wal {
   set timerStart(int value) {
     if (_timerStart == value) return;
     _timerStart = value;
+    _id = null;
     _changed();
   }
 
@@ -337,6 +338,7 @@ class Wal {
   set device(String value) {
     if (_device == value) return;
     _device = value;
+    _id = null;
     _changed();
   }
 
@@ -869,9 +871,13 @@ class Wal {
             syncDisplayState == WalSyncDisplayState.syncing);
   }
 
+  // Cache the regular identity used when scanning large histories. The device
+  // and timerStart setters invalidate it.
+  String? _id;
+
   String get id {
     final file = filePath;
-    if (!recoveredOrphan || file == null || file.isEmpty) return '${device}_$timerStart';
+    if (!recoveredOrphan || file == null || file.isEmpty) return _id ??= '${_device}_$_timerStart';
     if (_orphanIdentityPath != file) {
       _orphanIdentityPath = file;
       _orphanIdentity = 'orphan_${sha256.convert(utf8.encode(file))}';
