@@ -292,8 +292,36 @@ def test_review_and_apply_use_fixed_read_and_write_caps(now):
         assert receipt['repair']['candidate_owners'] == 5
         arm.assert_not_called()
         receipt, failed = worker.run(None, _args(now, apply=True), now=now)
-        assert not failed and arm.call_count == 2 and receipt['repair']['outcomes'] == {'armed': 2}
+        assert not failed and arm.call_count == 2
+        assert receipt['repair']['outcomes'] is None
+        assert receipt['repair']['outcomes_state'] == 'below_reporting_minimum'
         assert 'private-test' not in json.dumps(receipt)
+
+
+@pytest.mark.parametrize(
+    'dispositions, expected',
+    [
+        (['armed'], None),
+        (['armed'] * 5 + ['privacy_refused'], None),
+        (['armed'] * 5 + ['privacy_refused'] * 5, {'armed': 5, 'privacy_refused': 5}),
+    ],
+)
+def test_apply_only_publishes_breakdown_when_every_outcome_meets_owner_threshold(now, dispositions, expected):
+    count = len(dispositions)
+    owners = max(count, review.MIN_REPORT_OWNERS)
+    with (
+        patch.object(
+            worker,
+            'scan',
+            side_effect=lambda *a, **kw: _page(now, owners, owners) if kw['status'] == 'completed' else (0, []),
+        ),
+        patch.object(repair, 'arm', side_effect=dispositions) as arm,
+    ):
+        args = _args(now, apply=True, max_writes=count, per_status=owners)
+        receipt, failed = worker.run(None, args, now=now)
+    assert not failed and arm.call_count == count
+    assert receipt['repair']['outcomes'] == expected
+    assert receipt['repair'].get('outcomes_state') == ('below_reporting_minimum' if expected is None else None)
 
 
 def test_query_error_cannot_trigger_partial_apply_or_leak_exception(now):

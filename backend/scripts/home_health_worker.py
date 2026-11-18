@@ -202,7 +202,13 @@ def run(client, args, *, now, monotonic=time.monotonic, utcnow=lambda: datetime.
         if outcome == 'deadline_reached':
             report['budget_interrupted'] = True
             break
-    report['repair']['outcomes'] = dict(sorted(outcomes.items()))
+    # Each attempt has a distinct owner. A published bucket could reveal a
+    # suppressed bucket by subtraction, so publish the breakdown as a whole.
+    if outcomes and min(outcomes.values()) >= review.MIN_REPORT_OWNERS:
+        report['repair']['outcomes'] = dict(sorted(outcomes.items()))
+    else:
+        report['repair']['outcomes'] = None
+        report['repair']['outcomes_state'] = 'below_reporting_minimum'
     return report, bool(outcomes['error'] or report['budget_interrupted'])
 
 
