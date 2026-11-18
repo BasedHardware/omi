@@ -21,6 +21,9 @@ environments:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
+          CONVERSATIONS_V3_RECORDING_ROTATION: {value: 'off', category: rollout}
+          CONVERSATIONS_V3_ROTATION_MIN_SECONDS: {value: '180', category: rollout}
+          CONVERSATIONS_V3_ROTATION_MAX_SECONDS: {value: '300', category: rollout}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
             value: 'true'
             category: ops_kill
@@ -2910,6 +2913,9 @@ environments:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
+          CONVERSATIONS_V3_RECORDING_ROTATION: {value: 'off', category: rollout}
+          CONVERSATIONS_V3_ROTATION_MIN_SECONDS: {value: '180', category: rollout}
+          CONVERSATIONS_V3_ROTATION_MAX_SECONDS: {value: '300', category: rollout}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
             value: 'true'
             category: ops_kill

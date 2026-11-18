@@ -53,6 +53,7 @@ def entries():
                         'started_at': FROZEN_NOW,
                         'finished_at': FROZEN_NOW,
                         'transcript_segments': [{'text': 'shape', 'start': 0, 'end': 1}],
+                        'v3_rotation_cap_seconds': 300.0,
                     }
                 },
             },

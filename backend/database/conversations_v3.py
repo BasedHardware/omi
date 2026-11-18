@@ -292,19 +292,24 @@ def load(uid, *, conversation_id=None, firestore_client=None):
 
 
 def _mark_successor_pending(coll, recordings):
-    """Keep the latest stretch open while the next recording is still captured or transcribed.
+    """Keep the latest stretch open while the recording after a rotation is captured or transcribed.
 
-    Batch recordings get no transcript until they seal, and listen rotates long v3 recordings, so
-    the next one can start before the previous stretch's five-minute deadline with no lines yet.
+    Batch recordings get no transcript until they seal. Only a recording that listen rotation
+    sealed carries the cap stamp; every other stretch keeps the plain five-minute rule.
     """
     spoken = [r for r in recordings.values() if r.get('transcript_segments') and r.get('started_at')]
     if not spoken:
         return
     latest = max(spoken, key=speech_end)
-    if latest.get('_v3_page_continues'):
+    cap = latest.get(policy.ROTATION_CAP_FIELD)
+    if latest.get('_v3_page_continues') or type(cap) not in (int, float) or not 0 < cap <= 3600:
         return
     end, now = speech_end(latest), datetime.now(timezone.utc)
-    query = coll.where(filter=FieldFilter('started_at', '>', latest['started_at'])).order_by('started_at')
+    query = (
+        coll.where(filter=FieldFilter('started_at', '>', latest['started_at']))
+        .order_by('started_at')
+        .select(SUCCESSOR_FIELDS)
+    )
     for doc in query.limit(8).stream():
         raw = doc.to_dict() or {}
         start = raw.get('started_at')
@@ -316,10 +321,22 @@ def _mark_successor_pending(coll, recordings):
             and not raw.get('deleted')
             and not raw.get('sync_merged_into')
             and raw.get('data_protection_level') != 'private'
-            and policy.awaiting_transcript(raw, now)
+            and policy.awaiting_transcript(raw, now, cap)
         ):
             latest['_v3_page_continues'] = True
             return
+
+
+SUCCESSOR_FIELDS = [
+    'started_at',
+    'created_at',
+    'finished_at',
+    'status',
+    'recording',
+    'deleted',
+    'sync_merged_into',
+    'data_protection_level',
+]
 
 
 def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):

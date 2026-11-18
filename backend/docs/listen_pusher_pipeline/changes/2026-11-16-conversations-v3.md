@@ -77,11 +77,13 @@ change. Rollout still requires the existing beta gates.
 
 A batch-only recording has no transcript until it seals, and in continuous
 noise it never reached the 120 s speech quiet, so a 34-minute cafe capture
-showed nothing on Home until it ended. Listen now seals a live v3 recording
-(`recording: true`) at the first 1.5 s speech pause after 120 s, or at 240 s,
-and the next audio opens the next recording on the same socket. Legacy rows,
-onboarding captures and boundary holds never rotate. The v3 loader keeps the
-latest stretch open while the next recording is live under the cap or sealed
-and untranscribed for up to 15 minutes, so a rotation is never a false
-five-minute split. `CONVERSATIONS_V3_RECORDING_ROTATION=off` restores
-seal-on-quiet.
+showed nothing on Home until it ended. Listen can now seal a live v3 recording
+(`recording: true`) at the first 1.5 s speech pause after 180 s, or at 300 s.
+It opens the successor first, then retargets frames still addressed to the old
+recording, finishes its custody and seals it. A failed successor keeps the
+current recording and retries after 60 s. Legacy rows, onboarding captures,
+pending stops and boundary holds never rotate. Rotation-sealed rows carry
+`v3_rotation_cap_seconds`; for them only, the v3 loader keeps the stretch open
+while the next recording is live under the cap or sealed and untranscribed for
+up to 15 minutes. Default off (`CONVERSATIONS_V3_RECORDING_ROTATION`), with a
+`v3-recording-rotation` rollout cohort for canaries.

@@ -749,10 +749,15 @@ async def test_processing_and_purge_sweeps_cursor_past_errors_and_1000_rows(monk
         assert len(pages) == 2 and pages[1][2] is not None
 
 
-def _rotation_rows(successor):
+def _rotation_rows(successor, rotated=True):
     rows = {
         '/users/u/conversations/a': source(
-            'a', started_at=AT, finished_at=AT + timedelta(seconds=150), v3_pending=False, v3_pending_since=None
+            'a',
+            started_at=AT,
+            finished_at=AT + timedelta(seconds=150),
+            v3_pending=False,
+            v3_pending_since=None,
+            **({'v3_rotation_cap_seconds': 240.0} if rotated else {}),
         ),
         '/users/u/conversations/x': {'id': 'x', 'v3_derived': True, 'started_at': AT + timedelta(seconds=1)},
     }
@@ -781,9 +786,18 @@ def _rotation_rows(successor):
     ],
 )
 def test_untranscribed_successor_keeps_the_stretch_open(monkeypatch, successor, now_after, continues):
+    _assert_successor(monkeypatch, _rotation_rows(successor), now_after, continues)
+
+
+@pytest.mark.parametrize('successor', [{'status': 'in_progress'}, {'status': 'processing'}])
+def test_a_recording_rotation_did_not_seal_keeps_the_five_minute_rule(monkeypatch, successor):
+    # Rotation off (or a quiet seal): no cap stamp, so the builder behaves exactly as before.
+    _assert_successor(monkeypatch, _rotation_rows(successor, rotated=False), 200, False)
+
+
+def _assert_successor(monkeypatch, rows, now_after, continues):
     from utils.conversations.v3 import outline
 
-    rows = _rotation_rows(successor)
     now = AT + timedelta(seconds=now_after)
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
     monkeypatch.setattr(
