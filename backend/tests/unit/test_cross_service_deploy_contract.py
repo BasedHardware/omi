@@ -60,7 +60,7 @@ class OverlaySource(contract.Source):
 
 
 def _manifest() -> dict:
-    return yaml.safe_load((REPO_ROOT / contract.MANIFEST).read_text(encoding='utf-8'))
+    return contract._load_yaml_path(REPO_ROOT / contract.MANIFEST)
 
 
 def _prod(manifest: dict) -> dict:
@@ -75,7 +75,8 @@ def _manifest_mutation(mutate: Callable[[dict], None]) -> Callable[[], dict[str,
     def overrides() -> dict[str, str]:
         manifest = _manifest()
         mutate(manifest)
-        return {contract.MANIFEST: yaml.safe_dump(manifest, sort_keys=False)}
+        dumper = getattr(yaml, 'CSafeDumper', yaml.SafeDumper)
+        return {contract.MANIFEST: yaml.dump(manifest, Dumper=dumper, sort_keys=False)}
 
     return overrides
 
@@ -216,10 +217,7 @@ HELM_MUTATIONS = {
     'worker_without_independent_recovery',
     'worker_without_independent_recovery_default_off',
 }
-SOURCE_DEFAULT_MUTATIONS = {
-    'worker_without_independent_recovery',
-    'worker_without_independent_recovery_default_off',
-}
+SOURCE_DEFAULT_MUTATIONS = {'worker_without_independent_recovery_default_off'}
 
 
 @dataclass
