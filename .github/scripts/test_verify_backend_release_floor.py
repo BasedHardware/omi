@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -65,6 +66,27 @@ class VerifyBackendReleaseFloorTest(unittest.TestCase):
                 self.git('add', '.')
                 self.git('update-ref', 'refs/remotes/origin/main', self.commit())
                 self.assertIn('Cannot read a valid backend release floor', self.check_sha(self.floor).stderr)
+
+    def check_revision(self, env_entries):
+        revision = {'spec': {'containers': [{'env': env_entries}]}}
+        gcloud = self.repo / 'gcloud'
+        gcloud.write_text(f"#!/bin/sh\nprintf '%s\\n' {shlex.quote(json.dumps(revision))}\n")
+        gcloud.chmod(0o755)
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), '--revision', 'backend-retained', '--project', 'test', '--region', 'test'],
+            cwd=self.repo,
+            env={**os.environ, 'PATH': f"{self.repo}{os.pathsep}{os.environ['PATH']}"},
+            capture_output=True,
+            text=True,
+        )
+
+    def test_revision_stamp_at_floor_is_admitted(self):
+        self.assertEqual(self.check_revision([{'name': 'OMI_BACKEND_RELEASE_SHA', 'value': self.floor}]).returncode, 0)
+
+    def test_unstamped_revision_is_refused(self):
+        result = self.check_revision([])
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('must have exactly one valid OMI_BACKEND_RELEASE_SHA stamp', result.stderr)
 
     def test_break_glass_cannot_admit_pre_floor(self):
         workflow = WORKFLOW.read_text()
