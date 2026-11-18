@@ -1012,11 +1012,16 @@ def is_visible_conversation(
     return True
 
 
-# Legacy completed rule-discards still match ``discarded == False``. Skip at
-# most this many of them while filling one page: one stale row must not empty
-# the page, and a pile must not walk the collection. Past the cap the page
-# may be short; that bound is preferable to an unbounded scan or a new index.
-_RULE_DISCARD_PAGE_SKIP_CAP = 64
+# Rows the indexed query still matches but readers hide (completed rule
+# discards, ``home_hidden`` v3 windows, recordings, tombstones, holds). Skip at
+# most this many HIDDEN rows while filling one page; visible rows never count.
+# One stale row must not empty the page, and a pile must not walk the
+# collection. Measured 2026-11-18 over 648 v3-active owners: the longest
+# hidden run is p99 93, max 158 rows. Past the cap the page may be short, but
+# it still reports how many storage rows it consumed and that more remain, so
+# pagination continues. 512 rows plus a page stays far inside the request's
+# 25,000-document list budget, and list reads select no transcript blobs.
+_HIDDEN_ROW_PAGE_SKIP_CAP = 512
 
 
 def _conversation_list_cursor_enabled(uid: Optional[str]) -> bool:
@@ -1049,6 +1054,73 @@ def _with_conversation_cursor_envelope(func):
     return wrapper
 
 
+class _PageFill:
+    """Fill one page of visible rows from a newest-first query.
+
+    Hidden rows count against :data:`_HIDDEN_ROW_PAGE_SKIP_CAP`; visible rows
+    do not. ``consumed`` is the number of storage rows this page read past its
+    start (the raw-offset advance), and ``has_more`` says whether the scan
+    stopped before the end of the query. A budget cut keeps the honest prefix.
+    """
+
+    def __init__(self, conversations_ref, *, limit, budget, visible):
+        self.conversations_ref = conversations_ref
+        self.limit = limit
+        self.budget = budget
+        self.visible = visible
+        self.rows: List[Dict[str, Any]] = []
+        self.last_doc = None
+        self.consumed = 0
+        self.skipped = 0
+        self.has_more = False
+
+    def run(self, query, batch_limit):
+        try:
+            self._run(query, batch_limit)
+        except ListReadBudgetExhausted:
+            self.has_more = True
+        return self
+
+    def _run(self, query, batch_limit):
+        refill = 0
+        while True:
+            fetched = 0
+            for doc in budgeted_stream_iter(query, self.budget):
+                fetched += 1
+                self.consumed += 1
+                self.last_doc = doc
+                conversation = document_data_with_revision(doc)
+                if conversation is None or not self.visible(conversation):
+                    self.skipped += 1
+                    if self.skipped >= _HIDDEN_ROW_PAGE_SKIP_CAP:
+                        self.has_more = True
+                        return
+                    continue
+                self.rows.append(conversation)
+                if len(self.rows) >= self.limit:
+                    self.has_more = True
+                    return
+            if fetched < batch_limit or self.last_doc is None:
+                return
+            if not hasattr(self.conversations_ref, 'start_after'):
+                # Fakes without bookmarks cannot refill; a full window may have more.
+                self.has_more = True
+                return
+            # Refill only missing slots at first, then double through a hidden
+            # run so a long run costs a few RPCs, never one RPC per row.
+            missing = self.limit - len(self.rows)
+            refill += 1
+            batch_limit = min(
+                missing + _HIDDEN_ROW_PAGE_SKIP_CAP - self.skipped,
+                missing if refill == 1 else max(missing, 2 * batch_limit),
+            )
+            query = self.conversations_ref.start_after(self.last_doc).limit(batch_limit)
+
+
+def _visibility(**options):
+    return lambda conversation: is_visible_conversation(conversation, **options)
+
+
 def _collect_cursor_conversation_page(
     conversations_ref,
     *,
@@ -1060,37 +1132,27 @@ def _collect_cursor_conversation_page(
     include_recordings=False,
     hide_home=False,
     capture_only=False,
+    report=None,
 ):
-    """Bound the scan by page size plus the existing hidden-row allowance."""
-    conversations = []
-    last_doc = None
-    skipped = 0
-    query = conversations_ref.start_after(bookmark)
-    try:
-        while len(conversations) < limit and skipped <= _RULE_DISCARD_PAGE_SKIP_CAP:
-            batch_limit = min(limit - len(conversations), _RULE_DISCARD_PAGE_SKIP_CAP - skipped + 1)
-            fetched = 0
-            for doc in budgeted_stream_iter(query.limit(batch_limit), budget):
-                fetched += 1
-                last_doc = doc
-                conversation = document_data_with_revision(doc)
-                if conversation is None or not is_visible_conversation(
-                    conversation,
-                    include_discarded=include_discarded,
-                    presentation=presentation,
-                    include_recordings=include_recordings,
-                    hide_home=hide_home,
-                    capture_only=capture_only,
-                ):
-                    skipped += 1
-                    continue
-                conversations.append(conversation)
-            if fetched < batch_limit or last_doc is None:
-                break
-            query = conversations_ref.start_after(last_doc)
-    except ListReadBudgetExhausted:
-        pass
-    return conversations, last_doc
+    """Bound the scan by page size plus the hidden-row allowance.
+
+    ``report`` (when given) receives ``storage_rows`` and ``has_more``.
+    """
+    fill = _PageFill(
+        conversations_ref,
+        limit=limit,
+        budget=budget,
+        visible=_visibility(
+            include_discarded=include_discarded,
+            presentation=presentation,
+            include_recordings=include_recordings,
+            hide_home=hide_home,
+            capture_only=capture_only,
+        ),
+    ).run(conversations_ref.start_after(bookmark).limit(limit), limit)
+    if report is not None:
+        report.update(storage_rows=fill.consumed, has_more=fill.has_more)
+    return fill.rows, fill.last_doc
 
 
 def _collect_visible_conversation_page(
@@ -1113,10 +1175,17 @@ def _collect_visible_conversation_page(
     """Page visible rows.
 
     ``include_discarded=True`` scans and fills, because donor tombstones are not
-    excluded by an indexed flag. ``include_discarded=False`` keeps the indexed
-    ``discarded == False`` query's server ``limit``/``offset`` (desktop parity).
-    If that window is full but some rows are completed rule-discards, keep
-    reading after the last snapshot until the page is full or the skip cap hits.
+    excluded by an indexed flag; its ``offset`` counts visible rows.
+    ``include_discarded=False`` keeps the indexed ``discarded == False`` query's
+    server ``limit``/``offset`` (desktop parity), so its ``offset`` counts
+    storage rows. If that window is full but some rows are hidden, keep reading
+    after the last snapshot until the page is full or the hidden-row cap hits.
+
+    ``cursor_page`` (when given) receives ``storage_rows``, the amount the
+    caller's next ``offset`` must advance by, and ``has_more``, whether the scan
+    stopped before the end of the query. A short page is not the end: a long
+    hidden run can cut a page short while more visible rows remain behind it.
+    With the cursor lever on it also receives ``next_cursor``.
     """
     cursor_enabled = _conversation_list_cursor_enabled(uid)
     scope = (
@@ -1124,9 +1193,18 @@ def _collect_visible_conversation_page(
         if cursor_enabled
         else None
     )
-    last_doc = None
+    visible = _visibility(
+        include_discarded=include_discarded,
+        presentation=presentation,
+        include_recordings=include_recordings,
+        hide_home=hide_home,
+        capture_only=capture_only,
+    )
 
-    def finish(rows):
+    def finish(rows, last_doc, *, storage_rows, has_more):
+        if cursor_page is not None:
+            cursor_page['storage_rows'] = storage_rows
+            cursor_page['has_more'] = has_more
         if cursor_enabled and cursor_page is not None:
             cursor_page['next_cursor'] = None
             if last_doc is not None:
@@ -1153,8 +1231,10 @@ def _collect_visible_conversation_page(
             # Firestore implicitly orders document IDs in the last order's
             # direction. Make that tie-break explicit for the value cursor.
             ordered = conversations_ref.order_by('__name__', direction=firestore.Query.DESCENDING)
-            conversations, last_doc = _collect_cursor_conversation_page(
+            report: Dict[str, Any] = {}
+            rows, last_doc = _collect_cursor_conversation_page(
                 ordered,
+                report=report,
                 limit=limit,
                 include_discarded=include_discarded,
                 budget=budget,
@@ -1164,98 +1244,40 @@ def _collect_visible_conversation_page(
                 capture_only=capture_only,
                 bookmark=BookmarkDict({sort_field: stamp, '__name__': doc_id}),
             )
-            return finish(conversations)
+            return finish(rows, last_doc, **report)
 
     if include_discarded:
         skipped_visible = 0
         conversations: List[Dict[str, Any]] = []
+        last_doc = None
+        has_more = False
         try:
             for doc in budgeted_stream_iter(conversations_ref, budget):
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
-                if conversation is None or not is_visible_conversation(
-                    conversation,
-                    include_discarded=include_discarded,
-                    presentation=presentation,
-                    include_recordings=include_recordings,
-                    hide_home=hide_home,
-                    capture_only=capture_only,
-                ):
+                if conversation is None or not visible(conversation):
                     continue
                 if skipped_visible < offset:
                     skipped_visible += 1
                     continue
                 conversations.append(conversation)
                 if len(conversations) >= limit:
+                    has_more = True
                     break
         except ListReadBudgetExhausted:
-            pass
-        return finish(conversations)
+            has_more = True
+        # This scan's offset counts visible rows, so the advance is the page size.
+        return finish(conversations, last_doc, storage_rows=len(conversations), has_more=has_more)
 
     if budget is not None and offset > 0:
         try:
             budget.charge(offset)
         except ListReadBudgetExhausted:
-            return finish([])
-    page_query = conversations_ref.limit(limit).offset(offset)
-    conversations = []
-    last_doc = None
-    fetched = 0
-    batch_limit = limit
-    try:
-        for doc in budgeted_stream_iter(page_query, budget):
-            fetched += 1
-            last_doc = doc
-            conversation = document_data_with_revision(doc)
-            if conversation is None or not is_visible_conversation(
-                conversation,
-                include_discarded=False,
-                presentation=presentation,
-                include_recordings=include_recordings,
-                hide_home=hide_home,
-                capture_only=capture_only,
-            ):
-                continue
-            conversations.append(conversation)
-    except ListReadBudgetExhausted:
-        return finish(conversations)
-
-    refill_reads = 0
-    while (
-        len(conversations) < limit
-        and refill_reads < _RULE_DISCARD_PAGE_SKIP_CAP
-        and fetched == batch_limit
-        and last_doc is not None
-        and hasattr(conversations_ref, 'start_after')
-    ):
-        # Refill only missing slots and bound all follow-up reads, including
-        # visible rows. Pending holds cannot multiply a large requested page.
-        batch_limit = min(limit - len(conversations), _RULE_DISCARD_PAGE_SKIP_CAP - refill_reads)
-        follow = conversations_ref.start_after(last_doc).limit(batch_limit)
-        fetched = 0
-        try:
-            for doc in budgeted_stream_iter(follow, budget):
-                fetched += 1
-                refill_reads += 1
-                last_doc = doc
-                conversation = document_data_with_revision(doc)
-                if conversation is None or not is_visible_conversation(
-                    conversation,
-                    include_discarded=False,
-                    presentation=presentation,
-                    include_recordings=include_recordings,
-                    hide_home=hide_home,
-                    capture_only=capture_only,
-                ):
-                    continue
-                conversations.append(conversation)
-                if len(conversations) >= limit:
-                    return finish(conversations)
-        except ListReadBudgetExhausted:
-            return finish(conversations)
-        if fetched < batch_limit:
-            break
-    return finish(conversations)
+            return finish([], None, storage_rows=0, has_more=True)
+    fill = _PageFill(conversations_ref, limit=limit, budget=budget, visible=visible).run(
+        conversations_ref.limit(limit).offset(offset), limit
+    )
+    return finish(fill.rows, fill.last_doc, storage_rows=fill.consumed, has_more=fill.has_more)
 
 
 def _drop_summary_memo(uid: str) -> None:

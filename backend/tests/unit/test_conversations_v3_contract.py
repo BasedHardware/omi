@@ -1,6 +1,6 @@
 """Synthetic v3 switch, read boundaries, capture and released-wire contracts."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import importlib.util
@@ -352,15 +352,18 @@ def test_cursor_refills_after_recording_and_hidden_rows(include_recordings, hide
 @pytest.mark.parametrize('recording', [False, True])
 def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording):
     monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
+    started = datetime.now(timezone.utc) - timedelta(minutes=3)
     monkeypatch.setattr(
         db,
         'get_conversations_without_photos',
         lambda *a, **kw: [
             {
                 'id': 'c',
-                'started_at': datetime(2026, 11, 16, tzinfo=timezone.utc),
+                'started_at': started,
                 'status': 'in_progress',
-                'created_at': datetime(2026, 11, 16, tzinfo=timezone.utc),
+                'created_at': started,
+                'v3_derived': True,
+                'tile_state': 'live',
                 'recording': recording,
                 'transcript_segments': [{'text': 'private capture'}],
                 'structured': {'title': 'Plan', 'emoji': '🌳', 'overview': 'omit'},
@@ -385,6 +388,56 @@ def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording):
         required = schema['components']['schemas']['Conversation']['required']
         assert set(required) <= wire['conversation'].keys()
         assert wire['conversation']['finished_at'] is None
+
+
+def _live_row(id, *, v3=True, minutes_ago=1, tile_state='live', **extra):
+    now = datetime.now(timezone.utc)
+    return {
+        'id': id,
+        'status': 'in_progress',
+        'created_at': now - timedelta(minutes=minutes_ago + 5),
+        'started_at': now - timedelta(minutes=minutes_ago + 5),
+        'finished_at': now - timedelta(minutes=minutes_ago),
+        'v3_derived': v3 or None,
+        'tile_state': tile_state if v3 else None,
+        'structured': {'title': '', 'emoji': ''},
+        **extra,
+    }
+
+
+@pytest.mark.parametrize(
+    'rows, expected',
+    [
+        # A legacy in-progress row (not v3-derived) is never the live tile, however new.
+        ([_live_row('legacy', v3=False)], None),
+        # A newer legacy row must not hide the open v3 window behind it.
+        ([_live_row('legacy', v3=False), _live_row('window')], 'window'),
+        # A v3 window whose last speech is past the idle bound is stale, not live.
+        ([_live_row('stale', minutes_ago=31)], None),
+        ([_live_row('writing', tile_state='writing')], None),
+        ([_live_row('window', minutes_ago=29)], 'window'),
+    ],
+)
+def test_live_returns_only_a_recent_open_v3_window(monkeypatch, rows, expected):
+    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
+    calls = []
+
+    def fetch(uid, **kw):
+        calls.append(kw)
+        return rows
+
+    monkeypatch.setattr(db, 'get_conversations_without_photos', fetch)
+    result = routes.get_live_conversation('u', 'store')
+    assert (result['conversation'] or {}).get('id') == expected
+    # The query itself is bounded: no scan into hundreds of stale legacy rows.
+    (kw,) = calls
+    assert kw['statuses'] == ['in_progress'] and kw['hide_home'] is True
+    lookback = datetime.now(timezone.utc) - kw['start_date']
+    assert (
+        routes.LIVE_WINDOW_MAX_SPAN
+        < lookback
+        <= routes.LIVE_WINDOW_MAX_SPAN + routes.LIVE_WINDOW_MAX_IDLE + timedelta(seconds=5)
+    )
 
 
 def test_merge_rejects_recording_before_admission(monkeypatch):

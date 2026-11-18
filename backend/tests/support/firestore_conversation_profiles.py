@@ -64,6 +64,8 @@ WITHOUT_PHOTOS_PROFILES = (
     _profile(
         'v3-live-conversation',
         statuses=[['in_progress']],
+        # Bounded lookback: an open v3 window starts within the last 2.5 hours.
+        start_date=[FROZEN_NOW],
     ),
     _profile(
         'developer-list',

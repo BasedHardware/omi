@@ -23,7 +23,7 @@ def test_count_without_pending_reads_only_limit_one_probe(monkeypatch):
     assert not any('sync_bridge_pending' in str(filters) for filters, _ in calls)
 
 
-def test_offset_page_refills_at_most_64_raw_rows(monkeypatch):
+def test_offset_page_refills_at_most_the_hidden_row_cap(monkeypatch):
     monkeypatch.setattr(db, '_conversation_list_cursor_enabled', lambda _: False)
     monkeypatch.setattr(bridge_pending, 'current_time', lambda: 100)
     calls = []
@@ -38,7 +38,9 @@ def test_offset_page_refills_at_most_64_raw_rows(monkeypatch):
     docs = [_ListingDoc(str(i), {'created_at': i, 'sync_bridge_pending': {'expires_at': 200}}) for i in range(1000)]
     query = _ListingQuery(docs, order_field='created_at', descending=True)
     assert db._collect_visible_conversation_page(query, uid='u', limit=100, offset=0, include_discarded=False) == []
-    assert sum(reads for _, reads in calls) <= 100 + 64
+    assert sum(reads for _, reads in calls) <= 100 + db._HIDDEN_ROW_PAGE_SKIP_CAP
+    # A long hidden run grows the refill batch instead of paying one RPC per row.
+    assert len(calls) <= 5
     # One hidden row in a large page needs only one additional read.
     for doc in docs:
         doc._data.pop('sync_bridge_pending', None)
