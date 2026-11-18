@@ -17,7 +17,7 @@ from services.home_health_review import (
 )
 from utils.conversations import summary_delivery
 from utils.enrichment import age_gate, outbox
-from utils.summary_quality import safe_body, valid_title
+from utils.summary_quality import safe_body
 
 GENERATION_FIELDS = (
     'record_projection_revision',
@@ -80,7 +80,6 @@ def _missing_summary(row):
         and not hidden_for_review(row)
         and row.get('user_title') is None
         and row.get('user_overview') is None
-        and not valid_title(summary_delivery.field(structured, 'title'))
         and not safe_body(summary_delivery.field(structured, 'gist')).strip()
         and not summary_delivery.present(structured)
         and not summary_delivery.intentional_short_clip_minimum(row)
@@ -125,7 +124,7 @@ def commit(client, transaction, ref, uid, expected, *, now):
     row['summary_first_pending_at'] = _pending(row, now)
     if row.get('summary_lane') not in {'live', 'batch', 'fresh', 'backfill', 'integration'}:
         row['summary_lane'] = 'batch'
-    if not summary_delivery.stamp_projection_debt(row, now=now):
+    if not summary_delivery.stamp_projection_debt(row, now=now, allow_existing_title=True):
         return 'policy_refused'
     patch = {
         'summary_title_provenance': row['summary_title_provenance'],

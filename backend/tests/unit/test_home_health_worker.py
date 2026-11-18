@@ -9,6 +9,7 @@ import pytest
 
 from scripts import home_health_worker as worker
 from services import home_health_repair as repair, home_health_review as review
+from utils.conversations import summary_delivery
 from utils.conversations.summary_delivery import deadline_seconds
 
 
@@ -135,7 +136,6 @@ def test_receipt_suppresses_small_cells_and_never_exports_content(now):
         {'sync_content_revision': True},
         {'record_projection_revision': 0},
         {'finalization_status': 'leased'},
-        {'structured': {'title': 'Existing title'}},
         {'record_lane_owner': 'batch_sync_v1'},
         {'structured': {'title': 'Discussion notes', 'sections': [{'body_markdown': 'Existing notes'}]}},
     ],
@@ -148,9 +148,36 @@ def test_candidate_does_not_rearm_protected_existing_or_terminal_rows(now, updat
     'derived',
     [{'action_items': [{'description': 'Test task'}]}, {'events': [{'title': 'Test event'}]}],
 )
-def test_derived_items_are_not_a_summary(now, derived):
-    prior = row(now, structured={'title': 'Discussion notes', **derived})
+def test_repair_arms_titled_recording_without_a_summary(now, derived):
+    prior = row(now, structured={'title': 'Generated headline', **derived})
+    assert not summary_delivery.stamp_projection_debt(prior.copy(), now=now.timestamp())
+    assert 'notes_not_scheduled' in review.inspect_row(prior, now=now)[1]
     assert repair.candidate(prior, now=now.timestamp())
+
+    ref, transaction, client = Mock(id='test_capture'), Mock(), Mock()
+    ref.get.side_effect = [
+        SimpleNamespace(
+            exists=True,
+            to_dict=lambda: {key: value for key, value in prior.items() if key in repair.APPLY_METADATA_FIELDS},
+        ),
+        SimpleNamespace(exists=True, to_dict=lambda: {'structured': {'title': 'Generated headline'}}),
+    ]
+    ref.parent.parent.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {})
+    client.collection.return_value.document.return_value.get.return_value.exists = False
+    with patch.object(repair, 'assert_batch_write_allowed'):
+        assert (
+            repair.commit(client, transaction, ref, 'test_owner', repair.generation(prior), now=now.timestamp())
+            == 'armed'
+        )
+    transaction.update.assert_called_once_with(
+        ref,
+        {
+            'summary_first_pending_at': prior['finished_at'].timestamp(),
+            'summary_due_at': prior['finished_at'].timestamp() + deadline_seconds(),
+            'summary_title_provenance': 'server_minimum',
+            'summary_lane': 'batch',
+        },
+    )
 
 
 @pytest.mark.parametrize('lane,expected_lane', [('fresh', 'fresh'), (None, 'batch')])
