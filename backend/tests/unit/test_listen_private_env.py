@@ -213,7 +213,7 @@ def test_migrate_writes_only_the_declared_private_names(cluster, capsys, monkeyp
         "STT_CAP_DISPATCH_COHORT": COHORT,
         "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST,
     }
-    assert "version=3" in out
+    assert "new Secret Manager version added" in out
     for key in (
         "MEDIA_NOISE_MODE",
         "MEDIA_NOISE_MODE_SERVE_PERCENT",

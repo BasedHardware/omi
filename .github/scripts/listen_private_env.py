@@ -156,7 +156,7 @@ def wait_ready(namespace: str, name: str, timeout: int, previous: str | None = N
         ready = any(c.get('type') == 'Ready' and c.get('status') == 'True' for c in status.get('conditions') or [])
         version = status.get('syncedResourceVersion') or ''
         if ready and version and version != previous:
-            print(f'LISTEN_PRIVATE_ENV external_secret={name} ready refreshTime={status.get("refreshTime", "?")}')
+            print('LISTEN_PRIVATE_ENV external secret synced and ready')
             return
         if time.monotonic() >= deadline:
             raise Refused(f'ExternalSecret {name} not Ready{" after force-sync" if previous is not None else ""} within {timeout}s')
@@ -196,8 +196,11 @@ def cmd_migrate(a) -> int:
             json.dump({k: private[k] for k in keys}, handle, sort_keys=True)
         out = run(['gcloud', 'secrets', 'versions', 'add', a.secret_id, f'--project={a.project}',
                    f'--data-file={document}', '--format=value(name)'])
-    version = out.decode().strip().rsplit('/', 1)[-1]
-    print(f'LISTEN_PRIVATE_ENV secret={a.secret_id} version={version if version.isdigit() else "?"} keys={",".join(keys)}')
+    # Fixed text and a count only: nothing derived from the secret reaches the log (the new
+    # version is visible in Secret Manager's own metadata).
+    if not out.strip():
+        raise Refused('gcloud returned no version name')
+    print('LISTEN_PRIVATE_ENV new Secret Manager version added')
     # The same comparison the deploy guard makes, against the source document itself.
     live = live_env(a.namespace, a.deployment, a.container)
     report([(k, 'source-' + e) for k, e in compare_live(keys, secret_name, {k: private[k] for k in keys}, live)])
