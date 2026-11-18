@@ -15,7 +15,8 @@ so legacy Home (App Store 1.0.592 and older, Android) showed neither row.
 `fragment_visibility.held_for_notes` names the piece. It applies to a completed
 legacy-layer row (no `recording`, no `v3_derived`) with intake's `sync_relevance='keep'`
 and `has_content`, whose quiet hold is `held` or whose live bridge has a target.
-Discarded, rule-discarded, blocked, below-floor and merged rows never qualify. The wait
+Discarded, rule-discarded, blocked, below-floor, already-summarized and merged rows never
+qualify. The wait
 counts from the hold's `last_content_at`, falling back to `finished_at`, and ends at
 `SETTLING_MAX_HOLD_SECONDS`, so a lost obligation cannot keep a row processing.
 
@@ -24,7 +25,13 @@ default Home view of an owner for whom `conversations_v3_enabled(uid)` is false.
 the same gate `/v1/conversations/live` uses to tell the app it is a v3 account. There,
 `is_settling_fragment` lets the piece through and `home_step.classify` returns
 `writing_notes`. Every other reader, filtered views and v3 owners keep the previous
-behavior. `SETTLING_FIELDS` carries the four hold fields, so slim reads see them.
+behavior. The Home list's slim select gains `sync_processing_hold`; the other evidence
+fields were already selected.
+
+`keep` only means the deterministic rules did not classify the piece as filler. A piece
+that already carries a summary receipt never qualifies, because a standalone run leaves
+`sync_bridge_pending` in place. On a Redis error the v3 gate reads false for its 120 s
+cache window, and `/v1/conversations/live` then tells the app to show legacy Home too.
 
 The 10-minute `sync_bridge_pending` window is unchanged.
 

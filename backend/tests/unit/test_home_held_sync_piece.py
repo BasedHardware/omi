@@ -138,6 +138,15 @@ def test_landed_notes_are_ready_even_while_the_bridge_field_remains():
     assert home_step.classify(row, show_held=True) == home_step.READY
 
 
+@pytest.mark.parametrize('landed', [{'summary_completed_at': NOW.timestamp()}, {'summary_output_present': True}])
+def test_a_landed_summary_with_a_stale_bridge_is_not_writing_notes(landed):
+    # A standalone run leaves sync_bridge_pending in place; only assignment pops it.
+    row = piece(summary_title_provenance='server_minimum', sync_processing_hold={'held': False}, **landed)
+    assert row['structured']['title_provenance'] == 'server_minimum' and row['sync_bridge_pending']['target_id']
+    assert not held_for_notes(row)
+    assert home_step.classify(row, show_held=True) == home_step.classify(row) == home_step.READY
+
+
 def _home(monkeypatch, rows, *, v3=False, query=''):
     from routers import conversations as routes
     from utils.other import endpoints as auth
@@ -155,7 +164,8 @@ def _home(monkeypatch, rows, *, v3=False, query=''):
 
     monkeypatch.setattr(_ListingCollection, 'select', select, raising=False)
     monkeypatch.setattr(conversations_db, 'indexed_list_reads_enabled', lambda: True)
-    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: v3)
+    if v3 is not None:
+        monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: v3)
     _install_listing(monkeypatch, {row['id']: row for row in rows})
     monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
     monkeypatch.setattr(
@@ -252,3 +262,34 @@ def test_a_v3_owner_never_sees_a_held_legacy_piece(monkeypatch):
     rows = [recording, derived, held]
     assert [row['id'] for row in _home(monkeypatch, rows, v3=True)] == ['derived']
     assert [row['id'] for row in _home(monkeypatch, rows, v3=False)] == ['e87bfed2', 'derived']
+
+
+def test_a_held_piece_leaves_home_when_the_bridge_merges_it(monkeypatch):
+    held = piece(data_protection_level='standard')
+    assert [row['id'] for row in _home(monkeypatch, [held])] == ['piece']
+    merged = {**held, 'deleted': True, 'discarded': True, 'sync_merged_into': 'live'}
+    assert _home(monkeypatch, [merged]) == []
+
+
+def test_a_v3_gate_redis_miss_reads_as_legacy_for_the_cache_window(monkeypatch):
+    # Known limit: capable_cached fails closed and caches False for READ_CACHE_SECONDS.
+    # The live route reads the same gate, so the app shows legacy Home in that window too.
+    from config import conversations_v3
+    from utils.conversations.v3 import client_capability
+    from utils.episodes import client_gate
+
+    class _Down:
+        def exists(self, *_):
+            raise ConnectionError('redis down')
+
+    monkeypatch.delenv('CONVERSATIONS_V3', raising=False)
+    monkeypatch.delenv('CONVERSATIONS_V3_STAGE', raising=False)
+    monkeypatch.setattr(client_capability, '_read_cache', {})
+    monkeypatch.setattr(client_capability.redis_db, 'r', _Down())
+    monkeypatch.setattr(client_gate, '_seen_cache', {})
+    monkeypatch.setattr(client_gate, 'client_seen', lambda uid: True)
+    monkeypatch.setattr(conversations_v3, 'in_rollout_cohort', lambda uid, name: False)
+    assert conversations_v3.conversations_v3_enabled('u') is False
+    assert client_capability._read_cache['u'][0] is False
+    held = piece(data_protection_level='standard')
+    assert [row['id'] for row in _home(monkeypatch, [held], v3=None)] == ['piece']

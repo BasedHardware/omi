@@ -177,8 +177,9 @@ def _epoch(value: Any) -> float | None:
 def held_for_notes(data: Mapping[str, Any], *, now: float | None = None) -> bool:
     """A kept legacy sync piece whose notes wait on its quiet hold or its open live bridge.
 
-    Intake's keep verdict and content flag are the speech evidence; no transcript
-    is decoded. Discarded, blocked, below-floor and v3-layer rows never qualify.
+    The only content evidence is intake's: ``keep`` (the deterministic rules did
+    not classify it as filler) and ``has_content``; no transcript is decoded. Discarded, blocked, below-floor, already-summarized and v3-layer
+    rows never qualify: a stale bridge field outlives a standalone run.
     The wait counts from the last content arrival and ends with the settling
     bound, so a lost obligation cannot keep a row processing.
     """
@@ -196,6 +197,8 @@ def held_for_notes(data: Mapping[str, Any], *, now: float | None = None) -> bool
         or data.get('recording')
         or data.get('v3_derived')
         or data.get('summary_blocked_reason')
+        or data.get('summary_output_present')
+        or data.get('summary_completed_at')
         or is_relevance_discarded(data)
         or is_rule_discard_decision(data.get('relevance_decision'))
         or is_completed_below_floor(data)
