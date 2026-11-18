@@ -1,9 +1,9 @@
 # Recording-derived conversations v3
 
-The code default is `CONVERSATIONS_V3_STAGE=beta`; the deployed source (`runtime_env/_base.yaml`)
-is `cohort` since 2026-11-17 while reconcile commit conflicts are fixed, so every train keeps
-admission to named `rollout_cohorts/conversations-v3` accounts until the stage is moved back to `beta`
-there (never by a live-only env edit, which the next workflow deploy would revert). `CONVERSATIONS_V3=off`
+The code default is `CONVERSATIONS_V3_STAGE=beta`, and the deployed source (`runtime_env/_base.yaml`)
+is `beta` again since 2026-11-18 (it held at `cohort` on 2026-11-17 while reconcile commit
+conflicts were fixed). Change the stage only there, never by a live-only env edit, which the next
+workflow deploy would revert. `CONVERSATIONS_V3=off`
 stops marking new mobile pendant documents. Stages are `cohort`, `beta`, `all`;
 `rollout_cohorts/conversations-v3` is for named qualification accounts. Beta uses
 the shared, refreshed 14-day episode client-seen marker, so all devices of an
