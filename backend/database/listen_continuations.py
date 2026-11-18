@@ -193,3 +193,33 @@ def resolve_live_continuation(
                 transaction.update(ref, {'external_data': external})
 
     return resolve(client.transaction())
+
+
+def supersede_live_continuation(
+    uid: str,
+    origin_id: str,
+    *,
+    previous_id: str,
+    proposed: Mapping[str, str],
+    firestore_client: Any = None,
+) -> str:
+    """Move an origin's continuation from a rotated recording to its persisted successor.
+
+    Only a pointer that still names the retired recording (or none) moves, so a reconnect
+    resumes the successor rather than the sealed row. Returns moved, absent or other_owner.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    root = client.collection('users').document(uid).collection('recording_sessions').document(origin_id)
+
+    @firestore.transactional
+    def supersede(transaction: Any) -> str:
+        original = root.get(transaction=transaction).to_dict() or {}
+        if original.get('uid') != uid or original.get('recording_session_id') != origin_id:
+            return 'absent'
+        current = (original.get('live_continuation') or {}).get('conversation_id')
+        if current not in (None, previous_id):
+            return 'other_owner'
+        transaction.update(root, {'live_continuation': dict(proposed)})
+        return 'moved'
+
+    return supersede(client.transaction())

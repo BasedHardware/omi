@@ -112,7 +112,8 @@ async def test_frames_in_flight_across_a_rotation_land_in_exactly_one_window(
     controller.schedule_finalization = schedule_finalization
     switched = asyncio.Event()
 
-    async def create_successor(*, rollover=False):
+    async def create_successor(*, rollover=False, supersede=None):
+        assert supersede == 'current'
         # Firestore round trips: frames keep arriving for the current recording meanwhile.
         for _ in range(5):
             await asyncio.sleep(0)
@@ -138,6 +139,10 @@ async def test_frames_in_flight_across_a_rotation_land_in_exactly_one_window(
         await controller._rotate_v3_recording('current')
 
     await asyncio.gather(produce(), rotate())
+    published = []
+    # The custody ACK checkpoints frame sequence per channel, not conversation, so a retargeted
+    # frame is covered exactly like any other.
+    await archive.defer_ack('client', AsyncMock(side_effect=lambda: published.append(dict(archive.sequence))))
     # A frame the receiver bound to the old id before the switch, appended after the seal.
     late = times[-1] + 0.01
     times.append(late)
@@ -158,5 +163,59 @@ async def test_frames_in_flight_across_a_rotation_land_in_exactly_one_window(
         assert row['server_batch_audio_start'] <= start < row['server_batch_audio_end']
     assert max(s for s, c in owners.items() if c == 'current') < min(s for s, c in owners.items() if c == 'next')
     assert not archive.uncommitted and not archive.failed
+    assert len(published) == 1 and published[0][0] >= len(times) - 1 and not archive.pending_acks
+    # Timing skew: the successor's window starts at its first retargeted frame, which is the next
+    # frame after the sealed window (never inside it), and its started_at follows that frame.
+    successor = db.rows[_key('next')]
+    assert successor['started_at'].timestamp() == successor['server_batch_audio_start']
+    assert old_end <= successor['server_batch_audio_start'] <= old_end + 0.02
     assert old['v3_rotation_cap_seconds'] == 300.0
     assert 'current' not in controller._batch_producer_tokens
+
+
+@pytest.mark.asyncio
+async def test_retarget_chains_follow_the_newest_successor_and_stay_bounded():
+    h = archive_host()
+    archive = LiveAudioArchive(h)
+    await archive.retarget('a', 'b')
+    await archive.retarget('b', 'c')
+    assert archive.retargets == {'a': 'c', 'b': 'c'}
+    for index in range(70):
+        await archive.retarget(f'r{index}', f'r{index + 1}')
+    assert len(archive.retargets) == 64
+    assert archive.retargets['r69'] == 'r70' and 'a' not in archive.retargets
+    # Chained ids that were still kept all name the newest successor.
+    assert archive.retargets['r10'] == 'r70'
+
+
+from tests.unit.test_conversation_quiet_finalization import (  # noqa: E402
+    ROW as QUIET_ROW,
+    _advance,
+    checks as quiet_checks,
+    quiet,
+    store as quiet_store,  # noqa: F401 (fixture)
+)
+
+
+def test_a_rotation_orphan_is_finalized_by_the_quiet_check_its_create_armed(quiet_store, monkeypatch):  # noqa: F811
+    """Crash after the successor switch, before the seal: the retired recording keeps the quiet
+    check armed by _persist_policy_and_arm_quiet_check at its own creation, and that check admits
+    its finalization once the recording lease (renewed only for the socket's current id) expires."""
+    quiet_store.rows[QUIET_ROW].update(
+        record_lane_owner='batch_live_v1',
+        external_data={server_batch.MARKER: True, 'recording_session_id': 'recording-old'},
+        recording=True,
+        transcript_segments=[],
+        has_content=True,
+        server_batch_audio_start=1000.0,
+        server_batch_audio_end=1180.0,
+        server_batch_audio_received=True,
+    )
+    assert quiet.arm('synthetic', 'old', 120, firestore_client=quiet_store)
+    _advance(monkeypatch, 120)  # still leased: the check defers, nothing is admitted early
+    assert quiet.run(quiet_checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=quiet_store) != 'queued'
+    _advance(monkeypatch, 361)
+    job = quiet_checks.quiet_check_id('synthetic', 'old')
+    generation = quiet_store.rows[('conversation_finalization_jobs', job)]['dispatch_generation']
+    assert quiet.run(job, generation, firestore_client=quiet_store) == 'queued'
+    assert quiet_store.rows[QUIET_ROW]['finalization_revision'] == 1

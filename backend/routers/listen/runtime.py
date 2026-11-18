@@ -1458,6 +1458,12 @@ class ListenSessionRuntime:
                 note_ws_close(self.state, 'server', self.state.close_code)
             except Exception:
                 pass
+        drain = getattr(getattr(self, 'conversations', None), 'drain_rotations', None)
+        if drain is not None and not owner_persistence_blocked:
+            try:
+                await drain()
+            except Exception as error:
+                logger.error('V3 rotation drain failed type=%s', type(error).__name__)
         conversation_id = self.state.current_conversation_id
         if conversation_id and not owner_persistence_blocked:
             try:

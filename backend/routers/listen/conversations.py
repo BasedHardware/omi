@@ -40,6 +40,7 @@ from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import quiet_finalization
 from utils.conversations.live_continuation import resolve_live_continuation
+from database.listen_continuations import supersede_live_continuation
 from database.listen_continuations import calendar_continuity_row
 from models.conversation_continuity import calendar_continuity_identity, continuation_timeout, resumable_continuation
 from utils.conversations.factory import deserialize_conversation
@@ -62,6 +63,7 @@ from config.occasion_conversations import OCCASION_MAX_SPAN_SECONDS
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.lifecycle_clocks import speech_clock, utc
 from utils.stt.speech_clock import quiet_since, rotation_due
+from utils.observability.v3_rotation import record_rotation
 from utils.conversations.v3 import policy as v3_policy
 from config.conversations_v3 import recording_rotation_enabled, rotation_seconds
 from utils.episodes import boundaries, boundary_runtime
@@ -78,6 +80,9 @@ logger = logging.getLogger(__name__)
 STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS = 3600
 # A failed rotation keeps the current recording and waits this long before trying again.
 ROTATION_RETRY_SECONDS = 60
+# A refused rotation seal retries after 15, 30, 60, 120 s, then its armed quiet check owns it.
+ROTATION_SEAL_ATTEMPTS = 5
+ROTATION_SEAL_BACKOFF_SECONDS = 15
 RECORDING_SESSION_LEASE_RENEW_INTERVAL = timedelta(minutes=1)
 
 
@@ -103,7 +108,8 @@ class LiveConversationController:
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self._last_recording_session_lease_renewal: datetime | None = None
         self._rotation_retry_at: datetime | None = None
-        self._unsealed_rotations: list[str] = []
+        # Retired recording -> (failed seal attempts, next attempt). Kept until a seal is admitted.
+        self._unsealed_rotations: dict[str, tuple[int, datetime]] = {}
         self._batch_producer_tokens: dict[str, str] = {}
         self._batch_renewed_at: datetime | None = None
 
@@ -658,7 +664,14 @@ class LiveConversationController:
             )
             return None
 
-    async def create_new_in_progress_conversation(self, *, rollover: bool = False) -> None:
+    async def create_new_in_progress_conversation(
+        self, *, rollover: bool = False, supersede: str | None = None
+    ) -> None:
+        """Open the next recording generation.
+
+        ``supersede`` names a live recording a v3 rotation retires: the create never resumes a
+        continuation (that would return the same row) and moves the origin's pointer to the successor.
+        """
         request = self.host.request
         carry_from: Optional[tuple[str, str]] = None
         if rollover:
@@ -666,7 +679,7 @@ class LiveConversationController:
             active_scope = self._active_speaker_scope()
             if previous_id and active_scope:
                 carry_from = (previous_id, active_scope)
-            continuation = await self._continuation()
+            continuation = None if supersede else await self._continuation()
             if continuation and await self._resume_continuation(continuation):
                 return
         self.host.recording_session_id = select_recording_session_id(
@@ -695,7 +708,7 @@ class LiveConversationController:
             proposed_id,
         )
         if binding['requires_rollover']:
-            await self.create_new_in_progress_conversation(rollover=True)
+            await self.create_new_in_progress_conversation(rollover=True, supersede=supersede)
             return
         conversation_id = binding['conversation_id']
         self.host.recording_session_ids_by_conversation[conversation_id] = self.host.recording_session_id
@@ -726,7 +739,7 @@ class LiveConversationController:
             )
             if action == RecordingSessionReconnectAction.resume_current and not existing.get('deleted'):
                 if not server_batch_capture_compatible(self.host, existing):
-                    await self.create_new_in_progress_conversation(rollover=True)
+                    await self.create_new_in_progress_conversation(rollover=True, supersede=supersede)
                     return
                 if not self.host.is_multi_channel and not resumable_continuation(
                     existing,
@@ -745,11 +758,11 @@ class LiveConversationController:
                         await self._finalize_isolated(
                             self.process_conversation, conversation_id, stage='reconnect_rollover'
                         )
-                    await self.create_new_in_progress_conversation(rollover=True)
+                    await self.create_new_in_progress_conversation(rollover=True, supersede=supersede)
                     return
                 self.host.batch_record_capture = capture_snapshot(existing)
                 if not await self._claim_batch_producer(conversation_id, existing):
-                    await self.create_new_in_progress_conversation(rollover=True)
+                    await self.create_new_in_progress_conversation(rollover=True, supersede=supersede)
                     return
                 await self._persist_policy_and_arm_quiet_check(conversation_id)
                 self.host.state.current_conversation_id = conversation_id
@@ -770,12 +783,12 @@ class LiveConversationController:
                 self.send_conversation_session(binding, self.host.recording_session_id)
                 return
             if existing.get('deleted') or action == RecordingSessionReconnectAction.suppress_discarded_and_rollover:
-                await self.create_new_in_progress_conversation(rollover=True)
+                await self.create_new_in_progress_conversation(rollover=True, supersede=supersede)
                 return
             self.send_conversation_session(binding, self.host.recording_session_id, status=str(existing.get('status')))
             if existing.get('status') == ConversationStatus.completed.value:
                 self.on_conversation_processed(conversation_id)
-            await self.create_new_in_progress_conversation(rollover=True)
+            await self.create_new_in_progress_conversation(rollover=True, supersede=supersede)
             return
 
         context = self.host.client_device_context
@@ -900,9 +913,18 @@ class LiveConversationController:
             await request.websocket.close(code=1013, reason='Capture policy changed; reconnect')
             return
         if not server_batch_capture_compatible(self.host, self.host.batch_record_capture or {}):
-            await self.create_new_in_progress_conversation(rollover=True)
+            await self.create_new_in_progress_conversation(rollover=True, supersede=supersede)
             return
-        if rollover:
+        if supersede and self.host.client_conversation_id and not self.host.is_multi_channel:
+            moved = await self.host.persistence.call(
+                supersede_live_continuation,
+                request.uid,
+                self.host.client_conversation_id,
+                previous_id=supersede,
+                proposed={'conversation_id': conversation_id, 'recording_session_id': self.host.recording_session_id},
+            )
+            logger.info('event=v3_recording_rotation continuation=%s', moved)
+        elif rollover:
             proposed = {'conversation_id': conversation_id, 'recording_session_id': self.host.recording_session_id}
             adopted = await self._continuation(proposed)
             if adopted and adopted != proposed and await self._resume_continuation(adopted):
@@ -1238,46 +1260,72 @@ class LiveConversationController:
         """
         await self.host.transcripts.flush_speaker_assignments(previous_id)
         previous_session = self.host.recording_session_id
+        previous_capture = getattr(self.host, 'batch_record_capture', None)
+        bindings = dict(getattr(self.host, 'recording_session_ids_by_conversation', {}))
+        failed = False
         try:
-            await self.create_new_in_progress_conversation(rollover=True)
+            await self.create_new_in_progress_conversation(rollover=True, supersede=previous_id)
         except asyncio.CancelledError:
             raise
         except Exception as error:
-            logger.warning('event=v3_recording_rotation outcome=successor_failed type=%s', type(error).__name__)
+            failed = True
+            logger.warning('event=v3_recording_rotation outcome=create_failed type=%s', type(error).__name__)
         successor = self.host.state.current_conversation_id
         if not successor or successor == previous_id:
-            if successor == previous_id:
-                self.host.recording_session_id = previous_session
+            # Nothing switched: drop the unbound successor's residue and keep the current recording.
+            self.host.recording_session_id = previous_session
+            self.host.batch_record_capture = previous_capture
+            if hasattr(self.host, 'recording_session_ids_by_conversation'):
+                self.host.recording_session_ids_by_conversation.clear()
+                self.host.recording_session_ids_by_conversation.update(bindings)
             self._rotation_retry_at = self.clock() + timedelta(seconds=ROTATION_RETRY_SECONDS)
-            record_fallback(
-                component='other',
-                from_mode='other',
-                to_mode='incumbent',
-                reason='other',
-                outcome='degraded',
-                log=logger,
-            )
+            record_rotation('create_failed' if failed else 'same_row')
             return
         archive = getattr(getattr(self.host, 'receiver', None), 'raw_archive', None)
         if archive is not None:
             await archive.retarget(previous_id, successor)
-        self._unsealed_rotations = [*self._unsealed_rotations, previous_id][-8:]
+        self._unsealed_rotations[previous_id] = (0, self.clock())
         await self._seal_rotated()
 
-    async def _seal_rotated(self) -> None:
-        """Finish each retired recording's custody, then finalize it. Pending custody retries next tick."""
+    async def _seal_rotated(self, *, final: bool = False) -> None:
+        """Seal retired recordings until a seal is admitted, with bounded backoff.
+
+        After ROTATION_SEAL_ATTEMPTS, or at teardown (``final``), the row stays with the quiet
+        check its create armed (utils/conversations/quiet_finalization.py run), which finalizes it
+        once its recording lease expires.
+        """
         archive = getattr(getattr(self.host, 'receiver', None), 'raw_archive', None)
-        for conversation_id in list(self._unsealed_rotations):
+        for conversation_id, (attempts, due) in list(self._unsealed_rotations.items()):
+            if not final and self.clock() < due:
+                continue
+            sealed = False
             try:
                 if archive is not None:
                     await archive.finish_recording(conversation_id)
+                sealed = await self._seal_rotated_recording(conversation_id)
             except asyncio.CancelledError:
                 raise
             except Exception as error:
-                logger.warning('event=v3_recording_rotation outcome=custody_pending type=%s', type(error).__name__)
+                logger.warning('event=v3_recording_rotation outcome=seal_failed type=%s', type(error).__name__)
+            if sealed:
+                self._unsealed_rotations.pop(conversation_id, None)
+                record_rotation('rotated')
                 continue
-            self._unsealed_rotations.remove(conversation_id)
-            await self._finalize_isolated(self._seal_rotated_recording, conversation_id, stage='v3_rotation')
+            attempts += 1
+            if final or attempts >= ROTATION_SEAL_ATTEMPTS:
+                self._unsealed_rotations.pop(conversation_id, None)
+                record_rotation('handed_off')
+                continue
+            record_rotation('seal_retry')
+            self._unsealed_rotations[conversation_id] = (
+                attempts,
+                self.clock() + timedelta(seconds=ROTATION_SEAL_BACKOFF_SECONDS * 2 ** (attempts - 1)),
+            )
+
+    async def drain_rotations(self) -> None:
+        """Teardown: one last seal attempt for every retired recording; the rest keep their quiet check."""
+        if self._unsealed_rotations:
+            await self._seal_rotated(final=True)
 
     async def _seal_rotated_recording(self, conversation_id: str) -> bool:
         # The stamp tells the v3 builder a successor follows within this cap (database/conversations_v3.py).

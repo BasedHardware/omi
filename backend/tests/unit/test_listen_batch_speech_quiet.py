@@ -218,6 +218,8 @@ async def _rotation_pass(monkeypatch, row, speech_clock, *, successor='next', cr
         receiver=SimpleNamespace(speech_clock=speech_clock),
         transcripts=SimpleNamespace(flush_speaker_assignments=AsyncMock()),
         recording_session_id='session-1',
+        batch_record_capture={'id': 'current'},
+        recording_session_ids_by_conversation={'current': 'session-1'},
     )
     controller = LiveConversationController(host, clock=lambda: NOW)
     monkeypatch.setattr(conversation_module, 'poll_calendar', AsyncMock())
@@ -227,13 +229,21 @@ async def _rotation_pass(monkeypatch, row, speech_clock, *, successor='next', cr
     async def finalize(fn, conversation_id, *, stage):
         stages.append(stage)
 
-    async def create(*, rollover=False):
+    async def create(*, rollover=False, supersede=None):
+        assert supersede in (None, 'current')
         host.recording_session_id = 'session-2'
+        host.batch_record_capture = {'id': 'unbound'}
+        host.recording_session_ids_by_conversation['unbound'] = 'session-2'
         if create_error:
             raise create_error
         state.current_conversation_id = successor
 
+    async def seal(conversation_id):
+        stages.append('v3_rotation')
+        return True
+
     controller._finalize_isolated = finalize
+    controller._seal_rotated_recording = seal
     controller.create_new_in_progress_conversation = AsyncMock(side_effect=create)
     await asyncio.wait_for(controller.lifecycle_loop(), 1)
     return stages, controller.create_new_in_progress_conversation.await_count, controller
@@ -329,6 +339,8 @@ async def test_a_failed_successor_keeps_the_recording_and_backs_off(monkeypatch,
     assert (stages, creates) == ([], 1)
     assert controller.host.state.current_conversation_id == 'current'
     assert controller.host.recording_session_id == 'session-1'
+    assert controller.host.batch_record_capture == {'id': 'current'}
+    assert controller.host.recording_session_ids_by_conversation == {'current': 'session-1'}
     assert controller._rotation_retry_at == NOW + timedelta(seconds=60)
     assert not controller._v3_rotation_due(_v3_row(190))
     controller._rotation_retry_at = NOW - timedelta(seconds=1)
@@ -362,7 +374,7 @@ async def test_a_refused_seal_does_not_loop(monkeypatch, rotation_on):
     controller.process_conversation = AsyncMock(return_value=False)
     fresh = _v3_row(5)
 
-    async def create(*, rollover=False):
+    async def create(*, rollover=False, supersede=None):
         host.state.current_conversation_id = 'next'
         host.persistence.call.return_value = fresh
 
@@ -435,3 +447,53 @@ async def test_a_resumed_v3_row_rotates_on_speech_this_socket_heard(monkeypatch,
         opened=NOW - timedelta(minutes=2), started=NOW - timedelta(minutes=2), speech=NOW - timedelta(seconds=2)
     )
     assert (await _rotation_pass(monkeypatch, _v3_row(600), clock))[0] == ['v3_rotation']
+
+
+def _sealing_controller(process):
+    clock = {'now': NOW}
+    host = SimpleNamespace(
+        state=SimpleNamespace(active=True, current_conversation_id='next'),
+        request=SimpleNamespace(uid='test-owner'),
+        persistence=SimpleNamespace(call=AsyncMock(return_value=None)),
+        receiver=SimpleNamespace(),
+    )
+    controller = LiveConversationController(host, clock=lambda: clock['now'])
+    controller.process_conversation = process
+    controller._unsealed_rotations['old'] = (0, NOW)
+    return controller, clock
+
+
+@pytest.mark.asyncio
+async def test_a_refused_seal_retries_with_backoff_then_hands_off(monkeypatch):
+    controller, clock = _sealing_controller(AsyncMock(return_value=False))
+    waits = []
+    for _ in range(conversation_module.ROTATION_SEAL_ATTEMPTS):
+        await controller._seal_rotated()
+        if 'old' in controller._unsealed_rotations:
+            attempts, due = controller._unsealed_rotations['old']
+            waits.append((due - clock['now']).total_seconds())
+            await controller._seal_rotated()  # not yet due: no attempt
+            clock['now'] = due
+    assert waits == [15, 30, 60, 120]
+    assert controller.process_conversation.await_count == conversation_module.ROTATION_SEAL_ATTEMPTS
+    assert controller._unsealed_rotations == {}
+
+
+@pytest.mark.asyncio
+async def test_a_raising_seal_is_retried_and_an_admitted_one_is_dropped(monkeypatch):
+    controller, clock = _sealing_controller(AsyncMock(side_effect=[RuntimeError('firestore'), True]))
+    controller._batch_producer_tokens['old'] = 'token'
+    await controller._seal_rotated()
+    assert controller._unsealed_rotations['old'][0] == 1
+    clock['now'] += timedelta(seconds=15)
+    await controller._seal_rotated()
+    assert controller._unsealed_rotations == {} and 'old' not in controller._batch_producer_tokens
+
+
+@pytest.mark.asyncio
+async def test_teardown_drains_pending_seals_once(monkeypatch):
+    controller, clock = _sealing_controller(AsyncMock(return_value=False))
+    controller._unsealed_rotations['old'] = (2, NOW + timedelta(minutes=5))  # not due, still attempted
+    await controller.drain_rotations()
+    controller.process_conversation.assert_awaited_once_with('old')
+    assert controller._unsealed_rotations == {}
