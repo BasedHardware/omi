@@ -1123,6 +1123,11 @@ class AppLocalizationsKn extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'ಹೆಸರನ್ನು ಯಶಸ್ವಿಯಾಗಿ ನವೀಕರಣ ಮಾಡಲಾಗಿದೆ!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'ಆಯ್ಕೆಮಾಡಿದ ಕ್ಯಾಲೆಂಡರ್‌ಗಳನ್ನು ಓದಿ. ಹೊಸ ಈವೆಂಟ್‌ಗಳು $calendar ಅನ್ನು ಬಳಸುತ್ತವೆ.';
+  }
+
+  @override
   String get calendarSettings => 'ಕ್ಯಾಲೆಂಡರ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
 
   @override

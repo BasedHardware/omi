@@ -1,6 +1,9 @@
 """Ordered durable result log. Projection consumers must use stable segment IDs."""
 
+from collections import Counter, OrderedDict
 import logging
+import math
+import threading
 import time
 
 from google.api_core.exceptions import Aborted, FailedPrecondition, GoogleAPICallError
@@ -15,14 +18,16 @@ from config.batch_pipeline import (
     recovered_merge_release_enabled,
 )
 from config.policy.kill_switches import kill_switch
+from config.record_drain import capture_age_priority
 from config.record_latency import record_fresh_merge_enabled
+from database import batch_pipeline_allowance_hold as allowance_hold
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import Store
 from utils.batch_pipeline import backlog_release
 from utils.batch_pipeline.result_protocol import merge_markers
 from utils.batch_pipeline.held_terminal import held_without_recovery
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
-from utils.batch_pipeline.scheduler import owner_key
+from utils.batch_pipeline.scheduler import owner_key, requeue_due_retry
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.observability.fallback import record_fallback
 
@@ -42,6 +47,18 @@ STALE_HEAD_PAGE_ROWS = 128
 _STARVED_CLOCKS = {'ready': 'available_at', 'retry': 'available_at', 'leased': 'lease_until'}
 # Content siblings a recovery wake may release with the recovered unit.
 RELEASE_SIBLINGS_MAX = 32
+# Stale-head promotion (see OrderedMerge._promote_stale_heads).
+STALE_HEAD_SWITCH = 'BATCH_PIPELINE_MERGE_STALE_HEAD_PROMOTE_ENABLED'
+# Due retry rows one blocked commit promotes; later drains take the rest.
+STALE_HEAD_PROMOTE_ROWS = 8
+# Process-wide promotion transactions per second, and the burst a quiet process may spend.
+STALE_HEAD_PROMOTE_RATE = 2.0
+STALE_HEAD_PROMOTE_BURST = 16
+# A row is promoted at most this many times; after that recovery and the head wait own it.
+STALE_HEAD_PROMOTIONS_PER_ROW = 3
+# Owners whose promotion stopped at a bound are continued on later drains: bounded and expiring.
+STALE_OWNERS_TRACKED = 1024
+STALE_OWNER_TTL_SECONDS = 600.0
 _HEAD_STATES = frozenset({'ready', 'leased', 'retry', 'record_pending', 'privacy_blocked'})
 _FRESH_FIRST_HEAD_STATES = _HEAD_STATES | {'result_ready'}
 _RELEASE_HEAD_STATES = _FRESH_FIRST_HEAD_STATES | {'held'}
@@ -116,6 +133,52 @@ def _fresh_pick(rows: list[dict], now: float, wait: float) -> tuple[dict | None,
         earlier = [row['segment_id'] for row in rows[: rows.index(ready[0])]]
         return ready[0], {'segment_ids': earlier, 'state': rows[0].get('state'), 'waited': waited}
     return None, None
+
+
+def _promotable(row: dict, now: float) -> bool:
+    """A due retry whose promotion cannot cycle.
+
+    Worker failures and lease expiries charge an attempt, and an allowance hold parks. An
+    admission refusal refunds its attempt (``Scheduler.defer``), so a non-allowance policy
+    hold or an unevaluated refusal stays with recovery and the head wait, as before."""
+    if row.get('state') != 'retry' or row.get('available_at', math.inf) > now:
+        return False
+    if row.get('stale_head_promotions', 0) >= STALE_HEAD_PROMOTIONS_PER_ROW:
+        return False
+    decision = row.get('compute_decision') or {}
+    if decision.get('outcome') == 'held':
+        return allowance_hold.enabled() and allowance_hold.eligible(row)
+    return bool(decision) or not row.get('admission_refusals')
+
+
+def _aged_priority(job: dict, now: float) -> int:
+    """The stored class, lowered by capture age the way record intake classifies (never raised)."""
+    age = now - job.get('capture_at', math.nan) - (job.get('duration_seconds') or 0)
+    return max(int(job['priority']), int(capture_age_priority(age)))
+
+
+class _TokenBucket:
+    def __init__(self, rate: float, burst: int, clock=time.monotonic):
+        self.rate, self.burst, self.clock = rate, float(burst), clock
+        self.tokens, self.at = float(burst), clock()
+        self.lock = threading.Lock()
+
+    def take(self) -> bool:
+        with self.lock:
+            now = self.clock()
+            self.tokens = min(self.burst, self.tokens + (now - self.at) * self.rate)
+            self.at = now
+            if self.tokens < 1:
+                return False
+            self.tokens -= 1
+            return True
+
+    def empty(self) -> bool:
+        with self.lock:
+            return min(self.burst, self.tokens + (self.clock() - self.at) * self.rate) < 1
+
+
+_PROMOTIONS = _TokenBucket(STALE_HEAD_PROMOTE_RATE, STALE_HEAD_PROMOTE_BURST)
 
 
 def _awaiting_projection(tx, owner: dict) -> int:
@@ -198,6 +261,9 @@ class OrderedMerge:
         # backlog can fill the global result_ready page and hide them.
         self.held_owners: set[str] = set()
         self._marked_after: str | None = None
+        # Owners whose last promotion stopped at a bound: LRU-capped, entries expire.
+        self._stale_owners: OrderedDict[str, float] = OrderedDict()
+        self._stale_lock = threading.Lock()
 
     def _head_wait(self) -> float:
         if time.monotonic() < self._head_wait_retry_at:
@@ -275,6 +341,106 @@ class OrderedMerge:
             release.pop(0)
         return None
 
+    def _stale_pending(self, owner_id: str) -> bool:
+        with self._stale_lock:
+            marked = self._stale_owners.get(owner_id)
+            if marked is not None and time.monotonic() - marked > STALE_OWNER_TTL_SECONDS:
+                del self._stale_owners[owner_id]
+                marked = None
+            return marked is not None
+
+    def _mark_stale(self, owner_id: str, more: bool) -> None:
+        with self._stale_lock:
+            self._stale_owners.pop(owner_id, None)
+            if more:
+                self._stale_owners[owner_id] = time.monotonic()
+                while len(self._stale_owners) > STALE_OWNERS_TRACKED:
+                    self._stale_owners.popitem(last=False)
+
+    def _promote_stale_heads(self, owner_id: str, stale: dict[str, dict], now: float) -> None:
+        """Requeue (or allowance-park) the owner's due retry rows through recovery's transition.
+
+        Recovery requeues due retries oldest-first, 100 per pass. Behind a large
+        backlog that runs days late (prod 2026-11-18: 1.07M due retries, the oldest
+        94 h overdue), so an owner's retry head held every newer recording in the
+        head wait. Each row is re-verified in its own transaction, keeps its
+        admission identity and drops to the service class its capture age earns.
+        Protected-share eligibility is not consulted: like recovery's ordinary
+        oldest-due page this is a plain requeue, and lease admission rechecks it."""
+        if _PROMOTIONS.empty():
+            # Skip the probe read while the process budget is spent; the owner stays marked.
+            self._mark_stale(owner_id, True)
+            return
+        key = owner_key(owner_id)
+        rows = dict(stale)
+        try:
+            rows.update((row['segment_id'], row) for row in self.store.fresh_pending(key, FRESH_PROBE_ROWS))
+        except GoogleAPICallError as error:
+            logger.warning(
+                'event=batch_merge outcome=stale_head_probe_retry source=%s exception_type=%s count=1',
+                self.commit_source,
+                type(error).__name__,
+            )
+        due = sorted(
+            (row for row in rows.values() if _promotable(row, now)),
+            key=lambda row: (row.get('capture_at', 0), row['segment_id']),
+        )
+        more = len(due) > STALE_HEAD_PROMOTE_ROWS
+        outcomes: Counter = Counter()
+        for row in due[:STALE_HEAD_PROMOTE_ROWS]:
+            if not _PROMOTIONS.take():
+                more = True
+                break
+            segment_id = row['segment_id']
+
+            def promote(tx, segment_id=segment_id):
+                job = tx.get('jobs', segment_id)
+                if not job or job.get('owner_key') != key or not job.get('merge_pending') or not _promotable(job, now):
+                    return None
+                job['stale_head_promotions'] = job.get('stale_head_promotions', 0) + 1
+                if (job.get('compute_decision') or {}).get('outcome') == 'held':
+                    return 'allowance_parked' if allowance_hold.park(tx, job, now) else None
+                return requeue_due_retry(tx, job, now, priority=_aged_priority(job, now))
+
+            try:
+                outcome = self.store.run(promote)
+            except BatchPrivacyBlocked:
+                # Recovery's disposition for the same refusal: privacy cleanup owns the row.
+                try:
+                    if not self.store.quarantine_fenced(segment_id, now):
+                        continue
+                    outcome = 'privacy_fenced'
+                except Exception as error:
+                    logger.warning(
+                        'event=batch_merge outcome=stale_head_fence_retry source=%s exception_type=%s count=1',
+                        self.commit_source,
+                        type(error).__name__,
+                    )
+                    continue
+            except Exception as error:
+                # Recovery still owns the row; this only leaves it waiting there.
+                logger.warning(
+                    'event=batch_merge outcome=stale_head_promote_retry source=%s exception_type=%s count=1',
+                    self.commit_source,
+                    type(error).__name__,
+                )
+                continue
+            if outcome:
+                outcomes[outcome] += 1
+                if self.metrics and outcome != 'privacy_fenced':
+                    try:
+                        self.metrics.record(outcome)
+                    except Exception:
+                        pass
+        self._mark_stale(owner_id, more)
+        for outcome, count in outcomes.items():
+            logger.info(
+                'event=batch_merge outcome=stale_head_promoted action=%s source=%s count=%d',
+                outcome,
+                self.commit_source,
+                count,
+            )
+
     def commit_next(self, owner_id: str, now: float, *, release: list[str] | None = None) -> dict | None:
         """Commit the owner's next result-log row, or return None.
 
@@ -283,7 +449,10 @@ class OrderedMerge:
         first still-pending ready row in it commits at once. Recovered units
         already waited out quarantine and recovery, so the set skips the head
         wait; only the recovered unit also passes the catch-up depth hold. The
-        body, late marking and chain are the same as every other commit."""
+        body, late marking and chain are the same as every other commit.
+
+        A due ``retry`` row read at the owner's head is promoted before the
+        head wait, so it runs (or parks) now instead of blocking newer rows."""
         key = owner_key(owner_id)
         started = time.monotonic()
         wait = self._head_wait()
@@ -298,6 +467,8 @@ class OrderedMerge:
         released: dict = {}
         held: dict = {}
         head: dict = {}
+        # Retry rows read at the owner's strict or fresh head (see _promote_stale_heads).
+        stale: dict[str, dict] = {}
         gate = {'determined': True}
         backlog: dict = {}
         metered = kill_switch('BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED', log=False)
@@ -326,6 +497,8 @@ class OrderedMerge:
             candidate = tx.first_pending(key)
             if candidate and candidate.get('shadow'):
                 return None
+            if candidate and candidate['state'] == 'retry':
+                stale[candidate['segment_id']] = candidate
             if candidate and candidate.get('source_alias_fallback') and candidate.get('state') == 'result_ready':
                 from database.batch_pipeline_source_fallback import merge_ready
 
@@ -349,6 +522,8 @@ class OrderedMerge:
                 except GoogleAPICallError as error:
                     # Only query errors get probe-style handling; commit writes still raise.
                     raise _FreshGateReadError(error) from error
+                if first is not None and first['state'] == 'retry':
+                    stale[first['segment_id']] = first
                 if fresh is None and not (metered and _backlog_held(candidate)):
                     return None
                 if fresh is not None and (
@@ -616,6 +791,12 @@ class OrderedMerge:
                 probe = False
                 fresh_first.clear()
                 bypass.clear()
+        if (
+            entry is None
+            and (any(_promotable(row, now) for row in stale.values()) or self._stale_pending(owner_id))
+            and kill_switch(STALE_HEAD_SWITCH, log=False)
+        ):
+            self._promote_stale_heads(owner_id, stale, now)
         if probe:
             # A catch-up row heads the owner. Probe for a ready fresh row
             # outside the strict transaction (no transactional query lock);

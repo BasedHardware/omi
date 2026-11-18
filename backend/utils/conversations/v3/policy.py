@@ -72,3 +72,16 @@ def created_eligible(row):
         and row.get('status') == 'completed'
         and not row.get('v3_created_delivered_at')
     )
+
+
+def builder_eligible(row):
+    """A source recording the builder places into stretches (live and backfill passes alike)."""
+    return bool(
+        row
+        and row.get('recording')
+        and not row.get('deleted')
+        and not row.get('sync_merged_into')
+        and row.get('data_protection_level') != 'private'
+        and row.get('started_at')
+        and not row.get('_v3_unreadable')
+    )

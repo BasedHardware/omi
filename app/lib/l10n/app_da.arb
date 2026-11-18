@@ -352,6 +352,7 @@
     "enterYourName": "Indtast dit navn",
     "nameCannotBeEmpty": "Navn kan ikke være tomt",
     "nameUpdatedSuccessfully": "Navn opdateret!",
+    "calendarReadSelectionHelp": "Læs de valgte kalendere. Nye begivenheder bruger {calendar}.",
     "calendarSettings": "Kalenderindstillinger",
     "calendarProviders": "Kalenderudbydere",
     "macOsCalendar": "macOS-kalender",

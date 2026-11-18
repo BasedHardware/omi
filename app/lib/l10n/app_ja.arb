@@ -352,6 +352,7 @@
     "enterYourName": "お名前を入力",
     "nameCannotBeEmpty": "名前を空にすることはできません",
     "nameUpdatedSuccessfully": "名前が正常に更新されました！",
+    "calendarReadSelectionHelp": "選択したカレンダーを読み込みます。新しい予定には {calendar} を使用します。",
     "calendarSettings": "カレンダー設定",
     "calendarProviders": "カレンダープロバイダー",
     "macOsCalendar": "macOSカレンダー",

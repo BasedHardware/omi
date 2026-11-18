@@ -1126,6 +1126,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Vārds veiksmīgi atjaunināts!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Lasīt atlasītos kalendārus. Jauniem notikumiem tiek izmantots $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalendāra iestatījumi';
 
   @override

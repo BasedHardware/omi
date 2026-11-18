@@ -305,6 +305,31 @@ def _defer(job: dict, now: float, reason: str) -> None:
     )
 
 
+def stored_identity(job: dict) -> dict:
+    """The job as admitted: a demoted row compares against its admission priority."""
+    if 'admitted_priority' not in job:
+        return job
+    return {**job, 'priority': job['admitted_priority']}
+
+
+def requeue_due_retry(tx: Transaction, job: dict, now: float, *, priority: int | None = None) -> str | None:
+    """A due retry row rejoins DRR, or parks if its latest decision is an allowance hold.
+
+    ``priority`` may only lower the service class; the admission priority stays the row's identity."""
+    if job.get('state') != 'retry' or job['available_at'] > now:
+        return None
+    if allowance_hold.enabled() and allowance_hold.park(tx, job, now):
+        return 'allowance_parked'
+    if priority is not None and int(priority) > job['priority']:
+        job.setdefault('admitted_priority', job['priority'])
+        job['priority'] = int(priority)
+    control = read_control(tx, scheduler_control_key(job['owner_key']))
+    job['state'] = 'ready'
+    _append(tx, control, job)
+    tx.put('jobs', job['segment_id'], job)
+    return 'requeued'
+
+
 class Scheduler:
     def __init__(
         self,
@@ -352,8 +377,9 @@ class Scheduler:
         ):
             raise ValueError('pending recording owner cannot change')
         if previous and previous.get('state') != 'record_pending':
+            stored = stored_identity(previous)
             if any(
-                previous.get(key, {'unit_kind': 'conversation', 'requires_compute_admission': False}.get(key)) != value
+                stored.get(key, {'unit_kind': 'conversation', 'requires_compute_admission': False}.get(key)) != value
                 for key, value in immutable.items()
                 if not (key == 'privacy_generation' and value is None)
             ):
@@ -1163,12 +1189,7 @@ class Scheduler:
                     elif state == 'retry' and job.get('state') == 'retry' and job['available_at'] <= now:
                         if segment_id in protected_ids and not protected_share.eligible(job, now):
                             return None
-                        if allowance_hold.enabled() and allowance_hold.park(tx, job, now):
-                            return ('allowance_parked', 0, None)
-                        control = read_control(tx, scheduler_control_key(job['owner_key']))
-                        job['state'] = 'ready'
-                        _append(tx, control, job)
-                        outcome = ('requeued', 0, None)
+                        return (requeue_due_retry(tx, job, now), 0, None)
                     else:
                         return None
                     tx.put('jobs', segment_id, job)

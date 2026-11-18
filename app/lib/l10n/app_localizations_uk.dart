@@ -1127,6 +1127,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Ім\'я успішно оновлено!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Читати вибрані календарі. Нові події використовують $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Налаштування календаря';
 
   @override

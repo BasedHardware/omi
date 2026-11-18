@@ -222,11 +222,11 @@ def test_new_rules_do_not_change_server_recovery_policy():
 
 @pytest.fixture
 def calendar_probe():
-    from database import calendar_meetings, users
+    from database import calendar_meetings, google_calendar_preferences, users
     from utils.conversations import calendar_linking
     from utils.conversations.terminal_calendar import calendar_retains
 
-    return calendar_meetings, users, calendar_linking, calendar_retains
+    return calendar_meetings, google_calendar_preferences, users, calendar_linking, calendar_retains
 
 
 @pytest.mark.parametrize(
@@ -236,9 +236,10 @@ def test_real_terminal_calendar_probe_distinguishes_unavailable_evidence(monkeyp
     from datetime import datetime, timedelta, timezone
     from unittest.mock import AsyncMock
 
-    calendar_meetings, users, calendar_linking, calendar_retains = calendar_probe
+    calendar_meetings, google_calendar_preferences, users, calendar_linking, calendar_retains = calendar_probe
 
     monkeypatch.setattr(calendar_meetings, 'get_meetings_in_time_range', lambda *_: [])
+    monkeypatch.setattr(google_calendar_preferences, 'get_selections', lambda *_: {})
     integration = {'connected': True, 'access_token': 'test-token'}
     if mode == 'missing_token':
         integration.pop('access_token')
@@ -412,3 +413,24 @@ def test_production_terminal_assessment_call_sites_are_pinned(terminal_source_tr
                     for kw in call.keywords
                 )
     assert observed == expected
+
+
+def test_terminal_calendar_probe_keeps_uncertainty_when_a_calendar_was_skipped(monkeypatch, calendar_probe):
+    # A selected calendar that could not be read leaves absence unproven, so the
+    # probe must return uncertainty rather than confirmed no-overlap.
+    from datetime import datetime, timedelta, timezone
+
+    calendar_meetings, google_calendar_preferences, users, calendar_linking, calendar_retains = calendar_probe
+
+    monkeypatch.setattr(calendar_meetings, 'get_meetings_in_time_range', lambda *_: [])
+    monkeypatch.setattr(google_calendar_preferences, 'get_selections', lambda *_: {})
+    monkeypatch.setattr(users, 'get_integration', lambda *_: {'connected': True, 'access_token': 'test-token'})
+
+    async def fetch(**kwargs):
+        kwargs['on_degraded']()
+        return []
+
+    monkeypatch.setattr(calendar_linking, 'get_google_calendar_events', fetch)
+    now = datetime.now(timezone.utc)
+    row = {'source': 'omi', 'started_at': now, 'finished_at': now + timedelta(minutes=1)}
+    assert calendar_retains('u', row) is None

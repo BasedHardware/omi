@@ -352,6 +352,7 @@
     "enterYourName": "Masukkan nama anda",
     "nameCannotBeEmpty": "Nama tidak boleh kosong",
     "nameUpdatedSuccessfully": "Nama berjaya dikemas kini!",
+    "calendarReadSelectionHelp": "Baca kalendar yang dipilih. Acara baharu menggunakan {calendar}.",
     "calendarSettings": "Tetapan kalendar",
     "calendarProviders": "Penyedia Kalendar",
     "macOsCalendar": "Kalendar macOS",
