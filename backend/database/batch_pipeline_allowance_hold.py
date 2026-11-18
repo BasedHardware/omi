@@ -8,7 +8,6 @@ from config.policy.kill_switches import kill_switch
 STATE = 'allowance_held'
 OWNERS = 'allowance_holds'
 SWITCH = 'BATCH_ALLOWANCE_PARK_ENABLED'
-INTAKE_SWITCH = 'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED'
 EXHAUSTED = 'allowance_exhausted'
 
 
@@ -17,7 +16,7 @@ def enabled() -> bool:
 
 
 def intake_enabled() -> bool:
-    return enabled() and kill_switch(INTAKE_SWITCH, log=False)
+    return enabled() and kill_switch('BATCH_ALLOWANCE_INTAKE_PARK_ENABLED', log=False)
 
 
 def release_fence(owner: dict) -> tuple[str | None, float | None] | None:
