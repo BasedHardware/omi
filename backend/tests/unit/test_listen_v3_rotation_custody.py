@@ -197,14 +197,17 @@ from tests.unit.test_conversation_quiet_finalization import (  # noqa: E402
 )
 
 
-def test_a_rotation_orphan_is_finalized_by_the_quiet_check_its_create_armed(quiet_store, monkeypatch):  # noqa: F811
-    """Crash after the successor switch, before the seal: the retired recording keeps the quiet
-    check armed by _persist_policy_and_arm_quiet_check at its own creation, and that check admits
-    its finalization once the recording lease (renewed only for the socket's current id) expires."""
+def test_a_rotation_orphan_is_left_for_listen_stale_recovery_not_the_quiet_check(
+    quiet_store, monkeypatch
+):  # noqa: F811
+    """A v3 recording carries terminal_no_derived_effects, so the quiet check its create armed
+    never admits it (recovery_admission_refusal: terminal_no_derived). The owning recovery is
+    LiveConversationController.recover_stale_in_progress (below)."""
     quiet_store.rows[QUIET_ROW].update(
         record_lane_owner='batch_live_v1',
         external_data={server_batch.MARKER: True, 'recording_session_id': 'recording-old'},
         recording=True,
+        terminal_no_derived_effects=True,
         transcript_segments=[],
         has_content=True,
         server_batch_audio_start=1000.0,
@@ -212,10 +215,66 @@ def test_a_rotation_orphan_is_finalized_by_the_quiet_check_its_create_armed(quie
         server_batch_audio_received=True,
     )
     assert quiet.arm('synthetic', 'old', 120, firestore_client=quiet_store)
-    _advance(monkeypatch, 120)  # still leased: the check defers, nothing is admitted early
-    assert quiet.run(quiet_checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=quiet_store) != 'queued'
-    _advance(monkeypatch, 361)
+    _advance(monkeypatch, 481)
     job = quiet_checks.quiet_check_id('synthetic', 'old')
     generation = quiet_store.rows[('conversation_finalization_jobs', job)]['dispatch_generation']
-    assert quiet.run(job, generation, firestore_client=quiet_store) == 'queued'
-    assert quiet_store.rows[QUIET_ROW]['finalization_revision'] == 1
+    assert quiet.run(job, generation, firestore_client=quiet_store) != 'queued'
+    assert 'finalization_revision' not in quiet_store.rows[QUIET_ROW]
+
+
+@pytest.mark.asyncio
+async def test_a_rotation_orphan_is_sealed_by_stale_recovery_on_a_later_connection(monkeypatch):
+    host = SimpleNamespace(
+        state=SimpleNamespace(current_conversation_id='fresh', active=True),
+        request=SimpleNamespace(uid='owner'),
+        persistence=SimpleNamespace(call=AsyncMock(return_value=[{'id': 'orphan'}, {'id': 'fresh'}])),
+    )
+    controller = LiveConversationController(host)
+    finalized = []
+
+    async def finalize(fn, conversation_id, *, stage):
+        finalized.append((fn, conversation_id, stage))
+
+    controller._finalize_isolated = finalize
+    await controller.recover_stale_in_progress()
+    assert finalized == [(controller.process_conversation, 'orphan', 'stale_in_progress')]
+
+
+@pytest.mark.asyncio
+async def test_runtime_teardown_drains_pending_rotations(monkeypatch):
+    from starlette.websockets import WebSocketState
+
+    from routers.listen.contracts import ListenRequest
+    from routers.listen.runtime import ListenSessionRuntime
+    from unittest.mock import MagicMock
+
+    order = []
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = ListenRequest(websocket=SimpleNamespace(client_state=WebSocketState.DISCONNECTED), uid='owner')
+    runtime.state = SimpleNamespace(
+        shutdown_event=asyncio.Event(),
+        active=True,
+        stt_terminal_failure=False,
+        close_code=1000,
+        current_conversation_id=None,
+        finalization_reason=None,
+    )
+    runtime.conversation_creation_timeout = 120
+    runtime.task_supervisor = SimpleNamespace(end_session=MagicMock(), drain_all=AsyncMock())
+    runtime._finish_live_transcription = MagicMock()
+    runtime._record_session_transcript_outcome = MagicMock()
+    runtime.transcripts = SimpleNamespace(flush_translations=AsyncMock(), clear=MagicMock())
+    runtime.receiver = SimpleNamespace(finish=MagicMock(), flush_multi_channel_tail=AsyncMock(), clear=MagicMock())
+    runtime._flush_usage = AsyncMock()
+    runtime.is_multi_channel = False
+    runtime.language_observations = runtime.pusher_close = runtime.onboarding_handler = None
+    runtime.speakers = SimpleNamespace(clear=MagicMock())
+    runtime.conversations = SimpleNamespace(drain_rotations=AsyncMock(side_effect=lambda: order.append('drain')))
+
+    async def persist(fn, *args, **kwargs):
+        return False if getattr(fn, '__name__', '') == '_account_deletion_blocks_owner_persistence' else None
+
+    runtime.persistence = SimpleNamespace(call=persist)
+    await runtime._teardown_components()
+    runtime.conversations.drain_rotations.assert_awaited_once_with()
+    assert order == ['drain']

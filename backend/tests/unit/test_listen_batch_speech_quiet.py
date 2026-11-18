@@ -341,6 +341,12 @@ async def test_a_failed_successor_keeps_the_recording_and_backs_off(monkeypatch,
     assert controller.host.recording_session_id == 'session-1'
     assert controller.host.batch_record_capture == {'id': 'current'}
     assert controller.host.recording_session_ids_by_conversation == {'current': 'session-1'}
+    redis = [
+        c
+        for c in controller.host.persistence.call.await_args_list
+        if c.args[0].__name__ == 'set_in_progress_conversation_id'
+    ]
+    assert [c.args[1:] for c in redis] == [('test-owner', 'current')]
     assert controller._rotation_retry_at == NOW + timedelta(seconds=60)
     assert not controller._v3_rotation_due(_v3_row(190))
     controller._rotation_retry_at = NOW - timedelta(seconds=1)
@@ -449,7 +455,7 @@ async def test_a_resumed_v3_row_rotates_on_speech_this_socket_heard(monkeypatch,
     assert (await _rotation_pass(monkeypatch, _v3_row(600), clock))[0] == ['v3_rotation']
 
 
-def _sealing_controller(process):
+def _sealing_controller(process, token=True):
     clock = {'now': NOW}
     host = SimpleNamespace(
         state=SimpleNamespace(active=True, current_conversation_id='next'),
@@ -460,6 +466,8 @@ def _sealing_controller(process):
     controller = LiveConversationController(host, clock=lambda: clock['now'])
     controller.process_conversation = process
     controller._unsealed_rotations['old'] = (0, NOW)
+    if token:
+        controller._batch_producer_tokens['old'] = 'token'
     return controller, clock
 
 
@@ -475,6 +483,7 @@ async def test_a_refused_seal_retries_with_backoff_then_hands_off(monkeypatch):
             await controller._seal_rotated()  # not yet due: no attempt
             clock['now'] = due
     assert waits == [15, 30, 60, 120]
+    assert 'old' not in controller._batch_producer_tokens  # handed off: no longer counts toward the cap
     assert controller.process_conversation.await_count == conversation_module.ROTATION_SEAL_ATTEMPTS
     assert controller._unsealed_rotations == {}
 
@@ -497,3 +506,20 @@ async def test_teardown_drains_pending_seals_once(monkeypatch):
     await controller.drain_rotations()
     controller.process_conversation.assert_awaited_once_with('old')
     assert controller._unsealed_rotations == {}
+
+
+@pytest.mark.asyncio
+async def test_ownership_loss_during_a_rotation_closes_the_socket(monkeypatch, rotation_on):
+    from fastapi import WebSocketException
+
+    with pytest.raises(WebSocketException):
+        await _rotation_pass(
+            monkeypatch, _v3_row(190), _speaking(2), create_error=WebSocketException(code=1013, reason='limit')
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_reconnect_protocol_row_never_rotates(monkeypatch, rotation_on):
+    row = _v3_row(300, listen_batch_producer={'version': 1, 'token': 't', 'phase': 'active'})
+    stages, creates, _ = await _rotation_pass(monkeypatch, row, _speaking(2))
+    assert (stages, creates) == ([], 0)

@@ -93,3 +93,48 @@ def test_supersede_never_steals_a_pointer_another_generation_owns():
         )
         == 'absent'
     )
+
+
+@pytest.mark.anyio
+async def test_a_failed_successor_never_takes_the_pointer_and_the_retry_moves_it(monkeypatch):
+    harness = _harness(monkeypatch)
+    controller, sealed = _connect(harness)
+    await controller.prepare()
+    first = controller.host.state.current_conversation_id
+    arm = controller._persist_policy_and_arm_quiet_check
+    failures = iter([RuntimeError('firestore')])
+
+    async def flaky(cid):
+        if cid != first:
+            error = next(failures, None)
+            if error:
+                raise error
+        return await arm(cid)
+
+    controller._persist_policy_and_arm_quiet_check = flaky
+    harness.now += timedelta(minutes=3)
+    await controller._rotate_v3_recording(first)
+    assert controller.host.state.current_conversation_id == first and not sealed
+    assert harness.store.rows[ROOT]['live_continuation']['conversation_id'] == first
+    harness.now += timedelta(seconds=61)
+    controller._rotation_retry_at = None
+    await controller._rotate_v3_recording(first)
+    successor = controller.host.state.current_conversation_id
+    assert successor != first and sealed == [first]
+    assert harness.store.rows[ROOT]['live_continuation']['conversation_id'] == successor
+
+
+def test_supersede_accepts_a_pointer_this_socket_left_on_its_own_recording():
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    store = StrictFirestore()
+    store.rows[ROOT] = dict(uid='u', recording_session_id='original', live_continuation={'conversation_id': 'mine'})
+    moved = listen_continuations.supersede_live_continuation(
+        'u',
+        'original',
+        previous_id='old',
+        proposed={'conversation_id': 'new', 'recording_session_id': 's'},
+        own_ids=['mine', 'old'],
+        firestore_client=store,
+    )
+    assert moved == 'moved' and store.rows[ROOT]['live_continuation']['conversation_id'] == 'new'
