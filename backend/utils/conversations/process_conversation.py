@@ -81,7 +81,10 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from config.refactor_modes import serving_for
-from utils.conversations.empty_structure_minimum import apply_empty_structure_minimum
+from utils.conversations.empty_structure_minimum import (
+    apply_empty_structure_minimum,
+    recovery_minimum_would_drop_metadata,
+)
 from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
@@ -619,11 +622,11 @@ def _get_structured(
                 return Structured(), True
             stored_structured = getattr(main_conv, 'structured', None)
             stored_content_is_replaceable = stored_structure_is_replaceable(stored_structured)
-            # Kept minimum: batch audio owed (the finalizer registers it), or a short decoded transcript.
+            # Batch audio still owed follows the existing handoff path. The short
+            # transcript minimum also needs to preserve prior notes metadata.
             if stored_content_is_replaceable and (
                 batch_audio_owed
                 or recovery_transcript_decoded
-                and not getattr(main_conv, 'user_title', None)
                 and not is_release_probe_uid(uid)
                 and not user_kept
                 and not getattr(main_conv, 'photos', None)
@@ -631,6 +634,7 @@ def _get_structured(
                 and not summary_app_selected
                 and english_word_floor(main_conv, discard_transcript)
                 and recovery_transcript_below_content_floor(main_conv)
+                and not recovery_minimum_would_drop_metadata(main_conv)
             ):
                 reason = 'batch_audio_owed' if batch_audio_owed else 'content_below_floor'
                 if relevance_observer is not None:
