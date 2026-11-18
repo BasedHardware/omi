@@ -137,6 +137,7 @@ async def run_pass(strict, monkeypatch, sources):
     monkeypatch.setattr(service, 'has_pending', lambda uid: False)
     monkeypatch.setattr(service.models, 'outline', outline)
     monkeypatch.setattr(service.visibility, 'hydrate_recognition', lambda uid, recordings, windows: None)
+    monkeypatch.setattr(service.context, 'outline_sources', lambda *a: ({}, [], []))
     assert await service.reconcile(UID) == 'committed'
     return committed
 
@@ -377,7 +378,7 @@ async def test_blocked_log_names_cause_and_owner_hash_without_ids(monkeypatch, c
     with caplog.at_level(logging.WARNING, logger=service.logger.name):
         assert await service.reconcile(secret_uid) == 'blocked'
     [message] = [r.getMessage() for r in caplog.records if 'reconcile blocked reason=' in r.getMessage()]
-    assert 'cause=InvalidArgument' in message and '1100000 bytes' in message
+    assert 'cause=InvalidArgument limit=document bytes=1100000' in message and 'projects/' not in message
     assert f'owner={service.owner_tag(secret_uid)}' in message and secret_uid not in message
 
 
@@ -425,3 +426,25 @@ def test_fixed_write_bytes_counts_every_source_claim_update():
         'cache',
     )
     assert large - small > 500 * 40
+
+
+@pytest.mark.asyncio
+async def test_fresh_window_at_a_retained_start_gets_its_own_id(strict, monkeypatch):
+    # The retained conversation's id is the start-keyed id a fresh window at the same instant derives.
+    from uuid import NAMESPACE_URL, uuid5
+
+    xid = str(uuid5(NAMESPACE_URL, f'v3:{UID}:{T0.isoformat()}'))
+    seed(
+        strict,
+        a_claims=[{'conversation_id': xid, 'start': T0 + timedelta(seconds=30), 'end': T0 + timedelta(seconds=590)}],
+    )
+    strict.rows[path(xid)] = {**strict.rows.pop(path('x')), 'id': xid}
+    strict.rows[path('a')]['transcript_segments'] = speech(20)[1:]
+    strict.rows[path('b')] = recording(
+        'b', T0, [{'text': 'Synthetic late speech', 'start': 0, 'end': 20, 'is_user': True}], [], v3_pending=True
+    )
+    for _ in range(3):
+        committed = await run_pass(strict, monkeypatch, ['a', 'b'])
+        assert committed and all(len(ids) == len(set(ids)) for ids in committed), committed
+    keys = claim_keys('a', strict)
+    assert len(keys) == len(set(keys)) == 1

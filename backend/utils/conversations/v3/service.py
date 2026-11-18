@@ -15,6 +15,7 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -66,13 +67,18 @@ def owner_tag(uid):
 
 
 def redacted_cause(error):
-    """The blocking error's cause as type and message, with document paths and long ids removed."""
+    """The blocking error's cause: its type, plus the size limit and byte counts for a Firestore size error.
+
+    Never the raw message: Firestore names the document path (owner and conversation ids).
+    """
     cause = getattr(error, '__cause__', None)
     if cause is None:
         return '-'
-    text = re.sub(r'projects/\S+', '<path>', str(cause))
-    text = re.sub(r'[A-Za-z0-9_-]{20,}', '<id>', text)
-    return f'{type(cause).__name__}: {text[:300]}'
+    kind = store.size_error(cause)
+    if not kind:
+        return type(cause).__name__
+    sizes = ','.join(re.findall(r'\(?(\d+) bytes', str(cause))) or '-'
+    return f'{type(cause).__name__} limit={kind} bytes={sizes}'
 
 
 async def _drain_blocked(uid, reason):
@@ -281,6 +287,7 @@ async def reconcile(
             # rows with one id each re-add the source's held claims, doubling them every pass until the
             # recording outgrows Firestore's 1 MiB document limit (document_too_large).
             rows, used = [], {window['existing_id'] for window in windows if window.get('existing_id')}
+            taken = set()
             await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
             for window in windows:
                 # An affirmative transcription failure is terminal even before the silence deadline.
@@ -290,6 +297,12 @@ async def reconcile(
                 if prior:
                     used.add(prior['id'])
                 row = planner.build(uid, window, recordings, prior)
+                if not prior and row['id'] in used | taken:
+                    # A fresh window starting at a planned row's exact start derives the same start-keyed
+                    # id; qualify it with its first recording so one id never names two planned rows.
+                    first = window['lines'][0]['conversation_id']
+                    row['id'] = str(uuid5(NAMESPACE_URL, f"v3:{uid}:{row['started_at'].isoformat()}:{first}"))
+                taken.add(row['id'])
                 contributing = _backfill_runs(window, recordings)
                 if derive and len(contributing) > 1:
                     # Undo is scoped to one run; a re-derive never merges rows that different runs own.

@@ -447,7 +447,9 @@ def commit_projection(
     def commit(tx, batch_rows, batch_prepared, final):
         observed = {}
         staged.clear()
-        staged.update(rows=batch_prepared, recordings={})
+        staged.update(
+            rows=[row for raw, row in zip(batch_rows, batch_prepared) if not raw.get('deleted')], recordings={}
+        )
         now = datetime.now(timezone.utc)
         lease = held.get(transaction=tx).to_dict() or {}
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
