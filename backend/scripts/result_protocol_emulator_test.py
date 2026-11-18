@@ -162,8 +162,18 @@ def test_pl632_refusal_preserves_job_and_log_until_a_capable_successor(h, monkey
     for offset in (3, 4):
         assert merger.OrderedMerge(h.store).commit_next(h.uid('owner'), NOW + offset) is None
         assert snapshot(h) == before
-    # Model only a successor's capability decision, not its future semantics.
-    monkeypatch.setattr(merger, 'merge_markers', lambda job: dict(job[REQUIRED]))
+    if defect != 'unknown':
+        return  # A future binary is not permission to accept malformed metadata.
+
+    # Model one exact future requirement's capability decision, not future semantics.
+    current_markers = merger.merge_markers
+
+    def future_capability(job):
+        if job == before['job'] and job[REQUIRED] == {'source_reuse_version': 1, 'future_version': 1}:
+            return dict(job[REQUIRED])
+        return current_markers(job)
+
+    monkeypatch.setattr(merger, 'merge_markers', future_capability)
     entry = merger.OrderedMerge(h.store).commit_next(h.uid('owner'), NOW + 5)
     assert entry['log_sequence'] == before['owner'].get('log_sequence', 0) + 1
     assert entry['previous_segment_id'] == before['owner'].get('log_tail')
