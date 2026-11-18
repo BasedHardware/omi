@@ -83,7 +83,7 @@ def plan_owner(uid: str, label: str, since: datetime, until: datetime, mode: str
     show(label + ' window', {'since': since.isoformat(), 'until': until.isoformat(), 'mode': mode})
     show(label + ' rows', counts)
     totals: dict = {}
-    for index, partition in enumerate(partitions):
+    for partition in partitions:
         estimate = backfill.estimate_partition(uid, partition, run_id='dry-run', rederive=mode == 'rederive')
         for key, value in estimate.items():
             totals[key] = totals.get(key, 0) + value
