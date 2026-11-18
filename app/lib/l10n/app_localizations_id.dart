@@ -1126,6 +1126,11 @@ class AppLocalizationsId extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nama berhasil diperbarui!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Baca kalender yang dipilih. Acara baru menggunakan $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Pengaturan kalender';
 
   @override

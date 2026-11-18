@@ -364,6 +364,7 @@ actor RewindIndexer {
 
       guard !ownerTransitionSuspended else { return }
       let inserted = try await insertScreenshotIfCurrent(screenshot, snapshot: snapshot)
+      await RewindDatabase.shared.reportQuerySuccess()
       guard RewindCaptureExclusionGeneration.isCurrent(snapshot) else { return }
       markFrameEncodedForDedupe(dedupeSignature, timestamp: frame.captureTime)
 
@@ -485,6 +486,7 @@ actor RewindIndexer {
 
       guard !ownerTransitionSuspended else { return }
       let inserted = try await insertScreenshotIfCurrent(screenshot, snapshot: snapshot)
+      await RewindDatabase.shared.reportQuerySuccess()
       guard RewindCaptureExclusionGeneration.isCurrent(snapshot) else { return }
       markFrameEncodedForDedupe(dedupeSignature, timestamp: captureTime)
 

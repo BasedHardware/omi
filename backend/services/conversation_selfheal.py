@@ -426,10 +426,9 @@ def run_selfheal_tick(
                     elif content_due_scan or mode == 'heal':
                         # Resume after the considered window instead of the
                         # scan tail, so an eligible row behind the cap comes
-                        # first next tick rather than after a full rotation.
+                        # first next tick. Later rows still feed the counters.
                         resume_after_path = eligible[-1]['path']
                         exhausted = False
-                        break
             pending_before = len(pending)
             pending, deferred_at = _act_on_eligible(
                 eligible,

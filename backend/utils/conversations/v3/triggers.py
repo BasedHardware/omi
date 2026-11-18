@@ -4,6 +4,7 @@ import hashlib
 import logging
 import os
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 from config.conversations_v3 import conversations_v3_enabled
 from database import conversations_v3 as store
@@ -38,6 +39,16 @@ def _mark_resolved(uid, row):
         )
 
 
+def task_base():
+    base = os.getenv('CONVERSATIONS_V3_TASKS_URL', '').rstrip('/')
+    if not base:
+        target = urlsplit(os.getenv('SYNC_TASKS_HANDLER_URL', ''))
+        base = target.scheme + '://' + target.netloc if target.scheme and target.netloc else ''
+    if not base:
+        raise RuntimeError('conversations_v3_task_target_unconfigured')
+    return base
+
+
 def enqueue(uid, *, at=None, manual_end_id=None):
     instant = at or datetime.now(timezone.utc)
     minute = int(instant.timestamp()) // 60
@@ -46,14 +57,7 @@ def enqueue(uid, *, at=None, manual_end_id=None):
         # A live task may already have completed in this minute. Its retained
         # Cloud Tasks name must not swallow the user's later explicit close.
         task_id += '-end-' + hashlib.sha256(manual_end_id.encode()).hexdigest()[:32]
-    base = os.getenv('CONVERSATIONS_V3_TASKS_URL', '').rstrip('/')
-    if not base:
-        from urllib.parse import urlsplit
-
-        target = urlsplit(os.getenv('SYNC_TASKS_HANDLER_URL', ''))
-        base = target.scheme + '://' + target.netloc if target.scheme and target.netloc else ''
-    if not base:
-        raise RuntimeError('conversations_v3_task_target_unconfigured')
+    base = task_base()
     enqueue_named_task(
         os.getenv('CONVERSATIONS_V3_TASKS_QUEUE', 'conversations-v3'),
         base + '/v1/conversations-v3/reconcile',
