@@ -546,6 +546,7 @@ runs:
     - name: Preflight Cloud Run deploy
       shell: bash
       run: |
+        set -euo pipefail
         PREFLIGHT_ARGS=(
           ${{ inputs.cloud_run_service != 'all' && format('--service {0}', inputs.cloud_run_service) || '' }} \
           --env ${{ inputs.runtime_env }}
@@ -560,6 +561,14 @@ runs:
                "${{ inputs.environment }}" == "prod" ||
                "${{ inputs.environment }}" == "development") ]]; then
           PREFLIGHT_ARGS+=(--repair-traffic)
+          if [[ "${{ inputs.deploy_profile }}" == manual ]]; then
+            history_args=()
+            if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+              history_args=(--unshallow)
+            fi
+            git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
+            PREFLIGHT_ARGS+=(--release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py")
+          fi
         fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" "${PREFLIGHT_ARGS[@]}"
 
