@@ -9008,6 +9008,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncStatusUploaded => 'הועלה · בעיבוד ב-Omi';
 
   @override
+  String get deleteFromServerTitle => 'למחוק מכל מקום?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'ההקלטה הזו הועלתה אך עדיין לא תומללה. מחיקתה מוחקת לצמיתות גם את העותק בשרתים של Omi, כך שלעולם לא תתומלל. לא ניתן לבטל פעולה זו.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'כבר תומללה. מחקו את השיחה שלה כדי להסיר אותה.';
+
+  @override
   String get deleteWhileProcessingTitle => 'עדיין בעיבוד';
 
   @override

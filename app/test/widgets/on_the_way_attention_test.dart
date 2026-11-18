@@ -1,3 +1,4 @@
+import 'package:omi/backend/http/api/sync_job_cancel.dart';
 import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -34,7 +35,10 @@ class _FakeSync extends ChangeNotifier with WalDerivedSyncViews implements SyncP
   @override
   Future<void> syncWal(Wal wal) async => retried.add(wal);
   @override
-  Future<void> deleteWal(Wal wal) async => deleted.add(wal);
+  Future<SyncJobCancelResult?> deleteWal(Wal wal) async {
+    deleted.add(wal);
+    return null;
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

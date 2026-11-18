@@ -8941,6 +8941,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncStatusUploaded => '已上传 · 正在 Omi 上处理';
 
   @override
+  String get deleteFromServerTitle => '要在所有位置删除吗？';
+
+  @override
+  String get deleteFromServerMessage => '此录音已上传，但尚未转写。删除后，Omi 服务器上的副本也会被永久清除，因此它永远不会被转写。此操作无法撤销。';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => '已转写。请删除其对话以将其移除。';
+
+  @override
   String get deleteWhileProcessingTitle => '仍在处理';
 
   @override

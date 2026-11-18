@@ -9101,6 +9101,16 @@ class AppLocalizationsSl extends AppLocalizations {
   String get syncStatusUploaded => 'Naloženo · obdelava v Omi';
 
   @override
+  String get deleteFromServerTitle => 'Izbrišem povsod?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Ta posnetek je naložen, vendar še ni prepisan. Z brisanjem se trajno izbriše tudi kopija na Omijevih strežnikih, zato ne bo nikoli prepisan. Tega ni mogoče razveljaviti.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Že prepisano. Če ga želite odstraniti, izbrišite njegov pogovor.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Še poteka obdelava';
 
   @override

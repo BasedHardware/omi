@@ -9163,6 +9163,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String get syncStatusUploaded => 'Envoyé · traitement sur Omi';
 
   @override
+  String get deleteFromServerTitle => 'Supprimer partout ?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Cet enregistrement a été envoyé mais pas encore transcrit. Le supprimer efface aussi définitivement la copie sur les serveurs d\'Omi, il ne sera donc jamais transcrit. Cette action est irréversible.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Déjà transcrit. Supprimez sa conversation pour le retirer.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Traitement en cours';
 
   @override

@@ -9084,6 +9084,16 @@ class AppLocalizationsSv extends AppLocalizations {
   String get syncStatusUploaded => 'Uppladdad · bearbetas på Omi';
 
   @override
+  String get deleteFromServerTitle => 'Radera överallt?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Den här inspelningen är uppladdad men har inte transkriberats än. Om du raderar den tas även kopian på Omis servrar bort permanent, så den transkriberas aldrig. Detta kan inte ångras.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Redan transkriberad. Radera dess konversation för att ta bort den.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Bearbetas fortfarande';
 
   @override

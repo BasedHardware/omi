@@ -9090,6 +9090,16 @@ class AppLocalizationsPt extends AppLocalizations {
   String get syncStatusUploaded => 'Enviado · processando no Omi';
 
   @override
+  String get deleteFromServerTitle => 'Excluir em todos os lugares?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Esta gravação foi enviada, mas ainda não foi transcrita. Excluí-la também apaga permanentemente a cópia nos servidores do Omi, então ela nunca será transcrita. Isso não pode ser desfeito.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Já foi transcrita. Exclua a conversa dela para removê-la.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Ainda processando';
 
   @override

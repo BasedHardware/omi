@@ -16917,6 +16917,24 @@ abstract class AppLocalizations {
   /// **'Uploaded · processing on Omi'**
   String get syncStatusUploaded;
 
+  /// Confirmation title when deleting an uploaded recording that the server has not transcribed yet; the server copy is erased too
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Everywhere?'**
+  String get deleteFromServerTitle;
+
+  /// Confirmation body: deleting an uploaded, untranscribed recording also permanently erases it from Omi's servers
+  ///
+  /// In en, this message translates to:
+  /// **'This recording is uploaded but not transcribed yet. Deleting it also permanently erases the copy on Omi\'s servers, so it will never be transcribed. This can\'t be undone.'**
+  String get deleteFromServerMessage;
+
+  /// Shown after deleting a recording the server had already transcribed; the conversation must be deleted separately
+  ///
+  /// In en, this message translates to:
+  /// **'Already transcribed. Delete its conversation to remove it.'**
+  String get deletedRecordingAlreadyTranscribed;
+
   /// No description provided for @deleteWhileProcessingTitle.
   ///
   /// In en, this message translates to:

@@ -1,0 +1,309 @@
+import 'dart:io';
+
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/backend/http/api/sync_job_cancel.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
+import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/wal_file_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class _Listener implements IWalSyncListener {
+  final synced = <String>[];
+  @override
+  void onWalUpdated() {}
+  @override
+  void onWalSynced(Wal wal, {ServerConversation? conversation}) => synced.add(wal.id);
+}
+
+class _MemoryStore implements WalServerCancelStore {
+  List<WalServerCancelTombstone> rows = [];
+  bool failSaves = false;
+  final events = <String>[];
+
+  @override
+  Future<List<WalServerCancelTombstone>> load() async => List.of(rows);
+
+  @override
+  Future<bool> save(List<WalServerCancelTombstone> tombstones) async {
+    if (failSaves) return false;
+    events.add('save:${tombstones.map((t) => t.jobId).join(',')}');
+    rows = List.of(tombstones);
+    return true;
+  }
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  late Directory dir;
+  var now = DateTime.utc(2026, 11, 18, 12);
+
+  setUp(() async {
+    now = DateTime.utc(2026, 11, 18, 12);
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+    SyncJobPoller.instance.resetForTesting(clock: () => now);
+    dir = await Directory.systemTemp.createTemp('wal_server_cancel_');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (call) async => dir.path,
+    );
+    await WalFileManager.init();
+  });
+
+  tearDown(() async {
+    SyncRateLimiter.instance.clear();
+    SyncJobPoller.instance.resetForTesting();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      null,
+    );
+    await dir.delete(recursive: true);
+  });
+
+  Future<Wal> uploaded(String name,
+      {String jobId = 'bp_job', int offset = 0, WalStatus status = WalStatus.uploaded}) async {
+    await File('${dir.path}/$name.bin').writeAsBytes([1, 2, 3, 4]);
+    return Wal(
+      timerStart: now.millisecondsSinceEpoch ~/ 1000 - 3600 + offset,
+      codec: BleAudioCodec.opus,
+      seconds: 30,
+      status: status,
+      storage: WalStorage.disk,
+      device: 'omi',
+      filePath: '$name.bin',
+    )..jobId = status == WalStatus.uploaded ? jobId : null;
+  }
+
+  group('server answer mapping', () {
+    test('every server answer maps to one phone action', () {
+      SyncJobCancelOutcome outcome(int? code, String body) => syncJobCancelResultFor(code, body).outcome;
+      expect(outcome(200, '{"outcome":"cancelled","erasure":"complete"}'), SyncJobCancelOutcome.cancelled);
+      expect(outcome(200, '{"outcome":"cancelled","erasure":"pending"}'), SyncJobCancelOutcome.erasurePending);
+      expect(outcome(200, '{"outcome":"not_found"}'), SyncJobCancelOutcome.notFound);
+      final processed = syncJobCancelResultFor(200, '{"outcome":"already_processed","conversation_ids":["c1"]}');
+      expect(processed.outcome, SyncJobCancelOutcome.alreadyProcessed);
+      expect(processed.conversationIds, ['c1']);
+      expect(outcome(409, '{"code":"sync_job_processing"}'), SyncJobCancelOutcome.retryLater);
+      expect(outcome(409, '{"code":"sync_job_not_cancellable"}'), SyncJobCancelOutcome.notCancellable);
+      expect(outcome(409, '{"detail":"Account busy"}'), SyncJobCancelOutcome.retryLater);
+      expect(outcome(404, ''), SyncJobCancelOutcome.notFound);
+      for (final code in [null, 429, 500, 503]) {
+        expect(outcome(code, ''), SyncJobCancelOutcome.retryLater, reason: '$code');
+      }
+      expect(outcome(200, 'not json'), SyncJobCancelOutcome.retryLater);
+      expect(outcome(200, '{"outcome":"something_new"}'), SyncJobCancelOutcome.retryLater);
+    });
+  });
+
+  test('deleting an uploaded recording records the tombstone first, then cancels its server job', () async {
+    final store = _MemoryStore();
+    final calls = <String>[];
+    late File file;
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        serverCancelStore: store,
+        serverCancel: (jobId) async {
+          calls.add(jobId);
+          // The tombstone is durable and the local copy is already gone when the server is asked.
+          expect(store.rows.map((t) => t.jobId), ['bp_job']);
+          expect(file.existsSync(), isFalse);
+          return const SyncJobCancelResult(SyncJobCancelOutcome.cancelled);
+        });
+    final wal = await uploaded('a');
+    file = File('${dir.path}/a.bin');
+    sync.testWals = [wal];
+
+    final result = await sync.deleteWal(wal);
+
+    expect(result?.outcome, SyncJobCancelOutcome.cancelled);
+    expect(calls, ['bp_job']);
+    expect(store.rows, isEmpty);
+    expect(sync.testWals, isEmpty);
+    await sync.stop();
+  });
+
+  test('a confirmed cancel returns the upload siblings that were not deleted to local custody', () async {
+    final store = _MemoryStore();
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        serverCancelStore: store,
+        serverCancel: (_) async => const SyncJobCancelResult(SyncJobCancelOutcome.erasurePending));
+    final deleted = await uploaded('a');
+    final sibling = await uploaded('b', offset: 30);
+    final other = await uploaded('c', jobId: 'bp_other', offset: 60);
+    sync.testWals = [deleted, sibling, other];
+
+    final result = await sync.deleteWal(deleted);
+
+    expect(result?.outcome, SyncJobCancelOutcome.erasurePending);
+    expect(sibling.status, WalStatus.miss);
+    expect(sibling.jobId, isNull);
+    expect(File('${dir.path}/b.bin').existsSync(), isTrue);
+    expect(other.status, WalStatus.uploaded);
+    // Erasure is unfinished: the tombstone stays, marked fenced, for a later call.
+    expect(store.rows.single.jobId, 'bp_job');
+    expect(store.rows.single.fenced, isTrue);
+    await sync.stop();
+  });
+
+  test('an already transcribed recording clears the tombstone and its siblings are acknowledged by the poll', () async {
+    final store = _MemoryStore();
+    final listener = _Listener();
+    final polled = <String>[];
+    final sync = LocalWalSyncImpl(listener,
+        now: () => now,
+        persistWals: (_) async {},
+        serverCancelStore: store,
+        serverCancel: (_) async =>
+            const SyncJobCancelResult(SyncJobCancelOutcome.alreadyProcessed, conversationIds: ['conv-1']),
+        jobStatusFetcher: (jobId) async {
+          polled.add(jobId);
+          return SyncJobFetch(
+            SyncJobFetchOutcome.ok,
+            SyncJobStatusResponse.fromJson({
+              'job_id': jobId,
+              'status': 'completed',
+              'total_segments': 2,
+              'processed_segments': 2,
+              'successful_segments': 2,
+              'result': {
+                'new_memories': ['conv-1'],
+                'updated_memories': [],
+                'failed_segments': 0,
+                'total_segments': 2
+              },
+            }),
+          );
+        });
+    final deleted = await uploaded('a');
+    final sibling = await uploaded('b', offset: 30);
+    sync.testWals = [deleted, sibling];
+
+    final result = await sync.deleteWal(deleted);
+    expect(result?.outcome, SyncJobCancelOutcome.alreadyProcessed);
+    expect(result?.conversationIds, ['conv-1']);
+    expect(store.rows, isEmpty);
+    expect(sibling.status, WalStatus.uploaded);
+
+    await sync.reconcileUploadedWals();
+    expect(polled, ['bp_job']);
+    expect(sibling.status, WalStatus.synced);
+    await sync.stop();
+  });
+
+  test('offline: the tombstone survives, the job is not polled, and a later pass finishes the cancel', () async {
+    final store = _MemoryStore();
+    final polled = <String>[];
+    var answer = const SyncJobCancelResult(SyncJobCancelOutcome.retryLater);
+    final asked = <String>[];
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        serverCancelStore: store,
+        serverCancel: (jobId) async {
+          asked.add(jobId);
+          return answer;
+        },
+        jobStatusFetcher: (jobId) async {
+          polled.add(jobId);
+          return const SyncJobFetch(SyncJobFetchOutcome.transient);
+        });
+    final deleted = await uploaded('a');
+    final sibling = await uploaded('b', offset: 30);
+    sync.testWals = [deleted, sibling];
+
+    expect((await sync.deleteWal(deleted))?.outcome, SyncJobCancelOutcome.retryLater);
+    expect(sync.testWals, [sibling]);
+    expect(File('${dir.path}/a.bin').existsSync(), isFalse);
+    expect(store.rows.single.jobId, 'bp_job');
+    expect(store.rows.single.fenced, isFalse);
+
+    // Inside the backoff window nothing is asked, and the shared job is never polled.
+    await sync.reconcileUploadedWals();
+    expect(asked, ['bp_job']);
+    expect(polled, isEmpty);
+    expect(sibling.status, WalStatus.uploaded);
+
+    now = now.add(const Duration(minutes: 6));
+    answer = const SyncJobCancelResult(SyncJobCancelOutcome.cancelled);
+    await sync.reconcileUploadedWals();
+    expect(asked, ['bp_job', 'bp_job']);
+    expect(store.rows, isEmpty);
+    expect(sibling.status, WalStatus.miss);
+    expect(sibling.jobId, isNull);
+    expect(polled, isEmpty);
+    // The deleted recording is gone for good: nothing can re-upload it.
+    expect(sync.testWals.map((w) => w.filePath), ['b.bin']);
+    await sync.stop();
+  });
+
+  test('a tombstone that cannot be saved keeps the recording instead of orphaning its server job', () async {
+    final store = _MemoryStore()..failSaves = true;
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        serverCancelStore: store,
+        serverCancel: (_) async => fail('must not ask the server without a durable tombstone'));
+    final wal = await uploaded('a');
+    sync.testWals = [wal];
+    expect((await sync.deleteWal(wal))?.outcome, SyncJobCancelOutcome.retryLater);
+    expect(sync.testWals, [wal]);
+    expect(File('${dir.path}/a.bin').existsSync(), isTrue);
+    await sync.stop();
+  });
+
+  test('recordings that never reached the server delete locally without a server call', () async {
+    final store = _MemoryStore();
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        serverCancelStore: store,
+        serverCancel: (_) async => fail('nothing to cancel'));
+    final pending = await uploaded('a', status: WalStatus.miss);
+    final synced = await uploaded('b', status: WalStatus.synced, offset: 30);
+    sync.testWals = [pending, synced];
+    expect(await sync.deleteWal(pending), isNull);
+    expect(await sync.deleteWal(synced), isNull);
+    expect(sync.testWals, isEmpty);
+    expect(store.events, isEmpty);
+    await sync.stop();
+  });
+
+  test('another account\'s tombstone is never sent with this account\'s credentials', () async {
+    await SharedPreferencesUtil().saveString('uid', 'current-owner');
+    final store = _MemoryStore()
+      ..rows = [
+        WalServerCancelTombstone(
+            jobId: 'bp_foreign', ownerUid: 'previous-owner', createdAt: now.millisecondsSinceEpoch ~/ 1000)
+      ];
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        serverCancelStore: store,
+        serverCancel: (_) async => fail('foreign tombstone'),
+        jobStatusFetcher: (_) async => const SyncJobFetch(SyncJobFetchOutcome.transient));
+    sync.testWals = [];
+    await sync.reconcileUploadedWals();
+    expect(store.rows.single.jobId, 'bp_foreign');
+    await sync.stop();
+  });
+
+  test('tombstones persist across restarts in preferences', () async {
+    final store = PreferencesWalServerCancelStore();
+    expect(await store.load(), isEmpty);
+    const tombstone = WalServerCancelTombstone(jobId: 'bp_job', ownerUid: 'u', createdAt: 5, attempts: 2, fenced: true);
+    expect(await store.save([tombstone]), isTrue);
+    final loaded = (await PreferencesWalServerCancelStore().load()).single;
+    expect(loaded.toJson(), tombstone.toJson());
+  });
+}

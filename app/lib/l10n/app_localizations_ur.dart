@@ -9097,6 +9097,17 @@ class AppLocalizationsUr extends AppLocalizations {
   String get syncStatusUploaded => 'اپ لوڈ ہو گیا · Omi پر پروسیسنگ جاری';
 
   @override
+  String get deleteFromServerTitle => 'ہر جگہ سے حذف کریں؟';
+
+  @override
+  String get deleteFromServerMessage =>
+      'یہ ریکارڈنگ اپ لوڈ ہو چکی ہے لیکن ابھی تک ٹرانسکرائب نہیں ہوئی۔ اسے حذف کرنے سے Omi کے سرورز پر موجود کاپی بھی ہمیشہ کے لیے مٹ جائے گی، اس لیے یہ کبھی ٹرانسکرائب نہیں ہوگی۔ اسے واپس نہیں کیا جا سکتا۔';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'پہلے ہی ٹرانسکرائب ہو چکی ہے۔ اسے ہٹانے کے لیے اس کی گفتگو حذف کریں۔';
+
+  @override
   String get deleteWhileProcessingTitle => 'ابھی پروسیسنگ جاری ہے';
 
   @override

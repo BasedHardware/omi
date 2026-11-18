@@ -9103,6 +9103,16 @@ class AppLocalizationsBe extends AppLocalizations {
   String get syncStatusUploaded => 'Запампавана · апрацоўка ў Omi';
 
   @override
+  String get deleteFromServerTitle => 'Выдаліць усюды?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Гэты запіс загружаны, але яшчэ не расшыфраваны. Выдаленне таксама назаўсёды сатрэ копію на серверах Omi, таму ён ніколі не будзе расшыфраваны. Гэта нельга адмяніць.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Ужо расшыфравана. Выдаліце размову, каб прыбраць запіс.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Усё яшчэ апрацоўваецца';
 
   @override

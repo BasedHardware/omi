@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/pages/conversations/wal_server_delete_copy.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -571,11 +572,12 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   void _showDeleteDialog(BuildContext context) async {
-    final uploading = widget.wal.syncDisplayState == WalSyncDisplayState.uploaded;
+    final copy = walDeleteConfirmationCopy(context.l10n, [widget.wal],
+        localTitle: context.l10n.deleteRecording, localMessage: context.l10n.deleteRecordingConfirmation);
     final confirmed = await showOmiConfirm(
       context,
-      title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
-      message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.deleteRecordingConfirmation,
+      title: copy.title,
+      message: copy.message,
       confirmLabel: context.l10n.delete,
       destructive: true,
     );

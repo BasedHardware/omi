@@ -9083,6 +9083,16 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncStatusUploaded => 'Diunggah · diproses di Omi';
 
   @override
+  String get deleteFromServerTitle => 'Hapus di semua tempat?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Rekaman ini sudah diunggah tetapi belum ditranskripsi. Menghapusnya juga menghapus salinannya di server Omi secara permanen, sehingga tidak akan pernah ditranskripsi. Tindakan ini tidak dapat dibatalkan.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Sudah ditranskripsi. Hapus percakapannya untuk menghapusnya.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Masih diproses';
 
   @override

@@ -9090,6 +9090,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncStatusUploaded => 'Yüklendi · Omi\'de işleniyor';
 
   @override
+  String get deleteFromServerTitle => 'Her yerden silinsin mi?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Bu kayıt yüklendi ancak henüz metne dönüştürülmedi. Silmek, Omi sunucularındaki kopyayı da kalıcı olarak siler; böylece asla metne dönüştürülmez. Bu işlem geri alınamaz.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Zaten metne dönüştürüldü. Kaldırmak için konuşmasını silin.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Hâlâ işleniyor';
 
   @override

@@ -9081,6 +9081,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncStatusUploaded => 'Ladattu · käsitellään Omissa';
 
   @override
+  String get deleteFromServerTitle => 'Poistetaanko kaikkialta?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Tämä tallenne on ladattu, mutta sitä ei ole vielä litteroitu. Poistaminen poistaa pysyvästi myös kopion Omin palvelimilta, joten sitä ei koskaan litteroida. Tätä ei voi kumota.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Jo litteroitu. Poista sen keskustelu poistaaksesi sen.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Käsitellään yhä';
 
   @override

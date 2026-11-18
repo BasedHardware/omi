@@ -9075,6 +9075,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncStatusUploaded => 'Üles laaditud · töödeldakse Omis';
 
   @override
+  String get deleteFromServerTitle => 'Kas kustutada kõikjalt?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'See salvestis on üles laaditud, kuid veel transkribeerimata. Kustutamine eemaldab jäädavalt ka koopia Omi serveritest, nii et seda ei transkribeerita kunagi. Seda ei saa tagasi võtta.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Juba transkribeeritud. Eemaldamiseks kustuta selle vestlus.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Töötlemine veel käib';
 
   @override

@@ -9070,6 +9070,16 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncStatusUploaded => 'Uploadet · behandles på Omi';
 
   @override
+  String get deleteFromServerTitle => 'Slet overalt?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Denne optagelse er uploadet, men endnu ikke transskriberet. Når du sletter den, slettes kopien på Omis servere også permanent, så den aldrig bliver transskriberet. Dette kan ikke fortrydes.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Allerede transskriberet. Slet samtalen for at fjerne den.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Behandles stadig';
 
   @override

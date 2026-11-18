@@ -9144,6 +9144,17 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncStatusUploaded => 'Μεταφορτώθηκε · επεξεργασία στο Omi';
 
   @override
+  String get deleteFromServerTitle => 'Διαγραφή παντού;';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Αυτή η εγγραφή έχει μεταφορτωθεί αλλά δεν έχει μεταγραφεί ακόμη. Η διαγραφή της σβήνει οριστικά και το αντίγραφο στους διακομιστές της Omi, ώστε να μη μεταγραφεί ποτέ. Αυτή η ενέργεια δεν αναιρείται.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'Έχει ήδη μεταγραφεί. Διαγράψτε τη συνομιλία της για να την αφαιρέσετε.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Συνεχίζεται η επεξεργασία';
 
   @override

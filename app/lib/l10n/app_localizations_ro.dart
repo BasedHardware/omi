@@ -9123,6 +9123,16 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncStatusUploaded => 'Încărcat · se procesează pe Omi';
 
   @override
+  String get deleteFromServerTitle => 'Ștergi peste tot?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Această înregistrare a fost încărcată, dar nu a fost încă transcrisă. Ștergerea ei elimină definitiv și copia de pe serverele Omi, așa că nu va fi transcrisă niciodată. Acțiunea nu poate fi anulată.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Deja transcrisă. Șterge conversația ei pentru a o elimina.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Încă se procesează';
 
   @override

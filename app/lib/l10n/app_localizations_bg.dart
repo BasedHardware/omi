@@ -9113,6 +9113,16 @@ class AppLocalizationsBg extends AppLocalizations {
   String get syncStatusUploaded => 'Качено · обработва се в Omi';
 
   @override
+  String get deleteFromServerTitle => 'Изтриване навсякъде?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Този запис е качен, но все още не е транскрибиран. Изтриването му окончателно премахва и копието на сървърите на Omi, така че никога няма да бъде транскрибиран. Това не може да бъде отменено.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Вече е транскрибиран. Изтрийте разговора му, за да го премахнете.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Все още се обработва';
 
   @override

@@ -9102,6 +9102,17 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncStatusUploaded => 'Geüpload · wordt verwerkt op Omi';
 
   @override
+  String get deleteFromServerTitle => 'Overal verwijderen?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Deze opname is geüpload maar nog niet getranscribeerd. Als je hem verwijdert, wordt ook de kopie op de servers van Omi definitief gewist, zodat hij nooit wordt getranscribeerd. Dit kan niet ongedaan worden gemaakt.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'Al getranscribeerd. Verwijder het bijbehorende gesprek om het te verwijderen.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Nog bezig met verwerken';
 
   @override

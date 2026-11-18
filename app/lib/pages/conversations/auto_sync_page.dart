@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/conversations/wal_server_delete_copy.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/local_storage_page.dart';
@@ -572,11 +573,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 ? DismissDirection.none
                 : DismissDirection.endToStart,
             confirmDismiss: (direction) async {
-              final uploading = block.wals.any((w) => w.syncDisplayState == WalSyncDisplayState.uploaded);
+              final copy = walDeleteConfirmationCopy(context.l10n, block.wals,
+                  localTitle: context.l10n.deleteRecording, localMessage: context.l10n.thisCannotBeUndone);
               final confirmed = await showOmiConfirm(
                 context,
-                title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
-                message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
+                title: copy.title,
+                message: copy.message,
                 confirmLabel: context.l10n.delete,
                 destructive: true,
               );
@@ -910,9 +912,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   Future<bool> _deleteWalsVerified(SyncProvider provider, List<Wal> wals) async {
     final firmware = context.read<DeviceProvider>().currentFirmwareVersion;
     var failed = false;
+    final l10n = context.l10n;
     for (final wal in wals) {
       try {
-        await provider.deleteWal(wal);
+        final serverCancel = await provider.deleteWal(wal);
+        if (mounted) showWalServerDeleteNotice(context, serverCancel, l10n);
       } catch (e) {
         failed = true;
         Logger.debug('Offline Sync delete failed: $e');

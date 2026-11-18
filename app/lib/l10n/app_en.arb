@@ -10852,6 +10852,18 @@
     "noRecordingsYet": "No recordings yet",
     "syncInProgress": "Sync in progress",
     "syncStatusUploaded": "Uploaded · processing on Omi",
+    "deleteFromServerTitle": "Delete Everywhere?",
+    "@deleteFromServerTitle": {
+        "description": "Confirmation title when deleting an uploaded recording that the server has not transcribed yet; the server copy is erased too"
+    },
+    "deleteFromServerMessage": "This recording is uploaded but not transcribed yet. Deleting it also permanently erases the copy on Omi's servers, so it will never be transcribed. This can't be undone.",
+    "@deleteFromServerMessage": {
+        "description": "Confirmation body: deleting an uploaded, untranscribed recording also permanently erases it from Omi's servers"
+    },
+    "deletedRecordingAlreadyTranscribed": "Already transcribed. Delete its conversation to remove it.",
+    "@deletedRecordingAlreadyTranscribed": {
+        "description": "Shown after deleting a recording the server had already transcribed; the conversation must be deleted separately"
+    },
     "deleteWhileProcessingTitle": "Still Processing",
     "deleteWhileProcessingMessage": "This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can't be recovered. Delete anyway?",
     "syncCardAllBackedUp": "All recordings synced",

@@ -9162,6 +9162,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncStatusUploaded => 'Na-upload · pinoproseso sa Omi';
 
   @override
+  String get deleteFromServerTitle => 'Burahin sa lahat ng lugar?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Na-upload na ang recording na ito pero hindi pa naita-transcribe. Kapag binura mo ito, permanente ring mabubura ang kopya sa mga server ng Omi, kaya hindi na ito kailanman maita-transcribe. Hindi na ito maaaring bawiin.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Naita-transcribe na. Burahin ang usapan nito para alisin ito.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Pinoproseso pa rin';
 
   @override
