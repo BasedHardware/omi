@@ -10,8 +10,6 @@ from typing import Any
 from uuid import uuid4
 import json
 
-from utils.encryption import encrypt, decrypt
-
 SCHEMA = 1
 DISPLAY = 'home_display'
 VERSION = 'home_display_version'
@@ -62,12 +60,16 @@ def content(row: Mapping[str, Any], kind: str) -> dict[str, Any]:
 
 
 def seal_display(uid: str, value: Mapping[str, Any]) -> str:
+    from utils.encryption import encrypt
+
     return encrypt(json.dumps(dict(value), ensure_ascii=False, separators=(',', ':')), uid)
 
 
 def reveal_display(uid: str, blob: Any) -> dict[str, Any] | None:
     if not isinstance(blob, str) or len(blob) > 8192:
         return None
+    from utils.encryption import decrypt
+
     # decrypt historically returns ciphertext on authentication failure. Never
     # serialize that return value as display text.
     try:

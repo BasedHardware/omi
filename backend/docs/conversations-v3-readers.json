@@ -499,6 +499,10 @@
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
   },
+  "backend/scripts/home_health_worker.py:collection_group": {
+    "policy": "operator",
+    "reason": "Bounded diagnostic of raw batch capture cohorts using a field mask; emits aggregate Home symptoms only."
+  },
   "backend/scripts/legacy_dark/final_pass_rehome.py:collection_group": {
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
