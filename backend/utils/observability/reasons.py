@@ -306,6 +306,8 @@ class RecordingRotationOutcome(StrEnum):
     SEAL_RETRY = 'seal_retry'
     HANDED_OFF = 'handed_off'
     OTHER_OWNER = 'other_owner'
+    POINTER_FAILED = 'pointer_failed'
+    SKIPPED_PRODUCER = 'skipped_producer'
 
 
 class StaleRecoveryOutcome(StrEnum):
