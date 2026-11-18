@@ -315,3 +315,26 @@ def test_reservation_estimate_uses_the_output_ceiling():
     large = prices.reservation('/v1/chat/completions', {}, 300)
     assert small < large
     assert prices.reservation('/v1/embeddings', {'model': 'text-embedding-x'}, 300) < small
+
+
+def test_foreground_serve_reports_the_bound_url(lab, upstream):
+    proxy = _proxy(lab, upstream)
+    ready = threading.Event()
+    urls = []
+
+    def on_ready(url):
+        urls.append(url)
+        ready.set()
+
+    thread = threading.Thread(target=proxy.serve_forever, kwargs={'on_ready': on_ready}, daemon=True)
+    thread.start()
+    assert ready.wait(10)
+    try:
+        assert not urls[0].endswith(':0')
+        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+            urls[0] + '/_lab/health', timeout=10
+        ) as r:
+            assert json.loads(r.read())['run_id'] == 'run-1'
+    finally:
+        proxy.stop()
+        thread.join(10)

@@ -198,6 +198,11 @@ def run_pipeline(
     )
     if day.start_state_snapshot is None:
         run.warnings.append('corpus day has no start-state snapshot')
+    if worktree is not None:
+        try:
+            worktrees.check_lockfile(worktrees.harness_package_dir().parents[1], worktree.backend)
+        except worktrees.WorktreeError as drift:
+            run.warnings.append(str(drift))
     store.create_run(run)
     pins = request.overlay.get('pins') or {}
     if pins:

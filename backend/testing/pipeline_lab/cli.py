@@ -326,11 +326,12 @@ def _llm_proxy(args: argparse.Namespace, store: Store) -> Any:
         ledger=ledger,
         port=args.port,
     )
-    print(
-        json.dumps({'listening': f'http://127.0.0.1:{args.port}', 'run_id': run.run_id, 'mode': args.mode}), flush=True
-    )
+
+    def ready(url: str) -> None:
+        print(json.dumps({'listening': url, 'run_id': run.run_id, 'mode': args.mode}), flush=True)
+
     try:
-        proxy.serve_forever()
+        proxy.serve_forever(on_ready=ready)
     except KeyboardInterrupt:
         pass
     return {'stopped': True, 'counters': proxy.counters, 'ledger': ledger.snapshot()}

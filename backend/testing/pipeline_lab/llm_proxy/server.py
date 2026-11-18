@@ -33,7 +33,7 @@ import time
 import urllib.parse
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from testing.pipeline_lab.contracts import LlmCall, utc_iso
 from testing.pipeline_lab.ledger import SpendCapReached, SpendLedger
@@ -130,8 +130,8 @@ class LlmProxy:
         self._thread.start()
         return self
 
-    def serve_forever(self) -> None:
-        """Foreground serving for the CLI (Ctrl-C to stop)."""
+    def serve_forever(self, on_ready: Optional[Callable[[str], None]] = None) -> None:
+        """Foreground serving for the CLI (Ctrl-C to stop); ``on_ready`` gets the bound URL."""
         proxy = self
 
         class Handler(_Handler):
@@ -139,6 +139,8 @@ class LlmProxy:
 
         self._server = ThreadingHTTPServer((self.host, self.port), Handler)
         self._server.daemon_threads = True
+        if on_ready is not None:
+            on_ready(self.url)
         try:
             self._server.serve_forever()
         finally:
