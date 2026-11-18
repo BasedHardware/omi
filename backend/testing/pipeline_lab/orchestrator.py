@@ -115,6 +115,9 @@ class StageContext:
     llm_proxy_url: Optional[str] = None
     engine: str = 'product'
     warnings: list[str] = field(default_factory=list)
+    run_extra: dict[str, Any] = field(
+        default_factory=dict
+    )  # merged into run.json (e.g. the STT source shown in the UI)
 
     @property
     def model_config(self) -> dict[str, Any]:
@@ -336,6 +339,7 @@ def run_pipeline(
                     run.warnings.extend(f'{stage}: {w}' for w in result.warnings)
                 upstream[stage] = output
                 run.warnings.extend(f'{stage}: {w}' for w in ctx.warnings)
+                run.extra.update(ctx.run_extra)
                 if proxy is not None and proxy.cap_reached:
                     raise SpendCapReached('LLM proxy refused a call at the spend cap')
             except SpendCapReached as stop:

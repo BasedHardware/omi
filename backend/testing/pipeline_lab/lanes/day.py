@@ -88,8 +88,8 @@ def record_day_cassettes(
     language: str | None = None,
     vocabulary: tuple[str, ...] = (),
     root=None,
-    lanes: Iterable[str] = ('record', 'sync'),
-    sync_exact: bool = True,
+    lanes: Iterable[str] = ('record', 'sync', 'streaming'),
+    sync_exact: bool = False,  # RULINGS 13: one conversation-level cassette (span) by default
     file_vad=None,
 ) -> dict:
     timeline = _timeline(day_id, root)

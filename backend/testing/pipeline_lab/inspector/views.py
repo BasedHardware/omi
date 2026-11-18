@@ -76,6 +76,8 @@ def run_summary(reader: Reader, run: Mapping[str, Any]) -> dict[str, Any]:
             'start_state',
         )
     }
+    out['stt'] = run.get('stt')
+    out['engine'] = run.get('chain_engine')
     out['date'] = day.get('date')
     out['timezone'] = day.get('timezone')
     out['wall_seconds'] = seconds_between(run.get('started_at'), run.get('finished_at'))

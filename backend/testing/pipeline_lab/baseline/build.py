@@ -16,9 +16,17 @@ from testing.pipeline_lab.stack.io import read_json, read_jsonl, write_json
 
 
 def load_production(baseline_dir: Path) -> list[dict[str, Any]]:
+    """Production conversations in the replay's shape.
+
+    ``corpus add-day`` writes ``conversations.jsonl`` already normalized (RULINGS 1) and the raw
+    rows beside it; rows still in snapshot shape (``transcript_segments``) are normalized here.
+    """
     baseline_dir = Path(baseline_dir)
+    rows = list(read_jsonl(baseline_dir / 'conversations.jsonl'))
+    if rows and all('segments' in row and 'transcript_segments' not in row for row in rows):
+        return sorted(rows, key=lambda c: (c.get('started_at') or '', c['id']))
     return production_view(
-        list(read_jsonl(baseline_dir / 'conversations.jsonl')),
+        rows,
         memories=list(read_jsonl(baseline_dir / 'memories.jsonl')),
         action_items=list(read_jsonl(baseline_dir / 'action_items.jsonl')),
         notifications=list(read_jsonl(baseline_dir / 'notifications.jsonl')),

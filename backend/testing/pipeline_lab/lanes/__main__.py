@@ -1,11 +1,19 @@
-"""Interim ingest CLI until lane ``core`` wires these into ``python -m testing.pipeline_lab``.
+"""Ingest commands. ``python -m testing.pipeline_lab record-stt ...`` routes here through the
+plugin; this module also runs on its own (and is what the ``transcribe`` stage runs in the arm):
 
     python -m testing.pipeline_lab.lanes timeline --day DAY [--vad]
-    python -m testing.pipeline_lab.lanes record-stt --day DAY --run RUN --provider P --model M \
-        [--language L] [--budget-usd 1.0]          # the only billable command
-    python -m testing.pipeline_lab.lanes replay --day DAY --run RUN --provider P --model M [--sync-mode exact|span]
+    python -m testing.pipeline_lab.lanes record-stt --day DAY --adapter prerecorded|parakeet_batch \
+        [--provider P] --model M [--language L] --budget-usd 1.0 [--sync-exact]   # the only billable command
+    python -m testing.pipeline_lab.lanes replay --day DAY --run RUN --provider P --model M \
+        [--sync-mode span|exact] [--streaming-via sync|record|none]
 
-All paths come from ``OMI_PIPELINE_LAB_ROOT``. JSON summary on stdout.
+Paths come from ``OMI_PIPELINE_LAB_ROOT``. JSON summary on stdout.
+
+``record-stt`` records one conversation-level cassette per conversation by default (``span``
+mode for both lanes, RULINGS 13); ``--sync-exact`` records per VAD file for sync captures
+instead. Spend goes through core's persistent ledger under ``$ROOT/stt_records/<id>/`` with
+the vendor log beside it, so the cap holds across invocations of the same record id.
+Streaming captures replay through the sync driver as a labelled stand-in until M3 (RULINGS 14).
 """
 
 from __future__ import annotations
@@ -13,6 +21,40 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+
+
+def _record(args: argparse.Namespace) -> dict:
+    from testing.pipeline_lab.cassette.adapters import make_adapter
+    from testing.pipeline_lab.cassette.recorder import Recorder
+    from testing.pipeline_lab.contracts import utc_iso
+    from testing.pipeline_lab.lanes.day import record_day_cassettes
+    from testing.pipeline_lab.ledger import SpendLedger
+    from testing.pipeline_lab.store import atomic_write_json, lab_root, private_subdir, safe_segment
+
+    root = lab_root()
+    record_id = safe_segment(args.record_id or f'{args.day}-{args.adapter}', 'record id')
+    directory = private_subdir(root / 'stt_records' / record_id)
+    options = {'window_seconds': args.window_seconds} if args.adapter == 'parakeet_batch' else {}
+    adapter = make_adapter(args.adapter, provider=args.provider, model=args.model, **options)
+    ledger = SpendLedger(directory / 'ledger.json', budget_usd=args.budget_usd)
+    recorder = Recorder(adapter, ledger, vendor_log=directory / 'vendor_log.jsonl')
+    summary = record_day_cassettes(
+        args.day,
+        recorder,
+        language=args.language,
+        vocabulary=tuple(v for v in args.vocabulary.split(',') if v),
+        sync_exact=args.sync_exact,
+    )
+    summary.update(
+        record_id=record_id,
+        adapter=adapter.name,
+        provider=adapter.provider,
+        model=adapter.model,
+        mode='exact' if args.sync_exact else 'span',
+        spend=ledger.snapshot(),
+    )
+    atomic_write_json(directory / 'record.json', {**summary, 'day_id': args.day, 'at': utc_iso()})
+    return summary
 
 
 def main(argv=None) -> int:
@@ -24,16 +66,20 @@ def main(argv=None) -> int:
     for name in ('record-stt', 'replay'):
         p = sub.add_parser(name)
         p.add_argument('--day', required=True)
-        p.add_argument('--run', required=True)
-        p.add_argument('--provider', required=True)
-        p.add_argument('--model', required=True)
+        p.add_argument('--provider', default=None)
+        p.add_argument('--model', default=None)
         p.add_argument('--language', default=None)
         p.add_argument('--vocabulary', default='', help='comma-separated, in production order')
         if name == 'record-stt':
+            p.add_argument('--adapter', choices=('prerecorded', 'parakeet_batch', 'stub'), default='prerecorded')
             p.add_argument('--budget-usd', type=float, required=True)
+            p.add_argument('--record-id', help='ledger + vendor log id (default <day>-<adapter>)')
+            p.add_argument('--sync-exact', action='store_true', help='per-VAD-file cassettes for sync captures')
+            p.add_argument('--window-seconds', type=float, default=30.0, help='parakeet_batch window length')
         else:
-            p.add_argument('--sync-mode', choices=('exact', 'span'), default='exact')
-            p.add_argument('--streaming-via', choices=('record', 'sync'), default=None)
+            p.add_argument('--run', required=True)
+            p.add_argument('--sync-mode', choices=('exact', 'span'), default='span')
+            p.add_argument('--streaming-via', choices=('record', 'sync', 'none'), default='sync')
     args = parser.parse_args(argv)
 
     if args.command == 'timeline':
@@ -43,36 +89,31 @@ def main(argv=None) -> int:
         print(json.dumps({'coverage': timeline['coverage'], 'evaluable_boundaries': timeline['evaluable_boundaries']}))
         return 0
 
-    vocabulary = tuple(v for v in args.vocabulary.split(',') if v)
     if args.command == 'record-stt':
-        from testing.pipeline_lab.cassette.adapters import PrerecordedAdapter
-        from testing.pipeline_lab.cassette.recorder import InMemoryLedger, Recorder
-        from testing.pipeline_lab.lanes.day import record_day_cassettes
-        from testing.pipeline_lab.store import lab_root
-
-        # Interim cap: core's persistent ledger replaces InMemoryLedger at integration.
-        recorder = Recorder(
-            PrerecordedAdapter(provider=args.provider, model=args.model),
-            InMemoryLedger(args.budget_usd),
-            vendor_log=lab_root() / 'runs' / args.run / 'vendor_log.jsonl',
-        )
-        summary = record_day_cassettes(args.day, recorder, language=args.language, vocabulary=vocabulary)
-        print(json.dumps(summary))
+        if args.adapter == 'prerecorded' and not (args.provider and args.model):
+            parser.error('--provider and --model are required for the prerecorded adapter')
+        print(json.dumps(_record(args)))
         return 0
 
     from testing.pipeline_lab.lanes.day import STTSelection, replay_day
 
+    if not (args.provider and args.model):
+        parser.error('--provider and --model name the cassettes to play')
+    vocabulary = tuple(v for v in args.vocabulary.split(',') if v)
     results = replay_day(
         args.day,
         args.run,
         STTSelection(args.provider, args.model, args.language, vocabulary),
         sync_mode=args.sync_mode,
-        streaming_via=args.streaming_via,
+        streaming_via=None if args.streaming_via == 'none' else args.streaming_via,
     )
     counts: dict[str, int] = {}
+    errors: dict[str, int] = {}
     for r in results:
         counts[r.outcome] = counts.get(r.outcome, 0) + 1
-    print(json.dumps({'conversations': len(results), 'outcomes': counts}))
+        if r.error:
+            errors[r.error] = errors.get(r.error, 0) + 1
+    print(json.dumps({'conversations': len(results), 'outcomes': counts, 'errors': errors}))
     return 0
 
 

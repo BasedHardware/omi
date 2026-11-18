@@ -56,6 +56,50 @@ def normalize_goal(row: Mapping[str, Any]) -> dict[str, Any]:
     return {name: plain(row.get(name)) for name in GOAL_FIELDS if name in row}
 
 
+def contract_daily_summary(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """A product daily-summary row in the contract shape ``{title, overview, highlights}`` (RULINGS 5).
+
+    The other product fields (``date``, ``stats``, ``memories_learned``) ride along as extras.
+    """
+    if not row:
+        return None
+    highlights = row.get('highlights') or []
+    out = {
+        'title': str(row.get('headline') or row.get('title') or ''),
+        'overview': str(row.get('overview') or row.get('summary') or ''),
+        'highlights': plain(list(highlights) if isinstance(highlights, list) else [highlights]),
+    }
+    out.update({name: plain(row.get(name)) for name in ('date', 'stats', 'memories_learned') if name in row})
+    return out
+
+
+def _number(value: Any) -> float | None:
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def contract_goals(before: Iterable[Mapping[str, Any]], after: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Goals as ``{title, progress_before, progress_after, target, note}`` (RULINGS 5), id and unit as extras."""
+    start = {str(g.get('id')): g for g in before if g.get('id') is not None}
+    out = []
+    for goal in after:
+        old = start.get(str(goal.get('id')), {})
+        row = {
+            'id': goal.get('id'),
+            'title': str(goal.get('title') or ''),
+            'progress_before': _number(old.get('current_value')),
+            'progress_after': _number(goal.get('current_value')),
+            'target': _number(goal.get('target_value')),
+            'note': '' if old else 'new during the day',
+        }
+        if goal.get('unit'):
+            row['unit'] = goal.get('unit')
+        out.append(row)
+    return sorted(out, key=lambda g: str(g.get('id')))
+
+
 def _memory_key(row: Mapping[str, Any]) -> str:
     return str(row.get('id') or normalize_memory(row)['key'])
 
@@ -125,14 +169,15 @@ def build_day_json(
     notifications: Iterable[Mapping[str, Any]],
     chat_index: Mapping[str, Any] | None = None,
     recap: Mapping[str, Any] | None = None,
+    goals_before: Iterable[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     pushes = sorted(
         ({**normalize_notification(row), 'conversation_id': row.get('conversation_id')} for row in notifications),
         key=lambda row: str(row.get('at') or ''),
     )
     return {
-        'daily_summary': normalize_daily_summary(daily_summary),
-        'goals': sorted((normalize_goal(goal) for goal in goals), key=lambda g: str(g.get('id'))),
+        'daily_summary': contract_daily_summary(normalize_daily_summary(daily_summary)),
+        'goals': contract_goals(list(goals_before), [normalize_goal(goal) for goal in goals]),
         'memory_delta': memory_delta(memories_before, memories_after),
         'notifications': pushes,
         'chat_index': dict(chat_index) if chat_index is not None else {'checked': False},

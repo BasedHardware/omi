@@ -150,3 +150,96 @@ class PrerecordedAdapter:
         if (served_provider, served_model) != (self.provider, self.model):
             raise RuntimeError('prerecorded STT served a different provider/model than the cassette key')
         return STTResponse(words_from_prerecorded(raw), detected, served_provider, served_model)
+
+
+PARAKEET_URL_ENV = 'OMI_PIPELINE_LAB_PARAKEET_URL'
+
+
+class ParakeetBatchAdapter:
+    """The production batch model: a hosted Parakeet endpoint, recorded window by window (RULINGS 15).
+
+    The record lane's ``PipelineWorker`` transcribes VAD-packed windows of at most
+    ``window_seconds``; this adapter cuts the conversation into windows of that size, sends
+    each through the product's ``parakeet_prerecorded_from_bytes`` (with diarization) against
+    the endpoint in ``$OMI_PIPELINE_LAB_PARAKEET_URL``, and stores the words on the
+    conversation clock in one cassette. Which adapter a run plays back is the overlay's
+    ``model_config.stt.adapter``; the inspector header shows it.
+
+    Speaker labels are per window (the endpoint diarizes each call on its own), so turns
+    across a window edge may be relabelled. Self-hosted GPU time is priced at
+    ``usd_per_hour`` (default 0) so the ledger still records the audio that went out.
+    """
+
+    name = 'parakeet_batch'
+
+    def __init__(
+        self,
+        *,
+        model: str = 'parakeet-batch',
+        url: str | None = None,
+        window_seconds: float = 30.0,
+        usd_per_hour: float = 0.0,
+        transcribe_window: Callable[[bytes, str | None], tuple[list[dict], str | None]] | None = None,
+    ):
+        import os
+        from urllib.parse import urlparse
+
+        self.provider, self.model = 'parakeet', model
+        self.url = url or os.environ.get(PARAKEET_URL_ENV) or ''
+        if not self.url and transcribe_window is None:
+            raise ValueError(f'set {PARAKEET_URL_ENV} to the Parakeet batch endpoint')
+        host = urlparse(self.url).hostname or 'local'
+        self.destination = f'parakeet batch endpoint {host}'
+        self.window_seconds = float(window_seconds)
+        self.usd_per_hour = float(usd_per_hour)
+        self._transcribe_window = transcribe_window or self._product_window
+
+    def estimate_usd(self, request: STTRequest) -> float:
+        return self.usd_per_hour * request.audio_seconds / 3600
+
+    def _product_window(self, wav: bytes, language: str | None) -> tuple[list[dict], str | None]:
+        import os
+        from unittest import mock
+
+        from config.live_stt_gpu_fleet import gpu_fleet_off
+        from utils.stt.pre_recorded import parakeet_prerecorded_from_bytes  # lazy: no client at import time
+
+        with mock.patch.dict(os.environ, {'HOSTED_PARAKEET_API_URL': self.url}):
+            if gpu_fleet_off():
+                # The product would silently fall back to a vendor; never file that under a parakeet key.
+                raise RuntimeError('GPU fleet is off in this env; refusing to record a parakeet cassette')
+            result = parakeet_prerecorded_from_bytes(
+                wav, sample_rate=SAMPLE_RATE, diarize=True, return_language=True, language=language
+            )
+        raw, detected = result if isinstance(result, tuple) else (result, None)
+        return list(raw or []), detected
+
+    def transcribe(self, request: STTRequest) -> STTResponse:
+        window_bytes = int(self.window_seconds * BYTES_PER_SECOND) // 2 * 2
+        words: list[Word] = []
+        detected = None
+        for offset in range(0, len(request.pcm16), window_bytes):
+            chunk = request.pcm16[offset : offset + window_bytes]
+            if not chunk:
+                continue
+            start = offset / BYTES_PER_SECOND
+            raw, language = self._transcribe_window(pcm16_to_wav(chunk), request.language)
+            detected = detected or language
+            index = int(start // self.window_seconds)
+            for word in words_from_prerecorded(raw):
+                speaker = f'w{index}:{word.speaker}' if word.speaker is not None else None
+                words.append(Word(word.start + start, word.end + start, word.text, speaker))
+        return STTResponse(words, detected, self.provider, self.model)
+
+
+def make_adapter(name: str, *, provider: str | None = None, model: str | None = None, **options) -> STTAdapter:
+    """The adapter an overlay or the ``record-stt`` command names."""
+    if name == 'prerecorded':
+        if not provider or not model:
+            raise ValueError('the prerecorded adapter needs a provider and a model')
+        return PrerecordedAdapter(provider=provider, model=model)
+    if name == 'parakeet_batch':
+        return ParakeetBatchAdapter(model=model or 'parakeet-batch', **options)
+    if name == 'stub':
+        return StubAdapter(provider=provider or 'stub', model=model or 'stub-1')
+    raise ValueError(f'unknown STT adapter {name!r}; expected prerecorded, parakeet_batch or stub')

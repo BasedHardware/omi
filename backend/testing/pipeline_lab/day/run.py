@@ -82,6 +82,7 @@ def run_day(
     vector_index: Any,
     search_checker: Callable[[str], bool] | None = None,
     production_recap_at: Any = None,
+    goals_before: Iterable[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """Must run inside the chain's lab environment, after the chain has drained."""
     summary = run_daily_summary(uid, day, tz_name, clock, production_at=production_recap_at)
@@ -98,6 +99,7 @@ def run_day(
         notifications=sinks.notifications,
         chat_index=chat,
         recap=summary['recap'],
+        goals_before=goals_before,
     )
     write_json(Path(run_dir) / 'day.json', payload)
     return payload

@@ -318,6 +318,8 @@
       h('details', { class: 'inline item' },
         h('summary', null, h('span', { class: 'label' }, 'overlay'), ' ', overlay.length ? overlay.length + ' setting' + (overlay.length === 1 ? '' : 's') + ' ▾' : 'none'),
         overlay.length ? h('div', { class: 'pop' }, h('table', null, overlay.map(([k, v]) => h('tr', null, h('td', null, k), h('td', null, v))))) : null),
+      run.stt ? h('span', { class: 'item', title: 'where the transcripts came from' }, h('span', { class: 'label' }, 'stt'), h('code', null, run.stt)) : null,
+      run.engine === 'fake' ? h('span', { class: 'chip badge-warn', title: 'Plumbing check: a stand-in replaced the product pipeline' }, 'engine: fake') : null,
       h('span', { class: 'item spend', title: 'spend vs cap' }, h('span', { class: 'label' }, 'spend'), h('span', { class: 'num' }, usd(run.spend_usd) + ' / ' + usd(run.budget_usd)), h('span', { class: 'meter' + (spendPct > 80 ? ' hot' : '') }, h('i', { style: 'width:' + spendPct.toFixed(1) + '%' }))),
       h('span', { class: 'item' }, h('span', { class: 'label' }, 'wall'), h('span', { class: 'num' }, dur(run.wall_seconds))),
       run.status && run.status !== 'complete' ? h('span', { class: 'chip badge-warn' }, run.status) : null,

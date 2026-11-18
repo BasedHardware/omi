@@ -77,8 +77,17 @@ def test_build_day_json_shape():
         chat_index={'ready': True},
     )
     assert {'daily_summary', 'goals', 'memory_delta', 'notifications'} <= set(payload)
-    assert payload['daily_summary'] == {'date': '2026-03-14', 'headline': 'h', 'overview': 'o'}
-    assert payload['goals'] == [{'id': 'g1', 'title': 'Grow', 'current_value': 2, 'target_value': 5}]
+    assert payload['daily_summary'] == {'title': 'h', 'overview': 'o', 'highlights': [], 'date': '2026-03-14'}
+    assert payload['goals'] == [
+        {
+            'id': 'g1',
+            'title': 'Grow',
+            'progress_before': None,
+            'progress_after': 2.0,
+            'target': 5.0,
+            'note': 'new during the day',
+        }
+    ]
     assert [n['title'] for n in payload['notifications']] == ['Task', 'Your day']
     assert payload['memory_delta']['added'][0]['id'] == 'm1'
 

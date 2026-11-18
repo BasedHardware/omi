@@ -124,6 +124,7 @@ async def replay_chain(spec: ChainRunSpec) -> dict[str, Any]:
                 clock=clock,
                 sinks=sinks,
                 memories_before=spec.start_state.memories if spec.start_state is not None else (),
+                goals_before=spec.start_state.goals if spec.start_state is not None else (),
                 kept_conversation_ids=kept,
                 vector_index=spec.vector_index,
                 production_recap_at=spec.production_recap_at,
