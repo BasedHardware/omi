@@ -111,6 +111,7 @@ from utils.summary_quality import (
 )
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit, defer_held_budget_denial
+from utils.conversations import historical_minimum
 from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
 from utils.enrichment.admission import SyncConversationPersistenceFenced
 from utils.enrichment import early_abort
@@ -2708,8 +2709,11 @@ def process_conversation(
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
     # A v3 backfill window runs the live notes path (same trigger, relevance, speakers, meeting
     # context and floors) but is historical: like silent backfill it takes no derived effects.
-    historical = silent_backfill or (
-        v3_policy.flag(conversation, 'v3_derived') and v3_policy.flag(conversation, 'backfilled')
+    historical_tier = historical_minimum.historical_tier.is_historical(conversation)
+    historical = (
+        silent_backfill
+        or historical_tier
+        or (v3_policy.flag(conversation, 'v3_derived') and v3_policy.flag(conversation, 'backfilled'))
     )
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
@@ -2784,6 +2788,11 @@ def process_conversation(
             link_duplicate_captures(uid, completed)
             dispatch_primary_notes_refresh(uid, completed)
 
+    if historical_minimum.short_circuits(conversation, trigger):
+        payload = historical_minimum.payload(uid, cast(Conversation, conversation))
+        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
+        report_persistence(persisted, derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
+        return cast(Conversation, conversation)
     is_initial_creation = _is_ingress_create(conversation)
     if funded_processing.enabled(uid, 'batch'):
         waiting = bool(getattr(conversation, 'processing_deferred', False))
@@ -3087,6 +3096,16 @@ def process_conversation(
         # goal, webhook, lazy-effects queue or notification can escape this seam.
         if derived_effects_disposition_observer is not None:
             derived_effects_disposition_observer(DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
+        if historical_tier:
+            if explicit_app is not None:
+                # An explicitly chosen template is the summary the owner asked for.
+                trigger_conversation_apps(
+                    uid, conversation, True, app_id, explicit_app, app_usage_attribution, language_code, people
+                )
+                conversations_db.update_conversation(
+                    uid, conversation.id, {'apps_results': [r.dict() for r in conversation.apps_results]}
+                )
+            complete_explicit(uid, conversation, trigger)
         return conversation
 
     record_final(uid, conversation)

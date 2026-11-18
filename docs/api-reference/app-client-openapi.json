@@ -10079,6 +10079,18 @@
               }
             ]
           },
+          "processing_tier": {
+            "anyOf": [
+              {
+                "const": "historical",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Tier"
+          },
           "record_audio_partial": {
             "anyOf": [
               {
@@ -10214,6 +10226,17 @@
               }
             ],
             "title": "Summary Covers Through"
+          },
+          "summary_on_open": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary On Open"
           },
           "summary_retryable": {
             "anyOf": [
@@ -11639,6 +11662,18 @@
               }
             ]
           },
+          "processing_tier": {
+            "anyOf": [
+              {
+                "const": "historical",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Tier"
+          },
           "record_audio_partial": {
             "anyOf": [
               {
@@ -11774,6 +11809,17 @@
               }
             ],
             "title": "Summary Covers Through"
+          },
+          "summary_on_open": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary On Open"
           },
           "summary_retryable": {
             "anyOf": [
@@ -56690,6 +56736,93 @@
           }
         ],
         "summary": "Patch Conversation Summary",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/summary/open": {
+      "post": {
+        "description": "Generate the one summary of a historical conversation (`summary_on_open: true`) when its owner opens it. Summary only: no memories, tasks, apps or notifications. `X-Omi-Summary-Outcome` is `existing` (no model call) or `generated`. Typed refusals: 404, 409 (`conversation_locked`, `conversation_discarded`, `not_historical`, `byok_keys_required`, `conversation_processing_in_progress`), 402, 429 with Retry-After, 502 `summary_unavailable`, 503 `historical_summary_disabled` or retryable `historical_summary_retry`.",
+        "operationId": "open_historical_summary_v1_conversations__conversation_id__summary_open_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Open Historical Summary",
         "tags": [
           "conversations"
         ]

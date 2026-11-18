@@ -33,7 +33,7 @@ from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.list_version_check import ListVersionCheck
 from config.episodes import home_step_projection_enabled, home_transcription_presentation_gate_enabled
-from utils.conversations import home_step, transcribing_hold
+from utils.conversations import historical_summary, home_step, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
     delete_action_item_vector,
@@ -1044,6 +1044,10 @@ def execute_reprocess(
         processed_conversation.discarded = not restored
         if restored and processed_conversation.sync_relevance == 'review':
             processed_conversation.sync_relevance = 'keep'
+    if historical_summary.historical_tier.is_historical(processed_conversation):
+        # Old builds' "Summarize" CTA lands here: the marker kept the run summary-only.
+        historical_summary.after_summary(uid, processed_conversation)
+        return processed_conversation
 
     return schedule_reprocessed_learning(
         uid,
@@ -1188,7 +1192,10 @@ def get_conversations(
         ),
     )
     _heal_locked_conversations_if_eligible(uid, conversations)
-    conversations = [transcribing_hold.project(home_step.project(row), home_list=True) for row in conversations]
+    conversations = [
+        historical_summary.project(transcribing_hold.project(home_step.project(row), home_list=True))
+        for row in conversations
+    ]
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
@@ -1335,7 +1342,7 @@ def get_conversation_by_id(
             response.headers['X-Translation-Status'] = translation_status
             if next_cursor is not None:
                 response.headers['X-Translation-Cursor'] = next_cursor
-    return transcribing_hold.project(conversation)
+    return historical_summary.project(transcribing_hold.project(conversation))
 
 
 @router.patch(
@@ -2856,6 +2863,29 @@ def merge_conversations(
         conversation_ids=request.conversation_ids,
         merged_conversation_id=job['merge_target_id'],
     )
+
+
+@router.post(
+    '/v1/conversations/{conversation_id}/summary/open',
+    response_model=Conversation,
+    tags=['conversations'],
+    description=(
+        "Generate the one summary of a historical conversation (`summary_on_open: true`) when its owner opens it. "
+        "Summary only: no memories, tasks, apps or notifications. `X-Omi-Summary-Outcome` is `existing` (no model "
+        "call) or `generated`. Typed refusals: 404, 409 (`conversation_locked`, `conversation_discarded`, "
+        "`not_historical`, `byok_keys_required`, `conversation_processing_in_progress`), 402, 429 with Retry-After, "
+        "502 `summary_unavailable`, 503 `historical_summary_disabled` or retryable `historical_summary_retry`."
+    ),
+)
+def open_historical_summary(
+    conversation_id: str,
+    response: Response = None,  # type: ignore[assignment]
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    body, outcome = historical_summary.open_summary(uid, conversation_id)
+    if response is not None:
+        response.headers[historical_summary.OUTCOME_HEADER] = outcome
+    return body
 
 
 @router.get(

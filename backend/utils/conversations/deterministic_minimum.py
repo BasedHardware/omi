@@ -143,6 +143,7 @@ def build_deterministic_minimum_structured(
     uid: Optional[str] = None,
     source_label: str = DEFAULT_SOURCE_LABEL,
     tz_name_provider: Optional[Callable[[], Optional[str]]] = None,
+    provenance: bool = True,
 ) -> Structured:
     """The whole §1.7 row: deterministic title, empty overview, category ``other``,
     the category's fallback emoji, no action items, no events. Every other field
@@ -150,9 +151,10 @@ def build_deterministic_minimum_structured(
 
     ``uid`` is the owner. Stamp raw-title provenance for every known owner,
     so a minimum never masquerades as historical full processing.
-    An unknown owner (None) gets no stamp.
+    An unknown owner (None) gets no stamp. ``provenance=False`` is the
+    historical tier's final title: no summary debt, a ready Home row.
     """
-    raw_provenance = uid is not None
+    raw_provenance = provenance and uid is not None
     metadata: dict[str, Any] = {'title_provenance': 'server_minimum'} if raw_provenance else {}
     return Structured(
         **metadata,
