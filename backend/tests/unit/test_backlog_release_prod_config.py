@@ -13,6 +13,15 @@ from config.batch_pipeline_backlog_release import PREFIX, WriterConfig
 
 ROOT = Path(__file__).resolve().parents[3]
 LEGACY = 'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED'
+# One-way owner_key() digests of the four support owners approved 2026-11-18 (never raw identifiers).
+APPROVED_OWNER_KEYS = frozenset(
+    {
+        '70a8958da857b008477b9ab8ba52205bf5d4f7f61b4ed18d1e48b70344a3e80d',
+        'c68953b9fdbdcd5528b856fd4d50097e14c6b5eb4f48968115783ade222e59b1',
+        'cbf55865bc7f785d18a634a4615a21f052bbea40f4b9d5e726dec3dcbae40c26',
+        'f5d5e95afa2e18b4073f43099f4499f99326a2d3f2c50219dfa26013060cb177',
+    }
+)
 
 
 def _manifest():
@@ -52,20 +61,22 @@ def test_prod_backend_integration_parses_as_the_approved_allowlist_authority(mon
     assert config.rate_per_hour == 60
     assert config.reach_seconds == 0
     assert config.mode == 'allowlist_only'
-    assert len(config.owner_keys) == 4
+    assert set(config.owner_keys) == APPROVED_OWNER_KEYS
+    assert len(config.owner_keys) == len(APPROVED_OWNER_KEYS)
     assert LEGACY not in env
 
 
-def test_no_other_prod_role_enables_the_writer_or_the_legacy_release():
-    services = _manifest()['environments']['prod']['cloud_run']['services']
-    for name, service in services.items():
-        if name == 'backend-integration':
-            continue
-        found = set()
-        _walk_env_keys(service, found)
-        assert not found, (name, sorted(found))
+def test_no_other_prod_host_or_chart_sets_backlog_authority_keys():
+    prod = _manifest()['environments']['prod']
+    integration = prod['cloud_run']['services']['backend-integration']
+    found = set()
+    _walk_env_keys({k: v for k, v in prod.items() if k != 'cloud_run'}, found)
+    _walk_env_keys(prod['cloud_run'].get('jobs', {}), found)
+    for name, service in prod['cloud_run']['services'].items():
+        if service is not integration:
+            _walk_env_keys(service, found)
+    assert not found, sorted(found)
     for chart in (ROOT / 'backend/charts').glob('*/prod_*_values.yaml'):
-        found = set()
-        _walk_env_keys(yaml.load(chart.read_text(), Loader=yaml.CSafeLoader), found)
-        assert 'BATCH_PIPELINE_BACKLOG_RELEASE_WRITER' not in found, chart
-        assert LEGACY not in found, chart
+        chart_keys = set()
+        _walk_env_keys(yaml.load(chart.read_text(), Loader=yaml.CSafeLoader), chart_keys)
+        assert not chart_keys, (chart.name, sorted(chart_keys))
