@@ -63,8 +63,9 @@
     },
     "BATCH_HELD_POLL_SKIP_ENABLED": {
       "owner": "firestore-lead",
-      "review_by": "2026-11-18",
-      "registry": "config/feature-flags.yaml"
+      "review_by": "2026-11-25",
+      "registry": "config/feature-flags.yaml",
+      "reason": "Renewed one week 2026-11-18 (margin-40 lead): default-off read-saving switch with no ramp plan; owner to ramp it or delete it by review_by"
     },
     "BATCH_LEGACY_CAPACITY_FALLBACK_ENABLED": {
       "owner": "overflow / two-lane lead",
@@ -1131,7 +1132,8 @@
     },
     "SYNC_EARLY_CAPTURE_CLAMP_ENABLED": {
       "owner": "earlyclamp / two-lane transcription",
-      "review_by": "2026-11-17"
+      "review_by": "2026-12-16",
+      "reason": "Renewed 2026-11-18: registry decision keep/terminal keep, default-on ops kill switch for pre-2024 V2 sync stamps; expiry turned main's unit tests red"
     },
     "SYNC_EMPTY_SUCCESS_GUARD_ENABLED": {
       "seeded": "2026-10-25"
