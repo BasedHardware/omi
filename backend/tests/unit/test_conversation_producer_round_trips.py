@@ -53,8 +53,21 @@ def test_v3_planner_rows_round_trip(people):
     assert [p.name for p in conversation.structured.participants] == people
 
 
-def test_v3_planner_row_with_a_producer_bug_fails_at_the_write_seam():
-    # The 2026-11-17 class: a participant field the reader model rejects.
+@pytest.fixture(autouse=True)
+def enforced_write_seam(monkeypatch):
+    monkeypatch.delenv(row_contract.WRITE_VALIDATION_ENV, raising=False)
+
+
+def test_v3_planner_row_without_participant_source_is_repaired_and_accepted():
+    # The exact 2026-11-17 row shape: the reader model since #25588 folds a missing source, so the seam accepts it.
+    row = _v3_planned_row(['Alex'])
+    del row['structured']['participants'][0]['source']
+    conversation = assert_conversation_row_round_trips(row)
+    assert conversation.structured.participants[0].source == 'transcript'
+
+
+def test_v3_planner_row_with_an_out_of_vocabulary_participant_source_fails_at_the_write_seam():
+    # The same class the readers cannot repair: a participant field outside the reader model's vocabulary.
     row = _v3_planned_row(['Alex'])
     row['structured']['participants'][0]['source'] = 'calendar'
     with pytest.raises(row_contract.InvalidConversationRow) as raised:

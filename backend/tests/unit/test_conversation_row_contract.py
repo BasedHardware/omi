@@ -157,3 +157,36 @@ def test_get_conversations_returns_the_rest_of_a_page_with_one_malformed_row(mon
     assert [row['id'] for row in result] == ['a', 'b']
     # The declared response model accepts the page FastAPI would serialize.
     assert [c.id for c in TypeAdapter(List[Conversation]).validate_python(result)] == ['a', 'b']
+
+
+async def test_search_exact_reference_drops_a_malformed_row(monkeypatch):
+    from models.conversation import SearchRequest
+
+    monkeypatch.setattr(db, 'get_conversations_by_id_without_photos', lambda *a, **kw: [_broken('bad'), _row('a')])
+    monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
+    result = await routes._search_exact_conversation_reference(
+        'bad', SearchRequest(query='bad'), 'synthetic', None, None
+    )
+    assert [row['id'] for row in result['items']] == ['a']
+
+
+async def test_speaker_browse_drops_a_malformed_row(monkeypatch):
+    from models.conversation import SearchRequest
+
+    monkeypatch.setattr(routes.conversation_scan_db, 'conversation_scan_budget', lambda *a, **kw: None)
+    monkeypatch.setattr(routes.conversation_scan_db, 'speaker_browse_scan', lambda *a, **kw: [])
+    monkeypatch.setattr(
+        routes,
+        'browse_conversations_by_speaker',
+        lambda *a, **kw: {'items': [_broken('bad'), _row('a')], 'total_pages': 1, 'current_page': 1, 'per_page': 10},
+    )
+    monkeypatch.setattr(
+        routes.paid_lock_recovery,
+        'PaidLockRecovery',
+        lambda uid: SimpleNamespace(can_recover=None, heal=lambda rows: None),
+    )
+    monkeypatch.setattr(routes, 'finish_list_budget', lambda *a: None)
+    result = await routes._browse_speaker_conversations(
+        SearchRequest(speaker_id='spk'), 'synthetic', None, None, None, None
+    )
+    assert [row['id'] for row in result['items']] == ['a']

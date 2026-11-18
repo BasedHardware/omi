@@ -2499,6 +2499,7 @@ async def _search_exact_conversation_reference(
     if read_budget is None:
         conversations = [transcribing_hold.project(row) for row in conversations]
         redact_conversations_for_list(conversations)
+        conversations = row_contract.readable_rows(conversations, surface='search_exact', model=ConversationSearchItem)
     return {
         'items': conversations[:exact_per_page],
         'total_pages': 1,
@@ -2549,6 +2550,9 @@ async def _browse_speaker_conversations(
         ) from error
     browse_results['items'] = [transcribing_hold.project(row) for row in browse_results['items']]
     redact_conversations_for_list(browse_results['items'])
+    browse_results['items'] = row_contract.readable_rows(
+        browse_results['items'], surface='speaker_browse', model=ConversationSearchItem
+    )
     finish_list_budget(response, budget)
     return browse_results
 
