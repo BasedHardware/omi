@@ -82,7 +82,8 @@ def remainders(db, gcs, budget, uid, cid):
     bucket = private_archive_bucket()
     wal_prefix = _prefix(uid, cid)
     if budget.read(
-        bucket, lambda: next(iter(gcs.list_blobs(bucket, prefix=wal_prefix, versions=True, max_results=1, **RPC)), None)
+        'wal_objects',
+        lambda: next(iter(gcs.list_blobs(bucket, prefix=wal_prefix, versions=True, max_results=1, **RPC)), None),
     ):
         found.add('wal_objects')
 
@@ -103,7 +104,7 @@ def remainders(db, gcs, budget, uid, cid):
                 except (TypeError, ValueError):
                     raise Incomplete('invalid_batch_object_reference') from None
                 blob = gcs.bucket(name).blob(path, generation=generation)
-                if budget.read(name, lambda: blob.exists(**RPC)):
+                if budget.read('referenced_objects', lambda: blob.exists(**RPC)):
                     found.add('referenced_objects')
 
         for table in DISCOVER_TABLES + DEPENDENT_TABLES:
@@ -148,8 +149,27 @@ def _with_parked(owner_rows, parked_rows, owner):
             yield row
 
 
+def coverage_report():
+    return {
+        'complete_erasure_evidence': False,
+        'coverage': {
+            **{
+                location: {'status': 'unknown', 'reason': 'scan_did_not_complete'}
+                for location in (COLLECTION, *LOCATIONS)
+            },
+            'postgres_mirror': {'status': 'not_checked', 'reason': 'postgres_mirror_is_outside_this_scan'},
+            'discarded_associations': {'status': 'unknown', 'reason': 'erasure_can_remove_association_evidence'},
+            'deletion_time_and_path': {
+                'status': 'unknown',
+                'reason': 'tombstone_windows_mark_intent_only_and_do_not_establish_completion_time_or_coalesced_vs_legacy_path',
+            },
+        },
+    }
+
+
 def audit(db, gcs, start, end, budget):
     report = {
+        **coverage_report(),
         'start': start.isoformat(),
         'end': end.isoformat(),
         'tombstones': 0,
@@ -158,15 +178,15 @@ def audit(db, gcs, start, end, budget):
         'terminal_checked': 0,
         'remainders': dict.fromkeys(LOCATIONS, 0),
     }
-    query = (
-        db.collection_group(COLLECTION)
-        .where(filter=FieldFilter('deleted_at', '>=', start))
-        .where(filter=FieldFilter('deleted_at', '<', end))
-        .order_by('deleted_at')
-        .order_by('__name__')
-        .select(['deleted_at'])
-    )
     try:
+        query = (
+            db.collection_group(COLLECTION)
+            .where(filter=FieldFilter('deleted_at', '>=', start))
+            .where(filter=FieldFilter('deleted_at', '<', end))
+            .order_by('deleted_at')
+            .order_by('__name__')
+            .select(['deleted_at'])
+        )
         for tombstone in budget.pages(COLLECTION, query):
             parts = tombstone.reference.path.split('/')
             if len(parts) != 4 or parts[0] != 'users':
@@ -194,6 +214,15 @@ def audit(db, gcs, start, end, budget):
     except Exception:
         report.update(verdict='incomplete_scan', reason='unexpected_audit_failure')
     else:
+        report['coverage'][COLLECTION] = {'status': 'checked', 'reason': 'tombstone_window_scan_completed'}
+        for location in LOCATIONS:
+            if report['terminal_checked']:
+                report['coverage'][location] = {
+                    'status': 'checked',
+                    'reason': 'scanned_attributable_remainders_for_terminal_obligations',
+                }
+            else:
+                report['coverage'][location] = {'status': 'not_checked', 'reason': 'no_terminal_obligations_to_scan'}
         if any(report['remainders'].values()):
             report.update(verdict='remainders_found', reason='current_attributable_remainders')
         elif report['terminal_checked']:
@@ -227,12 +256,12 @@ def main():
         db = firestore.Client(project=args.project)
         gcs = storage.Client(project=args.project)
     except Exception:
-        print(json.dumps({'verdict': 'incomplete_scan', 'reason': 'client_initialization_failed'}))
+        print(json.dumps({**coverage_report(), 'verdict': 'incomplete_scan', 'reason': 'client_initialization_failed'}))
         return 2
     main_window = audit(db, gcs, args.start, args.end, Budget(args.max_requests))
     control_start = args.start - (args.end - args.start)
     if main_window['reason'].startswith('access_denied:'):
-        control = {'verdict': 'incomplete_scan', 'reason': 'stopped_after_access_denied'}
+        control = {**coverage_report(), 'verdict': 'incomplete_scan', 'reason': 'stopped_after_access_denied'}
     else:
         control = audit(db, gcs, control_start, args.start, Budget(args.max_requests))
     print(json.dumps({'main': main_window, 'control': control}, indent=2))

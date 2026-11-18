@@ -93,6 +93,11 @@ def test_locations(stores, location):
     else:
         assert report['remainders'][location] == 1
         assert report['verdict'] == 'remainders_found'
+    assert report['complete_erasure_evidence'] is False
+    assert report['coverage']['postgres_mirror']['status'] == 'not_checked'
+    assert report['coverage']['discarded_associations']['status'] == 'unknown'
+    assert report['coverage']['deletion_time_and_path']['status'] == 'unknown'
+    assert all(report['coverage'][name]['status'] == 'checked' for name in audit.LOCATIONS)
     encoded = json.dumps(report)
     assert all(secret not in encoded for secret in (UID, CID, 'private-object'))
 
@@ -102,6 +107,10 @@ def test_pending_is_excluded(stores):
     db.collection.return_value.document.return_value.get.return_value.exists = True
     report = audit.audit(db, gcs, START, END, audit.Budget(100))
     assert (report['tombstones'], report['pending'], report['terminal_checked']) == (1, 1, 0)
+    assert report['verdict'] == 'clean'
+    assert report['complete_erasure_evidence'] is False
+    assert report['coverage']['discarded_associations']['status'] == 'unknown'
+    assert all(report['coverage'][name]['status'] == 'not_checked' for name in audit.LOCATIONS)
     gcs.list_blobs.assert_not_called()
 
 
@@ -127,3 +136,8 @@ def test_missing_tombstone_index_names_required_field_without_rpc_payload(stores
     assert report['verdict'] == 'incomplete_scan'
     assert report['reason'] == 'missing_index:deleted_conversations.deleted_at:COLLECTION_GROUP:ASCENDING'
     assert report['tombstones'] is None
+    assert report['complete_erasure_evidence'] is False
+    assert report['coverage'][audit.COLLECTION]['status'] == 'unknown'
+    assert all(report['coverage'][name]['status'] == 'unknown' for name in audit.LOCATIONS)
+    assert report['coverage']['postgres_mirror']['status'] == 'not_checked'
+    assert 'private-project' not in json.dumps(report)
