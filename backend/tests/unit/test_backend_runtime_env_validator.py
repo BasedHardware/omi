@@ -3734,6 +3734,21 @@ def test_guarded_long_recovery_stays_disabled_and_hours_are_inert():
             assert env.get('SYNC_BACKFILL_ADMISSION_LIMITS', {}).get('value', 'false') == 'false'
 
 
+def test_prod_sync_backfill_lookback_is_sixty_days_and_no_release_reach_undercuts_it():
+    # Newest-first draining under per-run interruptions leaves a heavy backlog's oldest
+    # audio to age past the lookback, where the 422 retires it on the phone for good.
+    # Prod admits 60 days; the batch backlog-release reach (capture-age based) must
+    # never hold back what admission accepted.
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    services = manifest['environments']['prod']['cloud_run']['services']
+    lookback = 60 * 86400
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['SYNC_BACKFILL_MAX_AGE_SECONDS']['value'] == str(lookback)
+    for service in services.values():
+        reach = int(service.get('env', {}).get('BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS', {}).get('value', '0'))
+        assert reach == 0 or reach >= lookback
+
+
 # M7: compose and validate declarations offline; no cloud clients or rollout writes.
 @pytest.fixture(scope='module')
 def read_lever_sources():

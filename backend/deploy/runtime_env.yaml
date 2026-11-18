@@ -4825,7 +4825,7 @@ environments:
             ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
-              value: '2592000'
+              value: '5184000'
               category: rollout
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'true'}
             SYNC_FRESH_MAX_AGE_SECONDS:
@@ -5388,7 +5388,7 @@ environments:
             ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
-              value: '2592000'
+              value: '5184000'
               category: rollout
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'true'}
             SYNC_FRESH_MAX_AGE_SECONDS:
