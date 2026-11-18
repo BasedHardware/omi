@@ -662,6 +662,26 @@ class PostgresStore:
         due_before: float | None = None,
         exclude_async: bool = False,
         followup_due_before: float | None = None,
+    ) -> tuple[list[str], Any]:
+        page = self._projection_page(
+            limit,
+            after=after,
+            states=states,
+            due_before=due_before,
+            exclude_async=exclude_async,
+            followup_due_before=followup_due_before,
+        )
+        return page[0], page[1]
+
+    def _projection_page(
+        self,
+        limit: int = 100,
+        *,
+        after: tuple | None = None,
+        states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+        due_before: float | None = None,
+        exclude_async: bool = False,
+        followup_due_before: float | None = None,
         include_outbox: bool = False,
     ):
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
@@ -720,7 +740,7 @@ class PostgresStore:
         return ids, cursor
 
     def projection_page_with_outbox(self, **scope):
-        return self.projection_page(include_outbox=True, **scope)
+        return self._projection_page(include_outbox=True, **scope)
 
     def projection_outbox_page(self, now: float, limit: int) -> list[outbox.DueObligation]:
         # The partial index has the same numeric-type predicate as the query.

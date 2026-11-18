@@ -48,6 +48,11 @@ def due_obligation(segment_id: str, row: dict[str, Any]) -> DueObligation | None
     return None
 
 
+def holds_claim(row: dict, key: Obligation, token: str, now: float) -> bool:
+    due = due_obligation(key.segment_id, row)
+    return due is not None and due.key == key and row.get(TOKEN_FIELD) == token and due.due_at > now
+
+
 def covered(segment_id: str, row: dict) -> bool:
     return (
         row.get('projection_state') in RUNNABLE
@@ -66,7 +71,7 @@ def arm(row: dict, now: float) -> dict:
     # created by an off writer. Legacy discovery still sees every such row.
     if projection_outbox_enabled() and type(row.get('log_sequence')) is int and row['log_sequence'] > 0:
         return {KIND_FIELD: KIND, **metadata(now, None, None)}
-    return metadata(row.get(DUE_FIELD), None, 'legacy') if row.get(KIND_FIELD) == KIND else {}
+    return metadata(None, None, 'legacy') if row.get(KIND_FIELD) == KIND else {}
 
 
 def validate_batch_patch(table: str, fields: dict[str, Any]) -> None:
@@ -95,7 +100,7 @@ def claim(store, key: Obligation, clock) -> str | None:
         row = tx.get('results', key.segment_id)
         due = due_obligation(key.segment_id, row)
         now = clock()
-        if due is None or due.key != key or due.due_at > now:
+        if due is None or due.key != key or due.due_at > now or row.get(REASON_FIELD) == 'legacy':
             return None
         reason = disposition(row)
         if reason is not None:
@@ -110,9 +115,8 @@ def claim(store, key: Obligation, clock) -> str | None:
 def settle(store, key: Obligation, token: str, clock, outcome: str) -> str | None:
     def finish(tx):
         row = tx.get('results', key.segment_id)
-        due = due_obligation(key.segment_id, row)
         now = clock()
-        if due is None or due.key != key or row.get(TOKEN_FIELD) != token or due.due_at <= now:
+        if not holds_claim(row, key, token, now):
             return None
         reason = disposition(row)
         if reason is not None:

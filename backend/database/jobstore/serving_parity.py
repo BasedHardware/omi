@@ -188,6 +188,11 @@ def compare_serving_query(
 
                 dropped = UNMIRRORED_TABLE_FIELDS.get(args[0] if args else kwargs.get('table') or '', frozenset())
                 value = {name: field for name, field in value.items() if name not in dropped}
+            elif query == 'projection_page_with_outbox':
+                rows, cursor, covered = value
+                value = (rows, cursor, sorted(covered))
+            elif query == 'projection_outbox_page':
+                value = [(entry.key.segment_id, entry.key.revision, float(entry.due_at)) for entry in value]
             return codec.canonical(value)
 
         deadline = time.monotonic() + budget_s

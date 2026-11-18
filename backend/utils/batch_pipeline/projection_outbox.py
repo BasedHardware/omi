@@ -13,6 +13,7 @@ from database.batch_pipeline_projection_protocol import ProjectionBlocked, Proje
 from database.batch_privacy_attempt import with_batch_privacy_attempt
 from utils.batch_pipeline.leader import PROJECTION_OUTBOX_SCAN, TABLE, LeaderLease
 from utils.batch_pipeline.projection import Projector
+from utils.batch_pipeline.projection_delivery import fenced_delivery
 from utils.batch_pipeline.projection_followup import MAX_FOLLOWUPS, ProjectionFollowups
 from utils.executors import db_executor, run_blocking, sync_executor
 from utils.observability.fallback import record_fallback
@@ -49,13 +50,15 @@ class ProjectionOutbox:
         due = rows.due_obligation(entry['segment_id'], entry)
         if due is not None:
             try:
-                loop.call_soon_threadsafe(self._enqueue, due.key)
+                loop.call_soon_threadsafe(self._enqueue, due.key, True)
             except RuntimeError:
                 # The event loop closed after the commit. The indexed row remains due.
                 return
 
-    def _enqueue(self, key: rows.Obligation) -> None:
-        if key not in self.queued and not self.queue.full():
+    def _enqueue(self, key: rows.Obligation, hinted: bool = False) -> None:
+        # Post-commit hints leave half the queue for lost-wake recovery.
+        capacity = self.queue.maxsize // 2 if hinted else self.queue.maxsize
+        if key not in self.queued and self.queue.qsize() < capacity:
             self.queue.put_nowait(key)
             self.queued.add(key)
 
@@ -114,10 +117,11 @@ class ProjectionOutbox:
             return
         OUTCOMES.labels('claimed').inc()
         try:
-            async with asyncio.timeout(ATTEMPT_SECONDS):
-                outcome = await run_blocking(sync_executor, self._assign_or_project, key, token)
-                if outcome == 'followup':
-                    outcome = await self.followups.run(key.segment_id, track_backoff=False)
+            with fenced_delivery(key, token, self.clock):
+                async with asyncio.timeout(ATTEMPT_SECONDS):
+                    outcome = await run_blocking(sync_executor, self._assign_or_project, key, token)
+                    if outcome == 'followup':
+                        outcome = await self.followups.run(key.segment_id, track_backoff=False)
         except ProjectionPredecessorPending:
             outcome = 'predecessor'
         except (ProjectionBlocked, BatchPrivacyBlocked):
@@ -132,10 +136,7 @@ class ProjectionOutbox:
     def _assign_or_project(self, key: rows.Obligation, token: str) -> str:
         segment = key.segment_id
         job, entry, binding = self.projector.store.read(segment)
-        current = rows.due_obligation(segment, entry)
-        if current is None or current.key != key or entry.get(rows.TOKEN_FIELD) != token:
-            return 'stale'
-        if current.due_at <= self.clock() or rows.disposition(entry) is not None:
+        if not rows.holds_claim(entry, key, token, self.clock()) or rows.disposition(entry) is not None:
             return 'stale'
         try:
             return self.projector.apply_outbox_snapshot(segment, job, entry, binding)

@@ -7,8 +7,9 @@ resume can rearm that slot in their existing transactions and invalidate a
 previous claim. The scheduling fields contain no transcript, audio reference,
 conversation identifier, or billing state.
 
-Serving enqueues a bounded in-process hint after its commit succeeds. The GPU
-pump has no projector. Its stamped commits are found by the elected due reader
+Serving enqueues a bounded in-process hint after its commit succeeds. Hints use
+up to half the queue, leaving room for the elected scan to recover missed wakes.
+The GPU pump has no projector. Its stamped commits are found by the elected due reader
 through the same index that recovers lost serving hints. The `ef42ee8` GPU
 image and earlier backend writers produce unstamped results. All legacy
 assignment, finish and follow-up readers still cover them.
@@ -24,12 +25,20 @@ fences apply separately on every attempt. Legacy and outbox follow-up workers
 share the existing process-wide follow-up slot budget.
 
 The consumer defers predecessor or claim contention for 10 seconds and other
-unfinished work for up to 60 seconds. A ready multipart receipt can still owe
-work for siblings. Only canonical completion settles it as completed. A
+unfinished work for up to 60 seconds. A pending predecessor also uses the existing
+owner replay path, which can find unstamped commits from older writers. A ready
+multipart receipt can still owe work for siblings. Only canonical completion settles it as completed. A
 durable quarantine parks the obligation for the existing held/release owner.
 An expired claim on a completed result settles from the result state without
 replaying publication or accounting. Privacy purges retain their existing
 ordering-edge or deletion behavior and scheduling fields follow result retention.
+
+Claim tokens fence scheduling updates and acknowledgements. The canonical
+projection session also validates the token when it reads the result inside its
+transaction, and the outbox rechecks it after accounting and before the Redis
+fair-use call. In-flight external calls rely on the existing idempotency keys.
+Binding, ordering, privacy, receipt and ledger checks still govern canonical
+mutations and replays.
 
 ## Compatibility and release
 
@@ -41,8 +50,8 @@ ordering-edge or deletion behavior and scheduling fields follow result retention
 - Older projection binaries can consume any result through the same durable
   receipt and accounting fences. Older reactivation writers can leave no active
   obligation. These rows remain visible on the legacy pages. An updated writer
-  with the switch off marks a reactivated row for legacy discovery, including
-  when that row retains its previous scheduling metadata.
+  with the switch off clears the previous due time and claim on a reactivated
+  row, so readers that still have the switch on leave it to legacy discovery.
 - Follow-up due-clock coverage and its marker retain their own admission.
   #25314 still classifies async finish receipts. The #25596 overlap observer
   continues to count every returned legacy follow-up row, including those

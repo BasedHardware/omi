@@ -8,6 +8,7 @@ import asyncio
 from database import batch_pipeline_projection_claim as claims
 from database import batch_pipeline_projection_outbox as outbox_rows
 from database.batch_pipeline_projection import ProjectionBlocked
+from database.batch_pipeline_projection_session import ProjectionSession
 from utils.batch_pipeline import projection, projection_followup
 from utils.batch_pipeline.projection_outbox import ProjectionOutbox
 from utils.sync import reprocess
@@ -91,6 +92,58 @@ async def test_projection_outbox_rechecks_privacy_before_apply(outbox_lane):
 
 
 @pytest.mark.asyncio
+async def test_projection_outbox_fences_a_claim_replaced_after_its_snapshot(outbox_lane, monkeypatch):
+    lane = outbox_lane
+    batch = lane.seed()
+    entry = lane.finish(batch)
+    key = outbox_rows.Obligation(entry['segment_id'], entry['log_sequence'])
+    outbox = ProjectionOutbox(lane.store, lane.projector, clock=lambda: 3.0)
+    prepare = ProjectionSession.prepare
+    replaced = False
+
+    def supersede(session, transaction, **kwargs):
+        nonlocal replaced
+        if not replaced:
+            session.result_ref.update({outbox_rows.TOKEN_FIELD: 'replacement'})
+            replaced = True
+        return prepare(session, transaction, **kwargs)
+
+    monkeypatch.setattr(ProjectionSession, 'prepare', supersede)
+    await outbox.deliver(key)
+    result = lane.projector.store.ref('results', key.segment_id).get().to_dict()
+    assert replaced and result[outbox_rows.TOKEN_FIELD] == 'replacement'
+    assert result['projection_state'] == 'pending' and not result.get('projection')
+    assert not lane.published and not active_rows(lane)
+    assert not list(lane.user.collection('hourly_usage').stream())
+
+
+@pytest.mark.asyncio
+async def test_projection_outbox_rechecks_the_claim_before_fair_use_dispatch(outbox_lane, monkeypatch):
+    lane = outbox_lane
+    batch = lane.seed()
+    entry = lane.finish(batch)
+    key = outbox_rows.Obligation(entry['segment_id'], entry['log_sequence'])
+    outbox = ProjectionOutbox(lane.store, lane.projector, clock=lambda: 3.0)
+    ref = lane.projector.store.ref('results', key.segment_id)
+    prepare = lane.projector.store.prepare_accounting
+
+    def supersede_after_accounting(*args, **kwargs):
+        accounting = prepare(*args, **kwargs)
+        ref.update({outbox_rows.TOKEN_FIELD: 'replacement'})
+        return accounting
+
+    fair_use = Mock()
+    monkeypatch.setattr(lane.projector.store, 'prepare_accounting', supersede_after_accounting)
+    monkeypatch.setattr(projection, 'record_speech', fair_use)
+    await outbox.deliver(key)
+
+    fair_use.assert_not_called()
+    assert ref.get().to_dict()[outbox_rows.TOKEN_FIELD] == 'replacement'
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    assert not lane.published and not list(lane.user.collection('hourly_usage').stream())
+
+
+@pytest.mark.asyncio
 async def test_projection_outbox_defers_a_successor_and_drains_after_predecessor(outbox_lane):
     lane = outbox_lane
     batch = lane.seed(('head', 'later'))
@@ -110,6 +163,27 @@ async def test_projection_outbox_defers_a_successor_and_drains_after_predecessor
     await outbox.deliver(later_key)
     assert batch.ledger.get().to_dict()['status'] == 'completed'
     assert result_ref.get().to_dict()[outbox_rows.REASON_FIELD] == 'completed'
+
+
+@pytest.mark.asyncio
+async def test_projection_outbox_replays_an_unstamped_predecessor(outbox_lane, monkeypatch):
+    lane = outbox_lane
+    monkeypatch.setenv('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'false')
+    batch = lane.seed(('head', 'later'))
+    assert lane.finish(batch, 1) is None
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'false')
+    head = lane.finish(batch, 0)
+    assert outbox_rows.KIND_FIELD not in head
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'true')
+    later = lane.merge.commit_next(lane.uid, 2)
+    outbox = ProjectionOutbox(lane.store, lane.projector, clock=lambda: 3.0)
+    await outbox.deliver(outbox_rows.Obligation(later['segment_id'], later['log_sequence']))
+
+    head_result = lane.projector.store.ref('results', head['segment_id']).get().to_dict()
+    assert head_result['projection_state'] == 'persisted'
+    assert head['segment_id'] in lane.projector.chain_followups
 
 
 @pytest.mark.asyncio

@@ -41,6 +41,17 @@ async def test_serving_wakes_the_new_revision_after_merge_returns():
     assert serving.merge.commit_next.call_count == 2
 
 
+def test_hints_leave_queue_space_for_the_elected_scan():
+    store = SimStore(CustomerData())
+    outbox = coordinator(store, lambda: 10.0)
+    outbox.queue = asyncio.Queue(maxsize=4)
+    for i in range(4):
+        outbox._enqueue(rows.Obligation(f'hint-{i}', 1), hinted=True)
+    assert outbox.queue.qsize() == 2
+    outbox._enqueue(rows.Obligation('lost-hint', 1))
+    assert outbox.queue.qsize() == 3
+
+
 @pytest.mark.asyncio
 async def test_serving_shutdown_joins_outbox_workers(monkeypatch):
     store = SimStore(CustomerData())
@@ -121,6 +132,8 @@ def test_projection_outbox_skip_keeps_raw_page_cursor_and_observer(monkeypatch):
     store.run(rearm_under_rollback)
     monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'on')
     assert outbox.has_coverage() is True
+    assert outbox.scan(10) == []
+    assert rows.claim(store, rows.Obligation('covered', 1), lambda: now[0]) is None
     discovery.after = None
     assert discovery.next(limit=2) == ['covered', 'old-writer']
 

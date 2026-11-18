@@ -20,10 +20,11 @@ from utils.batch_pipeline import projection_drain, serving
 from database.batch_pipeline_recovery_discovery import RecoveryCaller
 
 
-async def isolated_pump(pump, holds):
-    # These tests control only projection ticks. Coalescing's independent loop
-    # has a separate real-gather supervision test in test_batch_upload_coalescing.
+async def isolated_pump(pump, holds, outbox):
+    # These tests control only projection ticks. The sidecars have separate
+    # supervision coverage in the upload-coalescing and projection-outbox suites.
     holds.close()
+    outbox.close()
     return await pump
 
 

@@ -6,6 +6,7 @@ from functools import lru_cache
 from datetime import datetime, timezone
 import logging
 import os
+from threading import Lock
 import time
 
 from config import batch_pipeline_protected_share as protected_share
@@ -438,8 +439,17 @@ class Serving:
                     )
 
 
-@lru_cache(maxsize=2)
+_serving_lock = Lock()
+
+
 def serving_for_stage(stage: str) -> Serving:
+    # Serving, the pump, and the outbox can cold-start in different executor workers.
+    with _serving_lock:
+        return _serving_for_stage(stage)
+
+
+@lru_cache(maxsize=2)
+def _serving_for_stage(stage: str) -> Serving:
     if stage != current_stage():
         raise ValueError('worker and serving stages must match')
     store = shadow_from_env(FirestoreStore(f'batch_pipeline_{stage}'))

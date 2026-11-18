@@ -36,6 +36,7 @@ from database import batch_pipeline_projection_release as projection_release
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
+from utils.batch_pipeline.projection_delivery import assert_delivery_claim
 from database.batch_pipeline_projection_protocol import PROJECTION_HEAD_BLOCK_TYPE as PROJECTION_HEAD_BLOCK_TYPE
 from database.batch_pipeline_projection_protocol import PROJECTION_HEAD_BLOCKED_SINCE
 from database.batch_pipeline_projection_protocol import normalized_binding
@@ -569,12 +570,26 @@ class Projector:
     def apply_outbox_snapshot(self, segment_id, job, entry, binding) -> str:
         """Apply a delivery through the ordinary policy and receipt fences."""
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
-        if not policy.async_projection:
-            self._project_read(segment_id, job, entry, binding)
-            return 'incomplete'
-        if entry['projection_state'] == 'pending':
-            if self._persist_read(segment_id, job, entry, binding) is PRIVACY_HELD:
-                return 'blocked'
+        try:
+            if not policy.async_projection:
+                self._project_read(segment_id, job, entry, binding)
+                return 'incomplete'
+            if entry['projection_state'] == 'pending':
+                if self._persist_read(segment_id, job, entry, binding) is PRIVACY_HELD:
+                    return 'blocked'
+        except ProjectionPredecessorPending:
+            if sweep_owner_chain_enabled() and projection_predecessor_replay_enabled():
+                if owner_drain_enabled():
+                    self.request_drain(binding.owner_id, reason='predecessor_replay')
+                else:
+                    try:
+                        self.owe_followups(self.project_owner(binding.owner_id))
+                    except Exception as error:
+                        logger.error(
+                            'event=batch_projection action=outbox_chain outcome=error exception_type=%s',
+                            error_type(error),
+                        )
+            raise
         return 'followup'
 
     @settle_refusals()
@@ -783,6 +798,9 @@ class Projector:
             return None
         if not accounting.get('source_deleted'):
             with projection_phase('usage', policy):
+                # Accounting may have waited on reads after this worker lost
+                # its claim. Recheck before dispatching the idempotent Redis step.
+                assert_delivery_claim(segment_id, lambda: self.store.ref('results', segment_id).get().to_dict() or {})
                 record_speech(binding, accounting, self.clock())
         with projection_phase('completion', policy):
             result = self.store.complete(segment_id, binding, self.clock(), accounting, policy=policy)
