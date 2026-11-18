@@ -49,6 +49,7 @@ BLOCKED = frozenset(
         'remove_not_backfilled',
         'rederive_mixed_runs',
         'backfill_source_unreadable',
+        'backfill_donor_unclaimed',
     }
 )
 
@@ -364,6 +365,10 @@ async def reconcile(
             unclaimed = [rid for rid, r in recordings.items() if '_v3_backfill_prior' in r and rid not in claimed]
             for rid in unclaimed:
                 recordings.pop(rid)
+            if any(rid not in claimed for rid, r in recordings.items() if r.get('_v3_derive')):
+                # An already-converted donor (resume or re-derive) that no rebuilt window claims would
+                # stay hidden with no copy; block until it is understood (undo restores it).
+                raise Conflict('backfill_donor_unclaimed')
         # A re-derive reuses prior ids; a prior copy no rebuilt window claims is retired with the commit.
         remove = [cid for cid in existing if cid not in planned] if derive and rederive else []
         await run_blocking(db_executor, leases.renew, uid, key, token)
@@ -689,7 +694,8 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
     """Notes for backfilled rows, through the same _process as live, a few at a time until deadline.
 
     Returns counts; ``remaining`` > 0 asks the caller for a continuation task. ``keep_going`` is
-    checked before each chunk so an undo stops new notes work.
+    checked before each chunk so an undo stops new notes work, and so is the account-deletion marker:
+    once deletion starts no transcript goes to the notes model (``stopped`` names why).
     """
     rows = [row for row in await run_blocking(db_executor, store.pending_backfill_processing, uid) if row]
     counts = {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 0}
@@ -722,6 +728,9 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
     for start in range(0, len(rows), concurrency):
         if time.monotonic() >= deadline or (keep_going is not None and not await keep_going()):
             break
+        if await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid):
+            counts['stopped'] = 'account_deletion'
+            return counts
         await asyncio.gather(*(one(row) for row in rows[start : start + concurrency]))
     left = await run_blocking(db_executor, store.pending_backfill_processing, uid)
     counts['remaining'] = len([row for row in left if row])

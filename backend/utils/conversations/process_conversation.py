@@ -2708,9 +2708,8 @@ def process_conversation(
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
     # A v3 backfill window runs the live notes path (same trigger, relevance, speakers, meeting
     # context and floors) but is historical: like silent backfill it takes no derived effects.
-    historical = silent_backfill or (
-        v3_policy.flag(conversation, 'v3_derived') and v3_policy.flag(conversation, 'backfilled')
-    )
+    v3_backfilled = v3_policy.flag(conversation, 'v3_derived') and v3_policy.flag(conversation, 'backfilled')
+    historical = silent_backfill or v3_backfilled
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess = mode.run_now, mode.reprocess
@@ -2771,7 +2770,8 @@ def process_conversation(
         for settle in final_pass_settlements:
             settle(current)
         final_pass_settlements.clear()
-        if current and completed is not None and not historical:
+        # Only v3 backfill copies skip this; silent-backfill recovery keeps its telemetry.
+        if current and completed is not None and not v3_backfilled:
             record_capture_loss(completed)
             _observe_owner_recognition_completion(completed)
         if persistence_observer is not None:

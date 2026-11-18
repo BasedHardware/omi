@@ -633,7 +633,6 @@ BACKFILL_TRACKED = (
 BACKFILL_SOURCES = frozenset({'omi', 'phone'})
 # Metadata page for planning an owner's window; a larger window is refused, never truncated.
 BACKFILL_WINDOW_MAX = 10000
-BACKFILL_UNDO_PAGE = 100
 
 
 def backfill_legacy_source(raw):
@@ -695,6 +694,9 @@ def _rederive_prior(row):
         'v3_process_failed': False,
         'v3_process_failure_reason': None,
         'v3_notes_written': False,
+        # The rebuilt window decides its own notes obligation; a stale marker never rides along.
+        'v3_process_pending': False,
+        'v3_backfill_process_pending': False,
     }
 
 
@@ -831,72 +833,67 @@ def backfill_run_documents(uid, run_id, *, firestore_client=None):
 def deleted_after_backfill(donor):
     """The owner deleted a backfilled copy of this donor: restoring it would resurrect what they deleted.
 
-    A delete releases the copy's claim and records its interval in deleted_spans. A converted donor
-    always has a claim, so no claim left also means every copy that covered it was deleted.
+    A delete records the copy's interval in the donor's deleted_spans (keyed by the copy id); spans the
+    donor already had before the run are not the owner's post-backfill deletion. A donor with no claim
+    but no new span (its copy never committed, or a re-derive retired it) is not a deletion.
     """
     prior = donor.get('v3_backfill_prior') or {}
     before = {s.get('conversation_id') for s in prior.get('deleted_spans') or []}
-    spans = donor.get('deleted_spans') or []
-    return any(s.get('conversation_id') not in before for s in spans) or not donor.get('claims')
+    return any(s.get('conversation_id') not in before for s in donor.get('deleted_spans') or [])
 
 
-def restore_backfill_donors(uid, token, ids, *, firestore_client=None):
-    """Undo one page of donors exactly: every tracked field returns to its pre-backfill value.
+def undo_backfill_group(uid, token, donor_ids, row_ids, *, firestore_client=None):
+    """Undo one connected group of a run in one transaction: restore its donors exactly, remove its copies.
 
-    A donor whose backfilled copy the owner deleted stays converted (hidden), so the deletion holds;
-    returns (restored, kept ids).
+    A group is every donor and copy linked by claims, so it either goes back to legacy whole or stays
+    v3 whole. It stays when the owner deleted any copy in it (a tombstone for a copy id, or a donor
+    deleted span added after the run); its copies' owed backfill notes move to the live marker so
+    they are still written. The tombstones are read inside the transaction, so a deletion racing undo
+    either lands first (the group stays) or retries after the copies are gone. Returns
+    (outcome, donors restored, rows removed).
     """
     client = firestore_client or get_firestore_client()
     coll = user_conversations(client, uid)
+    tombstones = client.collection('users').document(uid).collection('deleted_conversations')
     held = leases.lease_ref(client, uid, BACKFILL_LEASE)
 
     @firestore.transactional
-    def restore(tx):
+    def undo(tx):
         lease = held.get(transaction=tx).to_dict() or {}
-        snapshots = [(coll.document(cid), coll.document(cid).get(transaction=tx)) for cid in ids]
+        donors = [(cid, coll.document(cid).get(transaction=tx)) for cid in donor_ids]
+        rows = [(cid, coll.document(cid).get(transaction=tx)) for cid in row_ids]
+        deleted = [tombstones.document(cid).get(transaction=tx).exists for cid in row_ids]
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('lease_lost')
-        restored, kept = 0, []
-        for cid, (ref, snapshot) in zip(ids, snapshots):
-            row = snapshot.to_dict() or {}
-            if not snapshot.exists or row.get('v3_derived') or not row.get('v3_backfill_run'):
-                continue
+        converted = [
+            (cid, snapshot.to_dict() or {})
+            for cid, snapshot in donors
+            if snapshot.exists
+            and not (snapshot.to_dict() or {}).get('v3_derived')
+            and (snapshot.to_dict() or {}).get('v3_backfill_run')
+        ]
+        if any(deleted) or any(deleted_after_backfill(row) for _, row in converted):
+            for cid, snapshot in rows:
+                if snapshot.exists and (snapshot.to_dict() or {}).get('v3_backfill_process_pending'):
+                    tx.update(coll.document(cid), {'v3_backfill_process_pending': False, 'v3_process_pending': True})
+            return 'kept', 0, 0
+        for cid, row in converted:
             prior = row.get('v3_backfill_prior')
             if not isinstance(prior, dict):
                 raise Conflict('backfill_prior_missing')
-            if deleted_after_backfill(row):
-                kept.append(cid)
-                continue
             patch = {k: prior[k] if k in prior else firestore.DELETE_FIELD for k in BACKFILL_TRACKED}
             patch.update(v3_backfill_run=firestore.DELETE_FIELD, v3_backfill_prior=firestore.DELETE_FIELD)
-            tx.update(ref, patch)
-            restored += 1
-        return restored, kept
-
-    return restore(client.transaction())
-
-
-def delete_backfill_rows(uid, token, ids, *, firestore_client=None):
-    """Remove one page of backfill-derived rows. No tombstone: they were never the user's conversations."""
-    client = firestore_client or get_firestore_client()
-    coll = user_conversations(client, uid)
-    held = leases.lease_ref(client, uid, BACKFILL_LEASE)
-
-    @firestore.transactional
-    def remove(tx):
-        lease = held.get(transaction=tx).to_dict() or {}
-        snapshots = [(coll.document(cid), coll.document(cid).get(transaction=tx)) for cid in ids]
-        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
-            raise Conflict('lease_lost')
+            tx.update(coll.document(cid), patch)
         removed = 0
-        for ref, snapshot in snapshots:
+        for cid, snapshot in rows:
             row = snapshot.to_dict() or {}
+            # Only this backfill's copies; never a live row and no tombstone (they were never the owner's).
             if snapshot.exists and row.get('v3_derived') and row.get('backfilled') and row.get('v3_backfill_run'):
-                tx.delete(ref)
+                tx.delete(coll.document(cid))
                 removed += 1
-        return removed
+        return 'undone', len(converted), removed
 
-    return remove(client.transaction())
+    return undo(client.transaction())
 
 
 def claim_audio_purge(uid, rid, *, firestore_client=None):

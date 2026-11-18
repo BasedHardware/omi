@@ -124,11 +124,13 @@ FIELD_SITES = {
                 'structured',
                 'summary_covers_through',
                 'title_locked',
+                'v3_backfill_process_pending',
                 'v3_notes_written',
                 'v3_process_attempts',
                 'v3_process_failed',
                 'v3_process_failure_reason',
                 'v3_process_fingerprint',
+                'v3_process_pending',
                 'v3_rewrites',
             ),
         )
@@ -144,6 +146,7 @@ FIELD_SITES = {
         ('plan_partitions', 'status', "'pending'", ('documents', 'forced_cut', 'since', 'status', 'until')),
         ('resume_run', 'status', "'pending'", ('status',)),
         ('resume_run', 'status', "(run or {}).get('status')", ('outcome', 'status')),
+        ('run_step', 'status', "'blocked'", ('reason', 'status')),
         ('run_step', 'status', "'blocked'", ('reason', 'status')),
         ('run_step', 'status', "'committed'", ('status',)),
         ('run_step', 'status', "'deriving'", ('code_sha', 'status')),
@@ -4701,6 +4704,10 @@ KNOWN_TERMINAL_WRITERS = {
             'database/conversations_v3.py',
             'commit_projection.commit',
         ): 'known_extra_writer: lifecycle v3 projection; lease/revision/claim fenced',
+        (
+            'database/conversations_v3.py',
+            'undo_backfill_group.undo',
+        ): 'known_extra_writer: backfill undo restores converted donors and removes backfill copies; backfill lease fenced',
         (
             'utils/conversations/v3/service.py',
             'recording_short_path.guarded',

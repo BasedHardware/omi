@@ -131,6 +131,7 @@ def wait_for(uid: str, label: str, run_id: str, minutes: int) -> str:
 def cmd_run(args) -> int:
     owners = read_owners(args.owners_file)
     since, until = window(args)
+    status = 0
     for number, uid in enumerate(owners, 1):
         label = f'owner[{number}]'
         if active_runs(uid):
@@ -138,20 +139,27 @@ def cmd_run(args) -> int:
                 f'{label} skipped: a run is planned, running, blocked or undoing; resume or undo it first (see status)'
             )
             continue
-        counts, partitions, estimate = plan_owner(uid, label, since, until, args.mode)
-        if args.dry_run:
+        try:
+            counts, partitions, estimate = plan_owner(uid, label, since, until, args.mode)
+            if args.dry_run:
+                continue
+            run_id = backfill.create_run(
+                uid,
+                since=since,
+                until=until,
+                mode=args.mode,
+                operator=args.operator,
+                code_sha=code_sha(),
+                partitions=partitions,
+                estimate=estimate,
+                counts=counts,
+            )
+        except (store.Conflict, ValueError) as error:
+            # One owner's blocked plan (overfull partition, account deletion, unreadable source,
+            # existing run) is reported by reason and never stops the other owners' plans.
+            print(f'{label} blocked: {error}')
+            status = 1
             continue
-        run_id = backfill.create_run(
-            uid,
-            since=since,
-            until=until,
-            mode=args.mode,
-            operator=args.operator,
-            code_sha=code_sha(),
-            partitions=partitions,
-            estimate=estimate,
-            counts=counts,
-        )
         print(f'{label} run={run_id} planned; the sweep starts it within ~5 minutes when CONVERSATIONS_V3_BACKFILL=on')
         if args.no_wait:
             if len(owners) > 1:
@@ -165,7 +173,7 @@ def cmd_run(args) -> int:
             return 1
         if number < len(owners):
             time.sleep(args.owner_gap_seconds)
-    return 0
+    return status
 
 
 def cmd_status(args) -> int:

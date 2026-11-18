@@ -213,16 +213,22 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --m
   builder leases before it lists the run's documents, so no pass commits while it works. It refuses
   while either is held or a notes write for the owner is in flight, and records the refusal in the
   ledger (`undo.reason`); rerun it. `undo` and `resume` exit 1 when no listed owner has the run.
-  Otherwise it restores every donor field exactly, then deletes the run's derived rows. It writes no
-  tombstones and touches no audio. A donor whose backfilled copy the owner deleted is not restored
-  (that would resurrect the deletion): it stays a hidden source, together with every copy it shares
-  and those copies' donors. The ledger and `undo --dry-run` count them (`donors_kept_deleted`,
-  `rows_kept_deleted`, `donors_deleted_by_owner`). Undo a re-derive by undoing the original run;
+  Otherwise it works one connected group at a time (donors and the copies that claim them): in one
+  transaction it restores every donor field exactly and deletes the group's copies, so nothing is
+  hidden or doubled partway. It writes no tombstones and touches no audio. A group in which the owner
+  deleted a copy (a deletion tombstone for a copy id, or a donor deleted span added after the run;
+  both read inside the transaction, so a delete racing undo is seen) stays as backfilled v3, so undo
+  never resurrects a deletion; its copies' owed notes move to the live notes marker. The ledger and
+  `undo --dry-run` count them (`groups_kept_deleted`, `donors_kept_deleted`,
+  `donors_deleted_by_owner`). Undo a re-derive by undoing the original run;
   `undo` on a re-derive run id says so and exits 1. Not undone: outline cache entries, speaker-resolution and media-boundary
   evidence that the notes path wrote, and gateway spend.
 - **Blocked.** A partition over the loader's 128-document limit, a planned id that is already a live
   row (`target_exists`), a tombstoned window, or a converted donor that no longer reads
-  (`backfill_source_unreadable`; its copies are kept) blocks the run. The partition and its reason are
+  (`backfill_source_unreadable`; its copies are kept), a converted donor that no rebuilt window
+  claims (`backfill_donor_unclaimed`), or account deletion starting mid-drain (`account_deletion`;
+  no further transcript goes to the notes model) blocks the run. One owner's blocked plan prints
+  its reason and the operator continues with the next owner (exit 1). The partition and its reason are
   recorded in the ledger. Fix the cause, then `resume`. Never describe a blocked or partial run as
   complete. `status` shows partitions committed, windows, Home-visible rows, outline calls and
   notes processed or failed.
