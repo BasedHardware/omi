@@ -872,8 +872,13 @@ def undo_backfill_group(uid, token, donor_ids, row_ids, *, firestore_client=None
         donors = [(cid, coll.document(cid).get(transaction=tx)) for cid in donor_ids]
         rows = [(cid, coll.document(cid).get(transaction=tx)) for cid in row_ids]
         deleted = [tombstones.document(cid).get(transaction=tx).exists for cid in row_ids]
-        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+        notes = [leases.lease_ref(client, uid, 'summary-' + cid).get(transaction=tx).to_dict() or {} for cid in row_ids]
+        now = datetime.now(timezone.utc)
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= now:
             raise Conflict('lease_lost')
+        if any(n.get('token') and n.get('until') and n['until'] > now for n in notes):
+            # A notes write started on a copy after undo's first check: never delete under it.
+            raise Conflict('notes_in_flight')
         converted = [
             (cid, snapshot.to_dict() or {})
             for cid, snapshot in donors

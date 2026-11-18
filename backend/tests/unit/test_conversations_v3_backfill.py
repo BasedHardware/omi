@@ -1172,10 +1172,12 @@ async def test_a_failed_deletion_read_releases_the_rows_summary_lease(direct, mo
 async def test_an_account_deletion_block_keeps_the_chunks_notes_counts(chain, monkeypatch):
     ledger, steps = chain
     ledger.run['partitions'][0].update(status='notes', notes_processed=2)
-    service.drain_backfill.return_value = {'processed': 3, 'failed': 1, 'remaining': 0, 'account_deletion': 1}
+    ledger.run['partitions'][0]['notes_remaining'] = 9
+    service.drain_backfill.return_value = {'processed': 3, 'failed': 1, 'remaining': 2, 'account_deletion': 1}
     await backfill.run_step('u', RUN, 0, 'drain')
     part = ledger.run['partitions'][0]
     assert part['status'] == 'blocked' and part['notes_processed'] == 5 and part['notes_failed'] == 1
+    assert part['notes_remaining'] == 2
 
 
 def test_a_blocked_owner_still_fails_the_exit_code_with_no_wait(tmp_path, monkeypatch):
@@ -1211,3 +1213,45 @@ def test_a_failed_undo_group_is_recorded_and_leaves_the_run_resumable(monkeypatc
     result = backfill.undo_run('u', RUN)
     assert result['outcome'] == 'error' and result['reason'] == 'lease_lost'
     assert ledger.run['status'] == 'undoing' and ledger.run['undo']['reason'] == 'lease_lost'
+
+
+def test_undo_refuses_a_group_whose_copy_took_a_notes_lease_after_the_first_check(strict):
+    token = convert(strict)
+    strict.rows[('users', 'synthetic', 'conversation_v3_leases', 'summary-c0')] = {
+        'token': 'drain',
+        'until': datetime.now(timezone.utc) + timedelta(minutes=4),
+    }
+    with pytest.raises(store.Conflict, match='notes_in_flight'):
+        store.undo_backfill_group('synthetic', token, ['r'], ['c0'], firestore_client=strict)
+    assert strict.rows[R]['recording'] is True and COPY in strict.rows
+
+
+def test_a_rerun_undo_keeps_the_totals_of_groups_already_undone(monkeypatch):
+    ledger = _undo_ledger(monkeypatch)
+    ledger.run.update(status='undoing', undo={'donors_restored': 4, 'rows_removed': 3, 'outcome': 'error'})
+    _undo_leases(monkeypatch)
+    docs = [
+        {'id': 'd1', 'claims': [{'conversation_id': 'c1'}]},
+        {'id': 'c1', 'v3_derived': True, 'v3_recording_ids': ['d1']},
+    ]
+    monkeypatch.setattr(store, 'backfill_run_documents', lambda *a, **kw: docs)
+    monkeypatch.setattr(store, 'undo_backfill_group', lambda *a, **kw: ('undone', 1, 1))
+    result = backfill.undo_run('u', RUN)
+    assert result['donors_restored'] == 5 and result['rows_removed'] == 4
+    assert ledger.run['undo']['donors_restored'] == 5
+
+
+def test_a_refused_undo_keeps_the_earlier_totals(monkeypatch):
+    ledger = _undo_ledger(monkeypatch)
+    ledger.run['undo'] = {'donors_restored': 4}
+    _undo_leases(monkeypatch, busy={'builder'})
+    backfill.undo_run('u', RUN)
+    assert ledger.run['undo']['donors_restored'] == 4 and ledger.run['undo']['reason'] == 'live_builder_in_flight'
+
+
+def test_the_loader_reads_the_deletion_marker_on_its_own_data_plane(loader, monkeypatch):
+    calls = []
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda uid, **kw: calls.append(kw) or False)
+    store.load_derive('u', since=AT, until=AT + timedelta(hours=1), run_id=RUN, firestore_client=Client({}))
+    # Never the conversations client it was handed: the marker lives on the data plane.
+    assert calls == [{}]

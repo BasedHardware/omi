@@ -378,6 +378,7 @@ async def run_step(uid, run_id, index, phase):
                     'reason': 'account_deletion',
                     'notes_processed': int(part.get('notes_processed') or 0) + drained['processed'],
                     'notes_failed': int(part.get('notes_failed') or 0) + drained['failed'],
+                    'notes_remaining': drained['remaining'],
                 },
             ),
             expect=active,
@@ -416,11 +417,12 @@ async def run_step(uid, run_id, index, phase):
     return {'outcome': 'committed', 'last': last}
 
 
-def _undo_refused(uid, run_id, reason, firestore_client):
+def _undo_refused(uid, run_id, reason, firestore_client, earlier=None):
+    # Merged into the earlier undo record so totals of groups already undone are never lost.
     runs.update_run(
         uid,
         run_id,
-        patch={'undo': {'outcome': 'busy', 'reason': reason, 'at': datetime.now(timezone.utc)}},
+        patch={'undo': {**(earlier or {}), 'outcome': 'busy', 'reason': reason, 'at': datetime.now(timezone.utc)}},
         firestore_client=firestore_client,
     )
     return {'outcome': 'busy', 'reason': reason}
@@ -488,14 +490,19 @@ def undo_run(uid, run_id, *, firestore_client=None):
         for key, reason in ((store.BACKFILL_LEASE, 'backfill_pass_in_flight'), ('builder', 'live_builder_in_flight')):
             token = leases.acquire(uid, key, firestore_client=firestore_client)
             if token is None:
-                return _undo_refused(uid, run_id, reason, firestore_client)
+                return _undo_refused(uid, run_id, reason, firestore_client, run.get('undo'))
             held.append((key, token))
         token = held[0][1]
         docs = store.backfill_run_documents(uid, run_id, firestore_client=firestore_client)
         derived = [d['id'] for d in docs if d.get('v3_derived')]
         if any(leases.held(uid, 'summary-' + cid, firestore_client=firestore_client) for cid in derived):
-            return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client)
-        result = {'donors_restored': 0, 'rows_removed': 0, 'groups_kept_deleted': 0, 'donors_kept_deleted': 0}
+            return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client, run.get('undo'))
+        # Groups an interrupted undo already finished are gone from the run's documents: carry their totals.
+        earlier = run.get('undo') or {}
+        result = {
+            key: int(earlier.get(key) or 0)
+            for key in ('donors_restored', 'rows_removed', 'groups_kept_deleted', 'donors_kept_deleted')
+        }
         for donors, rows in undo_groups(docs):
             try:
                 outcome, restored, removed = store.undo_backfill_group(
