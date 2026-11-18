@@ -1,8 +1,15 @@
 """Fenced v3 reprocess/merge lifecycle; explicit Retry always owns its copied window."""
 
+import logging
+from datetime import datetime, timedelta, timezone
+
 from database import conversations_v3_fence as fence, conversations_v3_leases as leases
 from database import conversations_v3_processing as writers
 from utils.conversations.v3 import models, policy
+from utils.conversations.v3.triggers import enqueue
+from utils.observability.fallback import record_fallback
+
+logger = logging.getLogger(__name__)
 
 
 def run_external(fn, uid, language, conversation, *args, **kwargs):
@@ -12,6 +19,7 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
     row = conversation.model_dump()
     revision, content_hash = row.get('sync_content_revision'), writers.processing_hash(row)
     persisted = []
+    armed = False
     observer = kwargs.pop('persistence_observer', None)
 
     def observed(current):
@@ -36,8 +44,8 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
             except Exception:
                 writers.fail_processing(uid, conversation.id, token, revision, content_hash=content_hash)
                 raise
-            writers.settle_processing(
-                uid, conversation.id, token, revision, conversation.finished_at, content_hash=content_hash
+            armed = writers.settle_processing(
+                uid, conversation.id, token, revision, conversation.finished_at, notes=True, content_hash=content_hash
             )
             result.tile_state = 'done'
             if not result.home_hidden and result.structured.title:
@@ -46,3 +54,13 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
             return result
     finally:
         leases.release(uid, 'summary-' + conversation.id, token)
+        if armed:
+            # Retry/reprocess settles outside the builder's drain: wake the owner so the drain delivers
+            # the conversation-created fanout. A lost wake waits for the owner's next reconcile.
+            try:
+                enqueue(uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
+            except Exception as error:
+                logger.warning('event=v3_created_wake outcome=deferred exception_type=%s', type(error).__name__)
+                record_fallback(
+                    component='other', from_mode='dispatch', to_mode='none', reason='enqueue_failed', outcome='degraded'
+                )

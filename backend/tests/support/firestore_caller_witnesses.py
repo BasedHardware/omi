@@ -174,6 +174,7 @@ _STARRED = (None, False, True)
 
 def _run_v3_live(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, conversations_router, 'conversations_v3_enabled', lambda uid: True)
+    _stub(monkeypatch, conversations_router.v3_client_capability, 'note_capable', lambda uid: None)
     trial(capture, conversations_router.get_live_conversation, uid='u1', channel=None)
 
 
