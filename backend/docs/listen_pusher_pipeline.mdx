@@ -23,9 +23,11 @@ outcome metrics remain unchanged. See [sync egress attribution](./runbooks/sync-
 ## Recording-derived conversations v3
 
 `CONVERSATIONS_V3_STAGE` defaults to `beta` (`cohort`, `beta`, `all`);
-`CONVERSATIONS_V3=off` stops marking new pendant captures. Beta admission uses
-the existing 14-day `episodes:client_seen:{uid}` marker, refreshed by beta calls
-to episode routes and `/v1/conversations/live`. Admission is per owner.
+`CONVERSATIONS_V3=off` stops marking new pendant captures. Admission is per owner
+and needs the 14-day `conversations_v3:client_capable:{uid}` marker, refreshed by any
+channel's call to `/v1/conversations/live` (only v3-capable builds make it); beta also
+needs the 14-day `episodes:client_seen:{uid}` marker, refreshed by beta calls to
+episode routes and `/v1/conversations/live`.
 Recording documents (`recording: true`) retain capture IDs, socket payload shape,
 WAL/finalization semantics and audio custody. Their `v3_pending` obligation drives
 one named task per owner-minute. Derived conversations own copied transcript
