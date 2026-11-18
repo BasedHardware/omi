@@ -633,6 +633,8 @@ BACKFILL_TRACKED = (
 BACKFILL_SOURCES = frozenset({'omi', 'phone'})
 # Metadata page for planning an owner's window; a larger window is refused, never truncated.
 BACKFILL_WINDOW_MAX = 10000
+# Donors plus copies one undo transaction may touch (Firestore allows 500 writes per transaction).
+UNDO_GROUP_MAX = 400
 
 
 def backfill_legacy_source(raw):
@@ -697,6 +699,8 @@ def _rederive_prior(row):
         # The rebuilt window decides its own notes obligation; a stale marker never rides along.
         'v3_process_pending': False,
         'v3_backfill_process_pending': False,
+        # A fresh notes retry budget for the rebuilt window.
+        'v3_backfill_attempts': 0,
     }
 
 
@@ -852,6 +856,10 @@ def undo_backfill_group(uid, token, donor_ids, row_ids, *, firestore_client=None
     either lands first (the group stays) or retries after the copies are gone. Returns
     (outcome, donors restored, rows removed).
     """
+    if len(donor_ids) + len(row_ids) > UNDO_GROUP_MAX:
+        # Partitions cap loaded documents (LIMIT), so a group stays far below the transaction write
+        # limit; anything larger is refused whole rather than undone across transactions.
+        raise Conflict('undo_group_too_large')
     client = firestore_client or get_firestore_client()
     coll = user_conversations(client, uid)
     tombstones = client.collection('users').document(uid).collection('deleted_conversations')

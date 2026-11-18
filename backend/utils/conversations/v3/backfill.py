@@ -371,7 +371,15 @@ async def run_step(uid, run_id, index, phase):
             uid,
             run_id,
             status='blocked',
-            partition=(index, {'status': 'blocked', 'reason': 'account_deletion'}),
+            partition=(
+                index,
+                {
+                    'status': 'blocked',
+                    'reason': 'account_deletion',
+                    'notes_processed': int(part.get('notes_processed') or 0) + drained['processed'],
+                    'notes_failed': int(part.get('notes_failed') or 0) + drained['failed'],
+                },
+            ),
             expect=active,
         )
         return {'outcome': 'blocked', 'reason': 'account_deletion'}

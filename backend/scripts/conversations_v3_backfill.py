@@ -164,7 +164,7 @@ def cmd_run(args) -> int:
         if args.no_wait:
             if len(owners) > 1:
                 print('owners run one at a time: stopping after the first planned run (--no-wait)')
-                return 0
+                return status
             continue
         outcome = wait_for(uid, label, run_id, args.wait_minutes)
         print(f'{label} run={run_id} outcome={outcome}')
@@ -223,8 +223,9 @@ def cmd_undo(args) -> int:
                 'run': args.run,
                 'donors': sum(1 for d in docs if not d.get('v3_derived')),
                 'derived_rows': sum(1 for d in docs if d.get('v3_derived')),
-                # Donors whose copy the owner deleted stay converted with the copies they share.
-                'donors_deleted_by_owner': sum(
+                'groups': len(backfill.undo_groups(docs)),
+                # A lower bound: undo also keeps a group whose copy has only a deletion tombstone so far.
+                'donors_deleted_by_owner_min': sum(
                     1 for d in docs if not d.get('v3_derived') and store.deleted_after_backfill(d)
                 ),
             },

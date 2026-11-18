@@ -452,6 +452,7 @@ def test_loader_resumes_its_own_run_and_rederive_resets_prior_copies(loader):
             'status': 'completed',
             'structured': {'title': 'Old derived'},
             'title_locked': True,
+            'v3_backfill_attempts': 2,
         },
     }
     window = {'since': AT - timedelta(hours=1), 'until': AT + timedelta(hours=1)}
@@ -464,6 +465,7 @@ def test_loader_resumes_its_own_run_and_rederive_resets_prior_copies(loader):
     assert existing['copy']['title_locked'] is False
     # The rebuilt window decides its own notes obligation; no stale marker rides along.
     assert existing['copy']['v3_backfill_process_pending'] is False and existing['copy']['v3_process_pending'] is False
+    assert existing['copy']['v3_backfill_attempts'] == 0
 
 
 def test_an_unreadable_converted_donor_blocks_instead_of_retiring_its_copy(loader, monkeypatch):
@@ -826,7 +828,7 @@ def _undo_leases(monkeypatch, busy=()):
     return events
 
 
-def test_undo_restores_donors_before_removing_copies_and_waits_for_notes(monkeypatch):
+def test_undo_works_one_group_per_call_and_refuses_while_notes_are_in_flight(monkeypatch):
     ledger = _undo_ledger(monkeypatch)
     events = _undo_leases(monkeypatch)
     docs = [
@@ -1126,3 +1128,57 @@ async def test_a_row_rechecks_account_deletion_right_before_its_notes_call(direc
     monkeypatch.setattr(writers, 'settle_backfill_processing', lambda *a, **kw: 'settled')
     counts = await service.drain_backfill('u', deadline=float('inf'), concurrency=2)
     assert processed == ['a'] and counts['account_deletion'] == 1 and 'summary-b' in released
+
+
+def test_an_oversized_undo_group_is_refused_whole(strict):
+    ids = [f'd{i}' for i in range(store.UNDO_GROUP_MAX + 1)]
+    with pytest.raises(store.Conflict, match='undo_group_too_large'):
+        store.undo_backfill_group('synthetic', 'token', ids, [], firestore_client=strict)
+
+
+@pytest.mark.asyncio
+async def test_a_failed_deletion_read_releases_the_rows_summary_lease(direct, monkeypatch):
+    checks = iter([False])
+
+    def marker(uid):
+        try:
+            return next(checks)
+        except StopIteration:
+            raise RuntimeError('marker authority unavailable') from None
+
+    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid: [{'id': 'a'}])
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', marker)
+    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    released = []
+    monkeypatch.setattr(leases, 'release', lambda *a: released.append(a[1]))
+    monkeypatch.setattr(service, '_process_leased', AsyncMock(side_effect=AssertionError('processed')))
+    with pytest.raises(RuntimeError):
+        await service.drain_backfill('u', deadline=float('inf'))
+    assert released == ['summary-a']
+
+
+@pytest.mark.asyncio
+async def test_an_account_deletion_block_keeps_the_chunks_notes_counts(chain, monkeypatch):
+    ledger, steps = chain
+    ledger.run['partitions'][0].update(status='notes', notes_processed=2)
+    service.drain_backfill.return_value = {'processed': 3, 'failed': 1, 'remaining': 0, 'account_deletion': 1}
+    await backfill.run_step('u', RUN, 0, 'drain')
+    part = ledger.run['partitions'][0]
+    assert part['status'] == 'blocked' and part['notes_processed'] == 5 and part['notes_failed'] == 1
+
+
+def test_a_blocked_owner_still_fails_the_exit_code_with_no_wait(tmp_path, monkeypatch):
+    from scripts import conversations_v3_backfill as script
+
+    owners = tmp_path / 'owners.txt'
+    owners.write_text('owner-one\nowner-two\n')
+    monkeypatch.setattr(runs, 'list_runs', lambda uid: [])
+
+    def plan(uid, label, *a):
+        if uid == 'owner-one':
+            raise store.Conflict('backfill_partition_budget')
+        return {}, [], {}
+
+    monkeypatch.setattr(script, 'plan_owner', plan)
+    monkeypatch.setattr(backfill, 'create_run', lambda *a, **kw: 'run-x')
+    assert script.main(['run', '--owners-file', str(owners), '--no-wait']) == 1

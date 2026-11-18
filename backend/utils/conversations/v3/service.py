@@ -367,7 +367,8 @@ async def reconcile(
                 recordings.pop(rid)
             if any(rid not in claimed for rid, r in recordings.items() if r.get('_v3_derive')):
                 # An already-converted donor (resume or re-derive) that no rebuilt window claims would
-                # stay hidden with no copy; block until it is understood (undo restores it).
+                # stay hidden with no copy; block until it is understood. Undo restores it unless the
+                # owner deleted its copy (then undo keeps it; plan around that range instead).
                 raise Conflict('backfill_donor_unclaimed')
         # A re-derive reuses prior ids; a prior copy no rebuilt window claims is retired with the commit.
         remove = [cid for cid in existing if cid not in planned] if derive and rederive else []
@@ -706,8 +707,13 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
             counts['busy'] += 1
             return
         failed = False
-        if await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid):
+        try:
             # Re-checked per row, right before the model call, not only per chunk.
+            blocked = await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid)
+        except Exception:
+            await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
+            raise
+        if blocked:
             counts['account_deletion'] = 1
             await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
             return

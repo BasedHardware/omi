@@ -218,9 +218,11 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --m
   hidden or doubled partway. It writes no tombstones and touches no audio. A group in which the owner
   deleted a copy (a deletion tombstone for a copy id, or a donor deleted span added after the run;
   both read inside the transaction, so a delete racing undo is seen) stays as backfilled v3, so undo
-  never resurrects a deletion; its copies' owed notes move to the live notes marker. The ledger and
-  `undo --dry-run` count them (`groups_kept_deleted`, `donors_kept_deleted`,
-  `donors_deleted_by_owner`). Undo a re-derive by undoing the original run;
+  never resurrects a deletion; its copies' owed notes move to the live notes marker. The ledger
+  records `groups_kept_deleted` and `donors_kept_deleted`; `undo --dry-run` prints the group count
+  and `donors_deleted_by_owner_min`, a lower bound (it sees deleted spans, not tombstone-only
+  deletes). A group over 400 documents is refused (`undo_group_too_large`); partitions keep groups
+  far below that. Undo a re-derive by undoing the original run;
   `undo` on a re-derive run id says so and exits 1. Not undone: outline cache entries, speaker-resolution and media-boundary
   evidence that the notes path wrote, and gateway spend.
 - **Blocked.** A partition over the loader's 128-document limit, a planned id that is already a live
