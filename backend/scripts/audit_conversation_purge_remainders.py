@@ -41,6 +41,8 @@ def read(location, operation):
         raise Incomplete(f'access_denied:{location}') from None
     except FailedPrecondition as exc:
         reason = 'missing_index' if 'index' in str(exc).lower() else 'failed_precondition'
+        if reason == 'missing_index' and location == COLLECTION:
+            raise Incomplete(f'missing_index:{COLLECTION}.deleted_at:COLLECTION_GROUP:ASCENDING') from None
         raise Incomplete(f'{reason}:{location}') from None
     except Exception:
         raise Incomplete(f'read_failed:{location}') from None

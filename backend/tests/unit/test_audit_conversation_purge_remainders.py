@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from google.api_core.exceptions import Forbidden
+from google.api_core.exceptions import FailedPrecondition, Forbidden
 
 from scripts import audit_conversation_purge_remainders as audit
 
@@ -108,3 +108,22 @@ def test_pending_is_excluded(stores):
 def test_access_denial_drops_exception_payload():
     with pytest.raises(audit.Incomplete, match='^access_denied:deleted_conversations$'):
         audit.read('deleted_conversations', Mock(side_effect=Forbidden(f'{UID}/{CID}')))
+
+
+def test_missing_tombstone_index_names_required_field_without_rpc_payload(stores):
+    db, gcs, _ = stores
+    query = Mock()
+    db.collection_group.return_value = query
+    query.where.return_value = query
+    query.order_by.return_value = query
+    query.select.return_value = query
+    query.limit.return_value.get.side_effect = FailedPrecondition(
+        'The query requires a COLLECTION_GROUP_ASC index for collection deleted_conversations and field deleted_at.'
+        ' create_exemption=private-project'
+    )
+
+    report = audit.audit(db, gcs, START, END, audit.Budget(100))
+
+    assert report['verdict'] == 'incomplete_scan'
+    assert report['reason'] == 'missing_index:deleted_conversations.deleted_at:COLLECTION_GROUP:ASCENDING'
+    assert report['tombstones'] is None
