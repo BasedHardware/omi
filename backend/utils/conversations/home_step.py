@@ -147,6 +147,12 @@ def classify(row: Mapping[str, Any]) -> str | None:
         if row.get('summary_output_present') or row.get('summary_completed_at'):
             # A real summary landed; read projections may still re-stamp an echo title.
             return READY
+        if structured.get('title_provenance') != 'server_minimum' and not row.get('summary_blocked_reason'):
+            # Only the batch projection marks the row alone, and only when its
+            # transcript text landed. Past the repair age gate it carries no debt
+            # and no notes will come, but the speech stays on Home. A blocked row
+            # (local-only, BYOK, empty output) keeps its terminal disposition.
+            return READY
         # The stand-in title is final: nothing will ever summarize this row.
         return NOISE
     if not title and not str(structured.get('overview') or '').strip() and not row.get('transcript_segments'):

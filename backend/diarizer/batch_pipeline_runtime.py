@@ -55,6 +55,7 @@ from utils.batch_pipeline.worker_metrics import COLLECTORS as WORKER_IO_COLLECTO
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.leader import PUMP_RECOVERY, LeaderLease
 from utils.batch_pipeline.pump import Pump
+from utils.batch_pipeline.result_protocol import REFUSED as RESULT_PROTOCOL_REFUSED
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.batch_pipeline.stage_timings import StageTimings
 from database.batch_pipeline_shadow import ShadowStore
@@ -149,6 +150,7 @@ def health_server(
     register_runtime_percent(registry)
     register_probe_collectors(registry)  # Every child exports before the pod's merge_metrics.
     registry.register(LANGUAGE_ROUTES)
+    registry.register(RESULT_PROTOCOL_REFUSED)
     for collector in WORKER_IO_COLLECTORS:
         registry.register(collector)
     for collector in SHADOW_COLLECTORS:

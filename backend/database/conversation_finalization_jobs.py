@@ -68,8 +68,9 @@ from utils.conversations.recovery import (
     structured_has_protected_content,
 )
 
+from database.conversation_finalization_schema import FINALIZATION_JOBS_COLLECTION
+
 CONVERSATIONS_COLLECTION = 'conversations'
-FINALIZATION_JOBS_COLLECTION = 'conversation_finalization_jobs'
 # This projection starts at the first release that writes terminal outcomes.
 # It intentionally does not backfill historical jobs: terminal writes for rows
 # without this generation remain durable on the job itself but cannot move the

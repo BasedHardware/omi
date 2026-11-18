@@ -63,8 +63,9 @@
     },
     "BATCH_HELD_POLL_SKIP_ENABLED": {
       "owner": "firestore-lead",
-      "review_by": "2026-11-18",
-      "registry": "config/feature-flags.yaml"
+      "review_by": "2026-12-02",
+      "registry": "config/feature-flags.yaml",
+      "reason": "2026-11-18: turned off on all four prod workloads because the registry's enable gates (replay, integration-first ramp, terminal-loss/SLA/read and D+2 settled-SKU evidence) were never recorded. Indexes READY and state census PASS (0) verified. Renewed to 2026-12-02 for a recorded gated ramp; delete the flag if that ramp does not happen."
     },
     "BATCH_LEGACY_CAPACITY_FALLBACK_ENABLED": {
       "owner": "overflow / two-lane lead",
@@ -1131,7 +1132,8 @@
     },
     "SYNC_EARLY_CAPTURE_CLAMP_ENABLED": {
       "owner": "earlyclamp / two-lane transcription",
-      "review_by": "2026-11-17"
+      "review_by": "2026-12-16",
+      "reason": "Renewed 2026-11-18: registry decision keep/terminal keep, default-on ops kill switch for pre-2024 V2 sync stamps; expiry turned main's unit tests red"
     },
     "SYNC_EMPTY_SUCCESS_GUARD_ENABLED": {
       "seeded": "2026-10-25"
@@ -1239,6 +1241,11 @@
     "EPISODE_LIVE_MEMBER_CLOSE_ENABLED": {
       "owner": "quality-lead",
       "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
+    "BATCH_RESULT_PROTOCOL_GUARD_ENABLED": {
+      "owner": "pipeline-driver",
+      "review_by": "2026-12-17",
       "registry": "config/feature-flags.yaml"
     }
   },

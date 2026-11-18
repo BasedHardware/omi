@@ -22,8 +22,9 @@ def apply_user_title(row: dict[str, Any], user_title: str | None) -> None:
         structured['title'] = user_title
 
 
-# Loaded beside list rows so an owed summary is visible without transcripts.
-SUMMARY_DEBT_FIELDS = ('summary_due_at', 'summary_completed_at', 'summary_output_present')
+# Loaded beside list rows so an owed summary is visible without transcripts. The
+# row-level provenance is the only stand-in marker a batch projection stamps.
+SUMMARY_DEBT_FIELDS = ('summary_due_at', 'summary_completed_at', 'summary_output_present', 'summary_title_provenance')
 
 
 def summary_owed(row: Mapping[str, Any]) -> bool:

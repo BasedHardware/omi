@@ -3280,6 +3280,9 @@ environments:
           BATCH_JOBSTORE_MODE:
             value: firestore
             category: config
+          MEDIA_NOISE_MODE: {value: shadow, category: rollout}
+          MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+          NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
             value: 'false'
             category: ops_kill
@@ -4439,7 +4442,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
@@ -5011,7 +5014,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
@@ -5578,7 +5581,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
@@ -6093,7 +6096,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'

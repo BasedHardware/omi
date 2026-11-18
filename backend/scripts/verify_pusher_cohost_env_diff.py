@@ -290,6 +290,11 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
+            # 2026-11-18 listen chart fold of values listen already served (privateEnv overlay /
+            # lead2 f9bdc4). They equal the code defaults, so pusher, which leaves them unset, behaves the same.
+            "MEDIA_NOISE_MODE",
+            "MEDIA_NOISE_MODE_SERVE_PERCENT",
+            "NOTES_SHORT_CLIP_FLOOR",
             # Prod holds CPU projection off; pusher never constructs Projector.
             "BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED",
             # Occasion stitching runs only in the /v4/listen session (routers/listen/runtime.py);

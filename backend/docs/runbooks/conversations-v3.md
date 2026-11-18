@@ -1,6 +1,9 @@
 # Recording-derived conversations v3
 
-Admission defaults to `CONVERSATIONS_V3_STAGE=beta`. `CONVERSATIONS_V3=off`
+The code default is `CONVERSATIONS_V3_STAGE=beta`, and the deployed source (`runtime_env/_base.yaml`)
+is `beta` again since 2026-11-18 (it held at `cohort` on 2026-11-17 while reconcile commit
+conflicts were fixed). Change the stage only there, never by a live-only env edit, which the next
+workflow deploy would revert. `CONVERSATIONS_V3=off`
 stops marking new mobile pendant documents. Stages are `cohort`, `beta`, `all`;
 `rollout_cohorts/conversations-v3` is for named qualification accounts. Beta uses
 the shared, refreshed 14-day episode client-seen marker, so all devices of an
@@ -51,6 +54,17 @@ are explicit exceptions. Raw product by-id readers use a recording guard because
 they do not all pass through the conversations router. Typesense's external
 extension may still index recordings; first-party projection deletes them and
 hydration rejects them. Admin raw-index counts may therefore be inflated.
+
+Deterministic reconcile conflicts (`target_exists`, `target_deleted`, `multiple_open_conversations`,
+the closure/derived budgets, `recording_decode_unavailable`, `account_deletion`, and
+`document_too_large` when a copied window exceeds Firestore's 1 MiB limit) answer the task with
+outcome `blocked` instead of a 500 retry and park the owner on the builder lease doc
+(`v3_backoff_until`, 5 min doubling to 1 h, token-fenced); `v3_pending` stays owed, on-open bypasses it,
+backfill never parks the live builder, and the next successful commit clears it. A planned id that
+already exists outside the loaded closure is adopted once as the prior (live derived rows only).
+Watch `omi_conversations_v3_blocked_total{reason}` and `omi_conversations_v3_adopted_total`; an owner
+blocked for hours needs investigation, and an operator clears the park by deleting the three
+`v3_blocked_*`/`v3_backoff_until` fields on `users/{uid}/conversation_v3_leases/builder`.
 
 Each source has a durable `v3_pending` obligation. Tasks use the dedicated `conversations-v3`
 Cloud Tasks queue and the configured sync origin/OIDC identity unless

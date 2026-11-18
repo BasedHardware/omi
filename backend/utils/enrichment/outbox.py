@@ -531,6 +531,34 @@ def mark_update(
     return update
 
 
+def expedite_update(now: float) -> Callable[[Row | None], tuple[Row | None, Row | None]]:
+    """The CAS operation behind ``FirestoreEnrichmentOutbox.expedite``: an open obligation becomes due now.
+
+    It never creates, reopens or re-leases a row, so it cannot start an extra
+    processing run: a missing, dormant, parked, empty-blocked, leased or already
+    due row is returned unchanged. Moving the wake re-arms its named task under a
+    new token; the old task fails its stale-token check.
+    """
+
+    def update(old: Row | None) -> tuple[Row | None, Row | None]:
+        from utils.enrichment.age_gate import parked
+
+        if (
+            not old
+            or old.get('dormant')
+            or parked(old)
+            or old.get('summary_blocked_reason') in summary_delivery.EMPTY_BLOCKED_REASONS
+            or float(old.get('lease_until') or 0) > now
+            or float(old.get('due_at') or 0) <= now
+        ):
+            return old, None
+        row = dict(old)
+        row.update(due_at=now, task_due_at=now, task_token=uuid.uuid4().hex, version=int(old.get('version') or 0) + 1)
+        return row, row
+
+    return update
+
+
 def _deadline_seconds(row: Row) -> int:
     snapshot = row.get('first_summary_policy')
     if snapshot is not None:
