@@ -192,6 +192,10 @@ run_proof "provider merge conformance (sim + emulator required; Postgres when av
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/provider_merge_emulator_test.py
 
+run_proof "stale merge-head promotion (real transactions, privacy fence, stale hints, demotion)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/merge_stale_head_emulator_test.py
+
 run_proof "Firestore read budget: batch unit end-to-end (M3 scenario 1)" \
   "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_batch_unit.py
 run_proof "Firestore read budget: conversation list page (M3 scenario 3)" \

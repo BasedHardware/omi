@@ -199,6 +199,11 @@
     "BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS": {
       "seeded": "2026-10-25"
     },
+    "BATCH_PIPELINE_MERGE_STALE_HEAD_PROMOTE_ENABLED": {
+      "owner": "q12-post-seal",
+      "review_by": "2026-12-18",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED": {
       "owner": "SCA-2015",
       "review_by": "2026-12-14",
