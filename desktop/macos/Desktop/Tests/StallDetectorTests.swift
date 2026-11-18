@@ -280,4 +280,71 @@ final class StallDetectorTests: XCTestCase {
       StallThresholds.v1Defaults.slowGapMs
     )
   }
+
+  // MARK: - Waiting on the person
+
+  /// A device tool approval card is the person's turn, not a stall: while it
+  /// is up nothing promotes and no tool is overdue, and when it closes the
+  /// clocks restart from that moment, so the 90 s abort counts from the
+  /// answer, never from the tool's start.
+  func testWaitingOnThePersonPausesEveryClockAndRestartsThemWhenTheCardCloses() async {
+    let detector = StallDetector(thresholds: .v1Defaults, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "send"), atMs: 1_000)
+
+    let opened = await detector.setWaitingOnUser(true, atMs: 2_000)
+    XCTAssertEqual(opened, [.tool(id: "send", from: .running, to: .waitingOnUser)])
+    let whileWaiting = await detector.tick(atMs: 200_000)
+    XCTAssertEqual(whileWaiting, [])
+    let overdueWhileWaiting = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 200_000)
+    XCTAssertEqual(overdueWhileWaiting, [])
+    let silent = await detector.isSilentWithoutActiveTools(durationMs: 60_000, atMs: 200_000)
+    XCTAssertFalse(silent)
+    let stateWhileWaiting = await detector.currentToolState(id: "send")
+    XCTAssertEqual(stateWhileWaiting, .waitingOnUser)
+
+    let closed = await detector.setWaitingOnUser(false, atMs: 200_000)
+    XCTAssertEqual(closed, [.tool(id: "send", from: .waitingOnUser, to: .running)])
+    let justAfter = await detector.tick(atMs: 207_999)
+    XCTAssertEqual(justAfter, [])
+    let notYetOverdue = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 289_999)
+    XCTAssertEqual(notYetOverdue, [])
+    let overdue = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 290_000)
+    XCTAssertEqual(overdue, ["send"])
+  }
+
+  func testACardAppearingClearsAStalledToolAndNothingRePromotesWhileItIsUp() async {
+    let detector = StallDetector(thresholds: .v1Defaults, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "send"), atMs: 0)
+    _ = await detector.tick(atMs: 20_000)
+    let stalled = await detector.currentToolState(id: "send")
+    XCTAssertEqual(stalled, .stalled)
+
+    let cleared = await detector.setWaitingOnUser(true, atMs: 21_000)
+    XCTAssertEqual(
+      cleared,
+      [.interEvent(from: .stalled, to: .running), .tool(id: "send", from: .stalled, to: .waitingOnUser)])
+    let whileWaiting = await detector.tick(atMs: 180_000)
+    XCTAssertEqual(whileWaiting, [])
+    let states = await detector.snapshotToolStates()
+    XCTAssertEqual(states, ["send": .waitingOnUser])
+    // Progress reported by the bridge while waiting is recorded but promotes nothing.
+    let progress = await detector.step(kind: .toolProgress(id: "send"), atMs: 181_000)
+    XCTAssertEqual(progress, [])
+  }
+
+  func testRepeatingTheSameWaitStateChangesNothing() async {
+    let detector = StallDetector(thresholds: .v1Defaults, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "send"), atMs: 0)
+    let first = await detector.setWaitingOnUser(true, atMs: 1_000)
+    XCTAssertEqual(first, [.tool(id: "send", from: .running, to: .waitingOnUser)])
+    let repeated = await detector.setWaitingOnUser(true, atMs: 100_000)
+    XCTAssertEqual(repeated, [])
+    let closed = await detector.setWaitingOnUser(false, atMs: 100_000)
+    XCTAssertEqual(closed, [.tool(id: "send", from: .waitingOnUser, to: .running)])
+    let closedAgain = await detector.setWaitingOnUser(false, atMs: 150_000)
+    XCTAssertEqual(closedAgain, [])
+    // The first close restarted the clock at 100 s; the repeat at 150 s did not.
+    let overdue = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 190_000)
+    XCTAssertEqual(overdue, ["send"])
+  }
 }

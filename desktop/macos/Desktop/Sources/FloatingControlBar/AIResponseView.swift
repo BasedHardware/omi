@@ -28,6 +28,9 @@ struct AIResponseView: View {
   /// The "or hold ⌥ to ask aloud" hint, named for the shortcut actually bound.
   /// Nil where push-to-talk is off or unavailable.
   var followUpVoiceHint: String?
+  /// The kernel surface whose device tool approvals this conversation shows:
+  /// the floating chat's session, or the open agent pill's run.
+  var approvalSurface: AgentSurfaceReference? = nil
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -55,6 +58,9 @@ struct AIResponseView: View {
 
         // Current response
         currentContentView
+
+        // A parked device tool call asks here, in the lane that is waiting on it.
+        DesktopToolApprovalCardList(surface: approvalSurface)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .overlay(alignment: .bottom) {

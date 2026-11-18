@@ -1,8 +1,8 @@
 # Agent Grants and Approval UX Design
 
-**Status:** Design-only for TICKET-005. Do not treat this document as implementation scope.
+**Status:** Design for TICKET-005. The desktop runtime now parks the on-device tools (`send_message`, `run_applescript`, `read_message_history`, `list_message_chats`, `list_mail_messages`, `ui_snapshot`) and the live screenshot tool (`capture_screen`) behind an invocation-bound `approval` dispatch and resolves it through `resolve_desktop_dispatch`; that implementation is described in `desktop/macos/docs/device-tool-surface.md`. Everything else here, including the Swift card and the Claude Code lane, remains design-only.
 
-This document narrows the approval and grant UX design that follows the Agent Control Plane spec, especially sections 6.8, 11.2, 17, and 24. It does not change code, cloud relay behavior, artifact lifecycle, or adapter contracts.
+This document narrows the approval and grant UX design that follows the Agent Control Plane spec, especially sections 6.8, 11.2, 17, and 24. It does not change cloud relay behavior, artifact lifecycle, or adapter contracts.
 
 ## Current Inventory
 
@@ -23,9 +23,9 @@ The Phase 2 runtime has a durable `grants` schema and TypeScript grant types:
 - optional `expires_at_ms`
 - optional `revoked_at_ms`
 
-That schema is present, but grants are currently dormant state. There is no live insertion path for `policy`, `user`, or `system` grants in the merged Phase 2 runtime.
+The only live insertion path is `resolve_desktop_dispatch`, which mints a `source: "user"` grant while resolving an `approval` dispatch and requires the grant to name the dispatch's exact capability, operation, and resource with a finite expiry. There is still no `policy` or `system` writer.
 
-The intended meaning remains section 6.8: a grant is a recorded capability decision scoped to a session or run. Until implementation work explicitly activates grant writes, UI must not imply that Omi already has user-managed grant records.
+The intended meaning remains section 6.8: a grant is a recorded capability decision scoped to a session or run. UI must not imply that Omi has user-managed grant records beyond the ones the user minted this way.
 
 ### Live Approval Behavior
 
@@ -156,9 +156,9 @@ Hermes, OpenClaw, A2A, AgentVM, and future adapters must not inherit ACP's legac
 This design does not implement:
 
 - a new approvals table;
-- grant persistence;
-- Swift approval UI;
-- runtime event persistence changes;
+- Swift approval UI (the card that renders `approval_requested` and answers through direct control);
+- routing the Claude Code `session/request_permission` lane through the same card;
+- approval parking for the realtime voice surface, whose Swift tool wait is 180s and would race the approval TTL;
 - cloud relay or cross-device approval sync;
 - artifact lifecycle changes;
 - broad capability generation for future standards.

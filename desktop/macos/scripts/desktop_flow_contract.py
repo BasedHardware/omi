@@ -43,6 +43,7 @@ ACTION_SOURCE_RELATIVE_PATHS = _bridge_action_sources() + (
     "Desktop/Sources/Automation/DesktopAutomationPTTRecoveryActions.swift",
     "Desktop/Sources/Automation/DesktopAutomationItemLinkActions.swift",
     "Desktop/Sources/Automation/DesktopAutomationPassiveWindowActions.swift",
+    "Desktop/Sources/Automation/DesktopAutomationToolApprovalActions.swift",
     "Desktop/Sources/MainWindow/Pages/TasksPage.swift",
     "Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
     "Desktop/Sources/MainWindow/Pages/Settings/DataExport/AccountDataExportModel.swift",

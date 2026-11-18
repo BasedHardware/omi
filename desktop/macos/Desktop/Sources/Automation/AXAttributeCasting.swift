@@ -30,4 +30,46 @@ enum AXAttributeCasting {
     guard let raw, CFGetTypeID(raw) == AXValueGetTypeID() else { return nil }
     return unsafeDowncast(raw, to: AXValue.self)
   }
+
+  static func string(_ raw: CFTypeRef?) -> String? {
+    guard let raw, CFGetTypeID(raw) == CFStringGetTypeID() else { return nil }
+    return unsafeDowncast(raw, to: CFString.self) as String
+  }
+
+  static func bool(_ raw: CFTypeRef?) -> Bool? {
+    guard let raw else { return nil }
+    if CFGetTypeID(raw) == CFBooleanGetTypeID() {
+      return CFBooleanGetValue(unsafeDowncast(raw, to: CFBoolean.self))
+    }
+    return number(raw).map { $0 != 0 }
+  }
+
+  /// Booleans are not numbers here: a checkbox answers `AXValue` with a
+  /// CFNumber, while `kCFBooleanTrue` is only ever an on/off flag.
+  static func number(_ raw: CFTypeRef?) -> Double? {
+    guard let raw, CFGetTypeID(raw) == CFNumberGetTypeID() else { return nil }
+    var result = 0.0
+    guard CFNumberGetValue(unsafeDowncast(raw, to: CFNumber.self), .doubleType, &result) else { return nil }
+    return result
+  }
+
+  static func point(_ raw: CFTypeRef?) -> CGPoint? {
+    guard let value = value(raw), AXValueGetType(value) == .cgPoint else { return nil }
+    var point = CGPoint.zero
+    return AXValueGetValue(value, .cgPoint, &point) ? point : nil
+  }
+
+  static func size(_ raw: CFTypeRef?) -> CGSize? {
+    guard let value = value(raw), AXValueGetType(value) == .cgSize else { return nil }
+    var size = CGSize.zero
+    return AXValueGetValue(value, .cgSize, &size) ? size : nil
+  }
+
+  /// `AXUIElementCopyMultipleAttributeValues` answers a failed attribute with
+  /// an `AXValue` of type `.axError` in that slot instead of failing the call.
+  static func axError(_ raw: CFTypeRef?) -> AXError? {
+    guard let value = value(raw), AXValueGetType(value) == .axError else { return nil }
+    var error = AXError.success
+    return AXValueGetValue(value, .axError, &error) ? error : nil
+  }
 }

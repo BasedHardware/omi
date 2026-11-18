@@ -13,12 +13,14 @@ extension ChatToolExecutor {
   /// description of the request.
   ///
   /// `send_message` carries the recipient and the exact message body;
-  /// `run_applescript` carries the whole script. Both are reachable in release
+  /// `run_applescript` carries the whole script; `ui_snapshot` carries window
+  /// titles, which name documents and chats. All are reachable in release
   /// builds, so logging the raw arguments wrote private message text to the
   /// production log on ordinary use. These log their shape instead — enough to
   /// debug a malformed call, nothing anyone would mind keeping.
   private static let sensitiveArgumentTools: Set<String> = [
     "send_message", "run_applescript", "read_message_history", "list_mail_messages", "search_contacts",
+    "ui_snapshot",
   ]
 
   static func redactedArgumentSummary(for toolCall: ToolCall) -> String {
@@ -73,7 +75,7 @@ extension ChatToolExecutor {
   /// `NaN` are both protocol-legal. `Int(_: Double)` traps on either, which
   /// would take the whole app down on a model typo — the range check is what
   /// keeps a bad argument a validation matter rather than a crash.
-  private static func boundedInt(_ args: [String: Any], _ key: String, default fallback: Int) -> Int {
+  static func boundedInt(_ args: [String: Any], _ key: String, default fallback: Int) -> Int {
     if let value = args[key] as? Int { return value }
     if let value = args[key] as? Double {
       guard value.isFinite,
@@ -93,7 +95,7 @@ extension ChatToolExecutor {
   /// cancellation and account-transition controls the user would reach for to
   /// stop it. The owner checks stay at the physical-effect boundary; only the
   /// waiting moves.
-  private static func offMainActor<T: Sendable>(
+  static func offMainActor<T: Sendable>(
     _ work: @escaping @Sendable (@escaping @Sendable () -> Bool) throws -> T
   ) async throws -> T {
     try await Task.detached(priority: .userInitiated) {
