@@ -68,19 +68,17 @@ def batch_admission(job: dict, seconds: float, provider: str, *, path: DispatchP
 
 async def probe_intake_allowance(store, uid: str) -> allowance_hold.IntakeRefusal | None:
     """Recognize the funded gate's monthly refusal using a verified usage total."""
-    from utils import funded_processing
-    from utils.stt_cap_dispatch import funded_allowance
-
-    if not (
-        allowance_hold.intake_enabled()
-        and offline_enforcement_enabled('batch')
-        and lever_enabled('usage_month_total', uid)
-    ):
+    if not offline_enforcement_enabled('batch') or not lever_enabled('usage_month_total', uid):
         return None
 
     deadline = time.monotonic() + INTAKE_PROBE_SECONDS
 
     def probe():
+        if not allowance_hold.intake_enabled():
+            return None
+        from utils import funded_processing
+        from utils.stt_cap_dispatch import funded_allowance
+
         if time.monotonic() >= deadline or not funded_processing.consent_allows(uid):
             return None
         key = owner_key(uid)
