@@ -1,9 +1,9 @@
 # Recording-derived conversations v3
 
-The code default is `CONVERSATIONS_V3_STAGE=beta`, and the deployed source (`runtime_env/_base.yaml`)
-is `beta` again since 2026-11-18 (it held at `cohort` on 2026-11-17 while reconcile commit
-conflicts were fixed). Change the stage only there, never by a live-only env edit, which the next
-workflow deploy would revert. `CONVERSATIONS_V3=off`
+The code default is `CONVERSATIONS_V3_STAGE=beta`; the deployed source (`runtime_env/_base.yaml`)
+is `all` (step 2 below; it was `cohort` on 2026-11-17 and `beta` from 2026-11-18). Change the stage
+only there, never by a live-only env edit, which the next workflow deploy would revert. Rollback is
+the source back to `beta` (TestFlight-seen owners) plus a train. `CONVERSATIONS_V3=off`
 stops marking new mobile pendant documents. Stages are `cohort`, `beta`, `all`;
 `rollout_cohorts/conversations-v3` is for named qualification accounts. Admission
 needs a v3-capable app: only those builds call `GET /v1/conversations/live`, on any
@@ -19,10 +19,11 @@ Provision the dedicated queue on dev/prod before enabling admission; the prod
 ops manifest declares its bounded concurrency/retry policy. The same stage must reach backend/API, backend-listen (including realtime role),
 backend-sync, backend-sync-backfill, sync-backfill-worker, backend-integration,
 and pusher wherever their deployed image can create or finalize pendant rows.
-The desktop backend must use the same value for capability/episode responses;
-its desktop creates remain one-to-one. Refresh the runtime image/service census
+The desktop backend reads the code default (`beta`): it mounts no conversations or
+episodes router, so no capability/episode response depends on it, and its desktop
+creates remain one-to-one. A desktop route that reads the stage must first carry it. Refresh the runtime image/service census
 before rollout. `backend/deploy/runtime_env/_base.yaml` is the shared stage
-source; composition binds Cloud Run services/jobs and desktop directly, and
+source; composition binds Cloud Run services/jobs directly (not desktop), and
 backend-listen/pusher through the generated shared ConfigMap. The uninstalled
 sync-backfill-worker pilot references that ConfigMap. STT-only parakeet workers
 do not create/finalize/read conversation documents. A stage edit must be composed
