@@ -98,18 +98,22 @@ def test_wake_failure_after_commit_does_not_replay_the_unit(monkeypatch, caplog)
     assert 'action=v3_wake outcome=error exception_type=RuntimeError' in caplog.text
 
 
-# Callers that may create a conversation from new speech must apply v3 admission first.
+# Every function that may create a conversation from new speech must apply v3 admission first.
 # bridge.py re-assigns rows that already exist; assign_record_silence carries no speech.
-_NO_NEW_SPEECH_CALLERS = {'utils/sync/bridge.py'}
+_NO_NEW_SPEECH = {('utils/sync/bridge.py', None), ('utils/batch_pipeline/projection.py', 'assign_record_silence')}
 
 
-def _calls(tree, name):
-    return [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and (getattr(node.func, 'attr', None) == name or getattr(node.func, 'id', None) == name)
-    ]
+def _names(node, name):
+    """True when ``node`` (a call's func, including ``a or b`` forms) names ``name``."""
+    return any(getattr(part, 'attr', None) == name or getattr(part, 'id', None) == name for part in ast.walk(node))
+
+
+def _functions_calling(tree, name):
+    for fn in ast.walk(tree):
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            calls = [n for n in ast.walk(fn) if isinstance(n, ast.Call)]
+            if any(_names(call.func, name) for call in calls):
+                yield fn, calls
 
 
 @pytest.mark.parametrize(
@@ -118,13 +122,18 @@ def _calls(tree, name):
         str(path.relative_to(BACKEND))
         for root in ('utils', 'database', 'routers')
         for path in (BACKEND / root).rglob('*.py')
-        if 'assign_sync_conversation' in path.read_text()
+        if 'assign_sync_conversation' in path.read_text() and path.name != 'conversations.py'
     ),
 )
 def test_every_new_speech_sync_assignment_caller_applies_v3_admission(path):
-    if path in _NO_NEW_SPEECH_CALLERS or path == 'database/conversations.py':
-        return
     tree = ast.parse((BACKEND / path).read_text())
-    if not _calls(tree, 'assign_sync_conversation'):
-        return
-    assert _calls(tree, 'mark_new'), f'{path} assigns sync speech without v3 mark_new'
+    for fn, calls in _functions_calling(tree, 'assign_sync_conversation'):
+        if (path, None) in _NO_NEW_SPEECH or (path, fn.name) in _NO_NEW_SPEECH:
+            continue
+        # Nested helpers are walked with their parent; the parent's own mark_new covers them.
+        assert any(_names(call.func, 'mark_new') for call in calls), f'{path}:{fn.name} assigns without mark_new'
+
+
+def test_caller_contract_sees_the_projection_call_form():
+    tree = ast.parse((BACKEND / 'utils/batch_pipeline/projection.py').read_text())
+    assert 'assign_parts' in {fn.name for fn, _ in _functions_calling(tree, 'assign_sync_conversation')}
