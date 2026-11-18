@@ -195,6 +195,12 @@ env:
     value: ""
   - name: STT_CAP_DISPATCH_LANES
     value: "live"
+  # Media/noise classifier: live shadow/0 via the privateEnv overlay (folded 2026-11-18, unchanged). The
+  # digest serve list is private and stays in LISTEN_PRIVATE_VALUES_YAML.
+  - name: MEDIA_NOISE_MODE
+    value: "shadow"
+  - name: MEDIA_NOISE_MODE_SERVE_PERCENT
+    value: "0"
   - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED
     value: "false"
   - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS
@@ -513,6 +519,10 @@ env:
     value: "100"
   - name: NOTES_TIER_ESCALATION_ENABLED
     value: 'true'
+  # Short-recording compute floor: live true on listen since lead2 f9bdc4 (2026-11-11, kubectl set env);
+  # folded 2026-11-18 so a chart roll keeps it.
+  - name: NOTES_SHORT_CLIP_FLOOR
+    value: "true"
   # Staged sync-lineage rollout (omi#19947); keep identical to the Cloud Run services in
   # backend/deploy/runtime_env/prod.overlay.yaml. Empty admits every user.
   - name: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST

@@ -13,6 +13,7 @@ from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_policy import check_unit_privacy
 from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
 from utils.batch_pipeline.retention import RECEIPT_RETENTION
+from utils.batch_pipeline.result_protocol import REQUIRED, stamp, merge_markers
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.capture import chunk_identity
 
@@ -84,12 +85,12 @@ def enqueue(session, view, item, now):
     # Nothing is copied from the canonical transcript. The independent upload
     # keeps its own conversation/chunk/generation fences; inherited references
     # remain audit provenance, not authority to restore a deleted destination.
+    job.pop(REQUIRED, None)
+    stamp(job, 'source_reuse_version')
     job.update(
         source_alias_fallback=marker,
         source_conversation_ids=own_ids,
         requires_compute_admission=False,
-        protocol_version=2,
-        source_reuse_version=1,
         state='provider_pending',
         stt_route={
             'stt_route': 'provider',
@@ -137,6 +138,9 @@ def enqueue(session, view, item, now):
 
 def merge_ready(tx, job, now):
     """Replace only the unresolved marker; never append a second owner-log slot."""
+    markers = merge_markers(job)
+    if markers is None:
+        return None
     existing = tx.get('results', job['segment_id'])
     entry = dict((job.get('source_alias_fallback') or {}).get('log_slot') or {})
     binding = job.get('projection_binding') or {}
@@ -159,7 +163,7 @@ def merge_ready(tx, job, now):
     entry.update(
         result=job['result'],
         protocol_version=2,
-        source_reuse_version=1,
+        **markers,
         projection_redriven_at=now,
         projection_state='pending',
         # A redriven slot starts a new head-wait episode, as the release reset does.

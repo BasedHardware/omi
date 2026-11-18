@@ -21792,7 +21792,7 @@ abstract class AppLocalizations {
   /// Device Diagnostics footnote under the 7-day summary with lifetime counts
   ///
   /// In en, this message translates to:
-  /// **'Since pairing: {drops} drops, {failed} failed connections.'**
+  /// **'Since pairing: {drops} reconnections, {failed} failed connections.'**
   String diagnosticsSincePairingSummary(int drops, int failed);
 
   /// Caption beside the live signal chart title; duration is the chart window, e.g. 60s
@@ -23937,18 +23937,6 @@ abstract class AppLocalizations {
   /// **'Uploading · {done} of {total}'**
   String syncStepUploadingAmount(String done, String total);
 
-  /// Offline Sync status card title while the server transcribes uploaded audio; amount is a compact audio length.
-  ///
-  /// In en, this message translates to:
-  /// **'Turning {amount} into conversations'**
-  String syncCardTranscribingAmount(String amount);
-
-  /// Offline Sync status card subtitle while the server transcribes: compact audio lengths done and total.
-  ///
-  /// In en, this message translates to:
-  /// **'{done} of {total} done · you can leave this screen'**
-  String syncCardTranscribedOf(String done, String total);
-
   /// Offline Sync status card title when recordings wait for a manual sync; amount is a compact audio length.
   ///
   /// In en, this message translates to:
@@ -23991,10 +23979,10 @@ abstract class AppLocalizations {
   /// **'Waiting on this phone'**
   String get syncDetailsWaitingOnPhone;
 
-  /// Sync details row label: audio uploaded and still being transcribed by Omi.
+  /// Sync details stage label for uploaded audio awaiting a confirmed server outcome.
   ///
   /// In en, this message translates to:
-  /// **'Transcribing on Omi'**
+  /// **'Uploaded, awaiting server'**
   String get syncDetailsTranscribing;
 
   /// Sync details row label: number of raw audio files the app holds.
@@ -24806,6 +24794,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Omi is already working on this conversation. The summary will appear here when it finishes.'**
   String get summaryBusyBody;
+
+  /// Status shown in place of a summary when the recording has no transcript yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not transcribed yet'**
+  String get summaryTranscriptionPendingTitle;
+
+  /// Shown when a recording has no transcript yet, so its summary cannot be made. Tells the user the summary will come after the transcript.
+  ///
+  /// In en, this message translates to:
+  /// **'The summary will appear once the transcript is ready.'**
+  String get summaryTranscriptionPendingBody;
 
   /// Button that re-reads the conversation to see if processing finished.
   ///
@@ -27296,6 +27296,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Writing your summary…'**
   String get conversationWritingSummary;
+
+  /// No description provided for @onTheWayServerWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Server-reported work'**
+  String get onTheWayServerWork;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

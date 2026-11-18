@@ -12263,7 +12263,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Od uparivanja: prekida $drops, neuspješnih veza $failed.';
+    return 'Od uparivanja: $drops ponovnih povezivanja, $failed neuspjelih povezivanja.';
   }
 
   @override
@@ -13498,16 +13498,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Pretvaranje $amount u razgovore';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Gotovo $done od $total · možete napustiti ovaj zaslon';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount spremno za sinkronizaciju';
   }
@@ -13531,7 +13521,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Čeka na ovom telefonu';
 
   @override
-  String get syncDetailsTranscribing => 'Transkripcija na Omi';
+  String get syncDetailsTranscribing => 'Preneseno, čeka poslužitelj';
 
   @override
   String get syncDetailsAudioFiles => 'Audio datoteke';
@@ -13988,6 +13978,12 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi već radi na ovom razgovoru. Sažetak će se pojaviti ovdje kad bude gotov.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Još nije transkribirano';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Sažetak će se pojaviti kad transkript bude spreman.';
 
   @override
   String get summaryCheckAgain => 'Provjeri ponovno';
@@ -15593,4 +15589,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Pišemo vaš sažetak…';
+
+  @override
+  String get onTheWayServerWork => 'Rad koji je prijavio poslužitelj';
 }

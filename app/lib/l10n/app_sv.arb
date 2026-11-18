@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Avbrott",
     "diagnosticsDropsPerHour": "cirka {count} i timmen",
     "diagnosticsLongestGap": "Längsta uppehåll",
-    "diagnosticsSincePairingSummary": "Sedan kopplingen: {drops} avbrott, {failed} misslyckade anslutningar.",
+    "diagnosticsSincePairingSummary": "Sedan parkoppling: {drops} återanslutningar, {failed} misslyckade anslutningar.",
     "diagnosticsLastDuration": "Senaste {duration}",
     "chatReplyOffline": "Det går inte att ansluta. Kontrollera din anslutning och försök igen.",
     "chatReplyServerError": "Något gick fel på vår sida. Försök igen.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Synkroniserar dina inspelningar",
     "syncStepDownloadingAmount": "Hämtar från din Omi · {done} av {total}",
     "syncStepUploadingAmount": "Laddar upp · {done} av {total}",
-    "syncCardTranscribingAmount": "Gör om {amount} till konversationer",
-    "syncCardTranscribedOf": "{done} av {total} klart · du kan lämna den här skärmen",
     "syncCardReadyAmount": "{amount} redo att synkronisera",
     "syncDetailsTitle": "Synkroniseringsinfo",
     "syncDetailsRightNow": "Just nu",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Överföringshastighet",
     "syncDetailsWaitingOnOmi": "Väntar på din Omi",
     "syncDetailsWaitingOnPhone": "Väntar på den här telefonen",
-    "syncDetailsTranscribing": "Transkriberas på Omi",
+    "syncDetailsTranscribing": "Uppladdat, väntar på servern",
     "syncDetailsAudioFiles": "Ljudfiler",
     "syncDetailsServerJobs": "Serverjobb (klara / totalt)",
     "syncDetailsCopy": "Kopiera information för support",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "Sammanfatta med Omi i stället",
     "summaryBusyTitle": "Bearbetas fortfarande",
     "summaryBusyBody": "Omi arbetar redan med det här samtalet. Sammanfattningen visas här när den är klar.",
+    "summaryTranscriptionPendingTitle": "Inte transkriberad än",
+    "summaryTranscriptionPendingBody": "Sammanfattningen visas när transkriptionen är klar.",
     "summaryCheckAgain": "Kontrollera igen",
     "summaryLimitTitle": "Gränsen för sammanfattningar har nåtts",
     "summaryLimitBody": "Du har skapat om flera sammanfattningar under den senaste timmen. Försök igen senare.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "{size} MB nedladdning",
     "downloadNow": "Ladda ned nu",
     "onWifiLater": "Senare via Wi-Fi",
-    "conversationWritingSummary": "Skriver din sammanfattning…"
+    "conversationWritingSummary": "Skriver din sammanfattning…",
+    "onTheWayServerWork": "Arbete rapporterat av servern"
 }

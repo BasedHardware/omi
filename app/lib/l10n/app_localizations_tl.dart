@@ -12327,7 +12327,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Mula nang ipares: $drops pagputol, $failed bigong koneksyon.';
+    return 'Mula nang ipinares: $drops muling pagkonekta, $failed nabigong koneksyon.';
   }
 
   @override
@@ -13570,16 +13570,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Ginagawang mga usapan ang $amount';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done sa $total tapos na · puwede mong iwan ang screen na ito';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount handa nang i-sync';
   }
@@ -13603,7 +13593,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Naghihintay sa phone na ito';
 
   @override
-  String get syncDetailsTranscribing => 'Tina-transcribe sa Omi';
+  String get syncDetailsTranscribing => 'Na-upload, naghihintay sa server';
 
   @override
   String get syncDetailsAudioFiles => 'Mga audio file';
@@ -14063,6 +14053,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Ginagawa na ng Omi ang usapang ito. Lalabas dito ang buod kapag tapos na.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Hindi pa naita-transcribe';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Lalabas ang buod kapag handa na ang transcript.';
 
   @override
   String get summaryCheckAgain => 'Suriin muli';
@@ -15679,4 +15675,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Isinusulat ang iyong buod…';
+
+  @override
+  String get onTheWayServerWork => 'Trabahong iniulat ng server';
 }

@@ -155,6 +155,7 @@ from utils.stt.streaming import (
 )
 from routers.listen.stt_callbacks import attach_legacy_capture_window, build_stt_callbacks
 from utils.stt.speaker_identity import SpeakerProviderEpoch
+from utils.stt.speech_clock import SpeechClock
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.stt import edge_shadow
 from utils.transcribe_decisions import (
@@ -349,6 +350,9 @@ class ListenReceiver(ReplayFilterMixin):
         self.aac_decoder: Any = None
         self.lc3_decoder: Any = None
         self.vad_gate: Any = None
+        # Batch-only sockets have no transcript; this is their lifecycle's speech signal.
+        self.speech_clock: Optional[SpeechClock] = None
+        self._opened_at = time.time()
         self.edge_shadow: Optional[edge_shadow.EdgeShadowMirror] = None  # D2; edge_shadow.session_mirror
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
@@ -2721,6 +2725,10 @@ class ListenReceiver(ReplayFilterMixin):
                             continue
                         self._note_audio_activity()
                         self._mark_first_audio(now)
+                        if getattr(self.host, 'server_batch_only', False) is True:
+                            if self.speech_clock is None:
+                                self.speech_clock = SpeechClock(request.sample_rate, opened_at=self._opened_at)
+                            self.speech_clock.accept(decoded, now)
                         decoded_audio_bytes += len(decoded)
                         telemetry_call(
                             self.host, 'demand_telemetry', 'capture', len(decoded) / (2 * request.sample_rate)

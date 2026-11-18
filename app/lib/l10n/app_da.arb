@@ -3807,7 +3807,7 @@
     "diagnosticsDrops": "Afbrydelser",
     "diagnosticsDropsPerHour": "ca. {count} i timen",
     "diagnosticsLongestGap": "Længste pause",
-    "diagnosticsSincePairingSummary": "Siden parring: {drops} afbrydelser, {failed} mislykkede forbindelser.",
+    "diagnosticsSincePairingSummary": "Siden parring: {drops} genforbindelser, {failed} mislykkede forbindelser.",
     "diagnosticsLastDuration": "Seneste {duration}",
     "chatReplyOffline": "Kan ikke oprette forbindelse. Tjek din forbindelse, og prøv igen.",
     "chatReplyServerError": "Noget gik galt på vores side. Prøv venligst igen.",
@@ -4167,8 +4167,6 @@
     "syncCardSyncingTitle": "Synkroniserer dine optagelser",
     "syncStepDownloadingAmount": "Henter fra din Omi · {done} af {total}",
     "syncStepUploadingAmount": "Uploader · {done} af {total}",
-    "syncCardTranscribingAmount": "Omdanner {amount} til samtaler",
-    "syncCardTranscribedOf": "{done} af {total} færdig · du kan forlade denne skærm",
     "syncCardReadyAmount": "{amount} klar til synkronisering",
     "syncDetailsTitle": "Synkroniseringsdetaljer",
     "syncDetailsRightNow": "Lige nu",
@@ -4176,7 +4174,7 @@
     "syncDetailsTransferSpeed": "Overførselshastighed",
     "syncDetailsWaitingOnOmi": "Venter på din Omi",
     "syncDetailsWaitingOnPhone": "Venter på denne telefon",
-    "syncDetailsTranscribing": "Transskriberer på Omi",
+    "syncDetailsTranscribing": "Uploadet, afventer server",
     "syncDetailsAudioFiles": "Lydfiler",
     "syncDetailsServerJobs": "Serverjobs (færdige / i alt)",
     "syncDetailsCopy": "Kopiér detaljer til support",
@@ -4312,6 +4310,8 @@
     "summaryWithOmiInstead": "Opsummer med Omi i stedet",
     "summaryBusyTitle": "Behandles stadig",
     "summaryBusyBody": "Omi arbejder allerede på denne samtale. Opsummeringen vises her, når den er færdig.",
+    "summaryTranscriptionPendingTitle": "Ikke transskriberet endnu",
+    "summaryTranscriptionPendingBody": "Opsummeringen vises, når transskriptionen er klar.",
     "summaryCheckAgain": "Tjek igen",
     "summaryLimitTitle": "Grænsen for opsummeringer er nået",
     "summaryLimitBody": "Du har genereret flere opsummeringer igen inden for den seneste time. Prøv igen senere.",
@@ -4726,5 +4726,6 @@
     "onDeviceModelDownloadSize": "{size} MB download",
     "downloadNow": "Download nu",
     "onWifiLater": "Senere på Wi-Fi",
-    "conversationWritingSummary": "Skriver dit resumé…"
+    "conversationWritingSummary": "Skriver dit resumé…",
+    "onTheWayServerWork": "Arbejde rapporteret af serveren"
 }

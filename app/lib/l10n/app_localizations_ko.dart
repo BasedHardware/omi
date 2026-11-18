@@ -12050,7 +12050,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return '페어링 이후: 끊김 $drops회, 실패한 연결 $failed회.';
+    return '페어링 이후: 재연결 $drops회, 연결 실패 $failed회.';
   }
 
   @override
@@ -13279,16 +13279,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount을(를) 대화로 변환 중';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total 완료 · 이 화면을 나가도 됩니다';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount 동기화 준비됨';
   }
@@ -13312,7 +13302,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => '이 휴대폰에서 대기 중';
 
   @override
-  String get syncDetailsTranscribing => 'Omi에서 텍스트 변환 중';
+  String get syncDetailsTranscribing => '업로드됨, 서버 대기 중';
 
   @override
   String get syncDetailsAudioFiles => '오디오 파일';
@@ -13764,6 +13754,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi가 이미 이 대화를 처리하고 있습니다. 완료되면 여기에 요약이 표시됩니다.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => '아직 전사되지 않음';
+
+  @override
+  String get summaryTranscriptionPendingBody => '전사가 완료되면 요약이 표시됩니다.';
 
   @override
   String get summaryCheckAgain => '다시 확인';
@@ -15335,4 +15331,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => '요약을 작성하는 중…';
+
+  @override
+  String get onTheWayServerWork => '서버에서 보고한 작업';
 }

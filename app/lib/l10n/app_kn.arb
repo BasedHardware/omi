@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "ಕಡಿತಗಳು",
     "diagnosticsDropsPerHour": "ಗಂಟೆಗೆ ಸುಮಾರು {count}",
     "diagnosticsLongestGap": "ಅತಿ ದೀರ್ಘ ಅಂತರ",
-    "diagnosticsSincePairingSummary": "ಜೋಡಿಯಾದಾಗಿನಿಂದ: {drops} ಕಡಿತಗಳು, {failed} ವಿಫಲ ಸಂಪರ್ಕಗಳು.",
+    "diagnosticsSincePairingSummary": "ಜೋಡಿಸಿದಾಗಿನಿಂದ: {drops} ಮರುಸಂಪರ್ಕಗಳು, {failed} ವಿಫಲ ಸಂಪರ್ಕಗಳು.",
     "diagnosticsLastDuration": "ಕಳೆದ {duration}",
     "chatReplyOffline": "ಸಂಪರ್ಕ ಸಾಧ್ಯವಿಲ್ಲ. ನಿಮ್ಮ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "chatReplyServerError": "ನಮ್ಮ ಬದೆಯಲ್ಲಿ ಏನೋ ತಪ್ಪಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್ ಆಗುತ್ತಿವೆ",
     "syncStepDownloadingAmount": "ನಿಮ್ಮ Omi ನಿಂದ ಡೌನ್‌ಲೋಡ್ · {done} / {total}",
     "syncStepUploadingAmount": "ಅಪ್‌ಲೋಡ್ · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} ಅನ್ನು ಸಂಭಾಷಣೆಗಳಾಗಿ ಪರಿವರ್ತಿಸಲಾಗುತ್ತಿದೆ",
-    "syncCardTranscribedOf": "{done} / {total} ಪೂರ್ಣ · ನೀವು ಈ ಪರದೆಯಿಂದ ಹೊರಡಬಹುದು",
     "syncCardReadyAmount": "{amount} ಸಿಂಕ್‌ಗೆ ಸಿದ್ಧ",
     "syncDetailsTitle": "ಸಿಂಕ್ ವಿವರಗಳು",
     "syncDetailsRightNow": "ಈಗ",
@@ -11554,7 +11552,7 @@
     "syncDetailsTransferSpeed": "ವರ್ಗಾವಣೆ ವೇಗ",
     "syncDetailsWaitingOnOmi": "Omi ನಲ್ಲಿ ಕಾಯುತ್ತಿದೆ",
     "syncDetailsWaitingOnPhone": "ಈ ಫೋನ್‌ನಲ್ಲಿ ಕಾಯುತ್ತಿದೆ",
-    "syncDetailsTranscribing": "Omi ನಲ್ಲಿ ಲಿಪ್ಯಂತರವಾಗುತ್ತಿದೆ",
+    "syncDetailsTranscribing": "ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ, ಸರ್ವರ್‌ಗಾಗಿ ಕಾಯುತ್ತಿದೆ",
     "syncDetailsAudioFiles": "ಆಡಿಯೊ ಫೈಲ್‌ಗಳು",
     "syncDetailsServerJobs": "ಸರ್ವರ್ ಜಾಬ್‌ಗಳು (ಪೂರ್ಣ / ಒಟ್ಟು)",
     "syncDetailsCopy": "ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳನ್ನು ನಕಲಿಸಿ",
@@ -11690,6 +11688,8 @@
     "summaryWithOmiInstead": "ಬದಲಿಗೆ Omi ಮೂಲಕ ಸಾರಾಂಶ ಮಾಡಿ",
     "summaryBusyTitle": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತಿದೆ",
     "summaryBusyBody": "Omi ಈಗಾಗಲೇ ಈ ಸಂಭಾಷಣೆಯ ಮೇಲೆ ಕೆಲಸ ಮಾಡುತ್ತಿದೆ. ಮುಗಿದಾಗ ಸಾರಾಂಶ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.",
+    "summaryTranscriptionPendingTitle": "ಇನ್ನೂ ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗಿಲ್ಲ",
+    "summaryTranscriptionPendingBody": "ಲಿಪ್ಯಂತರ ಸಿದ್ಧವಾದಾಗ ಸಾರಾಂಶ ಕಾಣಿಸುತ್ತದೆ.",
     "summaryCheckAgain": "ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ",
     "summaryLimitTitle": "ಸಾರಾಂಶ ಮಿತಿ ತಲುಪಿದೆ",
     "summaryLimitBody": "ಕಳೆದ ಒಂದು ಗಂಟೆಯಲ್ಲಿ ನೀವು ಹಲವು ಸಾರಾಂಶಗಳನ್ನು ಮರುರಚಿಸಿದ್ದೀರಿ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
@@ -12241,5 +12241,6 @@
     "onDeviceModelDownloadSize": "{size} MB ಡೌನ್‌ಲೋಡ್",
     "downloadNow": "ಈಗ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ",
     "onWifiLater": "ನಂತರ Wi-Fi ನಲ್ಲಿ",
-    "conversationWritingSummary": "ನಿಮ್ಮ ಸಾರಾಂಶವನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…"
+    "conversationWritingSummary": "ನಿಮ್ಮ ಸಾರಾಂಶವನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…",
+    "onTheWayServerWork": "ಸರ್ವರ್ ವರದಿ ಮಾಡಿದ ಕೆಲಸ"
 }

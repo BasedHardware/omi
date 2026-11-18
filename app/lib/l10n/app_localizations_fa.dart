@@ -12222,7 +12222,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'از زمان جفت‌سازی: $drops قطعی، $failed اتصال ناموفق.';
+    return 'از زمان جفت‌سازی: $drops اتصال مجدد، $failed اتصال ناموفق.';
   }
 
   @override
@@ -13459,16 +13459,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'تبدیل $amount به گفتگو';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total انجام شد · می‌توانید از این صفحه خارج شوید';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount آماده همگام‌سازی';
   }
@@ -13492,7 +13482,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'در انتظار این گوشی';
 
   @override
-  String get syncDetailsTranscribing => 'در حال رونویسی در Omi';
+  String get syncDetailsTranscribing => 'بارگذاری شد، در انتظار سرور';
 
   @override
   String get syncDetailsAudioFiles => 'فایل‌های صوتی';
@@ -13951,6 +13941,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi در حال حاضر روی این گفتگو کار می‌کند. خلاصه پس از اتمام اینجا نمایش داده می‌شود.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'هنوز رونویسی نشده';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'خلاصه پس از آماده شدن رونوشت نمایش داده می‌شود.';
 
   @override
   String get summaryCheckAgain => 'بررسی دوباره';
@@ -15549,4 +15545,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'در حال نوشتن خلاصه شما…';
+
+  @override
+  String get onTheWayServerWork => 'کار گزارش‌شده توسط سرور';
 }

@@ -3800,7 +3800,7 @@
     "diagnosticsDrops": "Обрывы",
     "diagnosticsDropsPerHour": "примерно {count} в час",
     "diagnosticsLongestGap": "Самый долгий перерыв",
-    "diagnosticsSincePairingSummary": "С момента сопряжения: обрывов — {drops}, неудачных подключений — {failed}.",
+    "diagnosticsSincePairingSummary": "С момента сопряжения: {drops} повторных подключений, {failed} неудачных подключений.",
     "diagnosticsLastDuration": "Последние {duration}",
     "chatReplyOffline": "Не удалось подключиться. Проверьте соединение и попробуйте ещё раз.",
     "chatReplyServerError": "Что-то пошло не так с нашей стороны. Попробуйте ещё раз.",
@@ -4160,8 +4160,6 @@
     "syncCardSyncingTitle": "Синхронизация записей",
     "syncStepDownloadingAmount": "Загрузка с Omi · {done} из {total}",
     "syncStepUploadingAmount": "Загрузка на сервер · {done} из {total}",
-    "syncCardTranscribingAmount": "Преобразование {amount} в разговоры",
-    "syncCardTranscribedOf": "Готово {done} из {total} · можно покинуть этот экран",
     "syncCardReadyAmount": "{amount} готово к синхронизации",
     "syncDetailsTitle": "Сведения о синхронизации",
     "syncDetailsRightNow": "Сейчас",
@@ -4169,7 +4167,7 @@
     "syncDetailsTransferSpeed": "Скорость передачи",
     "syncDetailsWaitingOnOmi": "Ожидает на Omi",
     "syncDetailsWaitingOnPhone": "Ожидает на этом телефоне",
-    "syncDetailsTranscribing": "Расшифровывается в Omi",
+    "syncDetailsTranscribing": "Загружено, ожидание сервера",
     "syncDetailsAudioFiles": "Аудиофайлы",
     "syncDetailsServerJobs": "Задачи сервера (выполнено / всего)",
     "syncDetailsCopy": "Скопировать данные для поддержки",
@@ -4305,6 +4303,8 @@
     "summaryWithOmiInstead": "Обобщить с Omi вместо этого",
     "summaryBusyTitle": "Ещё обрабатывается",
     "summaryBusyBody": "Omi уже работает над этим разговором. Сводка появится здесь, когда будет готова.",
+    "summaryTranscriptionPendingTitle": "Ещё не расшифровано",
+    "summaryTranscriptionPendingBody": "Сводка появится, когда будет готова расшифровка.",
     "summaryCheckAgain": "Проверить снова",
     "summaryLimitTitle": "Достигнут лимит сводок",
     "summaryLimitBody": "За последний час вы несколько раз пересоздали сводки. Повторите попытку позже.",
@@ -4719,5 +4719,6 @@
     "onDeviceModelDownloadSize": "Загрузка {size} МБ",
     "downloadNow": "Скачать сейчас",
     "onWifiLater": "Позже по Wi-Fi",
-    "conversationWritingSummary": "Пишем ваше резюме…"
+    "conversationWritingSummary": "Пишем ваше резюме…",
+    "onTheWayServerWork": "Работа по данным сервера"
 }

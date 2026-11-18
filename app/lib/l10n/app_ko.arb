@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "끊김",
     "diagnosticsDropsPerHour": "시간당 약 {count}회",
     "diagnosticsLongestGap": "가장 긴 끊김",
-    "diagnosticsSincePairingSummary": "페어링 이후: 끊김 {drops}회, 실패한 연결 {failed}회.",
+    "diagnosticsSincePairingSummary": "페어링 이후: 재연결 {drops}회, 연결 실패 {failed}회.",
     "diagnosticsLastDuration": "최근 {duration}",
     "chatReplyOffline": "연결할 수 없습니다. 연결을 확인하고 다시 시도하세요.",
     "chatReplyServerError": "저희 측에서 문제가 발생했습니다. 다시 시도해 주세요.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "녹음 동기화 중",
     "syncStepDownloadingAmount": "Omi에서 다운로드 중 · {done} / {total}",
     "syncStepUploadingAmount": "업로드 중 · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount}을(를) 대화로 변환 중",
-    "syncCardTranscribedOf": "{done} / {total} 완료 · 이 화면을 나가도 됩니다",
     "syncCardReadyAmount": "{amount} 동기화 준비됨",
     "syncDetailsTitle": "동기화 상세 정보",
     "syncDetailsRightNow": "현재",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "전송 속도",
     "syncDetailsWaitingOnOmi": "Omi에서 대기 중",
     "syncDetailsWaitingOnPhone": "이 휴대폰에서 대기 중",
-    "syncDetailsTranscribing": "Omi에서 텍스트 변환 중",
+    "syncDetailsTranscribing": "업로드됨, 서버 대기 중",
     "syncDetailsAudioFiles": "오디오 파일",
     "syncDetailsServerJobs": "서버 작업 (완료 / 전체)",
     "syncDetailsCopy": "지원팀용 상세 정보 복사",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "대신 Omi로 요약",
     "summaryBusyTitle": "아직 처리 중",
     "summaryBusyBody": "Omi가 이미 이 대화를 처리하고 있습니다. 완료되면 여기에 요약이 표시됩니다.",
+    "summaryTranscriptionPendingTitle": "아직 전사되지 않음",
+    "summaryTranscriptionPendingBody": "전사가 완료되면 요약이 표시됩니다.",
     "summaryCheckAgain": "다시 확인",
     "summaryLimitTitle": "요약 한도 도달",
     "summaryLimitBody": "지난 1시간 동안 요약을 여러 번 다시 생성했습니다. 나중에 다시 시도해 주세요.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "{size}MB 다운로드",
     "downloadNow": "지금 다운로드",
     "onWifiLater": "나중에 Wi-Fi로",
-    "conversationWritingSummary": "요약을 작성하는 중…"
+    "conversationWritingSummary": "요약을 작성하는 중…",
+    "onTheWayServerWork": "서버에서 보고한 작업"
 }

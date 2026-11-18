@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "قطعی‌ها",
     "diagnosticsDropsPerHour": "حدود {count} در ساعت",
     "diagnosticsLongestGap": "طولانی‌ترین وقفه",
-    "diagnosticsSincePairingSummary": "از زمان جفت‌سازی: {drops} قطعی، {failed} اتصال ناموفق.",
+    "diagnosticsSincePairingSummary": "از زمان جفت‌سازی: {drops} اتصال مجدد، {failed} اتصال ناموفق.",
     "diagnosticsLastDuration": "{duration} گذشته",
     "chatReplyOffline": "اتصال برقرار نشد. اتصال خود را بررسی کنید و دوباره تلاش کنید.",
     "chatReplyServerError": "مشکلی از سمت ما پیش آمد. لطفاً دوباره تلاش کنید.",
@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "همگام‌سازی ضبط‌های شما",
     "syncStepDownloadingAmount": "دریافت از Omi · {done} / {total}",
     "syncStepUploadingAmount": "آپلود · {done} / {total}",
-    "syncCardTranscribingAmount": "تبدیل {amount} به گفتگو",
-    "syncCardTranscribedOf": "{done} / {total} انجام شد · می‌توانید از این صفحه خارج شوید",
     "syncCardReadyAmount": "{amount} آماده همگام‌سازی",
     "syncDetailsTitle": "جزئیات همگام‌سازی",
     "syncDetailsRightNow": "همین حالا",
@@ -11554,7 +11552,7 @@
     "syncDetailsTransferSpeed": "سرعت انتقال",
     "syncDetailsWaitingOnOmi": "در انتظار Omi",
     "syncDetailsWaitingOnPhone": "در انتظار این گوشی",
-    "syncDetailsTranscribing": "در حال رونویسی در Omi",
+    "syncDetailsTranscribing": "بارگذاری شد، در انتظار سرور",
     "syncDetailsAudioFiles": "فایل‌های صوتی",
     "syncDetailsServerJobs": "کارهای سرور (انجام‌شده / کل)",
     "syncDetailsCopy": "کپی جزئیات برای پشتیبانی",
@@ -11690,6 +11688,8 @@
     "summaryWithOmiInstead": "به‌جای آن با Omi خلاصه کنید",
     "summaryBusyTitle": "هنوز در حال پردازش",
     "summaryBusyBody": "Omi در حال حاضر روی این گفتگو کار می‌کند. خلاصه پس از اتمام اینجا نمایش داده می‌شود.",
+    "summaryTranscriptionPendingTitle": "هنوز رونویسی نشده",
+    "summaryTranscriptionPendingBody": "خلاصه پس از آماده شدن رونوشت نمایش داده می‌شود.",
     "summaryCheckAgain": "بررسی دوباره",
     "summaryLimitTitle": "به سقف خلاصه‌ها رسیدید",
     "summaryLimitBody": "در یک ساعت گذشته چندین خلاصه را دوباره ایجاد کرده‌اید. بعداً دوباره امتحان کنید.",
@@ -12241,5 +12241,6 @@
     "onDeviceModelDownloadSize": "دانلود {size} مگابایت",
     "downloadNow": "اکنون دانلود کن",
     "onWifiLater": "بعداً با Wi-Fi",
-    "conversationWritingSummary": "در حال نوشتن خلاصه شما…"
+    "conversationWritingSummary": "در حال نوشتن خلاصه شما…",
+    "onTheWayServerWork": "کار گزارش‌شده توسط سرور"
 }

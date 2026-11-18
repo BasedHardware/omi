@@ -3861,7 +3861,7 @@
     "diagnosticsDrops": "Kiesések",
     "diagnosticsDropsPerHour": "kb. {count} óránként",
     "diagnosticsLongestGap": "Leghosszabb kiesés",
-    "diagnosticsSincePairingSummary": "Párosítás óta: {drops} kiesés, {failed} sikertelen kapcsolat.",
+    "diagnosticsSincePairingSummary": "Párosítás óta: {drops} újracsatlakozás, {failed} sikertelen csatlakozás.",
     "diagnosticsLastDuration": "Utolsó {duration}",
     "chatReplyOffline": "Nem sikerült csatlakozni. Ellenőrizd a kapcsolatot, és próbáld újra.",
     "chatReplyServerError": "Valami hiba történt a mi oldalunkon. Kérlek, próbáld újra.",
@@ -4221,8 +4221,6 @@
     "syncCardSyncingTitle": "Felvételek szinkronizálása",
     "syncStepDownloadingAmount": "Letöltés az Omiról · {done} / {total}",
     "syncStepUploadingAmount": "Feltöltés · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} átalakítása beszélgetésekké",
-    "syncCardTranscribedOf": "{done} / {total} kész · elhagyhatod ezt a képernyőt",
     "syncCardReadyAmount": "{amount} készen áll a szinkronizálásra",
     "syncDetailsTitle": "Szinkronizálás részletei",
     "syncDetailsRightNow": "Jelenleg",
@@ -4230,7 +4228,7 @@
     "syncDetailsTransferSpeed": "Átviteli sebesség",
     "syncDetailsWaitingOnOmi": "Az Omira vár",
     "syncDetailsWaitingOnPhone": "Ezen a telefonon vár",
-    "syncDetailsTranscribing": "Átírás az Omin",
+    "syncDetailsTranscribing": "Feltöltve, várakozás a szerverre",
     "syncDetailsAudioFiles": "Hangfájlok",
     "syncDetailsServerJobs": "Szerverfeladatok (kész / összes)",
     "syncDetailsCopy": "Részletek másolása az ügyfélszolgálatnak",
@@ -4366,6 +4364,8 @@
     "summaryWithOmiInstead": "Összefoglalás inkább az Omival",
     "summaryBusyTitle": "Feldolgozás folyamatban",
     "summaryBusyBody": "Az Omi már dolgozik ezen a beszélgetésen. Az összefoglaló itt jelenik meg, amikor elkészül.",
+    "summaryTranscriptionPendingTitle": "Még nincs átírva",
+    "summaryTranscriptionPendingBody": "Az összefoglaló akkor jelenik meg, amikor az átirat elkészül.",
     "summaryCheckAgain": "Újbóli ellenőrzés",
     "summaryLimitTitle": "Elérted az összefoglalók korlátját",
     "summaryLimitBody": "Az elmúlt órában több összefoglalót is újrageneráltál. Próbáld újra később.",
@@ -4780,5 +4780,6 @@
     "onDeviceModelDownloadSize": "{size} MB letöltés",
     "downloadNow": "Letöltés most",
     "onWifiLater": "Később Wi-Fin",
-    "conversationWritingSummary": "Összefoglaló írása…"
+    "conversationWritingSummary": "Összefoglaló írása…",
+    "onTheWayServerWork": "A szerver által jelzett munka"
 }

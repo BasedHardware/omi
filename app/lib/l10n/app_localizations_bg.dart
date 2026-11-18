@@ -12270,7 +12270,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'От сдвояването: $drops прекъсвания, $failed неуспешни връзки.';
+    return 'От сдвояването: $drops повторни свързвания, $failed неуспешни връзки.';
   }
 
   @override
@@ -13511,16 +13511,6 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Превръщане на $amount в разговори';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Готово $done от $total · можете да напуснете екрана';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount готови за синхронизиране';
   }
@@ -13544,7 +13534,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Чака на този телефон';
 
   @override
-  String get syncDetailsTranscribing => 'Транскрибира се в Omi';
+  String get syncDetailsTranscribing => 'Качено, изчаква сървъра';
 
   @override
   String get syncDetailsAudioFiles => 'Аудиофайлове';
@@ -14001,6 +13991,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi вече работи по този разговор. Обобщението ще се появи тук, когато приключи.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Все още не е транскрибирано';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Обобщението ще се появи, когато транскрипцията е готова.';
 
   @override
   String get summaryCheckAgain => 'Провери отново';
@@ -15607,4 +15603,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Пишем вашето резюме…';
+
+  @override
+  String get onTheWayServerWork => 'Работа, отчетена от сървъра';
 }

@@ -1,186 +1,165 @@
-# Firestore-authoritative discovery index preparation
+# Firestore-authoritative recovery discovery hints
 
-`BATCH_JOBSTORE_MODE=index` wraps the existing mirror with a non-authoritative
-discovery reader. Firestore still performs every transaction, lease, claim,
-privacy check and state change. Default mode remains `firestore`.
+`BATCH_JOBSTORE_MODE=index` wraps the existing owner-sampled mirror.
+Firestore remains authoritative for every transaction, lease, claim, paid
+decision, privacy check and mutation. Default mode remains `firestore`.
+The retained copy keeps its existing cohort/erasure contract; see
+[production mirror prerequisites](jobstore-production-mirror.md).
 
-This source is dependent on dark-mirror PR #25323. Production factories require explicit target/context configuration; all copies
-enforce the resolved-owner cohort. Release activation and savings still need
-the production runtime acceptance packet.
-See [production mirror prerequisites](jobstore-production-mirror.md).
+Root approved the bounded `due_leased` **source contract** on 2026-11-17.
+This supersedes the earlier assumption that recovery requires an exact global
+prefix at every intermediate call. It grants no production activation,
+artifact qualification, new latency budget or savings claim.
 
-**Production reader admission is currently refused.** Production copies are
-owner-sampled, but `Scheduler.recover()` calls an unpartitioned `due()` query.
-This source has no complete-query coverage proof or owner-partitioned primary
-caller. `IndexStore` therefore returns Firestore answers with reason
-`coverage_unknown`, including after a successful primary scan and even with
-the owner-copy sample at 10000 BPS. The same check runs before returning an
-index answer if deployment context changes. Staging keeps its existing route.
-This is a source prerequisite, not reader-canary readiness or activation.
+## Qualified route and controls
 
-## Selection and rollback
-
-The existing namespace admission and complete `JOBSTORE_PG_*` configuration
-are required before constructing a mirror or index wrapper. Index selection
-adds two controls:
+Generic production `IndexStore.due()` calls remain coverage-refused. The sole
+exception is the `Scheduler.recover` gateway with a qualified source role:
+`pump_recovery`, `serving_maintenance`, or `serving_reconcile` (including manual
+reconcile). The caller role is supplied by the source callsite, never request
+data. Unknown callers use canonical primary discovery. Retry/result-ready
+production queries remain refused, and retry discovery runs independently.
+No hint result is a drain, completion, backlog, priority or admission guard.
 
 | Control | Behavior |
 | --- | --- |
-| `JOBSTORE_INDEX_QUERIES` | Exact comma-separated query names; default `due_leased`. Empty or any invalid name returns discovery to Firestore. |
-| `JOBSTORE_INDEX_READS` | Default on; `0`, `false`, `off` or `no` returns discovery to Firestore. |
+| `JOBSTORE_INDEX_QUERIES` | Exact allowlist; default `due_leased`. Empty/invalid uses primary. |
+| `JOBSTORE_INDEX_READS` | `0`, `false`, `off`, `no` kills reads, including before returning SQL. |
+| `JOBSTORE_SHADOW_WRITES` | Same off values kill hint reads as well as new copying. |
+| `JOBSTORE_INDEX_RECOVERY_POLICY` | Default unset/primary. Exact `role_minute_v1:BPS`, ASCII integer 0..10000. Invalid/unset/stale policy uses primary. |
 
-Supported names are `due_leased`, `due_retry` and `due_result_ready`. These
-callers recheck the discovered job or merge owner through existing Firestore
-transactions before acting. `record_pending`, `control_candidates`, fresh
-ordering probes, cursor pages, completion markers, gauges and capacity/spend
-decisions remain on Firestore. An empty index answer must never release a
-hold, finish a drain or backfill, or authorize lower-priority work.
+Existing namespace, deployment and complete target configuration are required.
+The new gateway is default-closed in dev/staging too. Installing this source
+does not preserve an earlier recovery-hint soak without an explicit exposure
+policy; root/Release must bind that policy before accepting new staging evidence.
+The configuration selects a conditional hint policy; it does not prove copy
+coverage, installation, erasure readiness or runtime admission.
 
-The controls do not override the production coverage refusal. Setting a
-reader flag or splitting HTTP traffic cannot partition background recovery.
+Exposure hashes the ASCII string
+`omi:recovery-hints:role-minute:v1:{namespace}:{caller}:{floor(entry_unix_time/60)}`
+with SHA256, interpreted as an unsigned integer modulo 10000, selecting buckets
+strictly below BPS. The semantic unit is a logical **namespace/role/UTC-minute**,
+shared across replicas and restarts. `100/10000=1%` describes hash buckets, not
+jobs, invocations, owner copies, HTTP traffic, reads or cost. Count actual
+selected/entry traffic; correlated replicas and uneven role traffic matter.
+Unselected invocations execute full canonical primary discovery. Zero selects
+none; 10000 selects every hash unit, subject to every other safety condition.
+An entry whose UTC minute expires before SQL can return uses primary. Bind
+runtime clock health and caller succession; invalid clocks cannot admit hints.
 
-`JOBSTORE_SHADOW_WRITES=off` also disables index discovery. Both kill paths
-are rechecked before returning a Postgres answer; an existing wrapper falls
-back if its allowlist changes. Roll back through the release owner with
-`JOBSTORE_INDEX_READS=off`, or select `shadow`/`firestore` mode. Retain the
-copy target and synchronous erasure access while any copies remain.
+## Safety and candidate feedback
 
-## Discovery and failure behavior
+Every wrapper/process starts with the full canonical primary due query.
+Factory reuse does not reset that guard. Successful primary-query **start**
+sets a monotonic interval at most 60 seconds; completion wall time is separate
+freshness evidence. Primary failure invalidates the interval. Per-query attempt
+ordering prevents an older overlapping result from clearing newer backlog or
+failure state. A primary-only gateway failure also invalidates cached hint
+freshness across a later factory-mode change.
 
-Each selected query starts with a canonical Firestore read and repeats that
-read after a successful-primary-scan interval. The source default is 60
-seconds, measured separately for each query. Factory caching preserves this
-state across repeated store construction. A failed Firestore safety read
-raises; it cannot silently become an index answer.
+A full primary leased page keeps subsequent calls on per-call primary until a
+short primary page. This preserves ordinary catch-up capacity. A primary prefix
+blocker retains the baseline starvation behavior; a short page is not a global
+drain/completion certificate. No global generation write, CDC protocol or
+producer fence is introduced for this bounded-hint route.
 
-Each safety read returns the existing bounded due prefix, at most 100 IDs.
-This interval is not a guarantee of complete backlog discovery. A permanent
-prefix blocker can retain the primary's existing starvation behavior; dropped
-copies beyond that prefix need the coverage/retirement work in the production
-packet. Measure the deployment's freshness before selecting an operating
-cadence or ramping a query.
+SQL uses the existing warm pool only, read-only transaction, ordered inclusive
+`lease_until <= now` predicate, key tie-break and limit clamped to 1..100.
+Statement and synchronous driver-wait deadlines remain bounded (default 0.2s).
+No connection dial, IAM refresh or surviving timeout worker enters discovery.
+Kills, exposure policy and monotonic freshness are checked again after SQL.
+Any failure, empty/full page, invalid shape/key or duplicate uses full primary.
+At limit=1 no hint page can qualify.
 
-Between primary reads, the index reuses the Postgres store's due SQL, ordering
-and limit. It uses only a warm pooled connection, a read-only transaction,
-server statement timeout and a synchronous driver-wait deadline. No IAM
-refresh, connection establishment or timeout worker runs on the discovery
-path. Postgres failure or timeout discards the connection and uses Firestore.
-Primary fallback can still take its normal bounded RPC path; the index read
-budget is not an end-to-end primary-request latency promise.
+Every candidate is re-read in the existing Firestore transaction and must still
+be leased and due. State/lease ABA, heartbeat, deletion or a change to retry
+cannot authorize a different transition. Existing privacy/owner checks remain
+at the transaction boundary. After all hints, if no candidate produced an
+authorized current transition, the caller runs full canonical primary discovery
+and processes that page before retry discovery. This is a feedback fallback,
+not a second full primary scan for every useful PG answer. A primary failure
+raises; it cannot authorize a hint or an empty completion.
+The context guard rejects a future caller that consumes PG hints without
+candidate feedback or canonical fallback. It cannot silently complete an
+unhandled all-ineligible answer; the actual Scheduler performs that fallback.
 
-## Evidence and release sequence
+For an omitted candidate inside a successful canonical prefix, discovery delay
+includes the mandatory primary cadence (at most 60s), measured caller gap,
+sampled cutoff age and primary-query duration. There is **no unconditional
+finite bound** during stalled callers, failed primary or blocked prefixes.
+Five-second pump throttles and twenty-second supervisor ticks do not prove a
+finite invocation gap; preceding maintenance and executors can stall. Existing
+900s obligation/1800s job freeze, rollback trips and prior-hour SLO/custody
+guards remain binding. Source approval grants no new user-visible budget.
 
-`omi_jobstore_index_reads_total` records bounded query/source/reason/outcome
-labels. It counts returned discovery answers, including empty answers, and
-errors; it does not count billed rows or prove work completion. The batch
-worker's private registry includes it in index mode. Optional
-`JOBSTORE_SHADOW_QUERY_PARITY=on` still queues comparisons on the mirror's
-bounded asynchronous observer, including after index answers. An error or
-dropped comparison is unknown, never a match.
+## Count and cost denominators
 
-`omi_jobstore_index_primary_scan_success_timestamp_seconds{namespace,query}`
-is the Unix time at successful completion of an actual primary `due()` call.
-It advances for safety, disabled, unselected, coverage-refused and recovered
-fallback primary answers, including empty answers. Failed primary calls, PG
-answers, parity enqueueing and scrapes do not advance it. The monotonic clock
-still controls the unchanged 60-second per-wrapper sweep cadence; wall time
-is used only for evidence. A newly constructed wrapper still reads primary
-first. No label series is created merely by construction or collection.
+`omi_jobstore_recovery_discovery_total{namespace,caller,event,source,reason}`
+counts every `Scheduler.recover` entry, including migration failure, unknown
+callers, Firestore mode, invalid allowlists and factory bypasses. Events are:
 
-Namespace labels are bounded to `batch_pipeline_dev`, `batch_pipeline_prod`
-and `other`; query labels are the three admitted names. `other` cannot certify
-a runtime scope. No owner, job, cursor or customer content is a label. The
-batch worker's private registry exports the same gauge in index mode, including
-when reads are killed. Absence, a future timestamp, stale scrape or missing
-caller/leader binding means UNKNOWN, never a fresh scan. Gauge age is
-`time() - omi_jobstore_index_primary_scan_success_timestamp_seconds`, evaluated
-for the actual caller/namespace/process. Bind the active recovery leader and
-its succession; idle replicas do not owe recovery scans, and a fleet `max`
-can hide a stale active caller. Do not combine unrelated namespaces, retired
-leaders or revisions. With a running caller, allow at most the 60-second
-cadence plus its measured invocation and scrape delay; this is not a timer
-that performs scans when the caller is idle. Neither this gauge nor a returned
-bounded prefix proves complete backlog coverage.
+- `entry`: one recovery invocation; not one row, owner, replica or transaction.
+- `selected`: a valid live policy selected the entry's logical hash unit.
+- `eligible`: pre-SQL freshness, backlog and configuration gates allow a hint,
+  before the exposure decision. This is not population completeness.
+- `pg_attempt`, `primary`: actual leased discovery attempts, including failures.
+- `candidate`, `useful_candidate`: primary candidate transactions attempted and
+  authorized transitions committed, attributed to hint/primary discovery.
+- `completed`, `error`: terminal caller outcome; all-ineligible PG feedback
+  ends on primary. A PG attempt is not itself a successful hint result.
 
-## Coverage prerequisite and first read-removing route
+Caller-gap, cutoff-age and primary-query-duration histograms provide count/sum
+and buckets. Gaps are monotonic between actual entries per process/role;
+cutoff age is sampled when discovery starts after migration. No gap series on
+the first entry proves an interval. Combine these with failures, active caller
+binding and source identity; a fleet maximum can hide a stalled active caller.
 
-The current owner-copy selector is
-`int(sha256('omi:jobstore-production-mirror:v1:' + owner_key), 16) % 10000 < BPS`,
-with an explicit ASCII integer BPS in 1..10000. At 100 BPS it selects 100 of
-10000 owner hash buckets, stable across replicas/restarts. It does not select
-1% of jobs, calls, rows or cost. At 10000 BPS malformed/unknown owners still
-remain outside the copy. Sampled-prefix parity and reconciliation cursor
-passes do not certify the full evolving due population.
+The existing `omi_jobstore_index_primary_scan_success_timestamp_seconds`
+records actual successful primary completion (including empty, killed,
+unselected and feedback fallback scans). It now also covers primary-only
+factory bypasses for leased recovery. PG, failures, parity and scrapes do not
+advance it. Absence/future timestamps/stale scrapes are UNKNOWN. Namespace
+labels are `batch_pipeline_dev`, `batch_pipeline_prod`, `other`; role/event/
+source/reason sets are finite. No IDs, customer content or minutes are labels.
+The legacy `omi_jobstore_index_reads_total` reason `hint_ineligible` also
+includes gateway-refused primary scans; the caller counter distinguishes
+`unknown_caller` and `excluded` from actual candidate-feedback fallback.
+The same collectors export in default and GPU private registries in all modes,
+even if optional shadow/driver imports fail.
 
-The smallest complete-query route starts with `due_leased` only. It needs a
-reviewed producer/coverage prerequisite outside this index-only change:
+Let N be caller entries, P actual leased primary queries, H PG attempts.
+Fallback contributes to both H and P. N-P is only a nominal upper bound:
+entries that fail before leased discovery also have no primary query and must
+not count as removal. Use successful `completed{source="postgres"}` recovery
+counts over N for completed useful PG-only work; retain error/none entries in
+the invocation denominator. PG attempts alone do not establish read removal.
+Candidate transactions, retries, migration, unchanged retry discovery, mirror
+rereads, parity and index-entry work remain in the cost denominator. Optional
+parity can enqueue after both PG and its feedback primary fallback; a dropped
+comparison is UNKNOWN. These counters do not establish billed savings.
 
-1. Bind the primary query scope and retained copy target, source version,
-   producer roster, erasure paths and coverage generation. Either cover every
-   potentially leased row in that namespace (including any currently omitted
-   ownership class), or add a genuinely partitioned primary caller and matching
-   PG predicate. A 100-BPS copy cannot replace the existing global query.
-2. Establish complete admitted population coverage with zero missing,
-   excluded or unknown relevant rows, complete writer catch-up and bounded
-   retirement/erasure lag. A census alone while writes run is insufficient:
-   the coverage generation needs a reviewed writer fence/catch-up boundary,
-   expiry and invalidation on roster, target, cohort or source change.
-3. Only then implement admission that checks that proof live before and after
-   SQL, alongside the existing kills. Unset, invalid, stale, revoked or unknown
-   proof must return the same full Firestore answer. No env boolean is a proof.
+The preserved historical1190 actual-source 2000/100 burst witness shows bare 60s sweeps leave
+400 leases at 900s; canonical per-call and primary-full catch-up clear by 95s
+at 5s invocations. Its 147 nominal removed queries also add 147 missing-ID
+transactions: no net savings claim follows. The fast unit case scales the same
+20-page workload to 40/2. An ideal useful short-hint 5s window can remove 11 of
+12 primary queries; empty/full/killed/catch-up windows remove zero. Actual
+usefulness, conditional exposure and net cost must be measured at runtime.
 
-A concrete future reader sampling contract to review with that prerequisite
-is SHA256 of `omi:jobstore-discovery-reader:v1:` followed by compact ASCII JSON
-`[namespace, role, query, floor(unix_time / 60)]`, interpreted as an unsigned
-big-endian integer modulo 10000, selecting buckets `< 100`. The semantic role
-is `pump_recovery` or `serving_maintenance`, never a random lease-holder ID.
-Its unit is **eligible caller-minutes**, with a common UTC epoch, never replica
-ID, process randomness or restart time. All replicas and restarts agree for
-the same role/minute. Unselected
-calls still execute the full primary query; selected calls may use PG only
-with complete coverage, after the first primary read and within the safety
-interval. This is a proposal, not an implemented selector: no new percentage
-flag is added here. Time buckets do not promise exactly 1% of calls or reads;
-actual selected-call and read counts must bound exposure before expansion.
+## Runtime gates and inverse
 
-For this head, eligible production PG calls are **0**: every production due
-call uses Firestore. The measurable denominator `N` is instrumented
-`IndexStore.due()` invocations for the bound query/roster/window, using the sum of
-`omi_jobstore_index_reads_total` over sources/reasons/outcomes. Each completed
-invocation records one terminal answer or primary error; a PG error followed
-by a successful primary answer counts once here and separately in shared
-fallback telemetry. Factory bypasses (Firestore mode or an empty/invalid
-query allowlist) are outside this counter, so it cannot establish an all-caller
-denominator across those modes. That requires caller-entry instrumentation
-before factory routing. This is a call denominator, not scanned/billed rows,
-distinct jobs or audio-hours. A future selector needs separate eligible and
-selected counts; PG-return counters alone cannot establish its denominator.
+Production eligibility is zero until root+Release accept the actual artifact,
+qualified caller/producer roster, retained-copy and erasure obligations,
+runtime/operator state, clock/gap/capacity, parity, SLO/custody and effect gates.
+The first eligible leased slice remains ASAP/latest November 18, not a calendar
+wait. Expand only after actual counts and the full predeclared new-state
+lookback plus two fresh scrapes, retaining prior-hour guards. Retry/result-ready
+need separate contracts; final PG authority/A7/G2 remains reserved, with no D
+dependency. A source merge, shadow mode or sampled-prefix parity is not rollout.
 
-Root and Release own the earliest eligible `due_leased` slice (target November
-18, 2026). This source does not admit a slice with missing coverage. Expansion
-to retry/result-ready needs actual counts, parity, SLOs, a full predeclared
-new-state lookback and two fresh scrapes. Final PG authority/G2 GO remains
-separate; there is no dependency on D. Reader inverse: `JOBSTORE_INDEX_READS=off`
-and `BATCH_JOBSTORE_MODE=shadow`, then verify primary answers for the same
-caller. Preserve target and erasers until retained-copy obligations end.
-
-Production sampled-prefix parity uses distinct `due_leased`, `due_retry` and
-`due_result_ready` query labels. It checks selected primary-prefix coverage and
-every returned hint against current primary documents; it does not claim
-whole-backlog equality. Record the selector/source and state-specific route
-traffic alongside this proof. Other sampled discovery comparisons are UNKNOWN. Include mirror rereads and parity/census
-overhead when measuring net Firestore reads.
-
-The release owner first completes mirror cohort enforcement, copy retirement,
-erasure and writer-version coverage. Then validate one selected poll in the
-synthetic/staging matrix, including dropped copies, stale hints, timeout,
-kill-switch and mode-off erasure. Prepare a source-pinned production ramp of
-leased, retry, then result-ready reads, with expansion owned by the existing
-SCA-2288 release owner at the next evidence review after each query's gates
-pass. Record that review deadline in the release packet before activation.
-There is no artificial soak interval or implicit expansion from source merge.
-
-Runtime acceptance needs the actual serving release identity, relevant query
-traffic, correct transactional actions, measured primary-sweep freshness,
-parity and rollback evidence. Settled savings remain the cost owner's separate
-billing claim. Current local tests establish source behavior only.
+Inverse: unset the recovery policy (or BPS0), `JOBSTORE_INDEX_READS=off`, or
+Firestore mode. Verify canonical primary for the same active callers. Retain
+copy target and synchronous erasers until retained-copy obligations end.
+No copy/init, activation, IAM/resources, image or customer action belongs to
+this source change. The earlier dropped-update witness remains valid against
+exact completeness; it is not a mandatory CDC prerequisite for recovery hints.

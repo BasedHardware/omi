@@ -12256,7 +12256,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Kopš savienošanas pārī: pārrāvumi $drops, neveiksmīgi savienojumi $failed.';
+    return 'Kopš savienošanas pārī: $drops atkārtoti savienojumi, $failed neizdevušies savienojumi.';
   }
 
   @override
@@ -13496,16 +13496,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount pārvēršana sarunās';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Gatavs $done no $total · varat atstāt šo ekrānu';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount gatavs sinhronizācijai';
   }
@@ -13529,7 +13519,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Gaida šajā tālrunī';
 
   @override
-  String get syncDetailsTranscribing => 'Atšifrē Omi';
+  String get syncDetailsTranscribing => 'Augšupielādēts, gaida serveri';
 
   @override
   String get syncDetailsAudioFiles => 'Audio faili';
@@ -13987,6 +13977,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi jau apstrādā šo sarunu. Kopsavilkums parādīsies šeit, kad tas būs gatavs.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Vēl nav transkribēts';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Kopsavilkums parādīsies, kad transkripcija būs gatava.';
 
   @override
   String get summaryCheckAgain => 'Pārbaudīt vēlreiz';
@@ -15591,4 +15587,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Rakstām jūsu kopsavilkumu…';
+
+  @override
+  String get onTheWayServerWork => 'Servera ziņotais darbs';
 }

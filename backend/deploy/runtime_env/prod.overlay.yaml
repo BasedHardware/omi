@@ -45,6 +45,10 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        # Mirrors the listen chart (2026-11-18 fold of live values; media noise is also carried by the privateEnv overlay).
+        MEDIA_NOISE_MODE: {value: shadow, category: rollout}
+        MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+        NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
         # Shared backend routes: keep the silence kill switch off on listen too.
         BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
@@ -624,7 +628,7 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1016,7 +1020,7 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
           # Projection finish backoff: backend-sync can run the same sweep through its authenticated
@@ -1446,7 +1450,7 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1828,7 +1832,7 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
           # Projection finish backoff. Off: turned off in production on 2026-11-14 19:41Z on a 5xx

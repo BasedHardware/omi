@@ -1,6 +1,6 @@
 """A2 shadow seams and the hook for batch writers that commit outside ``Store.run`` (projection apply, purge).
 
-Kept outside ``database.jobstore`` on purpose: importing it costs one ``os`` lookup, and the job-store package
+Kept outside ``database.jobstore`` on purpose: required core metrics are import-light, and the job-store package
 (Postgres store, outbox, migrations) is imported only when this process runs in shadow or index mode.
 """
 
@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 import os
 from typing import Iterable
+
+from database.batch_pipeline_recovery_metrics import RECOVERY_COLLECTORS
 
 logger = logging.getLogger(__name__)
 
@@ -52,33 +54,35 @@ def purge_owner(namespace: str, uid: str) -> int:
 
 
 def shadow_parity_collectors() -> tuple:
-    """Parity, convergence and index metrics for a private registry; empty outside shadow/index mode.
+    """Caller metrics in every mode; optional parity/convergence/index metrics in their modes.
 
     ``omi_jobstore_shadow_{parity,convergence}_*`` live in the default registry; a process that serves its own
     ``CollectorRegistry`` (the batch worker) must register them there or the series are never exported.
-    Never raises: a failed import keeps the worker serving its other metrics.
+    Optional jobstore import failures keep the core caller collectors available.
+    Core collectors are required; their import does not traverse caller utilities or jobstore.
     """
     if not _shadow_mode():
-        return ()
+        return RECOVERY_COLLECTORS
     try:
         import database.jobstore.dual_store as dual_store
 
         from database.jobstore.serving_parity import SERVING_PARITY_TOTAL
 
         collectors = (
+            *RECOVERY_COLLECTORS,
             SERVING_PARITY_TOTAL,
             dual_store.SHADOW_PARITY_TOTAL,
             dual_store.SHADOW_CONVERGENCE_TOTAL,
             dual_store.SHADOW_CONVERGENCE_SECONDS,
         )
         if _shadow_mode(index_only=True):
-            from database.jobstore.index_store import INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP, INDEX_READS_TOTAL
+            from database.jobstore.index_store import INDEX_READS_TOTAL
 
-            return (*collectors, INDEX_READS_TOTAL, INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP)
+            return (*collectors, INDEX_READS_TOTAL)
         return collectors
     except Exception:
         logger.warning('event=jobstore_shadow outcome=metrics_unavailable', exc_info=True)
-        return ()
+        return RECOVERY_COLLECTORS
 
 
 def shadow_from_env(primary):

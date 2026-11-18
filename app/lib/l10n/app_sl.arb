@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "Izpadi",
     "diagnosticsDropsPerHour": "približno {count} na uro",
     "diagnosticsLongestGap": "Najdaljši premor",
-    "diagnosticsSincePairingSummary": "Od seznanitve: izpadov {drops}, neuspešnih povezav {failed}.",
+    "diagnosticsSincePairingSummary": "Od seznanitve: {drops} ponovnih povezav, {failed} neuspelih povezav.",
     "diagnosticsLastDuration": "Zadnjih {duration}",
     "chatReplyOffline": "Povezava ni uspela. Preverite povezavo in poskusite znova.",
     "chatReplyServerError": "Na naši strani je šlo nekaj narobe. Poskusite znova.",
@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "Sinhronizacija posnetkov",
     "syncStepDownloadingAmount": "Prenos iz naprave Omi · {done} od {total}",
     "syncStepUploadingAmount": "Nalaganje · {done} od {total}",
-    "syncCardTranscribingAmount": "Pretvarjanje {amount} v pogovore",
-    "syncCardTranscribedOf": "Končano {done} od {total} · lahko zapustite ta zaslon",
     "syncCardReadyAmount": "{amount} pripravljeno za sinhronizacijo",
     "syncDetailsTitle": "Podrobnosti sinhronizacije",
     "syncDetailsRightNow": "Trenutno",
@@ -11554,7 +11552,7 @@
     "syncDetailsTransferSpeed": "Hitrost prenosa",
     "syncDetailsWaitingOnOmi": "Čaka na Omi",
     "syncDetailsWaitingOnPhone": "Čaka na tem telefonu",
-    "syncDetailsTranscribing": "Prepisovanje v Omi",
+    "syncDetailsTranscribing": "Naloženo, čaka na strežnik",
     "syncDetailsAudioFiles": "Zvočne datoteke",
     "syncDetailsServerJobs": "Opravila strežnika (končana / skupaj)",
     "syncDetailsCopy": "Kopiraj podrobnosti za podporo",
@@ -11690,6 +11688,8 @@
     "summaryWithOmiInstead": "Raje povzemi z Omi",
     "summaryBusyTitle": "Obdelava še poteka",
     "summaryBusyBody": "Omi že obdeluje ta pogovor. Povzetek se bo prikazal tukaj, ko bo končan.",
+    "summaryTranscriptionPendingTitle": "Še ni prepisano",
+    "summaryTranscriptionPendingBody": "Povzetek se bo prikazal, ko bo prepis pripravljen.",
     "summaryCheckAgain": "Preveri znova",
     "summaryLimitTitle": "Dosežena omejitev povzetkov",
     "summaryLimitBody": "V zadnji uri ste večkrat znova ustvarili povzetke. Poskusite znova pozneje.",
@@ -12241,5 +12241,6 @@
     "onDeviceModelDownloadSize": "Prenos {size} MB",
     "downloadNow": "Prenesi zdaj",
     "onWifiLater": "Pozneje prek Wi-Fi",
-    "conversationWritingSummary": "Pišemo vaš povzetek…"
+    "conversationWritingSummary": "Pišemo vaš povzetek…",
+    "onTheWayServerWork": "Delo, ki ga poroča strežnik"
 }

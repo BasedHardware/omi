@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "切断",
     "diagnosticsDropsPerHour": "1時間に約{count}回",
     "diagnosticsLongestGap": "最長の途切れ",
-    "diagnosticsSincePairingSummary": "ペアリング以降: 切断 {drops} 回、接続の失敗 {failed} 回。",
+    "diagnosticsSincePairingSummary": "ペアリング以降：再接続 {drops} 回、接続失敗 {failed} 回。",
     "diagnosticsLastDuration": "直近{duration}",
     "chatReplyOffline": "接続できません。接続を確認してもう一度お試しください。",
     "chatReplyServerError": "こちら側で問題が発生しました。もう一度お試しください。",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "録音を同期中",
     "syncStepDownloadingAmount": "Omiからダウンロード中 · {done} / {total}",
     "syncStepUploadingAmount": "アップロード中 · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount}を会話に変換中",
-    "syncCardTranscribedOf": "{done} / {total} 完了 · この画面を閉じても大丈夫です",
     "syncCardReadyAmount": "{amount}を同期できます",
     "syncDetailsTitle": "同期の詳細",
     "syncDetailsRightNow": "現在",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "転送速度",
     "syncDetailsWaitingOnOmi": "Omi側で待機中",
     "syncDetailsWaitingOnPhone": "このスマホで待機中",
-    "syncDetailsTranscribing": "Omiで文字起こし中",
+    "syncDetailsTranscribing": "アップロード済み、サーバー待ち",
     "syncDetailsAudioFiles": "音声ファイル",
     "syncDetailsServerJobs": "サーバージョブ (完了 / 合計)",
     "syncDetailsCopy": "サポート用に詳細をコピー",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "代わりに Omi で要約",
     "summaryBusyTitle": "まだ処理中です",
     "summaryBusyBody": "Omi はすでにこの会話を処理しています。完了すると、ここに要約が表示されます。",
+    "summaryTranscriptionPendingTitle": "まだ文字起こしされていません",
+    "summaryTranscriptionPendingBody": "文字起こしが完了すると、要約が表示されます。",
     "summaryCheckAgain": "再確認",
     "summaryLimitTitle": "要約の上限に達しました",
     "summaryLimitBody": "過去 1 時間に何度も要約を再生成しました。しばらくしてからもう一度お試しください。",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "{size} MB のダウンロード",
     "downloadNow": "今すぐダウンロード",
     "onWifiLater": "後で Wi-Fi で",
-    "conversationWritingSummary": "要約を作成しています…"
+    "conversationWritingSummary": "要約を作成しています…",
+    "onTheWayServerWork": "サーバーが報告した処理"
 }

@@ -29,6 +29,7 @@ import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 
 part 'conversation_visibility.dart';
 part 'conversation_home_fetch.dart';
@@ -588,6 +589,7 @@ class ConversationProvider extends ChangeNotifier {
   /// completed list and join the processing skeleton; a titled (or otherwise
   /// settled) result upserts in place.
   void applyConversationReprocessResult(ServerConversation updated) {
+    TranscriptionPendingConversations.observe(updated);
     if (updated.homeStep != 'failed') _failedHomeProcessingIds.remove(updated.id);
     if (_isActiveProcessingRow(updated)) {
       conversations.removeWhere((conversation) => conversation.id == updated.id);
@@ -1029,6 +1031,9 @@ class ConversationProvider extends ChangeNotifier {
     completedById.removeWhere((id, _) => _isHiddenByDelete(id));
     conversations = completedById.values.toList()
       ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+    for (final row in conversations) {
+      TranscriptionPendingConversations.observe(row);
+    }
     // Only use cache when no folder filter is applied
     if (conversations.isEmpty && selectedFolderId == null) {
       if (!await _restoreCacheForFetch(generation, fetchRevision)) {
@@ -1538,6 +1543,8 @@ class ConversationProvider extends ChangeNotifier {
       homeCardSourceChanged?.call(conversation.id, false);
     }
     conversation = _homeReplacement(conversation, preserveHomeStep);
+    // Observe the row actually applied: it keeps a retained 'failed' Home step.
+    TranscriptionPendingConversations.observe(conversation);
     if (conversation.deleted || conversation.isMergedDonor) {
       updateConversationInSortedList(conversation);
       return;

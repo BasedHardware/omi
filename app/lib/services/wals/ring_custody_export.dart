@@ -15,16 +15,20 @@ import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/ring_custody_diagnostics.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/recording_inventory.dart';
+import 'package:omi/services/wals/local_wal_sync.dart';
 
 Future<Map<String, Object?>> exportCurrentRingCustody(String deviceId, String? firmware) async {
   DeviceConnection? connection;
   List<Wal>? wals;
   Map<String, List<RecordingInventoryRow>> buckets = {};
+  var frameCache = const OrphanAudioFrameCache.empty();
   try {
     final services = ServiceManager.instance();
     connection = services.device.connectionFor(deviceId);
-    buckets = services.wal.getSyncs().phone.recordingInventorySnapshot;
-    wals = await services.wal.getSyncs().phone.getAllWals();
+    final phone = services.wal.getSyncs().phone;
+    buckets = phone.recordingInventorySnapshot;
+    if (phone is LocalWalSyncImpl) frameCache = phone.orphanFrameCache;
+    wals = await phone.getAllWals();
   } catch (_) {
     // Export also works before service startup; absence is explicit below.
   }
@@ -35,8 +39,7 @@ Future<Map<String, Object?>> exportCurrentRingCustody(String deviceId, String? f
     // can quarantine invalid values, which a read-only export must never do.
     final prefs = await SharedPreferences.getInstance();
     String text(String key) => prefs.get(key) is String ? prefs.get(key)! as String : '';
-    final configured = text('batchAudioDir');
-    final legacy = prefs.get('flash_page_pending_uploads');
+    final legacy = RecordingInventoryPreferences.capture(prefs.getKeys(), prefs.get);
     int? free;
     try {
       final mb = await DiskSpace.getFreeDiskSpaceForPath(documents.path);
@@ -47,10 +50,12 @@ Future<Map<String, Object?>> exportCurrentRingCustody(String deviceId, String? f
         memoryBuckets: buckets,
         phoneSeconds: DateTime.now().millisecondsSinceEpoch ~/ 1000,
         currentOwner: text('uid'),
-        additionalDirectories: configured.isEmpty ? [] : [configured],
-        legacyFiles: legacy is List ? legacy.whereType<String>().toList() : [],
-        legacyJobs: text('localRecordingJobs'),
-        corruptLegacyJobs: text('localRecordingJobsCorrupt'),
+        additionalDirectories: legacy.directories,
+        legacyFiles: legacy.files,
+        legacyJobs: legacy.jobs,
+        corruptLegacyJobs: legacy.corruptJobs,
+        legacyPreferencesComplete: legacy.complete,
+        frameCache: frameCache,
         freeBytes: free);
   } catch (_) {
     ring['local_recording_inventory'] = {'read_result': 'unavailable'};

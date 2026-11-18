@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "रुकावटें",
     "diagnosticsDropsPerHour": "लगभग {count} प्रति घंटा",
     "diagnosticsLongestGap": "सबसे लंबा अंतराल",
-    "diagnosticsSincePairingSummary": "पेयरिंग के बाद से: {drops} रुकावटें, {failed} विफल कनेक्शन।",
+    "diagnosticsSincePairingSummary": "पेयरिंग के बाद से: {drops} पुनः कनेक्शन, {failed} असफल कनेक्शन।",
     "diagnosticsLastDuration": "पिछले {duration}",
     "chatReplyOffline": "कनेक्ट नहीं हो सका। अपना कनेक्शन जांचें और फिर से प्रयास करें।",
     "chatReplyServerError": "हमारी ओर से कुछ गड़बड़ हुई। कृपया फिर से प्रयास करें।",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "आपकी रिकॉर्डिंग सिंक हो रही हैं",
     "syncStepDownloadingAmount": "आपके Omi से डाउनलोड · {done} / {total}",
     "syncStepUploadingAmount": "अपलोड · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} को बातचीत में बदला जा रहा है",
-    "syncCardTranscribedOf": "{done} / {total} पूरा · आप इस स्क्रीन से बाहर जा सकते हैं",
     "syncCardReadyAmount": "{amount} सिंक के लिए तैयार",
     "syncDetailsTitle": "सिंक विवरण",
     "syncDetailsRightNow": "अभी",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "ट्रांसफ़र गति",
     "syncDetailsWaitingOnOmi": "Omi पर प्रतीक्षारत",
     "syncDetailsWaitingOnPhone": "इस फ़ोन पर प्रतीक्षारत",
-    "syncDetailsTranscribing": "Omi पर ट्रांसक्राइब हो रहा है",
+    "syncDetailsTranscribing": "अपलोड हो गया, सर्वर की प्रतीक्षा में",
     "syncDetailsAudioFiles": "ऑडियो फ़ाइलें",
     "syncDetailsServerJobs": "सर्वर जॉब (पूर्ण / कुल)",
     "syncDetailsCopy": "सपोर्ट के लिए विवरण कॉपी करें",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "इसके बजाय Omi से सारांश बनाएं",
     "summaryBusyTitle": "अभी भी प्रोसेस हो रहा है",
     "summaryBusyBody": "Omi पहले से ही इस बातचीत पर काम कर रहा है। पूरा होने पर सारांश यहां दिखाई देगा।",
+    "summaryTranscriptionPendingTitle": "अभी तक ट्रांसक्राइब नहीं हुआ",
+    "summaryTranscriptionPendingBody": "ट्रांसक्रिप्ट तैयार होने पर सारांश दिखाई देगा।",
     "summaryCheckAgain": "फिर से जांचें",
     "summaryLimitTitle": "सारांश की सीमा पूरी हो गई",
     "summaryLimitBody": "आपने पिछले एक घंटे में कई सारांश दोबारा बनाए हैं। बाद में फिर से कोशिश करें।",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "{size} MB डाउनलोड",
     "downloadNow": "अभी डाउनलोड करें",
     "onWifiLater": "बाद में Wi-Fi पर",
-    "conversationWritingSummary": "आपका सारांश लिखा जा रहा है…"
+    "conversationWritingSummary": "आपका सारांश लिखा जा रहा है…",
+    "onTheWayServerWork": "सर्वर द्वारा बताया गया काम"
 }

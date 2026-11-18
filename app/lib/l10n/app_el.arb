@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Διακοπές",
     "diagnosticsDropsPerHour": "περίπου {count} την ώρα",
     "diagnosticsLongestGap": "Μεγαλύτερο κενό",
-    "diagnosticsSincePairingSummary": "Από τη σύζευξη: {drops} διακοπές, {failed} αποτυχημένες συνδέσεις.",
+    "diagnosticsSincePairingSummary": "Από τη σύζευξη: {drops} επανασυνδέσεις, {failed} αποτυχημένες συνδέσεις.",
     "diagnosticsLastDuration": "Τελευταία {duration}",
     "chatReplyOffline": "Δεν είναι δυνατή η σύνδεση. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.",
     "chatReplyServerError": "Κάτι πήγε στραβά από την πλευρά μας. Δοκιμάστε ξανά.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Συγχρονισμός των ηχογραφήσεών σας",
     "syncStepDownloadingAmount": "Λήψη από το Omi σας · {done} από {total}",
     "syncStepUploadingAmount": "Μεταφόρτωση · {done} από {total}",
-    "syncCardTranscribingAmount": "Μετατροπή {amount} σε συζητήσεις",
-    "syncCardTranscribedOf": "Ολοκληρώθηκαν {done} από {total} · μπορείτε να φύγετε από αυτήν την οθόνη",
     "syncCardReadyAmount": "{amount} έτοιμα για συγχρονισμό",
     "syncDetailsTitle": "Λεπτομέρειες συγχρονισμού",
     "syncDetailsRightNow": "Αυτή τη στιγμή",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Ταχύτητα μεταφοράς",
     "syncDetailsWaitingOnOmi": "Αναμονή για το Omi σας",
     "syncDetailsWaitingOnPhone": "Αναμονή για αυτό το τηλέφωνο",
-    "syncDetailsTranscribing": "Απομαγνητοφώνηση στο Omi",
+    "syncDetailsTranscribing": "Μεταφορτώθηκε, αναμονή διακομιστή",
     "syncDetailsAudioFiles": "Αρχεία ήχου",
     "syncDetailsServerJobs": "Εργασίες διακομιστή (ολοκληρωμένες / σύνολο)",
     "syncDetailsCopy": "Αντιγραφή λεπτομερειών για υποστήριξη",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "Σύνοψη με το Omi αντί αυτού",
     "summaryBusyTitle": "Η επεξεργασία συνεχίζεται",
     "summaryBusyBody": "Το Omi επεξεργάζεται ήδη αυτή τη συνομιλία. Η σύνοψη θα εμφανιστεί εδώ μόλις ολοκληρωθεί.",
+    "summaryTranscriptionPendingTitle": "Δεν έχει μεταγραφεί ακόμα",
+    "summaryTranscriptionPendingBody": "Η σύνοψη θα εμφανιστεί μόλις είναι έτοιμη η μεταγραφή.",
     "summaryCheckAgain": "Νέος έλεγχος",
     "summaryLimitTitle": "Συμπληρώθηκε το όριο συνόψεων",
     "summaryLimitBody": "Δημιουργήσατε ξανά αρκετές συνόψεις την τελευταία ώρα. Δοκιμάστε ξανά αργότερα.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "Λήψη {size} MB",
     "downloadNow": "Λήψη τώρα",
     "onWifiLater": "Αργότερα μέσω Wi-Fi",
-    "conversationWritingSummary": "Γράφεται η σύνοψή σας…"
+    "conversationWritingSummary": "Γράφεται η σύνοψή σας…",
+    "onTheWayServerWork": "Εργασία που αναφέρει ο διακομιστής"
 }

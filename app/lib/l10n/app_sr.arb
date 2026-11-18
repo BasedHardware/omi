@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "Прекиди",
     "diagnosticsDropsPerHour": "отприлике {count} на сат",
     "diagnosticsLongestGap": "Најдужи прекид",
-    "diagnosticsSincePairingSummary": "Од упаривања: прекида {drops}, неуспелих веза {failed}.",
+    "diagnosticsSincePairingSummary": "Од упаривања: {drops} поновних повезивања, {failed} неуспешних повезивања.",
     "diagnosticsLastDuration": "Последњих {duration}",
     "chatReplyOffline": "Није могуће повезивање. Проверите везу и покушајте поново.",
     "chatReplyServerError": "Нешто је пошло по злу са наше стране. Покушајте поново.",
@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "Синхронизација снимака",
     "syncStepDownloadingAmount": "Преузимање са уређаја Omi · {done} од {total}",
     "syncStepUploadingAmount": "Слање · {done} од {total}",
-    "syncCardTranscribingAmount": "Претварање {amount} у разговоре",
-    "syncCardTranscribedOf": "Готово {done} од {total} · можете напустити овај екран",
     "syncCardReadyAmount": "{amount} спремно за синхронизацију",
     "syncDetailsTitle": "Детаљи синхронизације",
     "syncDetailsRightNow": "Тренутно",
@@ -11554,7 +11552,7 @@
     "syncDetailsTransferSpeed": "Брзина преноса",
     "syncDetailsWaitingOnOmi": "Чека на Omi",
     "syncDetailsWaitingOnPhone": "Чека на овом телефону",
-    "syncDetailsTranscribing": "Транскрипција на Omi",
+    "syncDetailsTranscribing": "Отпремљено, чека сервер",
     "syncDetailsAudioFiles": "Аудио датотеке",
     "syncDetailsServerJobs": "Послови на серверу (готово / укупно)",
     "syncDetailsCopy": "Копирај детаље за подршку",
@@ -11690,6 +11688,8 @@
     "summaryWithOmiInstead": "Ипак сажми помоћу Omi",
     "summaryBusyTitle": "Обрада је још у току",
     "summaryBusyBody": "Omi већ ради на овом разговору. Сажетак ће се појавити овде када буде готов.",
+    "summaryTranscriptionPendingTitle": "Још није транскрибовано",
+    "summaryTranscriptionPendingBody": "Сажетак ће се појавити када транскрипт буде спреман.",
     "summaryCheckAgain": "Провери поново",
     "summaryLimitTitle": "Достигнуто је ограничење сажетака",
     "summaryLimitBody": "У последњих сат времена сте више пута поново генерисали сажетке. Покушајте поново касније.",
@@ -12241,5 +12241,6 @@
     "onDeviceModelDownloadSize": "Преузимање {size} MB",
     "downloadNow": "Преузми сада",
     "onWifiLater": "Касније на Wi-Fi",
-    "conversationWritingSummary": "Пишемо ваш сажетак…"
+    "conversationWritingSummary": "Пишемо ваш сажетак…",
+    "onTheWayServerWork": "Рад који је пријавио сервер"
 }

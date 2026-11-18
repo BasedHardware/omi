@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "การหลุด",
     "diagnosticsDropsPerHour": "ประมาณ {count} ครั้งต่อชั่วโมง",
     "diagnosticsLongestGap": "ช่วงหลุดนานที่สุด",
-    "diagnosticsSincePairingSummary": "ตั้งแต่จับคู่: หลุด {drops} ครั้ง เชื่อมต่อล้มเหลว {failed} ครั้ง",
+    "diagnosticsSincePairingSummary": "ตั้งแต่จับคู่: เชื่อมต่อใหม่ {drops} ครั้ง เชื่อมต่อล้มเหลว {failed} ครั้ง",
     "diagnosticsLastDuration": "{duration} ล่าสุด",
     "chatReplyOffline": "ไม่สามารถเชื่อมต่อได้ โปรดตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง",
     "chatReplyServerError": "เกิดข้อผิดพลาดจากฝั่งเรา โปรดลองอีกครั้ง",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "กำลังซิงค์การบันทึกของคุณ",
     "syncStepDownloadingAmount": "กำลังดาวน์โหลดจาก Omi · {done} จาก {total}",
     "syncStepUploadingAmount": "กำลังอัปโหลด · {done} จาก {total}",
-    "syncCardTranscribingAmount": "กำลังแปลง {amount} เป็นบทสนทนา",
-    "syncCardTranscribedOf": "เสร็จแล้ว {done} จาก {total} · ออกจากหน้าจอนี้ได้เลย",
     "syncCardReadyAmount": "{amount} พร้อมซิงค์",
     "syncDetailsTitle": "รายละเอียดการซิงค์",
     "syncDetailsRightNow": "ตอนนี้",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "ความเร็วการถ่ายโอน",
     "syncDetailsWaitingOnOmi": "รอจาก Omi",
     "syncDetailsWaitingOnPhone": "รอจากโทรศัพท์เครื่องนี้",
-    "syncDetailsTranscribing": "กำลังถอดเสียงบน Omi",
+    "syncDetailsTranscribing": "อัปโหลดแล้ว กำลังรอเซิร์ฟเวอร์",
     "syncDetailsAudioFiles": "ไฟล์เสียง",
     "syncDetailsServerJobs": "งานบนเซิร์ฟเวอร์ (เสร็จ / ทั้งหมด)",
     "syncDetailsCopy": "คัดลอกรายละเอียดสำหรับฝ่ายสนับสนุน",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "สรุปด้วย Omi แทน",
     "summaryBusyTitle": "ยังคงประมวลผลอยู่",
     "summaryBusyBody": "Omi กำลังประมวลผลบทสนทนานี้อยู่แล้ว สรุปจะปรากฏที่นี่เมื่อเสร็จสิ้น",
+    "summaryTranscriptionPendingTitle": "ยังไม่ได้ถอดเสียง",
+    "summaryTranscriptionPendingBody": "สรุปจะปรากฏเมื่อการถอดเสียงพร้อม",
     "summaryCheckAgain": "ตรวจสอบอีกครั้ง",
     "summaryLimitTitle": "ถึงขีดจำกัดการสรุปแล้ว",
     "summaryLimitBody": "คุณสร้างสรุปใหม่หลายครั้งในชั่วโมงที่ผ่านมา โปรดลองอีกครั้งในภายหลัง",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "ดาวน์โหลด {size} MB",
     "downloadNow": "ดาวน์โหลดเลย",
     "onWifiLater": "ภายหลังผ่าน Wi-Fi",
-    "conversationWritingSummary": "กำลังเขียนสรุปของคุณ…"
+    "conversationWritingSummary": "กำลังเขียนสรุปของคุณ…",
+    "onTheWayServerWork": "งานที่เซิร์ฟเวอร์รายงาน"
 }

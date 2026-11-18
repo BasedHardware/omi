@@ -181,7 +181,9 @@ def test_health_and_readiness_are_distinct_and_shutdown_closes_admission():
         state.stopping = True
         with pytest.raises(urllib.error.HTTPError):
             urllib.request.urlopen(base + '/ready')
-        assert urllib.request.urlopen(base + '/metrics').status == 200
+        with urllib.request.urlopen(base + '/metrics') as response:
+            assert response.status == 200
+            assert b'omi_batch_result_protocol_refused_total' in response.read()
         state.ticked_at -= 61
         with pytest.raises(urllib.error.HTTPError):
             urllib.request.urlopen(base + '/health')
@@ -535,7 +537,9 @@ def test_a2_parity_collector_failure_keeps_the_worker_metrics(monkeypatch):
     monkeypatch.setattr(builtins, '__import__', refuse)
     from database.batch_pipeline_shadow_hook import shadow_parity_collectors
 
-    assert shadow_parity_collectors() == ()
+    from database.batch_pipeline_recovery_metrics import RECOVERY_COLLECTORS
+
+    assert shadow_parity_collectors() == RECOVERY_COLLECTORS
 
 
 @pytest.mark.parametrize('raw,expected', [(None, 1), ('2', 2), ('1', 1), ('3', 3), ('0', 1), ('4', 1), ('two', 1)])

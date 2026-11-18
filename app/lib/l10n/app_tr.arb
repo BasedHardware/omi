@@ -3800,7 +3800,7 @@
     "diagnosticsDrops": "Kopmalar",
     "diagnosticsDropsPerHour": "saatte yaklaşık {count}",
     "diagnosticsLongestGap": "En uzun kesinti",
-    "diagnosticsSincePairingSummary": "Eşleştirmeden beri: {drops} kopma, {failed} başarısız bağlantı.",
+    "diagnosticsSincePairingSummary": "Eşleştirmeden beri: {drops} yeniden bağlantı, {failed} başarısız bağlantı.",
     "diagnosticsLastDuration": "Son {duration}",
     "chatReplyOffline": "Bağlanılamıyor. Bağlantınızı kontrol edin ve yeniden deneyin.",
     "chatReplyServerError": "Bizim tarafta bir sorun oluştu. Lütfen tekrar deneyin.",
@@ -4160,8 +4160,6 @@
     "syncCardSyncingTitle": "Kayıtlarınız senkronize ediliyor",
     "syncStepDownloadingAmount": "Omi'den indiriliyor · {done} / {total}",
     "syncStepUploadingAmount": "Yükleniyor · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} konuşmalara dönüştürülüyor",
-    "syncCardTranscribedOf": "{done} / {total} tamamlandı · bu ekrandan çıkabilirsiniz",
     "syncCardReadyAmount": "{amount} senkronize edilmeye hazır",
     "syncDetailsTitle": "Senkronizasyon ayrıntıları",
     "syncDetailsRightNow": "Şu anda",
@@ -4169,7 +4167,7 @@
     "syncDetailsTransferSpeed": "Aktarım hızı",
     "syncDetailsWaitingOnOmi": "Omi'de bekliyor",
     "syncDetailsWaitingOnPhone": "Bu telefonda bekliyor",
-    "syncDetailsTranscribing": "Omi'de yazıya dökülüyor",
+    "syncDetailsTranscribing": "Yüklendi, sunucu bekleniyor",
     "syncDetailsAudioFiles": "Ses dosyaları",
     "syncDetailsServerJobs": "Sunucu işleri (biten / toplam)",
     "syncDetailsCopy": "Destek için ayrıntıları kopyala",
@@ -4305,6 +4303,8 @@
     "summaryWithOmiInstead": "Bunun yerine Omi ile özetle",
     "summaryBusyTitle": "Hâlâ işleniyor",
     "summaryBusyBody": "Omi bu konuşma üzerinde zaten çalışıyor. Özet tamamlandığında burada görünecek.",
+    "summaryTranscriptionPendingTitle": "Henüz yazıya dökülmedi",
+    "summaryTranscriptionPendingBody": "Özet, döküm hazır olduğunda görünecek.",
     "summaryCheckAgain": "Tekrar kontrol et",
     "summaryLimitTitle": "Özet sınırına ulaşıldı",
     "summaryLimitBody": "Son bir saat içinde birkaç özeti yeniden oluşturdunuz. Daha sonra tekrar deneyin.",
@@ -4719,5 +4719,6 @@
     "onDeviceModelDownloadSize": "{size} MB indirme",
     "downloadNow": "Şimdi İndir",
     "onWifiLater": "Sonra Wi-Fi'da",
-    "conversationWritingSummary": "Özetiniz yazılıyor…"
+    "conversationWritingSummary": "Özetiniz yazılıyor…",
+    "onTheWayServerWork": "Sunucunun bildirdiği işler"
 }

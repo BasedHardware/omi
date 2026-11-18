@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Întreruperi",
     "diagnosticsDropsPerHour": "aproximativ {count} pe oră",
     "diagnosticsLongestGap": "Cea mai lungă întrerupere",
-    "diagnosticsSincePairingSummary": "De la asociere: {drops} întreruperi, {failed} conexiuni eșuate.",
+    "diagnosticsSincePairingSummary": "De la asociere: {drops} reconectări, {failed} conexiuni eșuate.",
     "diagnosticsLastDuration": "Ultimele {duration}",
     "chatReplyOffline": "Nu se poate conecta. Verifică-ți conexiunea și încearcă din nou.",
     "chatReplyServerError": "Ceva a mers prost de partea noastră. Încearcă din nou.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Se sincronizează înregistrările",
     "syncStepDownloadingAmount": "Se descarcă de pe Omi · {done} din {total}",
     "syncStepUploadingAmount": "Se încarcă · {done} din {total}",
-    "syncCardTranscribingAmount": "Se transformă {amount} în conversații",
-    "syncCardTranscribedOf": "{done} din {total} gata · poți părăsi acest ecran",
     "syncCardReadyAmount": "{amount} gata de sincronizare",
     "syncDetailsTitle": "Detalii sincronizare",
     "syncDetailsRightNow": "Chiar acum",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Viteză de transfer",
     "syncDetailsWaitingOnOmi": "Așteaptă Omi-ul",
     "syncDetailsWaitingOnPhone": "Așteaptă pe acest telefon",
-    "syncDetailsTranscribing": "Se transcrie pe Omi",
+    "syncDetailsTranscribing": "Încărcat, în așteptarea serverului",
     "syncDetailsAudioFiles": "Fișiere audio",
     "syncDetailsServerJobs": "Joburi pe server (finalizate / total)",
     "syncDetailsCopy": "Copiază detaliile pentru asistență",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "Rezumă cu Omi în schimb",
     "summaryBusyTitle": "Se procesează încă",
     "summaryBusyBody": "Omi lucrează deja la această conversație. Rezumatul va apărea aici când se termină.",
+    "summaryTranscriptionPendingTitle": "Încă netranscris",
+    "summaryTranscriptionPendingBody": "Rezumatul va apărea când transcrierea este gata.",
     "summaryCheckAgain": "Verifică din nou",
     "summaryLimitTitle": "Limita de rezumate a fost atinsă",
     "summaryLimitBody": "Ai regenerat mai multe rezumate în ultima oră. Încearcă din nou mai târziu.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "Descărcare de {size} MB",
     "downloadNow": "Descarcă acum",
     "onWifiLater": "Mai târziu pe Wi-Fi",
-    "conversationWritingSummary": "Se scrie rezumatul tău…"
+    "conversationWritingSummary": "Se scrie rezumatul tău…",
+    "onTheWayServerWork": "Activitate raportată de server"
 }

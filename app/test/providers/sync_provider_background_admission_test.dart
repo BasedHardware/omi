@@ -92,6 +92,7 @@ Wal _uploaded(String job) => Wal(
       seconds: 60,
       storage: WalStorage.disk,
       status: WalStatus.uploaded,
+      uploadedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       device: 'phone',
     )..jobId = job;
 

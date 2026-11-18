@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Onderbrekingen",
     "diagnosticsDropsPerHour": "ongeveer {count} per uur",
     "diagnosticsLongestGap": "Langste onderbreking",
-    "diagnosticsSincePairingSummary": "Sinds koppeling: {drops} onderbrekingen, {failed} mislukte verbindingen.",
+    "diagnosticsSincePairingSummary": "Sinds koppelen: {drops} herverbindingen, {failed} mislukte verbindingen.",
     "diagnosticsLastDuration": "Laatste {duration}",
     "chatReplyOffline": "Kan geen verbinding maken. Controleer je verbinding en probeer het opnieuw.",
     "chatReplyServerError": "Er is iets misgegaan aan onze kant. Probeer het opnieuw.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Opnamen synchroniseren",
     "syncStepDownloadingAmount": "Downloaden van je Omi · {done} van {total}",
     "syncStepUploadingAmount": "Uploaden · {done} van {total}",
-    "syncCardTranscribingAmount": "{amount} omzetten in gesprekken",
-    "syncCardTranscribedOf": "{done} van {total} klaar · je kunt dit scherm verlaten",
     "syncCardReadyAmount": "{amount} klaar om te synchroniseren",
     "syncDetailsTitle": "Synchronisatiedetails",
     "syncDetailsRightNow": "Op dit moment",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Overdrachtssnelheid",
     "syncDetailsWaitingOnOmi": "Wacht op je Omi",
     "syncDetailsWaitingOnPhone": "Wacht op deze telefoon",
-    "syncDetailsTranscribing": "Transcriberen op Omi",
+    "syncDetailsTranscribing": "Geüpload, wacht op server",
     "syncDetailsAudioFiles": "Audiobestanden",
     "syncDetailsServerJobs": "Serverjobs (klaar / totaal)",
     "syncDetailsCopy": "Details kopiëren voor support",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "In plaats daarvan samenvatten met Omi",
     "summaryBusyTitle": "Wordt nog verwerkt",
     "summaryBusyBody": "Omi is al met dit gesprek bezig. De samenvatting verschijnt hier zodra deze klaar is.",
+    "summaryTranscriptionPendingTitle": "Nog niet getranscribeerd",
+    "summaryTranscriptionPendingBody": "De samenvatting verschijnt zodra het transcript klaar is.",
     "summaryCheckAgain": "Opnieuw controleren",
     "summaryLimitTitle": "Limiet voor samenvattingen bereikt",
     "summaryLimitBody": "Je hebt het afgelopen uur meerdere samenvattingen opnieuw gegenereerd. Probeer het later opnieuw.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "{size} MB downloaden",
     "downloadNow": "Nu downloaden",
     "onWifiLater": "Later via wifi",
-    "conversationWritingSummary": "Je samenvatting wordt geschreven…"
+    "conversationWritingSummary": "Je samenvatting wordt geschreven…",
+    "onTheWayServerWork": "Door de server gemeld werk"
 }

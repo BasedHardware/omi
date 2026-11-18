@@ -47,6 +47,9 @@ class SyncAssignmentDiscovery:
 
 def encode_sync_assignment_plan(uid: str, client: Any, transaction: Any, payload: dict, current: dict | None) -> dict:
     from database import conversations
+    from database.batch_summary_debt import arm_projection_summary
+
+    arm_projection_summary(uid, client, transaction, payload, current)
 
     if current and current.get('has_transcript_corrections'):
         from utils.agent_capabilities.transcripts import load_entries, preserves_correction_anchors
