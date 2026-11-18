@@ -36,8 +36,10 @@ FRESH_PROBE_ROWS = 32
 RECORD_SIBLING_PROBE_ROWS = FRESH_PROBE_ROWS + 128
 # Pending rows a stale-head skip reads ahead of its row; more refuses the skip.
 STALE_HEAD_PAGE_ROWS = 128
-# States of a row waiting for a lease; any other unready state may be about to finish.
-_STARVED_STATES = frozenset({'ready', 'retry', 'leased'})
+# Per lease-waiting state, the clock that must be 30+ min old: due that long, or a lease
+# that expired that long ago. Lease-ending paths reset lease_until to 0, so ready/retry
+# rows use available_at. Any other unready state may be about to finish.
+_STARVED_CLOCKS = {'ready': 'available_at', 'retry': 'available_at', 'leased': 'lease_until'}
 # Content siblings a recovery wake may release with the recovered unit.
 RELEASE_SIBLINGS_MAX = 32
 _HEAD_STATES = frozenset({'ready', 'leased', 'retry', 'record_pending', 'privacy_blocked'})
@@ -134,11 +136,13 @@ def _record_sibling_pending(tx, job: dict) -> bool:
 
 
 def _starved(job: dict, now: float) -> bool:
-    """Admitted, and not leased, for 30+ min: it will not finish within the head wait."""
-    if job.get('state') not in _STARVED_STATES:
+    """Admitted 30+ min ago and waiting 30+ min for a lease: it will not finish within the head wait."""
+    state = job.get('state')
+    field = _STARVED_CLOCKS.get(state) if isinstance(state, str) else None
+    if field is None:
         return False
-    for clock in (job.get('enqueued_at'), job.get('lease_until', 0.0)):
-        if not isinstance(clock, (int, float)) or isinstance(clock, bool) or now - clock < MERGE_STALE_HEAD_SECONDS:
+    for value in (job.get('enqueued_at'), job.get(field)):
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or now - value < MERGE_STALE_HEAD_SECONDS:
             return False
     return True
 

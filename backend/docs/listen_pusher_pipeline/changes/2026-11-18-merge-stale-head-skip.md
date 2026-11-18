@@ -8,8 +8,9 @@ Prod, 2026-11-18 (600 random `batch_live_v1` rows with `record_sealed_at`, seale
 07:50Z): the last unit of a recording took p50 9 s from admission to GPU result, then p50 62 s more to
 commit. 346 of 432 fully committed recordings (80%) committed their last unit through the head-wait bypass
 (p50 67 s single-unit, 98 s multi-unit); without the bypass the commit took 0.1 s. In 20 of 20 sampled
-owners the earliest pending fresh-class row was a native record job in `retry`, captured 36-215 h earlier,
-due long ago and never leased (`lease_until` 0). Sampled owners had 8-134 such rows; the canary owner 75.
+owners the earliest pending fresh-class row was a native record job in `retry`, captured 36-215 h earlier
+and due for hours without a lease. Sampled owners had 8-134 such rows. All 75 rows ahead for the canary
+owner are `retry`, due 10.3-90.3 h (`available_at`) and unleased, so they meet the starved rule.
 `fresh_capture` is fixed at admission, so these rows act as fresh heads and every new recording waits
 out the full head wait.
 
@@ -32,5 +33,6 @@ Remove the uid or unset the variable. Committed rows keep their order; no migrat
 
 ## Readback
 
-`event=batch_merge outcome=stale_head_skip`; for the listed owner's last unit,
+A skip leaves no durable marker: the result row carries neither `head_wait_bypass` nor a skip field. Readback
+relies on the `event=batch_merge outcome=stale_head_skip` log line, plus, for the listed owner's last unit,
 `batch_pipeline_prod_results.committed_at` minus `batch_pipeline_prod_jobs.ready_at`.

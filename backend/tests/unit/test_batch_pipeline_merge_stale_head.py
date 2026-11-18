@@ -120,21 +120,53 @@ def test_a_young_unready_recording_captured_earlier_blocks_the_skip(listed):
     assert [merge.commit_next('owner', NOW + 10)['segment_id'] for _ in range(2)] == ['a', 'b']
 
 
+# Lease-ending paths reset lease_until to 0.0 and stamp available_at; enqueued_at stays old.
 @pytest.mark.parametrize(
-    'state,lease_until',
+    'head',
     [
-        ('leased', NOW + 300),  # In flight.
-        ('retry', NOW - 300),  # Leased within the last 30 minutes.
-        ('record_pending', 0.0),  # Not waiting for a lease: about to be admitted.
-        ('held', 0.0),
+        {'state': 'leased', 'token': 't', 'attempt': 1, 'lease_until': NOW + 300},  # In flight.
+        {  # Lease expired seconds ago and due again in 10 s.
+            'state': 'retry',
+            'attempt': 1,
+            'lease_until': 0.0,
+            'available_at': NOW + 10,
+            'retry_started_at': NOW - 3600,
+            'failure': 'lease_expired',
+        },
+        {  # Failed 10 minutes ago; due, but likely re-leased soon.
+            'state': 'retry',
+            'attempt': 2,
+            'lease_until': 0.0,
+            'available_at': NOW - 600,
+            'retry_started_at': NOW - 3600,
+            'failure': 'worker_failed',
+        },
+        {'state': 'ready', 'lease_until': 0.0, 'available_at': NOW - 60, 'failure': ''},  # Redriven a minute ago.
+        {'state': 'record_pending', 'lease_until': 0.0},  # About to be admitted.
+        {'state': 'held', 'lease_until': 0.0},
     ],
+    ids=['in_flight', 'due_in_seconds', 'failed_recently', 'redriven', 'record_pending', 'held'],
 )
-def test_a_head_that_is_not_starved_keeps_the_wait(listed, state, lease_until):
-    store, merge = world(head_state=state)
-    store.rows['jobs', 'stale']['lease_until'] = lease_until
+def test_a_head_that_is_not_starved_keeps_the_wait(listed, head):
+    store, merge = world()
+    store.rows['jobs', 'stale'].update(head)
     ready(store, 'first', NOW)
     assert merge.commit_next('owner', NOW + 1) is None
     assert store.rows['jobs', 'first']['state'] == 'result_ready'
+
+
+def test_a_retry_due_for_hours_without_a_lease_is_starved(listed):
+    # Prod shape: failed once, due 10+ hours, never leased again.
+    store, merge = world(head_age=40 * 3600)
+    store.rows['jobs', 'stale'].update(
+        attempt=1,
+        lease_until=0.0,
+        available_at=NOW - 10 * 3600,
+        retry_started_at=NOW - 40 * 3600,
+        failure='worker_failed',
+    )
+    ready(store, 'first', NOW)
+    assert merge.commit_next('owner', NOW + 1)['segment_id'] == 'first'
 
 
 @pytest.mark.parametrize('extra,commits', [(STALE_HEAD_PAGE_ROWS - 1, True), (STALE_HEAD_PAGE_ROWS, False)])
@@ -149,17 +181,17 @@ def test_the_page_bound_refuses_the_skip(listed, extra, commits):
     assert (entry is not None and entry['segment_id'] == 'first') is commits
 
 
-def test_head_readmitted_after_the_probe_keeps_the_wait(listed, monkeypatch):
+def test_head_deferred_after_the_probe_keeps_the_wait(listed, monkeypatch):
     store, merge = world()
     ready(store, 'first', NOW)
     probe = store.longest_ready_pending
 
-    def readmit_then_probe(key):
-        # The stale head is re-admitted between the probe and the transaction.
-        store.rows['jobs', 'stale']['enqueued_at'] = NOW
+    def defer_then_probe(key):
+        # A lease on the head ends between the probe and the transaction.
+        store.rows['jobs', 'stale'].update(attempt=1, lease_until=0.0, available_at=NOW + 5, failure='lease_expired')
         return probe(key)
 
-    monkeypatch.setattr(store, 'longest_ready_pending', readmit_then_probe)
+    monkeypatch.setattr(store, 'longest_ready_pending', defer_then_probe)
     assert merge.commit_next('owner', NOW + 1) is None
     assert store.rows['jobs', 'first']['state'] == 'result_ready'
 
@@ -201,3 +233,19 @@ def test_catch_up_head_with_older_fresh_stock_behind_it(monkeypatch, tx_gate, li
     else:
         assert entry is None
         assert merge.commit_next('owner', NOW + W)['segment_id'] == 'first'
+
+
+def test_a_refused_skip_of_a_backlog_held_unit_commits_and_holds_nothing(listed, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'true')
+    store, merge = world()
+    store.rows['jobs', 'first'].update(stt_route={'stt_route': 'provider'}, fresh_capture=False)
+    ready(store, 'first', NOW)
+    runs = []
+    run = store.run
+    monkeypatch.setattr(store, 'run', lambda body: runs.append(body) or run(body))
+    assert merge.commit_next('owner', NOW + 1) is None
+    assert store.rows['jobs', 'first']['state'] == 'result_ready'
+    assert merge.held_owners == set()
+    assert len(runs) == 2  # Strict order, then the refused skip: no early backlog fallback.
+    assert merge.commit_next('owner', NOW + W - 1) is None and merge.held_owners == set()
