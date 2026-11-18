@@ -618,15 +618,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   maxLines: 1,
                 ),
               if (_isLive) ...[
-                // The conversation in progress shows its speech so far, the same length its detail
-                // shows. Counting from its start to now made silence after the last words grow it.
-                if (_liveSpeechSeconds case final seconds? when seconds > 0)
-                  Text(
-                    '• ${OmiDuration.compact(seconds, context.l10n)}',
-                    key: const Key('conversation_row_live_length'),
-                    style: _metaStyle,
-                    maxLines: 1,
-                  ),
+                // The conversation in progress shows its speech so far, through the same duration
+                // authority as its detail. Counting from its start to now grew it through silence.
+                if (duration.isNotEmpty)
+                  Text('• $duration', key: const Key('conversation_row_live_length'), style: _metaStyle, maxLines: 1),
               ] else if (duration.isNotEmpty)
                 Text('• $duration', style: _metaStyle, maxLines: 1),
               if (widget.homeCard?.memberCount case final count? when count > 1)
@@ -787,13 +782,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
   bool get _isLive =>
       widget.conversation.v3?.tileState == ConversationTileState.live &&
       (context.read<ConversationsV3Provider?>()?.v3 ?? false);
-
-  /// Speech so far in a live v3 conversation: its first words to the server's latest `finished_at`.
-  int? get _liveSpeechSeconds {
-    final end = widget.conversation.finishedAt;
-    if (end == null) return null;
-    return end.difference(widget.conversation.startedAt ?? widget.conversation.createdAt).inSeconds;
-  }
 
   String _getConversationDuration(BuildContext context) {
     if (widget.homeCard != null && widget.homeCard!.startedAt == null) return '';

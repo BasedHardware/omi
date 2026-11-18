@@ -609,7 +609,7 @@ void main() {
         final sections = StreamController<SummaryStreamEvent>();
         LiveSummarySection.debugStream = (_) => sections.stream;
         final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
-        await shoot(tester, '001-mobile-ios-v3-home');
+        await shoot(tester, '001-mobile-ios-v3-live-tile-end');
 
         await tester.tap(find.text('Launch checklist'));
         await tester.pump();
@@ -617,7 +617,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.byType(ConversationDetailPage), findsOneWidget);
         expect(find.text('Writing your summary…'), findsOneWidget);
-        await shoot(tester, '002-mobile-ios-v3-live-summary-writing');
+        await shoot(tester, '002-mobile-ios-v3-live-detail-end');
 
         sections
           ..add(const SummarySection('## Venue and date\n- The venue holds Thursday the 26th; deposit due Friday.'

@@ -14,6 +14,20 @@
       "description": "v3 live conversation detail: End Conversation above the summary being written; the header length (11m) matches the Home tile",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-v3-live-summary-streamed.png",
+      "platform": "mobile-ios",
+      "description": "v3 live detail after summary sections stream in; End stays above the summary while capturing",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-v3-home-light.png",
+      "platform": "mobile-ios",
+      "description": "v3 Home in light mode: live tile with speech span and End Conversation",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }
