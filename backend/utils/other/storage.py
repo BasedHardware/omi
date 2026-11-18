@@ -2718,6 +2718,39 @@ def link_archive_captures(uid: str, paths: List[str], conversation_ids: List[str
                     raise
 
 
+def _archive_linked(metadata: Dict[str, Any]) -> bool:
+    try:
+        links = json.loads(metadata.get('conversation_ids', '[]'))
+    except (TypeError, ValueError):
+        return True  # Unreadable linkage is treated as linked: never erase another conversation's original.
+    return bool(links) or metadata.get('conversation_id') not in (None, '', 'unknown')
+
+
+def delete_unlinked_upload_archives(uid: str, sync_job_id: str) -> int:
+    """Erase the private-cloud originals archived for one owner-cancelled upload.
+
+    Only objects (every generation) whose metadata names this upload and that no
+    conversation links are deleted. An original that a conversation already
+    references stays with it and is erased when that conversation is deleted.
+    The caller holds the account destructive-operation gate.
+    """
+    if not sync_job_id or '/' in sync_job_id:
+        raise ValueError('bounded sync job identity required')
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    deleted = 0
+    for prefix in ('raw-sync', 'raw-mobile-batch'):
+        for blob in list(bucket.list_blobs(prefix=f'{prefix}/{uid}/', versions=True)):
+            metadata = blob.metadata or {}
+            if metadata.get('sync_job_id') != sync_job_id or _archive_linked(metadata):
+                continue
+            try:
+                blob.delete(if_generation_match=blob.generation, timeout=10)
+            except NotFound:
+                continue
+            deleted += 1
+    return deleted
+
+
 _canonical_bucket_cache: tuple[Any, str, float, Any] | None = None
 _canonical_bucket_lock = threading.Lock()
 

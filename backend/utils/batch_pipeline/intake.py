@@ -59,6 +59,7 @@ from utils.sync.source_reuse_decode import decode_for_intake
 from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
+from utils.batch_pipeline.owner_cancel import cancelled_status
 from database.outbox import OutboxKind, outbox_for
 from utils.batch_pipeline import gpu_overflow
 from utils.batch_pipeline.provider_stt_admission import provider_enqueue
@@ -260,6 +261,9 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             return None
         if intake['owner_id'] != uid:
             raise HTTPException(status_code=403, detail='Not authorized to view this sync job')
+        if intake.get('owner_cancelled_at') is not None:
+            # The owner deleted this recording: never redrive or ACK it as processed.
+            return cancelled_status(intake, job_id)
         if intake.get('coalesce_group'):
             return {'_coalescing_intake': intake}
         ledger = tx.get('content', f"{uid}/{intake['content_id']}")

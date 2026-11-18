@@ -9,7 +9,14 @@ job polling is window-admitted because an unbounded reconciler drain produced th
 
 from database import sync_redrive
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
-from database.legal_holds import DestructiveOperationInProgress
+from database.legal_holds import DestructiveOperationInProgress, destructive_operation_gate
+from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_shadow_hook import shadow_from_env
+from config import sync_owner_cancel
+from utils.batch_pipeline import owner_cancel
+from utils.batch_pipeline.owner_cancel_erase import FirestoreEraser
+from utils.other.account_gate_http import account_gate_busy_http_exception
+from utils.sync.stage import current_stage
 from utils.sync import minimal_redrive, redrive_policy, playback_build
 from utils.other.playback_identity import PlaybackSourceChanged
 from utils.capture.coverage_endpoint import router as coverage_router
@@ -59,6 +66,7 @@ from models.sync_job_status import (
     SyncCaptureEndRequest,
     SyncCaptureEndResponse,
     SyncUploadHoldReleaseResponse,
+    SyncJobCancelResponse,
 )
 from routers.batch_pipeline import enrichment_response
 from database import conversations as conversations_db
@@ -1873,6 +1881,80 @@ def release_sync_upload_hold(job_id: str, uid: str = Depends(auth.get_current_us
     except BatchPrivacyBlocked:
         return privacy_blocked_response()
     return {'accepted': True}
+
+
+# A same-account deletion holding the gate is short; the phone retries a busy answer from its tombstone.
+OWNER_CANCEL_GATE_WAIT_SECONDS = 5.0
+_GATE_ERRORS = frozenset(
+    {'DestructiveGateTakeover', 'DestructiveOperationInProgress', 'LegalHoldActive', 'LegalHoldAuthorityUnavailable'}
+)
+
+
+@router.delete('/v2/sync-local-files/{job_id}', response_model=SyncJobCancelResponse, response_model_exclude_none=True)
+def cancel_sync_upload(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Owner deletes an uploaded recording that has not been transcribed; its server copy is erased.
+
+    Idempotent. Wrong-owner, unknown and legacy handles share the ``not_found``
+    answer. Work that a worker is computing, merging or projecting answers 409
+    ``sync_job_processing`` (retry later); a committed transcript is never
+    deleted here and answers ``already_processed`` with its conversations.
+    Runs under the account destructive-operation gate, so a legal hold refuses it.
+    """
+    if not admit_sync_job_poll(uid):
+        raise HTTPException(
+            status_code=429,
+            detail='Sync job polling too frequent; retry later',
+            headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
+        )
+    if not sync_owner_cancel.enabled():
+        return JSONResponse(
+            status_code=503,
+            headers={'Retry-After': '3600'},
+            content={'code': 'sync_job_cancel_disabled', 'detail': 'Deleting server copies is paused; retry later'},
+        )
+    namespace = f'batch_pipeline_{current_stage()}'
+    try:
+        with destructive_operation_gate(
+            uid, kind='audio_conversation_deletion', wait_seconds=OWNER_CANCEL_GATE_WAIT_SECONDS
+        ):
+            result = owner_cancel.cancel_owner_upload(
+                uid,
+                job_id,
+                store=shadow_from_env(FirestoreStore(namespace)),
+                eraser=FirestoreEraser(namespace),
+            )
+    except owner_cancel.CancelDisabled:
+        return JSONResponse(
+            status_code=503,
+            headers={'Retry-After': '3600'},
+            content={'code': 'sync_job_cancel_disabled', 'detail': 'Deleting server copies is paused; retry later'},
+        )
+    except BatchPrivacyBlocked:
+        return privacy_blocked_response()
+    except RuntimeError as error:
+        if type(error).__name__ not in _GATE_ERRORS:
+            raise
+        raise account_gate_busy_http_exception() from error
+    if result.outcome is owner_cancel.Outcome.IN_PROGRESS:
+        return JSONResponse(
+            status_code=409,
+            headers={'Retry-After': '300'},
+            content={'code': 'sync_job_processing', 'detail': 'The recording is being processed; retry later'},
+        )
+    if result.outcome is owner_cancel.Outcome.NOT_CANCELLABLE:
+        return JSONResponse(
+            status_code=409,
+            content={
+                'code': 'sync_job_not_cancellable',
+                'detail': 'This upload will be processed; delete its conversation afterwards',
+            },
+        )
+    return {
+        'job_id': job_id,
+        'outcome': result.outcome.value,
+        'erasure': result.erasure,
+        'conversation_ids': list(result.conversation_ids),
+    }
 
 
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
