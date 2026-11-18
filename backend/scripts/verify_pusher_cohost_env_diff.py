@@ -466,6 +466,9 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
             "TRANSCRIPTION_SHADOW_PERCENT",
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+            # Listen reads its STT cap fallback cohort from privateSecretEnv (Secret Manager
+            # reference, not an env literal); pusher keeps the empty public value, enforcement off.
+            "STT_CAP_DISPATCH_COHORT",
         }
     )
     | frozenset(PROD_FINAL_PASS_SHADOW_VALUES),
@@ -496,7 +499,17 @@ SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
     # The 1% windowed-TDT canary is listen-only. Pusher retains its streaming
     # and prerecorded policy while allocated listen sessions may lead with TDT.
     # Backend-listen also owns the queue-age publisher; pusher remains disabled.
-    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "STT_SERVICE_MODELS", "FSR_QUEUE_AGE_PUBLISHER"}),
+    # STT cap enforcement has been live on listen since 2026-10-20 (formerly via the privateEnv
+    # overlay, now in the chart); pusher's cap stays observe-only.
+    "prod": frozenset(
+        {
+            "BUCKET_SPEECH_PROFILES",
+            "DD_SERVICE",
+            "STT_SERVICE_MODELS",
+            "FSR_QUEUE_AGE_PUBLISHER",
+            "STT_CAP_DISPATCH_ENFORCEMENT",
+        }
+    ),
 }
 
 DEV_SHADOW_VALUES = {
