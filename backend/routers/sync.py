@@ -1910,7 +1910,11 @@ def cancel_sync_upload(job_id: str, uid: str = Depends(auth.get_current_user_uid
         return JSONResponse(
             status_code=503,
             headers={'Retry-After': '3600'},
-            content={'code': 'sync_job_cancel_disabled', 'detail': 'Deleting server copies is paused; retry later'},
+            content={
+                'code': 'sync_job_cancel_disabled',
+                'detail': 'sync_job_cancel_disabled',
+                'message': 'Deleting server copies is paused; retry later',
+            },
         )
     namespace = f'batch_pipeline_{current_stage()}'
     try:
@@ -1927,7 +1931,11 @@ def cancel_sync_upload(job_id: str, uid: str = Depends(auth.get_current_user_uid
         return JSONResponse(
             status_code=503,
             headers={'Retry-After': '3600'},
-            content={'code': 'sync_job_cancel_disabled', 'detail': 'Deleting server copies is paused; retry later'},
+            content={
+                'code': 'sync_job_cancel_disabled',
+                'detail': 'sync_job_cancel_disabled',
+                'message': 'Deleting server copies is paused; retry later',
+            },
         )
     except BatchPrivacyBlocked:
         return privacy_blocked_response()
@@ -1939,14 +1947,19 @@ def cancel_sync_upload(job_id: str, uid: str = Depends(auth.get_current_user_uid
         return JSONResponse(
             status_code=409,
             headers={'Retry-After': '300'},
-            content={'code': 'sync_job_processing', 'detail': 'The recording is being processed; retry later'},
+            content={
+                'code': 'sync_job_processing',
+                'detail': 'sync_job_processing',
+                'message': 'The recording is being processed; retry later',
+            },
         )
     if result.outcome is owner_cancel.Outcome.NOT_CANCELLABLE:
         return JSONResponse(
             status_code=409,
             content={
                 'code': 'sync_job_not_cancellable',
-                'detail': 'This upload will be processed; delete its conversation afterwards',
+                'detail': 'sync_job_not_cancellable',
+                'message': 'This upload will be processed; delete its conversation afterwards',
             },
         )
     return {

@@ -263,6 +263,18 @@
       "basis": "planning-bound",
       "source": "Code bound: observation reads current row, deletion marker and one aggregate shard, with one transaction attempt and no retries; complete refresh reads exactly 16 fixed shards and no user rows. Planning envelope 100000 observations/day plus 10000 refreshes/day = 460000 reads, rounded to 500000. Not measured traffic, a runtime volume cap or a savings claim. Rebudget if observation or refresh volume exceeds that envelope. See backend/docs/operational/batch-identity-evidence.md.",
       "reviewed": "2026-11-16"
+    },
+    {
+      "site": "backend/utils/batch_pipeline/owner_cancel_erase.py",
+      "expression": "f'{self.namespace}_{table}'",
+      "collection_pattern": "batch_pipeline_*_*",
+      "owner": "support-packet owner cancel (DELETE /v2/sync-local-files/{job_id}) / batch-custody",
+      "unit": "one owner-cancelled batch upload (intake plus its fenced units), including one erasure retry",
+      "reads_per_unit_budget": 200,
+      "reads_per_day_budget": 400000,
+      "basis": "planning-bound",
+      "source": "Existing jobs/results/artifacts tables only, point reads by segment id; no scan. Per unit: job and result reads, one artifact read per referenced object, then the reused purge delete_job transaction (job, result, owner, control, queue, predecessor query, re-fence read), about 15 reads. Fence (Store.run in owner_cancel.py) adds intake, ledger, each unit, its queue and one ready-predecessor query per unit. Uploads hold a few units; 200 reads covers about eight units with one retry. Volume: owner-initiated deletes of uploaded-but-unprocessed rows only, planned at up to 2000/day; the endpoint shares the per-owner sync poll limiter. Remeasure if deletes exceed that or uploads grow beyond eight units.",
+      "reviewed": "2026-11-18"
     }
   ],
   "exempt": [

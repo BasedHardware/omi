@@ -2,10 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api/sync_job_cancel.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
@@ -13,6 +16,14 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+class _TestEnvFields implements EnvFields {
+  @override
+  String? get apiBaseUrl => 'https://api.test/';
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
 
 class _Listener implements IWalSyncListener {
   final synced = <String>[];
@@ -82,24 +93,39 @@ void main() {
     )..jobId = status == WalStatus.uploaded ? jobId : null;
   }
 
+  setUpAll(() => Env.init(_TestEnvFields()));
+
   group('server answer mapping', () {
-    test('every server answer maps to one phone action', () {
-      SyncJobCancelOutcome outcome(int? code, String body) => syncJobCancelResultFor(code, body).outcome;
-      expect(outcome(200, '{"outcome":"cancelled","erasure":"complete"}'), SyncJobCancelOutcome.cancelled);
-      expect(outcome(200, '{"outcome":"cancelled","erasure":"pending"}'), SyncJobCancelOutcome.erasurePending);
-      expect(outcome(200, '{"outcome":"not_found"}'), SyncJobCancelOutcome.notFound);
-      final processed = syncJobCancelResultFor(200, '{"outcome":"already_processed","conversation_ids":["c1"]}');
+    test('every server answer maps to one phone action', () async {
+      Future<SyncJobCancelResult> answer(int status, String body) => cancelSyncJob(
+            'bp_job',
+            send: (request) async {
+              expect(request.method, 'DELETE');
+              expect(request.url, endsWith('v2/sync-local-files/bp_job'));
+              return http.Response(body, status);
+            },
+          );
+      Future<SyncJobCancelOutcome> outcome(int status, String body) async => (await answer(status, body)).outcome;
+      expect(await outcome(200, '{"outcome":"cancelled","erasure":"complete"}'), SyncJobCancelOutcome.cancelled);
+      expect(await outcome(200, '{"outcome":"cancelled","erasure":"pending"}'), SyncJobCancelOutcome.erasurePending);
+      expect(await outcome(200, '{"outcome":"not_found"}'), SyncJobCancelOutcome.notFound);
+      final processed = await answer(200, '{"outcome":"already_processed","conversation_ids":["c1"]}');
       expect(processed.outcome, SyncJobCancelOutcome.alreadyProcessed);
       expect(processed.conversationIds, ['c1']);
-      expect(outcome(409, '{"code":"sync_job_processing"}'), SyncJobCancelOutcome.retryLater);
-      expect(outcome(409, '{"code":"sync_job_not_cancellable"}'), SyncJobCancelOutcome.notCancellable);
-      expect(outcome(409, '{"detail":"Account busy"}'), SyncJobCancelOutcome.retryLater);
-      expect(outcome(404, ''), SyncJobCancelOutcome.notFound);
-      for (final code in [null, 429, 500, 503]) {
-        expect(outcome(code, ''), SyncJobCancelOutcome.retryLater, reason: '$code');
+      expect(await outcome(409, '{"code":"sync_job_processing","detail":"sync_job_processing"}'),
+          SyncJobCancelOutcome.retryLater);
+      expect(await outcome(409, '{"code":"sync_job_not_cancellable","detail":"sync_job_not_cancellable"}'),
+          SyncJobCancelOutcome.notCancellable);
+      expect(await outcome(409, '{"detail":"Account busy"}'), SyncJobCancelOutcome.retryLater);
+      expect(await outcome(404, ''), SyncJobCancelOutcome.notFound);
+      for (final status in [429, 500, 503]) {
+        expect(await outcome(status, ''), SyncJobCancelOutcome.retryLater, reason: '$status');
       }
-      expect(outcome(200, 'not json'), SyncJobCancelOutcome.retryLater);
-      expect(outcome(200, '{"outcome":"something_new"}'), SyncJobCancelOutcome.retryLater);
+      expect(await outcome(200, 'not json'), SyncJobCancelOutcome.retryLater);
+      expect(await outcome(200, '[]'), SyncJobCancelOutcome.retryLater);
+      expect(await outcome(200, '{"outcome":"something_new"}'), SyncJobCancelOutcome.retryLater);
+      expect(syncJobCancelResultFrom(const ApiFailure(ApiProblem(ApiProblemKind.transport))).outcome,
+          SyncJobCancelOutcome.retryLater);
     });
   });
 
