@@ -206,6 +206,67 @@ def test_known_batch_outcomes_release_the_reservation(reservation_db, outcome):
     assert entries(reservation_db) == {}
 
 
+@pytest.fixture
+def full_reservation_ledger(reservation_db):
+    for index in range(reservations.MAX_OPEN):
+        reservations.reserve(UID, f'hold-{index}', units=1, period=PERIOD, batch_job_id=f'bp_{index}')
+    return reservation_db
+
+
+@pytest.mark.asyncio
+async def test_projected_handoff_frees_a_slot_in_a_full_ledger(full_reservation_ledger, monkeypatch):
+    db = full_reservation_ledger
+    snapshot = SimpleNamespace(id='hold-0', to_dict=lambda: {'state': 'batch_admitted', 'batch_job_id': 'bp_0'})
+    original = deepcopy(entries(db))
+    released = reservations.CAP_HOLD_RESERVATIONS_RELEASED.labels(outcome='projected')
+    before = released._value.get()
+    monkeypatch.setattr(adapter, 'handoff_projected', lambda uid, job_id: False)
+    monkeypatch.setattr(cap_hold_recovery, '_erase', lambda *args: pytest.fail('pending hand-off erased'))
+    assert not await cap_hold_recovery.finish_handoff(UID, snapshot)
+    reservations.release_projected(UID, snapshot.id, 'different-job')
+    assert entries(db) == original
+
+    expected = {hold_id: entry for hold_id, entry in original.items() if hold_id != snapshot.id}
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError('reservation store unavailable')
+
+    def erase(uid, snap, row):
+        assert entries(db) == expected  # release committed before the hold can disappear
+
+    monkeypatch.setattr(adapter, 'handoff_projected', lambda uid, job_id: True)
+    with monkeypatch.context() as patch:
+        patch.setattr(reservations, 'external_write_fence', unavailable)
+        with pytest.raises(RuntimeError, match='reservation store unavailable'):
+            await cap_hold_recovery.finish_handoff(UID, snapshot)
+    assert entries(db) == original
+
+    monkeypatch.setattr(cap_hold_recovery, '_erase', erase)
+    assert await cap_hold_recovery.finish_handoff(UID, snapshot)
+    assert await cap_hold_recovery.finish_handoff(UID, snapshot)  # duplicate sweep / erasure retry
+    assert released._value.get() == before + 1
+    monkeypatch.setattr(reservations, 'batch_status', lambda *args: pytest.fail('under-bound reserve scanned ledger'))
+    reservations.reserve(UID, 'next-hold', units=1, period=PERIOD, batch_job_id='bp_next')
+    assert len(entries(db)) == reservations.MAX_OPEN
+
+
+def test_full_ledger_can_recover_after_projected_handoff_was_already_erased(full_reservation_ledger, monkeypatch):
+    db = full_reservation_ledger
+    original = deepcopy(entries(db))
+    monkeypatch.setattr(reservations, 'batch_status', lambda uid, job_id: 'pending')
+    with pytest.raises(ValueError, match='cap-hold reservation bound exceeded'):
+        reservations.reserve(UID, 'next-hold', units=1, period=PERIOD, batch_job_id='bp_next')
+    assert entries(db) == original
+
+    monkeypatch.setattr(
+        reservations, 'batch_status', lambda uid, job_id: 'projected' if job_id == 'bp_0' else 'pending'
+    )
+    reservations.reserve(UID, 'next-hold', units=1, period=PERIOD, batch_job_id='bp_next')
+    assert len(entries(db)) == reservations.MAX_OPEN
+    assert 'hold-0' not in entries(db)
+    assert entries(db)['next-hold']['batch_job_id'] == 'bp_next'
+
+
 def test_slow_pending_reservations_keep_counting_and_alert_once(reservation_db, caplog):
     # Pending past the alert threshold is slow, not lost (lost jobs read as 'abandoned'): releasing it
     # would let the worker over-admit while batch still owes the debit.
