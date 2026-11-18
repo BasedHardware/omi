@@ -1,8 +1,119 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+usage() {
+  cat <<'USAGE'
+usage: bash test.sh [--list] [TEST_FILE[::NODE] ...]
+       bash test.sh [--list] --changed [--base REF]
+       bash test.sh [--list] --all
+
+  TEST_FILE ...  run exactly these files. Accepts tests/unit/x.py, backend/tests/unit/x.py,
+                 a path relative to the current directory, or a bare file name that is
+                 unique under tests/. A path that does not resolve is an error.
+  --changed      run what CI's PR selector picks for this branch: changes since the
+                 merge-base with REF (default origin/main), plus staged, unstaged and
+                 untracked files.
+  --base REF     compare against REF instead of origin/main (implies --changed).
+  --all          the full unit suite. That is CI's job; locally it is an explicit opt-in.
+  --list         print the selected files and exit without running them.
+
+With no selection, a local run uses --changed and CI (CI or GITHUB_ACTIONS is "true")
+uses --all. BACKEND_UNIT_TEST_FILE_LIST=<file> supplies a backend-relative list instead;
+combining it with TEST_FILE, --changed or --all is an error.
+BACKEND_PYTEST_WORKERS=<n> sets how many files run at once. Unset or "auto" means every
+core in CI and half the cores (at least 2, at most 8) elsewhere.
+USAGE
+}
+
+usage_error() {
+  echo "test.sh: $*" >&2
+  echo "Run 'bash test.sh --help' for usage." >&2
+  exit 2
+}
+
+selection_mode=""
+diff_base_ref=""
+list_only=0
+requested_paths=()
+requested_count=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --all | --changed)
+      if [[ -n "$selection_mode" && "$selection_mode" != "${1#--}" ]]; then
+        usage_error "--all and --changed are mutually exclusive"
+      fi
+      selection_mode="${1#--}"
+      ;;
+    --base)
+      [[ $# -ge 2 && -n "$2" && "$2" != -* ]] || usage_error "--base requires a git ref"
+      diff_base_ref="$2"
+      shift
+      ;;
+    --base=*)
+      diff_base_ref="${1#--base=}"
+      [[ -n "$diff_base_ref" ]] || usage_error "--base requires a git ref"
+      ;;
+    --list)
+      list_only=1
+      ;;
+    --)
+      shift
+      while [[ $# -gt 0 ]]; do
+        requested_paths+=("$1")
+        requested_count=$((requested_count + 1))
+        shift
+      done
+      break
+      ;;
+    -*)
+      usage_error "unknown option: $1"
+      ;;
+    *)
+      requested_paths+=("$1")
+      requested_count=$((requested_count + 1))
+      ;;
+  esac
+  shift
+done
+
+if [[ -n "$diff_base_ref" ]]; then
+  [[ "$selection_mode" != "all" ]] || usage_error "--base applies to --changed, not --all"
+  selection_mode="changed"
+fi
+if [[ "$requested_count" -gt 0 && -n "$selection_mode" ]]; then
+  usage_error "test files and --$selection_mode are mutually exclusive; pass one selection"
+fi
+if [[ -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ]]; then
+  if [[ "$requested_count" -gt 0 || -n "$selection_mode" ]]; then
+    usage_error "BACKEND_UNIT_TEST_FILE_LIST is already a selection; unset it or drop the test files/--all/--changed"
+  fi
+  selection_mode="list"
+elif [[ "$requested_count" -gt 0 ]]; then
+  selection_mode="paths"
+fi
+
+running_in_ci=0
+if [[ "${CI:-}" == "true" || "${GITHUB_ACTIONS:-}" == "true" ]]; then
+  running_in_ci=1
+fi
+implicit_selection=0
+if [[ -z "$selection_mode" ]]; then
+  implicit_selection=1
+  if [[ "$running_in_ci" == "1" ]]; then
+    selection_mode="all"
+  else
+    selection_mode="changed"
+  fi
+fi
+
+CALLER_DIR="$PWD"
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
+ROOT_DIR_PHYSICAL="$(pwd -P)"
 
 # Repository sources are UTF-8. Native Windows Python otherwise inherits the
 # system code page, which makes source-reading tests locale-dependent.
@@ -65,23 +176,142 @@ if [[ -n "$marker_expr" ]]; then
 fi
 
 use_file_isolation="${BACKEND_PYTEST_FILE_ISOLATION:-1}"
+use_session_xdist=0
 if [[ "$use_file_isolation" != "1" && "$use_file_isolation" != "true" && "${BACKEND_PYTEST_XDIST:-auto}" != "0" && "${BACKEND_PYTEST_XDIST:-auto}" != "false" ]]; then
   if "$PYTHON_BIN" -c "import xdist" >/dev/null 2>&1; then
-    workers="${BACKEND_PYTEST_WORKERS:-auto}"
-    pytest_args+=(-n "$workers" --dist=loadfile)
+    # The worker count is resolved after selection, by the same bounded rule.
+    use_session_xdist=1
   else
     echo "pytest-xdist is not installed; running backend unit tests serially."
   fi
 fi
 
-test_list_file="${BACKEND_UNIT_TEST_FILE_LIST:-}"
-generated_test_list=""
-if [[ -z "$test_list_file" ]]; then
-  generated_test_list="$(mktemp)"
-  trap '[[ -z "${generated_test_list:-}" ]] || rm -f "$generated_test_list"' EXIT
-  "$PYTHON_BIN" scripts/select_backend_unit_tests.py --all --output "$generated_test_list"
-  test_list_file="$generated_test_list"
-fi
+selection_dir="$(mktemp -d)"
+trap 'rm -rf "$selection_dir"' EXIT
+
+# Print the backend-relative form of an existing file; fail when it is outside backend/.
+backend_relative_path() {
+  local directory relative
+  directory="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || return 1
+  case "$directory/" in
+    "$ROOT_DIR_PHYSICAL"/*) ;;
+    *) return 1 ;;
+  esac
+  relative="${directory#"$ROOT_DIR_PHYSICAL"}"
+  relative="${relative#/}"
+  printf '%s%s\n' "${relative:+$relative/}" "$(basename "$1")"
+}
+
+# Resolve one requested test path to a backend-relative path. Never guesses: a
+# path that does not exist, a directory, or an ambiguous bare name is an error.
+resolve_test_path() {
+  local spec="$1" file_part node_suffix="" candidate name matches match_count match
+  local candidates=()
+  file_part="${spec%%::*}"
+  [[ "$file_part" == "$spec" ]] || node_suffix="::${spec#*::}"
+  case "$file_part" in
+    /*) candidates=("$file_part") ;;
+    *)
+      candidates=("$CALLER_DIR/$file_part" "$ROOT_DIR/$file_part")
+      [[ "$file_part" != backend/* ]] || candidates+=("$ROOT_DIR/${file_part#backend/}")
+      ;;
+  esac
+  for candidate in "${candidates[@]}"; do
+    if [[ -d "$candidate" ]]; then
+      echo "test.sh: $spec is a directory; pass test files, --changed, or --all" >&2
+      return 1
+    fi
+    if [[ -f "$candidate" ]]; then
+      if ! candidate="$(backend_relative_path "$candidate")"; then
+        echo "test.sh: $spec is outside backend/; this runner only runs backend tests" >&2
+        return 1
+      fi
+      printf '%s%s\n' "$candidate" "$node_suffix"
+      return 0
+    fi
+  done
+  if [[ "$file_part" != */* ]]; then
+    name="$file_part"
+    [[ "$name" == *.py ]] || name="$name.py"
+    matches="$(find tests -type f -name "$name" -not -path '*/__pycache__/*' 2>/dev/null | LC_ALL=C sort)"
+    match_count=0
+    [[ -z "$matches" ]] || match_count="$(printf '%s\n' "$matches" | wc -l | tr -d ' ')"
+    if [[ "$match_count" -eq 1 ]]; then
+      printf '%s%s\n' "$matches" "$node_suffix"
+      return 0
+    fi
+    if [[ "$match_count" -gt 1 ]]; then
+      echo "test.sh: $spec is ambiguous; $match_count files under backend/tests/ have that name:" >&2
+      while IFS= read -r match; do
+        echo "  $match" >&2
+      done <<< "$matches"
+      return 1
+    fi
+    echo "test.sh: $spec: no file of that name under backend/tests/" >&2
+    return 1
+  fi
+  echo "test.sh: $spec: no such file (looked relative to $CALLER_DIR and backend/)" >&2
+  return 1
+}
+
+# --changed reuses CI's PR selector over the same diff CI computes (merge-base
+# with the base ref versus HEAD), widened by the uncommitted state of this tree,
+# so a local run can select more than CI for the same change, never less.
+select_changed_tests() {
+  local base_ref="${diff_base_ref:-origin/main}" merge_base changed_list changed_count
+  if ! git rev-parse --verify --quiet "${base_ref}^{commit}" >/dev/null; then
+    usage_error "--changed cannot resolve $base_ref. Run 'git fetch origin main', pass --base REF, pass test files, or use --all."
+  fi
+  merge_base="$(git merge-base "$base_ref" HEAD)" ||
+    usage_error "--changed found no merge-base between $base_ref and HEAD; pass --base REF or use --all."
+  changed_list="$selection_dir/changed-files.txt"
+  {
+    "$ROOT_DIR/../scripts/changed-files" "$merge_base" HEAD
+    "$ROOT_DIR/../scripts/changed-files" "$merge_base"
+    git ls-files --others --exclude-standard --full-name -- ':/'
+  } | LC_ALL=C sort -u > "$changed_list"
+  changed_count="$(wc -l < "$changed_list" | tr -d ' ')"
+  test_list_file="$selection_dir/changed-tests.txt"
+  selection_reason_file="$selection_dir/changed-reason.txt"
+  "$PYTHON_BIN" scripts/select_backend_unit_tests.py \
+    --changed-files "$changed_list" \
+    --output "$test_list_file" \
+    --reason-output "$selection_reason_file"
+  echo "test.sh --changed: $changed_count changed path(s) since ${merge_base:0:12} ($base_ref): $(cat "$selection_reason_file")" >&2
+}
+
+selection_reason_file=""
+case "$selection_mode" in
+  paths)
+    test_list_file="$selection_dir/requested-tests.txt"
+    : > "$test_list_file"
+    resolve_failed=0
+    for spec in "${requested_paths[@]}"; do
+      if resolved="$(resolve_test_path "$spec")"; then
+        grep -qxF -- "$resolved" "$test_list_file" || printf '%s\n' "$resolved" >> "$test_list_file"
+      else
+        resolve_failed=1
+      fi
+    done
+    if [[ "$resolve_failed" -ne 0 ]]; then
+      echo "test.sh: no tests were run; fix the path(s) above." >&2
+      exit 2
+    fi
+    ;;
+  list)
+    test_list_file="$BACKEND_UNIT_TEST_FILE_LIST"
+    ;;
+  changed)
+    if [[ "$implicit_selection" == "1" ]]; then
+      echo "test.sh: no selection given, so running --changed (CI's PR selection for this branch). Pass test files to narrow it, or --all for the full suite." >&2
+    fi
+    select_changed_tests
+    ;;
+  all)
+    test_list_file="$selection_dir/all-tests.txt"
+    "$PYTHON_BIN" scripts/select_backend_unit_tests.py --all --output "$test_list_file"
+    ;;
+esac
 
 if [[ ! -f "$test_list_file" ]]; then
   echo "BACKEND_UNIT_TEST_FILE_LIST does not exist: $test_list_file" >&2
@@ -89,31 +319,78 @@ if [[ ! -f "$test_list_file" ]]; then
 fi
 
 selected_tests=()
+selected_count=0
 while IFS= read -r test_path; do
-  # Automatic unit selections leave E2E to its own CI job. An explicit list
-  # must honor hermetic E2E paths too, rather than silently report no tests.
-  if [[ -n "$test_path" && ( "$test_path" != testing/e2e/* || -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ) ]]; then
+  # The automatic full selection leaves E2E to its own CI job. Every other
+  # selection (an explicit list, named files, or the PR selector's output, which
+  # CI passes to this runner as an explicit list) must honor hermetic E2E paths.
+  if [[ -n "$test_path" && ( "$test_path" != testing/e2e/* || "$selection_mode" != "all" ) ]]; then
     selected_tests+=("$test_path")
+    selected_count=$((selected_count + 1))
   fi
 done < "$test_list_file"
 
-if [[ ${#selected_tests[@]} -eq 0 ]]; then
+if [[ "$list_only" == "1" ]]; then
+  [[ "$selected_count" -eq 0 ]] || printf '%s\n' "${selected_tests[@]}"
+  exit 0
+fi
+
+if [[ "$selected_count" -eq 0 ]]; then
   echo "No backend unit tests selected."
   exit 0
 fi
 
-echo "Running ${#selected_tests[@]} backend unit test file(s)."
+# A full local run is what turned one agent's two-file check into the whole suite
+# on a shared host, so say so before starting rather than after.
+broad_local_selection=100
+if [[ "$running_in_ci" != "1" && "$selection_mode" == "all" ]]; then
+  echo "==> test.sh: running the FULL backend unit suite ($selected_count files). CI runs it for every PR; locally prefer 'bash test.sh --changed' or 'bash test.sh tests/unit/test_<name>.py'." >&2
+elif [[ "$running_in_ci" != "1" && "$selection_mode" == "changed" && "$selected_count" -gt "$broad_local_selection" ]]; then
+  echo "==> test.sh: the selector picked $selected_count files for this diff, the same set CI runs for it. While iterating, pass the test files you are working on instead." >&2
+fi
+
+echo "Running $selected_count backend unit test file(s)."
+
+# Locally, "auto" is half the cores, at least 2 and at most 8: a developer machine
+# is shared with builds and other agents' test runs, and each invocation used to
+# start one worker per core (ten lanes on an 18-core host: 180 slots, load ~380).
+# Total CPU for a selection does not change with the worker count; the count only
+# decides how much of the host one run claims. backend/tests/README.md has the
+# measurement. CI runners are not shared and keep every core.
+local_auto_worker_cap=8
+resolve_worker_count() {
+  local requested="${BACKEND_PYTEST_WORKERS:-auto}" cores
+  if [[ "$requested" != "auto" ]]; then
+    [[ "$requested" =~ ^[1-9][0-9]*$ ]] ||
+      usage_error "BACKEND_PYTEST_WORKERS must be a positive integer or auto, not '$requested'"
+    printf '%s\n' "$requested"
+    return
+  fi
+  if command -v getconf >/dev/null 2>&1; then
+    cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
+  elif command -v sysctl >/dev/null 2>&1; then
+    cores="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+  else
+    cores="4"
+  fi
+  [[ "$cores" =~ ^[1-9][0-9]*$ ]] || cores=4
+  if [[ "$running_in_ci" == "1" ]]; then
+    printf '%s\n' "$cores"
+    return
+  fi
+  local workers=$((cores / 2))
+  [[ "$workers" -ge 2 ]] || workers=2
+  [[ "$workers" -le "$cores" ]] || workers="$cores"
+  [[ "$workers" -le "$local_auto_worker_cap" ]] || workers="$local_auto_worker_cap"
+  printf '%s\n' "$workers"
+}
 
 if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
-  worker_count="${BACKEND_PYTEST_WORKERS:-auto}"
-  if [[ "$worker_count" == "auto" ]]; then
-    if command -v getconf >/dev/null 2>&1; then
-      worker_count="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
-    elif command -v sysctl >/dev/null 2>&1; then
-      worker_count="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
-    else
-      worker_count="4"
-    fi
+  worker_count="$(resolve_worker_count)"
+  if [[ "$running_in_ci" == "1" ]]; then
+    echo "test.sh: $worker_count file(s) at a time (BACKEND_PYTEST_WORKERS=${BACKEND_PYTEST_WORKERS:-auto}; CI auto uses every core)." >&2
+  else
+    echo "test.sh: $worker_count file(s) at a time (BACKEND_PYTEST_WORKERS=${BACKEND_PYTEST_WORKERS:-auto}; local auto is half the cores, 2 to $local_auto_worker_cap)." >&2
   fi
 
   # OPT-IN partition: run the files that are not known module-stub offenders in one
@@ -277,8 +554,8 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
         # fixture plugin only where its fixture is referenced; importing it
         # (and Werkzeug) in every isolated process adds suite-wide startup cost.
         file_pytest_args=("${pytest_args[@]}" -p no:xdist.looponfail)
-        if [[ -f "$test_path" ]]; then
-          test_source="$(<"$test_path")"
+        if [[ -f "${test_path%%::*}" ]]; then
+          test_source="$(<"${test_path%%::*}")"
           httpserver_fixture_pattern='(^|[^[:alnum:]_])httpserver'
           if [[ ! "$test_source" =~ $httpserver_fixture_pattern ]]; then
             file_pytest_args+=(-p no:pytest_httpserver)
@@ -423,6 +700,14 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
 
   rm -rf "$status_dir"
   exit "$failed"
+fi
+
+if [[ "$use_session_xdist" == "1" ]]; then
+  workers="${BACKEND_PYTEST_WORKERS:-auto}"
+  if [[ "$workers" == "auto" && "$running_in_ci" != "1" ]]; then
+    workers="$(resolve_worker_count)"
+  fi
+  pytest_args+=(-n "$workers" --dist=loadfile)
 fi
 
 set +e
