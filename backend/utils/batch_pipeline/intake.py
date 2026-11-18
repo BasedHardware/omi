@@ -490,6 +490,22 @@ def _decode_failure_key(uid: str, content_id: str, paths: list[str]) -> str | No
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
+async def _probe_upload_allowance(store, uid, policy, lane, items, source_aliases):
+    if not (
+        policy.stt_route == 'parakeet'
+        and policy.provider_reason != 'byok'
+        and lane in {'fresh', 'backfill'}
+        and items
+        and all(item.requires_compute_admission for item in items)
+        and any(item.segment_id not in source_aliases for item in items)
+    ):
+        return None
+
+    from utils.batch_pipeline.admission import probe_intake_allowance
+
+    return await probe_intake_allowance(store, uid)
+
+
 async def accept_upload(
     *,
     uid: str,
@@ -1052,18 +1068,7 @@ async def accept_upload(
         wakes: dict[str, str] = {}
         phase = 'admit'
         outbox = await run_blocking(db_executor, outbox_for, OutboxKind.PROVIDER_STT) if provider else None
-        intake_refusal = None
-        if (
-            not provider
-            and policy.provider_reason != 'byok'
-            and lane in {'fresh', 'backfill'}
-            and items
-            and all(item.requires_compute_admission for item in items)
-            and any(item.segment_id not in source_aliases for item in items)
-        ):
-            from utils.batch_pipeline.admission import probe_intake_allowance
-
-            intake_refusal = await probe_intake_allowance(store, uid)
+        intake_refusal = await _probe_upload_allowance(store, uid, policy, lane, items, source_aliases)
         outcome = await run_blocking(
             db_executor,
             admit,
