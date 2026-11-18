@@ -1,0 +1,260 @@
+"""Private backend-listen env: Secret Manager migration and the pre-roll guard never leak a value."""
+
+from __future__ import annotations
+
+import base64
+import importlib.util
+import json
+from pathlib import Path
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parents[3]
+SCRIPT = ROOT / ".github" / "scripts" / "listen_private_env.py"
+PROD_VALUES = ROOT / "backend" / "charts" / "backend-listen" / "prod_omi_backend_listen_values.yaml"
+SPEC = importlib.util.spec_from_file_location("listen_private_env", SCRIPT)
+HELPER = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(HELPER)
+
+COHORT = "uid:SentinelCohort0123456789"
+DIGEST = "f" * 64
+SECRET_NAME = "prod-omi-backend-listen-private-env"
+
+
+class Cluster:
+    """Fake kubectl/gcloud: records argv, serves JSON, never prints."""
+
+    def __init__(self, live: dict[str, dict], secret: dict[str, str] | None, ready: bool = True):
+        self.live = live
+        self.secret = secret
+        self.ready = ready
+        self.version = "1-aaaa"
+        self.calls: list[list[str]] = []
+        self.written: dict | None = None
+        self.replicasets: list[tuple[int, dict]] = [(35, live)]
+
+    def __call__(self, argv, *, timeout=60):
+        self.calls.append(list(argv))
+        if argv[:4] == ["gcloud", "secrets", "versions", "add"]:
+            path = next(a.split("=", 1)[1] for a in argv if a.startswith("--data-file="))
+            self.written = json.loads(Path(path).read_text())
+            assert Path(path).stat().st_mode & 0o777 == 0o600
+            return b"projects/1/secrets/LISTEN_PRIVATE_ENV/versions/3\n"
+        if "annotate" in argv:
+            self.version = "1-bbbb"
+            return b""
+        kind = argv[argv.index("get") + 1]
+        if kind == "deployment":
+            env = [dict(entry, name=name) for name, entry in self.live.items()]
+            return json.dumps(
+                {
+                    "spec": {
+                        "selector": {"matchLabels": {"app": "listen"}},
+                        "template": {"spec": {"containers": [{"name": "backend-listen", "env": env}]}},
+                    }
+                }
+            ).encode()
+        if kind == "replicaset":
+            assert argv[argv.index("-l") + 1] == "app=listen"
+            items = []
+            for replicas, live in self.replicasets:
+                env = [dict(entry, name=name) for name, entry in live.items()]
+                items.append(
+                    {
+                        "metadata": {"ownerReferences": [{"name": "prod-omi-backend-listen"}]},
+                        "status": {"replicas": replicas},
+                        "spec": {"template": {"spec": {"containers": [{"name": "backend-listen", "env": env}]}}},
+                    }
+                )
+            return json.dumps({"items": items}).encode()
+        if kind == "secret":
+            if self.secret is None:
+                raise HELPER.Refused("kubectl get failed (exit 1)")
+            return json.dumps(
+                {"data": {k: base64.b64encode(v.encode()).decode() for k, v in self.secret.items()}}
+            ).encode()
+        if kind == "externalsecret":
+            return json.dumps(
+                {
+                    "status": {
+                        "syncedResourceVersion": self.version,
+                        "refreshTime": "t",
+                        "conditions": [{"type": "Ready", "status": str(self.ready)}],
+                    }
+                }
+            ).encode()
+        raise AssertionError(argv)
+
+
+@pytest.fixture
+def cluster(monkeypatch):
+    def install(**kwargs):
+        fake = Cluster(**kwargs)
+        monkeypatch.setattr(HELPER, "run", fake)
+        monkeypatch.setattr(HELPER.time, "sleep", lambda _s: None)
+        return fake
+
+    return install
+
+
+def literal_live():
+    return {
+        "STT_CAP_DISPATCH_COHORT": {"value": COHORT},
+        "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": {"value": DIGEST},
+        "STT_CAP_DISPATCH_ENFORCEMENT": {"value": "true"},
+    }
+
+
+def ref(key):
+    return {"valueFrom": {"secretKeyRef": {"name": SECRET_NAME, "key": key, "optional": False}}}
+
+
+def guard(capsys, timeout="5"):
+    rc = HELPER.main(["guard", "--values-file", str(PROD_VALUES), "--timeout", timeout])
+    out = capsys.readouterr()
+    assert COHORT not in out.out + out.err and DIGEST not in out.out + out.err
+    return rc, out.out, out.err
+
+
+def test_prod_chart_declares_only_uid_bearing_names():
+    values = yaml.safe_load(PROD_VALUES.read_text())
+    assert HELPER.declared(values) == (SECRET_NAME, ["STT_CAP_DISPATCH_COHORT", "MEDIA_NOISE_MODE_SERVE_UID_SHA256S"])
+
+
+def test_guard_passes_when_secret_matches_live_literals(cluster, capsys):
+    cluster(
+        live=literal_live(), secret={"STT_CAP_DISPATCH_COHORT": COHORT, "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST}
+    )
+    rc, out, _ = guard(capsys)
+    assert rc == 0
+    assert "key=STT_CAP_DISPATCH_COHORT effect=same" in out
+    assert "key=MEDIA_NOISE_MODE_SERVE_UID_SHA256S effect=same" in out
+
+
+def test_guard_refuses_a_changed_or_missing_value_before_any_roll(cluster, capsys):
+    cluster(live=literal_live(), secret={"STT_CAP_DISPATCH_COHORT": COHORT + "x"})
+    rc, out, err = guard(capsys)
+    assert rc == 2
+    assert "key=STT_CAP_DISPATCH_COHORT effect=changed" in out
+    assert "key=MEDIA_NOISE_MODE_SERVE_UID_SHA256S effect=missing-from-secret" in out
+    assert "nothing deployed" in err
+
+
+def test_guard_after_cutover_checks_references_and_presence(cluster, capsys):
+    live = {
+        "STT_CAP_DISPATCH_COHORT": ref("STT_CAP_DISPATCH_COHORT"),
+        "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": ref("MEDIA_NOISE_MODE_SERVE_UID_SHA256S"),
+    }
+    cluster(live=live, secret={"STT_CAP_DISPATCH_COHORT": COHORT, "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST})
+    assert guard(capsys)[0] == 0
+    # An emptied key would deny every capped dispatch (empty cohort with enforcement on).
+    cluster(live=live, secret={"STT_CAP_DISPATCH_COHORT": "", "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST})
+    rc, out, _ = guard(capsys)
+    assert rc == 2 and "key=STT_CAP_DISPATCH_COHORT effect=missing-from-secret" in out
+
+
+def test_guard_refuses_an_unsynced_external_secret(cluster, capsys):
+    cluster(live=literal_live(), secret=None, ready=False)
+    rc, _, err = guard(capsys, timeout="0")
+    assert rc == 2 and "not Ready" in err
+
+
+def test_guard_is_a_no_op_without_declared_names(tmp_path, cluster, capsys):
+    values = tmp_path / "values.yaml"
+    values.write_text("env: []\n")
+    fake = cluster(live={}, secret=None)
+    assert HELPER.main(["guard", "--values-file", str(values)]) == 0
+    assert fake.calls == []
+
+
+def private_yaml(**env):
+    return yaml.safe_dump({"privateEnv": env})
+
+
+def migrate(capsys, monkeypatch, secret_yaml):
+    monkeypatch.setenv("LISTEN_PRIVATE_VALUES_YAML", secret_yaml)
+    rc = HELPER.main(["migrate", "--values-file", str(PROD_VALUES), "--project", "synthetic-project"])
+    out = capsys.readouterr()
+    assert COHORT not in out.out + out.err and DIGEST not in out.out + out.err
+    import os
+
+    assert "LISTEN_PRIVATE_VALUES_YAML" not in os.environ
+    return rc, out.out, out.err
+
+
+def full_overlay(**changes):
+    env = {
+        "MEDIA_NOISE_MODE": "shadow",
+        "MEDIA_NOISE_MODE_SERVE_PERCENT": "0",
+        "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST,
+        "STT_CAP_DISPATCH_COHORT": COHORT,
+        "STT_CAP_DISPATCH_ENFORCEMENT": "true",
+        "STT_CAP_DISPATCH_LANES": "live",
+    }
+    env.update(changes)
+    return private_yaml(**env)
+
+
+def test_migrate_writes_only_the_declared_private_names(cluster, capsys, monkeypatch):
+    fake = cluster(live=literal_live(), secret=None)
+    rc, out, _ = migrate(capsys, monkeypatch, full_overlay())
+    assert rc == 0, out
+    assert fake.written == {"STT_CAP_DISPATCH_COHORT": COHORT, "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST}
+    assert "version=3" in out
+    for key in (
+        "MEDIA_NOISE_MODE",
+        "MEDIA_NOISE_MODE_SERVE_PERCENT",
+        "STT_CAP_DISPATCH_ENFORCEMENT",
+        "STT_CAP_DISPATCH_LANES",
+    ):
+        assert f"key={key} effect=public-same" in out
+    assert "key=STT_CAP_DISPATCH_COHORT effect=source-same" in out
+
+
+@pytest.mark.parametrize(
+    ("overlay", "effect"),
+    [
+        (full_overlay(STT_CAP_DISPATCH_ENFORCEMENT="false"), "key=STT_CAP_DISPATCH_ENFORCEMENT effect=public-changed"),
+        (full_overlay(EDGE_SHADOW_TOKEN="x" * 30), "key=EDGE_SHADOW_TOKEN effect=undeclared"),
+        (
+            private_yaml(STT_CAP_DISPATCH_COHORT=COHORT),
+            "key=MEDIA_NOISE_MODE_SERVE_UID_SHA256S effect=missing-from-source",
+        ),
+    ],
+)
+def test_migrate_refuses_a_mismatched_source_and_writes_nothing(cluster, capsys, monkeypatch, overlay, effect):
+    fake = cluster(live=literal_live(), secret=None)
+    rc, out, err = migrate(capsys, monkeypatch, overlay)
+    assert rc == 2
+    assert effect in out
+    assert "nothing written" in err
+    assert fake.written is None
+
+
+def test_migrate_refuses_bad_yaml_without_echoing_it(cluster, capsys, monkeypatch):
+    fake = cluster(live=literal_live(), secret=None)
+    rc, out, err = migrate(capsys, monkeypatch, f'privateEnv:\n  STT_CAP_DISPATCH_COHORT: "{COHORT}\n')
+    assert rc == 2 and fake.written is None
+
+
+def test_sync_waits_for_a_fresh_sync_after_force_sync(cluster, capsys):
+    fake = cluster(live={}, secret=None)
+    assert HELPER.main(["sync", "--values-file", str(PROD_VALUES), "--timeout", "5"]) == 0
+    assert any("annotate" in call for call in fake.calls)
+    assert "ready" in capsys.readouterr().out
+
+
+def test_guard_checks_every_serving_replicaset_not_only_the_template(cluster, capsys):
+    secret = {"STT_CAP_DISPATCH_COHORT": COHORT, "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST}
+    fake = cluster(live=literal_live(), secret=secret)
+    older = dict(literal_live(), STT_CAP_DISPATCH_COHORT={"value": "uid:older"})
+    fake.replicasets = [
+        (35, literal_live()),
+        (3, older),
+        (0, {"STT_CAP_DISPATCH_COHORT": {"value": "uid:scaled-down"}}),
+    ]
+    rc, out, _ = guard(capsys)
+    assert rc == 2
+    assert "key=STT_CAP_DISPATCH_COHORT effect=changed+same" in out
+    assert "key=MEDIA_NOISE_MODE_SERVE_UID_SHA256S effect=same" in out

@@ -28,7 +28,8 @@ environment_shared:
         SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: '', category: ops_kill}
         STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
-        STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
+        # STT_CAP_DISPATCH_COHORT is per environment: dev '' (dev overlay), prod a
+        # Secret Manager reference (prod overlay; uid-bearing, never in Git).
         STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
         UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
         UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}

@@ -45,7 +45,19 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
-        # Mirrors the listen chart (2026-11-18 fold of live values; media noise is also carried by the privateEnv overlay).
+        # Mirrors the listen chart (2026-11-18 fold of live values).
+        # Funded cap admission stays on for listen (lead2 4e5e71/45689e), live since 2026-10-20.
+        STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
+        # Private (uid-bearing): names only; values are the Secret Manager document
+        # LISTEN_PRIVATE_ENV synced by the backend-secrets chart (listen chart privateSecretEnv).
+        STT_CAP_DISPATCH_COHORT:
+          secret:
+            name: prod-omi-backend-listen-private-env
+            key: STT_CAP_DISPATCH_COHORT
+        MEDIA_NOISE_MODE_SERVE_UID_SHA256S:
+          secret:
+            name: prod-omi-backend-listen-private-env
+            key: MEDIA_NOISE_MODE_SERVE_UID_SHA256S
         MEDIA_NOISE_MODE: {value: shadow, category: rollout}
         MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
         NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
