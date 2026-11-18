@@ -520,10 +520,11 @@ def test_live_read_uses_the_v3_index_and_pages_to_the_newest_window(monkeypatch)
     from database import conversations_v3_live as live_db
 
     now = datetime.now(timezone.utc)
-    # 45 finished windows inside the idle cap, oldest first (the index order), then the open one.
+    # 200 finished windows inside the idle cap, oldest first (the index order), then the open
+    # one: far more than any fixed first-N read would reach.
     docs = [
-        _Snap(_live_row(f'done-{i:02d}', minutes_ago=100 - i, status='processing', tile_state='done'))
-        for i in range(45)
+        _Snap(_live_row(f'done-{i:03d}', minutes_ago=110 - i * 0.5, status='processing', tile_state='done'))
+        for i in range(200)
     ] + [_Snap(_live_row('open', minutes_ago=1))]
     log = []
     monkeypatch.setattr(live_db, 'prepare_conversation_for_read', lambda row, uid: row)
@@ -533,8 +534,24 @@ def test_live_read_uses_the_v3_index_and_pages_to_the_newest_window(monkeypatch)
     assert log[0]['filters'] == (('v3_derived', '=='), ('finished_at', '>='), ('started_at', '<='))
     # The projection is unconditional and carries no transcript.
     assert 'transcript_segments' not in log[0]['fields'] and 'structured' in log[0]['fields']
-    assert [call['size'] for call in log] == [live_db.PAGE] * 3
+    assert [call['size'] for call in log] == [live_db.PAGE] * 5
     assert len(log) <= live_db.MAX_PAGES
+
+
+def test_live_read_logs_when_it_reaches_its_safety_cap(monkeypatch, caplog):
+    from database import conversations_v3_live as live_db
+
+    now = datetime.now(timezone.utc)
+    docs = [_Snap(_live_row(f'w-{i}', minutes_ago=50 - i, status='processing', tile_state='done')) for i in range(10)]
+    monkeypatch.setattr(live_db, 'prepare_conversation_for_read', lambda row, uid: row)
+    monkeypatch.setattr(live_db, 'PAGE', 2)
+    monkeypatch.setattr(live_db, 'MAX_PAGES', 3)
+    with caplog.at_level('WARNING', logger=live_db.__name__):
+        rows = live_db.recent_windows(
+            'u', now=now, max_idle=timedelta(hours=2), firestore_client=_WindowQuery(docs, [])
+        )
+    assert len(rows) == 6
+    assert 'safety cap' in caplog.text
 
 
 def test_merge_rejects_recording_before_admission(monkeypatch):

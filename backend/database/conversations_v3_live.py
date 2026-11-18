@@ -6,6 +6,7 @@ exist. The field mask is unconditional and carries no transcript: the live tile 
 its identity, title, times, state and the visibility flags.
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -13,6 +14,8 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
 from database.conversations import conversations_collection, prepare_conversation_for_read
+
+logger = logging.getLogger(__name__)
 
 LIVE_FIELDS = [
     'id',
@@ -30,10 +33,13 @@ LIVE_FIELDS = [
     'deleted',
     'discarded',
 ]
-# Windows that spoke inside the idle cap. Ascending by finished_at (the index order), so a
-# busy account pages forward to reach the newest; four pages bound the read.
-PAGE = 20
-MAX_PAGES = 4
+# Windows that spoke inside the idle cap. The index is ascending by finished_at, so the
+# newest window comes last: the read pages through the whole idle window rather than
+# stopping at a fixed count. A reverse-order read would need a new descending index.
+# MAX_PAGES is only a safety stop, far above any real two-hour window count (a v3 window
+# spans many minutes of speech), and hitting it is logged.
+PAGE = 50
+MAX_PAGES = 20
 # Clock skew allowance for a window that started a moment "in the future".
 START_SKEW = timedelta(minutes=5)
 
@@ -64,4 +70,6 @@ def recent_windows(
         if len(snapshots) < PAGE:
             break
         last = snapshots[-1]
+    else:
+        logger.warning('v3 live read stopped at its safety cap of %d windows', PAGE * MAX_PAGES)
     return rows
