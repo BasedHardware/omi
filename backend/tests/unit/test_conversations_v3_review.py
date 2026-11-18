@@ -791,7 +791,9 @@ def test_untranscribed_successor_keeps_the_stretch_open(monkeypatch, successor, 
     )
     monkeypatch.setattr(store, 'datetime', type('Clock', (datetime,), {'now': staticmethod(lambda tz=None: now)}))
     recordings = {'a': store.recording_input('u', MemoryQuery(rows).document('users/u/conversations/a').get())}
-    store._mark_successor_pending(MemoryQuery(rows).collection('users').document('u').collection('conversations'), recordings)
+    store._mark_successor_pending(
+        MemoryQuery(rows).collection('users').document('u').collection('conversations'), recordings
+    )
     assert bool(recordings['a'].get('_v3_page_continues')) is continues
     groups = outline.stretches(list(recordings.values()), AT + timedelta(minutes=30))
     assert groups[0]['finished'] is not continues
