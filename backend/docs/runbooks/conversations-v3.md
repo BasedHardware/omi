@@ -15,6 +15,11 @@ episode callers too. Owners whose apps all predate v3 keep legacy intake: their 
 would show the raw recording a capture ends with as a blank card that 404s. An owner
 with a v3 app on one device and a pre-v3 app on another gets that card on the old device.
 
+Before a stage or kill-switch move, and before each service in its move order, check live prod against
+`backend/deploy/activation/conversations-v3.yaml` (services and minimum commits, order, env, gateway
+lanes, queue, scheduler jobs): `activation_collect.py` then `activation_check.py`; see
+`backend/deploy/activation/README.md`.
+
 Provision the dedicated queue on dev/prod before enabling admission; the prod
 ops manifest declares its bounded concurrency/retry policy. The same stage must reach backend/API, backend-listen (including realtime role),
 backend-sync, backend-sync-backfill, sync-backfill-worker, backend-integration,
