@@ -18,7 +18,10 @@ export interface AdapterProfile {
   activationEnv?: string;
   maxWorkers: number;
   capabilities: AdapterCapabilities;
-  createAdapter: (options: { log: (message: string) => void }) => RuntimeAdapter;
+  createAdapter: (options: {
+    log: (message: string) => void;
+    isRunWaitingOnUser?: (runId: string) => boolean;
+  }) => RuntimeAdapter;
 }
 
 export const ADAPTER_PROFILES: Record<ProductionAdapterId, AdapterProfile> = {
@@ -43,14 +46,14 @@ export const ADAPTER_PROFILES: Record<ProductionAdapterId, AdapterProfile> = {
     activationEnv: ADAPTER_ACTIVATION_ENV.hermes,
     maxWorkers: 1,
     capabilities: adapterCapabilitiesFor("hermes"),
-    createAdapter: ({ log }) => new HermesRuntimeAdapter({ log }),
+    createAdapter: ({ log, isRunWaitingOnUser }) => new HermesRuntimeAdapter({ log, isRunWaitingOnUser }),
   },
   openclaw: {
     adapterId: "openclaw",
     activationEnv: ADAPTER_ACTIVATION_ENV.openclaw,
     maxWorkers: 1,
     capabilities: adapterCapabilitiesFor("openclaw"),
-    createAdapter: ({ log }) => new OpenClawRuntimeAdapter({ log }),
+    createAdapter: ({ log, isRunWaitingOnUser }) => new OpenClawRuntimeAdapter({ log, isRunWaitingOnUser }),
   },
 };
 
@@ -103,6 +106,7 @@ export function ensureRegisteredAdapter(
   adapterId: ProductionAdapterId,
   options: {
     log: (message: string) => void;
+  isRunWaitingOnUser?: (runId: string) => boolean;
     maxWorkers?: number;
     onCreate?: (adapter: RuntimeAdapter) => void;
   }
@@ -111,7 +115,7 @@ export function ensureRegisteredAdapter(
   if (registry.has(adapterId)) return true;
   const profile = adapterProfile(adapterId);
   registry.register(adapterId, () => {
-    const adapter = profile.createAdapter({ log: options.log });
+    const adapter = profile.createAdapter({ log: options.log, isRunWaitingOnUser: options.isRunWaitingOnUser });
     options.onCreate?.(adapter);
     return adapter;
   }, options.maxWorkers ?? profile.maxWorkers);

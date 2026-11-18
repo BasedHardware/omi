@@ -29,6 +29,8 @@ actor StallDetector {
 
   enum State: Equatable, Sendable {
     case running
+    /// A device tool approval card is up: the person's turn, not a stall.
+    case waitingOnUser
     case slow
     case stalled
   }
@@ -79,6 +81,10 @@ actor StallDetector {
   private var toolLastProgressAtMs: [String: Int] = [:]
   private var toolStates: [String: State] = [:]
 
+  /// True while the turn is waiting on the person: a device tool approval
+  /// card is up. Nothing is stalled during that wait, so no clock runs.
+  private(set) var isWaitingOnUser = false
+
   // MARK: - Init
 
   /// `startedAtMs` is the simulated/wall-clock time of turn start. The
@@ -107,7 +113,8 @@ actor StallDetector {
   /// owns the recovery action (for example, interrupting the bridge); the
   /// detector remains pure and does not perform side effects itself.
   func toolIdsWithoutProgress(durationMs: Int, atMs: Int) -> [String] {
-    toolLastProgressAtMs.compactMap { id, lastProgressAt in
+    guard !isWaitingOnUser else { return [] }
+    return toolLastProgressAtMs.compactMap { id, lastProgressAt in
       atMs - lastProgressAt >= durationMs ? id : nil
     }
   }
@@ -115,7 +122,33 @@ actor StallDetector {
   /// A generic bridge timeout may fire only after a full quiet interval with
   /// no tool in flight. Active tools have their own no-progress watchdog.
   func isSilentWithoutActiveTools(durationMs: Int, atMs: Int) -> Bool {
-    toolStartedAtMs.isEmpty && atMs - lastEventAtMs >= durationMs
+    !isWaitingOnUser && toolStartedAtMs.isEmpty && atMs - lastEventAtMs >= durationMs
+  }
+
+  /// A device tool approval card opened (`true`) or closed (`false`) at
+  /// `atMs`. Waiting on the person is not a stall: while the card is up no
+  /// clock runs, so nothing promotes and no tool is ever overdue, and any
+  /// promotion already shown is cleared. Both edges restart every clock: the
+  /// card appearing is an event, and its answer or expiry is progress for the
+  /// tool that was waiting. Setting the same state again changes nothing.
+  func setWaitingOnUser(_ waiting: Bool, atMs: Int) -> [Transition] {
+    guard waiting != isWaitingOnUser else { return [] }
+    isWaitingOnUser = waiting
+    var transitions: [Transition] = []
+    if interEventState != .running {
+      transitions.append(.interEvent(from: interEventState, to: .running))
+      interEventState = .running
+    }
+    let toolState: State = waiting ? .waitingOnUser : .running
+    for (toolId, state) in toolStates where state != toolState {
+      transitions.append(.tool(id: toolId, from: state, to: toolState))
+      toolStates[toolId] = toolState
+    }
+    lastEventAtMs = atMs
+    for toolId in Array(toolLastProgressAtMs.keys) {
+      toolLastProgressAtMs[toolId] = atMs
+    }
+    return transitions
   }
 
   // MARK: - Observation
@@ -189,6 +222,7 @@ actor StallDetector {
   }
 
   private func evaluate(atMs: Int) -> [Transition] {
+    guard !isWaitingOnUser else { return [] }
     var transitions: [Transition] = []
 
     // Inter-event timer.
