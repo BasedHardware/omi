@@ -8,7 +8,7 @@ import pytest
 from config.batch_pipeline import MERGE_STALE_HEAD_SECONDS, merge_stale_head_skip
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkResult
-from utils.batch_pipeline.merge import OrderedMerge
+from utils.batch_pipeline.merge import STALE_HEAD_PAGE_ROWS, OrderedMerge
 from utils.batch_pipeline.scheduler import Scheduler
 
 ENV = 'BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST'
@@ -45,10 +45,21 @@ def test_listed_owner_commits_at_once_behind_a_stale_head(listed, caplog):
     ready(store, 'first', NOW)
     with caplog.at_level(logging.INFO):
         entry = merge.commit_next('owner', NOW + 1)
-    assert entry['segment_id'] == 'first' and entry['head_wait_bypass'] is True
+    assert entry['segment_id'] == 'first' and 'head_wait_bypass' not in entry
     assert store.rows['jobs', 'first']['state'] == 'committed'
     assert store.rows['jobs', 'stale']['merge_pending'] is True  # Appends later as late_capture.
-    assert 'outcome=stale_head_skip' in caplog.text
+    assert 'outcome=stale_head_skip source=ordered_merge head_state=retry wait_bucket=lt60' in caplog.text
+    assert 'outcome=head_wait_bypass' not in caplog.text
+
+
+def test_an_expired_wait_keeps_the_bypass_marker(monkeypatch, caplog):
+    monkeypatch.delenv(ENV, raising=False)
+    store, merge = world()
+    ready(store, 'first', NOW)
+    with caplog.at_level(logging.INFO):
+        entry = merge.commit_next('owner', NOW + W)
+    assert entry['head_wait_bypass'] is True
+    assert 'outcome=head_wait_bypass' in caplog.text and 'outcome=stale_head_skip' not in caplog.text
 
 
 @pytest.mark.parametrize('raw', [None, '', ' , ', 'someone-else'])
@@ -92,6 +103,50 @@ def test_non_record_work_keeps_the_head_wait(listed):
     ready(store, 'first', NOW)
     assert merge.commit_next('owner', NOW + W - 1) is None
     assert merge.commit_next('owner', NOW + W)['segment_id'] == 'first'
+
+
+def test_a_young_unready_recording_captured_earlier_blocks_the_skip(listed):
+    # Recording A (captured earlier, admitted 5 s ago) is on the GPU; B is ready first.
+    store, merge = world(units=('b',))
+    queue = Scheduler(store)
+    queue.enqueue(item('a', owner='owner', capture=NOW - 600), NOW - 5)
+    a = ProjectionBinding('owner', 'record-a', 'content-a', ('a',), native_record=True)
+    store.rows['jobs', 'a'].update(
+        state='leased', lease_until=NOW + 300, fresh_capture=True, projection_binding=asdict(a)
+    )
+    ready(store, 'b', NOW)
+    assert merge.commit_next('owner', NOW + 1) is None
+    ready(store, 'a', NOW + 9)
+    assert [merge.commit_next('owner', NOW + 10)['segment_id'] for _ in range(2)] == ['a', 'b']
+
+
+@pytest.mark.parametrize(
+    'state,lease_until',
+    [
+        ('leased', NOW + 300),  # In flight.
+        ('retry', NOW - 300),  # Leased within the last 30 minutes.
+        ('record_pending', 0.0),  # Not waiting for a lease: about to be admitted.
+        ('held', 0.0),
+    ],
+)
+def test_a_head_that_is_not_starved_keeps_the_wait(listed, state, lease_until):
+    store, merge = world(head_state=state)
+    store.rows['jobs', 'stale']['lease_until'] = lease_until
+    ready(store, 'first', NOW)
+    assert merge.commit_next('owner', NOW + 1) is None
+    assert store.rows['jobs', 'first']['state'] == 'result_ready'
+
+
+@pytest.mark.parametrize('extra,commits', [(STALE_HEAD_PAGE_ROWS - 1, True), (STALE_HEAD_PAGE_ROWS, False)])
+def test_the_page_bound_refuses_the_skip(listed, extra, commits):
+    store, merge = world()
+    queue = Scheduler(store)
+    for i in range(extra):
+        queue.enqueue(item(f'stock-{i:03}', owner='owner', capture=2 + i), NOW - 7200)
+        store.rows['jobs', f'stock-{i:03}'].update(state='retry')
+    ready(store, 'first', NOW)
+    entry = merge.commit_next('owner', NOW + 1)
+    assert (entry is not None and entry['segment_id'] == 'first') is commits
 
 
 def test_head_readmitted_after_the_probe_keeps_the_wait(listed, monkeypatch):

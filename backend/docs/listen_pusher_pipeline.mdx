@@ -10126,15 +10126,17 @@ prior in-recording notes do not contaminate the post-seal latency cohort.
 ### Stale merge head skip (canary)
 
 `BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST` (comma-separated uids, default
-empty) is read on every ordered-merge commit. For a listed owner whose strict
-head is unready and was enqueued at least 1,800 s ago, the bounded head wait is
-skipped: the owner's earliest ready pending row commits at once through the
-ordinary head-wait transaction, and the head later appends as `late_capture`.
-The committed row must be a native record unit whose earlier binding units are
-committed or held without recovery; the transaction re-checks that the head is
-still stale. Unlisted owners, head wait off, non-record rows and unready
-earlier units of the same recording keep the ordinary wait. Writers without
-this code keep the wait. Log `event=batch_merge outcome=stale_head_skip`.
+empty) is read on every ordered-merge commit. A listed owner whose strict head
+is starved skips the bounded head wait. Starved means state `ready`, `retry` or
+`leased`, admitted at least 1,800 s ago and with `lease_until` at least 1,800 s
+in the past. The skip commits the row an expired wait would commit (the
+owner's earliest ready pending row) only when that row is a native record unit
+whose earlier binding units are settled, and when every pending row captured
+before it is starved. The transaction reads at most 129 pending rows; a longer
+backlog keeps the wait. Head wait off, unlisted owners and refused skips keep
+the ordinary wait, with no early hold or fallback. A skip is logged as
+`event=batch_merge outcome=stale_head_skip` and never sets `head_wait_bypass`.
+Writers without this code keep the wait.
 [Change note](listen_pusher_pipeline/changes/2026-11-18-merge-stale-head-skip.md).
 
 ### Staged source-frame close protocol

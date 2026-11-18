@@ -197,6 +197,20 @@ def test_first_pending_in_composes_the_state_fragment():
     assert params == ('batch_pipeline_test_sql', 'ok')
 
 
+@pytest.mark.parametrize('skip_terminal', [False, True])
+def test_pending_page_in_binds_owner_and_a_capped_limit(monkeypatch, skip_terminal):
+    monkeypatch.setattr(postgres_store, 'held_poll_skip_enabled', lambda: skip_terminal)
+    conn = Conn([('k', {})])
+    assert store(conn).pending_page_in(conn, HOSTILE, 10_000) == [('k', {})]
+    statement, params = conn.statements[0]
+    assert HOSTILE not in statement and statement.endswith('LIMIT %s')
+    assert ('state <> ALL(%s)' in statement) == skip_terminal
+    expected = ('batch_pipeline_test_sql', HOSTILE)
+    if skip_terminal:
+        expected += (list(postgres_store.MERGE_POLL_TERMINAL_STATES),)
+    assert params == (*expected, 160)
+
+
 def test_projection_page_binds_states_and_cursor():
     conn = Conn([])
     store(conn).projection_page(10, after=(1.0, 'k'))

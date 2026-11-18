@@ -157,6 +157,9 @@ class _OwnWrites:
     def first_pending(self, owner_key: str) -> dict | None:
         return self._own(self._tx.first_pending(owner_key))
 
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        return [own for job in self._tx.pending_page(owner_key, limit) if (own := self._own(job)) is not None]
+
     def first_ready_pending(self, owner_key: str) -> dict | None:
         return self._own(self._tx.first_ready_pending(owner_key))
 
