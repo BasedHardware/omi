@@ -222,6 +222,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED", "value": "false"},
         {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS", "value": "24"},
         {"name": "BATCH_PIPELINE_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_PACKING_SAMPLE_RATE", "value": "0.001"},
         {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
         {"name": "FIRST_SUMMARY_DEADLINE_PERCENT", "value": "0"},

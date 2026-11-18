@@ -29,6 +29,11 @@ def entries():
     stores = [StoreArgument(namespace) for namespace in namespaces]
     return (
         DriverEntry(
+            'database.batch_pipeline_store.FirestoreStore.packing_candidates',
+            domains={'self': stores},
+            base={'owner_key': 'synthetic-owner-hash'},
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.FirestoreStore.allowance_owners',
             domains={'self': stores},
             neutrals={'now': (3000000.0, 'due clock operand only'), 'limit': (20, 'page bound only')},

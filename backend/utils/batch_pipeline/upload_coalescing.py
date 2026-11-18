@@ -219,24 +219,13 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
     # Metadata is hashed for identity; private context remains encrypted in body.
     key = await run_blocking(
         sync_executor,
-        rows.digest,
-        [
-            arguments['uid'],
-            session,
-            arguments['conversation_id'],
-            arguments['source'],
-            arguments['client_device_id'],
-            arguments['client_platform'],
-            arguments['should_lock'],
-            context.level,
-            context.generation,
-            language,
-            policy.policy_id,
-            arguments['lane'],
-            int(seed.priority),
-            sorted({tuple(Path(p).name.split('_')[1:4]) for p in arguments['paths']}),
-            upload_context.get('geolocation'),
-        ],
+        rows.compatibility_key,
+        arguments,
+        privacy_level=context.level,
+        generation=context.generation,
+        language=language,
+        policy_id=policy.policy_id,
+        priority=seed.priority,
     )
     admitted = await run_blocking(db_executor, rows.enqueue, store, member, key, now)
     if admitted == 'wait':

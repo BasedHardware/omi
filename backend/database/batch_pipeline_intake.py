@@ -41,6 +41,7 @@ def admit(
     record_barrier: dict | None = None,
     coalescing_group: dict | None = None,
     source_aliases: dict | None = None,
+    packing_observations: dict | None = None,
 ) -> dict:
     """Admit one content upload atomically.
 
@@ -202,6 +203,8 @@ def admit(
             if not created and previous_binding != serialized_binding:
                 raise ValueError('existing segment cannot change its immutable intake binding')
             job['projection_binding'] = serialized_binding
+            if created and packing_observations and item.segment_id in packing_observations:
+                job['packing_observation'] = packing_observations[item.segment_id]
             if created and binding.native_record:
                 # Admission commits after staging. Reuse the pending-job and
                 # conversation snapshots already read in this transaction.

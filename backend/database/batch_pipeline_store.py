@@ -17,6 +17,7 @@ from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted, InvalidArgument
 
 from config.firestore_read_levers import lever_enabled
+from config import batch_pipeline_packing as batch_packing
 from config.batch_pipeline_protected_share import (
     DEADLINE_SECONDS,
     MAX_DURATION_SECONDS,
@@ -99,6 +100,7 @@ class Store(Protocol):
 
     def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
+    def packing_candidates(self, owner_key: str) -> list[dict]: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
     def ready_pending(self, owner_key: str, limit: int, *, after=None) -> list[dict]: ...
     def ready_owners(
@@ -295,6 +297,20 @@ class FirestoreTransaction:
 
 
 class FirestoreStore:
+    def packing_candidates(self, owner_key: str) -> list[dict]:
+        """One projected owner prefix, including rows that can block a pack."""
+        docs = (
+            self.client.collection(f'{self.namespace}_jobs')
+            .where('owner_key', '==', owner_key)
+            .where('merge_pending', '==', True)
+            .order_by('capture_at')
+            .order_by('segment_id')
+            .select(batch_packing.JOB_FIELDS)
+            .limit(batch_packing.PAGE_ROWS)
+            .stream(timeout=batch_packing.READ_TIMEOUT_SECONDS, retry=None)
+        )
+        return [doc.to_dict() for doc in docs]
+
     def allowance_owners(self, now: float, limit: int) -> list[str]:
         return [
             doc.id

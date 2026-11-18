@@ -52,6 +52,7 @@ from database.batch_pipeline_store import (
     is_queue_dispositioned,
 )
 from database.firestore_transaction_retry import FirestoreContentionExhausted
+from config import batch_pipeline_packing as batch_packing
 
 import database.jobstore.codec as codec
 from database.jobstore.connection import Pool, sql
@@ -257,6 +258,20 @@ class PostgresTransaction:
 
 
 class PostgresStore:
+    def packing_candidates(self, owner_key: str) -> list[dict]:
+        projection = ', '.join('%s::text, doc -> %s::text' for _ in batch_packing.JOB_FIELDS)
+        fields = tuple(field for field in batch_packing.JOB_FIELDS for _ in range(2))
+        # The observer never waits for pool capacity or opens a new connection.
+        with self.pool.connection(timeout=0, existing_only=True) as conn, conn.transaction():
+            conn.execute('SET LOCAL statement_timeout = 1000')
+            rows = conn.execute(
+                f'SELECT jsonb_strip_nulls(jsonb_build_object({projection})) FROM jobs '
+                'WHERE namespace = %s AND owner_key = %s AND merge_pending '
+                'ORDER BY capture_at, key COLLATE "C" LIMIT %s',
+                (*fields, self.namespace, owner_key, batch_packing.PAGE_ROWS),
+            ).fetchall()
+        return [row[0] for row in rows]
+
     def allowance_owners(self, now: float, limit: int) -> list[str]:
         with self._read_conn() as conn:
             rows = conn.execute(

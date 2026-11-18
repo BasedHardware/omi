@@ -75,6 +75,7 @@ worker:
   shardSpreadEnabled: true
   # One shard transaction leases up to the pull batch; false leases one per transaction.
   pullMultiLeaseEnabled: true
+  packingSampleRate: '0.001'
   # Ship-on: a pump's non-first lanes take recent/deep backfill when every fresh
   # shard is claimed by another puller; lane 0 stays fresh-first. false restores
   # strict fresh-first on every lane.
