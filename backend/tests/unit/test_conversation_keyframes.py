@@ -8,7 +8,9 @@ from services import conversation_keyframes
 
 @pytest.fixture(autouse=True)
 def _allow_test_users_through_deletion_fence(monkeypatch):
-    monkeypatch.setattr(conversation_keyframes, "account_deletion_blocks_user_work", lambda _uid: False)
+    monkeypatch.setattr(
+        conversation_keyframes, "account_deletion_blocks_user_work", lambda _uid: False
+    )
 
 
 class _Screen:
@@ -33,7 +35,9 @@ def _screen(index: int, *, eligible: bool = True, local_id: str | None = None):
 
 
 def test_exact_500_candidates_select_latest_authoritative_local_id():
-    selected = conversation_keyframes._select_screen_winner([_screen(index) for index in range(500)])
+    selected = conversation_keyframes._select_screen_winner(
+        [_screen(index) for index in range(500)]
+    )
     assert selected is not None
     winner, local_id, retention = selected
     assert winner.frame_id == "opaque-storage-499"
@@ -42,7 +46,9 @@ def test_exact_500_candidates_select_latest_authoritative_local_id():
 
 
 def test_over_500_newest_page_converges_and_rejects_local_exclusion_attestation():
-    rows = [_screen(501, eligible=False), _screen(500, local_id="77")] + [_screen(index) for index in range(499)]
+    rows = [_screen(501, eligible=False), _screen(500, local_id="77")] + [
+        _screen(index) for index in range(499)
+    ]
     selected = conversation_keyframes._select_screen_winner(rows)
     assert selected is not None
     winner, local_id, _ = selected
@@ -51,7 +57,9 @@ def test_over_500_newest_page_converges_and_rejects_local_exclusion_attestation(
 
 
 def test_over_500_ineligible_prefix_pages_to_older_eligible_frame():
-    rows = [_screen(index, eligible=False) for index in range(600, 100, -1)] + [_screen(100, local_id="9")]
+    rows = [_screen(index, eligible=False) for index in range(600, 100, -1)] + [
+        _screen(100, local_id="9")
+    ]
 
     def fetch(cursor):
         start = 0 if cursor is None else rows.index(cursor) + 1
@@ -126,7 +134,9 @@ def test_finalization_retry_cannot_regress_requested_job(monkeypatch):
 
             return Transaction()
 
-    monkeypatch.setattr(conversation_keyframes.firestore, "transactional", lambda fn: fn)
+    monkeypatch.setattr(
+        conversation_keyframes.firestore, "transactional", lambda fn: fn
+    )
     conversation = SimpleNamespace(
         id="conversation-1",
         source=SimpleNamespace(value="desktop"),
@@ -134,15 +144,21 @@ def test_finalization_retry_cannot_regress_requested_job(monkeypatch):
         finished_at=datetime.now(timezone.utc),
         client_device_id="mac-1",
     )
-    assert conversation_keyframes.ensure_conversation_keyframe_job("uid", conversation, firestore_client=Client())
+    assert conversation_keyframes.ensure_conversation_keyframe_job(
+        "uid", conversation, firestore_client=Client()
+    )
     assert ref.data["expires_at"] == conversation.finished_at + timedelta(days=7)
     ref.data["state"] = "requested"
-    assert conversation_keyframes.ensure_conversation_keyframe_job("uid", conversation, firestore_client=Client())
+    assert conversation_keyframes.ensure_conversation_keyframe_job(
+        "uid", conversation, firestore_client=Client()
+    )
     assert ref.data["state"] == "requested"
 
 
 def test_pending_deletion_fences_capture_reconcile_and_cleanup(monkeypatch):
-    monkeypatch.setattr(conversation_keyframes, "account_deletion_blocks_user_work", lambda _uid: True)
+    monkeypatch.setattr(
+        conversation_keyframes, "account_deletion_blocks_user_work", lambda _uid: True
+    )
     conversation = SimpleNamespace(
         id="conversation-1",
         source=SimpleNamespace(value="desktop"),
@@ -157,7 +173,10 @@ def test_pending_deletion_fences_capture_reconcile_and_cleanup(monkeypatch):
 
     client = NoReadsClient()
     assert (
-        conversation_keyframes.ensure_conversation_keyframe_job("uid", conversation, firestore_client=client) is False
+        conversation_keyframes.ensure_conversation_keyframe_job(
+            "uid", conversation, firestore_client=client
+        )
+        is False
     )
     assert (
         conversation_keyframes.reconcile_conversation_keyframe_jobs(
@@ -168,7 +187,12 @@ def test_pending_deletion_fences_capture_reconcile_and_cleanup(monkeypatch):
         )
         == 0
     )
-    assert conversation_keyframes.prune_expired_conversation_keyframe_jobs("uid", firestore_client=client) == 0
+    assert (
+        conversation_keyframes.prune_expired_conversation_keyframe_jobs(
+            "uid", firestore_client=client
+        )
+        == 0
+    )
 
 
 def test_expired_keyframe_cleanup_deletes_only_bounded_operational_jobs():
@@ -177,6 +201,13 @@ def test_expired_keyframe_cleanup_deletes_only_bounded_operational_jobs():
     class Snapshot:
         def __init__(self, identifier):
             self.reference = SimpleNamespace(delete=lambda: deleted.append(identifier))
+
+    class Batch:
+        def delete(self, ref):
+            ref.delete()
+
+        def commit(self):
+            pass
 
     class Query:
         def collection(self, _name):
@@ -195,6 +226,9 @@ def test_expired_keyframe_cleanup_deletes_only_bounded_operational_jobs():
 
         def stream(self):
             return [Snapshot("pending-job"), Snapshot("requested-job")]
+
+        def batch(self):
+            return Batch()
 
     count = conversation_keyframes.prune_expired_conversation_keyframe_jobs(
         "uid",
