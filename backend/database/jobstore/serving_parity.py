@@ -38,6 +38,7 @@ STORE_QUERIES = frozenset(
         'control_candidates',
         'fresh_pending',
         'longest_ready_pending',
+        'packing_candidates',
         'ready_pending',
         'held_merge_owners',
         'ready_owners',

@@ -129,14 +129,14 @@ class IntakePacking:
 
     def __init__(self, arguments, *, canonical_decode):
         self.arguments = arguments
-        self.enabled = bool(config.sample_rate())
         context = arguments['intake_context'] or {}
+        # Receipt-clock uploads retain the existing job document shape.
+        self.enabled = bool(config.sample_rate()) and context.get('capture_received_at') is None
         self.trustworthy = bool(
             arguments['client_device_id']
             and canonical_decode
             and arguments['recording_age_seconds'] is not None
             and not context.get('capture_clock_policy')
-            and not context.get('capture_received_at')
         )
         self.bounds = {}
 

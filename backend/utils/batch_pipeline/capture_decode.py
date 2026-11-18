@@ -112,13 +112,14 @@ def decode_units(
         early_frames = sum(len(_canonical(path)) // 2 for path in wavs if path in early_paths)
         early_committed_frames = 0
 
-        def packed_unit(start, pcm, runs, early, padding_frames):
+        def packed_unit(start, pcm, runs, early):
             nonlocal early_committed_frames
             unit = provenance_unit(audio_unit(start, pcm), runs)
-            unit = replace(unit, source_frames=len(pcm) // 2 - padding_frames)
             if early and received_at is not None:
                 unit = replace(unit, stored_capture_at=received_at - (early_frames - early_committed_frames) / RATE)
                 early_committed_frames += len(pcm) // 2
+            if received_at is None:
+                unit = replace(unit, source_frames=len(pcm) // 2 - padding_frames)
             return unit
 
         pending = bytearray()
@@ -149,7 +150,7 @@ def decode_units(
                 or gap > MAX_JOIN_GAP_FRAMES
                 or len(pending) + gap * 2 >= unit_frames * 2
             ):
-                yield packed_unit(start, bytes(pending), pending_runs, pending_early, padding_frames)
+                yield packed_unit(start, bytes(pending), pending_runs, pending_early)
                 pending.clear()
                 pending_runs = []
                 padding_frames = 0
@@ -168,13 +169,13 @@ def decode_units(
                 pending.extend(pcm[offset : offset + take])
                 offset += take
                 if len(pending) == unit_frames * 2:
-                    yield packed_unit(start, bytes(pending), pending_runs, pending_early, padding_frames)
+                    yield packed_unit(start, bytes(pending), pending_runs, pending_early)
                     pending.clear()
                     pending_runs = []
                     padding_frames = 0
                     start = capture + offset / (2 * RATE)
         if pending:
-            yield packed_unit(start, bytes(pending), pending_runs, pending_early, padding_frames)
+            yield packed_unit(start, bytes(pending), pending_runs, pending_early)
     finally:
         for path in set(wavs) | set(expected) | generated:
             if os.path.exists(path):

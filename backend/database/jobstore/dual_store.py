@@ -337,6 +337,11 @@ class DualStore:
 
         return observed
 
+    def packing_candidates(self, owner_key: str) -> list[dict]:
+        # This call is itself sampled telemetry. Keep it to one attributed read
+        # even when automatic serving-query parity is enabled.
+        return self.primary.packing_candidates(owner_key)
+
     def observe_discovery(self, name: str, args: tuple, kwargs: dict) -> None:
         """Keep optional parity on its bounded queue when an index supplies the discovery answer."""
         from database.jobstore.serving_parity import STORE_QUERIES

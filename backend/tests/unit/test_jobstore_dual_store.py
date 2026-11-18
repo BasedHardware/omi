@@ -876,6 +876,20 @@ def test_serving_parity_reports_changing_pairs_and_refuses_mutations():
         compare_serving_query(Changing(), Changing(), 'acquire_pull_claim', 'shard', 'token', 1, 30)
 
 
+def test_packing_telemetry_uses_only_the_primary_projected_read(stores, monkeypatch):
+    primary, _, store = stores
+    rows = [{'segment_id': 'synthetic'}]
+    read = Mock(return_value=rows)
+    compare = Mock()
+    monkeypatch.setenv('JOBSTORE_SHADOW_QUERY_PARITY', 'on')
+    monkeypatch.setattr(primary, 'packing_candidates', read)
+    monkeypatch.setattr(store, 'observe_discovery', compare)
+
+    assert store.packing_candidates('owner') is rows
+    read.assert_called_once_with('owner')
+    compare.assert_not_called()
+
+
 @pytest.mark.parametrize('stage,namespace', [('prod', 'batch_pipeline_dev'), ('dev', 'batch_pipeline_prod')])
 def test_erasure_of_both_namespaces_is_independent_of_serving_stage(monkeypatch, stage, namespace):
     monkeypatch.setenv('OMI_ENV_STAGE', stage)

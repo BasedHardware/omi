@@ -259,16 +259,15 @@ class PostgresTransaction:
 
 class PostgresStore:
     def packing_candidates(self, owner_key: str) -> list[dict]:
-        projection = ', '.join('%s::text, doc -> %s::text' for _ in batch_packing.JOB_FIELDS)
-        fields = tuple(field for field in batch_packing.JOB_FIELDS for _ in range(2))
         # The observer never waits for pool capacity or opens a new connection.
         with self.pool.connection(timeout=0, existing_only=True) as conn, conn.transaction():
             conn.execute('SET LOCAL statement_timeout = 1000')
             rows = conn.execute(
-                f'SELECT jsonb_strip_nulls(jsonb_build_object({projection})) FROM jobs '
+                "SELECT (SELECT COALESCE(jsonb_object_agg(field, jobs.doc -> field), '{}'::jsonb) "
+                'FROM unnest(%s::text[]) AS requested(field) WHERE jobs.doc ? field) FROM jobs '
                 'WHERE namespace = %s AND owner_key = %s AND merge_pending '
                 'ORDER BY capture_at, key COLLATE "C" LIMIT %s',
-                (*fields, self.namespace, owner_key, batch_packing.PAGE_ROWS),
+                (list(batch_packing.JOB_FIELDS), self.namespace, owner_key, batch_packing.PAGE_ROWS),
             ).fetchall()
         return [row[0] for row in rows]
 

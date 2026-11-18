@@ -433,7 +433,7 @@ _SQL_PORTS = (
         'PostgresStore.packing_candidates',
         'FirestoreStore.packing_candidates',
         17,
-        '32a8541885acdbd59c843516a41c32168f4d1198a23b08b6e003dff0ed26862d',
+        'fab5c720c3aed731bebafc4b8da8ce25f0f2b932e2e1b50dc34632faad9ea962',
     ),
     (
         'PostgresStore.allowance_page',
