@@ -1,9 +1,11 @@
 """Repair a missing Home summary obligation through existing delivery policy."""
 
 import math
+import time
 
 from google.cloud import firestore
 
+from database import rpc_deadline
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 from database.batch_summary_debt import verify_projection_finalization
 from services.home_health_review import FIELDS, hidden_for_review, protected_for_review, positive_revision
@@ -51,6 +53,7 @@ def candidate(row, *, now):
         and positive_revision(row.get('sync_content_revision'))
         and row.get('summary_output_present') is False
         and not row.get('summary_completed_at')
+        and not row.get('notes_written_at')
         and row.get('summary_due_at') is None
         and row.get('summary_blocked_reason') is None
         and row.get('user_title') is None
@@ -114,9 +117,20 @@ def commit(client, transaction, ref, uid, expected, *, now):
     return 'armed'
 
 
-def arm(client, ref, uid, expected, *, now):
+def arm(client, ref, uid, expected, *, deadline, execute_before):
     @firestore.transactional
     def transaction_work(transaction):
+        now = time.time()
+        if now >= execute_before:
+            return 'deadline_reached'
         return commit(client, transaction, ref, uid, expected, now=now)
 
-    return transaction_work(client.transaction(max_attempts=3))
+    rpc_deadline.bind_firestore_client(client)
+    cutoff = min(deadline, rpc_deadline.now() + max(0, execute_before - time.time()))
+    if cutoff <= rpc_deadline.now():
+        return 'deadline_reached'
+    try:
+        with rpc_deadline.rpc_deadline(cutoff):
+            return transaction_work(client.transaction(max_attempts=3))
+    except rpc_deadline.RpcDeadlineExceeded:
+        return 'deadline_reached'

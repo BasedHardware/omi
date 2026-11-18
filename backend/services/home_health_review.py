@@ -15,7 +15,7 @@ from utils.conversations.fragment_visibility import (
 )
 from utils.conversations.home_titles import is_fallback_title, summary_owed
 from utils.enrichment import age_gate
-from utils.home_feed import projection
+from utils.home_feed import card_content
 from utils.sync import bridge_pending
 
 STATUSES = ('completed', 'in_progress', 'processing', 'merging', 'failed')
@@ -62,6 +62,7 @@ FIELDS = tuple(
             'summary_title_provenance',
             'summary_output_present',
             'summary_completed_at',
+            'notes_written_at',
             'summary_due_at',
             'summary_first_pending_at',
             'summary_blocked_reason',
@@ -100,7 +101,7 @@ SYMPTOMS = {
     'notes_not_scheduled': Symptom(
         'notes_expected',
         'summary_admission',
-        'Speech landed and no notes delivery or scheduled work is recorded.',
+        'Speech landed without a notes delivery receipt or a scheduled notes deadline.',
         'Check missing-debt eligibility and summary admission outcomes.',
     ),
     'notes_outside_repair_window': Symptom(
@@ -180,7 +181,7 @@ def _presented(row, step, now):
     if _has_text(manual_title):
         row = {**row, 'structured': {**(structured or {}), 'title': manual_title}}
     projected = transcribing_hold.project({**row, 'home_step': step}, now=now)
-    return projection.content(projected, 'conversation')
+    return card_content.content(projected, 'conversation')
 
 
 def hidden_for_review(row):
@@ -230,7 +231,7 @@ def inspect_row(row, *, now: datetime) -> tuple[set[str], set[str]]:
     if hidden_for_review(row):
         return metrics | {'hidden_by_design'}, findings
     status = row.get('status')
-    finished = projection.utc(row.get('finished_at'))
+    finished = card_content.utc(row.get('finished_at'))
     age = now - finished if finished else timedelta(0)
     if status == 'in_progress':
         metrics.add('in_progress')
@@ -297,6 +298,8 @@ def inspect_row(row, *, now: datetime) -> tuple[set[str], set[str]]:
                 findings.add('notes_overdue')
             else:
                 metrics.add('notes_pending')
+        elif row.get('notes_written_at'):
+            metrics.add('notes_attempt_without_delivery_receipt')
         elif age >= timedelta(seconds=deadline_seconds()):
             findings.add('notes_not_scheduled')
         else:

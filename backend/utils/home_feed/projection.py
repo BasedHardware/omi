@@ -5,71 +5,26 @@ Content is encrypted separately even for standard-protection conversations.
 """
 
 from collections.abc import Mapping
-from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 import json
 
-SCHEMA = 1
+from utils.encryption import encrypt, decrypt
+from utils.home_feed.card_content import SCHEMA, content, utc
+
 DISPLAY = 'home_display'
 VERSION = 'home_display_version'
 SORT = 'home_sort_at'
 DISPLAY_FIELDS = frozenset({DISPLAY, VERSION, SORT, 'home_started_at', 'home_projection_schema', 'home_has_tasks'})
 
 
-def text(value: Any, limit: int) -> str:
-    return value[:limit] if isinstance(value, str) else ''
-
-
-def utc(value: Any) -> datetime | None:
-    if not isinstance(value, datetime):
-        return None
-    aware = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
-    # Normalize Firestore nanosecond subclasses to the API's microsecond clock
-    # before indexing, so a cursor round trip cannot truncate its sort value.
-    return datetime(
-        aware.year,
-        aware.month,
-        aware.day,
-        aware.hour,
-        aware.minute,
-        aware.second,
-        aware.microsecond,
-        tzinfo=timezone.utc,
-    )
-
-
-def content(row: Mapping[str, Any], kind: str) -> dict[str, Any]:
-    structured = row.get('structured') or {}
-    structured = structured if isinstance(structured, Mapping) else {}
-    title = row.get('title') if kind == 'episode' else row.get('user_title') or structured.get('title')
-    preview = row.get('lede') if kind == 'episode' else structured.get('gist') or structured.get('overview')
-    # Fail closed on paid locks: Home needs no speech-derived preview to render
-    # the existing lock/paywall affordance. Never infer access from a blob.
-    if row.get('home_content_invalidated'):
-        title, preview = row.get('user_title') or '', ''
-    if row.get('is_locked'):
-        title, preview = '', ''
-    return {
-        'schema': SCHEMA,
-        'title': text(title, 240),
-        'emoji': text(row.get('emoji') if kind == 'episode' else structured.get('emoji'), 32),
-        'preview': text(preview, 320),
-        'summary_available': bool(preview) and not bool(row.get('is_locked')),
-    }
-
-
 def seal_display(uid: str, value: Mapping[str, Any]) -> str:
-    from utils.encryption import encrypt
-
     return encrypt(json.dumps(dict(value), ensure_ascii=False, separators=(',', ':')), uid)
 
 
 def reveal_display(uid: str, blob: Any) -> dict[str, Any] | None:
     if not isinstance(blob, str) or len(blob) > 8192:
         return None
-    from utils.encryption import decrypt
-
     # decrypt historically returns ciphertext on authentication failure. Never
     # serialize that return value as display text.
     try:

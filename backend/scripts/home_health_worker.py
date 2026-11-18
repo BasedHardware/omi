@@ -83,6 +83,7 @@ def run(client, args, *, now, monotonic=time.monotonic, utcnow=lambda: datetime.
     observations = review.Review()
     proposed = {}
     query_failed = False
+    counts_suppressed = False
     for status in review.STATUSES:
         if monotonic() + SCAN_TIMEOUT >= stop_at:
             report['budget_interrupted'] = True
@@ -98,16 +99,24 @@ def run(client, args, *, now, monotonic=time.monotonic, utcnow=lambda: datetime.
             query_failed = True
             break
         report['survey_documents'] += len(snapshots)
-        report['status_coverage'][status] = 'capped' if len(snapshots) > args.per_status else 'complete'
+        status_owners = set()
         for snapshot in snapshots[: args.per_status]:
             owner = _scope(snapshot)
             if owner is None:
                 continue
+            status_owners.add(owner)
             row = snapshot.to_dict() or {}
             findings = observations.observe(owner, row, now=now)
             if 'notes_not_scheduled' in findings and repair.candidate(row, now=now.timestamp()):
                 proposed.setdefault(owner, (snapshot.reference, repair.generation(row)))
+        if snapshots and len(status_owners) < review.MIN_REPORT_OWNERS:
+            counts_suppressed = True
+            report['status_coverage'][status] = 'suppressed'
+        else:
+            report['status_coverage'][status] = 'capped' if len(snapshots) > args.per_status else 'complete'
     report.update(observations.receipt())
+    if counts_suppressed or report['suppressed']:
+        report['survey_documents'] = None
     report['repair']['candidate_owners'] = len(proposed) if len(proposed) >= review.MIN_REPORT_OWNERS else None
     if query_failed or report['budget_interrupted'] or not args.apply or len(proposed) < review.MIN_REPORT_OWNERS:
         return report, query_failed or report['budget_interrupted']
@@ -119,11 +128,16 @@ def run(client, args, *, now, monotonic=time.monotonic, utcnow=lambda: datetime.
             report['budget_interrupted'] = True
             break
         try:
-            outcome = repair.arm(client, ref, owner, expected, now=current.timestamp())
+            outcome = repair.arm(
+                client, ref, owner, expected, deadline=stop_at, execute_before=args.execute_before.timestamp()
+            )
         except Exception:
             outcomes['error'] += 1
             break
         outcomes[outcome] += 1
+        if outcome == 'deadline_reached':
+            report['budget_interrupted'] = True
+            break
     report['repair']['outcomes'] = dict(sorted(outcomes.items()))
     return report, bool(outcomes['error'] or report['budget_interrupted'])
 

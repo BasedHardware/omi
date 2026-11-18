@@ -243,3 +243,51 @@ def test_query_error_cannot_trigger_partial_apply_or_leak_exception(now):
     assert failed and receipt['status_coverage']['in_progress'] == 'query_failed'
     arm.assert_not_called()
     assert 'private-test-path' not in json.dumps(receipt)
+
+
+def test_small_status_cell_suppresses_read_count_even_when_other_rows_are_reportable(now):
+    def scan(*args, **kwargs):
+        if kwargs['status'] == 'completed':
+            return _snapshots(now, 5)
+        if kwargs['status'] == 'processing':
+            return _snapshots(now, 1)
+        return []
+
+    with patch.object(worker, 'scan', side_effect=scan):
+        receipt, failed = worker.run(None, _args(now), now=now)
+    assert not failed and not receipt['suppressed']
+    assert receipt['survey_documents'] is None
+    assert receipt['status_coverage']['processing'] == 'suppressed'
+
+
+def test_existing_notes_attempt_is_not_reported_as_missing_admission(now):
+    prior = row(now, notes_written_at=now - timedelta(hours=1))
+    metrics, findings = review.inspect_row(prior, now=now)
+    assert 'notes_attempt_without_delivery_receipt' in metrics
+    assert 'notes_not_scheduled' not in findings
+    assert not repair.candidate(prior, now=now.timestamp())
+
+
+def test_expired_apply_cannot_enter_the_transaction(now):
+    client = Mock()
+    result = repair.arm(client, Mock(), 'test_owner', (), deadline=0, execute_before=now.timestamp() - 1)
+    assert result == 'deadline_reached'
+    client.transaction.assert_not_called()
+
+
+def test_apply_deadline_prevents_a_late_commit_rpc(monkeypatch):
+    monotonic = 10.0
+    monkeypatch.setattr(repair.rpc_deadline, 'now', lambda: monotonic)
+    monkeypatch.setattr(repair.time, 'time', lambda: 1000.0)
+    monkeypatch.setattr(repair.firestore, 'transactional', lambda function: function)
+    underlying_commit = Mock()
+    client = SimpleNamespace(_firestore_api=SimpleNamespace(commit=underlying_commit), transaction=Mock())
+
+    def after_reads(*args, **kwargs):
+        nonlocal monotonic
+        monotonic = 12.0
+        return client._firestore_api.commit()
+
+    monkeypatch.setattr(repair, 'commit', after_reads)
+    assert repair.arm(client, Mock(), 'test_owner', (), deadline=11, execute_before=1005) == 'deadline_reached'
+    underlying_commit.assert_not_called()
