@@ -218,15 +218,18 @@ def _verify_pending_attempts(
             and recorded_ids <= current_ids
         )
         terminal_minimum = recovery_terminal_minimum_output(conversation)
+        # A zero-preview capture is handed to the batch pipeline, which writes its notes later.
+        batch_handoff = job.get('finalization_outcome') == 'server_batch_capture'
         valid_output = (
             structured_is_rich(conversation.get('structured'))
             or verified_recovery_discard(conversation.get('discarded'), conversation.get('relevance_decision'))
             or terminal_minimum
+            or batch_handoff
         )
         if preserved and valid_output:
             _log_action(
                 'verified',
-                reason='kept_minimum' if terminal_minimum else 'ok',
+                reason='kept_minimum' if terminal_minimum else 'batch_handoff' if batch_handoff else 'ok',
                 uid=uid,
                 conversation_id=conversation_id,
             )
