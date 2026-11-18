@@ -1527,6 +1527,7 @@ _add(
             'include_recordings': (False, 'post-read visibility only; same query'),
             'hide_home': (False, 'post-read visibility only; same query'),
             'capture_only': (False, 'post-read visibility only; same query'),
+            'show_held': (False, 'post-read visibility only; same query'),
             'limit': _LIMIT,
             'offset': _OFFSET,
             'budget': _BUDGET,

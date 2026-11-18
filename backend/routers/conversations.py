@@ -1161,6 +1161,11 @@ def get_conversations(
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
     budget = list_read_budget_for_request(request, route='conversations')
     page: Dict[str, Any] = {}
+    reveal = include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
+    default_home = not (reveal or start_date or end_date)
+    # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
+    # legacy sync piece there would duplicate them.
+    show_held = default_home and not conversations_v3_enabled(uid)
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
@@ -1181,9 +1186,8 @@ def get_conversations(
         capture_only=status_filter == ['in_progress'],
         # A date range alone is still Home: the day view is Home's own drill-in,
         # so it hides what Home hides. Explicit reveal filters still opt out.
-        hide_home=not (
-            include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
-        ),
+        hide_home=not reveal,
+        show_held=show_held,
     )
 
     conversations = home_membership.project_list(
@@ -1198,7 +1202,9 @@ def get_conversations(
     if response is not None:
         list_page_headers.apply(response, page)
     _heal_locked_conversations_if_eligible(uid, conversations)
-    conversations = [transcribing_hold.project(home_step.project(row), home_list=True) for row in conversations]
+    conversations = [
+        transcribing_hold.project(home_step.project(row, show_held=show_held), home_list=True) for row in conversations
+    ]
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
