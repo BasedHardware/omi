@@ -51,6 +51,8 @@ from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.processing_hold import MAX_HOLD_SECONDS
 from utils.sync import capture_end, processing_hold
 from database.batch_pipeline_projection_protocol import (
+    PROJECTION_HEAD_BLOCK_TYPE,
+    PROJECTION_HEAD_BLOCKED_SINCE,
     ProjectionBlocked as ProjectionBlocked,
     ProjectionReplay as ProjectionReplay,
     normalized_binding,
@@ -329,6 +331,30 @@ class ProjectionStore:
             return True
 
         return bool(self.run(commit))
+
+    def note_head_blocked(self, segment_id: str, now: float, block_type: str) -> bool:
+        """Stamp a bounded-retry chain head's first failure; one write per episode.
+
+        ``run`` requires a ``@firestore.transactional`` callable. The Projector
+        once passed a plain function here, so every read failed with
+        ``ValueError('Transaction not in progress')`` and the 24 h head bound
+        (``projection_blocked_since``) never started.
+        """
+
+        @firestore.transactional
+        def commit(transaction):
+            ref = self.ref('results', segment_id)
+            row = ref.get(transaction=transaction).to_dict() or {}
+            if row.get(PROJECTION_HEAD_BLOCKED_SINCE) is not None or row.get('projection_state') not in (
+                'pending',
+                'persisted',
+                'ready',
+            ):
+                return False
+            transaction.update(ref, {PROJECTION_HEAD_BLOCKED_SINCE: now, PROJECTION_HEAD_BLOCK_TYPE: block_type})
+            return True
+
+        return self.run(commit)
 
     def defer_finish(self, segment_id: str, state: str | None, now: float) -> bool:
         """Bound when the finish page retries a row whose last walk changed nothing.
