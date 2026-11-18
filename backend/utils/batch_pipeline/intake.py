@@ -504,9 +504,7 @@ async def _probe_upload_allowance(
         policy.stt_route == 'parakeet'
         and policy.provider_reason != 'byok'
         and lane in {'fresh', 'backfill'}
-        and items
-        and all(item.requires_compute_admission for item in items)
-        and any(item.segment_id not in source_aliases for item in items)
+        and any(item.requires_compute_admission and item.segment_id not in source_aliases for item in items)
         and offline_enforcement_enabled('batch')
         and lever_enabled('usage_month_total', uid)
     ):
