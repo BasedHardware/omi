@@ -33,6 +33,8 @@ class Cluster:
         self.calls: list[list[str]] = []
         self.written: dict | None = None
         self.replicasets: list[tuple[int, dict]] = [(35, live)]
+        self.secret_written = "2026-11-18T00:00:00Z"
+        self.pod_starts = ["2026-11-18T01:00:00Z", "2026-11-18T02:00:00Z"]
 
     def __call__(self, argv, *, timeout=60):
         self.calls.append(list(argv))
@@ -68,11 +70,21 @@ class Cluster:
                     }
                 )
             return json.dumps({"items": items}).encode()
+        if kind == "pod":
+            assert argv[argv.index("-l") + 1] == "app=listen"
+            items = [{"status": {"phase": "Running", "startTime": t}} for t in self.pod_starts]
+            return json.dumps({"items": items}).encode()
         if kind == "secret":
             if self.secret is None:
                 raise HELPER.Refused("kubectl get failed (exit 1)")
             return json.dumps(
-                {"data": {k: base64.b64encode(v.encode()).decode() for k, v in self.secret.items()}}
+                {
+                    "metadata": {
+                        "creationTimestamp": "2026-11-17T00:00:00Z",
+                        "managedFields": [{"manager": "external-secrets", "time": self.secret_written}],
+                    },
+                    "data": {k: base64.b64encode(v.encode()).decode() for k, v in self.secret.items()},
+                }
             ).encode()
         if kind == "externalsecret":
             return json.dumps(
@@ -160,6 +172,20 @@ def test_guard_after_cutover_checks_references_and_presence(cluster, capsys):
     cluster(live=live, secret=full_secret(STT_CAP_DISPATCH_COHORT=""))
     rc, out, _ = guard(capsys)
     assert rc == 2 and "key=STT_CAP_DISPATCH_COHORT effect=missing-from-secret" in out
+
+
+def test_guard_after_cutover_refuses_a_secret_change_no_pod_serves_yet(cluster, capsys):
+    # A value change synced after the pods started would ride the next roll unannounced.
+    live = {key: ref(key) for key in full_secret()}
+    fake = cluster(live=live, secret=full_secret(STT_CAP_DISPATCH_COHORT=COHORT + ",uid:other"))
+    fake.secret_written = "2026-11-18T01:30:00Z"
+    rc, out, err = guard(capsys)
+    assert rc == 2
+    assert "key=STT_CAP_DISPATCH_COHORT effect=pending-restart" in out
+    assert "nothing deployed" in err
+    # After the runbook's rollout restart every serving pod is newer than the Secret.
+    fake.pod_starts = ["2026-11-18T01:40:00Z"]
+    assert guard(capsys)[0] == 0
 
 
 def test_guard_refuses_an_unsynced_external_secret(cluster, capsys):

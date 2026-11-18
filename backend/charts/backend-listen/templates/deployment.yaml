@@ -41,6 +41,10 @@ version plus a rollout restart, never a code deploy.
 {{- if not (regexMatch "^[A-Z][A-Z0-9_]*$" .) }}
 {{- fail "privateSecretEnv.keys has a name that is not an env var name" }}
 {{- end }}
+{{- /* A secretKeyRef would silently replace a chart-derived value or a workflow_dispatch --set override. */}}
+{{- if has . (list "GOOGLE_CLOUD_PROJECT" "OMI_LLM_GATEWAY_FEATURE_MODE" "OMI_LLM_CHAT_AGENT_ROUTE" "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION" "STT_SERVICE_MODELS" "TRANSLATION_SERVICE_MODELS") }}
+{{- fail (printf "privateSecretEnv.keys cannot name %s: it is chart-derived or a workflow_dispatch override" .) }}
+{{- end }}
 {{- end }}
 {{- end }}
 apiVersion: apps/v1

@@ -47,6 +47,17 @@ holds `secretmanager.versions.add` on `LISTEN_PRIVATE_ENV`. Off-peak for listen
 Rollback: add the previous document again as a new version (the ExternalSecret
 reads `latest`), then steps 2–3. Do not rely on disabling the newest version.
 
+Between steps 2 and 3 every listen deploy refuses at "Prove private listen env is
+unchanged" with `effect=pending-restart`: the Secret holds a value no serving pod
+reads yet, and a roll must never apply it unannounced. Finish step 3 first.
+
+An **empty** value is not a supported state. The guard reports it as
+`missing-from-secret` and refuses every listen deploy until it is non-empty. To
+stop STT cap admission, set `STT_CAP_DISPATCH_ENFORCEMENT` to `false`, not an
+empty cohort. To stop serving the media/noise list, set
+`MEDIA_NOISE_MODE_SERVE_PERCENT` to `0` in the chart. To retire a name, remove it
+through a reviewed PR (below).
+
 ## Add or remove a private name
 
 A reviewed PR: add the name to `privateSecretEnv.keys` and the `secret:` entry

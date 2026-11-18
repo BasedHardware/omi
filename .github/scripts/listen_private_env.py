@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+from datetime import datetime
 import hashlib
 import hmac
 import json
@@ -84,6 +85,29 @@ def kube_json(namespace: str, kind: str, name: str) -> dict:
 def secret_data(namespace: str, name: str) -> dict[str, str]:
     doc = kube_json(namespace, 'secret', name)
     return {k: base64.b64decode(v).decode('utf-8') for k, v in (doc.get('data') or {}).items()}
+
+
+def stamp(text: str) -> datetime:
+    return datetime.fromisoformat(text.replace('Z', '+00:00'))
+
+
+def secret_written_at(namespace: str, name: str) -> datetime:
+    # Last time any writer (ESO or a hand edit) changed the Secret, from apiserver managedFields.
+    meta = kube_json(namespace, 'secret', name).get('metadata') or {}
+    times = [f.get('time') for f in meta.get('managedFields') or []] + [meta.get('creationTimestamp')]
+    return max(stamp(t) for t in times if t)
+
+
+def oldest_serving_pod(namespace: str, deployment: str) -> datetime | None:
+    doc = kube_json(namespace, 'deployment', deployment)
+    labels = (doc['spec'].get('selector') or {}).get('matchLabels') or {}
+    if not labels:
+        raise Refused('listen deployment has no selector')
+    selector = ','.join(f'{k}={v}' for k, v in sorted(labels.items()))
+    pods = json.loads(run(['kubectl', '-n', namespace, 'get', 'pod', '-l', selector, '-o', 'json']) or b'{}')
+    starts = [stamp(p['status']['startTime']) for p in pods.get('items') or []
+              if (p.get('status') or {}).get('phase') == 'Running' and p['status'].get('startTime')]
+    return min(starts) if starts else None
 
 
 def container_env(pod_spec: dict, container: str) -> dict[str, dict]:
@@ -229,9 +253,19 @@ def cmd_guard(a) -> int:
     wait_ready(a.namespace, a.external_secret, a.timeout)
     secret = secret_data(a.namespace, secret_name)
     effects: dict[str, set[str]] = {k: set() for k in keys}
-    for env in serving_envs(a.namespace, a.deployment, a.container):
+    serving = serving_envs(a.namespace, a.deployment, a.container)
+    for env in serving:
         for key, effect in compare_live(keys, secret_name, secret, env):
             effects[key].add(effect)
+    # After cutover, pods read the Secret only when they start. A Secret written after the oldest
+    # serving pod started holds a value no pod serves yet, and a roll would apply it unannounced:
+    # apply value changes with the runbook's rollout restart, never with a deploy.
+    referenced = [k for k in keys if any(k in env and 'valueFrom' in env[k] for env in serving)]
+    if referenced:
+        oldest = oldest_serving_pod(a.namespace, a.deployment)
+        if oldest is not None and secret_written_at(a.namespace, secret_name) > oldest:
+            for k in referenced:
+                effects[k] = {'pending-restart'}
     # One line per name; any serving template that differs makes the name differ.
     rows = [(k, next(iter(e)) if len(e) == 1 else '+'.join(sorted(e))) for k, e in effects.items()]
     report(rows)

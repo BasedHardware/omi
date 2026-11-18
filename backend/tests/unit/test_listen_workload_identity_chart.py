@@ -152,3 +152,11 @@ def test_prod_private_secret_env_cannot_carry_a_key_credential(name):
     result = _render("prod", "prod-omi-backend-listen", "--set", f"privateSecretEnv.keys={{{name}}}")
     assert result.returncode != 0
     assert "workloadIdentityOnly forbids key credential environment variables" in result.stderr
+
+
+@pytest.mark.parametrize("name", ["GOOGLE_CLOUD_PROJECT", "STT_SERVICE_MODELS", "OMI_LLM_GATEWAY_FEATURE_MODE"])
+def test_prod_private_secret_env_cannot_shadow_chart_or_dispatch_owned_env(name):
+    # A secretKeyRef would silently win over the chart-derived value or a workflow_dispatch --set override.
+    result = _render("prod", "prod-omi-backend-listen", "--set", f"privateSecretEnv.keys={{{name}}}")
+    assert result.returncode != 0
+    assert f"privateSecretEnv.keys cannot name {name}" in result.stderr
