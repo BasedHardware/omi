@@ -540,3 +540,36 @@ def test_rearm_at_retry_handoff_is_supersession_not_a_failed_task(monkeypatch, w
     for job in (leader, follower):
         row = world.client.collection(jobs.COLLECTION).document(job).get().to_dict()
         assert row and not row.get('scan_epoch') and row.get('last_outcome') != 'failed'
+
+
+def test_tombstone_audit_after_coalesced_completion(world, caplog):
+    from unittest.mock import Mock
+
+    from scripts import audit_conversation_purge_remainders as audit
+
+    start = jobs._now() - timedelta(seconds=1)
+    cids = ('synthetic-audit-done-a', 'synthetic-audit-done-b')
+    armed = [world.arm(cid) for cid in cids]
+    for cid in cids:
+        world.client.document(f'users/{world.uid}/deleted_conversations/{cid}').update({'deleted_at': jobs._now()})
+    _seed(world, cids)
+    assert _run(world, armed[0], _dispatch(world, armed[0])) == 'purged'
+
+    pending = 'synthetic-audit-pending'
+    world.arm(pending)
+    world.client.document(f'users/{world.uid}/deleted_conversations/{pending}').update({'deleted_at': jobs._now()})
+    gcs = Mock()
+    gcs.list_blobs.return_value = []
+    end = jobs._now() + timedelta(seconds=1)
+    report = audit.audit(world.client, gcs, start, end, audit.Budget(200))
+    assert (report['tombstones'], report['terminal_checked'], report['pending']) == (3, 2, 1)
+    assert not any(report['remainders'].values())
+
+    events = [
+        event for event in caplog.messages if event.startswith('event=conversation_batch_purge_owner_scan_audit ')
+    ]
+    assert len(events) == 2
+    assert 'kind=sealed outcome=sealed members=2' in events[0]
+    assert 'kind=terminal outcome=completed members=2' in events[1]
+    assert events[0].split('epoch_hash=')[1] == events[1].split('epoch_hash=')[1]
+    assert all(world.uid not in event and all(cid not in event for cid in cids) for event in events)

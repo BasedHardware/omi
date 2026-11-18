@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID, FROZEN_NOW, FROZEN_LATER
+from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID, FROZEN_NOW, FROZEN_LATER, ref_collection
 from utils.other.list_budget import ListReadBudget
 
 
@@ -42,6 +42,21 @@ def entries():
             domains={'conversation_id': [None, 'source']},
             setup=_pending_source,
             patchers=(_decode,),
+        ),
+        DriverEntry(
+            'database.conversations_v3._mark_successor_pending',
+            base={
+                'coll': ref_collection(f'users/{SHAPE_UID}/conversations'),
+                'recordings': {
+                    'source': {
+                        'id': 'source',
+                        'started_at': FROZEN_NOW,
+                        'finished_at': FROZEN_NOW,
+                        'transcript_segments': [{'text': 'shape', 'start': 0, 'end': 1}],
+                        'v3_rotation_cap_seconds': 300.0,
+                    }
+                },
+            },
         ),
         DriverEntry(
             'database.conversations_v3.load_derive',

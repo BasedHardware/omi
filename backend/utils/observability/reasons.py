@@ -295,6 +295,19 @@ class PersonVoiceQualityReason(StrEnum):
     INCOMPATIBLE_PERSON_VOICEPRINT = 'incompatible_person_voiceprint'
 
 
+class RecordingRotationOutcome(StrEnum):
+    """Disposition of one listen v3 recording rotation step."""
+
+    UNKNOWN = 'unknown'
+    ROTATED = 'rotated'
+    SAME_ROW = 'same_row'
+    CREATE_FAILED = 'create_failed'
+    SEAL_FAILED = 'seal_failed'
+    SEAL_RETRY = 'seal_retry'
+    HANDED_OFF = 'handed_off'
+    OTHER_OWNER = 'other_owner'
+
+
 class StaleRecoveryOutcome(StrEnum):
     """Disposition of one reconnect stale-row finalization attempt."""
 
