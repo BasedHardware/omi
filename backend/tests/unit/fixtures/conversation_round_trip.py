@@ -19,15 +19,13 @@ from fastapi.routing import APIRoute
 from pydantic import BaseModel, TypeAdapter
 
 from models.conversation import Conversation
+from routers import conversations as conversations_router  # collection pays the router graph, not a test's CPU budget
 from utils.conversations import row_contract
 
 LIST_ROUTE = ('GET', '/v1/conversations')
 
 
 def _response_model(method: str, path: str):
-    # Imported on use: the router graph is heavy and only the round trip needs it.
-    from routers import conversations as conversations_router
-
     [route] = [
         route
         for route in conversations_router.router.routes
