@@ -759,6 +759,8 @@ def test_deletion_worker_transitions_advance_without_rewriting_purge_fields(worl
     w.users.mark_user_deletion_auth_deleted(w.uid)
     assert_epoch(12)
     w.users.mark_user_deletion_wipe_failed(w.uid)
+    marker = w.client.collection('account_deletions').document(w.uid)
+    assert marker.get().to_dict()['wipe_attempts'] == 1
     assert_epoch(13)
     assert w.users.claim_deletion_wipe(w.uid) == w.uid
     assert_epoch(14)
