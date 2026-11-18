@@ -154,11 +154,21 @@ def short_tasks(uid, conversation):
 
 
 def _action_items(text):
-    """The JSON object the prompt asked for, tolerating a code fence or prose around it."""
-    start, end = text.find('{'), text.rfind('}')
-    if start < 0 or end < start:
-        raise ValueError('short_tasks_no_json_object')
-    items = json.loads(text[start : end + 1]).get('action_items', [])
-    if not isinstance(items, list):
-        raise ValueError('short_tasks_action_items_not_list')
-    return items
+    """The action items from the first complete JSON value in the reply.
+
+    Tolerates a code fence or prose around it. An object must carry an ``action_items`` list; a bare
+    array is taken as the list. Anything else raises so the task retries.
+    """
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(text):
+        if char not in '{[':
+            continue
+        try:
+            value, _ = decoder.raw_decode(text, index)
+        except ValueError:
+            continue
+        items = value.get('action_items') if isinstance(value, dict) else value
+        if not isinstance(items, list):
+            raise ValueError('short_tasks_action_items_not_list')
+        return items
+    raise ValueError('short_tasks_no_json')

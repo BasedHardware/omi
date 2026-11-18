@@ -291,7 +291,29 @@ def test_short_tasks_requests_no_response_format_and_parses_fenced_json(monkeypa
     monkeypatch.setattr(v3_models, 'get_or_create_omi_gateway_llm', lambda *a, **kw: Model())
     short = conversation().model_copy(update={'transcript_segments': conversation().transcript_segments[:1]})
     structured = v3_models.short_tasks('u', short)
-    assert 'response_format' not in bound
+    assert bound == {'reasoning_effort': 'low'}
     assert [item.description for item in structured.action_items] == ['Send the deck to Sam']
+
+
+@pytest.mark.parametrize(
+    'reply, expected',
+    [
+        ('{"action_items": [{"description": "a"}]}\nNote: use {curly} braces', [{'description': 'a'}]),
+        ('Sure {see below}: {"action_items": []}', []),
+        ('[{"description": "a"}]', [{'description': 'a'}]),
+    ],
+)
+def test_short_tasks_action_items_parse(reply, expected):
+    from utils.conversations.v3 import models as v3_models
+
+    assert v3_models._action_items(reply) == expected
+
+
+@pytest.mark.parametrize(
+    'reply', ['no json here', '{"items": []}', '{"action_items": "later"}', '{"action_items": {}}']
+)
+def test_short_tasks_action_items_reject_retries(reply):
+    from utils.conversations.v3 import models as v3_models
+
     with pytest.raises(ValueError):
-        v3_models._action_items('no json here')
+        v3_models._action_items(reply)
