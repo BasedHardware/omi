@@ -71,12 +71,14 @@ class Overlay:
     gates: dict[str, Any] = field(default_factory=dict)
     strict: bool = False
     name: str = ''
+    model_config: dict[str, Any] = field(default_factory=dict)  # resolved model choices; part of the cache key
 
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any]) -> 'Overlay':
-        unknown = set(payload) - {'env', 'serving', 'gates', 'strict', 'name'}
+        """The one overlay schema (RULINGS 7): ``{name, env, model_config, serving, gates, strict}``."""
+        unknown = set(payload) - {'env', 'serving', 'gates', 'strict', 'name', 'model_config'}
         if unknown:
-            raise ValueError(f'unknown overlay keys: {sorted(unknown)}')
+            raise ValueError(f'unknown overlay keys: {sorted(unknown)} (cohorts go in "serving", not "pins")')
         env = {str(k): str(v) for k, v in (payload.get('env') or {}).items()}
         serving = {str(k): bool(v) for k, v in (payload.get('serving') or {}).items()}
         for key in env:
@@ -92,6 +94,7 @@ class Overlay:
             gates=gates,
             strict=bool(payload.get('strict')),
             name=str(payload.get('name') or ''),
+            model_config=dict(payload.get('model_config') or {}),
         )
 
     @classmethod
@@ -101,7 +104,14 @@ class Overlay:
         return cls.from_mapping(json.loads(Path(path).read_text(encoding='utf-8')))
 
     def to_mapping(self) -> dict[str, Any]:
-        return {'name': self.name, 'env': self.env, 'serving': self.serving, 'gates': self.gates, 'strict': self.strict}
+        return {
+            'name': self.name,
+            'env': self.env,
+            'model_config': self.model_config,
+            'serving': self.serving,
+            'gates': self.gates,
+            'strict': self.strict,
+        }
 
     def digest(self) -> str:
         return overlay_hash(self.to_mapping())

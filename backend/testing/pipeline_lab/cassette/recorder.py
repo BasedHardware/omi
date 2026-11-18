@@ -26,7 +26,9 @@ from typing import Any, Callable, Protocol, Sequence
 
 from testing.pipeline_lab.cassette.adapters import STTAdapter, STTRequest
 from testing.pipeline_lab.cassette.format import BYTES_PER_SECOND, Cassette, CassetteKey, derive_segments, load
-from testing.pipeline_lab.timeline.paths import append_jsonl, iso
+from testing.pipeline_lab.contracts import utc_iso as iso
+from testing.pipeline_lab.ledger import SpendCapReached
+from testing.pipeline_lab.store import append_jsonl
 
 
 class SpendLedger(Protocol):
@@ -37,8 +39,12 @@ class SpendLedger(Protocol):
         """Replace the hold with the final charge."""
 
 
-class BudgetExceeded(RuntimeError):
-    """Non-retryable: the reservation would cross the hard cap."""
+class BudgetExceeded(SpendCapReached):
+    """Non-retryable: the reservation would cross the hard cap.
+
+    A ``SpendCapReached``, so the orchestrator stops the run (exit 4) whichever ledger raised it.
+    Core's persistent ``ledger.SpendLedger`` satisfies the Protocol above directly (RULINGS 9).
+    """
 
 
 class InMemoryLedger:

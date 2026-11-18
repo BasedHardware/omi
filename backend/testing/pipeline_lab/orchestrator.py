@@ -15,6 +15,10 @@ calls inside those stages are still served by the proxy cache. A driver that
 cannot be restored from a manifest (its effect is emulator state) sets
 ``cacheable = False`` and always runs.
 
+Stages before ``--from-stage`` are served from the cache when an entry exists and
+are otherwise marked ``skipped``: in M1 ``--from-stage discard`` starts the chain
+from the stored production transcripts (RULINGS 16).
+
 Stops: a ledger refusal (or the proxy reporting the cap) marks the run
 ``stopped`` (exit 4); any other driver error marks it ``failed`` (exit 2) with the
 traceback in ``runs/<run_id>/errors.log``.
@@ -77,7 +81,9 @@ def select_stages(stages: Optional[Sequence[str]]) -> list[str]:
 class RunRequest:
     day_id: str
     ref: str
-    overlay: dict[str, Any] = field(default_factory=dict)  # {"env": {...}, "model_config": {...}, "pins": {...}}
+    overlay: dict[str, Any] = field(
+        default_factory=dict
+    )  # stack.overlay schema: {name, env, model_config, serving, gates, strict}
     from_stage: Optional[str] = None
     stages: Optional[list[str]] = None
     budget_usd: float = DEFAULT_BUDGET_USD
@@ -87,6 +93,9 @@ class RunRequest:
     llm_mode: str = 'record'
     llm_prices: Optional[dict[str, Any]] = None
     run_id: Optional[str] = None
+    allow_lock_mismatch: bool = False
+    engine: str = 'product'  # chain engine: 'product' (real backend, local stack) or 'fake' (hermetic tests)
+    commit: Optional[str] = None  # resolved sha when the run uses an unpinned in-place checkout
 
 
 @dataclass
@@ -104,6 +113,7 @@ class StageContext:
     ledger: SpendLedger
     upstream: dict[str, dict[str, Any]]
     llm_proxy_url: Optional[str] = None
+    engine: str = 'product'
     warnings: list[str] = field(default_factory=list)
 
     @property
@@ -142,6 +152,24 @@ class StageContext:
             raise worktrees.WorktreeError('no pinned worktree for this run')
         return worktrees.run_arm(self.worktree.backend, module, args, overlay=self.env, timeout=timeout, **kwargs)
 
+    def run_module(self, module: str, args: Sequence[str] = (), *, timeout: Optional[float] = None) -> int:
+        """Run a lab entry module for this stage: in the pinned arm (fresh ``python -I``) when there is one,
+        else in this process (in-place checkout or tests) with ``env`` overlaid on ``os.environ``."""
+        if self.worktree is not None:
+            result = self.run_arm(module, args, timeout=timeout)
+            if result.returncode != 0:
+                atomic_write_bytes(
+                    self.run_dir / f'{self.stage}.stderr.log', (result.stderr or '').encode('utf-8', errors='replace')
+                )
+            return result.returncode
+        import importlib
+        import os
+        from unittest import mock
+
+        entry = importlib.import_module(module)
+        with mock.patch.dict(os.environ, self.env):
+            return int(entry.main(list(args)) or 0)
+
 
 @dataclass
 class RunOutcome:
@@ -165,8 +193,12 @@ def run_pipeline(
     worktree: Optional[worktrees.Worktree] = None,
     backend_tree: Optional[str] = None,
     repo: Optional[Path] = None,
+    in_place_repo: Optional[Path] = None,
 ) -> RunOutcome:
     """Execute one run. Pass ``worktree`` (or, in tests, only ``backend_tree``) or a ``repo`` to pin from."""
+    from testing.pipeline_lab.stack.overlay import Overlay
+
+    Overlay.from_mapping(request.overlay)  # one schema (RULINGS 7); raises on pins or raw cohort env
     day = store.read_day(request.day_id)
     selected = select_stages(request.stages)
     forced_from = stage_index(request.from_stage) if request.from_stage else None
@@ -184,6 +216,7 @@ def run_pipeline(
         run_id=run_id,
         day_id=day.day_id,
         ref=request.ref,
+        commit=worktree.sha if worktree else request.commit,
         backend_tree=tree,
         overlay=redact_overlay(request.overlay),
         status=RunStatus.RUNNING.value,
@@ -191,24 +224,26 @@ def run_pipeline(
         budget_usd=request.budget_usd,
         stages={stage: StageRun() for stage in selected},
         extra={
-            'commit': worktree.sha if worktree else None,
             'from_stage': request.from_stage,
+            'chain_engine': request.engine,
             'llm_mode': request.llm_mode if request.llm_upstream or request.llm_mode == 'replay' else None,
         },
     )
     if day.start_state_snapshot is None:
         run.warnings.append('corpus day has no start-state snapshot')
+    if in_place_repo is not None:
+        run.extra['in_place'] = True
+        dirty = worktrees.git(Path(in_place_repo), 'status', '--porcelain', '--', 'backend')
+        if dirty.strip():
+            run.warnings.append('in-place run: backend/ has uncommitted changes, so backend_tree names HEAD only')
     if worktree is not None:
         try:
             worktrees.check_lockfile(worktrees.harness_package_dir().parents[1], worktree.backend)
         except worktrees.WorktreeError as drift:
+            if not request.allow_lock_mismatch:
+                raise  # RULINGS 11: fail closed; --allow-lock-mismatch downgrades to a warning
             run.warnings.append(str(drift))
     store.create_run(run)
-    pins = request.overlay.get('pins') or {}
-    if pins:
-        store.append_decisions(
-            run_id, [Decision(at=utc_iso(), name=str(k), mode=str(v), source='overlay') for k, v in pins.items()]
-        )
     ledger = SpendLedger(store.ledger_path(run_id), budget_usd=request.budget_usd)
     env = {str(k): str(v) for k, v in (request.overlay.get('env') or {}).items()}
 
@@ -228,6 +263,7 @@ def run_pipeline(
             ledger=ledger,
         ).start()
         env['OMI_LLM_GATEWAY_URL'] = proxy.url
+        env['OMI_PIPELINE_LAB_LLM_PROXY_URL'] = proxy.url  # RULINGS 8: the name the chain's stack reads
 
     upstream: dict[str, dict[str, Any]] = {}
     exit_code, error = EXIT_OK, None
@@ -252,6 +288,7 @@ def run_pipeline(
                 ledger=ledger,
                 upstream=dict(upstream),
                 llm_proxy_url=proxy.url if proxy else None,
+                engine=request.engine,
             )
             run.stages[stage].status = StageState.RUNNING.value
             store.write_run(run)
@@ -274,6 +311,11 @@ def run_pipeline(
                 entry = store.cache_get(stage, key) if cacheable and not forced else None
                 state = run.stages[stage]
                 state.extra['key'] = key
+                before_start = forced_from is not None and stage_index(stage) < forced_from
+                if entry is None and before_start:
+                    state.status = StageState.SKIPPED.value
+                    run.warnings.append(f'{stage}: before --from-stage and not cached (skipped)')
+                    continue
                 if entry is not None:
                     restore = getattr(driver, 'restore', None)
                     if restore is not None:

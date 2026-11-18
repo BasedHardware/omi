@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
 
-from testing.pipeline_lab.stack.io import content_key, iso, parse_time, plain
+from testing.pipeline_lab.contracts import memory_key, task_key
+from testing.pipeline_lab.stack.io import iso, parse_time, plain
 
 
 def _time(value: Any) -> str | None:
@@ -75,7 +76,7 @@ def structured(row: Mapping[str, Any]) -> dict[str, Any]:
 def action_item(row: Mapping[str, Any]) -> dict[str, Any]:
     description = (row.get('description') or '').strip()
     return {
-        'key': content_key('task', description),
+        'key': task_key(description),
         'description': description,
         'due_at': _time(row.get('due_at')),
         'completed': bool(row.get('completed')),
@@ -85,7 +86,7 @@ def action_item(row: Mapping[str, Any]) -> dict[str, Any]:
 def memory(row: Mapping[str, Any]) -> dict[str, Any]:
     content = (row.get('content') or '').strip()
     return {
-        'key': content_key('memory', content),
+        'key': memory_key(content),
         'content': content,
         'category': str(row.get('category') or ''),
     }

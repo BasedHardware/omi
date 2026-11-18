@@ -23,7 +23,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-from testing.pipeline_lab.timeline.paths import atomic_write_json, lab_root, read_json
+from testing.pipeline_lab.store import atomic_write_json, lab_root, read_json
 
 SCHEMA = 'pipeline_lab.stt_cassette/v1'
 STAGE_DIR = 'stt_cassette'

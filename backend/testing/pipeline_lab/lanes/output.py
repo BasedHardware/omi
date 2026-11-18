@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from testing.pipeline_lab.timeline.paths import atomic_write_json, lab_root
+from testing.pipeline_lab.store import atomic_write_json, lab_root
 
 SCHEMA = 'pipeline_lab.ingest/v1'
 

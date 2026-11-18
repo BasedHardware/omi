@@ -20,7 +20,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
-from testing.pipeline_lab.timeline.paths import atomic_write_json, iso, lab_root, parse_time, read_json, read_jsonl
+from testing.pipeline_lab.contracts import parse_time
+from testing.pipeline_lab.contracts import utc_iso as iso
+from testing.pipeline_lab.store import atomic_write_json, lab_root, read_json, read_jsonl
 
 LANE_RECORD = 'record'
 LANE_SYNC = 'sync'
@@ -100,7 +102,10 @@ def load_audio_index(day_dir: Path) -> list[AudioEntry]:
 
 
 def load_baseline(day_dir: Path) -> list[dict]:
-    return list(read_jsonl(day_dir / 'baseline' / 'conversations.jsonl'))
+    """Production rows of the day. Lane rules need snapshot fields (``record_lane_owner``, ``source``),
+    so the raw rows are preferred; ``conversations.jsonl`` (contract shape) is the fallback."""
+    raw = day_dir / 'baseline' / 'raw_conversations.jsonl'
+    return list(read_jsonl(raw if raw.exists() else day_dir / 'baseline' / 'conversations.jsonl'))
 
 
 def build_islands(entries: Sequence[AudioEntry], *, join_seconds: float = ISLAND_JOIN_SECONDS) -> list[dict]:

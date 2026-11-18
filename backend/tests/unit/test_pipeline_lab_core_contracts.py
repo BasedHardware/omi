@@ -46,7 +46,12 @@ def _all_records() -> list[c.Record]:
             timings={'notes': 1.5},
         ),
         _conversation(),
-        c.RunDay(daily_summary={'headline': 'h'}, memory_delta=c.MemoryDelta(added=['m']), notifications=[]),
+        c.RunDay(
+            daily_summary=c.DailySummary(title='h', highlights=['x']),
+            goals=[c.Goal(title='g', progress_before=1.0, progress_after=2.0, target=5.0)],
+            memory_delta=c.MemoryDelta(added=['m']),
+            notifications=[],
+        ),
         c.LlmCall(id='llm-1', at='t', stage='notes', prompt={'messages': []}, output='x', tokens_in=3, usd=0.001),
         c.VendorLogEntry(at='t', vendor='fake', purpose='stt', audio_seconds=3.0),
         c.Decision(at='t', name='NOTES_MODE', mode='serve', source='overlay'),

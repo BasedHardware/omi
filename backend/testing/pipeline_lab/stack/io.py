@@ -1,18 +1,19 @@
-"""Small JSON helpers for the run store layout in DESIGN.md (owned by lane ``core``).
+"""JSON helpers for product-shaped values (datetimes, pydantic models, bytes markers).
 
-The chain lane writes its files directly against the documented JSON layout so it
-does not depend on another lane's module. Writes are atomic and private (0600).
+Times and content keys come from ``contracts`` (the single source); writes are atomic
+and private (0600) like ``store``'s.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
-import hashlib
+from datetime import date, datetime
 import json
 import os
 from pathlib import Path
 import threading
 from typing import Any, Iterable, Iterator
+
+from testing.pipeline_lab.contracts import parse_time, utc_iso  # noqa: F401 - re-exported for lane modules
 
 _APPEND_LOCK = threading.Lock()
 
@@ -20,29 +21,10 @@ _APPEND_LOCK = threading.Lock()
 def iso(value: Any) -> Any:
     """ISO-8601 UTC for datetimes; everything else unchanged."""
     if isinstance(value, datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+        return utc_iso(value)
     if isinstance(value, date):
         return value.isoformat()
     return value
-
-
-def parse_time(value: Any) -> datetime | None:
-    """Parse the snapshot/contract time shapes into an aware UTC datetime."""
-    if value is None or value == '':
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(float(value), tz=timezone.utc)
-    if isinstance(value, str):
-        try:
-            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        except ValueError:
-            return None
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-    return None
 
 
 def _default(value: Any) -> Any:
@@ -115,9 +97,3 @@ def write_jsonl(path: Path, rows: Iterable[Any]) -> int:
             count += 1
     os.replace(tmp, path)
     return count
-
-
-def content_key(*parts: Any) -> str:
-    """Stable short hash of normalized content (DESIGN: verdict keys survive re-runs)."""
-    normalized = [' '.join(str(part or '').lower().split()) for part in parts]
-    return hashlib.sha256('\x1f'.join(normalized).encode('utf-8')).hexdigest()[:16]

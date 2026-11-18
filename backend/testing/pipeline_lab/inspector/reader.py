@@ -1,7 +1,7 @@
 """Read-only view of the pipeline-lab run store for the inspector, plus the verdict writer.
 
-Codes against the DESIGN store contract's JSON layout, not against lane ``core``'s modules, so the
-inspector works on any store that follows the contract. Every id that becomes a path is checked
+Reads the store contract's JSON layout; ids, content keys and item kinds come from ``contracts`` /
+``store`` (the single source). Every id that becomes a path is checked
 against the contract's id pattern and every resolved path must stay inside its root.
 
 Pairing replay with production: a replay conversation names its production twin in ``baseline_id``
@@ -13,20 +13,21 @@ content key first, then by word overlap, so the UI can show a word diff for near
 from __future__ import annotations
 
 import fcntl
-import hashlib
 import json
 import os
 import re
 import secrets
 import stat
-import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Optional
 
-ID_PATTERN = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,159}')
-ITEM_KINDS = ('summary', 'task', 'memory', 'notification', 'boundary', 'speaker', 'transcript', 'daily_summary')
-MARKS = ('good', 'bad')
+from testing.pipeline_lab.contracts import ITEM_KINDS, content_key, normalize_text  # noqa: F401 - re-exported
+from testing.pipeline_lab.contracts import MARKS as CONTRACT_MARKS
+from testing.pipeline_lab.store import SEGMENT_PATTERN, StoreRefused, safe_segment
+
+ID_PATTERN = SEGMENT_PATTERN
+MARKS = tuple(m for m in CONTRACT_MARKS if m != 'clear')  # marks the UI counts; ``clear`` withdraws one
 BOUNDARY_TOLERANCE_S = 30.0
 NEAR_MATCH = 0.45
 MAX_NOTE_CHARS = 4000
@@ -41,9 +42,11 @@ class BadRequest(ValueError):
 
 
 def safe_id(value: Any, what: str = 'id') -> str:
-    if not isinstance(value, str) or not ID_PATTERN.fullmatch(value) or '..' in value:
-        raise NotFound(f'invalid {what}')
-    return value
+    """``store.safe_segment`` with the inspector's error type: a bad id reads as not found."""
+    try:
+        return safe_segment(value, what)
+    except StoreRefused:
+        raise NotFound(f'invalid {what}') from None
 
 
 def inside(root: Path, *parts: str) -> Path:
@@ -55,31 +58,9 @@ def inside(root: Path, *parts: str) -> Path:
     return path
 
 
-# ---- content keys (same recipe as the contract's content_key) ---------------------------
+# ---- content keys: the contract's recipe (``contracts.content_key``) -------------------------
 
-_SPACE = re.compile(r'\s+')
-_EDGE_PUNCT = re.compile(r'^[\s\W_]+|[\s\W_]+$', re.UNICODE)
 _WORD = re.compile(r'\w+', re.UNICODE)
-
-
-def normalize_text(text: str) -> str:
-    folded = unicodedata.normalize('NFKC', text).casefold()
-    return _EDGE_PUNCT.sub('', _SPACE.sub(' ', folded))
-
-
-def _normalize_value(value: Any) -> Any:
-    if isinstance(value, str):
-        return normalize_text(value)
-    if isinstance(value, Mapping):
-        return {str(k): _normalize_value(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_normalize_value(v) for v in value]
-    return value
-
-
-def content_key(kind: str, content: Any) -> str:
-    canonical = json.dumps(_normalize_value(content), sort_keys=True, ensure_ascii=False, separators=(',', ':'))
-    return hashlib.sha256(f'{kind}\x00{canonical}'.encode('utf-8')).hexdigest()[:16]
 
 
 def summary_key(structured: Optional[Mapping[str, Any]]) -> str:
@@ -454,11 +435,23 @@ class Reader:
 
     # -- composed views
 
+    def baseline_view(self, run_id: str) -> Optional[dict[str, Any]]:
+        """``runs/<id>/baseline.json`` from the chain's baseline stage (the one pairing implementation)."""
+        data = self._json('runs', safe_id(run_id, 'run id'), 'baseline.json')
+        return data if isinstance(data, dict) and isinstance(data.get('conversations'), list) else None
+
     def pairing(self, run: Mapping[str, Any]) -> dict[str, Any]:
-        """Replay conversations with their production twins, statuses and the missing production rows."""
+        """Replay conversations with their production twins, statuses and the missing production rows.
+
+        Pairs, statuses and reasons come from the run's ``baseline.json`` (RULINGS 10). Runs written
+        without one (older runs, the synthetic sample) fall back to the local pairing below.
+        """
         replay = self.conversations(run['run_id'])
         baseline = self.baseline_conversations(run['day_id'])
         by_id = {b['id']: b for b in baseline if b.get('id')}
+        view = self.baseline_view(run['run_id'])
+        if view is not None:
+            return _pairing_from_view(view, replay, baseline, by_id)
         claims: dict[str, int] = {}
         for conv in replay:
             for bid in baseline_ids_of(conv):
@@ -523,9 +516,13 @@ class Reader:
             newest: dict[tuple, dict] = {}
             for row in rows:
                 newest[_verdict_target(row)] = row
-            rows = [row for row in rows if newest[_verdict_target(row)] is row]
+            rows = [row for row in rows if newest[_verdict_target(row)] is row and row.get('mark') != 'clear']
         for name, value in filters.items():
-            if value:
+            if not value:
+                continue
+            if name == 'conversation_id':  # either the stored (production) id or the replay id it was made on
+                rows = [r for r in rows if value in (r.get('conversation_id'), r.get('replay_conversation_id'))]
+            else:
                 rows = [r for r in rows if r.get(name) == value]
         return rows
 
@@ -544,6 +541,58 @@ class Reader:
         finally:
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)
+
+
+# chain ``baseline.json`` changed_fields -> the inspector's reason chips
+_FIELD_REASONS = {
+    'discarded': 'discard',
+    'boundary': 'boundary',
+    'transcript': 'transcript',
+    'segments': 'transcript',
+    'title': 'summary',
+    'overview': 'summary',
+    'emoji': 'summary',
+    'category': 'summary',
+    'action_items': 'tasks',
+    'memories': 'memories',
+    'notifications': 'pushes',
+}
+
+
+def _pairing_from_view(
+    view: Mapping[str, Any], replay: list[dict[str, Any]], baseline: list[dict[str, Any]], by_id: dict[str, Any]
+) -> dict[str, Any]:
+    replay_by_id = {c['id']: c for c in replay}
+    rows, claimed = [], set()
+    for entry in view.get('conversations') or []:
+        rid, bid = entry.get('replay_id'), entry.get('baseline_id')
+        conv = replay_by_id.get(rid) if rid else None
+        if conv is None:
+            continue  # production-only rows come back as ``missing`` below
+        if bid:
+            claimed.add(bid)
+        reasons: list[str] = []
+        for name in entry.get('changed_fields') or []:
+            reason = _FIELD_REASONS.get(name, name)
+            if reason not in reasons:
+                reasons.append(reason)
+        rows.append(
+            {
+                'replay': conv,
+                'baseline': by_id.get(bid) if bid else None,
+                'status': entry.get('status'),
+                'reasons': reasons,
+            }
+        )
+    listed = {row['replay']['id'] for row in rows}
+    for conv in replay:  # a conversation written after baseline.json: show it rather than hide it
+        if conv['id'] not in listed:
+            rows.append({'replay': conv, 'baseline': None, 'status': 'new', 'reasons': []})
+    for conv in replay:
+        claimed.update(baseline_ids_of(conv))
+    rows.sort(key=lambda r: (r['replay'].get('started_at') or '', r['replay'].get('id')))
+    missing = [b for b in baseline if b.get('id') not in claimed]
+    return {'rows': rows, 'missing': missing, 'by_id': by_id}
 
 
 def _verdict_target(row: Mapping[str, Any]) -> tuple:

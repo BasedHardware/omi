@@ -130,7 +130,7 @@ def run_overview(reader: Reader, run_id: str) -> dict[str, Any]:
     for row in pairing['rows']:
         conv = row['replay']
         twins = [pairing['by_id'][b] for b in baseline_ids_of(conv) if b in pairing['by_id']]
-        marks = _verdicts_for(verdicts, conv.get('id'))
+        marks = _verdicts_for(verdicts, conv.get('id'), *baseline_ids_of(conv))
         rows.append(
             {
                 **(_brief(conv) or {}),
@@ -147,7 +147,7 @@ def run_overview(reader: Reader, run_id: str) -> dict[str, Any]:
             }
         )
     for conv in pairing['missing']:
-        marks = _verdicts_for(verdicts, conv.get('id'))
+        marks = _verdicts_for(verdicts, conv.get('id'), *baseline_ids_of(conv))
         rows.append(
             {
                 **(_brief(conv) or {}),
@@ -271,7 +271,7 @@ def conversation_detail(reader: Reader, run_id: str, conversation_id: str) -> di
         'transcripts': {'replay': transcript_text(conv), 'baseline': transcript_text(twin) if twin else None},
         'audio': reader.audio_for(run['day_id'], conv),
         'llm_calls': reader.llm_calls(run_id, conversation_id, conv.get('llm_call_ids') or []),
-        'verdicts': _verdicts_for(index, conversation_id),
+        'verdicts': _verdicts_for(index, conversation_id, *baseline_ids_of(conv)),
     }
 
 
@@ -432,8 +432,8 @@ def build_verdict(reader: Reader, payload: Any, reviewer: Optional[str] = None) 
         raise BadRequest('run_id is required')
     if kind not in ITEM_KINDS:
         raise BadRequest(f'item_kind must be one of {", ".join(ITEM_KINDS)}')
-    if mark not in MARKS:
-        raise BadRequest('mark must be good or bad')
+    if mark not in MARKS and mark != 'clear':
+        raise BadRequest('mark must be good, bad or clear')
     if not isinstance(key, str) or not key or len(key) > 128:
         raise BadRequest('item_key is required')
     if not isinstance(note, str) or len(note) > MAX_NOTE_CHARS:
@@ -442,6 +442,15 @@ def build_verdict(reader: Reader, payload: Any, reviewer: Optional[str] = None) 
         raise BadRequest('conversation_id must be a string')
     run = reader.run(run_id)
     snapshot = locate_item(reader, run, conversation_id, kind, key)
+    replay_id = None
+    if conversation_id is not None and kind != 'daily_summary':
+        # RULINGS 4: store the production id when the conversation has one, so the mark follows the item.
+        try:
+            twins = baseline_ids_of(reader.conversation(run_id, conversation_id))
+        except NotFound:
+            twins = []
+        if twins and twins[0] != conversation_id:
+            replay_id, conversation_id = conversation_id, twins[0]
     row = {
         'id': new_verdict_id(),
         'at': utc_iso(datetime.now(timezone.utc)),
@@ -455,6 +464,8 @@ def build_verdict(reader: Reader, payload: Any, reviewer: Optional[str] = None) 
         'note': note.strip(),
         'item_snapshot': snapshot,
     }
+    if replay_id:
+        row['replay_conversation_id'] = replay_id
     if reviewer:
         row['reviewer'] = reviewer
     return row

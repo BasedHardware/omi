@@ -10,6 +10,12 @@ time overlap: greedy on intersection-over-union of ``[started_at, finished_at]``
 highest first, above ``min_iou`` (default 0.3). Unpaired replay = ``new``, unpaired
 production = ``missing``.
 
+**Boundary** differs when either edge moved more than ``BOUNDARY_TOLERANCE_S`` or the pair
+was matched by overlap rather than id. **Transcript** compares normalized text.
+
+This is the one pairing and status implementation (RULINGS 10); the inspector reads
+``baseline.json`` and only lays out word diffs.
+
 **Status** (DESIGN UX chips): ``discard flipped`` when exactly one side discarded;
 ``same`` when every compared field is equal; else ``changed``. Every difference is
 a production comparison (``vs production``), never a regression verdict.
@@ -22,10 +28,15 @@ from datetime import datetime
 from typing import Any, Iterable, Mapping, Sequence
 
 from testing.pipeline_lab.chain.export import normalize_conversation
+from testing.pipeline_lab.contracts import normalize_text
 from testing.pipeline_lab.stack.io import parse_time
+
+BOUNDARY_TOLERANCE_S = 30.0
 
 COMPARED_FIELDS = (
     'discarded',
+    'boundary',
+    'transcript',
     'title',
     'overview',
     'emoji',
@@ -140,8 +151,11 @@ def comparable(conversation: Mapping[str, Any] | None) -> dict[str, Any] | None:
     if conversation is None:
         return None
     s = conversation.get('structured') or {}
+    text = ' '.join((seg.get('text') or '').strip() for seg in conversation.get('segments') or [])
     return {
         'discarded': bool(conversation.get('discarded')),
+        'boundary': (conversation.get('started_at'), conversation.get('finished_at')),
+        'transcript': normalize_text(text),
         'title': s.get('title') or '',
         'overview': s.get('overview') or '',
         'emoji': s.get('emoji') or '',
@@ -158,17 +172,42 @@ def _set_diff(replay: Sequence[str], production: Sequence[str]) -> dict[str, lis
     return {'added': sorted(r - p), 'removed': sorted(p - r)}
 
 
-def compare_pair(replay: Mapping[str, Any] | None, production: Mapping[str, Any] | None) -> dict[str, Any]:
+def _edge_shift(a: Any, b: Any) -> float | None:
+    left, right = parse_time(a), parse_time(b)
+    if left is None or right is None:
+        return None if (left is None) != (right is None) else 0.0
+    return abs((left - right).total_seconds())
+
+
+def boundary_moved(replay: Mapping[str, Any], production: Mapping[str, Any], method: str = 'id') -> bool:
+    if method == 'overlap':
+        return True
+    for name in ('started_at', 'finished_at'):
+        shift = _edge_shift(replay.get(name), production.get(name))
+        if shift is None or shift > BOUNDARY_TOLERANCE_S:
+            return True
+    return False
+
+
+def compare_pair(
+    replay: Mapping[str, Any] | None, production: Mapping[str, Any] | None, *, method: str = 'id'
+) -> dict[str, Any]:
     left, right = comparable(replay), comparable(production)
     if left is None:
         return {'status': 'missing', 'changed_fields': [], 'diff': {}}
     if right is None:
         return {'status': 'new', 'changed_fields': [], 'diff': {}}
-    changed = [name for name in COMPARED_FIELDS if left[name] != right[name]]
+    changed = [
+        name
+        for name in COMPARED_FIELDS
+        if (boundary_moved(replay, production, method) if name == 'boundary' else left[name] != right[name])
+    ]
     diff: dict[str, Any] = {}
     for name in changed:
         if name in ('action_items', 'memories'):
             diff[name] = _set_diff(left[name], right[name])
+        elif name == 'transcript':
+            diff[name] = {'changed': True}  # the inspector renders the word diff from both files
         else:
             diff[name] = {'replay': left[name], 'production': right[name]}
     if left['discarded'] != right['discarded']:
@@ -197,7 +236,7 @@ def baseline_view(
                 'match': match.method,
                 'iou': match.iou,
                 'started_at': (r or p or {}).get('started_at'),
-                **compare_pair(r, p),
+                **compare_pair(r, p, method=match.method),
             }
         )
     rows.sort(key=lambda row: (row.get('started_at') or '', row.get('replay_id') or row.get('baseline_id') or ''))

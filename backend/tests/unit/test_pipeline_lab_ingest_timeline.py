@@ -13,7 +13,7 @@ from testing.pipeline_lab.timeline.build import (
     build_islands,
     classify_lane,
 )
-from testing.pipeline_lab.timeline.paths import parse_time
+from testing.pipeline_lab.contracts import parse_time
 
 DAY = 'day-synthetic'
 

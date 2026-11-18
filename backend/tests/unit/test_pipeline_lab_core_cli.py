@@ -120,7 +120,7 @@ def test_overlay_change_invalidates_and_secrets_are_redacted(lab):
     calls.clear()
     overlay = {
         'env': {'NOTES_MODE': 'shadow', 'OMI_LLM_GATEWAY_SERVICE_TOKEN': 'not-a-real-token'},
-        'pins': {'notes': 'all'},
+        'serving': {'NOTES': True},
     }
     outcome = orchestrator.run_pipeline(lab, _request(overlay=overlay), registry, backend_tree=TREE)
     assert calls == CHAIN
@@ -128,7 +128,26 @@ def test_overlay_change_invalidates_and_secrets_are_redacted(lab):
     assert run.overlay['env']['NOTES_MODE'] == 'shadow'
     assert run.overlay['env']['OMI_LLM_GATEWAY_SERVICE_TOKEN'].startswith('redacted:')
     assert 'not-a-real-token' not in (lab.run_dir(run.run_id) / 'run.json').read_text()
-    assert lab.read_decisions(run.run_id)[0].source == 'overlay'
+    assert run.overlay['serving'] == {'NOTES': True}
+
+
+def test_overlay_uses_one_schema(lab):
+    registry, _ = registry_with(CHAIN, [])
+    with pytest.raises(ValueError, match='serving'):
+        orchestrator.run_pipeline(lab, _request(overlay={'pins': {'notes': 'all'}}), registry, backend_tree=TREE)
+    with pytest.raises(ValueError, match='serving'):
+        orchestrator.run_pipeline(
+            lab, _request(overlay={'env': {'NOTES_SERVE_PERCENT': '100'}}), registry, backend_tree=TREE
+        )
+
+
+def test_from_stage_skips_uncached_earlier_stages(lab):
+    calls = []
+    registry, _ = registry_with(CHAIN, calls)
+    outcome = orchestrator.run_pipeline(lab, _request(from_stage=CHAIN[1]), registry, backend_tree=TREE)
+    assert calls == CHAIN[1:]
+    assert outcome.run.stages[CHAIN[0]].status == 'skipped'
+    assert outcome.exit_code == 0
 
 
 def test_uncacheable_driver_always_runs(lab):

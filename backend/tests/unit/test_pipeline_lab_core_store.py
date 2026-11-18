@@ -127,8 +127,8 @@ def test_conversations_day_and_logs(lab):
     lab.write_conversation('r1', c.ConversationRecord(id='c1', started_at='2026-01-15T09:00:00Z'))
     assert [x.id for x in lab.list_conversations('r1')] == ['c1', 'c2']
     assert lab.read_conversation('r1', 'c1').id == 'c1'
-    lab.write_run_day('r1', c.RunDay(daily_summary={'h': 1}))
-    assert lab.read_run_day('r1').daily_summary == {'h': 1}
+    lab.write_run_day('r1', c.RunDay(daily_summary=c.DailySummary(title='h')))
+    assert lab.read_run_day('r1').daily_summary.title == 'h'
     lab.append_llm_calls('r1', [c.LlmCall(id='l1', at='t'), c.LlmCall(id='l2', at='t')])
     lab.append_vendor_log('r1', [c.VendorLogEntry(at='t', vendor='fake', purpose='stt')])
     lab.append_decisions('r1', [c.Decision(at='t', name='N', mode='m', source='overlay')])

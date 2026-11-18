@@ -70,6 +70,10 @@ ITEM_KINDS: tuple[str, ...] = tuple(kind.value for kind in ItemKind)
 class Mark(str, Enum):
     GOOD = 'good'
     BAD = 'bad'
+    CLEAR = 'clear'  # withdraws an earlier mark on the same target (RULINGS 4)
+
+
+MARKS: tuple[str, ...] = tuple(mark.value for mark in Mark)
 
 
 class RunStatus(str, Enum):
@@ -124,6 +128,26 @@ def parse_utc(value: str) -> datetime:
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
     return moment.astimezone(timezone.utc)
+
+
+def parse_time(value: Any) -> Optional[datetime]:
+    """Lenient reader for snapshot and contract times: ISO (``Z`` allowed), epoch seconds or a datetime.
+
+    Returns an aware UTC datetime, or None for empty or unparseable values.
+    """
+    if value is None or value == '':
+        return None
+    if isinstance(value, datetime):
+        moment = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return moment.astimezone(timezone.utc)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return datetime.fromtimestamp(float(value), tz=timezone.utc)
+    if isinstance(value, str):
+        try:
+            return parse_utc(value)
+        except ValueError:
+            return None
+    return None
 
 
 # ---- stable content keys -------------------------------------------------------
@@ -335,6 +359,7 @@ class RunRecord(Record):
     run_id: str
     day_id: str
     ref: str
+    commit: Optional[str] = None  # full sha the ref resolved to (RULINGS 2)
     backend_tree: Optional[str] = None
     overlay: dict[str, Any] = field(default_factory=dict)
     start_state: str = START_STATE_APPROXIMATE
@@ -417,6 +442,7 @@ class ConversationRecord(Record):
 
     id: str
     baseline_id: Optional[str] = None
+    baseline_ids: Optional[list[str]] = None  # set when a replay merged several production rows (RULINGS 2)
     lane: str = Lane.UNKNOWN.value
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
@@ -434,6 +460,26 @@ class ConversationRecord(Record):
 
 
 @dataclass
+class DailySummary(Record):
+    """``runs/<id>/day.json`` ``daily_summary`` and ``corpus/<day>/baseline/daily_summary.json`` (RULINGS 5)."""
+
+    title: str = ''
+    overview: str = ''
+    highlights: list[Any] = field(default_factory=list)
+    extra: dict[str, Any] = _extra()
+
+
+@dataclass
+class Goal(Record):
+    title: str = ''
+    progress_before: Optional[float] = None
+    progress_after: Optional[float] = None
+    target: Optional[float] = None
+    note: str = ''
+    extra: dict[str, Any] = _extra()
+
+
+@dataclass
 class MemoryDelta(Record):
     added: list[Any] = field(default_factory=list)
     updated: list[Any] = field(default_factory=list)
@@ -445,10 +491,12 @@ class MemoryDelta(Record):
 class RunDay(Record):
     """``runs/<run_id>/day.json``."""
 
-    daily_summary: Optional[Any] = None
-    goals: list[Any] = field(default_factory=list)
+    daily_summary: Optional[DailySummary] = None
+    goals: list[Goal] = field(default_factory=list)
     memory_delta: MemoryDelta = field(default_factory=MemoryDelta)
     notifications: list[Notification] = field(default_factory=list)
+    chat_index: Optional[dict[str, Any]] = None  # readiness of the replayed day for chat (chain lane)
+    recap: Optional[dict[str, Any]] = None  # how and when the daily summary ran
     extra: dict[str, Any] = _extra()
 
 
@@ -498,7 +546,12 @@ class Decision(Record):
 
 @dataclass
 class Verdict(Record):
-    """One row of ``$VERDICTS/verdicts.jsonl``. Append-only; the latest row per item wins."""
+    """One row of ``$VERDICTS/verdicts.jsonl``. Append-only; the latest row per item wins.
+
+    ``conversation_id`` is the production (baseline) id when the item's conversation has one,
+    else the replay id, so a mark follows its item across runs (RULINGS 4). A ``clear`` row
+    withdraws the earlier mark on the same target.
+    """
 
     id: str
     at: str
@@ -511,13 +564,14 @@ class Verdict(Record):
     mark: str
     note: str = ''
     item_snapshot: Any = None
+    reviewer: Optional[str] = None  # the tailnet login when marked through tailscale serve
     extra: dict[str, Any] = _extra()
 
     def validate(self) -> 'Verdict':
         if self.item_kind not in ITEM_KINDS:
             raise ValueError(f'unknown item_kind {self.item_kind!r}')
-        if self.mark not in (Mark.GOOD.value, Mark.BAD.value):
-            raise ValueError(f'mark must be good or bad, got {self.mark!r}')
+        if self.mark not in MARKS:
+            raise ValueError(f'mark must be one of {", ".join(MARKS)}, got {self.mark!r}')
         if not self.item_key:
             raise ValueError('item_key is required')
         return self

@@ -48,7 +48,7 @@ def main(argv=None) -> int:
         from testing.pipeline_lab.cassette.adapters import PrerecordedAdapter
         from testing.pipeline_lab.cassette.recorder import InMemoryLedger, Recorder
         from testing.pipeline_lab.lanes.day import record_day_cassettes
-        from testing.pipeline_lab.timeline.paths import lab_root
+        from testing.pipeline_lab.store import lab_root
 
         # Interim cap: core's persistent ledger replaces InMemoryLedger at integration.
         recorder = Recorder(

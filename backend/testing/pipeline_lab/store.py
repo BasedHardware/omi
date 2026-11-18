@@ -48,8 +48,17 @@ VERDICTS_ENV = 'OMI_PIPELINE_LAB_VERDICTS'
 DEFAULT_ROOT = '/Volumes/Ephemeral/pipeline-lab'
 DEFAULT_VERDICTS = '~/.local/share/pipeline-lab/verdicts'
 
-BASELINE_FILES = ('conversations.jsonl', 'memories.jsonl', 'action_items.jsonl', 'notifications.jsonl')
+# ``conversations.jsonl`` holds ConversationRecord-shaped rows; ``raw_conversations.jsonl`` the same day's
+# production rows in snapshot shape (uid remapped to the lab uid), which the chain replays from (RULINGS 1).
+BASELINE_FILES = (
+    'conversations.jsonl',
+    'raw_conversations.jsonl',
+    'memories.jsonl',
+    'action_items.jsonl',
+    'notifications.jsonl',
+)
 _SEGMENT = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,159}')
+SEGMENT_PATTERN = _SEGMENT  # the id pattern every run/day/conversation id must match
 
 
 class StoreRefused(PermissionError):
@@ -105,6 +114,9 @@ def _subdir(path: Path) -> Path:
     return path
 
 
+private_subdir = _subdir
+
+
 def atomic_write_bytes(path: Path, body: bytes) -> None:
     _subdir(path.parent)
     temp = path.with_name(f'.{path.name}.{secrets.token_hex(6)}.tmp')
@@ -120,9 +132,10 @@ def atomic_write_bytes(path: Path, body: bytes) -> None:
             temp.unlink()
 
 
-def atomic_write_json(path: Path, value: Any) -> None:
+def atomic_write_json(path: Path, value: Any) -> Path:
     text = json.dumps(value, indent=2, ensure_ascii=False, sort_keys=False, default=str) + '\n'
-    atomic_write_bytes(path, text.encode('utf-8'))
+    atomic_write_bytes(Path(path), text.encode('utf-8'))
+    return Path(path)
 
 
 def read_json(path: Path, default: Any = None) -> Any:
@@ -182,6 +195,11 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def default_root() -> Path:
     return Path(os.environ.get(ROOT_ENV) or DEFAULT_ROOT).expanduser()
+
+
+def lab_root(root: Any = None) -> Path:
+    """``root`` when given, else ``$OMI_PIPELINE_LAB_ROOT`` (no permission checks: use ``Store.open`` for those)."""
+    return Path(root).expanduser() if root else default_root()
 
 
 def default_verdicts_root() -> Path:
@@ -420,13 +438,14 @@ class Store:
         mark: Optional[str] = None,
         latest: bool = False,
     ) -> list[Verdict]:
-        """Verdict rows in file order, filtered; ``latest`` keeps the newest row per target."""
+        """Verdict rows in file order, filtered; ``latest`` keeps the newest row per target and drops
+        targets whose newest row is a ``clear``."""
         rows = [Verdict.from_json(row) for row in read_jsonl(self.verdicts_path)]
         if latest:
             newest: dict[tuple, Verdict] = {}
             for row in rows:
                 newest[row.target] = row
-            rows = [row for row in rows if newest[row.target] is row]
+            rows = [row for row in rows if newest[row.target] is row and row.mark != 'clear']
         return [
             row
             for row in rows

@@ -38,7 +38,7 @@ from testing.pipeline_lab.cassette.format import Word
 from testing.pipeline_lab.cassette.player import CassetteMiss, Player, SpanSource
 from testing.pipeline_lab.cassette.recorder import Recorder
 from testing.pipeline_lab.lanes.output import IngestResult, contract_segment
-from testing.pipeline_lab.timeline.paths import parse_time
+from testing.pipeline_lab.contracts import parse_time
 
 DRIVER = 'sync_v1'
 PRODUCTION_STEPS = ['retrieve_vad_segments', 'merge_and_cap_vad_segments', 'postprocess_words', 'first_word_offset']

@@ -624,7 +624,9 @@
   function verdictFor(target, rows) {
     let best = null;
     for (const v of rows || []) {
-      if (v.item_kind === target.kind && v.item_key === target.key && (v.conversation_id || null) === (target.conversation_id || null)) {
+      // Marks are stored under the production id when one exists (RULINGS 4); match either id.
+      const ids = [target.conversation_id || null, ...(target.aliases || [])];
+      if (v.item_kind === target.kind && v.item_key === target.key && (ids.includes(v.conversation_id || null) || (v.replay_conversation_id && v.replay_conversation_id === target.conversation_id))) {
         if (!best || (v.at || '') >= (best.at || '')) best = v;
       }
     }
@@ -779,7 +781,9 @@
   function signed(seconds) { return (seconds >= 0 ? '+' : '−') + dur(Math.abs(seconds)); }
 
   function makeTarget(ctx, kind, key, label, preview) {
-    return { kind, key, conversation_id: ctx.cid, runId: ctx.runId, label, preview };
+    const r = (ctx.detail && ctx.detail.replay) || {};
+    const aliases = (r.baseline_ids && r.baseline_ids.length ? r.baseline_ids : (r.baseline_id ? [r.baseline_id] : []));
+    return { kind, key, conversation_id: ctx.cid, aliases, runId: ctx.runId, label, preview };
   }
 
   function leftColumn(ctx) {

@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 
 from testing.pipeline_lab import orchestrator, worktrees
-from testing.pipeline_lab.contracts import ITEM_KINDS, STAGES, Verdict, utc_iso
+from testing.pipeline_lab.contracts import ITEM_KINDS, MARKS, STAGES, Verdict, utc_iso
 from testing.pipeline_lab.ledger import DEFAULT_BUDGET_USD, SpendLedger
 from testing.pipeline_lab.registry import DriverNotRegistered, Registry, ToolContext, load_plugins
 from testing.pipeline_lab.store import Store, StoreRefused, new_verdict_id
@@ -58,12 +58,26 @@ def build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser('run', parents=[common], help='replay a day at a ref')
     run.add_argument('--day', required=True)
     run.add_argument('--ref', required=True, help='branch, tag or commit to pin')
-    run.add_argument('--overlay', help='overlay JSON file: {"env":{}, "model_config":{}, "pins":{}}')
+    run.add_argument(
+        '--overlay', help='overlay JSON: {"name", "env":{}, "model_config":{}, "serving":{}, "gates":{}, "strict"}'
+    )
     run.add_argument('--from-stage', choices=STAGES)
     run.add_argument('--stages', help='comma-separated subset of stages')
     run.add_argument('--budget-usd', type=float, default=DEFAULT_BUDGET_USD)
     run.add_argument('--repo', help='git repo to resolve the ref in (default: this checkout)')
     run.add_argument('--tree', help='use this existing checkout (must sit clean at the ref)')
+    run.add_argument(
+        '--in-place',
+        action='store_true',
+        help='run the backend of this checkout as is (unpinned; dirty trees are recorded as a warning)',
+    )
+    run.add_argument('--allow-lock-mismatch', action='store_true', help='warn instead of failing on lock drift')
+    run.add_argument(
+        '--engine',
+        choices=('product', 'fake'),
+        default='product',
+        help='chain engine: product (real backend on the local stack) or fake (hermetic plumbing check)',
+    )
     run.add_argument('--llm-upstream', help='LLM gateway URL the lab proxy forwards to')
     run.add_argument('--llm-mode', choices=('record', 'replay', 'refresh'), default='record')
     run.add_argument('--llm-prices', help='price table JSON file (USD per million tokens)')
@@ -88,7 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument('--run')
         command.add_argument('--day')
         command.add_argument('--kind', choices=ITEM_KINDS)
-        command.add_argument('--mark', choices=('good', 'bad'))
+        command.add_argument('--mark', choices=MARKS)
         command.add_argument('--latest', action='store_true', help='newest mark per item only')
         if name == 'export':
             command.add_argument('--out', help='write here instead of stdout (outside git)')
@@ -98,7 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument('--conversation')
     add.add_argument('--kind', required=True, choices=ITEM_KINDS)
     add.add_argument('--key', required=True)
-    add.add_argument('--mark', required=True, choices=('good', 'bad'))
+    add.add_argument('--mark', required=True, choices=MARKS, help='clear withdraws an earlier mark')
     add.add_argument('--note', default='')
 
     sub.add_parser('sample-run', parents=[common], help='write a synthetic day + run')
@@ -226,9 +240,19 @@ def _run(args: argparse.Namespace, store: Store, registry: Registry) -> tuple[An
         llm_upstream=args.llm_upstream,
         llm_mode=args.llm_mode,
         llm_prices=_read_json_file(args.llm_prices) or None,
+        allow_lock_mismatch=args.allow_lock_mismatch,
+        engine=args.engine,
     )
     repo = Path(args.repo) if args.repo else default_repo()
     worktree = None
+    if args.in_place:
+        if args.tree:
+            raise CliError('--in-place and --tree are exclusive')
+        request.commit = worktrees.resolve_ref(repo, 'HEAD')
+        outcome = orchestrator.run_pipeline(
+            store, request, registry, backend_tree=worktrees.tree_hash(repo, 'HEAD'), in_place_repo=repo
+        )
+        return {**outcome.run.to_json(), 'error': outcome.error}, outcome.exit_code
     if args.tree:
         worktree = worktrees.verify_worktree(Path(args.tree), worktrees.resolve_ref(repo, args.ref))
     outcome = orchestrator.run_pipeline(store, request, registry, worktree=worktree, repo=repo)
