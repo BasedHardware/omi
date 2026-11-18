@@ -9,7 +9,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift
   - desktop/macos/Desktop/Sources/ConversationReconciliationPolicy.swift
-  - desktop/macos/Desktop/Sources/APIClient+ConversationDelete.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ConversationDelete.swift
 preconditions:
   - named_non_production_bundle_ui_lane
   - loopback_backend_with_synthetic_conversations_and_controllable_delete_replies
