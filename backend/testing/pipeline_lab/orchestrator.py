@@ -26,6 +26,7 @@ traceback in ``runs/<run_id>/errors.log``.
 
 from __future__ import annotations
 
+import os
 import re
 import time
 import traceback
@@ -53,6 +54,7 @@ EXIT_OK = 0
 EXIT_ERROR = 2
 EXIT_TRANSPORT = 3
 EXIT_SPEND = 4
+UPSTREAM_TOKEN_ENV = 'OMI_PIPELINE_LAB_UPSTREAM_TOKEN'
 
 _SECRETISH = re.compile(r'(TOKEN|SECRET|PASSWORD|API_KEY|CREDENTIAL|PRIVATE)', re.IGNORECASE)
 
@@ -266,6 +268,8 @@ def run_pipeline(
                 mode=request.llm_mode,
                 run_id=run_id,
                 prices=PriceTable.from_json(request.llm_prices or {}),
+                # The real gateway's credential, from the operator's env only (never run.json or disk).
+                upstream_token=os.environ.get(UPSTREAM_TOKEN_ENV) or None,
             ),
             store=store,
             ledger=ledger,

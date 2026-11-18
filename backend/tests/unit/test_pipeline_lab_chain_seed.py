@@ -76,11 +76,12 @@ def test_start_state_remaps_the_source_uid_everywhere(snapshot):
 
 
 def test_source_uid_detection_is_strict():
-    assert detect_source_uid([{'uid': 'abcdef123'}, {'uid': 'abcdef123'}, {}], 'abcdef') == 'abcdef123'
+    uids = [{'uid': 'abcdef123'}, {'uid': 'abcdef123'}, {}]  # pragma: allowlist secret
+    assert detect_source_uid(uids, 'abcdef') == 'abcdef123'  # pragma: allowlist secret
     with pytest.raises(SourceUidError):
-        detect_source_uid([{'uid': 'abcdef123'}, {'uid': 'zzzzzz999'}], None)
+        detect_source_uid([{'uid': 'abcdef123'}, {'uid': 'zzzzzz999'}], None)  # pragma: allowlist secret
     with pytest.raises(SourceUidError):
-        detect_source_uid([{'uid': 'abcdef123'}], 'qqqqqq')
+        detect_source_uid([{'uid': 'abcdef123'}], 'qqqqqq')  # pragma: allowlist secret
     with pytest.raises(SourceUidError):
         detect_source_uid([{}], None)
 

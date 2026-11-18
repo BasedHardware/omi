@@ -17,24 +17,24 @@ synthetic uid `local-dev-user`.
 
 ## Layout
 
-Core (this lane):
-
-| File | Role |
+| Path | Role |
 |---|---|
-| `contracts.py` | Typed records for the store contract, the ordered `Stage` enum, item kinds, stable `content_key` hashing. Stdlib only. |
-| `store.py` | Private roots, atomic JSON writes, locked JSONL appends, corpus/run/cache/verdict readers and writers. |
+| `contracts.py` | The single source for the store contract: typed records, the ordered `Stage` enum, item kinds, marks, `content_key`, time helpers. Stdlib only. |
+| `store.py` | Private roots, id validation, atomic JSON writes, locked JSONL appends, corpus/run/cache/verdict readers and writers. |
 | `keys.py` | Stage cache key: stage, input hashes, `backend/` tree hash, overlay hash, model config. |
-| `ledger.py` | File-backed USD ledger with a hard cap; reserve before every billable attempt. |
+| `ledger.py` | File-backed USD ledger with a hard cap; LLM, embeddings and STT all reserve on it. |
 | `worktrees.py` | Pinned detached worktree per ref, tree-hash lookup, `python -I` arm runner. |
-| `llm_proxy/` | Local LLM record/replay proxy with cap and per-call log (`server.py`, `wire.py`, `tagging.py`). |
-| `registry.py` | Stage-driver and tool registry other lanes plug into. |
-| `orchestrator.py` | Walks the stages in order, consults the stage cache, records timings and status. |
+| `llm_proxy/` | LLM record/replay proxy with cap and per-call log; `fake_upstream.py` is a scripted gateway for tests and the smoke. |
+| `registry.py`, `orchestrator.py` | Stage-driver and tool registry; the ordered, cached stage walk. |
 | `cli.py`, `__main__.py` | The command line. |
-| `sample.py` | Minimal synthetic day and run (`sample-run` fallback). |
-
-Other lanes own `stack/`, `seed/`, `vector/`, `sinks/`, `chain/`, `day/`,
-`baseline/` (chain), `timeline/`, `cassette/`, `lanes/` (ingest), `streaming/`
-and `inspector/`.
+| `seed/` | Snapshot reader, start state, emulator seed writer, synthetic snapshot, `corpus.py` (`corpus add-day`). |
+| `stack/` | Lab environment: config, network guard, virtual clock, overlay, `runtime_env.py` (production overlay), `chain_smoke.py` (local-stack smoke). |
+| `vector/`, `sinks/` | In-process vector index and embedders; capture-only side-effect sinks (pushes, webhooks, telemetry). |
+| `chain/` | Ordered conversation driver, export, `entry.py` (process entry for the chain stages), `fake.py` (hermetic stand-in engine), `plugin.py`. |
+| `day/`, `baseline/` | Day-level outputs; production normalization, pairing and status (the one implementation). |
+| `timeline/`, `cassette/`, `lanes/` | Day timeline and lanes; STT cassettes (vendor prerecorded and Parakeet batch adapters); record/batch and sync replay; `lanes/plugin.py`. |
+| `inspector/` | Stdlib server and static UI; `sample_run.py` (synthetic Lumen Bay day). |
+| `sample.py` | Minimal synthetic run, used only when the inspector plugin is absent. |
 
 ## Store
 
@@ -43,21 +43,36 @@ Verdicts are a record, so they live apart at `$OMI_PIPELINE_LAB_VERDICTS`
 (default `~/.local/share/pipeline-lab/verdicts`).
 
 ```
-corpus/<day_id>/day.json                 CorpusDay
-corpus/<day_id>/baseline/*.jsonl         production rows; conversations use the ConversationRecord shape
-corpus/<day_id>/baseline/daily_summary.json
-corpus/<day_id>/audio/index.json         [AudioIndexEntry], paths relative to audio/
-cache/<stage>/<kk>/<key>.json            stage outputs; cache/llm/ holds recorded LLM responses
-runs/<run_id>/run.json                   RunRecord
-runs/<run_id>/conversations/<id>.json    ConversationRecord
-runs/<run_id>/day.json                   RunDay
-runs/<run_id>/llm_calls.jsonl            LlmCall (written by the proxy)
-runs/<run_id>/vendor_log.jsonl           VendorLogEntry (what audio went to which vendor)
-runs/<run_id>/decisions.jsonl            Decision (pinned serving modes)
-runs/<run_id>/ledger.json                spend ledger
-runs/<run_id>/errors.log                 traceback of a failed stage
-$VERDICTS/verdicts.jsonl                 Verdict, append-only; the newest row per item wins
+corpus/<day_id>/day.json                          CorpusDay (date, timezone, snapshot label, coverage)
+corpus/<day_id>/timeline.json                     islands, unknown gaps, lane per conversation, evaluability
+corpus/<day_id>/baseline/conversations.jsonl      production conversations, ConversationRecord shape (id = production id)
+corpus/<day_id>/baseline/raw_conversations.jsonl  the same rows in snapshot shape, lab uid; the chain replays these
+corpus/<day_id>/baseline/memories.jsonl           production rows of the day (carry conversation_id)
+corpus/<day_id>/baseline/action_items.jsonl
+corpus/<day_id>/baseline/daily_summary.json       {title, overview, highlights}
+corpus/<day_id>/start_state/                      meta.json + <entity>.jsonl: the account before the day (approximate)
+corpus/<day_id>/audio/index.json                  [AudioIndexEntry]; path relative to audio/, start = UTC instant of byte 0
+cache/<stage>/<kk>/<key>.json                     stage outputs; cache/llm, cache/stt_cassette, cache/embeddings
+stt_records/<record_id>/                          record-stt ledger.json, vendor_log.jsonl, record.json
+runs/<run_id>/run.json                            RunRecord (ref, commit, backend_tree, overlay, stages, extra.stt)
+runs/<run_id>/conversations/<id>.json             ConversationRecord (+ replay block)
+runs/<run_id>/day.json                            RunDay: daily_summary, goals, memory_delta, notifications, chat_index, recap
+runs/<run_id>/baseline.json                       pairs, status chips and changed fields (chain baseline/)
+runs/<run_id>/baseline/conversations/<id>.json    production twin in the replay's shape
+runs/<run_id>/chain.json, chain_entry.json        per-conversation chain status; the chain process summary
+runs/<run_id>/ingest/<id>.json, index.json        replayed transcripts (transcribe stage)
+runs/<run_id>/notifications.jsonl                 would-have-fired pushes (raw)
+runs/<run_id>/sinks_egress.jsonl, sinks_telemetry.jsonl
+runs/<run_id>/llm_calls.jsonl                     LlmCall (written by the proxy)
+runs/<run_id>/vendor_log.jsonl                    what audio went to which vendor (+ outcome)
+runs/<run_id>/decisions.jsonl                     serving pins, unpinned decisions, network refusals
+runs/<run_id>/ledger.json, errors.log, chain_errors.log, processing_errors.log, <stage>.process.log
+$VERDICTS/verdicts.jsonl                          Verdict, append-only; newest row per item wins; mark good|bad|clear
 ```
+
+Segment `start`/`end` are seconds from the conversation's `started_at`. A verdict's
+`conversation_id` is the production id when the item's conversation has one (the replay
+id is kept as `replay_conversation_id`), so marks follow an item across runs.
 
 Every record keeps unknown keys in `extra` and writes them back, so a field one
 lane adds survives another lane's round trip. Item `key`s come from
@@ -137,8 +152,17 @@ python -m testing.pipeline_lab verdicts list|export|add ...
 python -m testing.pipeline_lab worktree ensure|tree-hash <ref>
 python -m testing.pipeline_lab llm-proxy --run <run> --upstream URL [--port N]
 python -m testing.pipeline_lab stages | doctor
-python -m testing.pipeline_lab serve | record-stt ...   # engines from the inspector / ingest lanes
+python -m testing.pipeline_lab corpus add-day --snapshot DIR --date YYYY-MM-DD --timezone TZ [--audio-dir DIR]
+python -m testing.pipeline_lab record-stt --day <day> --adapter prerecorded|parakeet_batch [--provider P] --model M --budget-usd N
+python -m testing.pipeline_lab overlay from-runtime-env --out overlay.json
+python -m testing.pipeline_lab serve [--port 8765] [--allow-login LOGIN]
 ```
+
+`run` also takes `--in-place` (run this checkout's backend unpinned, in a fresh process),
+`--engine product|fake` (fake = hermetic plumbing check, no emulator) and
+`--allow-lock-mismatch` (a lock drift between harness and arm otherwise fails closed).
+Stages before `--from-stage` are restored from cache or skipped; `--from-stage discard`
+starts from the stored production transcripts.
 
 `make pipeline-lab ARGS="runs --json"` runs the same CLI from the repo root.
 Every command takes `--json`. Exit codes: 0 ok, 2 refusal or error, 3 transport,
@@ -147,9 +171,16 @@ Every command takes `--json`. Exit codes: 0 ok, 2 refusal or error, 3 transport,
 before creating the run with `stage driver not registered: <stages>` (or skips
 it with `--allow-missing`).
 
-Overlay file: `{"env": {...}, "model_config": {...}, "pins": {"<decision>": "<mode>"}}`.
-Pins are written to `decisions.jsonl`. Env values whose names look secret are
-redacted in `run.json`.
+Overlay file (one schema): `{"name", "env": {...}, "model_config": {...}, "serving": {"NAME": true},
+"gates": {"module:function": value}, "strict": false}`. Cohorts are pinned only through
+`serving` (raw `*_SERVE_PERCENT` / `*_SERVE_UID_SHA256S` env is refused). Env values whose
+names look secret are redacted in `run.json`. `model_config.stt` picks the cassettes the
+`transcribe` stage plays: `{"adapter": "prerecorded"|"parakeet_batch", "provider", "model",
+"language", "vocabulary", "sync_mode": "span"|"exact"}`.
+
+`overlay from-runtime-env [--service backend-listen] [--owner-uid-env VAR] --out FILE`
+builds an overlay from the ref's `deploy/runtime_env.yaml` production profile: the lab
+clears the process env, so without it every flag takes its code default.
 
 ## Worktrees
 
@@ -161,8 +192,51 @@ checks that HEAD is the pinned sha and `backend/` is unmodified. Arms run on the
 harness interpreter. `check_lockfile` fails closed when the arm's dependency lock
 differs from the harness's.
 
-## Tests
+## Tests and smoke
 
 ```bash
-cd backend && python -m pytest tests/unit/test_pipeline_lab_core_*.py
+cd backend
+for f in tests/unit/test_pipeline_lab_*.py; do python -m pytest "$f" -q; done   # one process per file, as CI
+testing/pipeline_lab/stack/run_chain_smoke.sh   # LOCAL-STACK SMOKE: emulator + redis on 8295/6391, synthetic day
+```
+
+`test_pipeline_lab_integration_e2e.py` drives the CLI end to end on a synthetic snapshot with
+the fake engine; the smoke runs the real product chain against a Firestore emulator.
+
+## Runbook: replay a real day (lead, on the lab host)
+
+Private paths are environment variables; nothing below goes in git.
+
+```bash
+export OMI_PIPELINE_LAB_ROOT=/Volumes/Ephemeral/pipeline-lab          # 0700, outside git
+export OMI_PIPELINE_LAB_VERDICTS=~/.local/share/pipeline-lab/verdicts
+export SNAPSHOT_DIR=...      # a fetch-owner-audio snapshot taken at or after the day
+export AUDIO_DIR=...         # optional: <conversation_id>.<ext> clips of that day
+export DAY=YYYY-MM-DD TZ=America/Los_Angeles
+HEAVY=<workspace>/bin/omi-heavy
+cd backend
+
+# 1. Corpus day (local files only, never the network)
+python -m testing.pipeline_lab corpus add-day --snapshot "$SNAPSHOT_DIR" --date "$DAY" --timezone "$TZ" \
+    --audio-dir "$AUDIO_DIR" --json
+
+# 2. Production flags at the ref under test (owner uid only resolves partial cohorts; never written)
+python -m testing.pipeline_lab overlay from-runtime-env --service backend-listen \
+    --owner-uid-env OWNER_UID --out "$OMI_PIPELINE_LAB_ROOT/overlays/prod.json" --json
+
+# 3. Local stack: Firestore + Auth emulators, Redis, Typesense (dev-up ports 8085/9099/6380/8108)
+make dev-up            # or point FIRESTORE_EMULATOR_HOST / OMI_PIPELINE_LAB_REDIS / _TYPESENSE elsewhere
+
+# 4. Run with a budget against the real gateway (proxy cap; exit 4 at the cap). The gateway credential
+#    comes from your env only; the product inside the lab holds a placeholder.
+export OMI_PIPELINE_LAB_UPSTREAM_TOKEN=...   # e.g. from the dev gateway's service token reference
+$HEAVY run -- python -m testing.pipeline_lab run --day "$DAY" --ref <branch|sha> \
+    --overlay "$OMI_PIPELINE_LAB_ROOT/overlays/prod.json" --from-stage discard \
+    --llm-upstream "$OMI_LLM_GATEWAY_URL" --budget-usd 5 --json
+#    re-run after a change: same command; unchanged calls are served from cache/llm
+#    replayed transcripts: record-stt first (billable, capped), then add model_config.stt to the overlay
+
+# 5. Inspector over the tailnet (loopback bind; tailscale serve, never funnel)
+python -m testing.pipeline_lab serve --port 8765 --allow-login "$TAILNET_LOGIN" &   # stop it by PID when done
+tailscale serve --bg --https=8765 http://127.0.0.1:8765
 ```

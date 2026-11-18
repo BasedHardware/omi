@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 import json
 
 import httpx
-import pytest
 
 from testing.pipeline_lab.sinks.capture import (
     SCOPE_CONVERSATION_HEADER,

@@ -156,7 +156,7 @@ def test_clock_patches_product_scope_only_then_restores():
         clock = LabClock(T0, tick=False)
         with installed_clock(clock, scope=('plab_clock_fixture',)):
             assert fixture.now() == T0 and fixture.via_module() == T0
-            assert type(fixture.now()) is type(real_now())  # plain datetime, nothing lab-typed leaks
+            assert fixture.now().__class__ is real_now().__class__  # plain datetime, nothing lab-typed leaks
             assert fixture.utc() == T0.replace(tzinfo=None)
             assert fixture.today() == T0.astimezone().date()
             assert fixture.ts() == T0.timestamp() == library.ts()  # time.time is process-wide

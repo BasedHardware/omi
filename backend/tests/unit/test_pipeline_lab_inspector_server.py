@@ -126,7 +126,7 @@ def test_static_ui_is_served_with_a_strict_policy(lab):
         f'/api/runs/..%2F..%2Fcorpus%2F{DAY}',
         f'/api/runs/{RUN}/conversations/..%2Frun',
         '/api/runs/.hidden',
-        f'/api/days/..%2Fruns/baseline',
+        '/api/days/..%2Fruns/baseline',
         '/etc/passwd',
     ],
 )

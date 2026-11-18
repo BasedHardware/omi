@@ -160,12 +160,12 @@ class LabStackConfig:
             'OMI_ENV_STAGE': 'local',
             'ENVIRONMENT': 'pipeline-lab',
             # Same dev-only secret family as dev-up; never a production key.
-            'ENCRYPTION_SECRET': 'omi_pipeline_lab_32_byte_local_secret_not_prod',
+            'ENCRYPTION_SECRET': 'omi_pipeline_lab_32_byte_local_secret_not_prod',  # pragma: allowlist secret
             'OMI_LLM_GATEWAY_URL': self.llm_proxy_url,
             'OMI_LLM_GATEWAY_FEATURE_MODE': 'gateway',
-            'OMI_LLM_GATEWAY_SERVICE_TOKEN': 'pipeline-lab-local-token-not-real',
+            'OMI_LLM_GATEWAY_SERVICE_TOKEN': 'pipeline-lab-local-token-not-real',  # pragma: allowlist secret
             # Provider keys are placeholders: every LLM call must go through the proxy.
-            'OPENAI_API_KEY': 'pipeline-lab-placeholder-not-a-key',
+            'OPENAI_API_KEY': 'pipeline-lab-placeholder-not-a-key',  # pragma: allowlist secret
             # Analytics drop at the source (product_telemetry reads these at call time).
             'POSTHOG_PRODUCT_CAPTURE_TOKEN': '',
             'POSTHOG_PROJECT_API_KEY': '',

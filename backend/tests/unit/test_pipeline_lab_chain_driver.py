@@ -5,7 +5,6 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 import json
-import threading
 import time
 
 import pytest

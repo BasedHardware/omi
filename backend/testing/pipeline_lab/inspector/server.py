@@ -381,7 +381,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument(
         '--allow-login',
         action='append',
-        default=[l for l in (os.environ.get(LOGINS_ENV) or '').split(',') if l.strip()],
+        default=[login for login in (os.environ.get(LOGINS_ENV) or '').split(',') if login.strip()],
         help=f'Tailscale login allowed through tailscale serve (also {LOGINS_ENV}, comma-separated)',
     )
     parser.add_argument('--verbose', action='store_true', help='log requests to stderr')

@@ -185,9 +185,12 @@ def test_day_record_then_replay_end_to_end(tmp_path):
     file_vad = lambda path: [{'start': 2.0, 'end': 9.0}]  # noqa: E731
     adapter = StubAdapter(script, provider='stub', model='stub-1')
     recorder = Recorder(adapter, InMemoryLedger(1.0), vendor_log=root / 'runs/run-1/vendor_log.jsonl', root=root)
-    summary = record_day_cassettes(day_id, recorder, language='en', root=root, file_vad=file_vad)
+    # Exact per-VAD-file sync cassettes and no streaming recording (the defaults are span and all
+    # lanes since RULINGS 13/14); this test exercises the exact path.
+    exact = {'sync_exact': True, 'lanes': ('record', 'sync')}
+    summary = record_day_cassettes(day_id, recorder, language='en', root=root, file_vad=file_vad, **exact)
     assert summary == {'conversations': 2, 'hits': 0, 'misses': 2}
-    again = record_day_cassettes(day_id, recorder, language='en', root=root, file_vad=file_vad)
+    again = record_day_cassettes(day_id, recorder, language='en', root=root, file_vad=file_vad, **exact)
     assert again['misses'] == 0 and len(adapter.calls) == 2
 
     results = replay_day(
