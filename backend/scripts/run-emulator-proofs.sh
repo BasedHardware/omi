@@ -107,6 +107,9 @@ run_proof "batch projection follow-up (silent ready, rollback and mixed completi
   tests/integration/test_batch_pipeline_projection_followup_firestore.py \
   tests/integration/test_batch_pipeline_silence_sizing_firestore.py
 
+run_proof "held-partial cursor concurrency (advance and wrap fence)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_held_partial_cursor_emulator.py
+
 run_proof "projection ghost-hold release gaps and ready-hint repair follow-up" \
   "$PYTHON" -m pytest -q -rxX -p no:cacheprovider \
   tests/integration/test_batch_projection_ghost_holds_firestore.py

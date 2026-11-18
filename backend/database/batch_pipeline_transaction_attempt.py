@@ -8,6 +8,7 @@ from typing import Any
 
 _DIRECT_READ_KINDS = {
     'first_pending': 'jobs_query',
+    'pending_page': 'jobs_query',
     'first_ready_pending': 'jobs_query',
     'fresh_first_pending': 'jobs_query',
     'fresh_first_ready_pending': 'jobs_query',

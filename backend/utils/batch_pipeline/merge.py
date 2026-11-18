@@ -9,8 +9,10 @@ import time
 from google.api_core.exceptions import Aborted, FailedPrecondition, GoogleAPICallError
 
 from config.batch_pipeline import (
+    MERGE_STALE_HEAD_SECONDS,
     merge_catch_up_depth,
     merge_head_wait_seconds,
+    merge_stale_head_skip,
     provider_backlog_release_enabled,
     provider_merge_membership_enabled,
     recovered_merge_release_enabled,
@@ -37,6 +39,12 @@ HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS = 300
 FRESH_PROBE_ROWS = 32
 # Ready rows scanned when a blocked record sibling hides independent work.
 RECORD_SIBLING_PROBE_ROWS = FRESH_PROBE_ROWS + 128
+# Pending rows a stale-head skip reads ahead of its row; more refuses the skip.
+STALE_HEAD_PAGE_ROWS = 128
+# Per lease-waiting state, the clock that must be 30+ min old: due that long, or a lease
+# that expired that long ago. Lease-ending paths reset lease_until to 0, so ready/retry
+# rows use available_at. Any other unready state may be about to finish.
+_STARVED_CLOCKS = {'ready': 'available_at', 'retry': 'available_at', 'leased': 'lease_until'}
 # Content siblings a recovery wake may release with the recovered unit.
 RELEASE_SIBLINGS_MAX = 32
 # Stale-head promotion (see OrderedMerge._promote_stale_heads).
@@ -183,6 +191,33 @@ def _record_sibling_pending(tx, job: dict) -> bool:
     """Every merge route preserves the immutable native recording's unit order."""
     if not record_fresh_merge_enabled():
         return False
+    return _native_sibling_pending(tx, job)
+
+
+def _starved(job: dict, now: float) -> bool:
+    """Admitted 30+ min ago and waiting 30+ min for a lease: it will not finish within the head wait."""
+    state = job.get('state')
+    field = _STARVED_CLOCKS.get(state) if isinstance(state, str) else None
+    if field is None:
+        return False
+    for value in (job.get('enqueued_at'), job.get(field)):
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or now - value < MERGE_STALE_HEAD_SECONDS:
+            return False
+    return True
+
+
+def _only_starved_ahead(tx, key: str, row: dict, now: float) -> bool:
+    """Every pending row captured before ``row`` is starved. A full page refuses."""
+    position = (row['capture_at'], row['segment_id'])
+    for job in tx.pending_page(key, STALE_HEAD_PAGE_ROWS + 1):
+        if (job['capture_at'], job['segment_id']) >= position:
+            return True
+        if not _starved(job, now):
+            return False
+    return False
+
+
+def _native_sibling_pending(tx, job: dict) -> bool:
     binding = job.get('projection_binding') or {}
     if binding.get('native_record') is not True:
         return False
@@ -418,6 +453,7 @@ class OrderedMerge:
         fresh_query = time.monotonic() >= max(self._fresh_first_retry_at, self._backlog_probe_retry_at)
         blocked: dict = {}
         bypass: dict = {}
+        skipped_wait: dict = {}
         fresh_first: dict = {}
         released: dict = {}
         held: dict = {}
@@ -435,10 +471,12 @@ class OrderedMerge:
             skipped: dict | None = None,
             exact: str | None = None,
             tx_fresh: bool = False,
+            skip_wait: bool = False,
         ):
             blocked.clear()  # Firestore may retry this callback.
             backlog.clear()
             bypass.clear()
+            skipped_wait.clear()
             fresh_first.clear()
             released.clear()
             held.clear()
@@ -570,7 +608,9 @@ class OrderedMerge:
                 candidate = current
             elif candidate and candidate['state'] != 'result_ready':
                 if waiter is None:
-                    blocked.update(head_state=candidate['state'], catch_up=_catch_up(candidate))
+                    blocked.update(
+                        head_state=candidate['state'], catch_up=_catch_up(candidate), starved=_starved(candidate, now)
+                    )
                     return None
                 # Bounded head wait (David, 2026-10-20): the probed waiter must
                 # still be pending and ready; then release the owner's ready
@@ -584,11 +624,20 @@ class OrderedMerge:
                     and _ready_since(current) == since
                 ):
                     return None
-                bypass.update(head_state=candidate['state'], waited=now - since)
+                (skipped_wait if skip_wait else bypass).update(head_state=candidate['state'], waited=now - since)
                 try:
                     candidate = tx.first_ready_pending(key)
                 except FailedPrecondition as error:
                     raise HeadWaitUnavailable from error
+                if skip_wait and not (
+                    # A native recording unit whose earlier units are settled,
+                    # behind nothing but starved rows; anything else keeps the wait.
+                    candidate
+                    and (candidate.get('projection_binding') or {}).get('native_record') is True
+                    and not _native_sibling_pending(tx, candidate)
+                    and _only_starved_ahead(tx, key, candidate, now)
+                ):
+                    return None
             if not candidate or candidate['state'] != 'result_ready':
                 return None
             if _record_sibling_pending(tx, candidate):
@@ -884,16 +933,21 @@ class OrderedMerge:
                     )
                     return None
             since = _ready_since(waiter) if waiter else None
-            if since is None or now - since < wait:
+            if since is None:
+                return None
+            skip_wait = now - since < wait
+            if skip_wait and not (strict_blocked.get('starved') and merge_stale_head_skip(owner_id)):
                 return None
             try:
-                entry = self.store.run(lambda tx: commit(tx, waiter))
+                entry = self.store.run(lambda tx: commit(tx, waiter, skip_wait=skip_wait))
             except BatchPrivacyBlocked:
                 # An owner-wide fence (often the reason the head is blocked)
                 # also refuses the successor; strict order commits nothing here.
                 return None
             except HeadWaitUnavailable:
                 return self._head_wait_unavailable()
+            if skip_wait and entry is None:
+                return None  # A refused skip keeps the ordinary wait: no hold or fallback fires early.
             if held and not held.get('backlog'):
                 # The released ready row is catch-up and the owner is at depth.
                 self.held_owners.add(owner_id)
@@ -963,6 +1017,14 @@ class OrderedMerge:
                     self.commit_source,
                     head_state,
                     _wait_bucket(bypass['waited']),
+                )
+            if skipped_wait:
+                head_state = skipped_wait['head_state'] if skipped_wait['head_state'] in _HEAD_STATES else 'other'
+                logger.info(
+                    'event=batch_merge outcome=stale_head_skip source=%s head_state=%s wait_bucket=%s count=1',
+                    self.commit_source,
+                    head_state,
+                    _wait_bucket(skipped_wait['waited']),
                 )
         return entry
 

@@ -204,6 +204,11 @@
       "review_by": "2026-12-18",
       "registry": "config/feature-flags.yaml"
     },
+    "BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST": {
+      "owner": "q12-post-seal",
+      "review_by": "2026-12-18",
+      "reason": "Canary: skip the 60 s head wait behind starved heads for listed owners; fleet ramp or removal by review"
+    },
     "BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED": {
       "owner": "SCA-2015",
       "review_by": "2026-12-14",
