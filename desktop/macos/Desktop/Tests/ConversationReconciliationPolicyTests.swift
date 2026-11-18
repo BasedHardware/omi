@@ -250,10 +250,24 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
 
     let result = ConversationReconciliationPolicy.mergeList(
       server: [server],
-      current: [localRecording]
+      current: [localRecording],
+      activeLocalCaptureIds: [localRecording.id]
     )
 
     XCTAssertEqual(result.conversations.map(\.id), ["server-conversation", "local-live"])
+  }
+
+  func testCachedInProgressRowMissingFromServerIsDroppedWithoutActiveCapture() {
+    let row = makeConversation(id: "old-capture", status: .inProgress)
+    let result = ConversationReconciliationPolicy.mergeList(server: [], current: [row])
+    XCTAssertTrue(result.conversations.isEmpty)
+  }
+
+  func testUnrelatedActiveCaptureDoesNotPreserveStaleRow() {
+    let row = makeConversation(id: "old-capture", status: .inProgress)
+    let result = ConversationReconciliationPolicy.mergeList(
+      server: [], current: [row], activeLocalCaptureIds: ["new-capture"])
+    XCTAssertTrue(result.conversations.isEmpty)
   }
 
   private func makeConversation(

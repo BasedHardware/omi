@@ -275,7 +275,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // bytes on disk but no index commit yet; preserve them without claiming
     // that the load confirmed their durability.
     final pending = [..._wals, ..._foreignWals];
-    final loadedKeys = loaded.map(_durableKey).toSet();
+    final loadedKeys = pending.isEmpty ? const <String>{} : loaded.map(_durableKey).toSet();
     _indexInventory.primeLoaded(loaded);
     final admitted = <Wal>[];
     final foreign = <Wal>[];
@@ -1266,7 +1266,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         }
         wal.data = [];
       }
-      for (final wal in List<Wal>.from(_wals)) {
+      for (final wal in _liveProofPendingWalIds.isEmpty ? const <Wal>[] : List<Wal>.from(_wals)) {
         if (!_liveProofPendingWalIds.contains(_durableKey(wal))) continue;
         await _reportDurableLiveWal(wal, generation);
         _liveProofPendingWalIds.remove(_durableKey(wal));
@@ -1384,10 +1384,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   // before the field existed) is acknowledged but of unknown age: unknown age
   // protects deletion — _removeExpiredSyncedCopies never touches syncedAt == 0
   // — and must not manufacture retention pressure.
-  int get _pendingDiskWalCount => [
-        ..._retiredWals,
-        ..._wals,
-      ].where((wal) => wal.storage == WalStorage.disk && wal.status != WalStatus.synced).length;
+  int get _pendingDiskWalCount => _retiredWals.where(_isPendingDisk).length + _wals.where(_isPendingDisk).length;
+  static bool _isPendingDisk(Wal w) => w.storage == WalStorage.disk && w.status != WalStatus.synced;
 
   /// Surfaces the bounded-retention pressure once per cap-engagement event.
   /// Pending (unsynced) copies are never evicted and admission is not refused

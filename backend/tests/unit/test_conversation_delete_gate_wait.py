@@ -351,6 +351,7 @@ def test_default_gate_keeps_fail_fast_contract(gate_client, fast_clock):
 
 
 def _route_app(monkeypatch, body):
+    monkeypatch.setattr(conversations.conversation_tombstones, 'is_deleted', lambda *args: False)
     for name in (
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
