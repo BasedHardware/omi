@@ -3,7 +3,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import pytest
 
@@ -139,6 +139,17 @@ def test_receipt_suppresses_small_cells_and_never_exports_content(now):
     recurring = next(item for item in receipt['feedback'] if item['issue_key'] == 'ready_emoji_default')
     assert recurring['owners_with_repeated_symptom'] == review.MIN_REPORT_OWNERS
     assert recurring['affected_rows'] == recurring['observable_rows'] == 15
+
+
+def test_receipt_suppresses_total_that_reveals_a_small_row_category(now):
+    observations = review.Review()
+    for index in range(review.MIN_REPORT_OWNERS):
+        observations.observe(f'owner-{index}', row(now), now=now)
+    observations.observe('protected-owner', row(now, is_locked=True), now=now)
+    metrics = observations.receipt()['metrics']
+    assert metrics['classified_captures'] == review.MIN_REPORT_OWNERS
+    assert 'protected_or_unknown' not in metrics
+    assert 'rows' not in metrics
 
 
 @pytest.mark.parametrize(
@@ -313,9 +324,10 @@ def test_review_and_apply_use_fixed_read_and_write_caps(now):
         assert receipt['repair']['candidate_owners'] == 5
         arm.assert_not_called()
         receipt, failed = worker.run(None, _args(now, apply=True), now=now)
-        assert not failed and arm.call_count == 2
+        assert failed and arm.call_count == 2
         assert receipt['repair']['outcomes'] is None
         assert receipt['repair']['outcomes_state'] == 'below_reporting_minimum'
+        assert receipt['budget_interrupted'] is None
         assert 'private-test' not in json.dumps(receipt)
 
 
@@ -340,9 +352,25 @@ def test_apply_only_publishes_breakdown_when_every_outcome_meets_owner_threshold
     ):
         args = _args(now, apply=True, max_writes=count, per_status=owners)
         receipt, failed = worker.run(None, args, now=now)
-    assert not failed and arm.call_count == count
+    assert failed == (expected is None)
+    assert arm.call_count == count
     assert receipt['repair']['outcomes'] == expected
     assert receipt['repair'].get('outcomes_state') == ('below_reporting_minimum' if expected is None else None)
+
+
+@pytest.mark.parametrize('outcome', ['armed', 'deadline_reached', RuntimeError('private detail')])
+def test_small_apply_receipt_and_exit_status_do_not_reveal_the_disposition(now, outcome):
+    with (
+        patch.object(worker, 'scan', side_effect=[_page(now, 5)] + [(0, [])] * 4),
+        patch.object(repair, 'arm', side_effect=[outcome]),
+    ):
+        receipt, failed = worker.run(None, _args(now, apply=True, max_writes=1), now=now)
+    assert failed and receipt['budget_interrupted'] is None
+    assert receipt['repair'] == {
+        'candidate_owners': 5,
+        'outcomes': None,
+        'outcomes_state': 'below_reporting_minimum',
+    }
 
 
 def test_query_error_cannot_trigger_partial_apply_or_leak_exception(now):
@@ -372,6 +400,7 @@ def test_small_status_cell_suppresses_read_count_even_when_other_rows_are_report
     assert not failed and not receipt['suppressed']
     assert receipt['survey_documents'] is None
     assert receipt['status_coverage']['processing'] == 'suppressed'
+    assert receipt['metrics']['rows'] == 5
 
 
 def test_existing_notes_attempt_is_not_reported_as_missing_admission(now):
@@ -467,7 +496,7 @@ def test_scan_uses_the_registered_masked_finish_time_query(now, monkeypatch):
         (('__name__',), {'direction': worker.firestore.Query.DESCENDING}),
     ]
     query.select.assert_called_once_with(repair.DISCOVERY_FIELDS)
-    assert not set(repair.DISCOVERY_FIELDS) & set(review.CARD_FIELDS)
+    assert set(repair.DISCOVERY_FIELDS) & set(review.CARD_FIELDS) == {'structured.title_provenance'}
     query.limit.assert_called_once_with(12)
     client.transaction.assert_called_once_with(read_only=True, max_attempts=1)
     query.get.assert_called_once_with(transaction=client.transaction.return_value)
@@ -519,7 +548,7 @@ def test_processing_scan_reads_only_a_manual_title_for_an_active_bridge(now, mon
     client.collection_group.return_value = query
     for method in ('where', 'order_by', 'select', 'limit'):
         getattr(query, method).return_value = query
-    ref, bridge = [entry[1] for entry in _page(now, 2)[1]]
+    ref, bridge, *other_refs = [entry[1] for entry in _page(now, 5)[1]]
     metadata = row(now, status='processing')
     metadata.pop('structured')
     query.get.return_value = [
@@ -528,6 +557,7 @@ def test_processing_scan_reads_only_a_manual_title_for_an_active_bridge(now, mon
             reference=bridge,
             to_dict=lambda: {**metadata, 'sync_bridge_pending': {'expires_at': now.timestamp() + 600}},
         ),
+        *(SimpleNamespace(reference=other, to_dict=lambda: metadata.copy()) for other in other_refs),
     ]
     client.get_all.return_value = [
         SimpleNamespace(exists=True, reference=bridge, to_dict=lambda: {'user_title': 'Owner title'})
@@ -538,8 +568,66 @@ def test_processing_scan_reads_only_a_manual_title_for_an_active_bridge(now, mon
     client.get_all.assert_called_once_with(
         [bridge], field_paths=('user_title',), transaction=client.transaction.return_value
     )
-    assert scanned == 2
+    assert scanned == 5
     assert {'processing'} <= review.inspect_row(rows[1][2], now=now)[0]
+    query.get.return_value = query.get.return_value[:4]
+    client.get_all.reset_mock()
+    worker.scan(client, lane='batch_live_v1', status='processing', start=now, end=now, limit=5, deadline=float('inf'))
+    client.get_all.assert_not_called()
+
+
+def test_completed_scan_reads_only_curation_evidence_before_fetching_visible_cards(now, monkeypatch):
+    monkeypatch.setenv('HOME_HIDE_BELOW_FLOOR_ROWS', 'on')
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'on')
+    monkeypatch.setattr(worker.firestore, 'transactional', lambda fn: fn)
+    client, query = Mock(), Mock()
+    client.collection_group.return_value = query
+    for method in ('where', 'order_by', 'select', 'limit'):
+        getattr(query, method).return_value = query
+
+    def snapshot(ref, data):
+        return SimpleNamespace(exists=True, reference=ref, to_dict=lambda: dict(data))
+
+    visible, bridge, curated, discarded, floor, settling = [entry[1] for entry in _page(now, 6, 6)[1]]
+    base = row(now, structured=None)
+    pending = {'sync_bridge_pending': {'expires_at': now.timestamp() + 600}}
+    query.get.return_value = [
+        snapshot(visible, base),
+        snapshot(bridge, {**base, **pending}),
+        snapshot(curated, {**base, **pending}),
+        snapshot(
+            discarded,
+            {**base, 'relevance_decision': {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'filler_only'}},
+        ),
+        snapshot(floor, {**base, 'summary_blocked_reason': 'content_below_floor'}),
+        snapshot(
+            settling,
+            {
+                **base,
+                'record_projection_revision': 0,
+                'finished_at': now - timedelta(minutes=1),
+                'home_transcription_deadline_at': now + timedelta(minutes=10),
+                'structured': {'title_provenance': 'server_minimum'},
+            },
+        ),
+    ]
+    client.get_all.side_effect = [
+        [
+            snapshot(ref, {'user_title': 'Curated'} if ref is curated else {})
+            for ref in (bridge, curated, discarded, floor, settling)
+        ],
+        [snapshot(visible, {'structured': {'title': 'Synthetic title'}}), snapshot(curated, {'user_title': 'Curated'})],
+    ]
+    _, rows = worker.scan(
+        client, lane='batch_live_v1', status='completed', start=now, end=now, limit=6, deadline=float('inf')
+    )
+    transaction = client.transaction.return_value
+    assert client.get_all.call_args_list == [
+        call([bridge, curated, discarded, floor, settling], field_paths=('user_title',), transaction=transaction),
+        call([visible, curated], field_paths=review.CARD_FIELDS, transaction=transaction),
+    ]
+    assert 'hidden_by_design' in review.inspect_row(rows[1][2], now=now)[0]
+    assert 'display_unknown' in review.inspect_row(rows[5][2], now=now)[0]
 
 
 def test_review_mask_preserves_partial_audio_visibility(now, monkeypatch):

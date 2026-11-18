@@ -17,7 +17,6 @@ from database import rpc_deadline
 from services import home_health_repair as repair, home_health_review as review
 from scripts import home_health_runtime as runtime
 from utils.enrichment.age_gate import max_age_seconds
-from utils.sync import bridge_pending
 
 MAX_PER_STATUS = 500
 MAX_WRITES = 50
@@ -40,11 +39,23 @@ def _scope(snapshot):
     return parts[1] if len(parts) == 4 and parts[0] == 'users' and parts[2] == 'conversations' else None
 
 
+def _read_card_fields(client, entries, field_paths, transaction):
+    if not entries:
+        return
+    remaining = {ref.path: row for ref, row in entries}
+    refs = [ref for ref, _ in entries]
+    for snapshot in client.get_all(refs, field_paths=field_paths, transaction=transaction):
+        if not snapshot.exists:
+            raise ValueError('missing card snapshot')
+        remaining.pop(snapshot.reference.path).update(snapshot.to_dict() or {})
+    if remaining:
+        raise ValueError('incomplete card read')
+
+
 def scan(client, *, lane, status, start, end, limit, deadline):
     @firestore.transactional
     def read_page(transaction):
-        # Both reads share a snapshot so a protection change cannot race
-        # the selection of card fields. The lookahead reads metadata only.
+        # All reads share a snapshot. The lookahead reads metadata only.
         snapshots = (
             client.collection_group('conversations')
             .where(filter=FieldFilter('record_lane_owner', '==', lane))
@@ -58,8 +69,9 @@ def scan(client, *, lane, status, start, end, limit, deadline):
             .get(transaction=transaction)
         )
         rows = []
-        card_refs = []
-        card_rows = {}
+        owners = set()
+        allowed = []
+        title_checks = []
         for snapshot in snapshots[:limit]:
             owner = _scope(snapshot)
             if owner is None:
@@ -67,23 +79,25 @@ def scan(client, *, lane, status, start, end, limit, deadline):
             row = snapshot.to_dict() or {}
             ref = snapshot.reference
             rows.append((owner, ref, row))
-            if (
-                not review.protected_for_review(row)
-                and not review.hidden_by_metadata(row)
-                and (status == 'completed' or bridge_pending.hidden(row))
-            ):
-                card_refs.append(ref)
-                card_rows[ref.path] = row
-        if card_refs:
-            # A manual title releases a pending bridge. It is the only card
-            # field needed for a row that has not completed.
-            field_paths = review.CARD_FIELDS if status == 'completed' else ('user_title',)
-            for snapshot in client.get_all(card_refs, field_paths=field_paths, transaction=transaction):
-                if not snapshot.exists:
-                    raise ValueError('missing card snapshot')
-                card_rows.pop(snapshot.reference.path).update(snapshot.to_dict() or {})
-            if card_rows:
-                raise ValueError('incomplete card read')
+            owners.add(owner)
+            if review.protected_for_review(row) or review.hidden_by_metadata(row):
+                continue
+            allowed.append((ref, row))
+            if review.needs_title_for_visibility(row):
+                title_checks.append((ref, row))
+        if len(owners) < review.MIN_REPORT_OWNERS:
+            return len(snapshots), rows
+        _read_card_fields(client, title_checks, ('user_title',), transaction)
+        if status == 'completed':
+            cards = []
+            for ref, row in allowed:
+                if not review.needs_title_for_visibility(row):
+                    cards.append((ref, row))
+                elif not review.hidden_for_review(row, show_held=True):
+                    # A settling row's transcription exception may depend on
+                    # note content. Leave visibility unknown without reading it.
+                    row['home_health_visibility_unknown'] = True
+            _read_card_fields(client, cards, review.CARD_FIELDS, transaction)
         return len(snapshots), rows
 
     rpc_deadline.bind_firestore_client(client)
@@ -156,20 +170,19 @@ def run(client, args, *, now, monotonic=time.monotonic, utcnow=lambda: datetime.
             report['status_coverage'][status] = 'query_failed'
             query_failed = True
             break
-        report['survey_documents'] += scanned
-        status_owners = set()
-        for owner, ref, row in rows:
-            status_owners.add(owner)
-            findings = observations.observe(owner, row, now=now)
-            if 'notes_not_scheduled' in findings and repair.candidate(row, now=now.timestamp()):
-                proposed.setdefault(owner, (ref, repair.generation(row)))
+        status_owners = {owner for owner, _, _ in rows}
         if scanned and len(status_owners) < review.MIN_REPORT_OWNERS:
             counts_suppressed = True
             report['status_coverage'][status] = 'suppressed'
-        else:
-            report['status_coverage'][status] = 'capped' if scanned > args.per_status else 'complete'
+            continue
+        report['survey_documents'] += scanned
+        report['status_coverage'][status] = 'capped' if scanned > args.per_status else 'complete'
+        for owner, ref, row in rows:
+            findings = observations.observe(owner, row, now=now)
+            if 'notes_not_scheduled' in findings and repair.candidate(row, now=now.timestamp()):
+                proposed.setdefault(owner, (ref, repair.generation(row)))
     report.update(observations.receipt())
-    if counts_suppressed or report['suppressed']:
+    if counts_suppressed or 'rows' not in report['metrics']:
         report['survey_documents'] = None
     enough_owners = len(proposed) >= review.MIN_REPORT_OWNERS
     report['repair']['candidate_owners'] = len(proposed) if enough_owners else None
@@ -206,10 +219,13 @@ def run(client, args, *, now, monotonic=time.monotonic, utcnow=lambda: datetime.
     # suppressed bucket by subtraction, so publish the breakdown as a whole.
     if outcomes and min(outcomes.values()) >= review.MIN_REPORT_OWNERS:
         report['repair']['outcomes'] = dict(sorted(outcomes.items()))
-    else:
-        report['repair']['outcomes'] = None
-        report['repair']['outcomes_state'] = 'below_reporting_minimum'
-    return report, bool(outcomes['error'] or report['budget_interrupted'])
+        return report, bool(outcomes['error'] or report['budget_interrupted'])
+    report['repair']['outcomes'] = None
+    report['repair']['outcomes_state'] = 'below_reporting_minimum'
+    report['budget_interrupted'] = None
+    # An inconclusive apply must stop automation regardless of the private
+    # outcomes. Subsequent read-only review can verify durable admissions.
+    return report, True
 
 
 def main():

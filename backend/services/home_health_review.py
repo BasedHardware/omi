@@ -71,6 +71,7 @@ METADATA_FIELDS = tuple(
             'relevance_decision.reason',
             'relevance_decision.decided_by',
             'summary_title_provenance',
+            'structured.title_provenance',
             'summary_output_present',
             'summary_completed_at',
             'notes_written_at',
@@ -85,6 +86,15 @@ METADATA_FIELDS = tuple(
 
 MIN_REPORT_OWNERS = 5
 REPEATED_CARDS = 3
+ROW_CATEGORIES = (
+    'terminal_without_derivatives',
+    'protected_or_unknown',
+    'hidden_by_design',
+    'in_progress',
+    'display_unknown',
+    'processing',
+    'classified_captures',
+)
 
 
 @dataclass(frozen=True)
@@ -209,14 +219,20 @@ def hidden_by_metadata(row):
     )
 
 
+def _hidden_by_rules(row):
+    return bridge_pending.hidden(row) or is_completed_rule_discard(row) or is_completed_below_floor(row)
+
+
+def needs_title_for_visibility(row):
+    return _hidden_by_rules(row) or is_settling_fragment(row, show_held=True)
+
+
 def hidden_for_review(row, *, show_held=False):
     # Keep lifecycle failures observable while honoring the list's discard,
     # bridge and settling policies. V3-owned products are outside this cohort.
     return (
         hidden_by_metadata(row)
-        or bridge_pending.hidden(row)
-        or is_completed_rule_discard(row)
-        or is_completed_below_floor(row)
+        or _hidden_by_rules(row)
         or (is_settling_fragment(row, show_held=show_held) and not transcribing_hold.applies(row, stored=True))
     )
 
@@ -242,6 +258,8 @@ def inspect_row(row, *, now: datetime) -> tuple[set[str], set[str]]:
         return metrics | {'terminal_without_derivatives'}, findings
     if protected_for_review(row):
         return metrics | {'protected_or_unknown'}, findings
+    if row.get('home_health_visibility_unknown'):
+        return metrics | {'display_unknown'}, findings
     if hidden_for_review(row, show_held=True):
         return metrics | {'hidden_by_design'}, findings
     status = row.get('status')
@@ -386,12 +404,9 @@ class Review:
                     'owners_with_repeated_symptom': repeated if repeated >= MIN_REPORT_OWNERS else None,
                 }
             )
-        return {
-            'suppressed': False,
-            'metrics': {
-                key: value
-                for key, value in sorted(self.counts.items())
-                if len(self.denominators[key]) >= MIN_REPORT_OWNERS
-            },
-            'feedback': feedback,
+        metrics = {
+            key: value for key, value in sorted(self.counts.items()) if len(self.denominators[key]) >= MIN_REPORT_OWNERS
         }
+        if any(0 < len(self.denominators[key]) < MIN_REPORT_OWNERS for key in ROW_CATEGORIES):
+            metrics.pop('rows', None)
+        return {'suppressed': False, 'metrics': metrics, 'feedback': feedback}
