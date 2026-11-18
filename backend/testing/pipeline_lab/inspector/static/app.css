@@ -139,7 +139,7 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; overflow-x: clip; }
 body {
   margin: 0;
   background: var(--bg);
@@ -531,6 +531,9 @@ textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong);
   .crow .counts { grid-area: counts; }
   .crow .stat { grid-area: stat; min-width: 0; }
   .pair-cols, .summary-grid { grid-template-columns: 1fr; }
+  .item-top { flex-wrap: wrap; }
+  .item-top .txt { flex-basis: 100%; }
+  .item-top .chip { margin-right: auto; }
   .call > summary { grid-template-columns: 64px minmax(0, 1fr) auto; }
   .call > summary .tok, .call > summary .ms { display: none; }
   .vtable .when, .vtable .runcol { display: none; }

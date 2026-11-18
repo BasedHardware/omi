@@ -22,7 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from testing.pipeline_lab.inspector import views
 from testing.pipeline_lab.inspector.reader import (
+    Reader,
     boundary_key,
     content_key,
     new_verdict_id,
@@ -1118,6 +1120,7 @@ def _write_sample_verdicts(verdicts_root: Path, root: Path) -> int:
         (json.loads(p.read_text()) for p in (run_dir / 'conversations').glob('*.json')), key=lambda c: c['started_at']
     )
     run = json.loads((run_dir / 'run.json').read_text())
+    reader = Reader(root, verdicts_root)
     picks = []
     for conv in convs:
         title = conv['structured']['title']
@@ -1145,7 +1148,7 @@ def _write_sample_verdicts(verdicts_root: Path, root: Path) -> int:
                 'item_key': key,
                 'mark': mark,
                 'note': note,
-                'item_snapshot': {'side': 'replay', 'title': conv['structured']['title']},
+                'item_snapshot': views.locate_item(reader, run, conv['id'], kind, key),
             }
         )
     _private_dir(verdicts_root)

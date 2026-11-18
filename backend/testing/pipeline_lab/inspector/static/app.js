@@ -211,7 +211,9 @@
   // ---------------------------------------------------------------- router
 
   function parseRoute() {
-    const [path, query] = location.hash.replace(/^#\/?/, '').split('?');
+    let raw = location.hash.replace(/^#\/?/, '');
+    if (!raw.includes('?')) raw = raw.replace(/%3F/i, '?'); // some launchers percent-encode the fragment's "?"
+    const [path, query] = raw.split('?');
     const params = new URLSearchParams(query || '');
     if (params.get('tab') && TABS.some(([k]) => k === params.get('tab'))) state.tab = params.get('tab');
     if (['replay', 'production', 'diff'].includes(params.get('tr'))) state.trMode = params.get('tr');

@@ -92,11 +92,11 @@ def parse_range(header: Optional[str], size: int) -> Optional[tuple[int, int]]:
             raise ValueError('unsatisfiable suffix range')
         return max(0, size - length), size - 1
     start = int(first)
-    end = int(last) if last else size - 1
-    if end < start:
-        return None
+    if last and int(last) < start:
+        return None  # syntactically invalid: ignore the header
     if start >= size:
         raise ValueError('unsatisfiable range')
+    end = int(last) if last else size - 1
     return start, min(end, size - 1)
 
 
