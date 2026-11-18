@@ -272,7 +272,7 @@ async def start_planned():
         try:
             run = await run_blocking(db_executor, runs.get_run, uid, run_id)
             index = next_partition(run) if run and run.get('status') == 'planned' else None
-            if index is not None:
+            if run is not None and index is not None:
                 gen = int(run.get('resumes') or 0)
                 await run_blocking(db_executor, enqueue_step, uid, run_id, index, 'derive', 0, gen)
                 started += 1
