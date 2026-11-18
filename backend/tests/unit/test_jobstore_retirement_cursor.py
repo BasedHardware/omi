@@ -1,9 +1,12 @@
 """Cursor scope, compare-and-set and monotonic progression without exposing keys."""
 
 from datetime import datetime, timezone
+from pathlib import Path
+import re
 
 import pytest
 
+from database.jobstore.dual_store import MIRRORED_TABLES
 from database.jobstore.reconcile import PageCounts, PageResult, _encode_cursor
 from database.jobstore.retirement_cursor import CursorPage, CursorScope
 
@@ -95,3 +98,11 @@ def test_cursor_scope_corruption_is_refused_before_page_work():
     with pytest.raises(ValueError, match='scope') as error:
         CursorPage(scope()).load(conn)
     assert 'secret' not in str(error.value)
+
+
+def test_cursor_table_check_lists_exactly_the_mirrored_tables():
+    """A mirrored table missing from 0010's CHECK would refuse that table's cursor INSERT."""
+    sql = (Path(__file__).resolve().parents[2] / 'database/jobstore/migrations/0010_retirement_cursor.sql').read_text()
+    match = re.search(r"tbl text NOT NULL CHECK \(tbl IN \((.*?)\)\)", sql, re.S)
+    assert match, 'tbl CHECK not found in 0010'
+    assert frozenset(re.findall(r"'([a-z_]+)'", match.group(1))) == frozenset(MIRRORED_TABLES)
