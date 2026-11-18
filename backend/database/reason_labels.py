@@ -18,6 +18,7 @@ class ReasonFamily(StrEnum):
     WORKER_VALIDATION = 'worker_validation'
     RECOVERY_FAILURE = 'recovery_failure'
     STALE_RECOVERY = 'stale_recovery'
+    RECORDING_ROTATION = 'recording_rotation'
     WORK_OUTCOME = 'work_outcome'
     QUARANTINE = 'quarantine'
     FALLBACK = 'fallback'

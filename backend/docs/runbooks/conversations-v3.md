@@ -46,7 +46,17 @@ this decision and outline_kind retains the original classification.
 Five minutes of placed-speech silence is a hard window boundary. An outline's
 `resumes_previous` may undo a topic split within that interval, never rejoin
 windows across the silence boundary, even with the same people. Short socket
-captures and reconnects do not themselves split a continuous stretch. The
+captures and reconnects do not themselves split a continuous stretch. Listen
+can seal a live v3 recording at the first 1.5 s speech pause once it is
+`CONVERSATIONS_V3_ROTATION_MIN_SECONDS` old (180), or at
+`CONVERSATIONS_V3_ROTATION_MAX_SECONDS` (300) without one.
+`CONVERSATIONS_V3_RECORDING_ROTATION` is `off` by default; `cohort` rotates owners in
+the `v3-recording-rotation` rollout cohort (`scripts/rollout_cohort.py --add`, no roll), `on`
+rotates every v3 owner. Changing the env rolls backend-listen. The successor opens
+first and the archive retargets late frames to it, so the sealed recording's custody
+is final before it seals. A rotation-sealed recording carries
+`v3_rotation_cap_seconds`; only then does a later recording still capturing (under
+the cap) or sealed and untranscribed (up to 15 minutes) hold its stretch open. The
 two-hour cap still bounds each resulting window. Missing transcript is not
 proof of acoustic silence; qualify transcript completeness separately.
 The recording-speaker picker for a derived conversation reads and edits only
