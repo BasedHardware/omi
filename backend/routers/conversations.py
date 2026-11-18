@@ -1151,6 +1151,18 @@ def get_conversations(
     # query and the page stream runs under the derived per-RPC timeout, so a
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
     budget = list_read_budget_for_request(request, route='conversations')
+    default_home = not (
+        include_discarded
+        or sources
+        or start_date
+        or end_date
+        or folder_id
+        or starred is not None
+        or statuses != 'processing,completed'
+    )
+    # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
+    # legacy sync piece there would duplicate them.
+    show_held = default_home and not conversations_v3_enabled(uid)
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
@@ -1167,15 +1179,8 @@ def get_conversations(
         presentation=True,
         include_recordings=status_filter == ['in_progress'],
         capture_only=status_filter == ['in_progress'],
-        hide_home=not (
-            include_discarded
-            or sources
-            or start_date
-            or end_date
-            or folder_id
-            or starred is not None
-            or statuses != 'processing,completed'
-        ),
+        hide_home=default_home,
+        show_held=show_held,
     )
 
     conversations = home_membership.project_list(
@@ -1188,7 +1193,9 @@ def get_conversations(
         ),
     )
     _heal_locked_conversations_if_eligible(uid, conversations)
-    conversations = [transcribing_hold.project(home_step.project(row), home_list=True) for row in conversations]
+    conversations = [
+        transcribing_hold.project(home_step.project(row, show_held=show_held), home_list=True) for row in conversations
+    ]
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
