@@ -133,6 +133,10 @@ def test_receipt_suppresses_small_cells_and_never_exports_content(now):
         {'summary_output_present': True},
         {'summary_output_present': None},
         {'summary_blocked_reason': 'empty_output_exhausted'},
+        {
+            'summary_title_provenance': 'server_minimum',
+            'relevance_decision': {'verdict': 'keep', 'decided_by': 'rule', 'reason': 'content_below_floor'},
+        },
         {'sync_content_revision': True},
         {'record_projection_revision': 0},
         {'finalization_status': 'leased'},
@@ -329,6 +333,42 @@ def test_existing_notes_attempt_is_not_reported_as_missing_admission(now):
     assert not repair.candidate(prior, now=now.timestamp())
 
 
+def test_review_and_repair_agree_on_a_gist_with_only_pipeline_text(now):
+    prior = row(now, structured={'title': 'Generated headline', 'gist': 'The transcript is missing.'})
+    assert 'notes_not_scheduled' in review.inspect_row(prior, now=now)[1]
+    assert repair.candidate(prior, now=now.timestamp())
+
+
+@pytest.mark.parametrize('owners', [0, 2])
+def test_apply_reports_the_owner_threshold_without_revealing_small_counts(now, owners):
+    with (
+        patch.object(
+            worker, 'scan', side_effect=lambda *a, **kw: _page(now, owners) if kw['status'] == 'completed' else (0, [])
+        ),
+        patch.object(repair, 'arm') as arm,
+    ):
+        receipt, failed = worker.run(None, _args(now, apply=True), now=now)
+    assert not failed
+    assert receipt['repair'] == {'candidate_owners': None, 'candidate_owners_state': 'below_reporting_minimum'}
+    arm.assert_not_called()
+
+
+def test_review_reports_effective_operator_visibility_settings(now, monkeypatch):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'off')
+    monkeypatch.setenv('HOME_STALE_EMPTY_CAPTURE_NOISE_ENABLED', 'false')
+    monkeypatch.setenv('HOME_EMPTY_OUTPUT_NOISE', 'off')
+    monkeypatch.setenv('HOME_PROCESSING_MAX_AGE_SECONDS', '3600')
+    with patch.object(worker, 'scan', return_value=(0, [])):
+        receipt, failed = worker.run(None, _args(now), now=now)
+    assert not failed
+    policy = receipt['home_visibility_policy']
+    assert policy['source'] == 'operator_environment'
+    assert policy['transcription_presentation_gate_enabled'] is False
+    assert policy['stale_empty_noise_enabled'] is False
+    assert policy['empty_output_noise_enabled'] is False
+    assert policy['processing_max_age_seconds'] == 3600
+
+
 def test_expired_apply_cannot_enter_the_transaction(now):
     client = Mock()
     result = repair.arm(client, Mock(), 'test_owner', (), deadline=0, execute_before=now.timestamp() - 1)
@@ -398,10 +438,11 @@ def test_scan_fetches_card_fields_only_for_rows_with_known_permission(now, monke
         row(now, data_protection_level='private'),
         row(now, private_cloud_sync_enabled=False),
         row(now),
+        row(now, discarded=True),
         row(now),
     ]
     metadata[4].pop('private_cloud_sync_enabled')
-    refs = [entry[1] for entry in _page(now, 6, limit=6)[1]]
+    refs = [entry[1] for entry in _page(now, 7, limit=7)[1]]
     query.get.return_value = [
         SimpleNamespace(
             reference=ref,
@@ -413,14 +454,43 @@ def test_scan_fetches_card_fields_only_for_rows_with_known_permission(now, monke
         SimpleNamespace(exists=True, reference=refs[0], to_dict=lambda: {'structured': {'title': 'Test title'}})
     ]
     scanned, rows = worker.scan(
-        client, lane='batch_live_v1', status='completed', start=now, end=now, limit=5, deadline=float('inf')
+        client, lane='batch_live_v1', status='completed', start=now, end=now, limit=6, deadline=float('inf')
     )
     client.get_all.assert_called_once_with(
         [refs[0]], field_paths=review.CARD_FIELDS, transaction=client.transaction.return_value
     )
-    assert scanned == 6
+    assert scanned == 7
     assert rows[0][2]['structured']['title'] == 'Test title'
     assert all('structured' not in entry[2] for entry in rows[1:])
+
+
+def test_processing_scan_reads_only_a_manual_title_for_an_active_bridge(now, monkeypatch):
+    monkeypatch.setattr(worker.firestore, 'transactional', lambda fn: fn)
+    client, query = Mock(), Mock()
+    client.collection_group.return_value = query
+    for method in ('where', 'order_by', 'select', 'limit'):
+        getattr(query, method).return_value = query
+    ref, bridge = [entry[1] for entry in _page(now, 2)[1]]
+    metadata = row(now, status='processing')
+    metadata.pop('structured')
+    query.get.return_value = [
+        SimpleNamespace(reference=ref, to_dict=lambda: metadata.copy()),
+        SimpleNamespace(
+            reference=bridge,
+            to_dict=lambda: {**metadata, 'sync_bridge_pending': {'expires_at': now.timestamp() + 600}},
+        ),
+    ]
+    client.get_all.return_value = [
+        SimpleNamespace(exists=True, reference=bridge, to_dict=lambda: {'user_title': 'Owner title'})
+    ]
+    scanned, rows = worker.scan(
+        client, lane='batch_live_v1', status='processing', start=now, end=now, limit=5, deadline=float('inf')
+    )
+    client.get_all.assert_called_once_with(
+        [bridge], field_paths=('user_title',), transaction=client.transaction.return_value
+    )
+    assert scanned == 2
+    assert {'processing'} <= review.inspect_row(rows[1][2], now=now)[0]
 
 
 def test_review_mask_preserves_partial_audio_visibility(now, monkeypatch):

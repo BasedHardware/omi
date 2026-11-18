@@ -11,12 +11,13 @@ import time
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from config.episodes import home_step_projection_enabled
+from config import episode_composition, episodes, transcription_pending
 from config.summary_guarantee import deadline_seconds
 from database import rpc_deadline
 from services import home_health_repair as repair, home_health_review as review
 from scripts import home_health_runtime as runtime
 from utils.enrichment.age_gate import max_age_seconds
+from utils.sync import bridge_pending
 
 MAX_PER_STATUS = 500
 MAX_WRITES = 50
@@ -66,11 +67,18 @@ def scan(client, *, lane, status, start, end, limit, deadline):
             row = snapshot.to_dict() or {}
             ref = snapshot.reference
             rows.append((owner, ref, row))
-            if status != 'in_progress' and not row.get('deleted') and not review.protected_for_review(row):
+            if (
+                not review.protected_for_review(row)
+                and not review.hidden_by_metadata(row)
+                and (status == 'completed' or bridge_pending.hidden(row))
+            ):
                 card_refs.append(ref)
                 card_rows[ref.path] = row
         if card_refs:
-            for snapshot in client.get_all(card_refs, field_paths=review.CARD_FIELDS, transaction=transaction):
+            # A manual title releases a pending bridge. It is the only card
+            # field needed for a row that has not completed.
+            field_paths = review.CARD_FIELDS if status == 'completed' else ('user_title',)
+            for snapshot in client.get_all(card_refs, field_paths=field_paths, transaction=transaction):
                 if not snapshot.exists:
                     raise ValueError('missing card snapshot')
                 card_rows.pop(snapshot.reference.path).update(snapshot.to_dict() or {})
@@ -96,7 +104,22 @@ def run(client, args, *, now, monotonic=time.monotonic, utcnow=lambda: datetime.
         },
         'surface': 'legacy_conversation_list_card_projection',
         'selection': 'newest_in_each_status',
-        'home_step_projection_enabled': home_step_projection_enabled(),
+        'home_step_projection_enabled': episodes.home_step_projection_enabled(),
+        'home_visibility_policy': {
+            'source': 'operator_environment',
+            'transcription_presentation_gate_enabled': episodes.home_transcription_presentation_gate_enabled(),
+            'transcription_queue_hold_enabled': episodes.home_transcription_queue_hold_enabled(),
+            'transcription_seal_wait_enabled': transcription_pending.seal_wait_enabled(),
+            'hide_below_floor_rows_enabled': episodes.home_hide_below_floor_rows_enabled(),
+            'empty_output_noise_enabled': episodes.home_empty_output_noise_enabled(),
+            'stale_empty_noise_enabled': transcription_pending.stale_empty_noise_enabled(),
+            'legacy_empty_wire_enabled': episode_composition.legacy_empty_wire_enabled(),
+            'processing_max_age_seconds': (
+                episodes.home_processing_max_age_seconds() or episodes.DEFAULT_HOME_PROCESSING_MAX_AGE_SECONDS
+            ),
+            'transcription_max_age_seconds': episodes.home_transcription_max_age_seconds(),
+            'transcription_deadline_seconds': episodes.home_transcription_deadline_seconds(),
+        },
         'notes_deadline_seconds': deadline_seconds(),
         'repair_max_age_seconds': max_age_seconds(),
         'per_status_limit': args.per_status,
@@ -148,8 +171,11 @@ def run(client, args, *, now, monotonic=time.monotonic, utcnow=lambda: datetime.
     report.update(observations.receipt())
     if counts_suppressed or report['suppressed']:
         report['survey_documents'] = None
-    report['repair']['candidate_owners'] = len(proposed) if len(proposed) >= review.MIN_REPORT_OWNERS else None
-    if query_failed or report['budget_interrupted'] or not args.apply or len(proposed) < review.MIN_REPORT_OWNERS:
+    enough_owners = len(proposed) >= review.MIN_REPORT_OWNERS
+    report['repair']['candidate_owners'] = len(proposed) if enough_owners else None
+    if not enough_owners:
+        report['repair']['candidate_owners_state'] = 'below_reporting_minimum'
+    if query_failed or report['budget_interrupted'] or not args.apply or not enough_owners:
         return report, query_failed or report['budget_interrupted']
 
     if getattr(client, 'project', None) == runtime.PRODUCTION_PROJECT:

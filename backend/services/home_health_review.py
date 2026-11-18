@@ -16,6 +16,7 @@ from utils.conversations.fragment_visibility import (
 from utils.conversations.home_titles import is_fallback_title, summary_owed
 from utils.enrichment import age_gate
 from utils.home_feed import card_content
+from utils.summary_quality import safe_body
 from utils.sync import bridge_pending
 
 STATUSES = ('completed', 'in_progress', 'processing', 'merging', 'failed')
@@ -189,22 +190,26 @@ def _presented(row, step, now):
     return card_content.content(projected, 'conversation')
 
 
+def hidden_by_metadata(row):
+    return any(
+        row.get(key)
+        for key in (
+            'deleted',
+            'discarded',
+            'recording',
+            'home_hidden',
+            'sync_merged_into',
+            'dream_duplicate_of',
+            'v3_derived',
+        )
+    )
+
+
 def hidden_for_review(row):
     # Keep lifecycle failures observable while honoring the list's discard,
     # bridge and settling policies. V3-owned products are outside this cohort.
     return (
-        any(
-            row.get(key)
-            for key in (
-                'deleted',
-                'discarded',
-                'recording',
-                'home_hidden',
-                'sync_merged_into',
-                'dream_duplicate_of',
-                'v3_derived',
-            )
-        )
+        hidden_by_metadata(row)
         or bridge_pending.hidden(row)
         or is_completed_rule_discard(row)
         or is_completed_below_floor(row)
@@ -290,7 +295,7 @@ def inspect_row(row, *, now: datetime) -> tuple[set[str], set[str]]:
         and row.get('user_title') is None
         and row.get('user_overview') is None
         and not summary_delivery.present(row.get('structured'))
-        and not _has_text((row.get('structured') or {}).get('gist'))
+        and not safe_body((row.get('structured') or {}).get('gist')).strip()
     ):
         metrics.add('notes_expected')
         due = row.get('summary_due_at')
