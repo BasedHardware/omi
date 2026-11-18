@@ -574,7 +574,19 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(store, monk
     monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', gate)
     monkeypatch.setenv('HOME_STEP_PROJECTION', home_gate)
     store.client.document('users/owner/conversations/locked').set({'is_locked': True, 'status': 'completed'})
-    rows = [{'id': 'locked', 'is_locked': True, 'status': 'completed'}]
+    # The response model's required fields: the route now drops a row it would reject.
+    now = datetime.now(timezone.utc)
+    rows = [
+        {
+            'id': 'locked',
+            'is_locked': True,
+            'status': 'completed',
+            'created_at': now,
+            'started_at': now,
+            'finished_at': now,
+            'structured': {},
+        }
+    ]
 
     def wire(source_rows):
         # The default-on Home row contract stamps the wire copy (both gate

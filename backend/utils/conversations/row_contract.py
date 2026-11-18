@@ -53,7 +53,7 @@ class InvalidConversationRow(ValueError):
 
 def error_paths(error: ValidationError) -> list[str]:
     """Field paths and error types, without input values: safe to log."""
-    paths = []
+    paths: list[str] = []
     for item in error.errors(include_input=False, include_url=False):
         location = '.'.join(str(part) for part in item.get('loc') or ()) or '<root>'
         paths.append(f"{location}:{item.get('type', 'invalid')}")
@@ -81,11 +81,11 @@ def check_write(row: Mapping[str, Any], *, producer: str) -> None:
 
 
 def _screen(rows: Iterable[Any], surface: str, model: type[BaseModel]) -> list[tuple[Any, BaseModel]]:
-    kept = []
+    kept: list[tuple[Any, BaseModel]] = []
     for row in rows:
         try:
             if not isinstance(row, Mapping):
-                raise TypeError(type(row).__name__)
+                raise TypeError('not_a_mapping')
             kept.append((row, model.model_validate(row)))
         except (ValidationError, TypeError) as error:
             record_fallback(
@@ -98,17 +98,17 @@ def _screen(rows: Iterable[Any], surface: str, model: type[BaseModel]) -> list[t
             logger.warning(
                 'conversation row skipped on read surface=%s conversation_id=%s paths=%s',
                 surface,
-                row.get('id', 'unknown') if isinstance(row, Mapping) else 'unknown',
-                error_paths(error) if isinstance(error, ValidationError) else [f'<root>:{error}'],
+                str(row.get('id', 'unknown')) if isinstance(row, Mapping) else 'unknown',
+                error_paths(error) if isinstance(error, ValidationError) else ['<root>:not_a_mapping'],
             )
     return kept
 
 
-def readable_rows(rows: Iterable[Any], *, surface: str, model: type[BaseModel] = Conversation) -> list:
+def readable_rows(rows: Iterable[Any], *, surface: str, model: type[BaseModel] = Conversation) -> list[Any]:
     """The input rows ``model`` accepts, unchanged, for endpoints whose response model re-validates them."""
     return [row for row, _ in _screen(rows, surface, model)]
 
 
-def readable_models(rows: Iterable[Any], *, surface: str, model: type[BaseModel] = Conversation) -> list:
+def readable_models(rows: Iterable[Any], *, surface: str, model: type[BaseModel] = Conversation) -> list[BaseModel]:
     """The validated ``model`` instance for each row it accepts (``Conversation`` unless the surface has its own)."""
     return [validated for _, validated in _screen(rows, surface, model)]
