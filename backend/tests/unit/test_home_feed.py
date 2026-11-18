@@ -190,6 +190,27 @@ def test_prepare_preserves_legacy_missing_started_at_and_late_import_order(store
     assert 'recorded_start' not in store.docs['users/u/conversations/legacy']
 
 
+@pytest.mark.parametrize(
+    ('receipt', 'locked', 'preview', 'title'),
+    [
+        ('done', False, '', 'Recording'),
+        (None, False, '', ''),
+        ('done', True, '', ''),
+        ('done', False, 'Useful notes', 'Discussion notes'),
+    ],
+)
+def test_prepared_feed_labels_only_unlocked_receipt_bearing_ready_recordings(store, receipt, locked, preview, title):
+    row = conversation(is_locked=locked)
+    row['record_projection_revision'] = receipt
+    row['structured'] = {'title': 'Discussion notes', 'overview': preview}
+    store.put('users/u/conversations/c', row)
+    drain(store)
+    cards = home_feed.feed('u', firestore_client=store)['items']
+    assert [card['home_step'] for card in cards] == [home_feed.home_step.READY]
+    assert [card['title'] for card in cards] == [title]
+    assert [card['preview'] for card in cards] == [preview]
+
+
 def test_projected_get_never_reads_members_transcripts_or_calls_generation(store, monkeypatch):
     store.put('users/u/conversations/c', conversation())
     drain(store)

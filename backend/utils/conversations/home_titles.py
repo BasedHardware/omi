@@ -86,16 +86,18 @@ def untitled_pending(structured: Any) -> bool:
     return not str(title or '').strip() or notes_pending(structured)
 
 
-def display_title(title: Any, preview: Any) -> Any:
-    """The Home card title: a bare fallback label with no preview is served as untitled."""
-    return '' if is_fallback_title(title) and not (isinstance(preview, str) and preview.strip()) else title
+def display_title(title: Any, preview: Any, *, label_recording: bool = False) -> Any:
+    """Replace a bare fallback with a neutral label only for eligible Home cards."""
+    if is_fallback_title(title) and not (isinstance(preview, str) and preview.strip()):
+        return fallback_title(None) if label_recording else ''
+    return title
 
 
 def placeholder_title_wire(row: dict[str, Any]) -> dict[str, Any]:
     """Hide a bare fallback label and keep ready recordings identifiable.
 
-    A ready row with a batch projection receipt can be opened for its
-    transcript, even with no notes. Give it a neutral title on the wire.
+    The legacy Home list first applies home_step.project. Other readers
+    that do not project a step still serve a bare fallback as untitled.
     """
     structured = row.get('structured')
     if not isinstance(structured, Mapping):
@@ -106,9 +108,14 @@ def placeholder_title_wire(row: dict[str, Any]) -> dict[str, Any]:
         or not notes_pending(structured)
     ):
         return row
-    title = ''
-    if row.get('home_step') == 'ready' and row.get('record_projection_revision') and not row.get('is_locked'):
-        title = fallback_title(None)
+    # The literal mirrors home_step.READY without a circular import.
+    title = display_title(
+        structured.get('title'),
+        '',
+        label_recording=bool(
+            row.get('home_step') == 'ready' and row.get('record_projection_revision') and not row.get('is_locked')
+        ),
+    )
     return {**row, 'structured': {**structured, 'title': title}}
 
 

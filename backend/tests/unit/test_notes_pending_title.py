@@ -210,7 +210,7 @@ def test_wire_rule_touches_nothing_else(changes):
 
 
 @pytest.mark.parametrize('fallback', [FALLBACK, 'Discussion 3'])
-def test_list_wire_labels_ready_captures_whose_transcript_landed(fallback):
+def test_list_wire_labels_ready_captures_with_projection_receipt(fallback):
     row = capture(record_projection_revision=2, structured={'title': fallback, 'overview': ''})
     before = deepcopy(row)
     wire = transcribing_hold.project(home_step.project(row))
@@ -219,6 +219,21 @@ def test_list_wire_labels_ready_captures_whose_transcript_landed(fallback):
     assert wire['structured']['overview'] == ''
     assert wire['status'] == 'completed'
     assert row == before
+
+
+def test_list_wire_does_not_label_a_ready_capture_without_a_receipt():
+    row = capture(structured={'title': FALLBACK})
+    row.pop('home_transcription_deadline_at', None)
+    wire = transcribing_hold.project(home_step.project(row))
+    assert wire['home_step'] == home_step.READY
+    assert wire['structured']['title'] == ''
+
+
+def test_list_wire_does_not_label_a_processing_capture_with_a_receipt():
+    row = capture(status='processing', record_projection_revision=2, structured={'title': FALLBACK})
+    wire = transcribing_hold.project(home_step.project(row))
+    assert wire['home_step'] == home_step.TRANSCRIBING
+    assert wire['structured']['title'] == ''
 
 
 def test_list_wire_does_not_label_a_locked_capture():

@@ -50,6 +50,7 @@ FEED_FIELDS = [
     'home_sources',
     'home_status',
     'home_step',
+    'record_projection_revision',
     'home_starred',
     'home_is_locked',
     'home_has_tasks',
@@ -663,13 +664,17 @@ def feed(
             'sort_at': row['home_sort_at'],
             'started_at': row.get('home_started_at'),
             'finished_at': row.get('home_finished_at'),
-            # A capture stub stamped with the fallback label before any notes existed
-            # is sealed with that label; serve it as untitled, like the list wire.
             'title': (
                 ''
                 if locked
                 else (
-                    display_title(display.get('title', ''), display.get('preview', ''))
+                    display_title(
+                        display.get('title', ''),
+                        display.get('preview', ''),
+                        label_recording=bool(
+                            row.get('home_step') == home_step.READY and row.get('record_projection_revision')
+                        ),
+                    )
                     if kind == 'conversation'
                     else display.get('title', '')
                 )
