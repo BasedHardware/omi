@@ -39,13 +39,7 @@ HOLD_RECHECK = timedelta(hours=1)
 logger = logging.getLogger(__name__)
 
 
-def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, storage_client: Any = None) -> None:
-    """Delete only a configured, owner-scoped object; foreign refs fail closed.
-
-    Inside ``rpc_deadline`` (a gate-held unit) the delete is one attempt with
-    no SDK retry, bounded by the time left; ``storage_client`` lets such a
-    caller reuse a client whose session is bound to that deadline.
-    """
+def batch_object_address(uid: str, uri: str) -> tuple[str, str, int | None]:
     parsed = urlsplit(uri)
     bucket_name, path = parsed.netloc, parsed.path.lstrip('/')
     allowed_buckets = {
@@ -72,6 +66,17 @@ def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, sto
     ):
         raise ValueError('batch object reference outside configured owner storage')
     generation = int(parsed.fragment) if parsed.fragment else None
+    return bucket_name, path, generation
+
+
+def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, storage_client: Any = None) -> None:
+    """Delete only a configured, owner-scoped object; foreign refs fail closed.
+
+    Inside ``rpc_deadline`` (a gate-held unit) the delete is one attempt with
+    no SDK retry, bounded by the time left; ``storage_client`` lets such a
+    caller reuse a client whose session is bound to that deadline.
+    """
+    bucket_name, path, generation = batch_object_address(uid, uri)
     if storage_client is None:
         from utils.other.local_storage import create_storage_client
 
