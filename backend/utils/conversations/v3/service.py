@@ -20,7 +20,7 @@ from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
-from utils.conversations.v3 import Conflict, outline, planner, models, metrics, policy, visibility, context, created
+from utils.conversations.v3 import Conflict, outline, planner, models, metrics, policy, visibility, context
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
 
@@ -414,6 +414,10 @@ async def drain_processing(uid):
         finally:
             await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
     # Settled notes arm the conversation-created obligation; deliver after every summary lease is released.
+    # Imported here: the webhook fanout's LLM/app graph must not join process_conversation's import graph,
+    # which loads this module at import time (listen, pusher and sync all import it).
+    from utils.conversations.v3 import created
+
     await created.deliver(uid)
 
 
