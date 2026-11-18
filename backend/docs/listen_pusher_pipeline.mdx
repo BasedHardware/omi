@@ -10126,6 +10126,23 @@ The Home histogram admits only recordings ended within 30 minutes and notes
 written at or after that end. Old Home history, untrusted/future end clocks and
 prior in-recording notes do not contaminate the post-seal latency cohort.
 
+### Stale merge head skip (canary)
+
+`BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST` (comma-separated uids, default
+empty) is read on every ordered-merge commit. A listed owner whose strict head
+is starved skips the bounded head wait. Starved means admitted at least 1,800 s
+ago and waiting that long for a lease: `ready` or `retry` with `available_at` at
+least 1,800 s in the past (lease-ending paths reset `lease_until` to 0 and stamp
+`available_at`), or `leased` with `lease_until` at least 1,800 s in the past. The skip commits the row an expired wait would commit (the
+owner's earliest ready pending row) only when that row is a native record unit
+whose earlier binding units are settled, and when every pending row captured
+before it is starved. The transaction reads at most 129 pending rows; a longer
+backlog keeps the wait. Head wait off, unlisted owners and refused skips keep
+the ordinary wait, with no early hold or fallback. A skip is logged as
+`event=batch_merge outcome=stale_head_skip` and never sets `head_wait_bypass`.
+Writers without this code keep the wait.
+[Change note](listen_pusher_pipeline/changes/2026-11-18-merge-stale-head-skip.md).
+
 ### Staged source-frame close protocol
 
 `PUSHER_RECORD_CLOSE_NOTIFY_ENABLED` remains default off. The experimental wire
