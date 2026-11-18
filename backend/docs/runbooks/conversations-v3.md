@@ -227,8 +227,8 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --m
   the operator exits 1. The ledger
   records `groups_kept_deleted` and `donors_kept_deleted`; `undo --dry-run` prints the group count
   and `donors_deleted_by_owner_min`, a lower bound (it sees deleted spans, not tombstone-only
-  deletes). A group over 400 documents is refused (`undo_group_too_large`); partitions keep groups
-  far below that. Undo a re-derive by undoing the original run;
+  deletes). A group whose reads (two, plus one per donor and three per copy) would exceed 500 is
+  refused (`undo_group_too_large`); partitions keep groups far below that. Undo a re-derive by undoing the original run;
   `undo` on a re-derive run id says so and exits 1. Not undone: outline cache entries, speaker-resolution and media-boundary
   evidence that the notes path wrote, and gateway spend.
 - **Blocked.** A partition over the loader's 128-document limit, a planned id that is already a live

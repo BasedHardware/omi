@@ -1283,8 +1283,9 @@ def test_the_loader_reads_the_deletion_marker_on_its_own_data_plane(loader, monk
     calls = []
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda uid, **kw: calls.append(kw) or False)
     store.load_derive('u', since=AT, until=AT + timedelta(hours=1), run_id=RUN, firestore_client=Client({}))
-    # Never the conversations client it was handed: the marker lives on the data plane.
-    assert calls == [{}]
+    # Never the conversations client it was handed (the marker lives on the data plane), and fresh,
+    # since this load gates sending the transcript to the outline model.
+    assert calls == [{'fresh': True}]
 
 
 def test_undo_lists_deletes_that_raced_it_and_ends_partial(monkeypatch):
