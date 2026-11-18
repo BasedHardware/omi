@@ -3,9 +3,9 @@
 No new collection or task protocol: ``owner_scan`` lives on the leader's normal
 obligation. Only fresh obligations are enrolled; partial legacy runs keep their
 cursor and finish independently. Every member's legacy progress stays untouched.
-Enrollment additionally requires Release's expiring all-consumers-new marker.
-Old binaries cannot fence a re-arm after taking over an expired member. During
-a mixed roll, purges therefore remain legacy. Rollback retains their journals.
+The coalescing kill switch gates enrollment. The workspace release floor excludes
+old binaries that cannot fence a re-arm after taking over an expired member.
+Switch-off handback retains each member's journal.
 """
 
 from __future__ import annotations

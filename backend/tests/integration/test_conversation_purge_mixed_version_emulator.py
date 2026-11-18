@@ -249,12 +249,10 @@ def test_switch_off_mid_group_hands_journals_back_before_legacy(monkeypatch, wor
     _assert_erased(world, cids)
 
 
-def test_frozen_old_rearm_gap_is_why_mixed_rolls_must_not_seal(monkeypatch, world, old):
+def test_frozen_old_rearm_gap_demonstrates_why_the_floor_is_required(monkeypatch, world, old):
     """Reproduce the old binary's limitation on synthetic data, then recover it.
 
     The release floor excludes old binaries that cannot compare arm revisions.
-    This is why Release must drain groups BEFORE restoring old traffic, and why
-    the new consumer refuses new groups throughout a mixed roll.
     """
     cids = ['one', 'two']
     leader, follower = [world.arm(cid) for cid in cids]
@@ -278,8 +276,8 @@ def test_frozen_old_rearm_gap_is_why_mixed_rolls_must_not_seal(monkeypatch, worl
     assert rearmed and not _row(world, leader)
     remaining = world.client.collection(f'{purge.NAMESPACES[0]}_results').document('rearmed-behind-cursor')
     assert remaining.get().to_dict().get('projection_state') != 'erased'
-    # Old completion ignored the re-arm. Readiness denial keeps new consumers
-    # out of shared mode; ordinary legacy recovery can still erase the row.
+    # Old completion ignored the re-arm. The follower's stale delegation keeps
+    # it out of a new group. Per-conversation recovery can still erase the row.
     world.arm('one')
     generation = _dispatch(world, leader)
     assert scans._claim(world.client, leader, generation) == ('legacy', None)

@@ -76,12 +76,18 @@ execution. A delivery observing an off-state group can perform this handback too
 No member completes merely because handback or an HTTP acknowledgement happened.
 
 Release must enforce the workspace rollback floor for every purge consumer.
+Use the floor-guarded workspace tooling for deploy and rollback admission. For
+manual traffic moves, verify the target against the workspace floor first.
 Verify traffic, tagged revisions and queued revision-specific task targets before
 rolling out the marker-free worker. Pre-floor binaries lack the arm-revision
 completion fence and must stay out of service.
 
-For emergency rollback, turn the kill switch off and verify active groups hand
-back before resuming per-conversation execution. Handback preserves an old
+For emergency rollback, roll out the kill switch set to off to every revision
+that receives purge tasks. Include tagged revisions and queued revision-specific
+targets. Running revisions keep their environment until they are replaced or
+drain. An off-state delivery can hand back a group still owned by its epoch and
+token. Allow finite leases to expire and redrive any remaining obligations, then
+verify handback and journal preservation. Handback preserves an old
 takeover's nonempty cursor and each member journal without revoking a replacement
 worker's lease. If a leader is gone, followers recover through finite leases.
 A product revert restores the readiness gate. Release must write a fresh
