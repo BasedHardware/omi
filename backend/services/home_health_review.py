@@ -43,7 +43,6 @@ FIELDS = tuple(
             'client_processing',
             'deferred',
             'deleted',
-            'deleted_at',
             'discarded',
             'recording',
             'home_hidden',
@@ -53,6 +52,7 @@ FIELDS = tuple(
             'v3_derived',
             'has_photos',
             'record_transcription_empty',
+            'record_audio_partial',
             'starred',
             'folder_user_set',
             'sync_relevance_user_kept',
@@ -68,7 +68,6 @@ FIELDS = tuple(
             'summary_blocked_reason',
             'summary_retryable',
             'home_content_invalidated',
-            'no_speech_terminal',
         )
     )
 )
@@ -180,7 +179,7 @@ def _presented(row, step, now):
     structured = row.get('structured')
     if _has_text(manual_title):
         row = {**row, 'structured': {**(structured or {}), 'title': manual_title}}
-    projected = transcribing_hold.project({**row, 'home_step': step}, now=now)
+    projected = transcribing_hold.project({**row, 'home_step': step}, now=now, home_list=True)
     return card_content.content(projected, 'conversation')
 
 

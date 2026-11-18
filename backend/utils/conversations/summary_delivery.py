@@ -167,9 +167,9 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
         data.setdefault('summary_lane', lane(data))
 
 
-def projection_debt_enabled() -> bool:
+def projection_debt_enabled(*, environ: Mapping[str, str] | None = None) -> bool:
     """Default on; false restores the pre-fix behavior for batch projections."""
-    return default_on(PROJECTION_DEBT_ENV)
+    return default_on(PROJECTION_DEBT_ENV, environ=environ)
 
 
 def _past_age_gate(created_at: Any, *, now: float) -> bool:

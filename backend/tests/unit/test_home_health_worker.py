@@ -222,9 +222,12 @@ def _args(now, **updates):
 
 
 def test_review_and_apply_use_fixed_read_and_write_caps(now):
-    with patch.object(
-        worker, 'scan', side_effect=lambda *a, **kw: _snapshots(now, 6) if kw['status'] == 'completed' else []
-    ), patch.object(repair, 'arm', return_value='armed') as arm:
+    with (
+        patch.object(
+            worker, 'scan', side_effect=lambda *a, **kw: _snapshots(now, 6) if kw['status'] == 'completed' else []
+        ),
+        patch.object(repair, 'arm', return_value='armed') as arm,
+    ):
         receipt, failed = worker.run(None, _args(now), now=now)
         assert not failed and receipt['survey_documents'] == 6
         assert receipt['status_coverage']['completed'] == 'capped'
@@ -236,9 +239,10 @@ def test_review_and_apply_use_fixed_read_and_write_caps(now):
 
 
 def test_query_error_cannot_trigger_partial_apply_or_leak_exception(now):
-    with patch.object(
-        worker, 'scan', side_effect=[_snapshots(now, 5), RuntimeError('private-test-path')]
-    ), patch.object(repair, 'arm') as arm:
+    with (
+        patch.object(worker, 'scan', side_effect=[_snapshots(now, 5), RuntimeError('private-test-path')]),
+        patch.object(repair, 'arm') as arm,
+    ):
         receipt, failed = worker.run(None, _args(now, apply=True), now=now)
     assert failed and receipt['status_coverage']['in_progress'] == 'query_failed'
     arm.assert_not_called()
@@ -291,3 +295,117 @@ def test_apply_deadline_prevents_a_late_commit_rpc(monkeypatch):
     monkeypatch.setattr(repair, 'commit', after_reads)
     assert repair.arm(client, Mock(), 'test_owner', (), deadline=11, execute_before=1005) == 'deadline_reached'
     underlying_commit.assert_not_called()
+
+
+def test_scan_uses_the_registered_masked_finish_time_query(now):
+    client, query = Mock(), Mock()
+    client.collection_group.return_value = query
+    for method in ('where', 'order_by', 'select', 'limit'):
+        getattr(query, method).return_value = query
+    start = now - timedelta(hours=1)
+    scanned = worker.scan(client, lane='batch_live_v1', status='completed', start=start, end=now, limit=11)
+    client.collection_group.assert_called_once_with('conversations')
+    filters = [record.kwargs['filter'] for record in query.where.call_args_list]
+    assert [(item.field_path, item.op_string, item.value) for item in filters] == [
+        ('record_lane_owner', '==', 'batch_live_v1'),
+        ('status', '==', 'completed'),
+        ('finished_at', '>=', start),
+        ('finished_at', '<', now),
+    ]
+    assert [(record.args, record.kwargs) for record in query.order_by.call_args_list] == [
+        (('finished_at',), {'direction': worker.firestore.Query.DESCENDING}),
+        (('__name__',), {'direction': worker.firestore.Query.DESCENDING}),
+    ]
+    query.select.assert_called_once_with(repair.DISCOVERY_FIELDS)
+    query.limit.assert_called_once_with(12)
+    query.get.assert_called_once_with(retry=None, timeout=worker.SCAN_TIMEOUT)
+    assert scanned is query.get.return_value
+
+
+def test_review_mask_preserves_partial_audio_visibility(now, monkeypatch):
+    monkeypatch.setenv('HOME_HIDE_BELOW_FLOOR_ROWS', 'on')
+    recent = row(
+        now,
+        record_projection_revision=0,
+        record_audio_partial=True,
+        started_at=now - timedelta(seconds=40),
+        finished_at=now - timedelta(seconds=20),
+    )
+    masked = {key: value for key, value in recent.items() if key in review.FIELDS}
+    assert not review.hidden_for_review(masked)
+    assert review.hidden_for_review({**masked, 'record_audio_partial': False})
+
+
+def test_review_uses_the_current_legacy_list_recording_label(now):
+    metrics, findings = review.inspect_row(row(now), now=now)
+    assert 'ready_cards' in metrics and 'notes_not_scheduled' in findings
+    assert 'ready_card_blank' not in findings and 'ready_title_missing' not in findings
+
+
+def _serving(revision='first', percent=100):
+    return {'status': {'traffic': [{'revisionName': f'backend-integration-{revision}', 'percent': percent}]}}
+
+
+def _sweep_revision(name, flags=None):
+    flags = {
+        'OMI_BACKEND_RELEASE_SHA': 'a' * 40,
+        'SUMMARY_DEBT_REPAIR_ENABLED': 'true',
+        **(flags or {}),
+    }
+    return {
+        'metadata': {'name': name},
+        'spec': {'containers': [{'env': [{'name': key, 'value': value} for key, value in flags.items()]}]},
+    }
+
+
+@pytest.mark.parametrize(
+    'flags,allowed',
+    [
+        ({}, True),
+        ({'SUMMARY_PROJECTION_DEBT_ENABLED': 'off'}, False),
+        ({'SUMMARY_PROJECTION_DEBT_ENABLED': 'false'}, False),
+        ({'SUMMARY_DEBT_REPAIR_ENABLED': 'false'}, False),
+        ({'SUMMARY_DEBT_REPAIR_ENABLED': 'on', 'CAPTURE_COVERAGE_MODE': 'serve'}, True),
+        ({'SUMMARY_DEBT_REPAIR_ENABLED': 'on', 'CAPTURE_COVERAGE_MODE': 'off'}, False),
+        ({'SUMMARY_PROJECTION_DEBT_ENABLED': None}, False),
+    ],
+)
+def test_production_admission_uses_receiving_revision_settings(monkeypatch, flags, allowed):
+    def describe(kind, name, deadline):
+        assert deadline == 400
+        return _serving() if kind == 'services' else _sweep_revision(name, flags)
+
+    monkeypatch.setattr(worker.runtime, '_describe', describe)
+    assert worker.runtime.serving_allows_repair(deadline=400) is allowed
+
+
+def test_production_admission_refuses_changed_traffic_or_an_unreadable_revision(monkeypatch):
+    describe = Mock(side_effect=[_serving(), _sweep_revision('backend-integration-first'), _serving('second')])
+    monkeypatch.setattr(worker.runtime, '_describe', describe)
+    assert not worker.runtime.serving_allows_repair(deadline=400)
+    describe.side_effect = OSError('private log value')
+    assert not worker.runtime.serving_allows_repair(deadline=400)
+
+
+def test_production_admission_refuses_when_any_receiving_revision_has_admission_off(monkeypatch):
+    mixed = _serving(percent=75)
+    mixed['status']['traffic'].extend(_serving('second', percent=25)['status']['traffic'])
+    second = _sweep_revision('backend-integration-second', {'SUMMARY_PROJECTION_DEBT_ENABLED': 'off'})
+    describe = Mock(side_effect=[mixed, _sweep_revision('backend-integration-first'), second])
+    monkeypatch.setattr(worker.runtime, '_describe', describe)
+    assert not worker.runtime.serving_allows_repair(deadline=400)
+
+
+def test_production_apply_refuses_before_any_write_when_live_policy_is_disabled(now):
+    client = SimpleNamespace(project=worker.runtime.PRODUCTION_PROJECT)
+    with (
+        patch.object(
+            worker, 'scan', side_effect=lambda *a, **kw: _snapshots(now, 5) if kw['status'] == 'completed' else []
+        ),
+        patch.object(worker.runtime, 'serving_allows_repair', return_value=False) as verify,
+        patch.object(repair, 'arm') as arm,
+    ):
+        receipt, failed = worker.run(client, _args(now, apply=True), now=now)
+    assert failed and receipt['repair']['serving_policy'] == 'unavailable_or_disabled'
+    verify.assert_called_once()
+    arm.assert_not_called()

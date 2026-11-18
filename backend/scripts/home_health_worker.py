@@ -14,6 +14,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from config.episodes import home_step_projection_enabled
 from config.summary_guarantee import deadline_seconds
 from services import home_health_repair as repair, home_health_review as review
+from scripts import home_health_runtime as runtime
 from utils.enrichment.age_gate import max_age_seconds
 
 MAX_PER_STATUS = 500
@@ -121,6 +122,13 @@ def run(client, args, *, now, monotonic=time.monotonic, utcnow=lambda: datetime.
     if query_failed or report['budget_interrupted'] or not args.apply or len(proposed) < review.MIN_REPORT_OWNERS:
         return report, query_failed or report['budget_interrupted']
 
+    if getattr(client, 'project', None) == runtime.PRODUCTION_PROJECT:
+        deadline = min(stop_at, monotonic() + (args.execute_before - utcnow()).total_seconds())
+        if not runtime.serving_allows_repair(deadline=deadline):
+            report['repair']['serving_policy'] = 'unavailable_or_disabled'
+            return report, True
+        report['repair']['serving_policy'] = 'enabled'
+
     outcomes = Counter()
     for owner, (ref, expected) in list(proposed.items())[: args.max_writes]:
         current = utcnow()
@@ -167,7 +175,7 @@ def main():
             parser.error('--apply requires --execute-before within the next 30 minutes')
     elif args.max_writes is not None or args.execute_before is not None:
         parser.error('--max-writes and --execute-before require --apply')
-    if args.project == 'based-hardware':
+    if args.project == runtime.PRODUCTION_PROJECT:
         tier = 'prod-operator' if args.apply else 'ro-prod'
         if os.environ.get('GCP_AGENT_TIER') != tier or not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
             parser.error(f'this production mode requires the {tier} agent environment')
