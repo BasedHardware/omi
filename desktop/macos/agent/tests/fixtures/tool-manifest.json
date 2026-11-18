@@ -4648,7 +4648,7 @@
       "destructiveHint": false,
       "openWorldHint": false
     },
-    "timeoutClass": "normal",
+    "timeoutClass": "long",
     "executor": {
       "kind": "swiftTool",
       "executorName": "chatToolExecutor"
@@ -5500,11 +5500,7 @@
     "runtimePreconditions": [
       "Realtime voice only; requires Screen Recording permission."
     ],
-    "adapters": {
-      "pi-mono": {
-        "advertised": true
-      }
-    },
+    "adapters": {},
     "surfaces": [
       "realtime_voice"
     ],
@@ -5816,7 +5812,7 @@
       "destructiveHint": false,
       "openWorldHint": false
     },
-    "timeoutClass": "normal",
+    "timeoutClass": "long",
     "executor": {
       "kind": "swiftTool",
       "executorName": "chatToolExecutor"
@@ -5880,7 +5876,7 @@
       "destructiveHint": false,
       "openWorldHint": false
     },
-    "timeoutClass": "normal",
+    "timeoutClass": "long",
     "executor": {
       "kind": "swiftTool",
       "executorName": "chatToolExecutor"
@@ -5936,7 +5932,7 @@
       "destructiveHint": false,
       "openWorldHint": false
     },
-    "timeoutClass": "normal",
+    "timeoutClass": "long",
     "executor": {
       "kind": "swiftTool",
       "executorName": "chatToolExecutor"
@@ -6015,7 +6011,7 @@
       "destructiveHint": false,
       "openWorldHint": true
     },
-    "timeoutClass": "normal",
+    "timeoutClass": "long",
     "executor": {
       "kind": "swiftTool",
       "executorName": "chatToolExecutor"
@@ -6080,7 +6076,7 @@
       "destructiveHint": false,
       "openWorldHint": true
     },
-    "timeoutClass": "normal",
+    "timeoutClass": "long",
     "executor": {
       "kind": "swiftTool",
       "executorName": "chatToolExecutor"

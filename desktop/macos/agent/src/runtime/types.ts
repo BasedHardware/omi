@@ -691,6 +691,8 @@ export interface StartupReconciliationResult {
   requeuedBackendConversationDeleteIds: string[];
   failedPreparedToolInvocationIds: string[];
   outcomeUnknownToolInvocationIds: string[];
+  /** Pending tool approvals whose waiting invocation died with the daemon; never replayed. */
+  expiredToolApprovalDispatchIds: string[];
   repairedSessionProfileIds: string[];
   repairedRunProfileReferenceIds: string[];
   repairedAttemptProfileReferenceIds: string[];
