@@ -815,6 +815,22 @@ def _undo_ledger(monkeypatch):
     return ledger
 
 
+def _group_stub(ledger, outcome='undone', calls=None):
+    """Stands in for undo_backfill_group, writing the run's undo progress the way its transaction does."""
+
+    def group(uid, token, donors, rows, run_id=None, **kw):
+        if calls is not None:
+            calls.append((donors, rows))
+        if outcome == 'undone':
+            progress = ledger.run.setdefault('undo_progress', {})
+            progress['donors_restored'] = progress.get('donors_restored', 0) + len(donors)
+            progress['rows_removed'] = progress.get('rows_removed', 0) + len(rows)
+            progress['removed_ids'] = progress.get('removed_ids', []) + rows
+        return outcome, 0, 0
+
+    return group
+
+
 def _undo_leases(monkeypatch, busy=()):
     events = []
     monkeypatch.setattr(
@@ -844,11 +860,7 @@ def test_undo_works_one_group_per_call_and_refuses_while_notes_are_in_flight(mon
     assert ('release', 'builder') in events and ('release', store.BACKFILL_LEASE) in events
     monkeypatch.setattr(leases, 'held', lambda *a, **kw: False)
     groups = []
-    monkeypatch.setattr(
-        store,
-        'undo_backfill_group',
-        lambda uid, token, donors, rows, **kw: groups.append((donors, rows)) or ('undone', 1, 1),
-    )
+    monkeypatch.setattr(store, 'undo_backfill_group', _group_stub(ledger, calls=groups))
     result = backfill.undo_run('u', RUN)
     assert result == {
         'outcome': 'undone',
@@ -857,6 +869,7 @@ def test_undo_works_one_group_per_call_and_refuses_while_notes_are_in_flight(mon
         'groups_kept_deleted': 0,
         'donors_kept_deleted': 0,
         'deleted_during_undo': 0,
+        'deleted_during_undo_ids': [],
     }
     # Each group's restore and copy removal is one transaction: never hidden or doubled partway.
     assert groups == [(['d1'], ['c1'])] and ledger.run['status'] == 'undone'
@@ -931,7 +944,8 @@ def test_undo_never_resurrects_a_donor_whose_copy_the_owner_deleted(strict, monk
     store.release_claims('synthetic', {**strict.rows[COPY]}, firestore_client=strict)
     _strict_undo(strict, monkeypatch)
     result = backfill.undo_run('synthetic', RUN, firestore_client=strict)
-    assert result['outcome'] == 'undone' and result['groups_kept_deleted'] == 1 and result['donors_restored'] == 0
+    assert result['outcome'] == 'undone_partial' and result['groups_kept_deleted'] == 1
+    assert result['donors_restored'] == 0
     donor = strict.rows[R]
     # Still a hidden source, never a visible legacy conversation again.
     assert donor['recording'] is True and donor['v3_backfill_run'] == RUN
@@ -941,7 +955,7 @@ def test_a_deletion_racing_undo_keeps_the_group_and_hands_owed_notes_to_live(str
     token = convert(strict)
     # Delete intent written; the claim release has not run yet (the window undo used to race).
     strict.rows[('users', 'synthetic', 'deleted_conversations', 'c0')] = {'conversation_id': 'c0'}
-    strict.rows[COPY] = {**strict.rows[COPY], 'v3_backfill_process_pending': True}
+    strict.rows[COPY] = {**strict.rows[COPY], 'v3_backfill_process_pending': True, 'v3_process_pending': True}
     sibling = ('users', 'synthetic', 'conversations', 'c1')
     strict.rows[sibling] = {**strict.rows[COPY], 'id': 'c1', 'v3_process_pending': False}
     result = store.undo_backfill_group('synthetic', token, ['r'], ['c0', 'c1'], firestore_client=strict)
@@ -949,7 +963,7 @@ def test_a_deletion_racing_undo_keeps_the_group_and_hands_owed_notes_to_live(str
     assert strict.rows[R]['recording'] is True and COPY in strict.rows
     # The deleted copy never goes to the notes model; a kept sibling's owed notes move to the live drain.
     assert strict.rows[COPY]['v3_backfill_process_pending'] is False
-    assert not strict.rows[COPY].get('v3_process_pending')
+    assert strict.rows[COPY]['v3_process_pending'] is False
     assert (
         strict.rows[sibling]['v3_backfill_process_pending'] is False
         and strict.rows[sibling]['v3_process_pending'] is True
@@ -1148,9 +1162,9 @@ async def test_a_row_rechecks_account_deletion_right_before_its_notes_call(direc
 
 
 def test_an_oversized_undo_group_is_refused_whole(strict):
-    ids = [f'd{i}' for i in range(store.UNDO_GROUP_MAX + 1)]
+    # Reads per copy are three (row, tombstone, notes lease): 167 copies plus 2 exceed 500.
     with pytest.raises(store.Conflict, match='undo_group_too_large'):
-        store.undo_backfill_group('synthetic', 'token', ids, [], firestore_client=strict)
+        store.undo_backfill_group('synthetic', 'token', [], [f'c{i}' for i in range(167)], firestore_client=strict)
 
 
 @pytest.mark.asyncio
@@ -1236,7 +1250,8 @@ def test_a_rerun_undo_keeps_the_totals_of_groups_already_undone(monkeypatch):
     ledger = _undo_ledger(monkeypatch)
     ledger.run.update(
         status='undoing',
-        undo={'donors_restored': 4, 'rows_removed': 3, 'groups_kept_deleted': 1, 'donors_kept_deleted': 2},
+        undo={'groups_kept_deleted': 1, 'donors_kept_deleted': 2},
+        undo_progress={'donors_restored': 4, 'rows_removed': 3, 'removed_ids': ['old']},
     )
     _undo_leases(monkeypatch)
     docs = [
@@ -1244,9 +1259,13 @@ def test_a_rerun_undo_keeps_the_totals_of_groups_already_undone(monkeypatch):
         {'id': 'c1', 'v3_derived': True, 'v3_recording_ids': ['d1']},
     ]
     monkeypatch.setattr(store, 'backfill_run_documents', lambda *a, **kw: docs)
-    monkeypatch.setattr(store, 'undo_backfill_group', lambda *a, **kw: ('undone', 1, 1))
+    monkeypatch.setattr(store, 'undo_backfill_group', _group_stub(ledger))
+    checked = []
+    monkeypatch.setattr(store, 'deleted_copy_ids', lambda uid, ids, **kw: checked.append(ids) or [])
     result = backfill.undo_run('u', RUN)
     assert result['donors_restored'] == 5 and result['rows_removed'] == 4
+    # Every attempt's removed copies are checked for a racing delete, not only this attempt's.
+    assert checked == [['old', 'c1']]
     assert ledger.run['undo']['donors_restored'] == 5
     # Kept groups are still in the run's documents and recounted, never carried twice.
     assert result['groups_kept_deleted'] == 0 and result['donors_kept_deleted'] == 0
@@ -1268,7 +1287,7 @@ def test_the_loader_reads_the_deletion_marker_on_its_own_data_plane(loader, monk
     assert calls == [{}]
 
 
-def test_undo_saves_totals_after_each_group_and_surfaces_a_delete_that_raced_it(monkeypatch):
+def test_undo_lists_deletes_that_raced_it_and_ends_partial(monkeypatch):
     ledger = _undo_ledger(monkeypatch)
     _undo_leases(monkeypatch)
     docs = [
@@ -1278,18 +1297,33 @@ def test_undo_saves_totals_after_each_group_and_surfaces_a_delete_that_raced_it(
         {'id': 'c2', 'v3_derived': True, 'v3_recording_ids': ['d2']},
     ]
     monkeypatch.setattr(store, 'backfill_run_documents', lambda *a, **kw: docs)
-    saved = []
-
-    def group(uid, token, donors, rows, **kw):
-        saved.append(deepcopy(ledger.run.get('undo') or {}))
-        return 'undone', 1, 1
-
-    monkeypatch.setattr(store, 'undo_backfill_group', group)
+    monkeypatch.setattr(store, 'undo_backfill_group', _group_stub(ledger))
     monkeypatch.setattr(store, 'deleted_copy_ids', lambda uid, ids, **kw: [i for i in ids if i == 'c2'])
     result = backfill.undo_run('u', RUN)
-    # The second group saw the first group's totals already persisted.
-    assert saved[1]['donors_restored'] == 1 and saved[1]['outcome'] == 'in_progress'
-    assert result['deleted_during_undo'] == 1 and ledger.run['undo']['deleted_during_undo'] == 1
+    assert result['outcome'] == 'undone_partial' and ledger.run['status'] == 'undone_partial'
+    assert result['deleted_during_undo'] == 1 and ledger.run['undo']['deleted_during_undo_ids'] == ['c2']
+
+
+def test_the_group_transaction_records_undo_progress_in_the_ledger(strict):
+    token = convert(strict)
+    ledger = ('users', 'synthetic', runs.COLLECTION, RUN)
+    strict.rows[ledger] = {'run_id': RUN, 'status': 'undoing'}
+    result = store.undo_backfill_group('synthetic', token, ['r'], ['c0'], run_id=RUN, firestore_client=strict)
+    assert result == ('undone', 1, 1)
+    assert strict.rows[ledger]['undo_progress'] == {'donors_restored': 1, 'rows_removed': 1, 'removed_ids': ['c0']}
+
+
+def test_a_deleted_copy_fully_covered_by_another_claim_still_keeps_its_group(strict):
+    convert(strict)
+    # A second copy claims the same interval, so deleting c0 leaves no uncovered span.
+    donor = strict.rows[R]
+    strict.rows[R] = {**donor, 'claims': donor['claims'] + [{**donor['claims'][0], 'conversation_id': 'c9'}]}
+    strict.rows[('users', 'synthetic', 'deleted_conversations', 'c0')] = {'conversation_id': 'c0'}
+    store.release_claims('synthetic', {**strict.rows[COPY]}, firestore_client=strict)
+    assert strict.rows[R]['v3_backfill_deleted_copies'] == ['c0']
+    assert store.deleted_after_backfill(strict.rows[R])
+    groups = backfill.undo_groups([{**strict.rows[R], 'id': 'r'}])
+    assert any('c0' in rows for _donors, rows in groups)
 
 
 def test_an_owner_skipped_for_an_active_run_fails_the_exit_code(tmp_path, monkeypatch):
@@ -1300,3 +1334,37 @@ def test_an_owner_skipped_for_an_active_run_fails_the_exit_code(tmp_path, monkey
     monkeypatch.setattr(runs, 'list_runs', lambda uid: [{'status': 'running'}] if uid == 'owner-one' else [])
     monkeypatch.setattr(script, 'plan_owner', lambda *a: ({}, [], {}))
     assert script.main(['run', '--owners-file', str(owners), '--dry-run']) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_resume_keeps_going_when_a_converted_donor_is_unclaimed(builder, monkeypatch, no_evidence):
+    converted = {
+        **legacy('b', AT + timedelta(hours=2), 0),
+        'transcript_segments': [],
+        'recording': True,
+        '_v3_derive': True,
+        '_v3_backfill_run': RUN,
+    }
+    sources = {'a': as_derive(legacy('a', AT, 400)), 'b': converted}
+    monkeypatch.setattr(store, 'load_derive', lambda *a, **kw: (sources, {}, []))
+    monkeypatch.setattr(service.models, 'outline', lambda *a: SCENARIOS['long_visible'][1])
+    committed = []
+    monkeypatch.setattr(service, '_commit', lambda *a, **kw: committed.append(kw))
+    outcome = await service.reconcile('u', derive=True, since=AT, until=AT + timedelta(days=1), run_id=RUN)
+    # A resume retires nothing, so the donor keeps its existing copy: no block.
+    assert outcome == 'committed' and committed
+
+
+def test_an_unexpected_plan_error_is_not_reported_as_a_blocked_owner(tmp_path, monkeypatch):
+    from scripts import conversations_v3_backfill as script
+
+    owners = tmp_path / 'owners.txt'
+    owners.write_text('owner-one\n')
+    monkeypatch.setattr(runs, 'list_runs', lambda uid: [])
+
+    def plan(*a):
+        raise ValueError('bug')
+
+    monkeypatch.setattr(script, 'plan_owner', plan)
+    with pytest.raises(ValueError, match='bug'):
+        script.main(['run', '--owners-file', str(owners), '--dry-run'])

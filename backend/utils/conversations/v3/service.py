@@ -365,9 +365,9 @@ async def reconcile(
             unclaimed = [rid for rid, r in recordings.items() if '_v3_backfill_prior' in r and rid not in claimed]
             for rid in unclaimed:
                 recordings.pop(rid)
-            if any(rid not in claimed for rid, r in recordings.items() if r.get('_v3_derive')):
-                # An already-converted donor (resume or re-derive) that no rebuilt window claims would
-                # stay hidden with no copy; block until it is understood. Undo restores it unless the
+            if rederive and any(rid not in claimed for rid, r in recordings.items() if r.get('_v3_derive')):
+                # On a re-derive an already-converted donor that no rebuilt window claims would lose its
+                # retired copy and stay hidden; block until it is understood (a resume keeps the copy). Undo restores it unless the
                 # owner deleted its copy (then undo keeps it; plan around that range instead).
                 raise Conflict('backfill_donor_unclaimed')
         # A re-derive reuses prior ids; a prior copy no rebuilt window claims is retired with the commit.

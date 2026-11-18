@@ -458,6 +458,7 @@ def undo_groups(docs):
             prior = {s.get('conversation_id') for s in (doc.get('v3_backfill_prior') or {}).get('deleted_spans') or []}
             linked = {c.get('conversation_id') for c in doc.get('claims') or []}
             linked |= {s.get('conversation_id') for s in doc.get('deleted_spans') or []} - prior
+            linked |= set(doc.get('v3_backfill_deleted_copies') or [])
             for cid in linked - {None}:
                 rows.add(cid)
                 union(doc['id'], cid)
@@ -497,19 +498,26 @@ def undo_run(uid, run_id, *, firestore_client=None):
         derived = [d['id'] for d in docs if d.get('v3_derived')]
         if any(leases.held(uid, 'summary-' + cid, firestore_client=firestore_client) for cid in derived):
             return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client, run.get('undo'))
-        # Groups an interrupted undo already undid are gone from the run's documents: carry those totals.
-        # Kept groups stay stamped with the run and are recounted on every attempt.
-        earlier = run.get('undo') or {}
-        result = {key: int(earlier.get(key) or 0) for key in ('donors_restored', 'rows_removed')}
-        result.update(groups_kept_deleted=0, donors_kept_deleted=0)
-        removed_ids = []
+        kept = {'groups_kept_deleted': 0, 'donors_kept_deleted': 0}
+
+        def totals():
+            # Restored/removed totals and removed copy ids are written in each group's own transaction
+            # (crash-safe, across attempts); kept groups stay stamped with the run and are recounted.
+            progress = (runs.get_run(uid, run_id, firestore_client=firestore_client) or {}).get('undo_progress') or {}
+            return progress, {
+                'donors_restored': int(progress.get('donors_restored') or 0),
+                'rows_removed': int(progress.get('rows_removed') or 0),
+                **kept,
+            }
+
         for donors, rows in undo_groups(docs):
             try:
-                outcome, restored, removed = store.undo_backfill_group(
-                    uid, token, donors, rows, firestore_client=firestore_client
+                outcome, _restored, _removed = store.undo_backfill_group(
+                    uid, token, donors, rows, run_id=run_id, firestore_client=firestore_client
                 )
             except store.Conflict as error:
                 # Groups already done stay done; the run stays 'undoing' and a rerun continues.
+                _progress, result = totals()
                 runs.update_run(
                     uid,
                     run_id,
@@ -519,33 +527,27 @@ def undo_run(uid, run_id, *, firestore_client=None):
                     firestore_client=firestore_client,
                 )
                 return {'outcome': 'error', 'reason': str(error), **result}
-            result['donors_restored'] += restored
-            result['rows_removed'] += removed
             if outcome == 'kept':
-                result['groups_kept_deleted'] += 1
-                result['donors_kept_deleted'] += len(donors)
-            else:
-                removed_ids += rows
-            # Durable after every group: a crash never loses the totals of groups already undone.
-            runs.update_run(
-                uid,
-                run_id,
-                patch={'undo': {**result, 'outcome': 'in_progress', 'at': datetime.now(timezone.utc)}},
-                firestore_client=firestore_client,
-            )
+                kept['groups_kept_deleted'] += 1
+                kept['donors_kept_deleted'] += len(donors)
             for key, held_token in held:
                 leases.renew(uid, key, held_token, firestore_client=firestore_client)
-        # A delete whose tombstone landed after its group was undone raced undo (the shared delete path
-        # reads the copy before it writes the tombstone); the legacy row is visible again. Surface it.
-        result['deleted_during_undo'] = len(store.deleted_copy_ids(uid, removed_ids, firestore_client=firestore_client))
+        progress, result = totals()
+        # A delete whose tombstone landed after its copy was undone raced undo (the shared delete path
+        # reads the copy before it writes the tombstone): that legacy row is visible again. Every
+        # attempt's removed copies are checked, and the ids are kept for the operator.
+        raced = store.deleted_copy_ids(uid, list(progress.get('removed_ids') or []), firestore_client=firestore_client)
+        result.update(deleted_during_undo=len(raced), deleted_during_undo_ids=raced)
     finally:
         for key, held_token in held:
             leases.release(uid, key, held_token, firestore_client=firestore_client)
+    # Kept groups or a raced delete mean undo did not return everything to legacy: never call that done.
+    status = 'undone_partial' if result['groups_kept_deleted'] or result['deleted_during_undo'] else 'undone'
     runs.update_run(
         uid,
         run_id,
-        status='undone',
+        status=status,
         patch={'undo': {**result, 'at': datetime.now(timezone.utc)}},
         firestore_client=firestore_client,
     )
-    return {'outcome': 'undone', **result}
+    return {'outcome': status, **result}

@@ -219,9 +219,12 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --m
   deleted a copy (a deletion tombstone for a copy id, or a donor deleted span added after the run;
   both read inside the transaction, so a delete racing undo is seen) stays as backfilled v3, so undo
   never resurrects a deletion; its surviving copies' owed notes move to the live notes marker (the
-  deleted copy's notes are never written). Totals are saved after every group. If the owner deletes
-  a copy in the instant undo removes it (before the delete path writes its tombstone), the legacy
-  row is visible again; undo counts these as `deleted_during_undo`, so delete those rows by hand. The ledger
+  deleted copy's notes are never written). Totals and removed copy ids are written in each group's own
+  transaction. If the owner deletes a copy in the instant undo removes it (before the delete path
+  writes its tombstone), the legacy row is visible again: undo lists those copy ids as
+  `deleted_during_undo_ids` (every attempt's removals are checked), so delete the matching legacy
+  rows by hand. A run with kept groups or a raced delete ends `undone_partial`, never `undone`, and
+  the operator exits 1. The ledger
   records `groups_kept_deleted` and `donors_kept_deleted`; `undo --dry-run` prints the group count
   and `donors_deleted_by_owner_min`, a lower bound (it sees deleted spans, not tombstone-only
   deletes). A group over 400 documents is refused (`undo_group_too_large`); partitions keep groups
@@ -230,8 +233,9 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --m
   evidence that the notes path wrote, and gateway spend.
 - **Blocked.** A partition over the loader's 128-document limit, a planned id that is already a live
   row (`target_exists`), a tombstoned window, or a converted donor that no longer reads
-  (`backfill_source_unreadable`; its copies are kept), a converted donor that no rebuilt window
-  claims (`backfill_donor_unclaimed`), or account deletion starting mid-drain (`account_deletion`;
+  (`backfill_source_unreadable`; its copies are kept), a re-derive in which a converted donor no rebuilt window claims
+  (`backfill_donor_unclaimed`; when the owner deleted that donor's copy, undo keeps it, so undo the
+  run and plan a new one around that range instead of resuming), or account deletion starting mid-drain (`account_deletion`;
   no further transcript goes to the notes model) blocks the run. One owner's blocked plan prints
   its reason and the operator continues with the next owner (exit 1). The partition and its reason are
   recorded in the ledger. Fix the cause, then `resume`. Never describe a blocked or partial run as
