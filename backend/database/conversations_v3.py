@@ -21,6 +21,9 @@ from utils.conversations.v3 import Conflict
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 
 LIMIT = 128
+# The backfill holds its own builder lease (and outline cache) so a running backfill never makes the
+# owner's live builder busy; the two passes touch disjoint documents and both are revision-fenced.
+BACKFILL_LEASE = 'backfill-builder'
 
 
 def user_conversations(client, uid):
@@ -135,10 +138,10 @@ def adoptable(uid, ids, *, firestore_client=None):
     return found
 
 
-def save_outline(uid, token, fingerprint, entries, *, firestore_client=None):
+def save_outline(uid, token, fingerprint, entries, *, key='builder', firestore_client=None):
     """Keep a paid outline even when this pass's projection commit later conflicts."""
     client = firestore_client or get_firestore_client()
-    ref = leases.lease_ref(client, uid, 'builder')
+    ref = leases.lease_ref(client, uid, key)
 
     @firestore.transactional
     def save(tx):
@@ -305,7 +308,19 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     return mark(client.transaction())
 
 
-def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pending=True, firestore_client=None):
+def commit_projection(
+    uid,
+    token,
+    recordings,
+    existing,
+    rows,
+    cache,
+    *,
+    clear_pending=True,
+    remove=(),
+    key='builder',
+    firestore_client=None,
+):
     """Commit derived rows and source claims; returns the ids of source recordings that kept moving.
 
     A recording that only received more speech during the pass does not fail the commit (a live
@@ -316,7 +331,7 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
     client = firestore_client or get_firestore_client()
     moved = set()
     coll = user_conversations(client, uid)
-    held = leases.lease_ref(client, uid, 'builder')
+    held = leases.lease_ref(client, uid, key)
     open_ids = [r['id'] for r in rows if r['status'] == 'in_progress' and not r.get('deleted')]
     if len(open_ids) > 1:
         raise Conflict('multiple_open_conversations')
@@ -384,6 +399,11 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
         for cid in new_ids:
             if coll.document(cid).get(transaction=tx).exists:
                 raise Conflict('target_exists')
+        if final:
+            for cid in remove:
+                # Only a backfill re-derive retires a copy, and only its own backfilled rows.
+                if not (existing.get(cid) or {}).get('backfilled'):
+                    raise Conflict('remove_not_backfilled')
         from database.recurring_voice_privacy import filter_processing_write
 
         user = client.collection('users').document(uid)
@@ -393,11 +413,14 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
             if raw.get('deleted'):
                 continue
             tx.set(coll.document(row['id']), row)
+        if final:
+            for cid in remove:
+                tx.delete(coll.document(cid))
         for rid, recording in recordings.items():
             if recording.get('deleted') or recording.get('sync_merged_into'):
                 tx.update(coll.document(rid), {'v3_pending': False, 'v3_pending_since': None})
                 continue
-            replaced = {r['id'] for r in batch_rows}
+            replaced = {r['id'] for r in batch_rows} | (set(remove) if final else set())
             if rid in moved:
                 # Merge onto the re-read document; never write the stale snapshot's view of a live source.
                 claims = [c for c in observed[rid].get('claims') or [] if c['conversation_id'] not in replaced]
@@ -448,12 +471,10 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
                     and final
                     and clear_pending
                     and not claims
+                    and not recording.get('_v3_derive')
+                    and not recording.get('v3_backfill_run')
                     and recording.get('status') == 'completed',
-                    **(
-                        {'recording': True, 'structured': {}, 'backfill_superseded': True}
-                        if recording.get('_v3_derive')
-                        else {}
-                    ),
+                    **(backfill_conversion(recording) if recording.get('_v3_derive') else {}),
                 },
             )
         tx.update(
@@ -497,7 +518,7 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
                 owned = {'claims', 'v3_pending', 'v3_pending_since', 'v3_audio_purge_pending', 'backfill_superseded'}
                 if recordings[rid].get('_v3_derive'):
                     # Our own committed conversion, not an external change.
-                    owned |= {'recording', 'structured'}
+                    owned |= {'recording', 'v3_backfill_run', 'v3_backfill_prior'}
                 if {k: v for k, v in current.items() if k not in owned} != {
                     k: v for k, v in observed[rid].items() if k not in owned
                 }:
@@ -584,8 +605,11 @@ def release_claims(uid, row, *, firestore_client=None):
                 {
                     'claims': claims,
                     'deleted_spans': spans,
+                    # A backfill donor is a legacy conversation hidden only for the spot check: deleting
+                    # a backfilled copy never erases the donor's audio or tombstones it; undo restores it.
                     'v3_audio_purge_pending': not claims
                     and not recording.get('v3_pending')
+                    and not recording.get('v3_backfill_run')
                     and recording.get('status') == 'completed',
                 },
             )
@@ -593,29 +617,255 @@ def release_claims(uid, row, *, firestore_client=None):
     remove(client.transaction())
 
 
-def load_derive(uid, *, firestore_client=None):
+# Fields the backfill conversion (and the claim/purge machinery that follows it) may write on a
+# legacy donor. Their original values are kept on the donor so undo restores it exactly.
+BACKFILL_TRACKED = (
+    'recording',
+    'claims',
+    'v3_pending',
+    'v3_pending_since',
+    'v3_audio_purge_pending',
+    'v3_audio_purge_retry_after',
+    'v3_audio_purge_attempts',
+    'backfill_superseded',
+    'deleted_spans',
+)
+BACKFILL_SOURCES = frozenset({'omi', 'phone'})
+# Metadata page for planning an owner's window; a larger window is refused, never truncated.
+BACKFILL_WINDOW_MAX = 10000
+BACKFILL_UNDO_PAGE = 100
+
+
+def backfill_legacy_source(raw):
+    """A completed legacy pendant/phone conversation the v3 backfill may re-derive."""
+    return bool(
+        raw.get('source') in BACKFILL_SOURCES
+        and raw.get('status') == 'completed'
+        and raw.get('started_at')
+        and raw.get('data_protection_level') != 'private'
+        and not any(
+            raw.get(k)
+            # Discarded rows stay discarded and imported rows were never pendant capture (live never
+            # converts them either); re-deriving them would surface hidden or foreign history on Home.
+            for k in (
+                'recording',
+                'v3_derived',
+                'deleted',
+                'discarded',
+                'imported',
+                'sync_merged_into',
+                'is_locked',
+                'v3_backfill_run',
+            )
+        )
+    )
+
+
+def legacy_manual_end(raw):
+    """Legacy rows keep the trigger that closed them only in their relevance audit record."""
+    decision = raw.get('relevance_decision')
+    return isinstance(decision, dict) and decision.get('trigger') == 'client_finalize'
+
+
+def backfill_conversion(recording):
+    """Source patch for a backfill donor: hidden as a recording, its notes and summary untouched."""
+    patch = {'recording': True, 'backfill_superseded': True, 'v3_backfill_run': recording['_v3_backfill_run']}
+    if '_v3_backfill_prior' in recording:
+        patch['v3_backfill_prior'] = recording['_v3_backfill_prior']
+    return patch
+
+
+def _rederive_prior(row):
+    """A previously derived backfill row offered to the planner as an open window with the same id.
+
+    The planner then rebuilds its boundaries, text and notes from the sources (an id is reused, never
+    deleted and recreated); edits made to the backfilled copy are not retained.
+    """
+    return {
+        **row,
+        'status': 'in_progress',
+        'structured': {},
+        'summary_covers_through': None,
+        'title_locked': False,
+        'manual_end': False,
+        'discarded': False,
+        'v3_rewrites': 0,
+        'v3_process_attempts': 0,
+        'v3_process_fingerprint': None,
+        'v3_process_failed': False,
+        'v3_process_failure_reason': None,
+        'v3_notes_written': False,
+    }
+
+
+def load_derive(uid, *, since, until, run_id, rederive=False, firestore_client=None):
+    """One planned backfill partition: legacy donors, this run's converted donors and derived rows.
+
+    The operator plans partitions at five-minute silence gaps, so a stretch never spans two loads.
+    Overflow is a blocked partition, never a partial conversion. Unreadable or private legacy rows
+    stay ordinary visible conversations.
+    """
     client = firestore_client or get_firestore_client()
     if account_deletion_blocks_user_work(uid, firestore_client=client):
         raise Conflict('account_deletion')
-    start = datetime.now(timezone.utc) - timedelta(days=30)
-    # Query by time alone, then classify sources. Overflow is a blocked backfill,
-    # never a claim that a partial 30-day history was converted.
     snapshots = list(
-        user_conversations(client, uid).where(filter=FieldFilter('started_at', '>=', start)).limit(LIMIT + 1).stream()
+        user_conversations(client, uid)
+        .where(filter=FieldFilter('started_at', '>=', since))
+        .where(filter=FieldFilter('started_at', '<', until))
+        .order_by('started_at')
+        .limit(LIMIT + 1)
+        .stream()
     )
     if len(snapshots) > LIMIT:
-        raise Conflict('backfill_window_budget; partition the operator job before enabling')
-    rows = {}
+        raise Conflict('backfill_partition_budget')
+
+    def ours(raw):
+        return bool(raw.get('v3_backfill_run')) and (rederive or raw.get('v3_backfill_run') == run_id)
+
+    recordings, existing = {}, {}
     for snapshot in snapshots:
-        row = decode_row(uid, snapshot)
-        if (
-            row
-            and row.get('source') in {'omi', 'phone'}
-            and row.get('status') == 'completed'
-            and not any(row.get(k) for k in ('recording', 'v3_derived', 'deleted', 'sync_merged_into', 'is_locked'))
-        ):
-            rows[row['id']] = {**row, 'recording': True, '_v3_derive': True}
-    return rows, {}, []
+        raw = snapshot.to_dict() or {}
+        if raw.get('deleted'):
+            continue
+        if backfill_legacy_source(raw) and not rederive:
+            row = recording_input(uid, snapshot)
+            if row is None or row.get('_v3_unreadable'):
+                continue
+            recordings[snapshot.id] = {
+                **row,
+                'recording': True,
+                '_v3_derive': True,
+                '_v3_backfill_run': run_id,
+                '_v3_backfill_prior': {k: raw[k] for k in BACKFILL_TRACKED if k in raw},
+                **({'v3_manual_end': True} if legacy_manual_end(raw) else {}),
+            }
+        elif raw.get('recording') and not raw.get('v3_derived') and ours(raw):
+            # A donor this run (or, re-deriving, any run) already converted: resume or rebuild it.
+            row = recording_input(uid, snapshot)
+            if row is None or row.get('_v3_unreadable'):
+                continue
+            recordings[snapshot.id] = {
+                **row,
+                '_v3_derive': True,
+                '_v3_backfill_run': raw['v3_backfill_run'],
+                **({'v3_manual_end': True} if legacy_manual_end(raw) else {}),
+            }
+        elif raw.get('v3_derived') and raw.get('backfilled') and ours(raw):
+            row = decode_row(uid, snapshot)
+            if row:
+                existing[row['id']] = _rederive_prior(row) if rederive else row
+    state = leases.lease_ref(client, uid, BACKFILL_LEASE).get().to_dict() or {}
+    cache = json.loads(decrypt(state['outline_cache'], uid)) if state.get('outline_cache') else []
+    return recordings, existing, cache
+
+
+def backfill_window_metadata(uid, since, until, *, firestore_client=None):
+    """Metadata only (no transcript decode) for planning an owner's window; refuses a truncated read."""
+    client = firestore_client or get_firestore_client()
+    snapshots = list(
+        user_conversations(client, uid)
+        .where(filter=FieldFilter('started_at', '>=', since))
+        .where(filter=FieldFilter('started_at', '<', until))
+        .order_by('started_at')
+        .select(
+            [
+                'source',
+                'status',
+                'started_at',
+                'finished_at',
+                'recording',
+                'v3_derived',
+                'backfilled',
+                'deleted',
+                'discarded',
+                'imported',
+                'sync_merged_into',
+                'is_locked',
+                'data_protection_level',
+                'v3_backfill_run',
+            ]
+        )
+        .limit(BACKFILL_WINDOW_MAX + 1)
+        .stream()
+    )
+    if len(snapshots) > BACKFILL_WINDOW_MAX:
+        raise Conflict('backfill_window_budget')
+    return [{**(snapshot.to_dict() or {}), 'id': snapshot.id} for snapshot in snapshots]
+
+
+def pending_backfill_processing(uid, *, firestore_client=None):
+    """Backfilled rows whose notes are owed; the live sweep and live drain never read this marker."""
+    client = firestore_client or get_firestore_client()
+    return [
+        decode_row(uid, doc)
+        for doc in user_conversations(client, uid)
+        .where(filter=FieldFilter('v3_backfill_process_pending', '==', True))
+        .limit(LIMIT)
+        .stream()
+    ]
+
+
+def backfill_run_documents(uid, run_id, *, firestore_client=None):
+    """Every document one backfill run stamped: converted donors and derived rows (ids and flags only)."""
+    client = firestore_client or get_firestore_client()
+    query = (
+        user_conversations(client, uid)
+        .where(filter=FieldFilter('v3_backfill_run', '==', run_id))
+        .select(['v3_derived', 'backfilled', 'recording'])
+    )
+    return [{**(doc.to_dict() or {}), 'id': doc.id} for doc in query.stream()]
+
+
+def restore_backfill_donors(uid, token, ids, *, firestore_client=None):
+    """Undo one page of donors exactly: every tracked field returns to its pre-backfill value."""
+    client = firestore_client or get_firestore_client()
+    coll = user_conversations(client, uid)
+    held = leases.lease_ref(client, uid, BACKFILL_LEASE)
+
+    @firestore.transactional
+    def restore(tx):
+        lease = held.get(transaction=tx).to_dict() or {}
+        snapshots = [(coll.document(cid), coll.document(cid).get(transaction=tx)) for cid in ids]
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+            raise Conflict('lease_lost')
+        restored = 0
+        for ref, snapshot in snapshots:
+            row = snapshot.to_dict() or {}
+            if not snapshot.exists or row.get('v3_derived') or not row.get('v3_backfill_run'):
+                continue
+            prior = row.get('v3_backfill_prior')
+            if not isinstance(prior, dict):
+                raise Conflict('backfill_prior_missing')
+            patch = {k: prior[k] if k in prior else firestore.DELETE_FIELD for k in BACKFILL_TRACKED}
+            patch.update(v3_backfill_run=firestore.DELETE_FIELD, v3_backfill_prior=firestore.DELETE_FIELD)
+            tx.update(ref, patch)
+            restored += 1
+        return restored
+
+    return restore(client.transaction())
+
+
+def delete_backfill_rows(uid, token, ids, *, firestore_client=None):
+    """Remove one page of backfill-derived rows. No tombstone: they were never the user's conversations."""
+    client = firestore_client or get_firestore_client()
+    coll = user_conversations(client, uid)
+    held = leases.lease_ref(client, uid, BACKFILL_LEASE)
+
+    @firestore.transactional
+    def remove(tx):
+        lease = held.get(transaction=tx).to_dict() or {}
+        snapshots = [(coll.document(cid), coll.document(cid).get(transaction=tx)) for cid in ids]
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+            raise Conflict('lease_lost')
+        removed = 0
+        for ref, snapshot in snapshots:
+            row = snapshot.to_dict() or {}
+            if snapshot.exists and row.get('v3_derived') and row.get('backfilled') and row.get('v3_backfill_run'):
+                tx.delete(ref)
+                removed += 1
+        return removed
+
+    return remove(client.transaction())
 
 
 def claim_audio_purge(uid, rid, *, firestore_client=None):
@@ -631,6 +881,7 @@ def claim_audio_purge(uid, rid, *, firestore_client=None):
         if (
             not row.get('recording')
             or not row.get('v3_audio_purge_pending')
+            or row.get('v3_backfill_run')
             or row.get('claims')
             or row.get('v3_pending')
             or row.get('status') != 'completed'
@@ -682,9 +933,9 @@ def transfer_claims(uid, sources, target, *, firestore_client=None):
     transfer(client.transaction())
 
 
-def outline_attempt(uid, token, fingerprint, *, firestore_client=None):
+def outline_attempt(uid, token, fingerprint, *, key='builder', firestore_client=None):
     client = firestore_client or get_firestore_client()
-    ref = leases.lease_ref(client, uid, 'builder')
+    ref = leases.lease_ref(client, uid, key)
 
     @firestore.transactional
     def begin(tx):
