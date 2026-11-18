@@ -27,6 +27,21 @@ def mark_new(uid, row):
         _mark_resolved(uid, row)
 
 
+def committed_sync_assignment(uid, assigned):
+    """Wake reconcile for a recording a batch projection created or appended to. Post-commit, never raises.
+
+    The assignment and its receipt are durable, so a failure must not replay the unit. A created
+    recording is already stored v3_pending (``mark_new``) and the sweep finds it; a failed wake after an
+    append waits for the owner's next change.
+    """
+    if not assigned.get('recording'):
+        return
+    try:
+        changed(uid, assigned['id'])
+    except Exception as error:
+        logger.warning('event=batch_projection action=v3_wake outcome=error exception_type=%s', type(error).__name__)
+
+
 @set_data_protection_level(data_arg_name='row')
 def _mark_resolved(uid, row):
     if row.get('data_protection_level') != 'private':
