@@ -95,7 +95,8 @@ def plan_owner(uid: str, label: str, since: datetime, until: datetime, mode: str
 
 
 def active_runs(uid: str) -> list[dict]:
-    return [r for r in runs.list_runs(uid) if r.get('status') not in runs.FINISHED]
+    # A blocked run is still resumable: resume or undo it before planning another over the same rows.
+    return [r for r in runs.list_runs(uid) if r.get('status') not in runs.FINISHED - {'blocked'}]
 
 
 def wait_for(uid: str, label: str, run_id: str, minutes: int) -> str:
@@ -133,7 +134,9 @@ def cmd_run(args) -> int:
     for number, uid in enumerate(owners, 1):
         label = f'owner[{number}]'
         if active_runs(uid):
-            print(f'{label} skipped: a run is already planned or running (see status)')
+            print(
+                f'{label} skipped: a run is planned, running, blocked or undoing; resume or undo it first (see status)'
+            )
             continue
         counts, partitions, estimate = plan_owner(uid, label, since, until, args.mode)
         if args.dry_run:
@@ -193,12 +196,12 @@ def cmd_status(args) -> int:
 
 
 def cmd_undo(args) -> int:
-    status = 0
+    status, found = 0, False
     for number, uid in enumerate(read_owners(args.owners_file), 1):
         label = f'owner[{number}]'
         if runs.get_run(uid, args.run) is None:
-            print(f'{label} run={args.run} not found')
             continue
+        found = True
         docs = store.backfill_run_documents(uid, args.run)
         show(
             label + ' undo scope',
@@ -213,17 +216,24 @@ def cmd_undo(args) -> int:
         result = backfill.undo_run(uid, args.run)
         show(label + ' undo', result)
         status |= result.get('outcome') != 'undone'
+    if not found:
+        print(f'run={args.run} not found for any listed owner')
+        return 1
     return status
 
 
 def cmd_resume(args) -> int:
-    status = 0
+    status, found = 0, False
     for number, uid in enumerate(read_owners(args.owners_file), 1):
         if runs.get_run(uid, args.run) is None:
             continue
+        found = True
         result = backfill.resume_run(uid, args.run)
         show(f'owner[{number}] resume', {'run': args.run, **result})
         status |= result.get('outcome') != 'resumed'
+    if not found:
+        print(f'run={args.run} not found for any listed owner')
+        return 1
     return status
 
 

@@ -87,7 +87,7 @@
       "reads_per_unit_budget": 21,
       "reads_per_day_budget": 6100,
       "basis": "planning-bound",
-      "source": "backend/utils/conversations/v3/backfill.py start_planned: one bounded list (at most 20 start markers) per five-minute sweep, 288 ticks per day; the collection is empty except between an operator plan and the next tick.",
+      "source": "backend/utils/conversations/v3/backfill.py start_planned: one bounded collection-group list (at most 20 start markers under users/{uid}) per five-minute sweep, 288 ticks per day; the collection is empty except between an operator plan and the next tick.",
       "reviewed": "2026-11-18"
     }
   ],

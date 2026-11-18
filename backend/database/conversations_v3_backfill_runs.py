@@ -84,22 +84,28 @@ def update_run(uid, run_id, *, status=None, partition=None, patch=None, expect=N
 
 
 # Start markers: a planned run's handoff from the operator to the sweep. The operator tier writes
-# Firestore but cannot create Cloud Tasks, so the service's own sweep dispatches the first step.
+# Firestore but cannot create Cloud Tasks, so the service's own sweep dispatches the first step. They
+# live under users/{uid}, so account deletion's recursive purge removes them with the owner's data.
 STARTS = 'conversations_v3_backfill_starts'
+
+
+def _starts(client, uid):
+    return client.collection('users').document(uid).collection(STARTS)
 
 
 def mark_start(uid, run_id, *, firestore_client=None):
     client = firestore_client or get_firestore_client()
-    client.collection(STARTS).document(run_id).set(
-        {'uid': uid, 'run_id': run_id, 'created_at': datetime.now(timezone.utc)}
-    )
+    _starts(client, uid).document(run_id).set({'run_id': run_id, 'created_at': datetime.now(timezone.utc)})
 
 
 def pending_starts(limit, *, firestore_client=None):
     client = firestore_client or get_firestore_client()
-    return [doc.to_dict() or {} for doc in client.collection(STARTS).limit(limit).stream()]
+    return [
+        {'uid': doc.reference.parent.parent.id, 'run_id': doc.id}
+        for doc in client.collection_group(STARTS).limit(limit).stream()
+    ]
 
 
-def clear_start(run_id, *, firestore_client=None):
+def clear_start(uid, run_id, *, firestore_client=None):
     client = firestore_client or get_firestore_client()
-    client.collection(STARTS).document(run_id).delete()
+    _starts(client, uid).document(run_id).delete()

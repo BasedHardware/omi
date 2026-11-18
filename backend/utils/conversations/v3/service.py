@@ -47,6 +47,7 @@ BLOCKED = frozenset(
         'document_too_large',
         'backfill_partition_budget',
         'remove_not_backfilled',
+        'rederive_mixed_runs',
     }
 )
 
@@ -103,14 +104,15 @@ def _match(window, existing, used):
     return min(candidates, key=lambda r: r['started_at']) if candidates else None
 
 
-def _backfill_run(window, recordings):
-    """The backfill run whose donors contributed this window (live builder passes included)."""
+def _backfill_runs(window, recordings):
+    """The backfill runs whose donors contributed this window (live builder passes included), in line order."""
+    found = []
     for line in window['lines']:
         source = recordings.get(line['conversation_id']) or {}
         run = source.get('_v3_backfill_run') or source.get('v3_backfill_run')
-        if run:
-            return run
-    return None
+        if run and run not in found:
+            found.append(run)
+    return found
 
 
 async def reconcile(
@@ -248,7 +250,11 @@ async def reconcile(
                 if prior:
                     used.add(prior['id'])
                 row = planner.build(uid, window, recordings, prior)
-                run = _backfill_run(window, recordings)
+                contributing = _backfill_runs(window, recordings)
+                if derive and len(contributing) > 1:
+                    # Undo is scoped to one run; a re-derive never merges rows that different runs own.
+                    raise Conflict('rederive_mixed_runs')
+                run = contributing[0] if contributing else None
                 if derive or run:
                     # Historical windows never fan out (policy.created_eligible) and take no derived
                     # effects; a live pass over an interrupted backfill's donors keeps the stamp.
@@ -349,6 +355,14 @@ async def reconcile(
             existing.update(adopted)
             rows = await plan()
         planned = {row['id'] for row in rows}
+        unclaimed = []
+        if derive:
+            # A legacy row no window claims (no usable lines after duplicate and deleted-span removal)
+            # stays a visible legacy conversation: converting it would hide it with no replacement.
+            claimed = {rid for row in rows for rid in row.get('v3_recording_ids') or []}
+            unclaimed = [rid for rid, r in recordings.items() if '_v3_backfill_prior' in r and rid not in claimed]
+            for rid in unclaimed:
+                recordings.pop(rid)
         # A re-derive reuses prior ids; a prior copy no rebuilt window claims is retired with the commit.
         remove = [cid for cid in existing if cid not in planned] if derive and rederive else []
         await run_blocking(db_executor, leases.renew, uid, key, token)
@@ -370,6 +384,7 @@ async def reconcile(
             windows=len(rows),
             rows_new=sum(1 for row in rows if row['id'] not in existing),
             rows_removed=len(remove),
+            sources_unclaimed=len(unclaimed),
             notes_queued=sum(1 for row in rows if row.get('v3_backfill_process_pending')),
             home_visible=sum(1 for row in rows if not row.get('home_hidden')),
         )

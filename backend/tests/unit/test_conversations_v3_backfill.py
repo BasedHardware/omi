@@ -194,6 +194,36 @@ async def test_rederive_retires_prior_copies_no_new_window_claims(builder, monke
     assert seen['remove'] == ['stale'] and seen['key'] == store.BACKFILL_LEASE
 
 
+@pytest.mark.asyncio
+async def test_a_donor_no_window_claims_stays_a_visible_legacy_row(builder, monkeypatch, no_evidence):
+    empty = {**legacy('empty', AT + timedelta(hours=2), 0), 'transcript_segments': []}
+    sources = {'a': as_derive(legacy('a', AT, 400)), 'empty': as_derive(empty)}
+    monkeypatch.setattr(store, 'load_derive', lambda *a, **kw: (sources, {}, []))
+    monkeypatch.setattr(service.models, 'outline', lambda *a: SCENARIOS['long_visible'][1])
+    seen = {}
+    monkeypatch.setattr(service, '_commit', lambda uid, token, recordings, *a, **kw: seen.update(recordings))
+    report = {}
+    outcome = await service.reconcile(
+        'u', derive=True, since=AT, until=AT + timedelta(days=1), run_id=RUN, report=report
+    )
+    # Converting 'empty' would hide it as a recording with no derived row to replace it.
+    assert outcome == 'committed' and set(seen) == {'a'} and report['sources_unclaimed'] == 1
+
+
+@pytest.mark.asyncio
+async def test_rederive_never_merges_rows_owned_by_different_runs(builder, monkeypatch, no_evidence):
+    a = as_derive(legacy('a', AT, 200))
+    b = {**as_derive(legacy('b', AT + timedelta(minutes=2), 200)), '_v3_backfill_run': 'run-2'}
+    monkeypatch.setattr(store, 'load_derive', lambda *a_, **kw: ({'a': a, 'b': b}, {}, []))
+    monkeypatch.setattr(service.models, 'outline', lambda *a_: SCENARIOS['resumes_within_silence_joins'][1])
+    monkeypatch.setattr(service, '_commit', lambda *a_, **kw: pytest.fail('committed a mixed-run window'))
+    report = {}
+    outcome = await service.reconcile(
+        'u', derive=True, since=AT, until=AT + timedelta(days=1), run_id=RUN, rederive=True, report=report
+    )
+    assert outcome == 'blocked' and report['blocked_reason'] == 'rederive_mixed_runs'
+
+
 def test_backfilled_rows_take_the_live_trigger_and_floor(monkeypatch):
     from utils.conversations import lifecycle, process_conversation as process
 
@@ -278,9 +308,30 @@ def test_window_classification_counts_what_stays_legacy():
         {'source': 'omi', 'status': 'completed', 'started_at': AT, 'v3_backfill_run': RUN, 'recording': True},
     ]
     counts = backfill.classify_window(rows)
-    assert counts['legacy_donors'] == 1
+    assert counts['legacy_candidates'] == 1
     assert counts['skipped_private'] == 1 and counts['skipped_discarded'] == 1
     assert counts['skipped_other_source'] == 1 and counts['live_v3'] == 1 and counts['already_backfilled'] == 1
+
+
+def test_estimate_prices_each_stretch_on_the_live_notes_floors(monkeypatch):
+    gap = timedelta(minutes=10)
+    sources = {
+        cid: as_derive(legacy(cid, AT + i * gap, words))
+        for i, (cid, words) in enumerate([('agent', 1600), ('notes', 400), ('tasks', 50), ('none', 5)])
+    }
+    monkeypatch.setattr(store, 'load_derive', lambda *a, **kw: (sources, {}, []))
+    est = backfill.estimate_partition(
+        'u', {'since': AT, 'until': AT + timedelta(days=1)}, RUN, now=AT + timedelta(days=2)
+    )
+    assert est['stretches'] == est['outline_calls'] == 4 and est['words'] == 2055
+    assert (est['notes_calls'], est['agent_notes'], est['short_task_calls'], est['no_model_windows']) == (2, 1, 1, 1)
+
+    def usd(tokens_in, tokens_out):
+        return tokens_in * 0.10 / 1e6 + tokens_out * 0.60 / 1e6
+
+    expected = sum(usd(1100 + w * 1.4, 350) for w in (1600, 400, 50, 5))
+    expected += 0.02 + usd(5000 + 400 * 1.4, 1500) + usd(1500 + 50 * 1.4, 250)
+    assert est['usd'] == pytest.approx(expected)
 
 
 # ---- loader ---------------------------------------------------------------------------------
@@ -615,6 +666,32 @@ async def test_a_redelivered_step_after_commit_only_drains(chain, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_a_redelivered_committed_partition_redispatches_a_lost_successor(chain, monkeypatch):
+    ledger, steps = chain
+    ledger.run['status'] = 'running'
+    ledger.run['partitions'][0]['status'] = 'committed'
+    monkeypatch.setattr(service, 'reconcile', AsyncMock(side_effect=AssertionError('derived twice')))
+    assert (await backfill.run_step('u', RUN, 0, 'derive'))['outcome'] == 'committed'
+    assert steps == [(1, 'derive', 0)]
+    ledger.run['partitions'][1]['status'] = 'notes'
+    await backfill.run_step('u', RUN, 0, 'derive')
+    assert steps == [(1, 'derive', 0)]
+
+
+@pytest.mark.asyncio
+async def test_a_drain_stopped_by_undo_reports_stopped_and_enqueues_nothing(chain, monkeypatch):
+    ledger, steps = chain
+    ledger.run['partitions'][0]['status'] = 'notes'
+
+    async def drain(uid, **kw):
+        ledger.run['status'] = 'undoing'
+        return {'processed': 1, 'failed': 0, 'remaining': 5}
+
+    monkeypatch.setattr(service, 'drain_backfill', drain)
+    assert (await backfill.run_step('u', RUN, 0, 'drain'))['outcome'] == 'stopped' and not steps
+
+
+@pytest.mark.asyncio
 async def test_unfinished_notes_continue_on_a_new_named_drain_task(chain, monkeypatch):
     ledger, steps = chain
     ledger.run['partitions'][0]['status'] = 'notes'
@@ -655,7 +732,7 @@ async def test_sweep_start_is_inert_while_the_switch_is_off(direct, monkeypatch)
     monkeypatch.setattr(runs, 'pending_starts', lambda *a: [{'uid': 'u', 'run_id': RUN}])
     monkeypatch.setattr(runs, 'get_run', Ledger(1).get)
     cleared, steps = [], []
-    monkeypatch.setattr(runs, 'clear_start', cleared.append)
+    monkeypatch.setattr(runs, 'clear_start', lambda uid, run_id: cleared.append(run_id))
     monkeypatch.setattr(backfill, 'enqueue_step', lambda *a: steps.append(a))
     assert await backfill.start_planned() == 1 and steps == [('u', RUN, 0, 'derive', 0, 0)] and cleared == [RUN]
 
@@ -691,7 +768,8 @@ def test_undo_restores_donors_before_removing_copies_and_waits_for_notes(monkeyp
     monkeypatch.setattr(store, 'backfill_run_documents', lambda *a, **kw: docs)
     monkeypatch.setattr(leases, 'held', lambda *a, **kw: True)
     assert backfill.undo_run('u', RUN) == {'outcome': 'busy', 'reason': 'notes_in_flight'}
-    assert ledger.run['status'] == 'undoing'
+    # The refusal is recorded; 'undoing' stays so in-flight drains stop, and rerunning undo finishes it.
+    assert ledger.run['status'] == 'undoing' and ledger.run['undo']['reason'] == 'notes_in_flight'
     monkeypatch.setattr(leases, 'held', lambda *a, **kw: False)
     monkeypatch.setattr(leases, 'acquire', lambda *a, **kw: 'token')
     monkeypatch.setattr(leases, 'renew', lambda *a, **kw: None)
@@ -758,3 +836,57 @@ def test_owner_file_rejects_paths_and_duplicates(tmp_path):
     bad.write_text('users/a\n')
     with pytest.raises(SystemExit):
         script.read_owners(str(bad))
+
+
+def test_start_markers_live_under_the_owner_so_account_deletion_purges_them():
+    written, deleted = [], []
+
+    class Ref:
+        def __init__(self, path):
+            self.path = path
+
+        def collection(self, name):
+            return Ref(self.path + [name])
+
+        def document(self, name):
+            return Ref(self.path + [name])
+
+        def set(self, data):
+            written.append((self.path, data))
+
+        def delete(self):
+            deleted.append(self.path)
+
+    doc = SimpleNamespace(id=RUN, reference=SimpleNamespace(parent=SimpleNamespace(parent=SimpleNamespace(id='u'))))
+    client = SimpleNamespace(
+        collection=lambda name: Ref([name]),
+        collection_group=lambda name: SimpleNamespace(
+            limit=lambda n: SimpleNamespace(stream=lambda: [doc] if name == runs.STARTS else [])
+        ),
+    )
+    runs.mark_start('u', RUN, firestore_client=client)
+    assert written[0][0] == ['users', 'u', runs.STARTS, RUN] and 'uid' not in written[0][1]
+    assert runs.pending_starts(20, firestore_client=client) == [{'uid': 'u', 'run_id': RUN}]
+    runs.clear_start('u', RUN, firestore_client=client)
+    assert deleted == [['users', 'u', runs.STARTS, RUN]]
+
+
+def test_operator_refuses_a_new_run_while_one_is_blocked(tmp_path, monkeypatch, capsys):
+    from scripts import conversations_v3_backfill as script
+
+    owners = tmp_path / 'owners.txt'
+    owners.write_text('synthetic-owner\n')
+    monkeypatch.setattr(runs, 'list_runs', lambda uid: [{'run_id': RUN, 'status': 'blocked'}])
+    monkeypatch.setattr(store, 'backfill_window_metadata', lambda *a: pytest.fail('planned over a blocked run'))
+    assert script.main(['run', '--owners-file', str(owners), '--dry-run']) == 0
+    assert 'resume or undo it first' in capsys.readouterr().out
+
+
+def test_undo_and_resume_fail_when_no_owner_has_the_run(tmp_path, monkeypatch):
+    from scripts import conversations_v3_backfill as script
+
+    owners = tmp_path / 'owners.txt'
+    owners.write_text('synthetic-owner\n')
+    monkeypatch.setattr(runs, 'get_run', lambda *a, **kw: None)
+    assert script.main(['undo', '--owners-file', str(owners), '--run', RUN, '--dry-run']) == 1
+    assert script.main(['resume', '--owners-file', str(owners), '--run', RUN]) == 1

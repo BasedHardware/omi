@@ -97,11 +97,15 @@ def plan_partitions(meta, since, until, *, max_rows=PARTITION_ROWS):
     return planned or [{'since': since, 'until': until, 'documents': 0, 'forced_cut': False, 'status': 'pending'}]
 
 
-def classify_window(meta, run_id=None):
-    """Counts for the operator: legacy donors and what stays legacy, with the reason."""
+def classify_window(meta):
+    """Counts for the operator: legacy candidates and what stays legacy, with the reason.
+
+    Metadata carries no transcript, so a candidate whose transcript is unreadable (or that no window
+    claims) is only found by the builder; the estimate's `sources` is the loaded donor count.
+    """
     counts = {
         'documents': len(meta),
-        'legacy_donors': 0,
+        'legacy_candidates': 0,
         'skipped_private': 0,
         'skipped_discarded': 0,
         'skipped_imported': 0,
@@ -128,7 +132,7 @@ def classify_window(meta, run_id=None):
         elif raw.get('is_locked'):
             counts['skipped_locked'] += 1
         elif store.backfill_legacy_source(raw):
-            counts['legacy_donors'] += 1
+            counts['legacy_candidates'] += 1
     return counts
 
 
@@ -276,7 +280,7 @@ async def start_planned():
                 gen = int(run.get('resumes') or 0)
                 await run_blocking(db_executor, enqueue_step, uid, run_id, index, 'derive', 0, gen)
                 started += 1
-            await run_blocking(db_executor, runs.clear_start, run_id)
+            await run_blocking(db_executor, runs.clear_start, uid, run_id)
         except Exception as error:
             # The marker stays for the next sweep; a backfill dispatch fault never fails the live sweep.
             logger.warning('event=v3_backfill_start outcome=retry exception_type=%s', type(error).__name__)
@@ -341,6 +345,13 @@ async def run_step(uid, run_id, index, phase):
             expect=active,
         )
         part = {**part, 'status': 'notes'}
+    if part.get('status') == 'committed' and run.get('status') in active:
+        # Redelivery after the commit: the successor's dispatch may have failed. Its name is fixed, so
+        # dispatching again is a no-op when it already went out.
+        successor = next_partition(run)
+        if successor is not None and partitions[successor].get('status') == 'pending':
+            await run_blocking(db_executor, enqueue_step, uid, run_id, successor, 'derive', 0, gen)
+        return {'outcome': 'committed', 'redelivered': True}
     if part.get('status') != 'notes':
         return {'outcome': part.get('status')}
 
@@ -356,7 +367,7 @@ async def run_step(uid, run_id, index, phase):
     }
     if drained['remaining']:
         seq = int(part.get('drain_seq') or 0) + 1
-        if await run_blocking(
+        if not await run_blocking(
             db_executor,
             runs.update_run,
             uid,
@@ -364,7 +375,8 @@ async def run_step(uid, run_id, index, phase):
             partition=(index, {**fields, 'drain_seq': seq}),
             expect=active,
         ):
-            await run_blocking(db_executor, enqueue_step, uid, run_id, index, 'drain', seq, gen)
+            return {'outcome': 'stopped', 'remaining': drained['remaining']}
+        await run_blocking(db_executor, enqueue_step, uid, run_id, index, 'drain', seq, gen)
         return {'outcome': 'draining', 'remaining': drained['remaining']}
     last = index + 1 >= len(partitions)
     if await run_blocking(
@@ -379,6 +391,16 @@ async def run_step(uid, run_id, index, phase):
         if not last:
             await run_blocking(db_executor, enqueue_step, uid, run_id, index + 1, 'derive', 0, gen)
     return {'outcome': 'committed', 'last': last}
+
+
+def _undo_refused(uid, run_id, reason, firestore_client):
+    runs.update_run(
+        uid,
+        run_id,
+        patch={'undo': {'outcome': 'busy', 'reason': reason, 'at': datetime.now(timezone.utc)}},
+        firestore_client=firestore_client,
+    )
+    return {'outcome': 'busy', 'reason': reason}
 
 
 def undo_run(uid, run_id, *, firestore_client=None):
@@ -398,11 +420,12 @@ def undo_run(uid, run_id, *, firestore_client=None):
     docs = store.backfill_run_documents(uid, run_id, firestore_client=firestore_client)
     derived = [d['id'] for d in docs if d.get('v3_derived')]
     donors = [d['id'] for d in docs if not d.get('v3_derived')]
+    # 'undoing' is written first so in-flight drains stop (keep_going); a refusal records why.
     if any(leases.held(uid, 'summary-' + cid, firestore_client=firestore_client) for cid in derived):
-        return {'outcome': 'busy', 'reason': 'notes_in_flight'}
+        return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client)
     token = leases.acquire(uid, store.BACKFILL_LEASE, firestore_client=firestore_client)
     if token is None:
-        return {'outcome': 'busy', 'reason': 'backfill_pass_in_flight'}
+        return _undo_refused(uid, run_id, 'backfill_pass_in_flight', firestore_client)
     restored = removed = 0
     try:
         for start in range(0, len(donors), store.BACKFILL_UNDO_PAGE):

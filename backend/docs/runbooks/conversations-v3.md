@@ -171,18 +171,23 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --m
 
 - **Plan.** The window is cut into partitions of at most 48 documents. Each cut is at a recorded gap
   of five minutes or more, the live hard boundary, so no live stretch spans two partitions. A gap-free
-  run over the cap is cut at its largest gap, and the plan reports it as `forced_cuts`. The dry-run
+  run over the cap is cut at its largest gap, and the plan reports it as `forced_cuts`. Gaps come from
+  row `started_at`/`finished_at`; a legacy row whose late text never moved `finished_at` can show a
+  gap the live speech-level cut would not, so rarely one live stretch is split at a partition edge.
+  `legacy_candidates` counts rows by metadata; the estimate's `sources` is the loaded count. The dry-run
   loads every partition as the builder will and prices it: one outline per stretch, plus notes or
   task-only calls by word count, at the gateway Luna card. The windows are known only after the
   outline, so treat the estimate as a planning number. Gateway usage has the actual spend.
 - **Run.** The script writes `users/{uid}/conversations_v3_backfill_runs/{run_id}`: operator,
   window, planned and served code SHA, per-partition counts and outcome, and no content. It also
-  writes a start marker in `conversations_v3_backfill_starts`. The five-minute sweep starts the run
+  writes a start marker in `users/{uid}/conversations_v3_backfill_starts` (account deletion purges
+  it with the owner's data). The five-minute sweep starts the run
   when the switch is on. Each partition then runs as one task on the `conversations-v3-backfill`
   queue, one dispatch at a time: an outline pass under its own `backfill-builder` lease (never the
   live builder's), then notes through the live `_process` until a 20-minute step deadline. Notes for
   historical rows use their own `v3_backfill_process_pending` marker, so the live sweep and the live
-  queue never pick them up. Owners run one after another.
+  queue never pick them up. Owners run one after another. A new run is refused while the owner has a
+  planned, running, blocked or undoing run: resume or undo it first.
 - **Accuracy.** Derive uses the live stretches (five-minute silence, manual cuts, duplicate-capture
   removal), outline prompt and model, planner, visibility rules, the `CAPTURE_END` notes trigger
   (relevance, speaker resolution, meeting context, media/short-clip floors), the notes models,
@@ -195,14 +200,18 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --m
   `v3_backfill_run`. Its `structured` notes and summary are kept, and the original values of every
   field the conversion touches are kept in `v3_backfill_prior`. Derived rows carry `backfilled=True`
   and `v3_backfill_run`. Home shows the v3 rows and not the legacy ones, so there are no duplicate
-  cards. Legacy rows that are private, discarded, imported, locked or unreadable stay as they are.
+  cards. Legacy rows that are private, discarded, imported, locked or unreadable stay as they are,
+  and so does a row no window claims (no usable lines after duplicate-capture and deleted-span
+  removal); the ledger counts those as `sources_unclaimed`.
   Deleting a backfilled row never arms the donor's audio purge.
 - **Resume, re-derive and undo.** A redelivered or resumed partition loads its own run's donors and
   derived rows and plans over them (adoption, not delete and recreate). `--mode rederive` rebuilds
   rows that were already backfilled in the window after a pipeline fix. It reuses each row's id,
   re-runs outline (when its inputs changed) and notes, and retires copies that no rebuilt window
-  claims. Edits made to backfilled copies are not kept. `undo --run` refuses while a backfill step or
-  notes write for the owner is in flight. Otherwise it restores every donor field exactly, then
+  claims. A window that would merge rows from two different runs blocks with `rederive_mixed_runs`,
+  so undo stays scoped to one run. Edits made to backfilled copies are not kept. `undo --run` refuses while a backfill step or
+  notes write for the owner is in flight, and records the refusal in the ledger (`undo.reason`); rerun
+  it. `undo` and `resume` exit 1 when no listed owner has the run. Otherwise it restores every donor field exactly, then
   deletes the run's derived rows. It writes no tombstones and touches no audio. Undo a re-derive by
   undoing the original run. Not undone: outline cache entries, speaker-resolution and media-boundary
   evidence that the notes path wrote, and gateway spend.
