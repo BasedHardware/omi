@@ -59,6 +59,8 @@ borrowedNodePools:
 worker:
   RECORD_FRESH_MERGE_ENABLED: false
   # Staged OFF until every merge writer runs the sibling guard.
+  # Stale-head merge skip canary (#25673): same canary uid as backend-integration; inert until the image reads it.
+  mergeStaleHeadUidAllowlist: viUv7GtdoHXbK1UBCDlPuTDuPgJ2
   heldDeadLetterEnabled: true
   inputExpiringEnabled: true
   # Two pump processes share each L4 (cl2-gpueff 2026-11-04, data/run-2026-11-04-gpueff

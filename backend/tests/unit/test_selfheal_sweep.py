@@ -996,3 +996,114 @@ def test_scan_uses_the_same_cutoff_as_recovery_admission():
     sweep.run_selfheal_tick(**kwargs)
     assert state['scan_calls'][0]['finished_before'] == NOW - sweep.STALE_AFTER
     assert state['finalization_calls'][0]['recovery_cutoff'] == state['scan_calls'][0]['finished_before']
+
+
+def _rotating(rows, *, refuse=frozenset(), max_scan=sweep.MAX_SCAN):
+    """A legacy heal sweep over a fixed collection, resuming like Firestore's start_after."""
+    state, kwargs = _harness(rows, mode='heal')
+    admitted = kwargs['request_finalization_fn']
+
+    def scan_fn(**options):
+        state['scan_calls'].append(options)
+        path = options['resume_after_path']
+        start = next((i + 1 for i, row in enumerate(rows) if row['path'] == path), 0)
+        window = rows[start : start + max_scan]
+        exhausted = start + max_scan >= len(rows)
+        return {
+            'rows': window,
+            'scanned': len(window),
+            'exhausted': exhausted,
+            'resume_after_path': None if exhausted else window[-1]['path'],
+        }
+
+    def advance(generation, path, *, pending_verifications, **_options):
+        state['advances'].append(path)
+        state['cursor'].update(
+            generation=generation + 1, resume_after_path=path, pending_verifications=pending_verifications
+        )
+        return True
+
+    def request(uid, cid, **options):
+        if cid in refuse:
+            state['finalization_calls'].append({'uid': uid, 'conversation_id': cid, **options})
+            return {'created': False, 'route': 'noop', 'status': 'refused_not_quiet'}
+        return admitted(uid, cid, **options)
+
+    kwargs.update(scan_fn=scan_fn, cursor_advancer=advance, request_finalization_fn=request)
+    # Admitted jobs verify on the next tick, so capacity reflects only this tick.
+    kwargs['job_reader'] = lambda job_id, **_: None
+    return state, kwargs
+
+
+def test_admission_cap_resumes_at_the_first_unadmitted_eligible_row():
+    rows = [_row('u1', f'c{i:02d}', _eligible_data()) for i in range(12)]
+    state, kwargs = _rotating(rows)
+
+    first = sweep.run_selfheal_tick(**kwargs)
+    assert first['enqueued'] == sweep.MAX_HEAL_ADMISSIONS_PER_TICK
+    assert state['cursor']['resume_after_path'] == rows[9]['path']
+    second = sweep.run_selfheal_tick(**kwargs)
+
+    assert state['scan_calls'][1]['resume_after_path'] == rows[9]['path']
+    assert second['enqueued'] == 2
+    attempted = [call['conversation_id'] for call in state['finalization_calls']]
+    assert attempted == [row['conversation_id'] for row in rows]
+    assert state['cursor']['resume_after_path'] is None
+
+
+def test_eligible_cap_resumes_after_the_considered_window_in_the_legacy_scan():
+    # Refusals consume eligibility, not admissions: the eligible cap truncates.
+    rows = []
+    for i in range(30):
+        rows.append(_row('u1', f'c{i:02d}', _eligible_data()))
+        rows.append(_row('u1', f'desktop-{i:02d}', _eligible_data(source='desktop')))
+    refused = frozenset(f'c{i:02d}' for i in range(25))
+    state, kwargs = _rotating(rows, refuse=refused)
+
+    first = sweep.run_selfheal_tick(**kwargs)
+    assert first['enqueued'] == 0 and first['refused'] == 25
+    assert state['cursor']['resume_after_path'] == 'users/u1/conversations/c24'
+    second = sweep.run_selfheal_tick(**kwargs)
+
+    assert second['enqueued'] == 5
+    attempted = [call['conversation_id'] for call in state['finalization_calls']]
+    assert attempted == [f'c{i:02d}' for i in range(30)]
+
+
+def test_a_permanently_refused_prefix_is_passed_once_per_rotation():
+    rows = [_row('u1', f'r{i:02d}', _eligible_data()) for i in range(40)]
+    rows += [_row('u2', f'ok{i}', _eligible_data()) for i in range(5)]
+    refused = frozenset(row['conversation_id'] for row in rows[:40])
+    state, kwargs = _rotating(rows, refuse=refused)
+
+    ticks = 0
+    while ticks < 10:
+        ticks += 1
+        sweep.run_selfheal_tick(**kwargs)
+        if state['cursor']['resume_after_path'] is None:
+            break
+
+    assert ticks == 2
+    attempted = [call['conversation_id'] for call in state['finalization_calls']]
+    assert attempted == [row['conversation_id'] for row in rows]
+    # The cursor only moves forward within a rotation.
+    assert state['advances'] == ['users/u1/conversations/r24', None]
+
+
+def test_full_verification_capacity_keeps_the_cursor_on_unadmitted_rows():
+    rows = [_row('u1', f'c{i}', _eligible_data()) for i in range(3)]
+    state, kwargs = _rotating(rows, max_scan=2)
+    queued = {'status': 'queued', 'created_at': NOW}
+    kwargs['job_reader'] = lambda job_id, **_: queued
+    pending = [
+        {'uid': 'p', 'conversation_id': f'p{i}', 'job_id': f'job-p{i}', 'admitted_at': NOW}
+        for i in range(sweep.jobs_db.SELFHEAL_MAX_PENDING_VERIFICATIONS)
+    ]
+    state['cursor'].update(resume_after_path=None, pending_verifications=pending)
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['enqueued'] == 0
+    assert state['finalization_calls'] == []
+    assert state['advances'] == [None]
+    assert state['cursor']['resume_after_path'] is None

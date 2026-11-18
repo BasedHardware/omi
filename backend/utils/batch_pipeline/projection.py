@@ -32,9 +32,12 @@ from config.batch_pipeline import (
     silence_read_skip_enabled,
 )
 from config.record_latency import recent_native_record
+from database import batch_pipeline_projection_release as projection_release
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
+from database.batch_pipeline_projection_protocol import PROJECTION_HEAD_BLOCK_TYPE as PROJECTION_HEAD_BLOCK_TYPE
+from database.batch_pipeline_projection_protocol import PROJECTION_HEAD_BLOCKED_SINCE
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
@@ -176,11 +179,6 @@ def projection_block_reason(error: BaseException) -> str:
 # once a head has failed for this long it takes the held disposition so the
 # chain can advance (audio retained; a reviewed redrive owns the unit).
 PROJECTION_HEAD_RETRY_SECONDS = 24 * 3600.0
-
-# Result-row fields stamping a bounded-retry head's first failure. Written
-# once per failure episode; the release redrive clears them with the receipt.
-PROJECTION_HEAD_BLOCKED_SINCE = 'projection_blocked_since'
-PROJECTION_HEAD_BLOCK_TYPE = 'projection_block_type'
 
 
 def projection_exception_transient(error: BaseException) -> bool:
@@ -467,6 +465,8 @@ class Projector:
         self.handoff = threading.Lock()
         # Resume point of the held-partial scan; a short page wraps it.
         self.held_after: str | None = None
+        self._held_cursor_baseline: dict | None = None
+        self._held_sweep_lock = threading.Lock()
         # Upload dedupe of the held-partial pass in flight; spans budget stops
         # and wraps only when the scan's cursor does.
         self.held_pass_seen: set[tuple[str, str]] = set()
@@ -811,6 +811,42 @@ class Projector:
     def sweep_held(
         self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None
     ) -> dict[str, int]:
+        """Resume from the shared checkpoint, with local progress during read or write failures."""
+        with self._held_sweep_lock:
+            durable = projection_release.load_held_partial_cursor(self.store)
+            if durable is not None and durable != self._held_cursor_baseline:
+                # A first successful read of a missing document confirms the
+                # local scan started at the beginning. Keep any unsaved work.
+                if self._held_cursor_baseline is not None or durable:
+                    self.held_after = projection_release.cursor_after_id(durable)
+                    self.held_pass_seen.clear()
+                self._held_cursor_baseline = durable
+            counts = self._sweep_held_pages(limit, deadline=deadline, max_pages=max_pages)
+            counts['reads'] += 1  # The initial checkpoint lookup.
+
+            def record_cursor_read():
+                counts['reads'] += 1
+
+            confirmed = durable is not None
+            # A nonempty pass can scan from None back to None. Publish that
+            # wrap too, so a concurrent advance can fence out its completion.
+            wrapped_with_work = not counts['more'] and counts['units'] > 0
+            if durable is not None and (
+                self.held_after != projection_release.cursor_after_id(durable) or wrapped_with_work
+            ):
+                committed = projection_release.advance_held_partial_cursor(
+                    self.store, durable, self.held_after, self.clock(), record_read=record_cursor_read
+                )
+                confirmed = committed is not None
+                if committed is not None:
+                    self._held_cursor_baseline = committed
+            if not counts['more'] and not confirmed:
+                counts['wrap_unconfirmed'] = 1
+            return counts
+
+    def _sweep_held_pages(
+        self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None
+    ) -> dict[str, int]:
         """Pages of held units chained into one bounded pass; one partial attempt per upload.
 
         A ``deadline`` (a ``time.monotonic`` instant) or ``max_pages`` chains
@@ -943,23 +979,8 @@ class Projector:
 
     def _note_head_blocked(self, segment_id: str, error: BaseException) -> None:
         """Stamp a bounded-retry head's first failure time; one write per episode."""
-
-        def commit(transaction):
-            row = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
-            if row.get(PROJECTION_HEAD_BLOCKED_SINCE) is not None or row.get('projection_state') not in (
-                'pending',
-                'persisted',
-                'ready',
-            ):
-                return False
-            transaction.update(
-                self.store.ref('results', segment_id),
-                {PROJECTION_HEAD_BLOCKED_SINCE: self.clock(), PROJECTION_HEAD_BLOCK_TYPE: error_type(error)},
-            )
-            return True
-
         try:
-            self.store.run(commit)
+            self.store.note_head_blocked(segment_id, self.clock(), error_type(error))
         except Exception as note_error:
             logger.warning(
                 'event=batch_projection action=head_block_note outcome=retry exception_type=%s',

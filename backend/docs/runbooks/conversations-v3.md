@@ -5,9 +5,15 @@ is `beta` again since 2026-11-18 (it held at `cohort` on 2026-11-17 while reconc
 conflicts were fixed). Change the stage only there, never by a live-only env edit, which the next
 workflow deploy would revert. `CONVERSATIONS_V3=off`
 stops marking new mobile pendant documents. Stages are `cohort`, `beta`, `all`;
-`rollout_cohorts/conversations-v3` is for named qualification accounts. Beta uses
-the shared, refreshed 14-day episode client-seen marker, so all devices of an
-owner agree. No client version gate is introduced.
+`rollout_cohorts/conversations-v3` is for named qualification accounts. Admission
+needs a v3-capable app: only those builds call `GET /v1/conversations/live`, on any
+channel, which refreshes the 14-day `conversations_v3:client_capable:{uid}` marker
+(`utils/conversations/v3/client_capability.py`). Beta also needs the shared, refreshed
+14-day episode client-seen marker (TestFlight); `all` needs only the capable marker.
+The episode marker alone is not proof: code before #25500 wrote it for store-channel
+episode callers too. Owners whose apps all predate v3 keep legacy intake: their builds
+would show the raw recording a capture ends with as a blank card that 404s. An owner
+with a v3 app on one device and a pre-v3 app on another gets that card on the old device.
 
 Provision the dedicated queue on dev/prod before enabling admission; the prod
 ops manifest declares its bounded concurrency/retry policy. The same stage must reach backend/API, backend-listen (including realtime role),

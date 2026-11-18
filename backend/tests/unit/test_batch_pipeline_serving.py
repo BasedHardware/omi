@@ -386,7 +386,8 @@ def test_held_partial_governor_charges_the_sweeps_exact_reads(monkeypatch):
     assert service.held_partial_reads == [(20_000.0, 500)]
 
 
-def test_held_partial_read_governor_defers_the_sweep_until_the_window_refills(monkeypatch):
+@pytest.mark.parametrize('one_page_left', [False, True])
+def test_held_partial_read_governor_defers_the_sweep_until_the_window_refills(monkeypatch, one_page_left):
     from utils.batch_pipeline import serving as serving_module
 
     clock = {'monotonic': 50_000.0}
@@ -396,10 +397,12 @@ def test_held_partial_read_governor_defers_the_sweep_until_the_window_refills(mo
     projector = Mock()
     projector.sweep_held = Mock(return_value={'partial': 0, 'waiting': 0, 'error': 0, 'units': 0, 'more': 0})
     service = Serving(MemoryStore(), projector=projector)
-    service.held_partial_reads = [(clock['monotonic'], serving_module.HELD_PARTIAL_READS_PER_HOUR)]
+    page_reads = serving_module.HELD_PARTIAL_PAGE * serving_module.HELD_PARTIAL_READS_PER_UNIT
+    spent = serving_module.HELD_PARTIAL_READS_PER_HOUR - (page_reads if one_page_left else 0)
+    service.held_partial_reads = [(clock['monotonic'], spent)]
     service.reconcile()
     service.reconcile()
-    # The hourly window is spent: no sweep, and the gate retries for free.
+    # Admission reserves room for the checkpoint reads before starting a page.
     assert projector.sweep_held.call_count == 0 and service.held_partial_due == clock['monotonic']
     clock['monotonic'] += serving_module.HELD_PARTIAL_WINDOW_SECONDS
     service.reconcile()
@@ -453,6 +456,18 @@ def test_held_partial_segment_lines_sum_into_one_pass_line_on_wrap(monkeypatch, 
         'event=batch_held_partial action=pass outcome=completed segments=2 pages=5 units=133 partial=3 waiting=129 '
         'error=1 reads=670 pass_seconds=11.0',
     ]
+
+
+def test_held_partial_logs_unconfirmed_wrap_separately(monkeypatch, caplog):
+    serving_module, _ = _held_partial_clock(monkeypatch)
+    projector = Mock()
+    projector.sweep_held.return_value = {'pages': 1, 'more': 0, 'wrap_unconfirmed': 1}
+    service = Serving(MemoryStore(), projector=projector)
+    caplog.set_level(logging.INFO, logger=serving_module.__name__)
+
+    service.reconcile()
+
+    assert _held_partial_lines(caplog)[-1].startswith('event=batch_held_partial action=pass outcome=cursor_unconfirmed')
 
 
 def test_held_partial_governor_deferred_tick_logs_nothing_and_keeps_the_pass(monkeypatch, caplog):

@@ -1054,7 +1054,16 @@ def test_fallback_restart_replaces_same_log_slot_and_charges_own_speech(monkeypa
     assert vendor.call_args.args[1] == 'multi'
     result = WorkResult(COPY, 'gs://synthetic/fresh-result#2')
     owner_before = store.ref('owners', owner_key(UID)).get().to_dict()
+    # The preserved slot carries a stamp from an earlier head-wait episode.
+    fallback = store.ref('jobs', COPY).get().to_dict()['source_alias_fallback']
+    stamped = {
+        **fallback['log_slot'],
+        'projection_blocked_since': NOW,
+        'projection_block_type': 'SyncAssignmentConflict',
+    }
+    patch_document(store, store.ref('jobs', COPY), {'source_alias_fallback': {**fallback, 'log_slot': stamped}})
     merged = OrderedMerge(store.store, head_wait_seconds=0, catch_up_depth=1).commit_next(UID, NOW + 3)
+    assert merged['projection_blocked_since'] is None and merged['projection_block_type'] is None
     assert merged['previous_segment_id'] == slot['previous_segment_id']
     assert merged['committed_at'] == slot['committed_at']
     assert merged['result']['result_uri'] == 'gs://synthetic/fresh-result#2'
