@@ -14,14 +14,26 @@ from database.legal_holds import destructive_operation_gate
 from models.sync_job_status import SyncJobCancelResponse
 from utils.batch_pipeline import owner_cancel
 from utils.batch_pipeline.intake import privacy_blocked_response
-from utils.batch_pipeline.owner_cancel_erase import FirestoreEraser
 from utils.other import endpoints as auth
-from utils.other.account_gate_http import account_gate_busy_http_exception
-from utils.sync.owner_cancel_legacy import FirestoreLegacyStore
 from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll
 from utils.sync.stage import current_stage
 
 router = APIRouter()
+
+
+# Erasure and the legacy cap-hold store load on first use: routers.sync imports this module, and
+# its import-isolated test harnesses stub the storage and Firestore packages they pull in.
+def FirestoreEraser(namespace: str):  # noqa: N802 - stands in for the class at its call site
+    from utils.batch_pipeline.owner_cancel_erase import FirestoreEraser as eraser
+
+    return eraser(namespace)
+
+
+def FirestoreLegacyStore():  # noqa: N802
+    from utils.sync.owner_cancel_legacy import FirestoreLegacyStore as store
+
+    return store()
+
 
 # A same-account deletion holding the gate is short; the phone retries a busy answer from its tombstone.
 OWNER_CANCEL_GATE_WAIT_SECONDS = 5.0
@@ -79,6 +91,8 @@ def cancel_sync_upload(job_id: str, uid: str = Depends(auth.get_current_user_uid
     except RuntimeError as error:
         if type(error).__name__ not in _GATE_ERRORS:
             raise
+        from utils.other.account_gate_http import account_gate_busy_http_exception
+
         raise account_gate_busy_http_exception() from error
     if result.outcome is owner_cancel.Outcome.IN_PROGRESS:
         return _refusal(409, 'sync_job_processing', 'The recording is being processed; retry later', 300)
