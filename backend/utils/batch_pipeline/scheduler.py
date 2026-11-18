@@ -962,7 +962,7 @@ class Scheduler:
                         # commit. The projected read sees their new lease state.
                         later = {}
                         selected = False
-                        for lease, _, _ in receipts:
+                        for lease, _, _ in receipts or ():
                             if selected:
                                 later[lease.item.segment_id] = lease.attempt
                             elif lease.item.segment_id == segment:

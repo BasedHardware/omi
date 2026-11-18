@@ -28,7 +28,6 @@ from config.batch_pipeline_vendor_overflow import (
 )
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_coverage_wait import decode_failure_memo_enabled
-from config.batch_pipeline_packing import sample_rate as packing_sample_rate
 from config.batch_pipeline_providers import provider_config
 from config.prerecorded_language import language_guard_enabled, language_class
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
@@ -55,7 +54,7 @@ from utils.sync.receipt_clock import (
     FutureCaptureRetry,
 )
 from utils.batch_pipeline.repair_lineage import language_proof, lineage_record
-from utils.batch_pipeline.packing_counterfactual import intake_observations, source_bounds
+from utils.batch_pipeline.packing_counterfactual import IntakePacking
 from utils.capture.batch_coverage import covered_response
 from utils.sync.source_reuse_decode import decode_for_intake
 from config.refactor_modes import serving_for
@@ -954,15 +953,7 @@ async def accept_upload(
             queue, decisions = sample
         # A missing-input repair replays these exact decisions; it never probes again.
         repair_languages: dict[str, dict] = {}
-        observed_bounds = {}
-        observe_packing = bool(packing_sample_rate())
-        direct_clock = bool(
-            client_device_id
-            and decode is None
-            and recording_age_seconds is not None
-            and not (intake_context or {}).get('capture_clock_policy')
-            and not (intake_context or {}).get('capture_received_at')
-        )
+        packing = IntakePacking(upload_arguments, canonical_decode=decode is None)
         phase = 'decode'
         while unit := (
             queue.pop(0) if queue else None if sampled else await run_blocking(sync_executor, _next_unit, iterator)
@@ -995,8 +986,7 @@ async def accept_upload(
                     staged, proposal = alias
                     items.append(staged)
                     source_aliases[item.segment_id] = proposal
-                    if observe_packing:
-                        observed_bounds[item.segment_id] = (None, {})
+                    packing.note_alias(item.segment_id)
                     continue
             if len(items) in decisions:
                 # This unit was classified above under fresh authority (silent units on their own audio).
@@ -1019,8 +1009,7 @@ async def accept_upload(
                 probe_guard.raise_if_denied()
             proof = _frozen_language_proof(input_language, language_decision)
             repair_languages[item.segment_id] = proof
-            if observe_packing:
-                observed_bounds[item.segment_id] = (source_bounds(unit, trustworthy=direct_clock), proof)
+            packing.note(item.segment_id, unit, proof)
             phase = 'freeze_audio'
             frozen = await run_blocking(
                 sync_executor,
@@ -1069,35 +1058,17 @@ async def accept_upload(
         phase = 'admit'
         outbox = await run_blocking(db_executor, outbox_for, OutboxKind.PROVIDER_STT) if provider else None
         accepted_at = time.time()
-        packing = {}
-        if observe_packing:
-            try:
-                packing = intake_observations(
-                    upload_arguments,
-                    observed_bounds,
-                    subscription=user.get('subscription'),
-                    protection=context,
-                    policy=policy,
-                    priority=seed.priority,
-                    release=release,
-                    now=accepted_at,
-                    packable=not (
-                        provider
-                        or sampled
-                        or record_origin
-                        or repair_job_id
-                        or _coalescing_group
-                        or byok_enabled
-                        or adopt
-                        or usage_period
-                        or input_language != language
-                        or language not in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3']
-                        or (intake_context or {}).get('capture_evidence_claims')
-                        or not client_platform
-                    ),
-                )
-            except Exception:
-                pass  # A diagnostic stamp cannot refuse upload custody.
+        packing_observations = packing.observations(
+            subscription=user.get('subscription'),
+            protection=context,
+            policy=policy,
+            priority=seed.priority,
+            release=release,
+            now=accepted_at,
+            excluded=(provider, sampled, record_origin, repair_job_id, _coalescing_group, adopt, usage_period),
+            input_language=input_language,
+            language=language,
+        )
         outcome = await run_blocking(
             db_executor,
             admit,
@@ -1130,7 +1101,7 @@ async def accept_upload(
             adopt=adopt,
             coalescing_group=_coalescing_group,
             source_aliases=source_aliases,
-            **({'packing_observations': packing} if packing else {}),
+            packing_observations=packing_observations,
         )
         phase = 'wake'
         for row_id, wake_token in wakes.items():

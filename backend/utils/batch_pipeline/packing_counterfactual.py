@@ -5,11 +5,13 @@ from datetime import datetime, timezone
 import math
 from threading import BoundedSemaphore
 from time import monotonic
+from typing import TypeGuard
 
 from prometheus_client import Counter, Histogram
 
 from config import batch_pipeline_packing as config
 from config.plan_catalog_generated import PAID_PLAN_IDS
+from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database.batch_pipeline_coalescing import compatibility_key, digest
 from database.firestore_read_origin import read_origin
 from utils.batch_pipeline.audio import RATE
@@ -22,7 +24,7 @@ AGES = ('under_1h', '1h_to_6h', '6h_to_1d', 'over_1d', 'unknown')
 _READ_SLOT = BoundedSemaphore(1)
 
 
-def _number(value):
+def _number(value) -> TypeGuard[int | float]:
     return type(value) in (int, float) and math.isfinite(value)
 
 
@@ -120,6 +122,59 @@ def source_bounds(unit, *, trustworthy):
     if type(frames) is int and 0 < frames <= round(unit.duration_seconds * RATE):
         return unit.capture_at, unit.capture_at + unit.duration_seconds, frames / RATE
     return None
+
+
+class IntakePacking:
+    """Collect evidence alongside the intake's existing decode and admission."""
+
+    def __init__(self, arguments, *, canonical_decode):
+        self.arguments = arguments
+        self.enabled = bool(config.sample_rate())
+        context = arguments['intake_context'] or {}
+        self.trustworthy = bool(
+            arguments['client_device_id']
+            and canonical_decode
+            and arguments['recording_age_seconds'] is not None
+            and not context.get('capture_clock_policy')
+            and not context.get('capture_received_at')
+        )
+        self.bounds = {}
+
+    def note_alias(self, segment):
+        if self.enabled:
+            self.bounds[segment] = (None, {})
+
+    def note(self, segment, unit, proof):
+        if self.enabled:
+            self.bounds[segment] = (source_bounds(unit, trustworthy=self.trustworthy), proof)
+
+    def observations(
+        self, *, subscription, protection, policy, priority, release, now, excluded, input_language, language
+    ):
+        if not self.enabled:
+            return None
+        context = self.arguments['intake_context'] or {}
+        try:
+            return intake_observations(
+                self.arguments,
+                self.bounds,
+                subscription=subscription,
+                protection=protection,
+                policy=policy,
+                priority=priority,
+                release=release,
+                now=now,
+                packable=not (
+                    any(excluded)
+                    or self.arguments['byok_enabled']
+                    or input_language != language
+                    or language not in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3']
+                    or context.get('capture_evidence_claims')
+                    or not self.arguments['client_platform']
+                ),
+            )
+        except Exception:
+            return None  # A diagnostic stamp cannot refuse upload custody.
 
 
 def _period(subscription, entitlement, now):
