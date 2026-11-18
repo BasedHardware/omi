@@ -236,6 +236,7 @@ def test_busy_peer_gate_accepts_without_waiting_and_erases_nothing(plane, cascad
     began = time.monotonic()
     response = _accept_behind_peer(cascade)
     assert response.status_code == 204 and response.content == b''
+    assert response.headers['X-Omi-Delete-Outcome'] == 'accepted_deferred'
     assert time.monotonic() - began < 1.0
     assert cascade.erased == []
     assert _tombstone(plane, 'c1') and _hidden(plane, 'c1')
