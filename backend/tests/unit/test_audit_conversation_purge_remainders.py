@@ -81,7 +81,9 @@ def test_locations(stores, location):
 
     db.collection.side_effect = collection
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(audit, 'batch_object_address', lambda uid, uri: ('bucket', 'private-object', None))
+        patch.setattr(
+            audit, 'batch_object_address', lambda uid, uri, allowed_buckets: ('bucket', 'private-object', None)
+        )
         report = audit.audit(db, gcs, START, END, audit.Budget(100))
     assert report['terminal_checked'] == 1
     assert report['pending'] == 0

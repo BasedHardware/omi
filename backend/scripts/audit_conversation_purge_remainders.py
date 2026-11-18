@@ -4,6 +4,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 import logging
+import os
 from pathlib import Path
 import sys
 
@@ -20,7 +21,7 @@ from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_purge import NAMESPACES, _belongs, _references, result_document
 from database.conversation_tombstones import COLLECTION
 from utils.batch_pipeline.record_wal_erasure import _prefix
-from utils.batch_pipeline.retention import batch_object_address
+from utils.batch_pipeline.retention import BATCH_OBJECT_BUCKET_ENV, batch_object_address
 
 PAGE = 100
 RPC = {'timeout': 10, 'retry': None}
@@ -75,6 +76,7 @@ def obligation_pending(db, budget, uid, cid):
 
 def remainders(db, gcs, budget, uid, cid):
     found = set()
+    allowed_buckets = {value for name in BATCH_OBJECT_BUCKET_ENV if (value := os.getenv(name, '').strip())}
     bucket = private_archive_bucket()
     wal_prefix = _prefix(uid, cid)
     if budget.read(
@@ -95,7 +97,7 @@ def remainders(db, gcs, budget, uid, cid):
             found.add(f'{namespace}_{table}')
             for uri in _references(data):
                 try:
-                    name, path, generation = batch_object_address(uid, uri)
+                    name, path, generation = batch_object_address(uid, uri, allowed_buckets)
                 except (TypeError, ValueError):
                     raise Incomplete('invalid_batch_object_reference') from None
                 blob = gcs.bucket(name).blob(path, generation=generation)
