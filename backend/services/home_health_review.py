@@ -9,6 +9,7 @@ from config.summary_guarantee import deadline_seconds
 from models.conversation_emoji import DEFAULT_EMOJI, NEUTRAL_EMOJI
 from utils.conversations import home_step, summary_delivery, transcribing_hold
 from utils.conversations.fragment_visibility import (
+    held_for_notes,
     is_completed_below_floor,
     is_completed_rule_discard,
     is_settling_fragment,
@@ -53,6 +54,9 @@ METADATA_FIELDS = tuple(
             'dream_duplicate_of',
             'sync_merged_into',
             'sync_bridge_pending',
+            'sync_relevance',
+            'sync_processing_hold.held',
+            'sync_processing_hold.last_content_at',
             'v3_derived',
             'has_photos',
             'record_transcription_empty',
@@ -205,7 +209,7 @@ def hidden_by_metadata(row):
     )
 
 
-def hidden_for_review(row):
+def hidden_for_review(row, *, show_held=False):
     # Keep lifecycle failures observable while honoring the list's discard,
     # bridge and settling policies. V3-owned products are outside this cohort.
     return (
@@ -213,7 +217,7 @@ def hidden_for_review(row):
         or bridge_pending.hidden(row)
         or is_completed_rule_discard(row)
         or is_completed_below_floor(row)
-        or (is_settling_fragment(row) and not transcribing_hold.applies(row, stored=True))
+        or (is_settling_fragment(row, show_held=show_held) and not transcribing_hold.applies(row, stored=True))
     )
 
 
@@ -238,7 +242,7 @@ def inspect_row(row, *, now: datetime) -> tuple[set[str], set[str]]:
         return metrics | {'terminal_without_derivatives'}, findings
     if protected_for_review(row):
         return metrics | {'protected_or_unknown'}, findings
-    if hidden_for_review(row):
+    if hidden_for_review(row, show_held=True):
         return metrics | {'hidden_by_design'}, findings
     status = row.get('status')
     finished = card_content.utc(row.get('finished_at'))
@@ -253,7 +257,7 @@ def inspect_row(row, *, now: datetime) -> tuple[set[str], set[str]]:
     # transcripts lacking a projection receipt are outside this observation.
     if not isinstance(row.get('structured'), dict) and row.get('structured') is not None:
         return metrics | {'display_unknown'}, findings
-    step = home_step.classify(row)
+    step = home_step.classify(row, show_held=True)
     if step == home_step.NOISE:
         return metrics | {'hidden_by_design'}, findings
     if status in ('processing', 'merging'):
@@ -282,6 +286,8 @@ def inspect_row(row, *, now: datetime) -> tuple[set[str], set[str]]:
         metrics.add('summary_receipted')
     elif row.get('summary_blocked_reason'):
         metrics.add('notes_blocked')
+    elif step == home_step.WRITING_NOTES and not summary_owed(row) and held_for_notes(row, now=now.timestamp()):
+        metrics.update({'notes_expected', 'notes_pending'})
     elif row.get('summary_output_present') is not False:
         metrics.add('summary_receipt_unknown')
     elif (

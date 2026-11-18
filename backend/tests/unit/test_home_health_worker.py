@@ -53,6 +53,27 @@ def test_landed_speech_without_debt_and_the_same_blank_card_are_two_signals(now)
     assert 'ready_emoji_default' not in findings  # quality denominator is summarized cards
 
 
+def test_legacy_review_treats_a_kept_sync_piece_held_for_notes_as_pending(now):
+    held = row(
+        now,
+        record_lane_owner='batch_sync_v1',
+        sync_relevance='keep',
+        sync_processing_hold={'held': True, 'last_content_at': now.timestamp()},
+        summary_title_provenance='server_minimum',
+        structured={'title': 'Discussion notes', 'title_provenance': 'server_minimum'},
+    )
+    assert {'sync_relevance', 'sync_processing_hold.held', 'sync_processing_hold.last_content_at'} <= set(
+        repair.DISCOVERY_FIELDS
+    )
+    metrics, findings = review.inspect_row(held, now=now)
+    assert {'notes_expected', 'notes_pending'} <= metrics
+    assert 'ready_cards' not in metrics
+    assert 'notes_not_scheduled' not in findings
+    assert not repair.candidate({**held, 'record_lane_owner': 'batch_live_v1'}, now=now.timestamp())
+    _, overdue = review.inspect_row({**held, 'summary_due_at': now.timestamp() - 1}, now=now)
+    assert 'notes_overdue' in overdue
+
+
 @pytest.mark.parametrize(
     'status,updates,expected',
     [

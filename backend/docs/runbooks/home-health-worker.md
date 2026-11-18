@@ -1,6 +1,6 @@
 # Home health review and repair
 
-The worker produces an aggregate review of the legacy Home conversation list. It finds captures that appear unfinished, waits past the transcript deadline, missing or overdue notes, and ready cards with title, preview, or emoji gaps. The JSON includes stable `issue_key` and `stage` values, the observed symptom, a next diagnostic check, the affected and observable rows, and a repeated-symptom count across owners. Three or more similar cards in the same window count as a repeat for an owner.
+The worker produces an aggregate review using the default legacy Home list's visibility rules. It treats kept sync pieces held for notes as pending and finds captures that appear unfinished, waits past the transcript deadline, missing or overdue notes, and ready cards with title, preview, or emoji gaps. The JSON includes stable `issue_key` and `stage` values, the observed symptom, a next diagnostic check, the affected and observable rows, and a repeated-symptom count across owners. Three or more similar cards in the same window count as a repeat for an owner.
 
 Use the feedback to prioritize what to reproduce with a synthetic account. A neutral emoji is an intentional option, so its frequency is a quality signal. A transcript receipt and a summary receipt are separate signals. A missing notes receipt describes delivery metadata, and does not establish that stored notes are empty. A summary receipt with a blank preview can indicate a display gap even when the notes exist.
 

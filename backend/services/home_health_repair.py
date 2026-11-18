@@ -16,6 +16,7 @@ from services.home_health_review import (
     positive_revision,
 )
 from utils.conversations import summary_delivery
+from utils.conversations.fragment_visibility import held_for_notes
 from utils.enrichment import age_gate, outbox
 from utils.summary_quality import safe_body
 
@@ -48,6 +49,7 @@ def _eligible_metadata(row, *, now):
         and row.get('record_lane_owner') == 'batch_live_v1'
         and row.get('status') == 'completed'
         and not protected_for_review(row)
+        and not held_for_notes(row, now=now)
         and not row.get('deleted')
         and not row.get('record_upload_failed')
         and not row.get('summary_retryable')
