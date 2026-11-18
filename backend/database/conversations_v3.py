@@ -16,6 +16,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from database._client import get_firestore_client
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
+from database.home_feed_writer import COMMIT_STAMPED_FIELDS
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.encryption import encrypt, decrypt
@@ -653,18 +654,33 @@ def commit_projection(
             for rid in recordings:
                 snapshot = coll.document(rid).get()
                 current = snapshot.to_dict() or {}
-                owned = {'claims', 'v3_pending', 'v3_pending_since', 'v3_audio_purge_pending', 'backfill_superseded'}
+                # The Home feed hook stamps every conversation write at Commit (COMMIT_STAMPED_FIELDS); those
+                # stamps are our own write, not an external change.
+                owned = {
+                    'claims',
+                    'v3_pending',
+                    'v3_pending_since',
+                    'v3_audio_purge_pending',
+                    'backfill_superseded',
+                    *COMMIT_STAMPED_FIELDS,
+                }
                 if recordings[rid].get('_v3_derive'):
                     # Our own committed conversion, not an external change.
                     owned |= {'recording', 'v3_backfill_run', 'v3_backfill_prior'}
-                if {k: v for k, v in current.items() if k not in owned} != {
-                    k: v for k, v in observed[rid].items() if k not in owned
-                }:
+                changed = sorted(
+                    k
+                    for k in set(current) | set(observed[rid])
+                    if k not in owned and current.get(k) != observed[rid].get(k)
+                )
+                if changed:
                     # Claims are ours between batches; any other protected change still conflicts.
                     fence = recordings[rid].get('_v3_fence')
                     if fence is None or not speech_moved(
                         {**recordings[rid], '_v3_fence': {**fence, 'claims': current.get('claims')}}, current
                     ):
+                        logger.warning(
+                            'v3 projection readback changed kind=recording batch=%d fields=%s', index, changed[:8]
+                        )
                         raise Conflict('source_changed')
                     moved.add(rid)
                 recordings[rid] = {
@@ -677,7 +693,13 @@ def commit_projection(
                 snapshot = coll.document(raw['id']).get()
                 if snapshot.exists:
                     current = snapshot.to_dict() or {}
-                    if any(current.get(k) != value for k, value in encoded.items()):
+                    changed = sorted(
+                        k for k, value in encoded.items() if k not in COMMIT_STAMPED_FIELDS and current.get(k) != value
+                    )
+                    if changed:
+                        logger.warning(
+                            'v3 projection readback changed kind=derived_row batch=%d fields=%s', index, changed[:8]
+                        )
                         raise Conflict('source_changed')
                     existing[raw['id']] = {**raw, '_v3_revision': snapshot.update_time}
     return moved
