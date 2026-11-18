@@ -570,3 +570,27 @@ async def test_a_reconnect_protocol_skip_is_counted_once_per_row(monkeypatch, ro
     row = _v3_row(300, listen_batch_producer={'version': 1, 'token': 't', 'phase': 'active'})
     assert not controller._v3_rotation_due(row) and not controller._v3_rotation_due(row)
     assert outcomes == ['skipped_producer']
+
+
+def test_producer_skips_stay_bounded(monkeypatch, rotation_on):
+    host = SimpleNamespace(state=SimpleNamespace(), request=SimpleNamespace(uid='test-owner'))
+    controller = LiveConversationController(host, clock=lambda: NOW)
+    for index in range(100):
+        controller._skipped_for_producer({'id': f'r{index}', 'listen_batch_producer': {'version': 1}})
+    assert list(controller._producer_skips) == [f'r{index}' for index in range(36, 100)]
+
+
+@pytest.mark.asyncio
+async def test_ownership_loss_skips_the_redis_restore(monkeypatch):
+    from fastapi import WebSocketException
+
+    calls = []
+    host = SimpleNamespace(
+        request=SimpleNamespace(uid='test-owner'),
+        persistence=SimpleNamespace(call=AsyncMock(side_effect=lambda fn, *a, **kw: calls.append(fn.__name__))),
+    )
+    controller = LiveConversationController(host, clock=lambda: NOW)
+    await controller._clear_failed_successor('current', {}, WebSocketException(code=1013))
+    assert calls == []
+    await controller._clear_failed_successor('current', {}, RuntimeError('firestore'))
+    assert calls == ['set_in_progress_conversation_id']

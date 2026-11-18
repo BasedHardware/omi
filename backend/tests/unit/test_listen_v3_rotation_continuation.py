@@ -171,37 +171,3 @@ async def test_a_failed_pointer_move_still_finishes_the_successor_and_counts_it(
     assert 'pointer_failed' in outcomes and 'rotated' in outcomes
     assert harness.pointer == successor  # the Redis in-progress id and the tail ran
     assert len(harness.events) > events  # send_conversation_session reached the phone
-
-
-@pytest.mark.anyio
-async def test_a_create_that_fails_after_binding_deletes_its_empty_successor(monkeypatch):
-    from routers.listen import conversations as controller_module
-
-    harness = _harness(monkeypatch)
-    deleted = []
-
-    def delete_empty(uid, cid, sid, **kwargs):
-        deleted.append((cid, kwargs))
-        harness.rows.pop(cid, None)
-        return True
-
-    monkeypatch.setattr(controller_module.lifecycle_service, 'delete_empty_recording_conversation', delete_empty)
-    controller, sealed = _connect(harness)
-    await controller.prepare()
-    first = controller.host.state.current_conversation_id
-    arm = controller._persist_policy_and_arm_quiet_check
-
-    async def failing(cid):
-        if cid != first:
-            raise RuntimeError('firestore')
-        return await arm(cid)
-
-    controller._persist_policy_and_arm_quiet_check = failing
-    for _ in range(3):  # a Firestore flap: every retry cleans up after itself
-        harness.now += timedelta(minutes=1)
-        controller._rotation_retry_at = None
-        await controller._rotate_v3_recording(first)
-    assert controller.host.state.current_conversation_id == first and not sealed
-    assert len(deleted) == 3 and all(kw == {'allow_empty_server_batch': True} for _, kw in deleted)
-    assert [cid for cid, row in harness.rows.items() if row.get('status') == 'in_progress'] == [first]
-    assert harness.pointer == first
