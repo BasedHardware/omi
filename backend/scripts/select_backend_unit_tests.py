@@ -200,6 +200,9 @@ CENSUS_GUARD_PREFIXES = (
     'backend/database/batch_pipeline_',
     'backend/utils/observability/reasons.py',
     'backend/config/batch_census.py',
+    'backend/config/batch_census_selectors.py',
+    'backend/database/jobstore/',
+    'backend/tests/support/batch_census_sql_selectors.py',
     'backend/scripts/batch_pipeline_poll_state_census.py',
 )
 # Census exporter (W3 / SCA-2119): a change to the sampler, the gauge families or
@@ -279,6 +282,8 @@ FIRESTORE_INDEX_GUARD_CONTROL_PATHS = frozenset(
         'backend/tests/unit/conftest.py',
         'backend/tests/unit/memory_import_isolation.py',
         'backend/testing/hermetic_network.py',
+        'backend/config/batch_census_selectors.py',
+        'backend/tests/support/batch_census_selector_guard.py',
     }
 )
 
