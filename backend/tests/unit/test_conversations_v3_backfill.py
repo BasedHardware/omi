@@ -946,6 +946,7 @@ def test_undo_never_resurrects_a_donor_whose_copy_the_owner_deleted(strict, monk
     result = backfill.undo_run('synthetic', RUN, firestore_client=strict)
     assert result['outcome'] == 'undone_partial' and result['groups_kept_deleted'] == 1
     assert result['donors_restored'] == 0
+    assert result['donors_kept_deleted'] == 1
     donor = strict.rows[R]
     # Still a hidden source, never a visible legacy conversation again.
     assert donor['recording'] is True and donor['v3_backfill_run'] == RUN
@@ -959,7 +960,7 @@ def test_a_deletion_racing_undo_keeps_the_group_and_hands_owed_notes_to_live(str
     sibling = ('users', 'synthetic', 'conversations', 'c1')
     strict.rows[sibling] = {**strict.rows[COPY], 'id': 'c1', 'v3_process_pending': False}
     result = store.undo_backfill_group('synthetic', token, ['r'], ['c0', 'c1'], firestore_client=strict)
-    assert result == ('kept', 0, 0)
+    assert result == ('kept', 1, 0)
     assert strict.rows[R]['recording'] is True and COPY in strict.rows
     # The deleted copy never goes to the notes model; a kept sibling's owed notes move to the live drain.
     assert strict.rows[COPY]['v3_backfill_process_pending'] is False
@@ -1230,8 +1231,12 @@ def test_a_failed_undo_group_is_recorded_and_leaves_the_run_resumable(monkeypatc
         raise store.Conflict('lease_lost')
 
     monkeypatch.setattr(store, 'undo_backfill_group', fail)
+    ledger.run['undo_progress'] = {'removed_ids': ['c0']}
+    monkeypatch.setattr(store, 'deleted_copy_ids', lambda uid, ids, **kw: list(ids))
     result = backfill.undo_run('u', RUN)
     assert result['outcome'] == 'error' and result['reason'] == 'lease_lost'
+    # Copies removed before the failure are still checked for a racing delete.
+    assert ledger.run['undo']['deleted_during_undo_ids'] == ['c0']
     assert ledger.run['status'] == 'undoing' and ledger.run['undo']['reason'] == 'lease_lost'
 
 

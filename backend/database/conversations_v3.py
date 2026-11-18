@@ -873,7 +873,7 @@ def undo_backfill_group(uid, token, donor_ids, row_ids, *, run_id=None, firestor
     deleted span added after the run); its copies' owed backfill notes move to the live marker so
     they are still written. The tombstones are read inside the transaction, so a deletion racing undo
     either lands first (the group stays) or retries after the copies are gone. Returns
-    (outcome, donors restored, rows removed). With ``run_id``, the run ledger's undo progress
+    (outcome, donors restored or kept, rows removed). With ``run_id``, the run ledger's undo progress
     (totals and removed copy ids) is written in the same transaction, so a crash never loses it.
     """
     if 2 + len(donor_ids) + 3 * len(row_ids) > UNDO_GROUP_MAX:
@@ -917,7 +917,8 @@ def undo_backfill_group(uid, token, donor_ids, row_ids, *, run_id=None, firestor
                     tx.update(coll.document(cid), patch)
                 elif snapshot.exists and gone and (snapshot.to_dict() or {}).get('v3_process_pending'):
                     tx.update(coll.document(cid), {'v3_process_pending': False})
-            return 'kept', 0, 0
+            # The third value is the number of converted donors kept (still hidden as v3 sources).
+            return 'kept', len(converted), 0
         for cid, row in converted:
             prior = row.get('v3_backfill_prior')
             if not isinstance(prior, dict):

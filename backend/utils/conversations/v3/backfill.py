@@ -513,12 +513,17 @@ def undo_run(uid, run_id, *, firestore_client=None):
 
         for donors, rows in undo_groups(docs):
             try:
-                outcome, _restored, _removed = store.undo_backfill_group(
+                outcome, donors_touched, _removed = store.undo_backfill_group(
                     uid, token, donors, rows, run_id=run_id, firestore_client=firestore_client
                 )
             except store.Conflict as error:
-                # Groups already done stay done; the run stays 'undoing' and a rerun continues.
-                _progress, result = totals()
+                # Groups already done stay done; the run stays 'undoing' and a rerun continues. Copies
+                # removed so far are still checked for a delete that raced them.
+                progress, result = totals()
+                raced = store.deleted_copy_ids(
+                    uid, list(progress.get('removed_ids') or []), firestore_client=firestore_client
+                )
+                result.update(deleted_during_undo=len(raced), deleted_during_undo_ids=raced)
                 runs.update_run(
                     uid,
                     run_id,
@@ -530,7 +535,7 @@ def undo_run(uid, run_id, *, firestore_client=None):
                 return {'outcome': 'error', 'reason': str(error), **result}
             if outcome == 'kept':
                 kept['groups_kept_deleted'] += 1
-                kept['donors_kept_deleted'] += len(donors)
+                kept['donors_kept_deleted'] += donors_touched
             for key, held_token in held:
                 leases.renew(uid, key, held_token, firestore_client=firestore_client)
         progress, result = totals()
