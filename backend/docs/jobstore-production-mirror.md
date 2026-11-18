@@ -344,6 +344,8 @@ obligations still apply.
    requires an explicit complete-population release decision. No arbitrary
    elapsed interval substitutes for these prerequisites.
 
+A retirement scope whose page fails every pass (`omi_jobstore_retirement_page_errors_total{reason="operation_failed"}` rising for one source/table while its rotation lag grows) usually has a corrupt or regressed cursor. Remediation: as the table owner, delete that scope's `jobstore_retirement_cursor` row (namespace, source, tbl, mode, target_identity). The next tick re-creates it and restarts that scope from the first key. Pages are idempotent, so a restart only repeats work.
+
 Rollback new work with `JOBSTORE_SHADOW_WRITES=off`,
 `JOBSTORE_PRODUCTION_MIRROR=off`, or `BATCH_JOBSTORE_MODE=firestore` through the
 release owner. Verify queued work stops as specified by the integrated copy

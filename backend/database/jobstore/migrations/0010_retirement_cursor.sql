@@ -14,3 +14,10 @@ CREATE TABLE jobstore_retirement_cursor (
     rotation_completed_at timestamptz,
     PRIMARY KEY (namespace, source, tbl, mode, target_identity)
 );
+
+-- Retirement copy pages walk each namespace in byte order (reconcile._copy_keys:
+-- ORDER BY key COLLATE "C"). Without these, every page sorts the whole namespace.
+CREATE INDEX jobs_retire_scan_c    ON jobs    (namespace, key COLLATE "C");
+CREATE INDEX results_retire_scan_c ON results (namespace, key COLLATE "C");
+CREATE INDEX control_retire_scan_c ON control (namespace, key COLLATE "C");
+CREATE INDEX docs_retire_scan_c    ON docs    (namespace, tbl, key COLLATE "C");

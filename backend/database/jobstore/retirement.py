@@ -153,8 +153,9 @@ class Retirement:
                 observe(namespace, source, table, result.counts.deleted, checkpoint.timestamps)
         except ValueError:
             # After settings parse, a ValueError is page data (cursor regression or a corrupt
-            # cursor row), not configuration. A corrupt row is cleared by deleting that
-            # jobstore_retirement_cursor row; the next pass restarts from the beginning.
+            # cursor row), not configuration. Nothing clears a corrupt row automatically: an
+            # operator deletes that jobstore_retirement_cursor row (see jobstore-production-mirror.md)
+            # and the next pass restarts that scope from the beginning.
             reason = RetirementPageReason.OPERATION_FAILED if configured else RetirementPageReason.INVALID_CONFIG
             page_error(namespace, source, table, reason)
         except TimeoutError:
