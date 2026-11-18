@@ -86,9 +86,8 @@ async def probe_intake_allowance(store, uid: str) -> allowance_hold.IntakeRefusa
         if fence is None or time.monotonic() >= deadline:
             return None
         observed_at = time.time()
-        # The optional backfill day cap only narrows a managed answer. A
-        # monthly refusal is identical on both lanes, and this probe leaves
-        # day-cap-only refusals to the funded gate with its day meter.
+        # The GPU gate uses the same monthly allowance for both lanes. Sync
+        # upload enforces the independent Unlimited V2 backfill day cap.
         allowance = funded_allowance(uid, lane='batch', ready_usage_only=True)
         if not allowance.managed and allowance.reason == 'plan_allowance_exhausted':
             return allowance_hold.IntakeRefusal(observed_at, fence)
