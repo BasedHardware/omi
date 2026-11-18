@@ -32,6 +32,7 @@ from config.batch_pipeline import (
     silence_read_skip_enabled,
 )
 from config.record_latency import recent_native_record
+from database import batch_pipeline_projection_release as projection_release
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
@@ -811,14 +812,9 @@ class Projector:
         """Resume the fleet's pass durably: instances restart far more often than a pass wraps.
 
         A fresh pass drops this process's upload dedupe, which another instance's wrap made stale."""
-        from database.batch_pipeline_projection_release import (
-            HELD_PARTIAL_CURSOR_KEY as key,
-            load_release_cursor,
-            save_release_cursor,
-        )
-
         event = 'batch_held_partial'
-        durable = load_release_cursor(self.store, key=key, event=event)['after_id']
+        key = projection_release.HELD_PARTIAL_CURSOR_KEY
+        durable = projection_release.load_release_cursor(self.store, key=key, event=event)['after_id']
         # After a failed save the in-memory cursor is the newer one; keep it.
         unsaved = getattr(self, 'held_cursor_unsaved', False)
         start = self.held_after = self.held_after if unsaved else durable
@@ -826,7 +822,9 @@ class Projector:
             self.held_pass_seen = set()
         counts = self._sweep_held_pages(limit, deadline=deadline, max_pages=max_pages)
         if self.held_after != start or unsaved:
-            saved = save_release_cursor(self.store, self.held_after, self.clock(), key=key, event=event)
+            saved = projection_release.save_release_cursor(
+                self.store, self.held_after, self.clock(), key=key, event=event
+            )
             self.held_cursor_unsaved = not saved
         return counts
 
