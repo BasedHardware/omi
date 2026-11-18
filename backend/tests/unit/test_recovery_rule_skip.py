@@ -168,8 +168,11 @@ def test_recovery_calendar_overlap_does_not_take_the_rule_discard(monkeypatch, i
         (Structured(title='Project update'), None),
         (Structured(title='Discussion 3', overview='Existing notes'), None),
         (Structured(title='Discussion notes'), 'Discussion notes'),
+        (Structured(title='Discussion notes', participants=[{'source': 'roster', 'name': 'Test reviewer'}]), None),
+        (Structured(title='Discussion notes', salience='highlight'), None),
+        (Structured(title='Discussion notes', category='work'), None),
     ],
-    ids=['gist', 'real-title', 'notes', 'user-title'],
+    ids=['gist', 'real-title', 'notes', 'user-title', 'participant', 'salience', 'category'],
 )
 def test_quiet_recovery_preserves_the_normal_notes_path_for_protected_rows(
     monkeypatch, isolated_processing_module, stored, user_title

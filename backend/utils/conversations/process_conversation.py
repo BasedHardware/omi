@@ -616,17 +616,16 @@ def _get_structured(
             stored_structured = getattr(main_conv, 'structured', None)
             stored_title = getattr(stored_structured, 'title', '') or ''
             stored_title_provenance = getattr(stored_structured, 'title_provenance', None)
-            stored_gist = getattr(stored_structured, 'gist', None)
-            # A generated placeholder can survive on an older pending capture.
-            # Keep any existing Home preview, even when it is only a gist.
-            stored_content_is_replaceable = (
-                not structured_is_rich(stored_structured)
-                and not stored_gist
-                and (
-                    not stored_title.strip()
-                    or is_fallback_title(stored_title)
-                    or stored_title_provenance == 'server_minimum'
+            stored_gist = (getattr(stored_structured, 'gist', '') or '').strip()
+            replaceable_title = not stored_title.strip() or stored_title_provenance == 'server_minimum'
+            if is_fallback_title(stored_title) and isinstance(stored_structured, Structured):
+                # A fallback can be the only content on an old capture stub.
+                # Keep any non-default metadata from a prior notes pass.
+                replaceable_title = not stored_structured.model_dump(
+                    exclude={'title', 'gist', 'title_provenance'}, exclude_defaults=True
                 )
+            stored_content_is_replaceable = (
+                not structured_is_rich(stored_structured) and not stored_gist and replaceable_title
             )
             if (
                 recovery_transcript_decoded

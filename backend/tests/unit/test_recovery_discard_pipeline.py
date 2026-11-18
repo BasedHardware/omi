@@ -213,9 +213,12 @@ async def test_decoded_rule_discard_completes_and_verifies_without_rewriting_blo
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('stored_title', ['', 'Discussion notes', 'Discussion 3'])
+@pytest.mark.parametrize(
+    ('stored_title', 'stored_gist'),
+    [('', ''), ('Discussion notes', ''), ('Discussion 3', ''), ('Discussion notes', '  ')],
+)
 async def test_short_contentful_recovery_keeps_minimum_instead_of_creating_attention(
-    pipeline, monkeypatch, capsys, stored_title
+    pipeline, monkeypatch, capsys, stored_title, stored_gist
 ):
     text = 'Call mom before five.'
 
@@ -226,7 +229,7 @@ async def test_short_contentful_recovery_keeps_minimum_instead_of_creating_atten
     _seed(
         pipeline,
         transcript=[{'id': 'seg-short', 'text': text, 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00', 'is_user': True}],
-        structured={'title': stored_title, 'overview': ''},
+        structured={'title': stored_title, 'overview': '', 'gist': stored_gist},
     )
     monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *_: (text, text, {}))
 

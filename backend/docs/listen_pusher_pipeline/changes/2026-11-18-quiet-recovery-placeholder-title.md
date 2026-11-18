@@ -2,7 +2,7 @@
 
 An already admitted server-recovery job can use the existing short-clip
 minimum when its stored title is the deterministic fallback and the row holds
-no rich content or Home gist. Previously the fallback title sent the job to
+no rich content, Home gist or previously generated metadata. Previously the fallback title sent the job to
 paid notes, where empty output could dead-letter a capture that could have
 settled on the minimum. The user title, relevance, transcript and custody
 checks still apply. Admission, discard eligibility and final-attempt processing
