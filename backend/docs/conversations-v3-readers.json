@@ -499,6 +499,10 @@
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
   },
+  "backend/scripts/historical_tier_operator.py:collection": {
+    "policy": "operator",
+    "reason": "Offline owner-scoped operator utility; classifier fields only, never a product read."
+  },
   "backend/scripts/legacy_dark/final_pass_rehome.py:collection_group": {
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
@@ -670,6 +674,10 @@
   "backend/utils/conversations/finalizer.py:get_conversation": {
     "policy": "both",
     "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
+  },
+  "backend/utils/conversations/historical_ingest.py:get_conversation": {
+    "policy": "storage",
+    "reason": "Pipeline-internal hold settlement for a historical row; reads its revision and content snapshot, never serves a product read."
   },
   "backend/utils/conversations/historical_summary.py:get_conversation": {
     "policy": "conversations",
