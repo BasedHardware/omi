@@ -12,6 +12,7 @@ from typing import Any
 import math
 
 from config.episodes import (
+    home_step_projection_enabled,
     home_transcription_deadline_seconds,
     home_transcription_max_age_seconds,
     home_transcription_presentation_gate_enabled,
@@ -152,13 +153,16 @@ def failed(row: Mapping[str, Any]) -> bool:
     )
 
 
-def project(row: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
+def project(row: dict[str, Any], *, now: datetime | None = None, home_list: bool = False) -> dict[str, Any]:
     """Return a wire copy; expired/error captures stay visible as completed rows."""
     empty = empty_capture.project(row, now=now)
     if empty is not row:
         return empty
     if not applies(row):
-        return placeholder_title_wire(row)
+        # home_list is set only after the route computed the current wire step.
+        return placeholder_title_wire(
+            row, label_recording=home_list and home_step_projection_enabled() and row.get('home_step') == 'ready'
+        )
     deadline_at = deadline(row)
     title, status = transcription_presentation(
         deadline_at,

@@ -93,7 +93,7 @@ def display_title(title: Any, preview: Any, *, label_recording: bool = False) ->
     return title
 
 
-def placeholder_title_wire(row: dict[str, Any]) -> dict[str, Any]:
+def placeholder_title_wire(row: dict[str, Any], *, label_recording: bool = False) -> dict[str, Any]:
     """Hide a bare fallback label and keep ready recordings identifiable.
 
     The legacy Home list first applies home_step.project. Other readers
@@ -108,13 +108,10 @@ def placeholder_title_wire(row: dict[str, Any]) -> dict[str, Any]:
         or not notes_pending(structured)
     ):
         return row
-    # The literal mirrors home_step.READY without a circular import.
     title = display_title(
         structured.get('title'),
         '',
-        label_recording=bool(
-            row.get('home_step') == 'ready' and row.get('record_projection_revision') and not row.get('is_locked')
-        ),
+        label_recording=bool(label_recording and row.get('record_projection_revision') and not row.get('is_locked')),
     )
     return {**row, 'structured': {**structured, 'title': title}}
 

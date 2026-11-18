@@ -1,16 +1,17 @@
 # Neutral title for a ready recording without notes
 
-Both Home lists can classify a completed batch row as ready and then blank its
-stored fallback headline. An unlocked ready row with a batch projection receipt
-now displays the neutral label `Recording` when the fallback is its only
-display content.
+An unlocked ready row with a batch projection receipt displays `Recording`
+when its stored fallback headline is the only display content. The legacy
+conversation list opts into the label after computing the current Home step.
+Detail and other readers keep their title contract even when storage carries a
+prepared Home step. With `HOME_STEP_PROJECTION=off` the lists stop adding the
+label.
 
-The legacy list applies the Home step projection before building its wire
-title. The prepared feed uses that step and the receipt from its existing
-document read. It preserves an explicit user title, including one that matches
-a generated fallback. With `HOME_STEP_PROJECTION=off`, neither list adds the label.
-The label uses no transcript content or time-zone lookup and changes no
-stored data. Detail and other non-Home readers keep their current contract.
+The prepared feed preserves user headlines and notes that live in sections,
+action items, or events. Normal writes and preparation include a notes-pending
+bit inside the encrypted display. Existing displays with unknown notes status
+keep the stored headline for ready receipt-bearing rows. The GET still uses
+one document read and does not read transcripts or notes bodies.
 
-Verify both lists with a receipt-bearing placeholder row and no preview.
-Revert this commit to roll back.
+Verify both lists with a receipt-bearing generated placeholder, with and without
+notes. Revert this change to roll back.

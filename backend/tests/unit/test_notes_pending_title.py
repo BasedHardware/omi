@@ -157,7 +157,7 @@ def test_home_presents_a_stamped_capture_as_transcribing_not_as_a_finished_row()
     before = deepcopy(row)
     assert transcribing_hold.applies(row)
     assert home_step.classify(row) == home_step.TRANSCRIBING
-    wire = transcribing_hold.project(home_step.project(row))
+    wire = transcribing_hold.project(home_step.project(row), home_list=True)
     assert wire['structured']['title'] == 'Transcribing…'
     assert wire['status'] == 'processing' and wire['home_step'] == home_step.TRANSCRIBING
     assert row == before  # presentation only
@@ -213,7 +213,7 @@ def test_wire_rule_touches_nothing_else(changes):
 def test_list_wire_labels_ready_captures_with_projection_receipt(fallback):
     row = capture(record_projection_revision=2, structured={'title': fallback, 'overview': ''})
     before = deepcopy(row)
-    wire = transcribing_hold.project(home_step.project(row))
+    wire = transcribing_hold.project(home_step.project(row), home_list=True)
     assert wire['home_step'] == home_step.READY
     assert wire['structured']['title'] == 'Recording'
     assert wire['structured']['overview'] == ''
@@ -224,22 +224,33 @@ def test_list_wire_labels_ready_captures_with_projection_receipt(fallback):
 def test_list_wire_does_not_label_a_ready_capture_without_a_receipt():
     row = capture(structured={'title': FALLBACK})
     row.pop('home_transcription_deadline_at', None)
-    wire = transcribing_hold.project(home_step.project(row))
+    wire = transcribing_hold.project(home_step.project(row), home_list=True)
     assert wire['home_step'] == home_step.READY
     assert wire['structured']['title'] == ''
 
 
 def test_list_wire_does_not_label_a_processing_capture_with_a_receipt():
     row = capture(status='processing', record_projection_revision=2, structured={'title': FALLBACK})
-    wire = transcribing_hold.project(home_step.project(row))
+    wire = transcribing_hold.project(home_step.project(row), home_list=True)
     assert wire['home_step'] == home_step.TRANSCRIBING
     assert wire['structured']['title'] == ''
 
 
 def test_list_wire_does_not_label_a_locked_capture():
     row = capture(record_projection_revision=2, is_locked=True, structured={'title': FALLBACK})
-    wire = transcribing_hold.project(home_step.project(row))
+    wire = transcribing_hold.project(home_step.project(row), home_list=True)
     assert wire['structured']['title'] == ''
+
+
+def test_other_reader_cannot_label_a_row_with_a_saved_ready_step():
+    row = capture(record_projection_revision=2, home_step='ready', structured={'title': FALLBACK})
+    assert transcribing_hold.project(row)['structured']['title'] == ''
+
+
+def test_list_with_home_projection_off_ignores_a_saved_ready_step(monkeypatch):
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'off')
+    row = capture(record_projection_revision=2, home_step='ready', structured={'title': FALLBACK})
+    assert transcribing_hold.project(home_step.project(row), home_list=True)['structured']['title'] == ''
 
 
 def test_expired_empty_capture_is_noise_even_when_stamped():
@@ -299,6 +310,6 @@ def test_placeholder_title_beside_real_notes_is_a_finished_row_not_a_transcripti
     row = capture(structured=notes)
     assert not transcribing_hold.applies(row)
     assert home_step.classify(row) == home_step.READY
-    wire = transcribing_hold.project(home_step.project(row))
+    wire = transcribing_hold.project(home_step.project(row), home_list=True)
     assert wire['structured'] == notes and wire['status'] == 'completed'
     assert home_step.classify(capture(status='processing', structured=notes)) == home_step.WRITING_NOTES

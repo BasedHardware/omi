@@ -660,11 +660,17 @@ def feed(
         locked = bool(row.get('home_is_locked'))
         title = display.get('title', '')
         if kind == 'conversation' and not conversations.effective_user_title(row.get('user_title')):
-            title = display_title(
-                title,
-                display.get('preview', ''),
-                label_recording=bool(row.get('home_step') == home_step.READY and row.get('record_projection_revision')),
+            ready_receipt = bool(
+                home_step_projection_enabled()
+                and row.get('home_step') == home_step.READY
+                and row.get('record_projection_revision')
             )
+            pending = display.get('notes_pending')
+            # Old encrypted cards did not record whether notes live outside the
+            # preview. Keep their headline on ready receipt-bearing rows until
+            # a normal source write or prepare refreshes the display metadata.
+            if pending is True or (pending is not False and not ready_receipt):
+                title = display_title(title, display.get('preview', ''), label_recording=ready_receipt)
         return {
             'id': f'{kind}:{row["id"]}',
             'kind': kind,
