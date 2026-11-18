@@ -83,6 +83,7 @@ def test_notes_settle_arms_one_delivery_for_a_visible_completed_row(strict):
         {'recording': True},
         {'status': 'processing'},
         {'v3_created_delivered_at': AT},
+        {'data_protection_level': 'private'},
     ],
 )
 def test_notes_settle_never_arms_hidden_suppressed_or_delivered_rows(strict, updates):
@@ -241,3 +242,25 @@ def test_explicit_retry_settle_wakes_the_owner_to_deliver(monkeypatch):
     assert processing.run_external(fn, 'u', 'en', conversation) is result
     assert settles[0]['notes'] is True
     assert len(wakes) == 1 and wakes[0][0] == 'u'
+
+
+@pytest.mark.asyncio
+async def test_a_full_page_schedules_a_continuation_for_the_rest(strict, delivery, monkeypatch):
+    strict.rows[C] = derived()
+    settle(strict)
+    monkeypatch.setattr(writers, 'pending_created', lambda uid: ['c'] + [f'gone-{n}' for n in range(7)])
+    assert await created.deliver('synthetic') == 1
+    assert len(delivery.wakes) == 1
+
+
+def test_on_open_notes_arm_a_completed_visible_row(strict, monkeypatch):
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(
+        writers.conversations, '_prepare_conversation_for_write', lambda row, *a, **kw: {**row}, raising=False
+    )
+    strict.rows[C] = derived(tile_state='failed', v3_process_failed=True, structured={})
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    assert writers.store_summary('synthetic', 'c', token, 1, {'title': 'Plan'}, AT, firestore_client=strict) is True
+    assert strict.rows[C]['v3_created_pending'] is True and strict.rows[C]['v3_notes_written'] is True
+    strict.rows[C].update(v3_created_pending=False, v3_created_delivered_at=AT)
+    assert writers.store_summary('synthetic', 'c', token, 1, {'title': 'Plan'}, AT, firestore_client=strict) is False

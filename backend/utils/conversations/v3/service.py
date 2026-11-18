@@ -269,7 +269,7 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
                     prior
                     and prior.get('home_hidden')
                     and not row.get('v3_process_pending')
-                    and writers.created_eligible(row)
+                    and policy.created_eligible(row)
                 ):
                     # Notes written while hidden; the window now shows on Home without a re-note,
                     # so this is its first visible completed moment and it owes the created fanout.

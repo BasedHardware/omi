@@ -57,8 +57,13 @@ async def deliver(uid):
             retry = True
             continue
         await run_blocking(db_executor, writers.finish_created, uid, cid, attempt, delivered=True)
-        metrics.CREATED_DELIVERIES.labels('delivered').inc()
+        # The final attempt drops per-app failures itself, so it is counted apart from a clean delivery.
+        final = attempt >= writers.CREATED_MAX_ATTEMPTS
+        metrics.CREATED_DELIVERIES.labels('final_attempt' if final else 'delivered').inc()
         delivered += 1
+    if len(ids) >= writers.CREATED_PAGE:
+        # A full page may hide more owed rows; continue them on a later owner wake.
+        retry = True
     if retry:
         try:
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RETRY)

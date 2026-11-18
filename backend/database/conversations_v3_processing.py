@@ -11,7 +11,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations, conversations_v3 as store
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
-from utils.conversations.v3 import Conflict
+from utils.conversations.v3 import Conflict, policy
 
 
 def store_summary(uid, cid, token, revision, structured, covers, *, firestore_client=None):
@@ -44,6 +44,15 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
         if current.get('title_locked'):
             patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
             patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
+        settled = current.get('v3_derived') and current.get('status') != 'in_progress'
+        # On-open notes are a notes write too: a row whose background notes failed and the user then
+        # opened owes the same single created delivery once it is visible and completed.
+        armed = bool(
+            settled
+            and policy.created_eligible(
+                {**current, 'v3_notes_written': True, 'v3_process_failed': False, 'tile_state': 'done'}
+            )
+        )
         tx.update(
             ref,
             {
@@ -59,33 +68,13 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
                     if current.get('v3_derived') and not current.get('home_hidden') and patch['structured'].get('title')
                     else {}
                 ),
+                **({'v3_notes_written': True} if settled else {}),
+                **({'v3_created_pending': True} if armed else {}),
             },
         )
+        return armed
 
-    persist(client.transaction())
-
-
-def created_eligible(row):
-    """A visible, completed, notes-bearing derived row owes one conversation-created delivery.
-
-    Mirrors the legacy suppressions: discarded, locked, recordings, free-tier terminal minimums
-    (terminal_no_derived_effects) and silent backfill never fan out; hidden rows wait for visibility.
-    """
-    return bool(
-        row
-        and row.get('v3_derived')
-        and row.get('v3_notes_written')
-        and not row.get('recording')
-        and not row.get('deleted')
-        and not row.get('discarded')
-        and not row.get('is_locked')
-        and not row.get('home_hidden')
-        and not row.get('backfilled')
-        and not row.get('terminal_no_derived_effects')
-        and not row.get('v3_process_failed')
-        and row.get('status') == 'completed'
-        and not row.get('v3_created_delivered_at')
-    )
+    return persist(client.transaction())
 
 
 def settle_processing(
@@ -113,7 +102,7 @@ def settle_processing(
             if not content_hash or processing_hash(decoded) != content_hash:
                 raise Conflict('processing_source_changed')
         written = bool(notes and not skipped and not row.get('deleted'))
-        armed = written and created_eligible(
+        armed = written and policy.created_eligible(
             {**row, 'v3_notes_written': True, 'v3_process_failed': False, 'v3_process_pending': False}
         )
         tx.update(
@@ -141,6 +130,7 @@ def settle_processing(
 
 CREATED_CLAIM = timedelta(minutes=5)
 CREATED_MAX_ATTEMPTS = 5
+CREATED_PAGE = 8
 
 
 def pending_created(uid, *, firestore_client=None):
@@ -150,7 +140,7 @@ def pending_created(uid, *, firestore_client=None):
         snapshot.id
         for snapshot in store.user_conversations(client, uid)
         .where(filter=FieldFilter('v3_created_pending', '==', True))
-        .limit(8)
+        .limit(CREATED_PAGE)
         .stream()
     ]
 
@@ -171,7 +161,7 @@ def claim_created(uid, cid, *, firestore_client=None):
         if not snapshot.exists or not row.get('v3_created_pending'):
             return None
         now = datetime.now(timezone.utc)
-        if not created_eligible(row):
+        if not policy.created_eligible(row):
             tx.update(ref, {'v3_created_pending': False, 'v3_created_claim_until': None})
             return None
         if row.get('v3_created_claim_until') and row['v3_created_claim_until'] > now:
