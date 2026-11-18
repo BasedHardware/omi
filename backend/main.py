@@ -172,6 +172,8 @@ paths_timeout = {
     # Same queue and dispatch deadline; a heavy owner's batch scan runs for minutes.
     "/v1/conversations/deletion-batch-purges/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
     "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
+    # One v3 backfill step: a partition's outline pass, then notes until a 20-minute step deadline.
+    "/v1/conversations-v3/backfill": 1500,
     # STT proxy: 30s slot wait + 300s parakeet client budget (get_stt_proxy_client)
     # + headroom for auth and the multipart spool read; the default POST timeout
     # would cut long files off mid-transcription.

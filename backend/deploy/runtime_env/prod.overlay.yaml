@@ -1006,6 +1006,8 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          # Operator-only per-owner v3 backfill/repair route (scripts/conversations_v3_backfill.py); off = route 404s.
+          CONVERSATIONS_V3_BACKFILL: {value: 'on', category: ops_kill}
           # Hold silent read skipping until the release-owner canary (review F1).
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}

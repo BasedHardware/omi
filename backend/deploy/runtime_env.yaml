@@ -1415,6 +1415,9 @@ environments:
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
               category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
+              category: reliability
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
@@ -1823,6 +1826,9 @@ environments:
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
               category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
+              category: reliability
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -2215,6 +2221,9 @@ environments:
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
               category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
+              category: reliability
           provisional: true
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -2580,6 +2589,9 @@ environments:
               category: config
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
+              category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
               category: reliability
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -4588,6 +4600,9 @@ environments:
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
               category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
+              category: reliability
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
           capabilities:
@@ -4899,6 +4914,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATIONS_V3_BACKFILL:
+              value: 'on'
+              category: ops_kill
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -5149,6 +5167,9 @@ environments:
               category: config
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
+              category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
               category: reliability
           flags:
             --timeout: 3600s
@@ -5677,6 +5698,9 @@ environments:
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
               category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
+              category: reliability
           provisional: true
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -6151,6 +6175,9 @@ environments:
               category: config
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
+              category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
               category: reliability
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
