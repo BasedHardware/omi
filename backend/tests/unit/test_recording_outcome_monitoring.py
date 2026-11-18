@@ -349,10 +349,8 @@ def test_stuck_row_shows_blocked_heads_and_fresh_unprojected_share():
 
 
 def test_kill_switch_is_registered_default_on():
-    flags = {
-        entry['key']: entry
-        for entry in yaml.safe_load((BACKEND.parent / 'config/feature-flags.yaml').read_text())['flags']
-    }
+    with (BACKEND.parent / 'config/feature-flags.yaml').open(encoding='utf-8') as registry:
+        flags = {entry['key']: entry for entry in yaml.load(registry, Loader=yaml.CSafeLoader)['flags']}
     flag = flags['BATCH_PIPELINE_RECORDING_OUTCOME_ENABLED']
     assert flag['lifecycle'] == 'ops_kill' and flag['fail'] == 'open'
     from config.policy.kill_switches import KILL_SWITCHES
