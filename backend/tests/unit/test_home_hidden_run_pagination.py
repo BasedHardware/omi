@@ -123,6 +123,14 @@ def test_budget_cut_keeps_prefix_and_says_more(monkeypatch):
     assert info['has_more'] is True
 
 
+def test_budget_spent_before_the_first_row_does_not_say_more(monkeypatch):
+    data, _ = owner()
+    ids, info, _ = page(monkeypatch, data, offset=0, budget=budget(0))
+    assert ids == []
+    # A client honoring has-more would repeat the identical request forever.
+    assert info == {'storage_rows': 0, 'has_more': False}
+
+
 def test_offset_charge_that_exhausts_the_budget_ends_the_walk(monkeypatch):
     data, _ = owner()
     ids, info, counts = page(monkeypatch, data, offset=100, budget=budget(60))

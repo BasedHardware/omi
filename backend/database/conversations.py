@@ -1089,7 +1089,9 @@ class _PageFill:
         try:
             self._run(query, batch_limit)
         except ListReadBudgetExhausted:
-            self.has_more = True
+            # With no row read there is no position to resume from, and an identical retry
+            # would stop at the same place, so only a page that advanced says more.
+            self.has_more = self.consumed > 0
         return self
 
     def _run(self, query, batch_limit):

@@ -368,7 +368,8 @@ def _serve_windows(monkeypatch, rows, calls=None):
     def recent(uid, *, now, max_idle, **kw):
         if calls is not None:
             calls.append(dict(now=now, max_idle=max_idle))
-        return rows() if callable(rows) else rows
+        served = rows() if callable(rows) else rows
+        return served, len(served)
 
     monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
     monkeypatch.setattr(routes.conversations_v3_live, 'recent_windows', recent)
@@ -476,11 +477,12 @@ def test_live_returns_only_a_recent_open_v3_window(monkeypatch, rows, expected):
 class _WindowQuery:
     """A Firestore query fake over v3 windows: records the shape and pages by limit/start_after."""
 
-    def __init__(self, docs, log, filters=(), size=None, after=None, fields=None):
+    def __init__(self, docs, log, filters=(), size=None, after=None, fields=None, bounds=()):
         self.docs, self.log, self.filters, self.size, self.after, self.fields = docs, log, filters, size, after, fields
+        self.bounds = bounds
 
     def _clone(self, **kw):
-        state = dict(filters=self.filters, size=self.size, after=self.after, fields=self.fields)
+        state = dict(filters=self.filters, size=self.size, after=self.after, fields=self.fields, bounds=self.bounds)
         state.update(kw)
         return _WindowQuery(self.docs, self.log, **state)
 
@@ -491,7 +493,14 @@ class _WindowQuery:
         return self
 
     def where(self, *, filter):
-        return self._clone(filters=(*self.filters, (filter.field_path, filter.op_string)))
+        return self._clone(
+            filters=(*self.filters, (filter.field_path, filter.op_string)),
+            bounds=(*self.bounds, (filter.field_path, filter.op_string, filter.value)),
+        )
+
+    def _matches(self, doc):
+        ops = {'==': lambda a, b: a == b, '>=': lambda a, b: a >= b, '<=': lambda a, b: a <= b}
+        return all(ops[op](doc._data.get(field), value) for field, op, value in self.bounds)
 
     def select(self, fields):
         return self._clone(fields=list(fields))
@@ -504,8 +513,9 @@ class _WindowQuery:
 
     def stream(self):
         self.log.append(dict(filters=self.filters, size=self.size, fields=self.fields))
-        start = 0 if self.after is None else self.docs.index(self.after) + 1
-        return iter(self.docs[start : start + self.size])
+        docs = sorted((d for d in self.docs if self._matches(d)), key=lambda d: d._data['finished_at'])
+        start = 0 if self.after is None else docs.index(self.after) + 1
+        return iter(docs[start : start + self.size])
 
 
 class _Snap:
@@ -516,42 +526,62 @@ class _Snap:
         return dict(self._data)
 
 
-def test_live_read_uses_the_v3_index_and_pages_to_the_newest_window(monkeypatch):
+def _live_read(monkeypatch, docs, log):
     from database import conversations_v3_live as live_db
 
-    now = datetime.now(timezone.utc)
-    # 200 finished windows inside the idle cap, oldest first (the index order), then the open
-    # one: far more than any fixed first-N read would reach.
-    docs = [
-        _Snap(_live_row(f'done-{i:03d}', minutes_ago=110 - i * 0.5, status='processing', tile_state='done'))
-        for i in range(200)
-    ] + [_Snap(_live_row('open', minutes_ago=1))]
-    log = []
     monkeypatch.setattr(live_db, 'prepare_conversation_for_read', lambda row, uid: row)
-    rows = live_db.recent_windows('u', now=now, max_idle=timedelta(hours=2), firestore_client=_WindowQuery(docs, log))
-    assert routes.v3_live.active(rows, now)['id'] == 'open'
+    now = datetime.now(timezone.utc)
+    row = live_db.live_window(
+        'u',
+        now=now,
+        max_idle=routes.v3_live.MAX_IDLE,
+        pick=routes.v3_live.active,
+        firestore_client=_WindowQuery(docs, log),
+    )
+    return live_db, row
+
+
+def _finished(n, *, newest_minutes_ago):
+    # n finished windows, one a minute, the newest ``newest_minutes_ago`` old.
+    return [
+        _Snap(_live_row(f'done-{i:03d}', minutes_ago=newest_minutes_ago + i, status='processing', tile_state='done'))
+        for i in range(n)
+    ]
+
+
+def test_live_read_finds_a_speaking_window_in_the_recent_band(monkeypatch):
+    # A busy account: 100 finished windows in the idle cap. The open window spoke a minute
+    # ago, so the recent band holds it and the full window is never read.
+    log = []
+    live_db, row = _live_read(monkeypatch, _finished(100, newest_minutes_ago=20) + [_Snap(_live_row('open'))], log)
+    assert row['id'] == 'open'
+    assert len(log) == 1 and log[0]['size'] == live_db.PAGE
     # Indexed filters only (v3_derived, finished_at, started_at): legacy rows never enter the scan.
     assert log[0]['filters'] == (('v3_derived', '=='), ('finished_at', '>='), ('started_at', '<='))
     # The projection is unconditional and carries no transcript.
     assert 'transcript_segments' not in log[0]['fields'] and 'structured' in log[0]['fields']
-    assert [call['size'] for call in log] == [live_db.PAGE] * 5
-    assert len(log) <= live_db.MAX_PAGES
 
 
-def test_live_read_logs_when_it_reaches_its_safety_cap(monkeypatch, caplog):
+def test_live_read_widens_to_the_idle_cap_for_a_quiet_open_window(monkeypatch):
+    log = []
+    docs = _finished(30, newest_minutes_ago=40) + [_Snap(_live_row('quiet', minutes_ago=30))]
+    _, row = _live_read(monkeypatch, docs, log)
+    assert row['id'] == 'quiet'
+    assert len(log) == 2
+
+
+def test_live_read_with_nothing_open_stops_at_its_cap_and_logs(monkeypatch, caplog):
     from database import conversations_v3_live as live_db
 
-    now = datetime.now(timezone.utc)
-    docs = [_Snap(_live_row(f'w-{i}', minutes_ago=50 - i, status='processing', tile_state='done')) for i in range(10)]
-    monkeypatch.setattr(live_db, 'prepare_conversation_for_read', lambda row, uid: row)
-    monkeypatch.setattr(live_db, 'PAGE', 2)
-    monkeypatch.setattr(live_db, 'MAX_PAGES', 3)
+    monkeypatch.setattr(live_db, 'READ_CAP', 7)
+    monkeypatch.setattr(live_db, 'PAGE', 3)
+    log = []
     with caplog.at_level('WARNING', logger=live_db.__name__):
-        rows = live_db.recent_windows(
-            'u', now=now, max_idle=timedelta(hours=2), firestore_client=_WindowQuery(docs, [])
-        )
-    assert len(rows) == 6
-    assert 'safety cap' in caplog.text
+        _, row = _live_read(monkeypatch, _finished(4, newest_minutes_ago=1) + _finished(20, newest_minutes_ago=30), log)
+    assert row is None
+    # The cap is shared across both bands: 4 rows in the recent band, then 3 more.
+    assert [call['size'] for call in log] == [3, 3, 3]
+    assert 'stopped at its cap' in caplog.text
 
 
 def test_merge_rejects_recording_before_admission(monkeypatch):

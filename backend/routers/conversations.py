@@ -188,7 +188,7 @@ def get_live_conversation(
     if not enabled:
         return {'v3': False, 'conversation': None}
     now = datetime.now(timezone.utc)
-    row = v3_live.active(conversations_v3_live.recent_windows(uid, now=now, max_idle=v3_live.MAX_IDLE), now)
+    row = conversations_v3_live.live_window(uid, now=now, max_idle=v3_live.MAX_IDLE, pick=v3_live.active)
     compact = (
         {
             key: row[key]

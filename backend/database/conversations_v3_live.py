@@ -8,7 +8,7 @@ its identity, title, times, state and the visibility flags.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -33,21 +33,26 @@ LIVE_FIELDS = [
     'deleted',
     'discarded',
 ]
-# Windows that spoke inside the idle cap. The index is ascending by finished_at, so the
-# newest window comes last: the read pages through the whole idle window rather than
-# stopping at a fixed count. A reverse-order read would need a new descending index.
-# MAX_PAGES is only a safety stop, far above any real two-hour window count (a v3 window
-# spans many minutes of speech), and hitting it is logged.
+# The index is ascending by finished_at, so the newest window comes last and a read cannot
+# stop early once it finds the open one; a reverse-order read would need a new descending
+# index. The live tile is polled, so the read goes in two bands instead. An open window's
+# finished_at is its latest speech, so it is almost always in the recent band, which holds
+# only a few rows. The full idle window is read only when the recent band has no live
+# window. READ_CAP bounds the rows one call reads across both bands; reaching it is logged.
+RECENT_BAND = timedelta(minutes=10)
 PAGE = 50
-MAX_PAGES = 20
+READ_CAP = 200
 # Clock skew allowance for a window that started a moment "in the future".
 START_SKEW = timedelta(minutes=5)
 
 
 def recent_windows(
-    uid: str, *, now: datetime, max_idle: timedelta, firestore_client: Any = None
-) -> List[Dict[str, Any]]:
-    """v3 windows whose last speech is inside ``max_idle``, projected to the live fields."""
+    uid: str, *, now: datetime, max_idle: timedelta, max_rows: int = READ_CAP, firestore_client: Any = None
+) -> Tuple[List[Dict[str, Any]], int]:
+    """v3 windows whose last speech is inside ``max_idle``, projected to the live fields.
+
+    Returns the prepared rows and the number of documents read (at most ``max_rows``).
+    """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     query = (
         client.collection('users')
@@ -59,17 +64,37 @@ def recent_windows(
         .select(LIVE_FIELDS)
     )
     rows: List[Dict[str, Any]] = []
+    read = 0
     last: Optional[Any] = None
-    for _ in range(MAX_PAGES):
-        page = (query.start_after(last) if last is not None else query).limit(PAGE)
-        snapshots = list(page.stream())
+    while read < max_rows:
+        size = min(PAGE, max_rows - read)
+        snapshots = list((query.start_after(last) if last is not None else query).limit(size).stream())
+        read += len(snapshots)
         for snapshot in snapshots:
             row = prepare_conversation_for_read(dict(snapshot.to_dict() or {}, id=snapshot.id), uid)
             if row is not None:
                 rows.append(row)
-        if len(snapshots) < PAGE:
-            break
+        if len(snapshots) < size:
+            return rows, read
         last = snapshots[-1]
-    else:
-        logger.warning('v3 live read stopped at its safety cap of %d windows', PAGE * MAX_PAGES)
-    return rows
+    logger.warning('v3 live read stopped at its cap of %d windows', READ_CAP)
+    return rows, read
+
+
+def live_window(
+    uid: str,
+    *,
+    now: datetime,
+    max_idle: timedelta,
+    pick: Callable[[Sequence[Mapping[str, Any]], datetime], Optional[Mapping[str, Any]]],
+    firestore_client: Any = None,
+) -> Optional[Mapping[str, Any]]:
+    """The window ``pick`` chooses, reading the recent band first and widening only if needed."""
+    left = READ_CAP
+    for band in (min(RECENT_BAND, max_idle), max_idle):
+        rows, read = recent_windows(uid, now=now, max_idle=band, max_rows=left, firestore_client=firestore_client)
+        row = pick(rows, now)
+        left -= read
+        if row is not None or left <= 0:
+            return row
+    return None
