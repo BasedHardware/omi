@@ -308,6 +308,41 @@ def test_audio_only_row_without_transcript_is_admitted():
     assert job['selfheal_transcript_bytes'] == len(b'[]')
 
 
+# The 2026-11-18 stuck shape: a sealed server-batch stub stamped with the placeholder.
+_PLACEHOLDER_STUB = {
+    'transcript_segments': [],
+    'has_content': True,
+    'audio_files': [{'id': 'clip-1'}],
+    'record_lane_owner': 'batch_live_v1',
+    'record_audio_closed': True,
+    'external_data': {'server_batch_only': True},
+    'structured': {'title': 'Discussion notes', 'overview': '', 'emoji': '🧠', 'category': 'other'},
+}
+
+
+@pytest.mark.parametrize(
+    'overrides,refusal',
+    [
+        ({}, None),
+        ({'user_title': 'Standup'}, 'refused_protected_content'),
+        (
+            {'structured': {**_PLACEHOLDER_STUB['structured'], 'overview': 'Budget approved.'}},
+            'refused_protected_content',
+        ),
+        ({'structured': {**_PLACEHOLDER_STUB['structured'], 'title': 'Pilot budget'}}, 'refused_protected_content'),
+    ],
+)
+def test_placeholder_only_stub_is_admitted_and_real_content_still_refuses(overrides, refusal):
+    transaction, intent = _recover(_recovery_conversation({**_PLACEHOLDER_STUB, **overrides}))
+
+    if refusal is None:
+        assert intent['created'] is True
+        assert transaction.sets[0][1]['selfheal_audio_file_ids'] == ['clip-1']
+    else:
+        assert intent['status'] == refusal
+        assert transaction.sets == []
+
+
 def test_undecodable_transcript_blob_counts_as_content_and_sized_in_bytes():
     blob = 'gzipped-not-json-###'
     transaction, intent = _recover(_recovery_conversation({'transcript_segments': blob}))
@@ -338,6 +373,7 @@ def test_structured_has_protected_content_boundaries():
     assert structured_has_protected_content({'title': 'A title'}) is True
     assert structured_has_protected_content({'overview': 'notes'}) is True
     assert structured_has_protected_content({'sections': [{'title': 'x'}]}) is True
+    assert structured_has_protected_content({'gist': 'Pilot budget approval'}) is True
     assert structured_has_protected_content({'action_items': [{'description': 'd'}]}) is True
     assert structured_has_protected_content({'events': [{'title': 'e'}]}) is True
     assert structured_has_protected_content({}, user_title='Renamed') is True

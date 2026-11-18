@@ -171,6 +171,37 @@ def test_huh_completed_dead_letter_empty_decision_snapshot(monkeypatch, text, ve
     assert patch['discarded'] == (verdict == 'discard')
 
 
+@pytest.mark.parametrize(
+    'structured,retryable',
+    [
+        ({'title': 'Discussion notes'}, True),
+        ({'title': 'Discussion 3'}, True),
+        ({'title': 'Pilot budget'}, False),
+        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, False),
+        ({'title': 'Discussion notes', 'overview': 'Pilot budget approved'}, False),
+    ],
+)
+def test_dead_letter_retryability_ignores_a_placeholder_title(monkeypatch, structured, retryable):
+    """A placeholder-only row holds no earlier summary, so a retry can be offered."""
+    row = {
+        'source': 'omi',
+        'id': 'c',
+        'status': 'completed',
+        'discarded': False,
+        'finalization_status': 'dead_letter',
+        'relevance_decision': {},
+        'structured': structured,
+        'transcript_segments': [{'text': 'the pilot budget is eight thousand dollars'}],
+    }
+    monkeypatch.setattr(terminal, 'calendar_retains', lambda *_: False)
+    monkeypatch.setattr(terminal, '_has_described_photo', lambda *_, **__: False)
+    ref = SimpleNamespace(path='users/u/conversations/c')
+    patch = terminal.dead_letter_conversation_updates(
+        'u', row, ref, object(), 'processing_failed', None, lambda _: False
+    )
+    assert bool(patch.get('summary_retryable')) is retryable
+
+
 def test_decision_metrics_have_distinct_terminal_labels():
     from utils.metrics import CONVERSATION_RELEVANCE_DECISION_TOTAL, record_conversation_relevance
 
