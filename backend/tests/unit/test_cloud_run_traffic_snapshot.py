@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import subprocess
+import sys
+from pathlib import Path
 
 from scripts import cloud_run_traffic_snapshot as snapshots
 
@@ -264,3 +266,42 @@ def test_restore_deletes_and_observes_services_missing_before_bootstrap() -> Non
     ]
     assert evidence['result'] == 'pass'
     assert evidence['deleted_services']['backend-beta']['result'] == 'deleted'
+
+
+def test_release_floor_rejects_split_restore_before_mutating_traffic(monkeypatch) -> None:
+    snapshot = {
+        'project': 'based-hardware',
+        'region': 'us-central1',
+        'services': {
+            'backend-sync': {
+                'spec': {
+                    'traffic': [
+                        {'revisionName': 'backend-sync-new', 'percent': 90},
+                        {'revisionName': 'backend-sync-old', 'percent': 10},
+                    ]
+                },
+            },
+        },
+    }
+    checks = []
+
+    def check(command, *, check):
+        checks.append(command)
+        if 'backend-sync-old' in command:
+            raise subprocess.CalledProcessError(1, command)
+
+    monkeypatch.setattr(snapshots.subprocess, 'run', check)
+    mutations = []
+    evidence = snapshots.restore_snapshot(
+        snapshot,
+        runner=mutations.append,
+        release_floor_check=Path('floor.py'),
+    )
+
+    assert checks == [
+        [sys.executable, 'floor.py', '--revision', revision, '--project', 'based-hardware', '--region', 'us-central1']
+        for revision in ('backend-sync-new', 'backend-sync-old')
+    ]
+    assert mutations == []
+    assert evidence['failed_services'] == ['backend-sync']
+    assert evidence['services']['backend-sync']['error'] == 'backend release floor rejected backend-sync-old'

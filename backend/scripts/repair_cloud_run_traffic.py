@@ -47,6 +47,8 @@ def main() -> int:
     parser.add_argument('--release-floor-check', help='Validate the exact revision before moving live traffic.')
     parser.add_argument('--state', help='Offline Cloud Run services JSON list/object for tests.')
     args = parser.parse_args()
+    if args.state and args.release_floor_check:
+        parser.error('--release-floor-check requires live revision discovery and cannot be combined with --state')
 
     services = tuple(args.services or DEFAULT_SERVICES)
     if args.state:

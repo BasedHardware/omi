@@ -117,3 +117,27 @@ def test_live_repair_validates_exact_target_before_moving_traffic(monkeypatch) -
             'us-central1',
         ]
     ]
+
+
+def test_state_file_cannot_bypass_requested_release_floor(monkeypatch) -> None:
+    import pytest
+
+    from scripts import repair_cloud_run_traffic as repair
+
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'repair',
+            '--project',
+            'based-hardware',
+            '--state',
+            'snapshot.json',
+            '--repair',
+            '--release-floor-check',
+            'floor.py',
+        ],
+    )
+
+    with pytest.raises(SystemExit, match='2'):
+        repair.main()

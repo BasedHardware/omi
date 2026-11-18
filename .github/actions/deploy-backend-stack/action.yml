@@ -1748,8 +1748,14 @@ runs:
             --state "$RUNNER_TEMP/integration-canary-private.json" || rollback_rc=$?
           canary_args=(--exclude-service backend-integration)
         fi
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
           --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
+          --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
           "${canary_args[@]}" \
           --evidence-path artifacts/backend-cloud-run-traffic-restore.json || rollback_rc=$?
         exit "$rollback_rc"

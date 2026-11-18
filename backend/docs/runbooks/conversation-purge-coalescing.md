@@ -77,7 +77,10 @@ No member completes merely because handback or an HTTP acknowledgement happened.
 
 Release must enforce the workspace rollback floor for every purge consumer.
 Use the floor-guarded workspace tooling for deploy and rollback admission. For
-manual traffic moves, verify the target against the workspace floor first.
+other manual traffic moves, verify the target against the workspace floor first.
+The direct backend workflow checks the floor from product main for the requested
+release, traffic repair, integration canary rollback, and failed-promotion
+traffic restoration.
 Keep renewing the readiness marker daily while marker-gated #25608 binaries
 still serve, until every purge consumer runs the marker-free release.
 Verify traffic, tagged revisions and queued revision-specific task targets before
