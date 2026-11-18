@@ -1,7 +1,17 @@
 """Pure v3 intent policy shared by projection, processing and on-open notes."""
 
 from collections.abc import Mapping
+from datetime import timedelta
+
 from utils.conversations.processing_trigger import ProcessingTrigger
+
+# Listen seals a live v3 recording at a short pause once it is ROTATION_MIN_SECONDS old, or at
+# ROTATION_MAX_SECONDS without one, so transcripts flow during a long capture.
+ROTATION_MIN_SECONDS = 120
+ROTATION_PAUSE_SECONDS = 1.5
+ROTATION_MAX_SECONDS = 240
+# How long a sealed recording's pending transcript keeps the previous stretch open.
+TRANSCRIPT_WAIT = timedelta(minutes=15)
 
 
 def field(row, name):
@@ -85,3 +95,19 @@ def builder_eligible(row):
         and row.get('started_at')
         and not row.get('_v3_unreadable')
     )
+
+
+def awaiting_transcript(row, now):
+    """A recording whose transcript has not landed yet: missing transcript is not silence.
+
+    Bounded, so a stuck row cannot hold the previous stretch open: a live row that is past the
+    rotation cap has heard no speech (it would have sealed), and a sealed row waits TRANSCRIPT_WAIT.
+    """
+    status = field(row, 'status')
+    if status == 'processing':
+        since = field(row, 'finished_at') or field(row, 'started_at')
+        return since is not None and now - since < TRANSCRIPT_WAIT
+    if status == 'in_progress':
+        created = field(row, 'created_at') or field(row, 'started_at')
+        return created is not None and now - created < timedelta(seconds=ROTATION_MAX_SECONDS + 15)
+    return False

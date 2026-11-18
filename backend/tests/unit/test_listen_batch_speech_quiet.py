@@ -190,3 +190,83 @@ async def test_a_row_created_before_the_meeting_still_gets_its_window(monkeypatc
         'end_time': (NOW + timedelta(minutes=30)).isoformat(),
     }
     assert await _one_pass(monkeypatch, row, clock) == 0
+
+
+def _v3_row(age_seconds):
+    row = _batch_row(NOW - timedelta(seconds=age_seconds))
+    row['recording'] = True
+    return row
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('age', 'since_speech', 'rotates'),
+    [
+        (130, 2, True),  # past the rotation age, at a pause
+        (130, 0.5, False),  # past the age, mid-speech
+        (90, 30, False),  # quiet but younger than the rotation age
+        (245, 0, True),  # hard cap with continuous speech
+    ],
+)
+async def test_v3_recording_rotates_at_a_pause_or_the_cap(monkeypatch, age, since_speech, rotates):
+    opened = NOW - timedelta(minutes=40)
+    clock = _clock(opened=opened, started=opened, speech=NOW - timedelta(seconds=since_speech))
+    assert await _one_pass(monkeypatch, _v3_row(age), clock) == int(rotates)
+
+
+@pytest.mark.asyncio
+async def test_v3_row_with_no_speech_of_its_own_never_rotates(monkeypatch):
+    opened = NOW - timedelta(minutes=40)
+    clock = _clock(opened=opened, started=opened, speech=NOW - timedelta(seconds=250))
+    assert await _one_pass(monkeypatch, _v3_row(245), clock) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('since_speech', [2, 0])
+async def test_legacy_row_never_rotates(monkeypatch, since_speech):
+    opened = NOW - timedelta(minutes=40)
+    clock = _clock(opened=opened, started=opened, speech=NOW - timedelta(seconds=since_speech))
+    assert await _one_pass(monkeypatch, _batch_row(NOW - timedelta(minutes=20)), clock) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failed', [True, False])
+@pytest.mark.parametrize(('age', 'rotates'), [(130, False), (245, True)])
+async def test_failed_or_absent_clock_uses_only_the_cap(monkeypatch, failed, age, rotates):
+    clock = None
+    if failed:
+        opened = NOW - timedelta(minutes=40)
+        clock = _clock(opened=opened, started=opened, speech=NOW - timedelta(seconds=2))
+        clock.failed = True
+    assert await _one_pass(monkeypatch, _v3_row(age), clock) == int(rotates)
+
+
+@pytest.mark.asyncio
+async def test_kill_switch_stops_rotation(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_RECORDING_ROTATION', 'off')
+    opened = NOW - timedelta(minutes=40)
+    clock = _clock(opened=opened, started=opened, speech=NOW - timedelta(seconds=2))
+    assert await _one_pass(monkeypatch, _v3_row(245), clock) == 0
+
+
+@pytest.mark.asyncio
+async def test_a_calendar_meeting_does_not_block_v3_rotation(monkeypatch):
+    # v3 conversations come from transcript windows; the successor recording inherits the meeting.
+    opened = NOW - timedelta(minutes=40)
+    clock = _clock(opened=opened, started=opened, speech=NOW - timedelta(seconds=2))
+    row = _v3_row(130)
+    row['has_content'] = True
+    row['external_data']['calendar_meeting_context'] = {
+        'calendar_event_id': 'evt-3',
+        'calendar_source': 'google',
+        'start_time': (NOW - timedelta(minutes=10)).isoformat(),
+        'end_time': (NOW + timedelta(minutes=30)).isoformat(),
+    }
+    assert await _one_pass(monkeypatch, row, clock) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_resumed_v3_row_rotates_on_speech_this_socket_heard(monkeypatch):
+    opened = NOW - timedelta(minutes=2)
+    clock = _clock(opened=opened, started=opened, speech=NOW - timedelta(seconds=2))
+    assert await _one_pass(monkeypatch, _v3_row(600), clock) == 1

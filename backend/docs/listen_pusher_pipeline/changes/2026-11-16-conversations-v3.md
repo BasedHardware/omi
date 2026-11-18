@@ -72,3 +72,16 @@ outline prompt/context identity versions both caching and paid-attempt budgets.
 
 No intake, STT, speaker assignment, sync merge, audio, wire or service-stage
 change. Rollout still requires the existing beta gates.
+
+## v3 recording rotation (2026-11-18)
+
+A batch-only recording has no transcript until it seals, and in continuous
+noise it never reached the 120 s speech quiet, so a 34-minute cafe capture
+showed nothing on Home until it ended. Listen now seals a live v3 recording
+(`recording: true`) at the first 1.5 s speech pause after 120 s, or at 240 s,
+and the next audio opens the next recording on the same socket. Legacy rows,
+onboarding captures and boundary holds never rotate. The v3 loader keeps the
+latest stretch open while the next recording is live under the cap or sealed
+and untranscribed for up to 15 minutes, so a rotation is never a false
+five-minute split. `CONVERSATIONS_V3_RECORDING_ROTATION=off` restores
+seal-on-quiet.

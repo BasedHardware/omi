@@ -61,7 +61,9 @@ from utils.transcribe_store import calendar_db, conversations_db, redis_db
 from config.occasion_conversations import OCCASION_MAX_SPAN_SECONDS
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.lifecycle_clocks import speech_clock, utc
-from utils.stt.speech_clock import quiet_since
+from utils.stt.speech_clock import quiet_since, rotation_due
+from utils.conversations.v3 import policy as v3_policy
+from config.conversations_v3 import recording_rotation_enabled
 from utils.episodes import boundaries, boundary_runtime
 from utils.episodes.batch_close import attach_admitted_batch_capture
 from routers.listen.occasion import occasion_attach_target
@@ -1197,6 +1199,29 @@ class LiveConversationController:
     async def _occasion_attach_target(self) -> Optional[str]:
         return await occasion_attach_target(self)
 
+    def _v3_rotation_due(self, conversation: dict[str, Any]) -> bool:
+        """A v3 recording does not define a conversation, so a long one seals at a pause.
+
+        Its transcript, and the conversation derived from it, then appear during the capture.
+        Legacy rows are one conversation per recording and never rotate.
+        """
+        if (
+            conversation.get('recording') is not True
+            or not server_batch_owned(conversation)
+            or getattr(self.host.request, 'onboarding_mode', False)
+            or self.host.state.last_audio_received_time is None
+            or not recording_rotation_enabled()
+        ):
+            return False
+        return rotation_due(
+            getattr(getattr(self.host, 'receiver', None), 'speech_clock', None),
+            utc(conversation.get('created_at')),
+            self.clock().timestamp(),
+            min_age=v3_policy.ROTATION_MIN_SECONDS,
+            pause=v3_policy.ROTATION_PAUSE_SECONDS,
+            max_age=v3_policy.ROTATION_MAX_SECONDS,
+        )
+
     async def lifecycle_loop(self) -> None:
         while self.host.state.active:
             if await self.host.wait(5):
@@ -1270,6 +1295,13 @@ class LiveConversationController:
             ):
                 # One occasion is capped like a smart-merged chain: all-day capture still rolls over.
                 logger.info('event=occasion_span_rollover conversation=%s', conversation_id)
+                action = ConversationLifecycleAction.process_and_create_new
+            if (
+                boundary_action != 'hold'
+                and action == ConversationLifecycleAction.continue_current
+                and self._v3_rotation_due(conversation)
+            ):
+                logger.info('event=v3_recording_rotation conversation=%s', conversation_id)
                 action = ConversationLifecycleAction.process_and_create_new
             if (
                 producer

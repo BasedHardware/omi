@@ -17,7 +17,7 @@ from database import conversations, conversations_v3_leases as leases
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.encryption import encrypt, decrypt
-from utils.conversations.v3 import Conflict
+from utils.conversations.v3 import Conflict, policy
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 
 LIMIT = 128
@@ -287,7 +287,39 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         queried.update(row['id'] for row in fresh)
     else:
         raise Conflict('v3_source_closure_budget')
+    _mark_successor_pending(coll, recordings)
     return {**recordings, **unreadable}, existing, cache
+
+
+def _mark_successor_pending(coll, recordings):
+    """Keep the latest stretch open while the next recording is still captured or transcribed.
+
+    Batch recordings get no transcript until they seal, and listen rotates long v3 recordings, so
+    the next one can start before the previous stretch's five-minute deadline with no lines yet.
+    """
+    spoken = [r for r in recordings.values() if r.get('transcript_segments') and r.get('started_at')]
+    if not spoken:
+        return
+    latest = max(spoken, key=speech_end)
+    if latest.get('_v3_page_continues'):
+        return
+    end, now = speech_end(latest), datetime.now(timezone.utc)
+    query = coll.where(filter=FieldFilter('started_at', '>', latest['started_at'])).order_by('started_at')
+    for doc in query.limit(8).stream():
+        raw = doc.to_dict() or {}
+        start = raw.get('started_at')
+        if not start or start - end >= timedelta(minutes=5):
+            return
+        if (
+            doc.id != latest['id']
+            and raw.get('recording') is True
+            and not raw.get('deleted')
+            and not raw.get('sync_merged_into')
+            and raw.get('data_protection_level') != 'private'
+            and policy.awaiting_transcript(raw, now)
+        ):
+            latest['_v3_page_continues'] = True
+            return
 
 
 def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):

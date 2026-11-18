@@ -24,6 +24,11 @@ def conversations_v3_enabled(uid: str) -> bool:
     return in_rollout_cohort(uid, 'conversations-v3')
 
 
+def recording_rotation_enabled() -> bool:
+    """Listen seals long v3 recordings at short pauses (utils/conversations/v3/policy.py ROTATION_*)."""
+    return os.getenv('CONVERSATIONS_V3_RECORDING_ROTATION', 'on').strip().lower() not in {'off', 'false', '0'}
+
+
 def backfill_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_BACKFILL', 'off').strip().lower() == 'on'
 

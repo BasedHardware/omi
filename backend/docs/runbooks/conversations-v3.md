@@ -46,7 +46,12 @@ this decision and outline_kind retains the original classification.
 Five minutes of placed-speech silence is a hard window boundary. An outline's
 `resumes_previous` may undo a topic split within that interval, never rejoin
 windows across the silence boundary, even with the same people. Short socket
-captures and reconnects do not themselves split a continuous stretch. The
+captures and reconnects do not themselves split a continuous stretch. Listen
+seals a live v3 recording at the first 1.5 s speech pause once it is 120 s old,
+or at 240 s without one, so transcripts and the live derived row keep flowing in
+a long capture (`CONVERSATIONS_V3_RECORDING_ROTATION`, default on; `off` restores
+seal-on-quiet). A later recording still capturing (under the cap) or sealed and
+untranscribed (up to 15 minutes) holds the previous stretch open. The
 two-hour cap still bounds each resulting window. Missing transcript is not
 proof of acoustic silence; qualify transcript completeness separately.
 The recording-speaker picker for a derived conversation reads and edits only
