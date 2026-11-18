@@ -1344,7 +1344,11 @@ def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
         assert removed == (environment == 'prod' and name in ('backend', 'backend-sync-backfill'))
         expected = {}
         if environment == 'prod':
-            expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'true'
+            # 2026-11-18: turned off on all four prod workloads. The registry's enable
+            # gates (replay, integration-first ramp, terminal-loss/SLA/read and D+2
+            # settled-SKU evidence) were never recorded, so the owner kept the
+            # documented default-off rollback. See config/feature-flags.yaml.
+            expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'false'
             if name in ('backend-sync', 'backend-integration'):
                 expected['BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED'] = 'true'
         switches = {
