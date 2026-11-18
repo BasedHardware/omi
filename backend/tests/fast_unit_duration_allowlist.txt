@@ -572,3 +572,6 @@ tests/unit/test_monitoring_telemetry_contract.py::test_held_dead_letter_producer
 # Walks a 1200-segment transcript across every page; each page rebuilds speaker display over the
 # whole transcript (product behavior under test). ~0.3s CPU locally, 1.02-1.07s on CI runners (PR #25522, #25551).
 tests/unit/test_mcp_conversation_detail_paging.py::test_walk_1200_segments_once_with_one_existing_read_per_page
+# First synchronous-finalize test of its file pays the lazy finalize import chain (batch pipeline, STT,
+# scipy/onnxruntime; ~627 modules) in its call phase: 1.04-1.07s CPU on CI runners, ~0.5s locally.
+tests/unit/test_client_processing_finalize.py::test_paid_sync_finalize_projection_is_in_firestore_on_reread

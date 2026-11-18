@@ -365,11 +365,17 @@ def test_census_guard_runs_for_writer_and_vocabulary_changes(path):
     assert guard <= set(selected), reason
 
 
-def test_unmapped_census_neighbours_keep_their_full_fallback():
+def test_unmapped_census_registry_selects_the_guard_and_its_importers(monkeypatch):
+    monkeypatch.setenv('BACKEND_UNIT_GRAPH_SELECTION', '1')
     selector = runpy.run_path(str(BACKEND / 'scripts/select_backend_unit_tests.py'))
     all_tests = selector['discover_all_tests']()
-    # The registry is not otherwise mapped to a narrow area, so its edit must
-    # still select the full suite while the guard runs.
+    # The registry is not mapped to a narrow area. Its edit selects the tests
+    # that import it through the import graph, and always runs the guard.
+    selected, reason = selector['tests_for_changed_paths'](['backend/config/batch_census.py'], all_tests)
+    assert 'tests/unit/test_batch_census_registry.py' in selected
+    assert 'import graph' in reason
+    # With graph selection switched off the unmapped full-suite fallback returns.
+    monkeypatch.setenv('BACKEND_UNIT_GRAPH_SELECTION', '0')
     selected, _reason = selector['tests_for_changed_paths'](['backend/config/batch_census.py'], all_tests)
     assert set(selected) == set(all_tests)
 

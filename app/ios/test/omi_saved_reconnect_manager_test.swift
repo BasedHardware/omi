@@ -110,6 +110,7 @@ final class ManagerHarness {
     var peripherals: [String: TestPeripheral] = [:]
     var manuallyDisconnected: Set<String> = []
     var everConnected: Set<String> = []
+    lazy var healthStore = OmiDeviceHealthStore(defaults: UserDefaults(suiteName: defaultsSuite)!)
     var pairingRecoveryInFlight: Set<String> = []
     var pairingLostBlocked: Set<String> = []
     var captureReconnects: [String: OmiCaptureReconnect] = [:]
@@ -167,6 +168,12 @@ final class ManagerHarness {
         return (manager, peripheral, uuid)
     }
     static func main() {
+        let restored = ManagerHarness()
+        restored.healthStore.setPolicy(enabled: true, epoch: 1, retire: true)
+        restored.healthStore.recordConnected("restored")
+        precondition(restored.everConnected.isEmpty)
+        precondition(restored.hasEverConnected("restored"))
+
         // A terminal service-discovery failure must retire an OS-connected but
         // unusable saved link, then leave the reconnect delay with CoreBluetooth.
         do {

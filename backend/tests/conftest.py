@@ -394,3 +394,24 @@ def isolated_git_env(monkeypatch):
     local_vars = subprocess.check_output(['git', 'rev-parse', '--local-env-vars'], text=True).split()
     for name in [*local_vars, 'GIT_NAMESPACE']:
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _warm_backend_unit_selector_graph(request):
+    """Parse the backend import graph in setup for modules that drive the selector.
+
+    The changed-file selector builds a static import graph of ~6,200 modules
+    once per process. Without this, the first test in each selector-driving
+    file pays that parse in its call phase and trips the per-test CPU guard.
+    Other test modules skip it (one read of their own source).
+    """
+    module_file = getattr(request.module, '__file__', None)
+    try:
+        source = Path(module_file).read_text(encoding='utf-8') if module_file else ''
+    except OSError:
+        source = ''
+    if 'select_backend_unit_tests' in source or 'backend_import_graph' in source:
+        from scripts.backend_import_graph import cached_import_graph
+
+        cached_import_graph(BACKEND_DIR).warm()
+    yield

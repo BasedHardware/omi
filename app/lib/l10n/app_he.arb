@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "ניתוקים",
     "diagnosticsDropsPerHour": "בערך {count} בשעה",
     "diagnosticsLongestGap": "הפער הארוך ביותר",
-    "diagnosticsSincePairingSummary": "מאז ההתאמה: {drops} ניתוקים, {failed} חיבורים שנכשלו.",
+    "diagnosticsSincePairingSummary": "מאז ההתאמה: {drops} חיבורים מחדש, {failed} חיבורים שנכשלו.",
     "diagnosticsLastDuration": "{duration} אחרונות",
     "chatReplyOffline": "לא ניתן להתחבר. בדוק את החיבור שלך ונסה שוב.",
     "chatReplyServerError": "משהו השתבש אצלנו. נסה שוב.",
@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "מסנכרן את ההקלטות שלך",
     "syncStepDownloadingAmount": "מוריד מה-Omi שלך · {done} מתוך {total}",
     "syncStepUploadingAmount": "מעלה · {done} מתוך {total}",
-    "syncCardTranscribingAmount": "הופך {amount} לשיחות",
-    "syncCardTranscribedOf": "{done} מתוך {total} הושלמו · אפשר לצאת ממסך זה",
     "syncCardReadyAmount": "{amount} מוכנים לסנכרון",
     "syncDetailsTitle": "פרטי הסנכרון",
     "syncDetailsRightNow": "כרגע",
@@ -11554,7 +11552,7 @@
     "syncDetailsTransferSpeed": "מהירות העברה",
     "syncDetailsWaitingOnOmi": "ממתין ל-Omi שלך",
     "syncDetailsWaitingOnPhone": "ממתין בטלפון זה",
-    "syncDetailsTranscribing": "מתמלל ב-Omi",
+    "syncDetailsTranscribing": "הועלה, בהמתנה לשרת",
     "syncDetailsAudioFiles": "קובצי אודיו",
     "syncDetailsServerJobs": "משימות שרת (הושלמו / סך הכול)",
     "syncDetailsCopy": "העתקת פרטים לתמיכה",
@@ -11690,6 +11688,8 @@
     "summaryWithOmiInstead": "סיכום עם Omi במקום",
     "summaryBusyTitle": "העיבוד עדיין מתבצע",
     "summaryBusyBody": "Omi כבר עובד על השיחה הזו. הסיכום יופיע כאן כשהוא יסתיים.",
+    "summaryTranscriptionPendingTitle": "עדיין לא תומלל",
+    "summaryTranscriptionPendingBody": "הסיכום יופיע כשהתמלול יהיה מוכן.",
     "summaryCheckAgain": "בדיקה חוזרת",
     "summaryLimitTitle": "הגעת למגבלת הסיכומים",
     "summaryLimitBody": "יצרת מחדש כמה סיכומים בשעה האחרונה. אפשר לנסות שוב מאוחר יותר.",
@@ -12241,5 +12241,6 @@
     "onDeviceModelDownloadSize": "הורדה של {size} MB",
     "downloadNow": "הורדה עכשיו",
     "onWifiLater": "מאוחר יותר ב-Wi-Fi",
-    "conversationWritingSummary": "כותבים את הסיכום שלך…"
+    "conversationWritingSummary": "כותבים את הסיכום שלך…",
+    "onTheWayServerWork": "עבודה שדווחה מהשרת"
 }

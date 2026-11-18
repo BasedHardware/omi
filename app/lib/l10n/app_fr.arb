@@ -3800,7 +3800,7 @@
     "diagnosticsDrops": "Coupures",
     "diagnosticsDropsPerHour": "environ {count} par heure",
     "diagnosticsLongestGap": "Plus longue interruption",
-    "diagnosticsSincePairingSummary": "Depuis l'appairage : {drops} coupures, {failed} échecs de connexion.",
+    "diagnosticsSincePairingSummary": "Depuis l'appairage : {drops} reconnexions, {failed} connexions échouées.",
     "diagnosticsLastDuration": "Dernières {duration}",
     "chatReplyOffline": "Impossible de se connecter. Vérifiez votre connexion et réessayez.",
     "chatReplyServerError": "Un problème est survenu de notre côté. Veuillez réessayer.",
@@ -4160,8 +4160,6 @@
     "syncCardSyncingTitle": "Synchronisation de vos enregistrements",
     "syncStepDownloadingAmount": "Téléchargement depuis votre Omi · {done} sur {total}",
     "syncStepUploadingAmount": "Envoi · {done} sur {total}",
-    "syncCardTranscribingAmount": "Transformation de {amount} en conversations",
-    "syncCardTranscribedOf": "{done} sur {total} terminé · vous pouvez quitter cet écran",
     "syncCardReadyAmount": "{amount} prêt à synchroniser",
     "syncDetailsTitle": "Détails de la synchronisation",
     "syncDetailsRightNow": "En ce moment",
@@ -4169,7 +4167,7 @@
     "syncDetailsTransferSpeed": "Vitesse de transfert",
     "syncDetailsWaitingOnOmi": "En attente de votre Omi",
     "syncDetailsWaitingOnPhone": "En attente de ce téléphone",
-    "syncDetailsTranscribing": "Transcription sur Omi",
+    "syncDetailsTranscribing": "Envoyé, en attente du serveur",
     "syncDetailsAudioFiles": "Fichiers audio",
     "syncDetailsServerJobs": "Tâches serveur (terminées / total)",
     "syncDetailsCopy": "Copier les détails pour l'assistance",
@@ -4305,6 +4303,8 @@
     "summaryWithOmiInstead": "Résumer plutôt avec Omi",
     "summaryBusyTitle": "Traitement en cours",
     "summaryBusyBody": "Omi travaille déjà sur cette conversation. Le résumé apparaîtra ici une fois terminé.",
+    "summaryTranscriptionPendingTitle": "Pas encore transcrit",
+    "summaryTranscriptionPendingBody": "Le résumé apparaîtra dès que la transcription sera prête.",
     "summaryCheckAgain": "Vérifier à nouveau",
     "summaryLimitTitle": "Limite de résumés atteinte",
     "summaryLimitBody": "Vous avez régénéré plusieurs résumés au cours de la dernière heure. Réessayez plus tard.",
@@ -4719,5 +4719,6 @@
     "onDeviceModelDownloadSize": "Téléchargement de {size} Mo",
     "downloadNow": "Télécharger",
     "onWifiLater": "Plus tard en Wi-Fi",
-    "conversationWritingSummary": "Rédaction de votre résumé…"
+    "conversationWritingSummary": "Rédaction de votre résumé…",
+    "onTheWayServerWork": "Traitement signalé par le serveur"
 }

@@ -14589,7 +14589,7 @@
     "@diagnosticsLongestGap": {
         "description": "Device Diagnostics row title: the longest time the device took to reconnect"
     },
-    "diagnosticsSincePairingSummary": "Since pairing: {drops} drops, {failed} failed connections.",
+    "diagnosticsSincePairingSummary": "Since pairing: {drops} reconnections, {failed} failed connections.",
     "@diagnosticsSincePairingSummary": {
         "description": "Device Diagnostics footnote under the 7-day summary with lifetime counts",
         "placeholders": {
@@ -16219,27 +16219,6 @@
             }
         }
     },
-    "syncCardTranscribingAmount": "Turning {amount} into conversations",
-    "@syncCardTranscribingAmount": {
-        "description": "Offline Sync status card title while the server transcribes uploaded audio; amount is a compact audio length.",
-        "placeholders": {
-            "amount": {
-                "type": "String"
-            }
-        }
-    },
-    "syncCardTranscribedOf": "{done} of {total} done · you can leave this screen",
-    "@syncCardTranscribedOf": {
-        "description": "Offline Sync status card subtitle while the server transcribes: compact audio lengths done and total.",
-        "placeholders": {
-            "done": {
-                "type": "String"
-            },
-            "total": {
-                "type": "String"
-            }
-        }
-    },
     "syncCardReadyAmount": "{amount} ready to sync",
     "@syncCardReadyAmount": {
         "description": "Offline Sync status card title when recordings wait for a manual sync; amount is a compact audio length.",
@@ -16273,9 +16252,9 @@
     "@syncDetailsWaitingOnPhone": {
         "description": "Sync details row label: audio on the phone that has not been uploaded yet."
     },
-    "syncDetailsTranscribing": "Transcribing on Omi",
+    "syncDetailsTranscribing": "Uploaded, awaiting server",
     "@syncDetailsTranscribing": {
-        "description": "Sync details row label: audio uploaded and still being transcribed by Omi."
+        "description": "Sync details stage label for uploaded audio awaiting a confirmed server outcome."
     },
     "syncDetailsAudioFiles": "Audio files",
     "@syncDetailsAudioFiles": {
@@ -16898,6 +16877,14 @@
     "summaryBusyBody": "Omi is already working on this conversation. The summary will appear here when it finishes.",
     "@summaryBusyBody": {
         "description": "Body when the conversation is already being processed. Omi is the product name."
+    },
+    "summaryTranscriptionPendingTitle": "Not transcribed yet",
+    "@summaryTranscriptionPendingTitle": {
+        "description": "Status shown in place of a summary when the recording has no transcript yet."
+    },
+    "summaryTranscriptionPendingBody": "The summary will appear once the transcript is ready.",
+    "@summaryTranscriptionPendingBody": {
+        "description": "Shown when a recording has no transcript yet, so its summary cannot be made. Tells the user the summary will come after the transcript."
     },
     "summaryCheckAgain": "Check Again",
     "@summaryCheckAgain": {
@@ -19008,5 +18995,6 @@
     "conversationWritingSummary": "Writing your summary…",
     "@conversationWritingSummary": {
         "description": "Shown with a pen over a skeleton while the summary of a conversation in progress is written"
-    }
+    },
+    "onTheWayServerWork": "Server-reported work"
 }

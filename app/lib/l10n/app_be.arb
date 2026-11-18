@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "Разрывы",
     "diagnosticsDropsPerHour": "прыкладна {count} у гадзіну",
     "diagnosticsLongestGap": "Найдаўжэйшы перапынак",
-    "diagnosticsSincePairingSummary": "З моманту спарвання: разрываў — {drops}, няўдалых злучэнняў — {failed}.",
+    "diagnosticsSincePairingSummary": "З моманту спалучэння: {drops} паўторных падключэнняў, {failed} няўдалых падключэнняў.",
     "diagnosticsLastDuration": "Апошнія {duration}",
     "chatReplyOffline": "Не ўдалося падключыцца. Праверце злучэнне і паспрабуйце яшчэ раз.",
     "chatReplyServerError": "Нешта пайшло не так на нашым баку. Паспрабуйце яшчэ раз.",
@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "Сінхранізацыя запісаў",
     "syncStepDownloadingAmount": "Спампоўка з Omi · {done} з {total}",
     "syncStepUploadingAmount": "Загрузка на сервер · {done} з {total}",
-    "syncCardTranscribingAmount": "Ператварэнне {amount} у размовы",
-    "syncCardTranscribedOf": "Гатова {done} з {total} · можна пакінуць гэты экран",
     "syncCardReadyAmount": "{amount} гатова да сінхранізацыі",
     "syncDetailsTitle": "Дэталі сінхранізацыі",
     "syncDetailsRightNow": "Цяпер",
@@ -11554,7 +11552,7 @@
     "syncDetailsTransferSpeed": "Хуткасць перадачы",
     "syncDetailsWaitingOnOmi": "Чакае на Omi",
     "syncDetailsWaitingOnPhone": "Чакае на гэтым тэлефоне",
-    "syncDetailsTranscribing": "Расшыфроўваецца ў Omi",
+    "syncDetailsTranscribing": "Запампавана, чаканне сервера",
     "syncDetailsAudioFiles": "Аўдыяфайлы",
     "syncDetailsServerJobs": "Заданні сервера (гатова / усяго)",
     "syncDetailsCopy": "Скапіяваць дэталі для падтрымкі",
@@ -11690,6 +11688,8 @@
     "summaryWithOmiInstead": "Падсумаваць з Omi замест гэтага",
     "summaryBusyTitle": "Усё яшчэ апрацоўваецца",
     "summaryBusyBody": "Omi ужо працуе над гэтай размовай. Падсумаванне з'явіцца тут, калі будзе гатова.",
+    "summaryTranscriptionPendingTitle": "Яшчэ не транскрыбавана",
+    "summaryTranscriptionPendingBody": "Падсумаванне з'явіцца, калі будзе гатовая транскрыпцыя.",
     "summaryCheckAgain": "Праверыць зноў",
     "summaryLimitTitle": "Дасягнуты ліміт падсумаванняў",
     "summaryLimitBody": "За апошнюю гадзіну вы некалькі разоў перастваралі падсумаванні. Паспрабуйце пазней.",
@@ -12241,5 +12241,6 @@
     "onDeviceModelDownloadSize": "Спампоўка {size} МБ",
     "downloadNow": "Спампаваць зараз",
     "onWifiLater": "Пазней праз Wi-Fi",
-    "conversationWritingSummary": "Пішам ваша рэзюмэ…"
+    "conversationWritingSummary": "Пішам ваша рэзюмэ…",
+    "onTheWayServerWork": "Праца паводле сервера"
 }

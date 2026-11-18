@@ -3800,7 +3800,7 @@
     "diagnosticsDrops": "Zerwania",
     "diagnosticsDropsPerHour": "ok. {count} na godzinę",
     "diagnosticsLongestGap": "Najdłuższa przerwa",
-    "diagnosticsSincePairingSummary": "Od sparowania: zerwania: {drops}, nieudane połączenia: {failed}.",
+    "diagnosticsSincePairingSummary": "Od sparowania: {drops} ponownych połączeń, {failed} nieudanych połączeń.",
     "diagnosticsLastDuration": "Ostatnie {duration}",
     "chatReplyOffline": "Nie można się połączyć. Sprawdź połączenie i spróbuj ponownie.",
     "chatReplyServerError": "Coś poszło nie tak po naszej stronie. Spróbuj ponownie.",
@@ -4160,8 +4160,6 @@
     "syncCardSyncingTitle": "Synchronizacja nagrań",
     "syncStepDownloadingAmount": "Pobieranie z Omi · {done} z {total}",
     "syncStepUploadingAmount": "Przesyłanie · {done} z {total}",
-    "syncCardTranscribingAmount": "Zamiana {amount} na rozmowy",
-    "syncCardTranscribedOf": "Gotowe: {done} z {total} · możesz opuścić ten ekran",
     "syncCardReadyAmount": "{amount} gotowe do synchronizacji",
     "syncDetailsTitle": "Szczegóły synchronizacji",
     "syncDetailsRightNow": "Teraz",
@@ -4169,7 +4167,7 @@
     "syncDetailsTransferSpeed": "Prędkość transferu",
     "syncDetailsWaitingOnOmi": "Czeka na Omi",
     "syncDetailsWaitingOnPhone": "Czeka na tym telefonie",
-    "syncDetailsTranscribing": "Transkrypcja w Omi",
+    "syncDetailsTranscribing": "Przesłano, oczekiwanie na serwer",
     "syncDetailsAudioFiles": "Pliki audio",
     "syncDetailsServerJobs": "Zadania serwera (gotowe / razem)",
     "syncDetailsCopy": "Skopiuj szczegóły dla pomocy technicznej",
@@ -4305,6 +4303,8 @@
     "summaryWithOmiInstead": "Zamiast tego podsumuj z Omi",
     "summaryBusyTitle": "Trwa przetwarzanie",
     "summaryBusyBody": "Omi już pracuje nad tą rozmową. Podsumowanie pojawi się tutaj po zakończeniu.",
+    "summaryTranscriptionPendingTitle": "Jeszcze nie przepisano",
+    "summaryTranscriptionPendingBody": "Podsumowanie pojawi się, gdy transkrypcja będzie gotowa.",
     "summaryCheckAgain": "Sprawdź ponownie",
     "summaryLimitTitle": "Osiągnięto limit podsumowań",
     "summaryLimitBody": "W ciągu ostatniej godziny kilkakrotnie wygenerowano ponownie podsumowania. Spróbuj ponownie później.",
@@ -4719,5 +4719,6 @@
     "onDeviceModelDownloadSize": "Pobieranie {size} MB",
     "downloadNow": "Pobierz teraz",
     "onWifiLater": "Później przez Wi-Fi",
-    "conversationWritingSummary": "Piszemy podsumowanie…"
+    "conversationWritingSummary": "Piszemy podsumowanie…",
+    "onTheWayServerWork": "Praca zgłoszona przez serwer"
 }

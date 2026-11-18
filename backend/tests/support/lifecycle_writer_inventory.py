@@ -1,6 +1,15 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    'database/batch_summary_debt.py': [
+        ('arm_projection_summary', 'summary_due_at', "candidate['summary_due_at']", ('summary_due_at',)),
+        (
+            'arm_projection_summary',
+            'summary_first_pending_at',
+            "candidate['summary_first_pending_at']",
+            ('summary_first_pending_at',),
+        ),
+    ],
     # R40: own retained-audio fallback preserves its committed owner-log slot.
     'database/batch_pipeline_source_fallback.py': [
         (
@@ -13,11 +22,9 @@ FIELD_SITES = {
                 'lease_until',
                 'merge_pending',
                 'policy',
-                'protocol_version',
                 'requires_compute_admission',
                 'source_alias_fallback',
                 'source_conversation_ids',
-                'source_reuse_version',
                 'state',
                 'stt_route',
                 'token',
@@ -27,7 +34,7 @@ FIELD_SITES = {
             'merge_ready',
             'projection_state',
             "'pending'",
-            ('projection_redriven_at', 'projection_state', 'protocol_version', 'result', 'source_reuse_version'),
+            ('projection_redriven_at', 'projection_state', 'protocol_version', 'result'),
         ),
         ('merge_ready', 'state', "'committed'", ('merge_pending', 'state')),
     ],
@@ -48,11 +55,9 @@ FIELD_SITES = {
                 'policy',
                 'policy_source',
                 'priority',
-                'protocol_version',
                 'ready_at',
                 'result',
                 'source_alias',
-                'source_alias_version',
                 'source_conversation_ids',
                 'state',
                 'token',
@@ -166,7 +171,7 @@ FIELD_SITES = {
         )
     ],
     'utils/conversations/v3/service.py': [
-        ('reconcile', 'status', "prior['status']", ('status',)),
+        ('reconcile.plan', 'status', "prior['status']", ('status',)),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
     ],
     'utils/batch_pipeline/empty_transcription.py': [
@@ -3112,6 +3117,7 @@ FIELD_SITES = {
             "'leased'",
             ('attempt', 'lease_until', 'shared_gpu_key', 'state', 'token'),
         ),
+        ('Scheduler._recover.recover_page.commit', 'state', "'ready'", ('state',)),
         ('Scheduler.complete.commit', 'state', "'result_ready'", ('ready_at', 'result', 'state')),
         ('Scheduler.defer.commit', 'state', "'retry'", ('attempt', 'available_at', 'lease_until', 'state', 'token')),
         (
@@ -3135,7 +3141,6 @@ FIELD_SITES = {
                 'token',
             ),
         ),
-        ('Scheduler.recover.commit', 'state', "'ready'", ('state',)),
         (
             'Scheduler.redrive_in_transaction',
             'state',
@@ -3280,8 +3285,8 @@ FIELD_SITES = {
             'current + deadline_seconds()',
             ('summary_blocked_reason', 'summary_due_at', 'summary_empty_failures', 'summary_empty_rearms'),
         ),
-        ('stamp_projection_debt', 'summary_due_at', 'current + deadline_seconds()', ('summary_due_at',)),
-        ('stamp_projection_debt', 'summary_first_pending_at', 'current', ('summary_first_pending_at',)),
+        ('stamp_projection_debt', 'summary_due_at', 'accepted + deadline_seconds()', ('summary_due_at',)),
+        ('stamp_projection_debt', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
     ],
     'utils/conversations/transcript_for_llm.py': [
         ('render_cluster_transcript', 'status', "'resolved' if resolution_available else 'unavailable'", ('status',))

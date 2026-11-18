@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Talls",
     "diagnosticsDropsPerHour": "uns {count} per hora",
     "diagnosticsLongestGap": "Interrupció més llarga",
-    "diagnosticsSincePairingSummary": "Des de l'aparellament: {drops} talls, {failed} connexions fallides.",
+    "diagnosticsSincePairingSummary": "Des de l'aparellament: {drops} reconnexions, {failed} connexions fallides.",
     "diagnosticsLastDuration": "Últims {duration}",
     "chatReplyOffline": "No s'ha pogut connectar. Comprova la connexió i torna-ho a provar.",
     "chatReplyServerError": "Alguna cosa ha fallat per part nostra. Torna-ho a provar.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Sincronitzant les teves gravacions",
     "syncStepDownloadingAmount": "Baixant des de l'Omi · {done} de {total}",
     "syncStepUploadingAmount": "Pujant · {done} de {total}",
-    "syncCardTranscribingAmount": "Convertint {amount} en converses",
-    "syncCardTranscribedOf": "{done} de {total} fet · pots sortir d'aquesta pantalla",
     "syncCardReadyAmount": "{amount} a punt per sincronitzar",
     "syncDetailsTitle": "Detalls de la sincronització",
     "syncDetailsRightNow": "Ara mateix",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Velocitat de transferència",
     "syncDetailsWaitingOnOmi": "Esperant l'Omi",
     "syncDetailsWaitingOnPhone": "Esperant aquest mòbil",
-    "syncDetailsTranscribing": "Transcrivint a Omi",
+    "syncDetailsTranscribing": "Pujat, esperant el servidor",
     "syncDetailsAudioFiles": "Fitxers d'àudio",
     "syncDetailsServerJobs": "Tasques del servidor (fetes / total)",
     "syncDetailsCopy": "Copia els detalls per a assistència",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "Resumeix amb Omi en lloc d'això",
     "summaryBusyTitle": "Encara s'està processant",
     "summaryBusyBody": "Omi ja està treballant en aquesta conversa. El resum apareixerà aquí quan acabi.",
+    "summaryTranscriptionPendingTitle": "Encara no s'ha transcrit",
+    "summaryTranscriptionPendingBody": "El resum apareixerà quan la transcripció estigui llesta.",
     "summaryCheckAgain": "Torna-ho a comprovar",
     "summaryLimitTitle": "S'ha arribat al límit de resums",
     "summaryLimitBody": "Has tornat a generar diversos resums durant l'última hora. Torna-ho a provar més tard.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "Baixada de {size} MB",
     "downloadNow": "Baixa ara",
     "onWifiLater": "Més tard amb Wi-Fi",
-    "conversationWritingSummary": "Escrivint el teu resum…"
+    "conversationWritingSummary": "Escrivint el teu resum…",
+    "onTheWayServerWork": "Feina indicada pel servidor"
 }

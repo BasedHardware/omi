@@ -94,7 +94,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   WalDerivedViews get derivedWals {
     final source = allWals;
     if (_derived == null) {
-      _derived = WalDerivedViews(source);
+      _derived = WalDerivedViews(source, onPendingWorkExpired: () {
+        if (!_isDisposed) notifyListeners();
+      });
     } else if (!identical(source, _derivedSource) || source.length != _derivedLength) {
       // A new inventory snapshot usually differs by a row or two; adopt it
       // incrementally instead of re-deriving the whole synced history.
@@ -623,11 +625,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     final eligibleWals = [
       ...missingWals,
       ..._allWals.where((wal) => wal.status == WalStatus.uploadRejected && isAutoUploadEligible(wal)),
-    ]
-        .where((wal) =>
-            (!wal.holdForUser || wal.status == WalStatus.uploadRejected) &&
-            (!liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds)))
-        .toList();
+    ].where((wal) => !wal.holdForUser && (!liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds))).toList();
     final hadEligibleWals = eligibleWals.isNotEmpty;
     if (!hadEligibleWals) return const RecordingTransferDrainResult.skipped();
 

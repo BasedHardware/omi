@@ -41,12 +41,33 @@ continue using their existing independent cursors/clocks.
    python scripts/batch_pipeline_projection_followup_backfill.py --stage prod
    # Separate admitted prod-operator action, only after writer-coverage proof:
    python scripts/batch_pipeline_projection_followup_backfill.py --stage prod \
-     --apply --confirm-writers-deployed --max-pages 10
+     --apply --confirm-writers-deployed --max-pages 10 \
+     --page-size 50 --max-rows-per-second 10
    ```
 
+   Apply defaults to a **10 newly admitted candidate rows/second** page budget,
+   with one page-size burst. One monotonic limiter spans the entire invocation;
+   waiting occurs before page reads or transactions, never inside a transaction.
+   Every page reserves its full configured size, including a short or empty page,
+   so it cannot exceed the candidate-admission budget. Slow IO earns no catch-up
+   credit. A restart or second driver has an independent budget: this is not a
+   distributed lock. Release designates one driver; the operator identity gate
+   and transactional checkpoint preimage check reject a stale concurrent page,
+   rather than implementing a singleton lock. Pacing waits print counts-only
+   progress on stderr at least once per60-second sleep chunk.
+   SDK transaction/RPC retries are **not separately rate-limited** by this page
+   budget; observe the admitted Firestore abort/retry bounds and stop at a page
+   boundary on a trip. Do not describe this as a physical billed-read/RPC ceiling.
+   A lower value changes operator throughput, not a serving parameter. Dry-run
+   remains one unpaced page and is not a no-row-read aggregate operation.
+
    Each page and checkpoint commit atomically. A concurrent cursor change fails
-   the page rather than advancing stale progress. Repeat bounded admitted runs
-   until `complete:true`. No production migration is authorized by this runbook.
+   the page rather than advancing stale progress. Prefer one admitted multi-page
+   invocation. Between bounded invocations, wait at least `page-size / rate`
+   seconds AFTER the previous invocation finishes (5s for the example), using
+   only one driver and no catch-up, until `complete:true`. A fresh invocation's
+   first-page burst does not otherwise preserve the prior process's rate budget.
+   No production migration is authorized by this runbook.
 4. The default-on reader begins after the same namespace's versioned completion
    marker. There is no permanent default-off cohort. First read `durable_deferred`
    outcomes and native/caller reads **and writes**, progress, delay/age and failures;
@@ -81,7 +102,11 @@ For those pages, 200 rows/page and six reads/row reserve 12 million migration
 reads/day: discovery, transactional fence and optional shadow refresh, with one
 retry. These are planning bounds, not a measured fleet, population, spend or
 runtime cap. The operator must remeasure/rebudget before exceeding the envelope
-or repeating passes/retries beyond it. Normal serving never invokes stamping.
+or repeating passes/retries beyond it. In particular, a50-row page at10rows/s
+could admit17,280 pages/day if run continuously, exceeding the10,000-page marker
+budget. The example is a bounded10-page pilot, not permission for continuous
+restarts; either stop at the admitted daily page bound or obtain a rebudgeted
+packet. Normal serving never invokes stamping.
 
 ## Store protocol parity
 

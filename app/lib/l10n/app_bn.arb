@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "বিচ্ছিন্নতা",
     "diagnosticsDropsPerHour": "ঘণ্টায় প্রায় {count}",
     "diagnosticsLongestGap": "দীর্ঘতম বিরতি",
-    "diagnosticsSincePairingSummary": "জোড়া হওয়ার পর থেকে: {drops}টি বিচ্ছিন্নতা, {failed}টি ব্যর্থ সংযোগ।",
+    "diagnosticsSincePairingSummary": "পেয়ার করার পর থেকে: {drops} বার পুনঃসংযোগ, {failed} বার সংযোগ ব্যর্থ।",
     "diagnosticsLastDuration": "শেষ {duration}",
     "chatReplyOffline": "সংযোগ করা যাচ্ছে না। আপনার সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।",
     "chatReplyServerError": "আমাদের দিক থেকে কিছু ভুল হয়েছে। আবার চেষ্টা করুন।",
@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "আপনার রেকর্ডিং সিঙ্ক হচ্ছে",
     "syncStepDownloadingAmount": "Omi থেকে ডাউনলোড · {done} / {total}",
     "syncStepUploadingAmount": "আপলোড · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} কথোপকথনে রূপান্তর হচ্ছে",
-    "syncCardTranscribedOf": "{done} / {total} সম্পন্ন · আপনি এই স্ক্রিন ছেড়ে যেতে পারেন",
     "syncCardReadyAmount": "{amount} সিঙ্কের জন্য প্রস্তুত",
     "syncDetailsTitle": "সিঙ্কের বিবরণ",
     "syncDetailsRightNow": "এই মুহূর্তে",
@@ -11554,7 +11552,7 @@
     "syncDetailsTransferSpeed": "ট্রান্সফার গতি",
     "syncDetailsWaitingOnOmi": "Omi-তে অপেক্ষমাণ",
     "syncDetailsWaitingOnPhone": "এই ফোনে অপেক্ষমাণ",
-    "syncDetailsTranscribing": "Omi-তে ট্রান্সক্রাইব হচ্ছে",
+    "syncDetailsTranscribing": "আপলোড হয়েছে, সার্ভারের অপেক্ষায়",
     "syncDetailsAudioFiles": "অডিও ফাইল",
     "syncDetailsServerJobs": "সার্ভার জব (সম্পন্ন / মোট)",
     "syncDetailsCopy": "সাপোর্টের জন্য বিবরণ কপি করুন",
@@ -11690,6 +11688,8 @@
     "summaryWithOmiInstead": "বরং Omi দিয়ে সারসংক্ষেপ করুন",
     "summaryBusyTitle": "এখনও প্রক্রিয়া চলছে",
     "summaryBusyBody": "Omi ইতিমধ্যে এই কথোপকথনে কাজ করছে। শেষ হলে সারসংক্ষেপ এখানে দেখা যাবে।",
+    "summaryTranscriptionPendingTitle": "এখনও ট্রান্সক্রাইব হয়নি",
+    "summaryTranscriptionPendingBody": "ট্রান্সক্রিপ্ট তৈরি হলে সারসংক্ষেপ দেখা যাবে।",
     "summaryCheckAgain": "আবার দেখুন",
     "summaryLimitTitle": "সারসংক্ষেপের সীমা পূর্ণ হয়েছে",
     "summaryLimitBody": "আপনি গত এক ঘণ্টায় একাধিক সারসংক্ষেপ পুনরায় তৈরি করেছেন। পরে আবার চেষ্টা করুন।",
@@ -12241,5 +12241,6 @@
     "onDeviceModelDownloadSize": "{size} MB ডাউনলোড",
     "downloadNow": "এখনই ডাউনলোড করুন",
     "onWifiLater": "পরে Wi-Fi-তে",
-    "conversationWritingSummary": "আপনার সারাংশ লেখা হচ্ছে…"
+    "conversationWritingSummary": "আপনার সারাংশ লেখা হচ্ছে…",
+    "onTheWayServerWork": "সার্ভারের জানানো কাজ"
 }

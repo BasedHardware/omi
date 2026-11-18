@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Abbrüche",
     "diagnosticsDropsPerHour": "etwa {count} pro Stunde",
     "diagnosticsLongestGap": "Längste Lücke",
-    "diagnosticsSincePairingSummary": "Seit der Kopplung: {drops} Abbrüche, {failed} fehlgeschlagene Verbindungen.",
+    "diagnosticsSincePairingSummary": "Seit der Kopplung: {drops} Wiederverbindungen, {failed} fehlgeschlagene Verbindungen.",
     "diagnosticsLastDuration": "Letzte {duration}",
     "chatReplyOffline": "Verbindung nicht möglich. Prüfe deine Verbindung und versuche es erneut.",
     "chatReplyServerError": "Auf unserer Seite ist etwas schiefgelaufen. Bitte versuche es erneut.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Aufnahmen werden synchronisiert",
     "syncStepDownloadingAmount": "Herunterladen von deinem Omi · {done} von {total}",
     "syncStepUploadingAmount": "Hochladen · {done} von {total}",
-    "syncCardTranscribingAmount": "{amount} werden in Unterhaltungen umgewandelt",
-    "syncCardTranscribedOf": "{done} von {total} fertig · du kannst diesen Bildschirm verlassen",
     "syncCardReadyAmount": "{amount} bereit zur Synchronisierung",
     "syncDetailsTitle": "Sync-Details",
     "syncDetailsRightNow": "Gerade jetzt",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Übertragungsgeschwindigkeit",
     "syncDetailsWaitingOnOmi": "Wartet auf dein Omi",
     "syncDetailsWaitingOnPhone": "Wartet auf dieses Handy",
-    "syncDetailsTranscribing": "Wird bei Omi transkribiert",
+    "syncDetailsTranscribing": "Hochgeladen, wartet auf Server",
     "syncDetailsAudioFiles": "Audiodateien",
     "syncDetailsServerJobs": "Serveraufträge (erledigt / gesamt)",
     "syncDetailsCopy": "Details für den Support kopieren",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "Stattdessen mit Omi zusammenfassen",
     "summaryBusyTitle": "Wird noch verarbeitet",
     "summaryBusyBody": "Omi arbeitet bereits an diesem Gespräch. Die Zusammenfassung erscheint hier, sobald sie fertig ist.",
+    "summaryTranscriptionPendingTitle": "Noch nicht transkribiert",
+    "summaryTranscriptionPendingBody": "Die Zusammenfassung erscheint, sobald das Transkript fertig ist.",
     "summaryCheckAgain": "Erneut prüfen",
     "summaryLimitTitle": "Limit für Zusammenfassungen erreicht",
     "summaryLimitBody": "Du hast in der letzten Stunde mehrere Zusammenfassungen neu erstellt. Versuche es später erneut.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "{size} MB Download",
     "downloadNow": "Jetzt laden",
     "onWifiLater": "Später über WLAN",
-    "conversationWritingSummary": "Deine Zusammenfassung wird geschrieben…"
+    "conversationWritingSummary": "Deine Zusammenfassung wird geschrieben…",
+    "onTheWayServerWork": "Vom Server gemeldete Arbeit"
 }

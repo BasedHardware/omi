@@ -12291,7 +12291,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Dall\'associazione: $drops interruzioni, $failed connessioni non riuscite.';
+    return 'Dall\'abbinamento: $drops riconnessioni, $failed connessioni non riuscite.';
   }
 
   @override
@@ -13535,16 +13535,6 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Trasformazione di $amount in conversazioni';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done di $total completati · puoi lasciare questa schermata';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount pronti da sincronizzare';
   }
@@ -13568,7 +13558,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'In attesa di questo telefono';
 
   @override
-  String get syncDetailsTranscribing => 'Trascrizione su Omi';
+  String get syncDetailsTranscribing => 'Caricato, in attesa del server';
 
   @override
   String get syncDetailsAudioFiles => 'File audio';
@@ -14028,6 +14018,12 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi sta già lavorando su questa conversazione. Il riassunto apparirà qui al termine.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Non ancora trascritto';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Il riassunto apparirà quando la trascrizione sarà pronta.';
 
   @override
   String get summaryCheckAgain => 'Controlla di nuovo';
@@ -15634,4 +15630,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Sto scrivendo il tuo riepilogo…';
+
+  @override
+  String get onTheWayServerWork => 'Lavoro segnalato dal server';
 }

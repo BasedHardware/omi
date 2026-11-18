@@ -165,12 +165,15 @@ class PostgresOutbox:
                     if self._fenced(owner_id, payload):
                         self._close(conn, row_id, 'privacy_fenced', now)
                         continue
-                    psycopg_sql = sql()
-                    query = psycopg_sql.SQL(
-                        'UPDATE outbox SET lease_token = %s, lease_until = %s, attempts = attempts + 1, '
-                        'wake_pending = false WHERE id = %s RETURNING {}'
-                    ).format(psycopg_sql.SQL(_COLUMNS))
-                    taken = conn.execute(query, (_token(), now + lease_seconds, row_id)).fetchone()
+                    taken = conn.execute(
+                        sql()
+                        .SQL(
+                            'UPDATE outbox SET lease_token = %s, lease_until = %s, attempts = attempts + 1, '
+                            'wake_pending = false WHERE id = %s RETURNING {}'
+                        )
+                        .format(sql().SQL(_COLUMNS)),
+                        (_token(), now + lease_seconds, row_id),
+                    ).fetchone()
                     claims.append(self._claim_from(taken, ''))
         return claims
 
@@ -183,7 +186,9 @@ class PostgresOutbox:
         taken: tuple | None = None
         with self.store.pool.connection() as conn, conn.transaction():
             row = conn.execute(
-                f'SELECT {_COLUMNS}, done_at FROM outbox WHERE id = %s AND namespace = %s AND kind = %s FOR UPDATE',
+                sql()
+                .SQL('SELECT {}, done_at FROM outbox WHERE id = %s AND namespace = %s AND kind = %s FOR UPDATE')
+                .format(sql().SQL(_COLUMNS)),
                 (numeric, self.store.namespace, self.kind.value),
             ).fetchone()
             if row is None or row[-1] is not None or row[6] != wake_token:
@@ -198,12 +203,15 @@ class PostgresOutbox:
                 conn.execute('UPDATE outbox SET wake_token = %s, wake_pending = true WHERE id = %s', (fresh, numeric))
                 rearmed = (fresh, row[4])
             else:
-                psycopg_sql = sql()
-                query = psycopg_sql.SQL(
-                    'UPDATE outbox SET lease_token = %s, lease_until = %s, attempts = attempts + 1, '
-                    'wake_pending = false WHERE id = %s RETURNING {}'
-                ).format(psycopg_sql.SQL(_COLUMNS))
-                taken = conn.execute(query, (_token(), now + lease_seconds, numeric)).fetchone()
+                taken = conn.execute(
+                    sql()
+                    .SQL(
+                        'UPDATE outbox SET lease_token = %s, lease_until = %s, attempts = attempts + 1, '
+                        'wake_pending = false WHERE id = %s RETURNING {}'
+                    )
+                    .format(sql().SQL(_COLUMNS)),
+                    (_token(), now + lease_seconds, numeric),
+                ).fetchone()
         if rearmed is not None:
             self._try_wake(str(numeric), rearmed[0])
             return Outcome.DEFERRED
@@ -248,15 +256,18 @@ class PostgresOutbox:
         self, claim: Claim, sets: LiteralString, params: tuple, *, live: bool = False, now: float = 0.0
     ) -> Any:
         """Run an UPDATE guarded by the claim's lease token; return the RETURNING row or None."""
-        guard = 'AND lease_until > %s' if live else ''
+        guard = sql().SQL('AND lease_until > %s') if live else sql().SQL('')
         values = (*params, int(claim.row_id), self.store.namespace, claim.lease_token) + ((now,) if live else ())
         with self.store.pool.connection() as conn:
-            psycopg_sql = sql()
-            query = psycopg_sql.SQL(
-                'UPDATE outbox SET {} WHERE id = %s AND namespace = %s AND lease_token = %s '
-                'AND done_at IS NULL {} RETURNING id'
-            ).format(psycopg_sql.SQL(sets), psycopg_sql.SQL(guard))
-            return conn.execute(query, values).fetchone()
+            return conn.execute(
+                sql()
+                .SQL(
+                    'UPDATE outbox SET {} WHERE id = %s AND namespace = %s AND lease_token = %s '
+                    'AND done_at IS NULL {} RETURNING id'
+                )
+                .format(sql().SQL(sets), guard),
+                values,
+            ).fetchone()
 
     def heartbeat(self, claim: Claim, lease_seconds: float, *, now: float) -> bool:
         return self._fenced_update(claim, 'lease_until = %s', (now + lease_seconds,), live=True, now=now) is not None
@@ -297,11 +308,15 @@ class PostgresOutbox:
         """
         discarded = expired = 0
         to_wake: list[tuple[str, str]] = []
-        actionable = '((lease_until > 0 AND lease_until <= %s) OR (wake_pending AND lease_until <= %s))'
+        actionable = sql().SQL('((lease_until > 0 AND lease_until <= %s) OR (wake_pending AND lease_until <= %s))')
         with self.store.pool.connection() as conn:
             candidates = conn.execute(
-                f'SELECT id, owner_id, payload FROM outbox WHERE namespace = %s AND kind = %s AND done_at IS NULL '
-                f'AND {actionable} ORDER BY available_at, id LIMIT %s',
+                sql()
+                .SQL(
+                    'SELECT id, owner_id, payload FROM outbox WHERE namespace = %s AND kind = %s AND done_at IS NULL '
+                    'AND {} ORDER BY available_at, id LIMIT %s'
+                )
+                .format(actionable),
                 (self.store.namespace, self.kind.value, now, now, limit),
             ).fetchall()
         if not candidates:
@@ -309,8 +324,12 @@ class PostgresOutbox:
         fenced = {row_id for row_id, owner_id, payload in candidates if self._fenced(owner_id, payload)}
         with self.store.pool.connection() as conn, conn.transaction():
             rows = conn.execute(
-                f'SELECT id, lease_until, wake_token, wake_pending FROM outbox WHERE id = ANY(%s) '
-                f'AND done_at IS NULL AND {actionable} ORDER BY id FOR UPDATE SKIP LOCKED',
+                sql()
+                .SQL(
+                    'SELECT id, lease_until, wake_token, wake_pending FROM outbox WHERE id = ANY(%s) '
+                    'AND done_at IS NULL AND {} ORDER BY id FOR UPDATE SKIP LOCKED'
+                )
+                .format(actionable),
                 ([row_id for row_id, _, _ in candidates], now, now),
             ).fetchall()
             for row_id, lease_until, wake_token, pending in rows:

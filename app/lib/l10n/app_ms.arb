@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Pemutusan",
     "diagnosticsDropsPerHour": "kira-kira {count} sejam",
     "diagnosticsLongestGap": "Jurang terpanjang",
-    "diagnosticsSincePairingSummary": "Sejak pemasangan: {drops} pemutusan, {failed} sambungan gagal.",
+    "diagnosticsSincePairingSummary": "Sejak dipasangkan: {drops} sambungan semula, {failed} sambungan gagal.",
     "diagnosticsLastDuration": "{duration} lepas",
     "chatReplyOffline": "Tidak dapat menyambung. Semak sambungan anda dan cuba lagi.",
     "chatReplyServerError": "Sesuatu telah berlaku di pihak kami. Sila cuba lagi.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Menyegerakkan rakaman anda",
     "syncStepDownloadingAmount": "Memuat turun daripada Omi anda · {done} daripada {total}",
     "syncStepUploadingAmount": "Memuat naik · {done} daripada {total}",
-    "syncCardTranscribingAmount": "Menukar {amount} kepada perbualan",
-    "syncCardTranscribedOf": "{done} daripada {total} selesai · anda boleh tinggalkan skrin ini",
     "syncCardReadyAmount": "{amount} sedia untuk disegerakkan",
     "syncDetailsTitle": "Butiran penyegerakan",
     "syncDetailsRightNow": "Sekarang",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Kelajuan pemindahan",
     "syncDetailsWaitingOnOmi": "Menunggu Omi anda",
     "syncDetailsWaitingOnPhone": "Menunggu telefon ini",
-    "syncDetailsTranscribing": "Mentranskripsi di Omi",
+    "syncDetailsTranscribing": "Dimuat naik, menunggu pelayan",
     "syncDetailsAudioFiles": "Fail audio",
     "syncDetailsServerJobs": "Tugas pelayan (selesai / jumlah)",
     "syncDetailsCopy": "Salin butiran untuk sokongan",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "Ringkaskan dengan Omi sahaja",
     "summaryBusyTitle": "Masih diproses",
     "summaryBusyBody": "Omi sedang memproses perbualan ini. Ringkasan akan dipaparkan di sini apabila selesai.",
+    "summaryTranscriptionPendingTitle": "Belum ditranskripsikan",
+    "summaryTranscriptionPendingBody": "Ringkasan akan dipaparkan apabila transkrip sedia.",
     "summaryCheckAgain": "Semak semula",
     "summaryLimitTitle": "Had ringkasan dicapai",
     "summaryLimitBody": "Anda telah menjana semula beberapa ringkasan dalam sejam yang lalu. Cuba lagi nanti.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "Muat turun {size} MB",
     "downloadNow": "Muat Turun Sekarang",
     "onWifiLater": "Kemudian melalui Wi-Fi",
-    "conversationWritingSummary": "Menulis ringkasan anda…"
+    "conversationWritingSummary": "Menulis ringkasan anda…",
+    "onTheWayServerWork": "Kerja yang dilaporkan pelayan"
 }

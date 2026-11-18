@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Výpadky",
     "diagnosticsDropsPerHour": "asi {count} za hodinu",
     "diagnosticsLongestGap": "Najdlhší výpadok",
-    "diagnosticsSincePairingSummary": "Od spárovania: výpadkov {drops}, neúspešných pripojení {failed}.",
+    "diagnosticsSincePairingSummary": "Od spárovania: {drops} opätovných pripojení, {failed} neúspešných pripojení.",
     "diagnosticsLastDuration": "Posledných {duration}",
     "chatReplyOffline": "Nedá sa pripojiť. Skontrolujte pripojenie a skúste to znova.",
     "chatReplyServerError": "Niečo sa pokazilo na našej strane. Skúste to znova.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Synchronizácia nahrávok",
     "syncStepDownloadingAmount": "Sťahovanie z Omi · {done} z {total}",
     "syncStepUploadingAmount": "Nahrávanie · {done} z {total}",
-    "syncCardTranscribingAmount": "Premena {amount} na konverzácie",
-    "syncCardTranscribedOf": "Hotovo {done} z {total} · túto obrazovku môžete opustiť",
     "syncCardReadyAmount": "{amount} pripravené na synchronizáciu",
     "syncDetailsTitle": "Podrobnosti synchronizácie",
     "syncDetailsRightNow": "Práve teraz",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Rýchlosť prenosu",
     "syncDetailsWaitingOnOmi": "Čaká na Omi",
     "syncDetailsWaitingOnPhone": "Čaká v tomto telefóne",
-    "syncDetailsTranscribing": "Prepisuje sa v Omi",
+    "syncDetailsTranscribing": "Nahrané, čaká na server",
     "syncDetailsAudioFiles": "Zvukové súbory",
     "syncDetailsServerJobs": "Úlohy servera (hotovo / spolu)",
     "syncDetailsCopy": "Kopírovať podrobnosti pre podporu",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "Radšej zhrnúť pomocou Omi",
     "summaryBusyTitle": "Stále sa spracúva",
     "summaryBusyBody": "Omi už na tomto rozhovore pracuje. Zhrnutie sa tu zobrazí po dokončení.",
+    "summaryTranscriptionPendingTitle": "Zatiaľ neprepísané",
+    "summaryTranscriptionPendingBody": "Zhrnutie sa zobrazí, keď bude prepis hotový.",
     "summaryCheckAgain": "Skontrolovať znova",
     "summaryLimitTitle": "Dosiahnutý limit zhrnutí",
     "summaryLimitBody": "Za poslednú hodinu ste niekoľkokrát znova vygenerovali zhrnutia. Skúste to neskôr.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "Stiahnutie {size} MB",
     "downloadNow": "Stiahnuť teraz",
     "onWifiLater": "Neskôr cez Wi-Fi",
-    "conversationWritingSummary": "Píšeme vaše zhrnutie…"
+    "conversationWritingSummary": "Píšeme vaše zhrnutie…",
+    "onTheWayServerWork": "Práca hlásená serverom"
 }

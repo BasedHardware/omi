@@ -1018,6 +1018,11 @@ checks:
     triggers: [".github/scripts/measure_ci_budget.py", ".github/scripts/test_measure_ci_budget.py", ".github/workflows/ci-budget-audit.yml"]
     lanes: ["local", "ci"]
     reason: "weekly audit must skip unused jobs, detect over-budget p50, and update one tracking issue"
+  - id: backend-unit-plan-contract
+    command: ["python3", ".github/actions/ci-tier/test_plan_backend_unit_selection.py"]
+    triggers: [".github/actions/ci-tier/plan_backend_unit_selection.sh", ".github/actions/ci-tier/test_plan_backend_unit_selection.py", ".github/workflows/backend-unit-tests.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "one plan per run: nightly and ci:full run everything, main diffs from the last green main run with a rotating slice, and every lookup failure falls back to the full suite"
   - id: ci-tier-contract
     command: ["python3", ".github/actions/ci-tier/test_resolve.py"]
     triggers: [".github/actions/ci-tier/**", ".github/workflows/backend-hermetic-e2e.yml", ".github/workflows/backend-unit-tests.yml", ".github/workflows/desktop-swift-ci.yml", ".github/workflows/mobile-app-checks.yml", ".github/workflows/python-cli-ci.yml", ".github/checks-manifest.yaml"]

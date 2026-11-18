@@ -1,5 +1,7 @@
 package com.friend.ios.ble
 
+import android.content.SharedPreferences
+
 /** Attributes recovery latency to a persisted event without controlling connection retries. */
 internal class BleReconnectDiagnostics {
     data class Recovery(val timestamp: Long, val durationMs: Long)
@@ -46,4 +48,26 @@ internal class BleReconnectDiagnostics {
             if (i == index) withDuration(event, recovery.durationMs) else event
         }
     }
+}
+
+/** Per-identity durable reconnect evidence, separate from audio outage accounting. */
+internal object BleConnectionHistory {
+    fun connectedBefore(prefs: SharedPreferences, address: String, enabled: Boolean): Boolean {
+        if (!enabled) return false
+        val addr = address.uppercase()
+        return prefs.getBoolean("ever_connected_$addr", false) ||
+            prefs.contains("audio_outage_$addr") || prefs.getInt("reconnect_count_$addr", 0) > 0
+    }
+
+    fun connected(prefs: SharedPreferences, address: String) {
+        val addr = address.uppercase()
+        prefs.edit().putBoolean("ever_connected_$addr", true).remove("reconnect_event_$addr").apply()
+    }
+
+    fun disconnected(prefs: SharedPreferences, address: String, timestamp: Long) {
+        prefs.edit().putLong("reconnect_event_${address.uppercase()}", timestamp).apply()
+    }
+
+    fun eventTimestamp(prefs: SharedPreferences, address: String): Long =
+        prefs.getLong("reconnect_event_${address.uppercase()}", prefs.getLong("audio_outage_${address.uppercase()}", 0L))
 }

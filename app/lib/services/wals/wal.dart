@@ -7,6 +7,9 @@
 // decodes as the wrong codec (still HTTP 200), so naming schemes here must
 // stay in sync with backend/utils/sync (CUSTODY.md).
 import 'dart:math';
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 
 import 'package:path_provider/path_provider.dart';
 
@@ -373,6 +376,12 @@ class Wal {
   }
 
   /// Explicit Transcribe Later consent: only a manual upload may release this hold.
+  // New orphan rows need a file-specific playback/upload identity: producer
+  // collision and fractional suffixes can share the legacy device/second id.
+  // Existing and released rows keep their original id.
+  final bool recoveredOrphan;
+  String? _orphanIdentityPath, _orphanIdentity;
+
   bool _holdForUser;
   bool get holdForUser => _holdForUser;
   set holdForUser(bool value) {
@@ -862,10 +871,19 @@ class Wal {
             syncDisplayState == WalSyncDisplayState.syncing);
   }
 
-  // Cached: identity lookups scan indexes of ~100k rows. Cleared by the
-  // [device] and [timerStart] setters, its only inputs.
+  // Cache the regular identity used when scanning large histories. The device
+  // and timerStart setters invalidate it.
   String? _id;
-  String get id => _id ??= '${_device}_$_timerStart';
+
+  String get id {
+    final file = filePath;
+    if (!recoveredOrphan || file == null || file.isEmpty) return _id ??= '${_device}_$_timerStart';
+    if (_orphanIdentityPath != file) {
+      _orphanIdentityPath = file;
+      _orphanIdentity = 'orphan_${sha256.convert(utf8.encode(file))}';
+    }
+    return _orphanIdentity!;
+  }
 
   /// Single source of truth for how this recording's sync state is shown to the
   /// user. The sync page renders an explicit label + icon for every value so a
@@ -966,6 +984,7 @@ class Wal {
     WalStorage storage = WalStorage.mem,
     bool onDeviceOnly = false,
     bool holdForUser = false,
+    this.recoveredOrphan = false,
     DeviceType? deviceType,
     Map<String, dynamic>? onDeviceConversation,
     Map<String, dynamic>? onDevicePreparedUpload,
@@ -1078,6 +1097,7 @@ class Wal {
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
       onDeviceOnly: json['on_device_only'] == true,
       holdForUser: json['hold_for_user'] == true,
+      recoveredOrphan: json['recovered_orphan'] == true,
       deviceType: DeviceType.values.asNameMap()[json['device_type']],
       onDeviceConversation:
           json['on_device_conversation'] is Map ? Map<String, dynamic>.from(json['on_device_conversation']) : null,
@@ -1146,6 +1166,7 @@ class Wal {
       'storage': storage.name,
       'on_device_only': onDeviceOnly,
       'hold_for_user': holdForUser,
+      if (recoveredOrphan) 'recovered_orphan': true,
       if (deviceType != null) 'device_type': deviceType!.name,
       'on_device_conversation': onDeviceConversation,
       if (onDevicePreparedUpload != null) 'on_device_prepared_upload': onDevicePreparedUpload,
@@ -1214,6 +1235,7 @@ class Wal {
     h = _mixFingerprint(h, storage.index);
     h = _mixFingerprint(h, onDeviceOnly ? 1 : 0);
     h = _mixFingerprint(h, holdForUser ? 1 : 0);
+    h = _mixFingerprint(h, recoveredOrphan ? 1 : 0);
     h = _mixFingerprint(h, deviceType?.index ?? -1);
     h = _mixFingerprint(h, identityHashCode(onDeviceConversation));
     h = _mixFingerprint(h, identityHashCode(onDevicePreparedUpload));

@@ -12225,7 +12225,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Kể từ khi ghép đôi: $drops lần ngắt, $failed kết nối thất bại.';
+    return 'Kể từ khi ghép đôi: $drops lần kết nối lại, $failed lần kết nối thất bại.';
   }
 
   @override
@@ -13462,16 +13462,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Đang biến $amount thành cuộc trò chuyện';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Xong $done / $total · bạn có thể rời màn hình này';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount sẵn sàng đồng bộ';
   }
@@ -13495,7 +13485,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Đang chờ trên điện thoại này';
 
   @override
-  String get syncDetailsTranscribing => 'Đang phiên âm trên Omi';
+  String get syncDetailsTranscribing => 'Đã tải lên, đang chờ máy chủ';
 
   @override
   String get syncDetailsAudioFiles => 'Tệp âm thanh';
@@ -13955,6 +13945,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi đang xử lý cuộc trò chuyện này. Bản tóm tắt sẽ xuất hiện ở đây khi hoàn tất.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Chưa được chép lời';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Bản tóm tắt sẽ xuất hiện khi bản chép lời sẵn sàng.';
 
   @override
   String get summaryCheckAgain => 'Kiểm tra lại';
@@ -15557,4 +15553,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Đang viết bản tóm tắt của bạn…';
+
+  @override
+  String get onTheWayServerWork => 'Công việc do máy chủ báo cáo';
 }

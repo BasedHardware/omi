@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Nutrūkimai",
     "diagnosticsDropsPerHour": "maždaug {count} per valandą",
     "diagnosticsLongestGap": "Ilgiausia pertrauka",
-    "diagnosticsSincePairingSummary": "Nuo susiejimo: nutrūkimų {drops}, nepavykusių ryšių {failed}.",
+    "diagnosticsSincePairingSummary": "Nuo susiejimo: {drops} pakartotinių prisijungimų, {failed} nepavykusių prisijungimų.",
     "diagnosticsLastDuration": "Paskutinės {duration}",
     "chatReplyOffline": "Nepavyko prisijungti. Patikrinkite ryšį ir bandykite dar kartą.",
     "chatReplyServerError": "Mūsų pusėje įvyko klaida. Bandykite dar kartą.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Sinchronizuojami jūsų įrašai",
     "syncStepDownloadingAmount": "Atsisiunčiama iš Omi · {done} iš {total}",
     "syncStepUploadingAmount": "Įkeliama · {done} iš {total}",
-    "syncCardTranscribingAmount": "{amount} paverčiama pokalbiais",
-    "syncCardTranscribedOf": "Atlikta {done} iš {total} · galite palikti šį ekraną",
     "syncCardReadyAmount": "{amount} paruošta sinchronizuoti",
     "syncDetailsTitle": "Sinchronizavimo informacija",
     "syncDetailsRightNow": "Šiuo metu",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Perdavimo sparta",
     "syncDetailsWaitingOnOmi": "Laukia Omi",
     "syncDetailsWaitingOnPhone": "Laukia šiame telefone",
-    "syncDetailsTranscribing": "Transkribuojama Omi",
+    "syncDetailsTranscribing": "Įkelta, laukiama serverio",
     "syncDetailsAudioFiles": "Garso failai",
     "syncDetailsServerJobs": "Serverio užduotys (atlikta / iš viso)",
     "syncDetailsCopy": "Kopijuoti informaciją palaikymo komandai",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "Verčiau apibendrinti su Omi",
     "summaryBusyTitle": "Vis dar apdorojama",
     "summaryBusyBody": "Omi jau apdoroja šį pokalbį. Santrauka bus parodyta čia, kai bus baigta.",
+    "summaryTranscriptionPendingTitle": "Dar netranskribuota",
+    "summaryTranscriptionPendingBody": "Santrauka bus parodyta, kai bus paruošta transkripcija.",
     "summaryCheckAgain": "Tikrinti dar kartą",
     "summaryLimitTitle": "Pasiektas santraukų limitas",
     "summaryLimitBody": "Per pastarąją valandą kelis kartus iš naujo sugeneravote santraukas. Bandykite vėliau.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "{size} MB atsisiuntimas",
     "downloadNow": "Atsisiųsti dabar",
     "onWifiLater": "Vėliau per Wi-Fi",
-    "conversationWritingSummary": "Rašoma jūsų santrauka…"
+    "conversationWritingSummary": "Rašoma jūsų santrauka…",
+    "onTheWayServerWork": "Serverio praneštas darbas"
 }

@@ -777,20 +777,21 @@ def test_projection_stamps_first_summary_debt_on_an_untitled_completed_row():
     assert home_step.classify(listed) == home_step.WRITING_NOTES
 
 
-def test_projection_does_not_stamp_debt_past_the_repair_age_gate():
+def test_projection_past_the_repair_age_gate_stamps_no_debt_and_stays_on_home():
     from utils.conversations import home_step
 
     old = recording(created_at=datetime.fromtimestamp(STAMP_NOW - 4 * 86400, timezone.utc))
     result, new = replace_record(old, incoming(), {'start': 100, 'end': 102})
     assert new
     # Provenance is honest, but no debt means the repair never parks the row
-    # one-way and Home never presents it as Writing notes forever.
+    # one-way and Home never presents it as Writing notes forever. The row has
+    # the projected speech, so Home keeps it as a finished card, never noise.
     assert result['summary_title_provenance'] == 'server_minimum'
     assert 'summary_due_at' not in result
     assert 'summary_first_pending_at' not in result
     assert summary_delivery.refusal(result) is None
     listed = {key: value for key, value in result.items() if key != 'transcript_segments'}
-    assert home_step.classify(listed) == home_step.NOISE
+    assert home_step.classify(listed) == home_step.READY
 
 
 def test_projection_does_not_double_stamp_existing_debt():
@@ -890,7 +891,6 @@ def test_projection_debt_stamp_skips_every_non_empty_summary_block(reason):
         {'summary_completed_at': 90.0},
         {'summary_output_present': True},
         {'summary_due_at': 170.0},
-        {'summary_first_pending_at': 50.0},
         {'structured': {'title': 'Synthetic title'}},
         {'structured': {'overview': 'Synthetic overview'}},
         {'structured': {'sections': [{'body_markdown': 'Synthetic body'}]}},

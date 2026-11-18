@@ -12237,7 +12237,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Eşleştirmeden beri: $drops kopma, $failed başarısız bağlantı.';
+    return 'Eşleştirmeden beri: $drops yeniden bağlantı, $failed başarısız bağlantı.';
   }
 
   @override
@@ -13477,16 +13477,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount konuşmalara dönüştürülüyor';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total tamamlandı · bu ekrandan çıkabilirsiniz';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount senkronize edilmeye hazır';
   }
@@ -13510,7 +13500,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Bu telefonda bekliyor';
 
   @override
-  String get syncDetailsTranscribing => 'Omi\'de yazıya dökülüyor';
+  String get syncDetailsTranscribing => 'Yüklendi, sunucu bekleniyor';
 
   @override
   String get syncDetailsAudioFiles => 'Ses dosyaları';
@@ -13966,6 +13956,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi bu konuşma üzerinde zaten çalışıyor. Özet tamamlandığında burada görünecek.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Henüz yazıya dökülmedi';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Özet, döküm hazır olduğunda görünecek.';
 
   @override
   String get summaryCheckAgain => 'Tekrar kontrol et';
@@ -15567,4 +15563,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Özetiniz yazılıyor…';
+
+  @override
+  String get onTheWayServerWork => 'Sunucunun bildirdiği işler';
 }

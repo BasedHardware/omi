@@ -3800,7 +3800,7 @@
     "diagnosticsDrops": "Pemutusan",
     "diagnosticsDropsPerHour": "sekitar {count} per jam",
     "diagnosticsLongestGap": "Jeda terlama",
-    "diagnosticsSincePairingSummary": "Sejak penyambungan: {drops} pemutusan, {failed} koneksi gagal.",
+    "diagnosticsSincePairingSummary": "Sejak pemasangan: {drops} penyambungan ulang, {failed} koneksi gagal.",
     "diagnosticsLastDuration": "{duration} terakhir",
     "chatReplyOffline": "Tidak dapat terhubung. Periksa koneksi Anda dan coba lagi.",
     "chatReplyServerError": "Terjadi kesalahan di sisi kami. Silakan coba lagi.",
@@ -4160,8 +4160,6 @@
     "syncCardSyncingTitle": "Menyinkronkan rekaman Anda",
     "syncStepDownloadingAmount": "Mengunduh dari Omi Anda · {done} dari {total}",
     "syncStepUploadingAmount": "Mengunggah · {done} dari {total}",
-    "syncCardTranscribingAmount": "Mengubah {amount} menjadi percakapan",
-    "syncCardTranscribedOf": "{done} dari {total} selesai · Anda boleh meninggalkan layar ini",
     "syncCardReadyAmount": "{amount} siap disinkronkan",
     "syncDetailsTitle": "Detail sinkronisasi",
     "syncDetailsRightNow": "Saat ini",
@@ -4169,7 +4167,7 @@
     "syncDetailsTransferSpeed": "Kecepatan transfer",
     "syncDetailsWaitingOnOmi": "Menunggu Omi Anda",
     "syncDetailsWaitingOnPhone": "Menunggu ponsel ini",
-    "syncDetailsTranscribing": "Mentranskripsi di Omi",
+    "syncDetailsTranscribing": "Diunggah, menunggu server",
     "syncDetailsAudioFiles": "File audio",
     "syncDetailsServerJobs": "Tugas server (selesai / total)",
     "syncDetailsCopy": "Salin detail untuk dukungan",
@@ -4305,6 +4303,8 @@
     "summaryWithOmiInstead": "Ringkas dengan Omi saja",
     "summaryBusyTitle": "Masih diproses",
     "summaryBusyBody": "Omi sedang memproses percakapan ini. Ringkasan akan muncul di sini setelah selesai.",
+    "summaryTranscriptionPendingTitle": "Belum ditranskripsi",
+    "summaryTranscriptionPendingBody": "Ringkasan akan muncul setelah transkrip siap.",
     "summaryCheckAgain": "Periksa lagi",
     "summaryLimitTitle": "Batas ringkasan tercapai",
     "summaryLimitBody": "Anda telah membuat ulang beberapa ringkasan dalam satu jam terakhir. Coba lagi nanti.",
@@ -4719,5 +4719,6 @@
     "onDeviceModelDownloadSize": "Unduhan {size} MB",
     "downloadNow": "Unduh Sekarang",
     "onWifiLater": "Nanti via Wi-Fi",
-    "conversationWritingSummary": "Menulis ringkasan Anda…"
+    "conversationWritingSummary": "Menulis ringkasan Anda…",
+    "onTheWayServerWork": "Pekerjaan yang dilaporkan server"
 }

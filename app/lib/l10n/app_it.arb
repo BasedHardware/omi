@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Interruzioni",
     "diagnosticsDropsPerHour": "circa {count} all'ora",
     "diagnosticsLongestGap": "Interruzione più lunga",
-    "diagnosticsSincePairingSummary": "Dall'associazione: {drops} interruzioni, {failed} connessioni non riuscite.",
+    "diagnosticsSincePairingSummary": "Dall'abbinamento: {drops} riconnessioni, {failed} connessioni non riuscite.",
     "diagnosticsLastDuration": "Ultimi {duration}",
     "chatReplyOffline": "Impossibile connettersi. Controlla la connessione e riprova.",
     "chatReplyServerError": "Qualcosa è andato storto da parte nostra. Riprova.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Sincronizzazione delle registrazioni",
     "syncStepDownloadingAmount": "Download dal tuo Omi · {done} di {total}",
     "syncStepUploadingAmount": "Caricamento · {done} di {total}",
-    "syncCardTranscribingAmount": "Trasformazione di {amount} in conversazioni",
-    "syncCardTranscribedOf": "{done} di {total} completati · puoi lasciare questa schermata",
     "syncCardReadyAmount": "{amount} pronti da sincronizzare",
     "syncDetailsTitle": "Dettagli sincronizzazione",
     "syncDetailsRightNow": "Adesso",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Velocità di trasferimento",
     "syncDetailsWaitingOnOmi": "In attesa del tuo Omi",
     "syncDetailsWaitingOnPhone": "In attesa di questo telefono",
-    "syncDetailsTranscribing": "Trascrizione su Omi",
+    "syncDetailsTranscribing": "Caricato, in attesa del server",
     "syncDetailsAudioFiles": "File audio",
     "syncDetailsServerJobs": "Job del server (completati / totale)",
     "syncDetailsCopy": "Copia i dettagli per l'assistenza",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "Riassumi invece con Omi",
     "summaryBusyTitle": "Elaborazione in corso",
     "summaryBusyBody": "Omi sta già lavorando su questa conversazione. Il riassunto apparirà qui al termine.",
+    "summaryTranscriptionPendingTitle": "Non ancora trascritto",
+    "summaryTranscriptionPendingBody": "Il riassunto apparirà quando la trascrizione sarà pronta.",
     "summaryCheckAgain": "Controlla di nuovo",
     "summaryLimitTitle": "Limite di riassunti raggiunto",
     "summaryLimitBody": "Hai rigenerato diversi riassunti nell'ultima ora. Riprova più tardi.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "Download di {size} MB",
     "downloadNow": "Scarica ora",
     "onWifiLater": "Più tardi su Wi-Fi",
-    "conversationWritingSummary": "Sto scrivendo il tuo riepilogo…"
+    "conversationWritingSummary": "Sto scrivendo il tuo riepilogo…",
+    "onTheWayServerWork": "Lavoro segnalato dal server"
 }

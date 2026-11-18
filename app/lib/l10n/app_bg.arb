@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Прекъсвания",
     "diagnosticsDropsPerHour": "около {count} на час",
     "diagnosticsLongestGap": "Най-дълго прекъсване",
-    "diagnosticsSincePairingSummary": "От сдвояването: {drops} прекъсвания, {failed} неуспешни връзки.",
+    "diagnosticsSincePairingSummary": "От сдвояването: {drops} повторни свързвания, {failed} неуспешни връзки.",
     "diagnosticsLastDuration": "Последните {duration}",
     "chatReplyOffline": "Неуспешно свързване. Проверете връзката си и опитайте отново.",
     "chatReplyServerError": "Нещо се обърка от наша страна. Моля, опитайте отново.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Синхронизиране на записите",
     "syncStepDownloadingAmount": "Изтегляне от Omi · {done} от {total}",
     "syncStepUploadingAmount": "Качване · {done} от {total}",
-    "syncCardTranscribingAmount": "Превръщане на {amount} в разговори",
-    "syncCardTranscribedOf": "Готово {done} от {total} · можете да напуснете екрана",
     "syncCardReadyAmount": "{amount} готови за синхронизиране",
     "syncDetailsTitle": "Подробности за синхронизацията",
     "syncDetailsRightNow": "В момента",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Скорост на прехвърляне",
     "syncDetailsWaitingOnOmi": "Чака на Omi",
     "syncDetailsWaitingOnPhone": "Чака на този телефон",
-    "syncDetailsTranscribing": "Транскрибира се в Omi",
+    "syncDetailsTranscribing": "Качено, изчаква сървъра",
     "syncDetailsAudioFiles": "Аудиофайлове",
     "syncDetailsServerJobs": "Задачи на сървъра (готови / общо)",
     "syncDetailsCopy": "Копиране на данните за поддръжката",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "Обобщи с Omi вместо това",
     "summaryBusyTitle": "Все още се обработва",
     "summaryBusyBody": "Omi вече работи по този разговор. Обобщението ще се появи тук, когато приключи.",
+    "summaryTranscriptionPendingTitle": "Все още не е транскрибирано",
+    "summaryTranscriptionPendingBody": "Обобщението ще се появи, когато транскрипцията е готова.",
     "summaryCheckAgain": "Провери отново",
     "summaryLimitTitle": "Достигнат е лимитът за обобщения",
     "summaryLimitBody": "Генерирахте отново няколко обобщения през последния час. Опитайте отново по-късно.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "Изтегляне {size} МБ",
     "downloadNow": "Изтегляне сега",
     "onWifiLater": "По-късно през Wi-Fi",
-    "conversationWritingSummary": "Пишем вашето резюме…"
+    "conversationWritingSummary": "Пишем вашето резюме…",
+    "onTheWayServerWork": "Работа, отчетена от сървъра"
 }

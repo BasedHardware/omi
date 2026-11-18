@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "الانقطاعات",
     "diagnosticsDropsPerHour": "حوالي {count} في الساعة",
     "diagnosticsLongestGap": "أطول انقطاع",
-    "diagnosticsSincePairingSummary": "منذ الاقتران: {drops} انقطاع، {failed} اتصال فاشل.",
+    "diagnosticsSincePairingSummary": "منذ الاقتران: {drops} إعادة اتصال، {failed} اتصال فاشل.",
     "diagnosticsLastDuration": "آخر {duration}",
     "chatReplyOffline": "تعذر الاتصال. تحقق من اتصالك وحاول مرة أخرى.",
     "chatReplyServerError": "حدث خطأ ما من جانبنا. يُرجى المحاولة مرة أخرى.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "مزامنة تسجيلاتك",
     "syncStepDownloadingAmount": "التنزيل من Omi · {done} من {total}",
     "syncStepUploadingAmount": "الرفع · {done} من {total}",
-    "syncCardTranscribingAmount": "تحويل {amount} إلى محادثات",
-    "syncCardTranscribedOf": "اكتمل {done} من {total} · يمكنك مغادرة هذه الشاشة",
     "syncCardReadyAmount": "{amount} جاهزة للمزامنة",
     "syncDetailsTitle": "تفاصيل المزامنة",
     "syncDetailsRightNow": "الآن",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "سرعة النقل",
     "syncDetailsWaitingOnOmi": "في انتظار Omi",
     "syncDetailsWaitingOnPhone": "في انتظار هذا الهاتف",
-    "syncDetailsTranscribing": "جارٍ النسخ في Omi",
+    "syncDetailsTranscribing": "تم الرفع، بانتظار الخادم",
     "syncDetailsAudioFiles": "ملفات صوتية",
     "syncDetailsServerJobs": "مهام الخادم (المكتملة / الإجمالي)",
     "syncDetailsCopy": "نسخ التفاصيل للدعم",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "لخّص باستخدام Omi بدلًا من ذلك",
     "summaryBusyTitle": "لا تزال المعالجة جارية",
     "summaryBusyBody": "يعمل Omi بالفعل على هذه المحادثة. سيظهر الملخص هنا عند الانتهاء.",
+    "summaryTranscriptionPendingTitle": "لم يُفرَّغ نصيًا بعد",
+    "summaryTranscriptionPendingBody": "سيظهر الملخص عندما يصبح النص جاهزًا.",
     "summaryCheckAgain": "تحقق مرة أخرى",
     "summaryLimitTitle": "تم بلوغ حد الملخصات",
     "summaryLimitBody": "لقد أعدت إنشاء عدة ملخصات خلال الساعة الماضية. حاول مرة أخرى لاحقًا.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "تنزيل {size} ميغابايت",
     "downloadNow": "التنزيل الآن",
     "onWifiLater": "لاحقًا عبر Wi-Fi",
-    "conversationWritingSummary": "جارٍ كتابة ملخصك…"
+    "conversationWritingSummary": "جارٍ كتابة ملخصك…",
+    "onTheWayServerWork": "عمل أبلغ عنه الخادم"
 }

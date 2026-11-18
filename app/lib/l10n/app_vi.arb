@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Lần ngắt",
     "diagnosticsDropsPerHour": "khoảng {count} lần mỗi giờ",
     "diagnosticsLongestGap": "Lần gián đoạn lâu nhất",
-    "diagnosticsSincePairingSummary": "Kể từ khi ghép đôi: {drops} lần ngắt, {failed} kết nối thất bại.",
+    "diagnosticsSincePairingSummary": "Kể từ khi ghép đôi: {drops} lần kết nối lại, {failed} lần kết nối thất bại.",
     "diagnosticsLastDuration": "{duration} gần nhất",
     "chatReplyOffline": "Không thể kết nối. Hãy kiểm tra kết nối của bạn và thử lại.",
     "chatReplyServerError": "Đã xảy ra lỗi từ phía chúng tôi. Vui lòng thử lại.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Đang đồng bộ bản ghi của bạn",
     "syncStepDownloadingAmount": "Đang tải từ Omi của bạn · {done} / {total}",
     "syncStepUploadingAmount": "Đang tải lên · {done} / {total}",
-    "syncCardTranscribingAmount": "Đang biến {amount} thành cuộc trò chuyện",
-    "syncCardTranscribedOf": "Xong {done} / {total} · bạn có thể rời màn hình này",
     "syncCardReadyAmount": "{amount} sẵn sàng đồng bộ",
     "syncDetailsTitle": "Chi tiết đồng bộ",
     "syncDetailsRightNow": "Ngay lúc này",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Tốc độ truyền",
     "syncDetailsWaitingOnOmi": "Đang chờ trên Omi",
     "syncDetailsWaitingOnPhone": "Đang chờ trên điện thoại này",
-    "syncDetailsTranscribing": "Đang phiên âm trên Omi",
+    "syncDetailsTranscribing": "Đã tải lên, đang chờ máy chủ",
     "syncDetailsAudioFiles": "Tệp âm thanh",
     "syncDetailsServerJobs": "Tác vụ máy chủ (xong / tổng)",
     "syncDetailsCopy": "Sao chép chi tiết cho bộ phận hỗ trợ",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "Chuyển sang tóm tắt bằng Omi",
     "summaryBusyTitle": "Vẫn đang xử lý",
     "summaryBusyBody": "Omi đang xử lý cuộc trò chuyện này. Bản tóm tắt sẽ xuất hiện ở đây khi hoàn tất.",
+    "summaryTranscriptionPendingTitle": "Chưa được chép lời",
+    "summaryTranscriptionPendingBody": "Bản tóm tắt sẽ xuất hiện khi bản chép lời sẵn sàng.",
     "summaryCheckAgain": "Kiểm tra lại",
     "summaryLimitTitle": "Đã đạt giới hạn tóm tắt",
     "summaryLimitBody": "Bạn đã tạo lại nhiều bản tóm tắt trong giờ qua. Hãy thử lại sau.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "Tải xuống {size} MB",
     "downloadNow": "Tải ngay",
     "onWifiLater": "Sau, qua Wi-Fi",
-    "conversationWritingSummary": "Đang viết bản tóm tắt của bạn…"
+    "conversationWritingSummary": "Đang viết bản tóm tắt của bạn…",
+    "onTheWayServerWork": "Công việc do máy chủ báo cáo"
 }

@@ -23,6 +23,28 @@ final class OmiDeviceHealthStore {
         try? SafeDefaults.store(.bool(enabled), forKey: "ble_health_enabled", in: defaults)
         defaults.synchronize()
     }
+    // The reconnect event key is separate from the audio outage: the latter can
+    // predate this disconnect after a process restart and owns audio accounting.
+    func recordDisconnect(_ device: String, at: Int64) {
+        guard enabled else { return }
+        try? SafeDefaults.store(.int64(at), forKey: "ble_reconnect_event_\(device)", in: defaults)
+    }
+    func reconnectEvent(_ device: String) -> Int64? {
+        guard enabled else { return nil }
+        return defaults.object(forKey: "ble_reconnect_event_\(device)") as? Int64
+    }
+    func connectedBefore(_ device: String) -> Bool {
+        guard enabled else { return false }
+        return defaults.bool(forKey: "ble_ever_connected_\(device)") ||
+            defaults.object(forKey: "ble_session_\(device)") != nil ||
+            defaults.object(forKey: "ble_audio_outage_\(device)") != nil ||
+            defaults.integer(forKey: "ble_diagnostics_reconnect_count_\(device)") > 0
+    }
+    func recordConnected(_ device: String) {
+        guard enabled else { return }
+        try? SafeDefaults.store(.bool(true), forKey: "ble_ever_connected_\(device)", in: defaults)
+        defaults.removeObject(forKey: "ble_reconnect_event_\(device)")
+    }
     func openSince(_ device: String) -> Int64? {
         guard enabled else { return nil }
         if defaults.object(forKey: "ble_audio_outage_epoch_\(device)") as? Int64 == epoch,

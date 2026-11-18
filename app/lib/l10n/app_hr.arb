@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "Prekidi",
     "diagnosticsDropsPerHour": "otprilike {count} na sat",
     "diagnosticsLongestGap": "Najdulji prekid",
-    "diagnosticsSincePairingSummary": "Od uparivanja: prekida {drops}, neuspješnih veza {failed}.",
+    "diagnosticsSincePairingSummary": "Od uparivanja: {drops} ponovnih povezivanja, {failed} neuspjelih povezivanja.",
     "diagnosticsLastDuration": "Posljednjih {duration}",
     "chatReplyOffline": "Nije moguće povezivanje. Provjerite vezu i pokušajte ponovno.",
     "chatReplyServerError": "Nešto je pošlo po zlu s naše strane. Pokušajte ponovno.",
@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "Sinkronizacija snimaka",
     "syncStepDownloadingAmount": "Preuzimanje s uređaja Omi · {done} od {total}",
     "syncStepUploadingAmount": "Slanje · {done} od {total}",
-    "syncCardTranscribingAmount": "Pretvaranje {amount} u razgovore",
-    "syncCardTranscribedOf": "Gotovo {done} od {total} · možete napustiti ovaj zaslon",
     "syncCardReadyAmount": "{amount} spremno za sinkronizaciju",
     "syncDetailsTitle": "Detalji sinkronizacije",
     "syncDetailsRightNow": "Trenutno",
@@ -11554,7 +11552,7 @@
     "syncDetailsTransferSpeed": "Brzina prijenosa",
     "syncDetailsWaitingOnOmi": "Čeka na Omi",
     "syncDetailsWaitingOnPhone": "Čeka na ovom telefonu",
-    "syncDetailsTranscribing": "Transkripcija na Omi",
+    "syncDetailsTranscribing": "Preneseno, čeka poslužitelj",
     "syncDetailsAudioFiles": "Audio datoteke",
     "syncDetailsServerJobs": "Poslovi na poslužitelju (gotovo / ukupno)",
     "syncDetailsCopy": "Kopiraj detalje za podršku",
@@ -11690,6 +11688,8 @@
     "summaryWithOmiInstead": "Ipak sažmi s Omi",
     "summaryBusyTitle": "Obrada je još u tijeku",
     "summaryBusyBody": "Omi već radi na ovom razgovoru. Sažetak će se pojaviti ovdje kad bude gotov.",
+    "summaryTranscriptionPendingTitle": "Još nije transkribirano",
+    "summaryTranscriptionPendingBody": "Sažetak će se pojaviti kad transkript bude spreman.",
     "summaryCheckAgain": "Provjeri ponovno",
     "summaryLimitTitle": "Dosegnuto je ograničenje sažetaka",
     "summaryLimitBody": "U posljednjih sat vremena više ste puta ponovno generirali sažetke. Pokušajte ponovno kasnije.",
@@ -12241,5 +12241,6 @@
     "onDeviceModelDownloadSize": "Preuzimanje {size} MB",
     "downloadNow": "Preuzmi sada",
     "onWifiLater": "Kasnije na Wi-Fi",
-    "conversationWritingSummary": "Pišemo vaš sažetak…"
+    "conversationWritingSummary": "Pišemo vaš sažetak…",
+    "onTheWayServerWork": "Rad koji je prijavio poslužitelj"
 }

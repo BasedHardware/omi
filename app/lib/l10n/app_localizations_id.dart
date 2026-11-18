@@ -12232,7 +12232,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Sejak penyambungan: $drops pemutusan, $failed koneksi gagal.';
+    return 'Sejak pemasangan: $drops penyambungan ulang, $failed koneksi gagal.';
   }
 
   @override
@@ -13474,16 +13474,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Mengubah $amount menjadi percakapan';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done dari $total selesai · Anda boleh meninggalkan layar ini';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount siap disinkronkan';
   }
@@ -13507,7 +13497,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Menunggu ponsel ini';
 
   @override
-  String get syncDetailsTranscribing => 'Mentranskripsi di Omi';
+  String get syncDetailsTranscribing => 'Diunggah, menunggu server';
 
   @override
   String get syncDetailsAudioFiles => 'File audio';
@@ -13967,6 +13957,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi sedang memproses percakapan ini. Ringkasan akan muncul di sini setelah selesai.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Belum ditranskripsi';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Ringkasan akan muncul setelah transkrip siap.';
 
   @override
   String get summaryCheckAgain => 'Periksa lagi';
@@ -15571,4 +15567,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Menulis ringkasan Anda…';
+
+  @override
+  String get onTheWayServerWork => 'Pekerjaan yang dilaporkan server';
 }

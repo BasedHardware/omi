@@ -17,6 +17,7 @@ from config.record_latency import record_fresh_merge_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import Store
 from utils.batch_pipeline import backlog_release
+from utils.batch_pipeline.result_protocol import merge_markers
 from utils.batch_pipeline.held_terminal import held_without_recovery
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.scheduler import owner_key
@@ -455,6 +456,9 @@ class OrderedMerge:
                 held['catch_up'] = True
                 return None
             job = tx.get('jobs', candidate['segment_id'])
+            markers = merge_markers(job)
+            if markers is None:
+                return None
             existing = tx.get('results', job['segment_id'])
             if existing:
                 raise RuntimeError('result log exists for pending job; reconciliation required')
@@ -481,9 +485,7 @@ class OrderedMerge:
                 'projection_state': 'pending',
                 'fresh_capture': job.get('fresh_capture') is True,
             }
-            for field in ('source_reuse_version', 'source_alias_version'):
-                if field in job:
-                    entry[field] = job[field]
+            entry.update(markers)
             if job.get('recovery_state') == 'recovered' or (job.get('stt_route') or {}).get('stt_route') == 'provider':
                 entry['recovery_version'] = 1
             if bypass:

@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Обриви",
     "diagnosticsDropsPerHour": "приблизно {count} на годину",
     "diagnosticsLongestGap": "Найдовша перерва",
-    "diagnosticsSincePairingSummary": "З моменту спарування: обривів — {drops}, невдалих підключень — {failed}.",
+    "diagnosticsSincePairingSummary": "Від сполучення: {drops} повторних підключень, {failed} невдалих підключень.",
     "diagnosticsLastDuration": "Останні {duration}",
     "chatReplyOffline": "Не вдалося під'єднатися. Перевірте з'єднання та повторіть спробу.",
     "chatReplyServerError": "Щось пішло не так з нашого боку. Спробуйте ще раз.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Синхронізація записів",
     "syncStepDownloadingAmount": "Завантаження з Omi · {done} із {total}",
     "syncStepUploadingAmount": "Завантаження на сервер · {done} із {total}",
-    "syncCardTranscribingAmount": "Перетворення {amount} на розмови",
-    "syncCardTranscribedOf": "Готово {done} із {total} · можна залишити цей екран",
     "syncCardReadyAmount": "{amount} готово до синхронізації",
     "syncDetailsTitle": "Відомості про синхронізацію",
     "syncDetailsRightNow": "Зараз",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Швидкість передачі",
     "syncDetailsWaitingOnOmi": "Очікує на Omi",
     "syncDetailsWaitingOnPhone": "Очікує на цьому телефоні",
-    "syncDetailsTranscribing": "Розшифровується в Omi",
+    "syncDetailsTranscribing": "Завантажено, очікування сервера",
     "syncDetailsAudioFiles": "Аудіофайли",
     "syncDetailsServerJobs": "Завдання сервера (виконано / усього)",
     "syncDetailsCopy": "Скопіювати дані для підтримки",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "Натомість підсумувати з Omi",
     "summaryBusyTitle": "Ще обробляється",
     "summaryBusyBody": "Omi вже працює над цією розмовою. Підсумок з'явиться тут, щойно буде готовий.",
+    "summaryTranscriptionPendingTitle": "Ще не транскрибовано",
+    "summaryTranscriptionPendingBody": "Підсумок з'явиться, щойно буде готова транскрипція.",
     "summaryCheckAgain": "Перевірити знову",
     "summaryLimitTitle": "Досягнуто ліміту підсумків",
     "summaryLimitBody": "За останню годину ви кілька разів повторно створили підсумки. Спробуйте пізніше.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "Завантаження {size} МБ",
     "downloadNow": "Завантажити зараз",
     "onWifiLater": "Пізніше через Wi-Fi",
-    "conversationWritingSummary": "Пишемо ваш підсумок…"
+    "conversationWritingSummary": "Пишемо ваш підсумок…",
+    "onTheWayServerWork": "Робота за даними сервера"
 }

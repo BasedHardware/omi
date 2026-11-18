@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "Прекини",
     "diagnosticsDropsPerHour": "околу {count} на час",
     "diagnosticsLongestGap": "Најдолг прекин",
-    "diagnosticsSincePairingSummary": "Од спарувањето: {drops} прекини, {failed} неуспешни поврзувања.",
+    "diagnosticsSincePairingSummary": "Од спарувањето: {drops} повторни поврзувања, {failed} неуспешни поврзувања.",
     "diagnosticsLastDuration": "Последните {duration}",
     "chatReplyOffline": "Не може да се воспостави врска. Проверете ја врската и обидете се повторно.",
     "chatReplyServerError": "Нешто тргна наопаку од наша страна. Обидете се повторно.",
@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "Синхронизирање на снимките",
     "syncStepDownloadingAmount": "Преземање од Omi · {done} од {total}",
     "syncStepUploadingAmount": "Подигање · {done} од {total}",
-    "syncCardTranscribingAmount": "Претворање на {amount} во разговори",
-    "syncCardTranscribedOf": "Завршено {done} од {total} · можете да го напуштите екранот",
     "syncCardReadyAmount": "{amount} подготвени за синхронизација",
     "syncDetailsTitle": "Детали за синхронизацијата",
     "syncDetailsRightNow": "Моментално",
@@ -11554,7 +11552,7 @@
     "syncDetailsTransferSpeed": "Брзина на пренос",
     "syncDetailsWaitingOnOmi": "Чека на Omi",
     "syncDetailsWaitingOnPhone": "Чека на овој телефон",
-    "syncDetailsTranscribing": "Се транскрибира на Omi",
+    "syncDetailsTranscribing": "Прикачено, се чека серверот",
     "syncDetailsAudioFiles": "Аудио датотеки",
     "syncDetailsServerJobs": "Задачи на серверот (завршени / вкупно)",
     "syncDetailsCopy": "Копирај ги деталите за поддршка",
@@ -11690,6 +11688,8 @@
     "summaryWithOmiInstead": "Наместо тоа, сумирај со Omi",
     "summaryBusyTitle": "Сè уште се обработува",
     "summaryBusyBody": "Omi веќе работи на овој разговор. Резимето ќе се појави тука кога ќе заврши.",
+    "summaryTranscriptionPendingTitle": "Сè уште не е транскрибирано",
+    "summaryTranscriptionPendingBody": "Резимето ќе се појави кога транскриптот ќе биде подготвен.",
     "summaryCheckAgain": "Провери повторно",
     "summaryLimitTitle": "Достигнато е ограничувањето за резимеа",
     "summaryLimitBody": "Во последниот час повеќе пати повторно генериравте резимеа. Обидете се повторно подоцна.",
@@ -12241,5 +12241,6 @@
     "onDeviceModelDownloadSize": "Преземање {size} MB",
     "downloadNow": "Преземи сега",
     "onWifiLater": "Подоцна на Wi-Fi",
-    "conversationWritingSummary": "Го пишуваме вашето резиме…"
+    "conversationWritingSummary": "Го пишуваме вашето резиме…",
+    "onTheWayServerWork": "Работа пријавена од серверот"
 }

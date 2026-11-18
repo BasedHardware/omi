@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Pārrāvumi",
     "diagnosticsDropsPerHour": "aptuveni {count} stundā",
     "diagnosticsLongestGap": "Garākais pārtraukums",
-    "diagnosticsSincePairingSummary": "Kopš savienošanas pārī: pārrāvumi {drops}, neveiksmīgi savienojumi {failed}.",
+    "diagnosticsSincePairingSummary": "Kopš savienošanas pārī: {drops} atkārtoti savienojumi, {failed} neizdevušies savienojumi.",
     "diagnosticsLastDuration": "Pēdējās {duration}",
     "chatReplyOffline": "Nevar izveidot savienojumu. Pārbaudiet savienojumu un mēģiniet vēlreiz.",
     "chatReplyServerError": "Mūsu pusē kaut kas nogāja greizi. Lūdzu, mēģiniet vēlreiz.",
@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Sinhronizē jūsu ierakstus",
     "syncStepDownloadingAmount": "Lejupielāde no Omi · {done} no {total}",
     "syncStepUploadingAmount": "Augšupielāde · {done} no {total}",
-    "syncCardTranscribingAmount": "{amount} pārvēršana sarunās",
-    "syncCardTranscribedOf": "Gatavs {done} no {total} · varat atstāt šo ekrānu",
     "syncCardReadyAmount": "{amount} gatavs sinhronizācijai",
     "syncDetailsTitle": "Sinhronizācijas informācija",
     "syncDetailsRightNow": "Pašlaik",
@@ -4134,7 +4132,7 @@
     "syncDetailsTransferSpeed": "Pārsūtīšanas ātrums",
     "syncDetailsWaitingOnOmi": "Gaida Omi",
     "syncDetailsWaitingOnPhone": "Gaida šajā tālrunī",
-    "syncDetailsTranscribing": "Atšifrē Omi",
+    "syncDetailsTranscribing": "Augšupielādēts, gaida serveri",
     "syncDetailsAudioFiles": "Audio faili",
     "syncDetailsServerJobs": "Servera uzdevumi (pabeigti / kopā)",
     "syncDetailsCopy": "Kopēt informāciju atbalstam",
@@ -4270,6 +4268,8 @@
     "summaryWithOmiInstead": "Tā vietā apkopot ar Omi",
     "summaryBusyTitle": "Joprojām notiek apstrāde",
     "summaryBusyBody": "Omi jau apstrādā šo sarunu. Kopsavilkums parādīsies šeit, kad tas būs gatavs.",
+    "summaryTranscriptionPendingTitle": "Vēl nav transkribēts",
+    "summaryTranscriptionPendingBody": "Kopsavilkums parādīsies, kad transkripcija būs gatava.",
     "summaryCheckAgain": "Pārbaudīt vēlreiz",
     "summaryLimitTitle": "Sasniegts kopsavilkumu limits",
     "summaryLimitBody": "Pēdējās stundas laikā jūs vairākkārt atkārtoti ģenerējāt kopsavilkumus. Mēģiniet vēlāk vēlreiz.",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "{size} MB lejupielāde",
     "downloadNow": "Lejupielādēt tagad",
     "onWifiLater": "Vēlāk ar Wi-Fi",
-    "conversationWritingSummary": "Rakstām jūsu kopsavilkumu…"
+    "conversationWritingSummary": "Rakstām jūsu kopsavilkumu…",
+    "onTheWayServerWork": "Servera ziņotais darbs"
 }

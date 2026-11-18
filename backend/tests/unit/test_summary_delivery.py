@@ -598,3 +598,65 @@ def test_emitted_continuation_cursor_keeps_rollback_shapes(rotating_repair, monk
         assert cursor['path'] == path and cursor['due'] == 220
         due_conversations(now=now, after=cursor, firestore_client=client)
         assert client.shapes[-1].uses_cursors
+
+
+def _stored_after_merge(existing, write):
+    """Apply the processing write's leaf mask the way Firestore stores it."""
+    from google.cloud.firestore import DELETE_FIELD
+    from database.conversations import _processing_result_update_fields
+
+    stored = deepcopy(existing)
+    for path, value in _processing_result_update_fields(write).items():
+        *parents, leaf = path.split('.')
+        node = stored
+        for name in parents:
+            node = node.setdefault(name, {})
+        if value is DELETE_FIELD:
+            node.pop(leaf, None)
+        else:
+            node[leaf] = value
+    return stored
+
+
+def _notes(existing, structured, now):
+    write = {'status': 'completed', 'structured': structured}
+    delivery.prepare(write, 'u', now=now)
+    delivery.merge_result(existing, write, 'u', now=now + 100)
+    return write
+
+
+def test_real_notes_retire_the_minimums_title_marker_so_the_row_is_not_held_as_settling(enabled):
+    # Prod 2026-11-17 (a sync piece): after real notes the merge write kept
+    # structured.title_provenance='server_minimum', so the settling-fragment
+    # filter hid the summarized row from the list until two hours after its end.
+    from google.cloud.firestore import DELETE_FIELD
+    from utils.conversations.fragment_visibility import is_settling_fragment
+
+    finished = datetime.now(timezone.utc)
+    existing = {**debt(), 'started_at': finished, 'finished_at': finished}
+    assert is_settling_fragment(existing)
+    notes = _notes(existing, {'title': 'Fundraising intros', 'overview': 'Real notes'}, 200)
+    assert notes['structured']['title_provenance'] is DELETE_FIELD
+    assert notes['summary_title_provenance'] == 'generated'
+    stored = _stored_after_merge(existing, notes)
+    assert 'title_provenance' not in stored['structured']
+    assert not is_settling_fragment(stored)
+    # A reprocess of a row that kept the stale marker also clears it.
+    summarized = {**existing, 'summary_output_present': True, 'summary_completed_at': 300}
+    again = _notes(summarized, {'title': 'Again', 'overview': 'New notes'}, 400)
+    assert again['structured']['title_provenance'] is DELETE_FIELD
+
+
+def test_minimum_empty_and_new_rows_keep_their_title_marker_untouched(enabled):
+    existing = debt()
+    # Another stand-in states its own marker; an empty model result is not notes.
+    for structured in (minimum()['structured'], {'title': 'T', 'overview': ''}):
+        write = {'status': 'completed', 'structured': dict(structured)}
+        delivery.prepare(write, 'u', now=200)
+        assert not delivery.retires_title_marker(existing, write)
+    # A row with no stored marker has nothing to delete.
+    created = {'status': 'completed', 'structured': {'title': 'T', 'overview': 'Notes'}}
+    delivery.prepare(created, 'u', now=200)
+    assert delivery.retires_title_marker(existing, created)
+    assert not delivery.retires_title_marker({}, created)
+    assert not delivery.retires_title_marker({'structured': {'title': 'Old', 'overview': 'Old'}}, created)

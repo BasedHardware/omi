@@ -12241,7 +12241,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'جوڑنے کے بعد سے: $drops رکاوٹیں، $failed ناکام کنکشن۔';
+    return 'پیئرنگ کے بعد سے: $drops دوبارہ کنکشن، $failed ناکام کنکشن۔';
   }
 
   @override
@@ -13478,16 +13478,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount کو گفتگو میں تبدیل کیا جا رہا ہے';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total مکمل · آپ اس اسکرین سے باہر جا سکتے ہیں';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount سنک کے لیے تیار';
   }
@@ -13511,7 +13501,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'اس فون پر منتظر';
 
   @override
-  String get syncDetailsTranscribing => 'Omi پر ٹرانسکرائب ہو رہا ہے';
+  String get syncDetailsTranscribing => 'اپ لوڈ ہو گیا، سرور کا انتظار ہے';
 
   @override
   String get syncDetailsAudioFiles => 'آڈیو فائلیں';
@@ -13968,6 +13958,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi پہلے ہی اس گفتگو پر کام کر رہا ہے۔ مکمل ہونے پر خلاصہ یہاں ظاہر ہوگا۔';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'ابھی تک ٹرانسکرائب نہیں ہوا';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'ٹرانسکرپٹ تیار ہونے پر خلاصہ ظاہر ہوگا۔';
 
   @override
   String get summaryCheckAgain => 'دوبارہ چیک کریں';
@@ -15568,4 +15564,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'آپ کا خلاصہ لکھا جا رہا ہے…';
+
+  @override
+  String get onTheWayServerWork => 'سرور کی بتائی ہوئی کارروائی';
 }
