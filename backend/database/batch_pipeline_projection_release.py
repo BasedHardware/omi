@@ -13,6 +13,7 @@ than field deletes: every consumer reads these fields through truthiness, and
 tombstones keep the strict Firestore test fixture's sentinel contract intact.
 """
 
+from collections.abc import Callable
 import logging
 import math
 import time
@@ -470,7 +471,9 @@ def load_held_partial_cursor(store) -> dict | None:
     return _read_cursor(store, HELD_PARTIAL_CURSOR_KEY, 'batch_held_partial')
 
 
-def advance_held_partial_cursor(store, baseline: dict, after_id: str | None, now: float) -> dict | None:
+def advance_held_partial_cursor(
+    store, baseline: dict, after_id: str | None, now: float, *, record_read: Callable[[], None] | None = None
+) -> dict | None:
     """Publish a page or wrap only while the checkpoint it followed is current."""
     # A token per write fences repeated document IDs, including wraps and legacy
     # rows that have no token. Keep it stable when the transaction retries.
@@ -479,6 +482,9 @@ def advance_held_partial_cursor(store, baseline: dict, after_id: str | None, now
 
     @firestore.transactional
     def put(transaction):
+        # The SDK or the store can re-enter the transaction body after contention.
+        if record_read is not None:
+            record_read()
         current = ref.get(transaction=transaction).to_dict() or {}
         if current == proposed:
             return True

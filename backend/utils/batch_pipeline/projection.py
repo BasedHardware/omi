@@ -815,12 +815,18 @@ class Projector:
         with self._held_sweep_lock:
             durable = projection_release.load_held_partial_cursor(self.store)
             if durable is not None and durable != self._held_cursor_baseline:
-                # A peer advanced or wrapped the scan. Its checkpoint supersedes
-                # local unsaved work and may belong to a new dedupe pass.
+                # A first successful read of a missing document confirms the
+                # local scan started at the beginning. Keep any unsaved work.
+                if self._held_cursor_baseline is not None or durable:
+                    self.held_after = projection_release.cursor_after_id(durable)
+                    self.held_pass_seen.clear()
                 self._held_cursor_baseline = durable
-                self.held_after = projection_release.cursor_after_id(durable)
-                self.held_pass_seen.clear()
             counts = self._sweep_held_pages(limit, deadline=deadline, max_pages=max_pages)
+            counts['reads'] += 1  # The initial checkpoint lookup.
+
+            def record_cursor_read():
+                counts['reads'] += 1
+
             confirmed = durable is not None
             # A nonempty pass can scan from None back to None. Publish that
             # wrap too, so a concurrent advance can fence out its completion.
@@ -829,7 +835,7 @@ class Projector:
                 self.held_after != projection_release.cursor_after_id(durable) or wrapped_with_work
             ):
                 committed = projection_release.advance_held_partial_cursor(
-                    self.store, durable, self.held_after, self.clock()
+                    self.store, durable, self.held_after, self.clock(), record_read=record_cursor_read
                 )
                 confirmed = committed is not None
                 if committed is not None:
