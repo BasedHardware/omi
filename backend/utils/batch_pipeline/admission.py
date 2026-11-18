@@ -10,11 +10,14 @@ import time
 from prometheus_client import Histogram
 
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import offline_enforcement_enabled
+from config.firestore_read_levers import lever_enabled
 from config.sync_telemetry import bounded_exception_class
 from config.batch_pipeline import allowance_hold_retry_seconds
 from utils.stt_cap_dispatch import sync_admission
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from utils.batch_pipeline.scheduler import owns_lease
+from database import batch_pipeline_allowance_hold as allowance_hold
+from utils.batch_pipeline.scheduler import owner_key, owns_lease
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
 from utils.executors import db_executor, run_blocking
 from utils.sync.backfill import reserve_backfill_speech, retry_after_next_utc_day
@@ -25,6 +28,7 @@ AUTHORIZE_SECONDS = 4.0
 # A worker that advertises a longer client timeout (X-Omi-Admission-Seconds)
 # gets up to this deadline; workers that send nothing keep AUTHORIZE_SECONDS.
 MAX_AUTHORIZE_SECONDS = 8.0
+INTAKE_PROBE_SECONDS = 1.0
 STAGE_SECONDS = Histogram(
     'omi_batch_compute_admission_stage_seconds',
     'Admission substage wall time including executor wait; bounded stages, no identifiers',
@@ -60,6 +64,44 @@ def batch_admission(job: dict, seconds: float, provider: str, *, path: DispatchP
     if admitted_as_byok(job):
         return record_decision(path, True, DispatchReason.BYOK), DispatchReason.BYOK.value
     return sync_admission(job['owner_id'], seconds, provider, lane='batch', path=path)
+
+
+async def probe_intake_allowance(store, uid: str) -> allowance_hold.IntakeRefusal | None:
+    """Recognize the funded gate's monthly refusal using a verified usage total."""
+    from utils import funded_processing
+    from utils.stt_cap_dispatch import funded_allowance
+
+    if not (
+        allowance_hold.intake_enabled()
+        and offline_enforcement_enabled('batch')
+        and lever_enabled('usage_month_total', uid)
+    ):
+        return None
+
+    deadline = time.monotonic() + INTAKE_PROBE_SECONDS
+
+    def probe():
+        if time.monotonic() >= deadline or not funded_processing.consent_allows(uid):
+            return None
+        key = owner_key(uid)
+        fence = store.run(lambda tx: allowance_hold.release_fence(tx.get(allowance_hold.OWNERS, key)))
+        if fence is None or time.monotonic() >= deadline:
+            return None
+        observed_at = time.time()
+        # The optional backfill day cap only narrows a managed answer. A
+        # monthly refusal is identical on both lanes, and this probe leaves
+        # day-cap-only refusals to the funded gate with its day meter.
+        allowance = funded_allowance(uid, lane='batch', ready_usage_only=True)
+        if not allowance.managed and allowance.reason == 'plan_allowance_exhausted':
+            return allowance_hold.IntakeRefusal(observed_at, fence)
+        return None
+
+    try:
+        with STAGE_SECONDS.labels(stage='intake_funding').time():
+            return await asyncio.wait_for(run_blocking(db_executor, probe), timeout=INTAKE_PROBE_SECONDS)
+    except Exception as error:
+        logger.warning('event=batch_allowance_intake outcome=unevaluated exception_type=%s', type(error).__name__)
+        return None
 
 
 async def authorize(store, leases: list[dict], *, now: float | None = None, budget: str | float | None = None) -> dict:

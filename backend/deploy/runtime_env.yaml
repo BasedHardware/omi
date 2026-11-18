@@ -1083,6 +1083,9 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
+              value: 'on'
+              category: ops_kill
             BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1483,6 +1486,9 @@ environments:
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
+              category: ops_kill
+            BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
+              value: 'on'
               category: ops_kill
             BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
@@ -1904,6 +1910,9 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
+              value: 'on'
+              category: ops_kill
             BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2294,6 +2303,9 @@ environments:
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
+              category: ops_kill
+            BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
+              value: 'on'
               category: ops_kill
             BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
@@ -4124,6 +4136,9 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
+              value: 'on'
+              category: ops_kill
             BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4672,6 +4687,9 @@ environments:
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
+              category: ops_kill
+            BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
+              value: 'on'
               category: ops_kill
             BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
@@ -5248,6 +5266,9 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
+              value: 'on'
+              category: ops_kill
             BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5772,6 +5793,9 @@ environments:
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
+              category: ops_kill
+            BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
+              value: 'on'
               category: ops_kill
             BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'

@@ -9,6 +9,18 @@ keep their existing recovery.
 
 ## Readers, writers and sweeps
 
+Sync upload intake can establish a monthly allowance refusal after it has
+selected the Omi-funded GPU route. The bounded probe uses the same batch-funded
+resolver with an already verified monthly usage total. An unavailable total,
+per-day cap, budget denial, or ambiguous decision leaves the upload on the
+ordinary worker path. The admission transaction rechecks the release cursor
+and usage period before inserting the job and owner's held count together.
+New holds have no ready-queue link, so workers predating SCA-2195 cannot lease
+them. Observe committed uploads with
+`omi_stt_cap_dispatch_decisions_total{path="batch_intake",outcome="held",reason="allowance_exhausted"}`.
+The `batch_allowance_intake` log also records the number of parked units per
+commit.
+
 `Scheduler.defer` (GPU worker and backend) parks new refusals transactionally;
 `Scheduler.recover` (both services) parks old-worker retry decisions. The
 operator migration and scheduler use the same CAS helper in
@@ -188,6 +200,13 @@ the durable progress document; do not undo safely parked rows to roll back speed
 No saving is claimed by this tool change or its synthetic/emulator tests.
 
 ## Rollback and production acceptance
+
+Set `BATCH_ALLOWANCE_INTAKE_PARK_ENABLED=off` on upload-serving roles to stop
+new intake holds. Existing holds still release and newly refused jobs still
+park through the worker and recovery paths. For rollback past the original
+parking protocol, turn intake parking off before disabling the controller
+and worker parking below. Keep the parking-aware controller until held stock
+drains.
 
 Kill switch: `BATCH_ALLOWANCE_PARK_ENABLED=off` on **backend-integration and
 every GPU worker**, read live per transition; unset/on keeps parking enabled.

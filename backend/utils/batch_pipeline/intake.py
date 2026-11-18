@@ -1052,6 +1052,18 @@ async def accept_upload(
         wakes: dict[str, str] = {}
         phase = 'admit'
         outbox = await run_blocking(db_executor, outbox_for, OutboxKind.PROVIDER_STT) if provider else None
+        intake_refusal = None
+        if (
+            not provider
+            and policy.provider_reason != 'byok'
+            and lane in {'fresh', 'backfill'}
+            and items
+            and all(item.requires_compute_admission for item in items)
+            and any(item.segment_id not in source_aliases for item in items)
+        ):
+            from utils.batch_pipeline.admission import probe_intake_allowance
+
+            intake_refusal = await probe_intake_allowance(store, uid)
         outcome = await run_blocking(
             db_executor,
             admit,
@@ -1084,6 +1096,7 @@ async def accept_upload(
             adopt=adopt,
             coalescing_group=_coalescing_group,
             source_aliases=source_aliases,
+            intake_refusal=intake_refusal,
         )
         phase = 'wake'
         for row_id, wake_token in wakes.items():

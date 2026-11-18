@@ -51,6 +51,7 @@ class DispatchPath(StrEnum):
     EMPTY_RETRY = 'sync_empty_retry'
     MULTILINGUAL = 'sync_multilingual'
     BATCH_GPU = 'batch_gpu'
+    BATCH_INTAKE = 'batch_intake'
     BATCH_PROVIDER = 'batch_provider'
     SPEECH_REDRIVE = 'batch_speech_redrive'
     QUARANTINE = 'batch_quarantine'
