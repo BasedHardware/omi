@@ -182,8 +182,10 @@ void main() {
       final gated = source.contains('SyncUploadGate') && RegExp(r'\.\s*upload\s*\(').hasMatch(source);
       final httpClient = file.path.endsWith('backend/http/api/conversations.dart');
       final rawCalls = !httpClient && RegExp(r'uploadLocalFilesV2\s*\(|fetchSyncJobStatus\s*\(').hasMatch(source);
+      // The owner-cancel client may name the resource (DELETE only); it can neither upload nor poll.
       final rawPath = !httpClient &&
           !file.path.endsWith('backend/http/api_edge_throttle_telemetry.dart') &&
+          !file.path.endsWith('backend/http/api/sync_job_cancel.dart') &&
           source.contains('sync-local-files');
       final raw = rawCalls || rawPath;
       if (gated || raw) offenders.add(file.path);

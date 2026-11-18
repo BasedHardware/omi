@@ -1,7 +1,7 @@
 part of 'local_wal_sync.dart';
 
 /// Deleting an uploaded recording that the server has not transcribed also cancels and erases its
-/// server job (`DELETE /v2/sync-local-files/{job_id}`).
+/// server job (`cancelSyncJob`, the owner-cancel endpoint).
 ///
 /// The job id is written to a durable tombstone before the local file goes, so an offline phone, a
 /// 409 (the job is being processed right now) or a server error retries from the tombstone on
