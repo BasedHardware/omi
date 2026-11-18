@@ -747,3 +747,88 @@ async def test_processing_and_purge_sweeps_cursor_past_errors_and_1000_rows(monk
     for field in ['v3_process_pending', 'v3_audio_purge_pending']:
         pages = [c for c in client.calls if any(f[0] == field for f in c[0])]
         assert len(pages) == 2 and pages[1][2] is not None
+
+
+def _rotation_rows(successor, rotated=True):
+    rows = {
+        '/users/u/conversations/a': source(
+            'a',
+            started_at=AT,
+            finished_at=AT + timedelta(seconds=150),
+            v3_pending=False,
+            v3_pending_since=None,
+            **({'v3_rotation_cap_seconds': 240.0} if rotated else {}),
+        ),
+        '/users/u/conversations/x': {'id': 'x', 'v3_derived': True, 'started_at': AT + timedelta(seconds=1)},
+    }
+    if successor:
+        rows['/users/u/conversations/b'] = {
+            'id': 'b',
+            'recording': True,
+            'v3_pending': False,
+            'started_at': AT + timedelta(seconds=150),
+            'created_at': AT + timedelta(seconds=150),
+            **successor,
+        }
+    return rows
+
+
+@pytest.mark.parametrize(
+    ('successor', 'now_after', 'continues'),
+    [
+        ({'status': 'in_progress'}, 200, True),  # still capturing, before the rotation cap
+        ({'status': 'in_progress'}, 150 + 255 + 1, False),  # live past the cap: it has heard no speech
+        ({'status': 'processing', 'finished_at': AT + timedelta(seconds=300)}, 600, True),  # sealed, untranscribed
+        ({'status': 'processing', 'finished_at': AT + timedelta(seconds=300)}, 300 + 901, False),  # bounded wait
+        ({'status': 'completed'}, 600, False),  # transcribed with no lines: real silence
+        ({'status': 'in_progress', 'started_at': AT + timedelta(minutes=8)}, 500, False),  # after a 5 min gap
+        (None, 400, False),
+    ],
+)
+def test_untranscribed_successor_keeps_the_stretch_open(monkeypatch, successor, now_after, continues):
+    _assert_successor(monkeypatch, _rotation_rows(successor), now_after, continues)
+
+
+@pytest.mark.parametrize('successor', [{'status': 'in_progress'}, {'status': 'processing'}])
+def test_a_recording_rotation_did_not_seal_keeps_the_five_minute_rule(monkeypatch, successor):
+    # Rotation off (or a quiet seal): no cap stamp, so the builder behaves exactly as before.
+    _assert_successor(monkeypatch, _rotation_rows(successor, rotated=False), 200, False)
+
+
+def _assert_successor(monkeypatch, rows, now_after, continues):
+    from utils.conversations.v3 import outline
+
+    now = AT + timedelta(seconds=now_after)
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
+    monkeypatch.setattr(
+        store, 'decode_row', lambda uid, snap: dict(snap.to_dict(), _v3_revision=1) if snap.exists else None
+    )
+    monkeypatch.setattr(store, 'datetime', type('Clock', (datetime,), {'now': staticmethod(lambda tz=None: now)}))
+    recordings = {'a': store.recording_input('u', MemoryQuery(rows).document('users/u/conversations/a').get())}
+    store._mark_successor_pending(
+        MemoryQuery(rows).collection('users').document('u').collection('conversations'), recordings
+    )
+    assert bool(recordings['a'].get('_v3_page_continues')) is continues
+    groups = outline.stretches(list(recordings.values()), AT + timedelta(minutes=30))
+    assert groups[0]['finished'] is not continues
+
+
+def test_rotated_recordings_stitch_into_one_stretch_in_order():
+    from utils.conversations.v3 import outline, planner
+
+    def piece(cid, offset, text):
+        return source(
+            cid,
+            started_at=AT + timedelta(seconds=offset),
+            finished_at=AT + timedelta(seconds=offset + 150),
+            transcript_segments=[{'text': text, 'start': 1, 'end': 149}],
+        )
+
+    members = [piece('r2', 150, 'second part'), piece('r1', 0, 'first part'), piece('r3', 300, 'third part')]
+    groups = outline.stretches(members, AT + timedelta(minutes=20))
+    assert len(groups) == 1 and groups[0]['finished']
+    assert [line['text'] for line in groups[0]['lines']] == ['first part', 'second part', 'third part']
+    entries = [[{'first_line': 1, 'title': 'T', 'line': '', 'kind': 'conversation', 'people': [], 'sections': []}]]
+    (window,) = planner.windows(groups, entries)
+    row = planner.build('u', window, {m['id']: m for m in members})
+    assert row['v3_recording_ids'] == ['r1', 'r2', 'r3']
