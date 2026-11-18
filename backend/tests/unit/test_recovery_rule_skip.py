@@ -162,6 +162,45 @@ def test_recovery_calendar_overlap_does_not_take_the_rule_discard(monkeypatch, i
 
 
 @pytest.mark.parametrize(
+    ('stored', 'user_title'),
+    [
+        (Structured(title='Discussion notes', gist='Existing Home preview'), None),
+        (Structured(title='Project update'), None),
+        (Structured(title='Discussion 3', overview='Existing notes'), None),
+        (Structured(title='Discussion notes'), 'Discussion notes'),
+    ],
+    ids=['gist', 'real-title', 'notes', 'user-title'],
+)
+def test_quiet_recovery_preserves_the_normal_notes_path_for_protected_rows(
+    monkeypatch, isolated_processing_module, stored, user_title
+):
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
+    pc = isolated_processing_module
+    conversation = _empty_recovery_conversation()
+    conversation.structured = stored
+    conversation.user_title = user_title
+    text = 'Call mom before five.'
+    conversation.transcript_segments = [
+        TranscriptSegment(text=text, speaker='SPEAKER_00', is_user=True, start=0, end=1)
+    ]
+    with (
+        patch.object(pc, 'conversation_transcripts_for_llm', return_value=(text, text, {})),
+        patch.object(pc, 'has_structural_wake_word_marker', return_value=False),
+        patch.object(pc, 'is_release_probe_uid', return_value=False),
+        patch.object(pc, '_calendar_overlap_retains_conversation', return_value=False),
+        patch.object(pc, 'get_conversation_notes', return_value=Structured()) as paid_notes,
+    ):
+        pc._get_structured(
+            'uid-recovery',
+            'en',
+            conversation,
+            trigger=ProcessingTrigger.SERVER_RECOVERY,
+            recovery_transcript_decoded=True,
+        )
+    paid_notes.assert_called_once()
+
+
+@pytest.mark.parametrize(
     'decided_by,reason',
     [
         ('deterministic', 'jev_fallback_deterministic'),

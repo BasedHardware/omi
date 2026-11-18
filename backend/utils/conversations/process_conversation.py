@@ -97,7 +97,7 @@ from utils.conversations.deterministic_minimum import (
     deterministic_minimum_title,
 )
 from utils.conversations.duration import conversation_duration_seconds
-from utils.conversations.home_titles import title_for_stability
+from utils.conversations.home_titles import is_fallback_title, title_for_stability
 from utils.summary_quality import (
     clean_structured,
     stable_title,
@@ -616,8 +616,17 @@ def _get_structured(
             stored_structured = getattr(main_conv, 'structured', None)
             stored_title = getattr(stored_structured, 'title', '') or ''
             stored_title_provenance = getattr(stored_structured, 'title_provenance', None)
-            stored_content_is_replaceable = not structured_is_rich(stored_structured) and (
-                not stored_title.strip() or stored_title_provenance == 'server_minimum'
+            stored_gist = getattr(stored_structured, 'gist', None)
+            # A generated placeholder can survive on an older pending capture.
+            # Keep any existing Home preview, even when it is only a gist.
+            stored_content_is_replaceable = (
+                not structured_is_rich(stored_structured)
+                and not stored_gist
+                and (
+                    not stored_title.strip()
+                    or is_fallback_title(stored_title)
+                    or stored_title_provenance == 'server_minimum'
+                )
             )
             if (
                 recovery_transcript_decoded
