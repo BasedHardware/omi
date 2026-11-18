@@ -100,7 +100,10 @@ def test_wake_failure_after_commit_does_not_replay_the_unit(monkeypatch, caplog)
 
 # Every function that may create a conversation from new speech must apply v3 admission first.
 # bridge.py re-assigns rows that already exist; assign_record_silence carries no speech.
-_NO_NEW_SPEECH = {('utils/sync/bridge.py', None), ('utils/batch_pipeline/projection.py', 'assign_record_silence')}
+_NO_NEW_SPEECH = {
+    ('utils/sync/bridge.py', '_finish_pending_live_bridge'),
+    ('utils/batch_pipeline/projection.py', 'assign_record_silence'),
+}
 
 
 def _names(node, name):
@@ -128,12 +131,43 @@ def _functions_calling(tree, name):
 def test_every_new_speech_sync_assignment_caller_applies_v3_admission(path):
     tree = ast.parse((BACKEND / path).read_text())
     for fn, calls in _functions_calling(tree, 'assign_sync_conversation'):
-        if (path, None) in _NO_NEW_SPEECH or (path, fn.name) in _NO_NEW_SPEECH:
+        if (path, fn.name) in _NO_NEW_SPEECH:
             continue
-        # Nested helpers are walked with their parent; the parent's own mark_new covers them.
+        # Every def whose own body calls the assignment (nested defs included) must call mark_new itself.
         assert any(_names(call.func, 'mark_new') for call in calls), f'{path}:{fn.name} assigns without mark_new'
 
 
 def test_caller_contract_sees_the_projection_call_form():
     tree = ast.parse((BACKEND / 'utils/batch_pipeline/projection.py').read_text())
     assert 'assign_parts' in {fn.name for fn, _ in _functions_calling(tree, 'assign_sync_conversation')}
+
+
+def test_append_wake_retries_a_transient_mark_pending_failure(monkeypatch):
+    from utils.conversations.v3 import triggers
+
+    calls = []
+
+    def flaky(uid, cid, **_):
+        calls.append(cid)
+        if len(calls) == 1:
+            raise RuntimeError('synthetic')
+
+    monkeypatch.setattr(triggers, 'changed', flaky)
+    monkeypatch.setattr(triggers.time, 'sleep', lambda _: None)
+    triggers.committed_sync_assignment('u', {'id': 'c', 'recording': True})
+    assert calls == ['c', 'c']
+
+
+def test_append_wake_counts_the_degraded_branch_after_every_attempt_fails(monkeypatch):
+    from utils.conversations.v3 import triggers
+
+    fallbacks = []
+
+    def broken(uid, cid, **_):
+        raise RuntimeError('synthetic')
+
+    monkeypatch.setattr(triggers, 'changed', broken)
+    monkeypatch.setattr(triggers.time, 'sleep', lambda _: None)
+    monkeypatch.setattr(triggers, 'record_fallback', lambda **kw: fallbacks.append(kw))
+    triggers.committed_sync_assignment('u', {'id': 'c', 'recording': True})
+    assert fallbacks and fallbacks[0]['outcome'] == 'degraded'
