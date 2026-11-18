@@ -74,10 +74,12 @@ def redacted_cause(error):
     cause = getattr(error, '__cause__', None)
     if cause is None:
         return '-'
-    kind = store.size_error(cause)
+    text = str(cause)
+    # Pure string checks (store.size_error's markers): this runs on the event loop.
+    kind = 'document' if store.DOCUMENT_TOO_LARGE in text else 'request' if store.REQUEST_TOO_LARGE in text else None
     if not kind:
         return type(cause).__name__
-    sizes = ','.join(re.findall(r'\(?(\d+) bytes', str(cause))) or '-'
+    sizes = ','.join(re.findall(r'\(?(\d+) bytes', text)) or '-'
     return f'{type(cause).__name__} limit={kind} bytes={sizes}'
 
 
