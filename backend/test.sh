@@ -273,6 +273,14 @@ select_changed_tests() {
   changed_count="$(wc -l < "$changed_list" | tr -d ' ')"
   test_list_file="$selection_dir/changed-tests.txt"
   selection_reason_file="$selection_dir/changed-reason.txt"
+  # The selector answers an empty path list with the full suite, which suits a
+  # CI event whose diff could not be computed. Here the diff was computed and is
+  # empty: there is nothing to test, and a clean checkout must not run everything.
+  if [[ "$changed_count" -eq 0 ]]; then
+    : > "$test_list_file"
+    echo "test.sh --changed: no changes since ${merge_base:0:12} ($base_ref), so nothing is selected. Pass test files, or --all for the full suite." >&2
+    return
+  fi
   "$PYTHON_BIN" scripts/select_backend_unit_tests.py \
     --changed-files "$changed_list" \
     --output "$test_list_file" \

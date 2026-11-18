@@ -273,7 +273,19 @@ def test_changed_without_a_resolvable_base_fails_instead_of_running_everything(f
     assert fixture_repo.pytest_targets() == []
 
 
+def test_an_empty_diff_selects_nothing_instead_of_the_full_suite(fixture_repo):
+    # The selector maps an empty path list to the full suite; a clean local
+    # checkout must not inherit that.
+    result = fixture_repo.run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'no changes since' in result.stderr
+    assert 'No backend unit tests selected.' in result.stdout
+    assert fixture_repo.selector_calls() == []
+    assert fixture_repo.pytest_targets() == []
+
+
 def test_no_selection_runs_changed_locally_and_the_full_suite_in_ci(fixture_repo):
+    (fixture_repo.backend / 'utils' / 'module.py').write_text('VALUE = 1\n', encoding='utf-8')
     local = fixture_repo.run()
     assert local.returncode == 0, local.stdout + local.stderr
     assert 'no selection given, so running --changed' in local.stderr

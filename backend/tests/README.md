@@ -25,7 +25,8 @@ that names the argument; nothing falls back to the full suite. With no selection
 working tree and untracked files, then runs `scripts/select_backend_unit_tests.py --changed-files`
 on that list: the same selector, and the same diff, that CI's PR job uses, so a local run can select
 more than CI for a change but not less. A stale local `origin/main` only widens the diff. Like CI,
-it keeps the hermetic E2E files the selector's contracts name. When the diff touches a full-run
+it keeps the hermetic E2E files the selector's contracts name. An empty diff selects nothing; the selector itself
+treats an empty path list as "run everything", which a clean local checkout must not inherit. When the diff touches a full-run
 input (for example `test.sh` or a lockfile) the selector picks the whole suite, as it does in CI.
 
 The full selection, `scripts/select_backend_unit_tests.py --all`, covers:
