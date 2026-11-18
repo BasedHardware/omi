@@ -1,13 +1,17 @@
 """Pin the packing estimate, coverage and kill switch without a live store."""
 
 from time import monotonic
+from contextlib import nullcontext
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from prometheus_client import CollectorRegistry
 
 from config import batch_pipeline_packing as config
+from database.batch_pipeline_store import FirestoreStore
 from database.firestore_read_origin import current_read_origin
+from database.jobstore.postgres_store import PostgresStore
 from utils.batch_pipeline.packing_counterfactual import (
     PackingMetrics,
     build_pack,
@@ -79,6 +83,7 @@ def test_intake_freezes_newest_source_age_and_scopes_key():
         'a': (source_bounds(first, trustworthy=True), proof),
         'b': (source_bounds(newest, trustworthy=True), proof),
     }
+    assert bounds['a'][0] == (start, start + 20, 15)
     arguments = {
         'uid': 'private-owner',
         'conversation_id': 'private-conversation',
@@ -126,6 +131,37 @@ def test_rate_is_bounded(monkeypatch, raw, rate):
     assert config.sample_rate() == rate
     assert sampled('00000000', rate) == (rate > 0)
     assert not sampled('ffffffff', rate)
+
+
+def test_firestore_probe_has_one_bounded_unretried_stream(monkeypatch):
+    emulator_host = '127.0.0.1:1'
+    monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', emulator_host)
+    client = Mock(_emulator_host=emulator_host)
+    query = client.collection.return_value
+    for method in ('where', 'order_by', 'select', 'limit'):
+        getattr(query, method).return_value = query
+    query.stream.return_value = []
+    store = FirestoreStore('batch_pipeline_test_probe', firestore_client=client)
+
+    assert store.packing_candidates('owner') == []
+    query.limit.assert_called_once_with(config.PAGE_ROWS)
+    query.stream.assert_called_once_with(timeout=config.READ_TIMEOUT_SECONDS, retry=None)
+
+
+def test_postgres_probe_uses_only_an_idle_connection_with_a_statement_deadline():
+    connection = Mock()
+    connection.transaction.return_value = nullcontext()
+    connection.execute.return_value.fetchall.return_value = []
+    pool = Mock()
+    pool.connection.return_value = nullcontext(connection)
+    store = PostgresStore('batch_pipeline_test_probe', pool=pool, customer_client=None)
+
+    assert store.packing_candidates('owner') == []
+    pool.connection.assert_called_once_with(timeout=0, existing_only=True)
+    assert connection.execute.call_count == 2
+    assert connection.execute.call_args_list[0].args == (
+        f'SET LOCAL statement_timeout = {int(config.READ_TIMEOUT_SECONDS * 1000)}',
+    )
 
 
 @pytest.mark.parametrize('receipt_attempt,members', [(1, 2), (2, 1)])
