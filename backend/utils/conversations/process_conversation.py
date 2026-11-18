@@ -622,7 +622,7 @@ def _get_structured(
                 # A fallback can be the only content on an old capture stub.
                 # Keep any non-default metadata from a prior notes pass.
                 replaceable_title = not stored_structured.model_dump(
-                    exclude={'title', 'gist', 'title_provenance'}, exclude_defaults=True
+                    exclude={'title', 'overview', 'gist', 'title_provenance'}, exclude_defaults=True
                 )
             stored_content_is_replaceable = (
                 not structured_is_rich(stored_structured) and not stored_gist and replaceable_title

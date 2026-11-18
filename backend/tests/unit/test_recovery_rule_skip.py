@@ -165,6 +165,7 @@ def test_recovery_calendar_overlap_does_not_take_the_rule_discard(monkeypatch, i
     ('stored', 'owner_edits', 'expects_notes'),
     [
         pytest.param(Structured(title='Discussion notes'), {}, False, id='fallback-only'),
+        pytest.param(Structured(title='Discussion notes', overview='  '), {}, False, id='blank-overview'),
         pytest.param(
             Structured(title='Discussion notes', gist='Existing Home preview', title_provenance='server_minimum'),
             {},
