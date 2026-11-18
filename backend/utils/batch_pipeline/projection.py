@@ -32,6 +32,7 @@ from config.batch_pipeline import (
     silence_read_skip_enabled,
 )
 from config.record_latency import recent_native_record
+from database import batch_pipeline_projection_release as projection_release
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
@@ -464,6 +465,8 @@ class Projector:
         self.handoff = threading.Lock()
         # Resume point of the held-partial scan; a short page wraps it.
         self.held_after: str | None = None
+        self._held_cursor_baseline: dict | None = None
+        self._held_sweep_lock = threading.Lock()
         # Upload dedupe of the held-partial pass in flight; spans budget stops
         # and wraps only when the scan's cursor does.
         self.held_pass_seen: set[tuple[str, str]] = set()
@@ -808,27 +811,32 @@ class Projector:
     def sweep_held(
         self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None
     ) -> dict[str, int]:
-        """Resume the fleet's pass durably: instances restart far more often than a pass wraps.
-
-        A fresh pass drops this process's upload dedupe, which another instance's wrap made stale."""
-        from database.batch_pipeline_projection_release import (
-            HELD_PARTIAL_CURSOR_KEY as key,
-            load_release_cursor,
-            save_release_cursor,
-        )
-
-        event = 'batch_held_partial'
-        durable = load_release_cursor(self.store, key=key, event=event)['after_id']
-        # After a failed save the in-memory cursor is the newer one; keep it.
-        unsaved = getattr(self, 'held_cursor_unsaved', False)
-        start = self.held_after = self.held_after if unsaved else durable
-        if start is None:
-            self.held_pass_seen = set()
-        counts = self._sweep_held_pages(limit, deadline=deadline, max_pages=max_pages)
-        if self.held_after != start or unsaved:
-            saved = save_release_cursor(self.store, self.held_after, self.clock(), key=key, event=event)
-            self.held_cursor_unsaved = not saved
-        return counts
+        """Resume from the shared checkpoint, with local progress during read or write failures."""
+        with self._held_sweep_lock:
+            durable = projection_release.load_held_partial_cursor(self.store)
+            if durable is not None and durable != self._held_cursor_baseline:
+                # A peer advanced or wrapped the scan. Its checkpoint supersedes
+                # local unsaved work and may belong to a new dedupe pass.
+                self._held_cursor_baseline = durable
+                self.held_after = projection_release.cursor_after_id(durable)
+                self.held_pass_seen.clear()
+            counts = self._sweep_held_pages(limit, deadline=deadline, max_pages=max_pages)
+            confirmed = durable is not None
+            # A nonempty pass can scan from None back to None. Publish that
+            # wrap too, so a concurrent advance can fence out its completion.
+            wrapped_with_work = not counts['more'] and counts['units'] > 0
+            if durable is not None and (
+                self.held_after != projection_release.cursor_after_id(durable) or wrapped_with_work
+            ):
+                committed = projection_release.advance_held_partial_cursor(
+                    self.store, durable, self.held_after, self.clock()
+                )
+                confirmed = committed is not None
+                if committed is not None:
+                    self._held_cursor_baseline = committed
+            if not counts['more'] and not confirmed:
+                counts['wrap_unconfirmed'] = 1
+            return counts
 
     def _sweep_held_pages(
         self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None

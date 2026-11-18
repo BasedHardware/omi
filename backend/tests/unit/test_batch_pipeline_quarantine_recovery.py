@@ -1804,6 +1804,34 @@ def test_restarted_instance_resumes_the_held_pass_from_the_durable_cursor(setup,
     assert restarted.held_pass_seen == set()
 
 
+def test_peer_wrap_and_advance_drops_dedupe_from_the_previous_pass(setup, monkeypatch):
+    from database.batch_pipeline_projection_release import HELD_PARTIAL_CURSOR_KEY, save_release_cursor
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, _, artifacts, _, _ = setup
+    rows = held_unit_rows(client, 3)
+
+    def candidates(_client, _namespace, limit, *, after_id):
+        return [(key, row) for key, row in rows if after_id is None or key > after_id][:limit]
+
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', candidates)
+    first = Projector(store, artifacts.load_result, clock=lambda: 101)
+    peer = Projector(store, artifacts.load_result, clock=lambda: 102)
+    attempts = []
+    monkeypatch.setattr(first, 'complete_held', lambda binding: attempts.append(binding.content_id))
+    monkeypatch.setattr(peer, 'complete_held', lambda binding: None)
+    save_release_cursor(first.store, 'unit-0000', 100, key=HELD_PARTIAL_CURSOR_KEY)
+
+    first.sweep_held(1)
+    peer.sweep_held(1)
+    peer.sweep_held(1)
+    peer.sweep_held(1)
+    assert peer.held_after == 'unit-0000'
+    first.sweep_held(1)
+
+    assert attempts == ['upload-1', 'upload-1']
+
+
 def test_a_failed_cursor_save_keeps_the_in_memory_cursor(setup, monkeypatch):
     """A lost durable write must not send the next segment back to the stale cursor."""
     from utils.batch_pipeline.projection import Projector
@@ -1813,14 +1841,80 @@ def test_a_failed_cursor_save_keeps_the_in_memory_cursor(setup, monkeypatch):
     rows = held_unit_rows(client, 4)
     pages = Mock(side_effect=[rows[0:2], rows[2:4]])
     monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
-    saves = Mock(side_effect=[False, True])
-    monkeypatch.setattr('database.batch_pipeline_projection_release.save_release_cursor', saves)
+    saves = Mock(side_effect=[None, {'after_id': 'unit-0003'}])
+    monkeypatch.setattr('database.batch_pipeline_projection_release.advance_held_partial_cursor', saves)
     projector = Projector(store, artifacts.load_result, clock=lambda: 101)
     monkeypatch.setattr(projector, 'complete_held', lambda b: None)
     projector.sweep_held(2, max_pages=1)
     projector.sweep_held(2, max_pages=1)
     assert pages.call_args_list[1].kwargs['after_id'] == 'unit-0001'
-    assert saves.call_args_list[1].args[1] == 'unit-0003'
+    assert saves.call_args_list[1].args[2] == 'unit-0003'
+
+
+def test_failed_cursor_load_keeps_local_progress_until_the_baseline_is_readable(setup, monkeypatch):
+    from database import batch_pipeline_projection_release as cursors
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, _, artifacts, _, _ = setup
+    rows = held_unit_rows(client, 6)
+    pages = Mock(side_effect=[rows[:2], rows[2:4], rows[4:]])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    load = cursors.load_held_partial_cursor
+    read = Mock(side_effect=lambda projection_store: None if read.call_count == 2 else load(projection_store))
+    monkeypatch.setattr(cursors, 'load_held_partial_cursor', read)
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda binding: None)
+
+    projector.sweep_held(2, max_pages=1)
+    projector.sweep_held(2, max_pages=1)
+    assert projector.held_after == 'unit-0003'
+    assert load(projector.store)['after_id'] == 'unit-0001'
+    projector.sweep_held(2, max_pages=1)
+
+    assert [call.kwargs['after_id'] for call in pages.call_args_list] == [None, 'unit-0001', 'unit-0003']
+    assert load(projector.store)['after_id'] == 'unit-0005'
+
+
+@pytest.mark.parametrize('start', ['unit-0001', None])
+def test_rejected_cursor_wrap_is_reported_as_unconfirmed(setup, monkeypatch, start):
+    from database import batch_pipeline_projection_release as cursors
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, _, artifacts, _, _ = setup
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    baseline = cursors.advance_held_partial_cursor(projector.store, {}, start, 100)
+    assert baseline is not None
+    monkeypatch.setattr(projector, 'complete_held', lambda binding: None)
+    rows = held_unit_rows(client, 1)
+
+    def candidates(*args, **kwargs):
+        assert cursors.advance_held_partial_cursor(projector.store, baseline, 'unit-0003', 101)
+        return rows
+
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', candidates)
+    counts = projector.sweep_held(2, max_pages=1)
+
+    assert counts['more'] == 0
+    assert counts['wrap_unconfirmed'] == 1
+    assert cursors.load_held_partial_cursor(projector.store)['after_id'] == 'unit-0003'
+
+
+def test_cursor_writes_reject_late_advances_and_wraps_even_at_a_repeated_id(setup):
+    from database.batch_pipeline_projection_release import advance_held_partial_cursor, load_held_partial_cursor
+
+    _, store, _, _, _, _ = setup
+    projection_store = ProjectionStore(store)
+    missing = load_held_partial_cursor(projection_store)
+    assert missing == {}
+    first = advance_held_partial_cursor(projection_store, missing, 'a', 101)
+    assert first is not None
+    assert advance_held_partial_cursor(projection_store, missing, 'b', 101) is None
+    wrapped = advance_held_partial_cursor(projection_store, first, None, 101)
+    assert wrapped is not None
+    repeated = advance_held_partial_cursor(projection_store, wrapped, 'a', 101)
+    assert repeated is not None
+    assert advance_held_partial_cursor(projection_store, first, None, 101) is None
+    assert load_held_partial_cursor(projection_store) == repeated
 
 
 def test_pass_deadline_stops_between_pages_and_keeps_the_cursor(setup, monkeypatch):

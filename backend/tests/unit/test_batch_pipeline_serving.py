@@ -455,6 +455,18 @@ def test_held_partial_segment_lines_sum_into_one_pass_line_on_wrap(monkeypatch, 
     ]
 
 
+def test_held_partial_logs_unconfirmed_wrap_separately(monkeypatch, caplog):
+    serving_module, _ = _held_partial_clock(monkeypatch)
+    projector = Mock()
+    projector.sweep_held.return_value = {'pages': 1, 'more': 0, 'wrap_unconfirmed': 1}
+    service = Serving(MemoryStore(), projector=projector)
+    caplog.set_level(logging.INFO, logger=serving_module.__name__)
+
+    service.reconcile()
+
+    assert _held_partial_lines(caplog)[-1].startswith('event=batch_held_partial action=pass outcome=cursor_unconfirmed')
+
+
 def test_held_partial_governor_deferred_tick_logs_nothing_and_keeps_the_pass(monkeypatch, caplog):
     serving_module, clock = _held_partial_clock(monkeypatch)
     results = [

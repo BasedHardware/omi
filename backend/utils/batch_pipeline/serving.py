@@ -298,8 +298,9 @@ class Serving:
         )
         if not counts.get('more'):
             logging.getLogger(__name__).info(
-                'event=batch_held_partial action=pass outcome=completed segments=%d pages=%d units=%d partial=%d '
+                'event=batch_held_partial action=pass outcome=%s segments=%d pages=%d units=%d partial=%d '
                 'waiting=%d error=%d reads=%d pass_seconds=%.1f',
+                'cursor_unconfirmed' if counts.get('wrap_unconfirmed') else 'completed',
                 self.held_pass_segments,
                 self.held_pass_counts['pages'],
                 self.held_pass_counts['units'],
