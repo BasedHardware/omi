@@ -359,6 +359,23 @@ void main() {
         ]);
       })));
       await tester.tap(find.byKey(const Key('live_summary_catch_up')));
+      rebuild(() {
+        conversation = _conversation(
+          state: ConversationTileState.live,
+          latestSpeech: through.add(const Duration(seconds: 3)),
+          speech: enoughSpeech,
+        );
+        conversation.transcriptSegments.add(TranscriptSegment(
+            id: 'later',
+            text: 'New speech.',
+            speaker: 'SPEAKER_00',
+            personId: null,
+            isUser: true,
+            start: 1201,
+            end: 1203,
+            translations: []));
+      });
+      await tester.pump();
       events.add(SummaryDone(Structured('Launch', 'Interim live private body.'), through));
       await tester.pump();
       expect(find.textContaining('Interim live private body.'), findsOneWidget);

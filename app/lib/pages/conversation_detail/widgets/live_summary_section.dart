@@ -85,6 +85,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   int _observedOpen = 0;
   bool _attemptedLiveRecap = false;
   List<Object>? _requestSpeech;
+  double _requestBoundary = 0;
   ({DateTime through, String markdown})? _liveResult;
   String? _openedId;
   late String _ownerUid;
@@ -128,8 +129,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
         // A new detail snapshot supersedes optimistic SSE. It exposes stored preview coverage only
         // when the server verified it against the current transcript receipt.
         _liveResult = null;
-        if (!_canShowLiveContent ||
-            (_requestSpeech != null && !listEquals(_requestSpeech, _speechSnapshot(widget.conversation)))) {
+        if (!_canShowLiveContent || (_requestSpeech != null && !_coveredSpeechUnchanged(widget.conversation))) {
           _stopRequest();
           _sections.clear();
           _liveRequestFailed = false;
@@ -190,12 +190,21 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
     final request = _requestEpoch;
     final cancel = _cancel = Completer<void>();
     _requestSpeech = liveCatchup ? _speechSnapshot(widget.conversation) : null;
+    if (liveCatchup) {
+      final c = widget.conversation;
+      final start = c.startedAt;
+      final end = c.finishedAt;
+      _requestBoundary = start != null && end != null ? end.difference(start).inMicroseconds / 1e6 : 0;
+      for (final segment in c.transcriptSegments) {
+        if (segment.end > _requestBoundary) _requestBoundary = segment.end;
+      }
+    }
     bool liveTarget() =>
         request == _requestEpoch &&
         _ownerUid.isNotEmpty &&
         _currentLiveTarget &&
         _canShowLiveContent &&
-        listEquals(_requestSpeech, _speechSnapshot(widget.conversation));
+        _coveredSpeechUnchanged(widget.conversation);
     _liveSummaryAtRequest = liveCatchup ? _summary : null;
     _coveredAtOpen = widget.conversation.v3?.summaryCoversThrough;
     final open = widget.stream ??
@@ -311,11 +320,12 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   void _fail() {
     if (_isLive(widget.conversation)) {
       _stopRequest();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _liveRequestFailed = true;
           _phase = _Phase.live;
         });
+      }
       return;
     }
     if (widget.conversation.v3?.summaryCoversThrough != null) {
@@ -473,6 +483,19 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   bool get _canShowLiveContent {
     final c = widget.conversation;
     return !c.isLocked && !c.discarded && c.v3?.homeHidden != true && c.v3?.recording != true;
+  }
+
+  bool _coveredSpeechUnchanged(ServerConversation current) {
+    final covered = _requestSpeech;
+    if (covered == null || current.transcriptSegments.length < covered.length) return false;
+    if (!listEquals(covered, _speechSnapshot(current).sublist(0, covered.length))) return false;
+    return current.transcriptSegments.skip(covered.length).every(
+          (segment) =>
+              segment.start.isFinite &&
+              segment.end.isFinite &&
+              segment.start > _requestBoundary &&
+              segment.end >= segment.start,
+        );
   }
 
   static List<Object> _speechSnapshot(ServerConversation c) => [

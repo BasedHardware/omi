@@ -60,7 +60,13 @@ def test_append_during_inference_preserves_coverage_and_same_clock_edit_invalida
 
     frozen = snapshot()
     segments.append({'start': 31, 'end': 34, 'text': 'Additional speech.', 'speaker': 'SPEAKER_0'})
-    ref.update({'transcript_segments': segments, 'finished_at': start + timedelta(seconds=34)})
+    ref.update(
+        {
+            'transcript_segments': segments,
+            'finished_at': start + timedelta(seconds=34),
+            'v3_recording_ids': ['recording', 'rotated'],
+        }
+    )
     commit(frozen)
     appended = snapshot()
     assert 'summary_covers_through' not in appended
@@ -69,6 +75,8 @@ def test_append_during_inference_preserves_coverage_and_same_clock_edit_invalida
     assert preview and preview['summary_covers_through'] == initial_end
     assert len(appended['transcript_segments']) == 2
     assert writers.read_live_summary(uid, appended, exact=True) is None
+    changed_lineage = {**appended, 'v3_recording_ids': ['other', 'rotated']}
+    assert writers.read_live_summary(uid, changed_lineage) is None
     commit(appended)
     cached = snapshot()
     preview = writers.read_live_summary(uid, cached, exact=True)

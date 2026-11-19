@@ -56,6 +56,16 @@ def read_live_summary(uid, row, *, exact=False):
     if len(segments) < count or (exact and len(segments) != count):
         return None
     covered = {**row, 'transcript_segments': segments[:count], 'finished_at': coverage}
+    recording_count = cached.get('recording_count')
+    if recording_count is not None:
+        recording_ids = row.get('v3_recording_ids')
+        if (
+            not isinstance(recording_ids, list)
+            or type(recording_count) is not int
+            or not 0 < recording_count <= len(recording_ids)
+        ):
+            return None
+        covered['v3_recording_ids'] = recording_ids[:recording_count]
     if cached.get('input') != _live_summary_fingerprint(covered):
         return None
     if len(segments) > count and not _strict_live_append(covered, row):
@@ -73,12 +83,13 @@ def read_live_summary(uid, row, *, exact=False):
 
 
 def _strict_live_append(frozen, current):
-    if (
-        not current
-        or not policy.live_summary_target(current)
-        or _live_scope(frozen) != _live_scope(current)
-        or current['finished_at'] <= frozen['finished_at']
-    ):
+    if not current or not policy.live_summary_target(current) or current['finished_at'] <= frozen['finished_at']:
+        return False
+    frozen_scope, current_scope = _live_scope(frozen), _live_scope(current)
+    old_ids, new_ids = frozen_scope.get('v3_recording_ids'), current_scope.get('v3_recording_ids')
+    if isinstance(old_ids, list) and old_ids and isinstance(new_ids, list):
+        current_scope['v3_recording_ids'] = new_ids[: len(old_ids)]
+    if frozen_scope != current_scope:
         return False
     before, after = frozen.get('transcript_segments') or [], current.get('transcript_segments') or []
     if not before or len(after) <= len(before) or after[: len(before)] != before:
@@ -110,6 +121,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
             raise Conflict('summary_empty')
         live_cache = {
             'input': _live_summary_fingerprint(live_input),
+            **({'recording_count': len(live_input['v3_recording_ids'])} if live_input.get('v3_recording_ids') else {}),
             'coverage': covers,
             'segments': len(live_input['transcript_segments']),
             'ciphertext': encrypt(json.dumps(structured, default=str), uid),

@@ -361,7 +361,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       if (current == null ||
           !_detailProvider.hasHydratedDetail(current.id) ||
           current.id != widget.conversation.id ||
-          !_isLiveV3(current)) return;
+          !_isLiveV3(current)) {
+        return;
+      }
       setState(() {
         _summaryOpenSnapshot = current;
         _summaryOpen++;
