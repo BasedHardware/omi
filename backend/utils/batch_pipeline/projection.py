@@ -1157,6 +1157,10 @@ class Projector:
                     if not incoming['transcript_segments']:
                         receipt = session.persist_empty()
                     else:
+                        from utils.conversations.v3 import triggers as v3_triggers
+
+                        # Same v3 admission as sync intake, or admitted owners get legacy duplicates.
+                        v3_triggers.mark_new(binding.owner_id, incoming)
                         try:
                             assigned = (self.assign_conversation or conversations_db.assign_sync_conversation)(
                                 binding.owner_id,
@@ -1173,6 +1177,7 @@ class Projector:
                             )
                         finally:
                             self._mirror_assignment(session)
+                        v3_triggers.committed_sync_assignment(binding.owner_id, assigned[0])
                         transcript_receipts.enqueue(binding.owner_id, assigned[0], firestore_client=self.store.client)
                         incoming.pop('_sync_lineage_eligible', None)
                         record_projection(

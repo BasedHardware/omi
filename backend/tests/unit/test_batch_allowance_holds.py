@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from utils.batch_pipeline.allowance_hold import generation
-from database.batch_pipeline_allowance_hold import enabled
+from database.batch_pipeline_allowance_hold import IntakeRefusal, enabled
 from utils.batch_pipeline import allowance_hold
 from utils import backfill_hours_cap, stt_cap_dispatch
 
@@ -23,6 +23,17 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 
 def stamp(value):
     return datetime.fromisoformat(value).replace(tzinfo=timezone.utc).timestamp()
+
+
+def test_intake_refusal_cannot_cross_a_period_or_an_owner_release_claim():
+    now = stamp('2026-11-30T23:59:58')
+    owner = {'generation': 'november', 'cutoff': now - 300}
+    refusal = IntakeRefusal(now, ('november', now - 300))
+    assert refusal.current(owner, now + 1)
+    assert not refusal.current(owner, now + 2)
+    assert not refusal.current({**owner, 'token': 'claim'}, now + 1)
+    assert not refusal.current({**owner, 'cutoff': now}, now + 1)
+    assert not refusal.current({**owner, 'draining': True}, now + 1)
 
 
 def test_usage_counter_changes_do_not_reoffer_a_generation_but_plan_and_month_do():
@@ -40,12 +51,13 @@ def test_subscription_expiry_changes_generation_without_a_writer():
     assert generation(user, now) != generation(user, now + 61)
 
 
-def test_enabled_backfill_daily_cap_has_a_daily_generation(monkeypatch):
+def test_enabled_backfill_daily_cap_keeps_a_monthly_generation(monkeypatch):
+    # The day cap is enforced at sync upload and never parks a batch unit.
     monkeypatch.setattr(backfill_hours_cap, 'cap_enabled', lambda: True)
     user = {'subscription': {'plan': 'unlimited_v2', 'status': 'active'}}
     start = stamp('2026-11-14')
-    assert generation(user, start) == generation(user, start + 86399)
-    assert generation(user, start) != generation(user, start + 86400)
+    assert generation(user, start) == generation(user, start + 86400)
+    assert generation(user, start) != generation(user, stamp('2026-12-01'))
 
 
 @pytest.fixture
@@ -99,25 +111,6 @@ def test_untrusted_usage_does_not_acknowledge_generation(discovery, reason):
     mark = store.rows['allowance_holds', store.rows['jobs', 'held']['owner_key']]
     assert 'generation' not in mark
     assert controller.tick(discovery.now + 121) == 1
-    assert store.rows['jobs', 'held']['state'] == 'ready'
-
-
-def test_reparked_daily_cap_refusal_releases_after_utc_reset(discovery, monkeypatch):
-    monkeypatch.setattr(backfill_hours_cap, 'cap_enabled', lambda: True)
-    discovery.funded.side_effect = lambda *args, **kwargs: TranscriptionAllowance('managed', None, 'resolved')
-    store = MemoryStore()
-    queue = Scheduler(store)
-    queue.enqueue(item('held', owner='synthetic-owner'), 0)
-    lease = queue.pull(1)[0]
-    assert queue.defer('held', lease.token, 2, held_reason='allowance_exhausted')
-    controller = allowance_hold.AllowanceHolds(store, allowance_hold.entitlement)
-    assert controller.tick(discovery.now) == 1
-    # Ordinary backfill admission can still reject the same day's reoffer.
-    lease = queue.pull(discovery.now + 1)[0]
-    assert queue.defer('held', lease.token, discovery.now + 2, held_reason='allowance_exhausted')
-    assert controller.tick(discovery.now + 301) == 0
-    assert store.rows['jobs', 'held']['state'] == 'allowance_held'
-    assert controller.tick(discovery.now + 86400) == 1
     assert store.rows['jobs', 'held']['state'] == 'ready'
 
 

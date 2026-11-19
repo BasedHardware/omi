@@ -9,6 +9,8 @@ dials a DSN directly.
 from __future__ import annotations
 
 import queue
+import time
+import math
 import threading
 from contextlib import contextmanager
 from typing import Any, Callable, Iterator
@@ -46,7 +48,9 @@ def dial(dsn: str) -> Any:
     return psycopg.connect(dsn, autocommit=True)
 
 
-def iam_connector(host: str, database: str, user: str, *, port: int = 5432) -> Callable[[], Any]:
+def iam_connector(
+    host: str, database: str, user: str, *, port: int = 5432, setup_timeout_s: float | None = None
+) -> Callable[[], Any]:
     """Connect to Cloud SQL over its private IP with IAM database auth, no connector library.
 
     The password is a short-lived OAuth token with the ``sqlservice.login`` scope, minted per connection
@@ -59,12 +63,34 @@ def iam_connector(host: str, database: str, user: str, *, port: int = 5432) -> C
         import google.auth
         from google.auth.transport.requests import Request
 
-        credentials, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/sqlservice.login'])
-        credentials.refresh(Request())
-        return _psycopg().connect(
+        deadline = time.monotonic() + setup_timeout_s if setup_timeout_s is not None else None
+        request = Request()
+
+        def bounded_request(*args, **kwargs):
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError('jobstore IAM setup deadline exceeded')
+                kwargs['timeout'] = min(float(kwargs.get('timeout') or remaining), remaining)
+            return request(*args, **kwargs)
+
+        credentials, _ = google.auth.default(
+            scopes=['https://www.googleapis.com/auth/sqlservice.login'], request=bounded_request
+        )
+        credentials.refresh(bounded_request)
+        # libpq's minimum effective connect timeout is two seconds. Refuse a
+        # new dial when that minimum cannot fit in the remaining setup budget.
+        remaining = deadline - time.monotonic() if deadline is not None else 10.0
+        if remaining < 2:
+            raise TimeoutError('jobstore IAM setup deadline exceeded')
+        conn = _psycopg().connect(
             host=host, port=port, dbname=database, user=user, password=credentials.token, sslmode='require',
-            autocommit=True, connect_timeout=10,
+            autocommit=True, connect_timeout=max(2, math.floor(remaining)),
         )  # fmt: skip
+        if deadline is not None and time.monotonic() >= deadline:
+            conn.close()
+            raise TimeoutError('jobstore IAM setup deadline exceeded')
+        return conn
 
     return connect
 

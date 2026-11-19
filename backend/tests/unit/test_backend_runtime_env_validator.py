@@ -23,6 +23,12 @@ from scripts.runtime_env_validation.manifest import (
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/validate-backend-runtime-env.py'
 RENDERER_SCRIPT = ROOT / 'scripts/render_backend_runtime_env.py'
+ALLOWANCE_INTAKE_PARK_BY_SERVICE = {
+    'backend': 'false',
+    'backend-sync': 'true',
+    'backend-sync-backfill': 'false',
+    'backend-integration': 'true',
+}
 READINESS_PROPOSAL_ARGS = (
     ' --proposal-output "$FIRESTORE_PROPOSAL_PATH"'
     ' --source-commit "$FIRESTORE_SOURCE_COMMIT"'
@@ -542,7 +548,8 @@ def with_conversations_v3_env(payload: str) -> str:
             rf'("{service}":\s*\{{.*?"env":\s*\[)',
             r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "beta"},'
             r'\n        {"name": "CONVERSATIONS_V3_FIRST_APP_BUILD", "value": ""},'
-            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},',
+            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},'
+            r'\n        {"name": "CONVERSATIONS_V3_BACKFILL_QUEUE", "value": "conversations-v3-backfill"},',
             payload,
             count=1,
             flags=re.DOTALL,
@@ -675,10 +682,18 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
-    # Carry each host's explicit ledger bindings.
+    # Carry the role-specific intake switch and explicit ledger bindings.
     payload = re.sub(
         r'("(?P<service>backend(?:-sync|-sync-backfill|-integration)?)":\s*\{.*?"env":\s*\[)',
         lambda match: match.group(1)
+        + '\n        '
+        + json.dumps(
+            {
+                'name': 'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED',
+                'value': ALLOWANCE_INTAKE_PARK_BY_SERVICE[match.group('service')],
+            }
+        )
+        + ','
         + '\n        '
         + json.dumps({'name': 'FIRESTORE_READ_LEDGER', 'value': '1'})
         + ',\n        '
@@ -3734,6 +3749,52 @@ def test_guarded_long_recovery_stays_disabled_and_hours_are_inert():
             assert env.get('SYNC_BACKFILL_ADMISSION_LIMITS', {}).get('value', 'false') == 'false'
 
 
+def _settings_named(node, key):
+    if isinstance(node, dict):
+        for name, child in node.items():
+            if name == key:
+                yield child
+            else:
+                yield from _settings_named(child, key)
+    elif isinstance(node, list):
+        for child in node:
+            yield from _settings_named(child, key)
+
+
+def test_prod_sync_backfill_lookback_is_sixty_days_and_no_release_reach_undercuts_it():
+    # The lookback is checked once, at upload admission; a backlog that older app builds
+    # or slow drains cannot clear within the window gets a terminal 422 on the phone.
+    # Prod admits 60 days. The batch backlog-release reach (capture-age based) must never
+    # hold back what admission accepted, on any prod surface (Cloud Run services and
+    # jobs, GKE). This covers the env seed only: the effective reach lives on the
+    # Firestore gate row, whose code floor is MIN_REACH_SECONDS (30 days).
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    prod = manifest['environments']['prod']
+    services = prod['cloud_run']['services']
+    lookback = 60 * 86400
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['SYNC_BACKFILL_MAX_AGE_SECONDS']['value'] == str(lookback)
+    assert len(list(_settings_named(prod, 'SYNC_BACKFILL_MAX_AGE_SECONDS'))) >= 2  # walker reaches service env
+    for setting in _settings_named(prod, 'BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS'):
+        reach = int(setting.get('value', '0') if isinstance(setting, dict) else setting)
+        assert reach == 0 or reach >= lookback
+
+
+def test_prod_unlimited_backfill_day_cap_is_on_at_24_hours_on_every_declaring_surface():
+    # Enforced only at sync upload (retryable 503 backfill_capacity); dev keeps it off.
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    for stage, expected in (('prod', 'true'), ('dev', 'false')):
+        environment = manifest['environments'][stage]
+        enabled = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED'))
+        hours = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS'))
+        assert len(enabled) == len(hours) >= 5
+        assert {setting['value'] for setting in enabled} == {expected}
+        assert {setting['value'] for setting in hours} == {'24'}
+    services = manifest['environments']['prod']['cloud_run']['services']
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED']['value'] == 'true'
+
+
 # M7: compose and validate declarations offline; no cloud clients or rollout writes.
 @pytest.fixture(scope='module')
 def read_lever_sources():
@@ -3997,6 +4058,17 @@ def test_read_lever_unknown_declaration_is_rejected_from_actual_source_files(tmp
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_allowance_intake_parking_is_bound_only_to_upload_roles(environment, monkeypatch):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    state = render_cloud_run_state(config, monkeypatch)
+    rendered = {
+        service: [entry['value'] for entry in target['env'] if entry['name'] == 'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED']
+        for service, target in state['services'].items()
+    }
+    assert rendered == {service: [value] for service, value in ALLOWANCE_INTAKE_PARK_BY_SERVICE.items()}
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_post_seal_controls_are_rendered_on_every_cpu_reader(environment):
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='record_latency_renderer')
@@ -4142,6 +4214,13 @@ def test_control_sync_routing_validates_deployed_values_without_changing_manifes
 
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    # Exercise each validation against the same parsed input without reparsing
+    # the full fleet manifest on every call.
+    monkeypatch.setattr(
+        manifest_validation,
+        '_load_yaml',
+        lambda path: manifest if path == validator.DEFAULT_MANIFEST else validator._load_yaml(path),
+    )
     config = validator._get_env_config(manifest, 'prod')
     original = copy.deepcopy(config)
     overlay = tmp_path / 'routing.env'

@@ -4661,7 +4661,7 @@
     "monthlySwitchDoneTitle": "已改为按月付费",
     "monthlySwitchDoneBody": "今日已支付 {price}。按月续订。",
     "processingDeleteScopeChanged": "处理列表已更改。请检查列表后重试。",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "本月的 {minutes} 分钟已用完",
     "freeCapBody": "Omi 仍在录音。选择继续转录的方式。",
     "omiProPlanName": "Omi Pro",
@@ -4686,5 +4686,8 @@
     "downloadNow": "立即下载",
     "onWifiLater": "稍后通过 Wi-Fi",
     "conversationWritingSummary": "正在撰写你的摘要…",
-    "onTheWayServerWork": "服务器报告的任务"
+    "onTheWayServerWork": "服务器报告的任务",
+    "finishNothingToProcess": "还没有可处理的内容。",
+    "finishStillProcessing": "仍在处理中。完成后会显示在首页。",
+    "finishBackToHome": "返回首页"
 }

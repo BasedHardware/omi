@@ -15225,7 +15225,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15309,4 +15309,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => '服务器报告的任务';
+
+  @override
+  String get finishNothingToProcess => '还没有可处理的内容。';
+
+  @override
+  String get finishStillProcessing => '仍在处理中。完成后会显示在首页。';
+
+  @override
+  String get finishBackToHome => '返回首页';
 }

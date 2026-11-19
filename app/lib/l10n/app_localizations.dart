@@ -27156,7 +27156,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncTooOldExplanation.
   ///
   /// In en, this message translates to:
-  /// **'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.'**
+  /// **'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.'**
   String get syncTooOldExplanation;
 
   /// Title of the sheet shown when a free plan has used all of its monthly cloud transcription minutes
@@ -27308,6 +27308,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Server-reported work'**
   String get onTheWayServerWork;
+
+  /// Brief notice after tapping Finish on the live capture page when nothing was heard since the last conversation, so no conversation is made.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to process yet.'**
+  String get finishNothingToProcess;
+
+  /// Shown on the page Finish opens when the conversation has not arrived after a long wait; it will show up on Home by itself.
+  ///
+  /// In en, this message translates to:
+  /// **'Still processing. It will appear on Home.'**
+  String get finishStillProcessing;
+
+  /// Button that leaves the processing page for the Home conversation list.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to Home'**
+  String get finishBackToHome;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

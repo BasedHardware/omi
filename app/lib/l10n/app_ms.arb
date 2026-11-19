@@ -4661,7 +4661,7 @@
     "monthlySwitchDoneTitle": "Anda kini membayar bulanan",
     "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperbaharui setiap bulan.",
     "processingDeleteScopeChanged": "Senarai pemprosesan telah berubah. Semak senarai dan cuba lagi.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Anda telah menggunakan {minutes} minit bulan ini",
     "freeCapBody": "Omi masih merakam. Pilih cara untuk terus mentranskripsi.",
     "omiProPlanName": "Omi Pro",
@@ -4686,5 +4686,8 @@
     "downloadNow": "Muat Turun Sekarang",
     "onWifiLater": "Kemudian melalui Wi-Fi",
     "conversationWritingSummary": "Menulis ringkasan anda…",
-    "onTheWayServerWork": "Kerja yang dilaporkan pelayan"
+    "onTheWayServerWork": "Kerja yang dilaporkan pelayan",
+    "finishNothingToProcess": "Belum ada apa-apa untuk diproses.",
+    "finishStillProcessing": "Masih diproses. Ia akan muncul di Laman Utama.",
+    "finishBackToHome": "Kembali ke Laman Utama"
 }

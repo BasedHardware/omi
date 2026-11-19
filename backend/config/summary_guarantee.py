@@ -12,9 +12,12 @@ from typing import Any
 ADMITTED_OWNER: ContextVar[str | None] = ContextVar('admitted_first_summary_owner', default=None)
 
 
-def repair_enabled() -> bool:
+def repair_enabled(*, environ: Mapping[str, str] | None = None) -> bool:
+    values = os.environ if environ is None else environ
     return rollout_default_off(
-        'SUMMARY_DEBT_REPAIR_ENABLED', os.getenv('SUMMARY_DEBT_REPAIR_ENABLED', 'false').strip().lower() == 'true'
+        'SUMMARY_DEBT_REPAIR_ENABLED',
+        values.get('SUMMARY_DEBT_REPAIR_ENABLED', 'false').strip().lower() == 'true',
+        environ=environ,
     )
 
 

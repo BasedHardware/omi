@@ -15535,7 +15535,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15619,4 +15619,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'A szerver által jelzett munka';
+
+  @override
+  String get finishNothingToProcess => 'Még nincs mit feldolgozni.';
+
+  @override
+  String get finishStillProcessing => 'Még feldolgozás alatt. Megjelenik a Kezdőlapon.';
+
+  @override
+  String get finishBackToHome => 'Vissza a Kezdőlapra';
 }

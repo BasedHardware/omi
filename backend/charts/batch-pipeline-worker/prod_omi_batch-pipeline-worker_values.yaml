@@ -150,3 +150,16 @@ recordSealRepair:
 recordSealWorker:
   # Serve /metrics idle; an enabled runtime with the refused policy exits before readiness.
   runtimeEnabled: false
+
+# Target prepared; copying and hint reads stay off.
+jobstoreEnv:
+  OMI_DEPLOYMENT: "prod"
+  FIRESTORE_DATABASE_ID: "(default)"
+  JOBSTORE_PG_HOST: "172.25.29.2"
+  JOBSTORE_PG_DATABASE: "jobstore_prod"
+  JOBSTORE_PG_USER: "batch-pipeline-worker@based-hardware.iam"
+  JOBSTORE_SHADOW_NAMESPACES: "batch_pipeline_prod"
+  JOBSTORE_PRODUCTION_MIRROR: "off"
+  BATCH_JOBSTORE_MODE: "firestore"
+  GOOGLE_CLOUD_PROJECT: "based-hardware"
+  OMI_CUSTOMER_DATA_PROJECT: "based-hardware"

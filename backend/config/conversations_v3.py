@@ -24,6 +24,30 @@ def conversations_v3_enabled(uid: str) -> bool:
     return in_rollout_cohort(uid, 'conversations-v3')
 
 
+ROTATION_COHORT = 'v3-recording-rotation'
+ROTATION_DEFAULTS = (180.0, 300.0)
+
+
+def recording_rotation_enabled(uid: str) -> bool:
+    """Listen seals long v3 recordings at short pauses. ``off`` (default), ``cohort`` or ``on``."""
+    mode = os.getenv('CONVERSATIONS_V3_RECORDING_ROTATION', 'off').strip().lower()
+    if mode == 'on':
+        return True
+    return mode == 'cohort' and in_rollout_cohort(uid, ROTATION_COHORT)
+
+
+def rotation_seconds() -> tuple[float, float]:
+    """(minimum age, hard cap) of a rotated recording; an invalid pair keeps the defaults."""
+    try:
+        age = float(os.getenv('CONVERSATIONS_V3_ROTATION_MIN_SECONDS', str(ROTATION_DEFAULTS[0])))
+        cap = float(os.getenv('CONVERSATIONS_V3_ROTATION_MAX_SECONDS', str(ROTATION_DEFAULTS[1])))
+    except ValueError:
+        return ROTATION_DEFAULTS
+    if not 60 <= age <= cap <= 3600:
+        return ROTATION_DEFAULTS
+    return age, cap
+
+
 def backfill_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_BACKFILL', 'off').strip().lower() == 'on'
 
