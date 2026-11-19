@@ -67,7 +67,7 @@ func clean() map[string]string {
 		"internal/queue/queue.go":               queueStub,
 		"internal/queue/queue_test.go":          "package queue\n\nimport \"testing\"\n\nfunc TestQueue(t *testing.T) {}\n",
 		"internal/queue/README.md":              "# queue\n\n`TestQueue`\n",
-		"internal/platform/clock/clock.go":      "package clock\n",
+		"internal/platform/clock/clock.go":      "package clock\n\nfunc Now() {}\n",
 		"internal/platform/clock/clock_test.go": "package clock\n\nimport \"testing\"\n\nfunc TestClock(t *testing.T) {}\n",
 		"internal/billing/ports.go": `package billing
 
