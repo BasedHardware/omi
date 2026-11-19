@@ -36,17 +36,17 @@ class FinishedCapturePage extends StatefulWidget {
   @visibleForTesting
   final void Function(BuildContext context, ServerConversation conversation)? open;
 
-  /// The conversation made from [recordingId]: the newest one holding a piece of it, which is the
-  /// one on top of Home. A recording document itself, or a row with no piece of it (an unrelated
-  /// sync copy), never matches.
+  /// The newest conversation made from [recordingId]. A derived transcript can have
+  /// recording lineage before a playable audio piece is available.
   static ServerConversation? match(Iterable<ServerConversation> rows, String recordingId) {
     ServerConversation? best;
     for (final row in rows) {
       final v3 = row.v3;
       if (row.discarded || v3?.recording == true) continue;
-      final holds = v3 != null
-          ? v3.recordingPieces.any((piece) => piece.recordingId == recordingId) || row.id == recordingId
-          : row.id == recordingId;
+      final holds = row.id == recordingId ||
+          (v3 != null &&
+              (v3.recordingPieces.any((piece) => piece.recordingId == recordingId) ||
+                  (!row.isLocked && v3.derived && v3.recordingIds.contains(recordingId))));
       if (!holds) continue;
       if (best == null || row.createdAt.isAfter(best.createdAt)) best = row;
     }
