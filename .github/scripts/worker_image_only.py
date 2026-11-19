@@ -38,7 +38,9 @@ def guarded(run):
     def call(*args):
         if dry_run_mode():
             read = bool(args) and args[0] == "get"
-            preview = bool(args) and args[0] == "patch" and "--dry-run=server" in args
+            # Exactly one dry-run option, and it is server: a later or conflicting flag could override it.
+            dry = [a for a in args if a == "--dry-run" or str(a).startswith("--dry-run=")]
+            preview = bool(args) and args[0] == "patch" and dry == ["--dry-run=server"]
             require(read or preview, "write refused in dry-run mode")
         return run(*args)
 

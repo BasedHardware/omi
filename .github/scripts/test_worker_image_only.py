@@ -652,7 +652,8 @@ class Recorder:
 
 
 def is_write(args):
-    return args[0] != "get" and "--dry-run=server" not in args
+    dry = [a for a in args if a == "--dry-run" or str(a).startswith("--dry-run=")]
+    return args[0] != "get" and dry != ["--dry-run=server"]
 
 
 class DryRunTests(unittest.TestCase):
@@ -856,6 +857,17 @@ class DryRunTests(unittest.TestCase):
         for verb in ("delete", "apply", "replace", "scale", "create"):
             with self.subTest(verb=verb), self.assertRaisesRegex(ValueError, "dry-run mode"):
                 worker.guarded(recorder)(verb, "deployment", worker.TARGET, "--dry-run=server")
+        self.assertEqual(recorder.calls, [])
+
+    def test_guard_refuses_conflicting_or_duplicate_dry_run_flags(self):
+        os.environ[worker.DRY_RUN_ENV] = "1"
+        recorder = Recorder(self.cluster)
+        for flags in (("--dry-run=server", "--dry-run=none"), ("--dry-run=none", "--dry-run=server"),
+                      ("--dry-run=server", "--dry-run=server"), ("--dry-run", "--dry-run=server"),
+                      ("--dry-run=client",), ()):
+            with self.subTest(flags=flags), self.assertRaisesRegex(ValueError, "dry-run mode"):
+                worker.guarded(recorder)("patch", "deployment", worker.TARGET, "--type=json", "-p", "[]", *flags)
+            self.assertTrue(is_write(("patch", "deployment", *flags)), flags)
         self.assertEqual(recorder.calls, [])
 
     def test_dry_run_command_requires_the_mode_env(self):
@@ -1136,14 +1148,36 @@ class WorkflowTests(unittest.TestCase):
     # sha256 of its exact script. A new or moved step, or any edit to one of these scripts, fails here until it
     # is reviewed for writes (fail closed), whatever it calls.
     DRY_RUN_REACHABLE_RUN_STEPS = {
-        ("deploy", 0, "Validate Environment Input"): "96f625184865014f0b2e49dadbfefb10f33d338bfbc35941a4c2e3603ed3edad",
-        ("deploy", 1, "Delete huge unnecessary tools folder"): "99c44db74408ad1e6174a3bf28a90e72a976ce4005a1bb175f6525c06af417d2",
-        ("deploy", 3, "Select merged production source and image tag"): "259f74511721d4d448b962a9ead92f0fae477ec60ead6fffa9319540b48f745a",
-        ("deploy", 7, "Resolve deployment target"): "63f02fcafe44590aad8e5fba0e997859e4d4ff28dc1f86108a8847dfb0487c73",
-        ("deploy", 11, None): "cea3c6ca1bb08b72231064902dbf642d6c47200f802f6eefef709d24b6534438",  # gcloud auth configure-docker
-        ("deploy", 13, "Verify promoted worker digest"): "f006e9315fa3308a136f384a69bcf27a56dac6112c090c6df316d4c1813d6a2d",
-        ("deploy", 16, "Dry-run worker image preserving live runtime"): "72af588008714cad26482e7b845d922f81070a7bed1b52a16d8588862a111d05",
+        ("deploy", 0, "Validate Environment Input"): "0d2eb02f1ae99c8950d7f9073904f9be01b6016d5f5eee4bed279cd810df26a3",
+        ("deploy", 1, "Delete huge unnecessary tools folder"): "a71b06dd03bda76b2559683bd74127b61517f4f93cc53061a73d4b896c91eb38",
+        ("deploy", 3, "Select merged production source and image tag"): "2aaf02419157b69684a1739cc8a2c839e97176c764d2e77e3fe86a9033b6e164",
+        ("deploy", 7, "Resolve deployment target"): "d1f30ada455b94ebc25691e3189f8d8c2f4084b2ab959aca69738a06d3462655",
+        ("deploy", 11, None): "c63205ec4dfd63425f762ff34a73886a059822157d26079120ee7adabaa1ff59",  # gcloud auth configure-docker
+        ("deploy", 13, "Verify promoted worker digest"): "b1748a2caa525b382f9c7b5201ab3d53c2d303d14e2c9714fe78214dbd124de4",
+        ("deploy", 16, "Dry-run worker image preserving live runtime"): "26f8f6a07901ce23724ab66b9afb5a74cdc496b100aa080290354fedceb3573f",
     }
+
+    @staticmethod
+    def step_digest(step):
+        # Everything that shapes what the step executes: its script, env, shell and working directory.
+        fields = {k: step.get(k) for k in ("run", "env", "shell", "working-directory")}
+        return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
+
+    # Workflow- and job-level execution context (env, defaults, permissions, container, environment) that
+    # applies to every dry-run-reachable step; any edit fails here until reviewed.
+    DRY_RUN_CONTEXT_DIGEST = "9132ad2fb2771bf9f39cd2b05d3753f4bc5f127ab65b6341ccdb73b8f7f703df"
+
+    def context_digest(self):
+        context = {
+            "workflow": {k: self.workflow.get(k) for k in ("env", "defaults", "permissions", "concurrency")},
+            "jobs": {name: {k: job.get(k) for k in ("env", "defaults", "permissions", "container", "services",
+                                                      "environment", "runs-on", "if", "uses")}
+                     for name, job in self.workflow["jobs"].items()},
+        }
+        return hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
+
+    def test_dry_run_execution_context_is_reviewed(self):
+        self.assertEqual(self.context_digest(), self.DRY_RUN_CONTEXT_DIGEST)
 
     def test_run_steps_reachable_in_dry_run_mode_are_reviewed(self):
         reachable = {
@@ -1153,7 +1187,7 @@ class WorkflowTests(unittest.TestCase):
             for index, step in enumerate(job.get("steps", []))
             if "run" in step and not self.excludes_dry_run(step.get("if"))
         }
-        digests = {key: hashlib.sha256(step["run"].encode()).hexdigest() for key, step in reachable.items()}
+        digests = {key: self.step_digest(step) for key, step in reachable.items()}
         self.assertEqual(digests, self.DRY_RUN_REACHABLE_RUN_STEPS)
         self.assertEqual(reachable[("deploy", 11, None)]["run"].strip(), "gcloud auth configure-docker")
         for key, step in reachable.items():
@@ -1211,7 +1245,13 @@ class WorkflowTests(unittest.TestCase):
     def test_dry_run_step_sets_mode_env_and_calls_only_the_dry_run_command(self):
         step = self.step("Dry-run worker image preserving live runtime")
         self.assertEqual(step["if"], "inputs.preserve_live_worker == true && inputs.worker_dry_run == true")
-        self.assertEqual(step["env"][worker_env_name()], "1")
+        self.assertEqual(step["env"], {
+            "LIVE_BASELINE": "${{ inputs.worker_live_baseline }}",
+            "ROLLBACK_RECEIPT": "${{ inputs.worker_rollback_receipt }}",
+            "IMAGE_REPOSITORY": "${{ steps.target.outputs.image_repository }}",
+            "IMAGE_DIGEST": "${{ steps.promote.outputs.image_digest }}",
+            worker_env_name(): "1",
+        })
         self.assertIn("worker_image_only.py dry-run", step["run"])
         self.assertFalse(self.writes(step["run"]))
         names = [s.get("name") for s in self.steps]
