@@ -170,6 +170,8 @@ from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
 from utils.conversations.v3 import live as v3_live
+from database import conversations_v3_live
+from utils.conversations import list_page_headers
 
 router = APIRouter()
 
@@ -185,7 +187,8 @@ def get_live_conversation(
     enabled = conversations_v3_enabled(uid)
     if not enabled:
         return {'v3': False, 'conversation': None}
-    row = v3_live.active(conversations_db.get_conversations_without_photos(uid, **v3_live.OPEN_ROWS))
+    now = datetime.now(timezone.utc)
+    row = conversations_v3_live.live_window(uid, now=now, max_idle=v3_live.MAX_IDLE, pick=v3_live.active)
     compact = (
         {
             key: row[key]
@@ -1112,6 +1115,13 @@ def get_conversations(
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
+    cursor: Optional[str] = Query(
+        None,
+        description=(
+            "Opaque page cursor from a previous response's X-Omi-Next-Cursor header; when accepted it "
+            "replaces offset. An unknown or stale cursor falls back to offset."
+        ),
+    ),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     if start_date is not None and end_date is not None and aware_datetime(start_date) > aware_datetime(end_date):
@@ -1151,15 +1161,9 @@ def get_conversations(
     # query and the page stream runs under the derived per-RPC timeout, so a
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
     budget = list_read_budget_for_request(request, route='conversations')
-    default_home = not (
-        include_discarded
-        or sources
-        or start_date
-        or end_date
-        or folder_id
-        or starred is not None
-        or statuses != 'processing,completed'
-    )
+    page: Dict[str, Any] = {}
+    reveal = include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
+    default_home = not (reveal or start_date or end_date)
     # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
     # legacy sync piece there would duplicate them.
     show_held = default_home and not conversations_v3_enabled(uid)
@@ -1167,6 +1171,8 @@ def get_conversations(
         uid,
         limit,
         offset,
+        cursor=cursor,
+        cursor_page=page,
         include_discarded=include_discarded,
         statuses=status_filter,
         sources=source_list,
@@ -1179,7 +1185,9 @@ def get_conversations(
         presentation=True,
         include_recordings=status_filter == ['in_progress'],
         capture_only=status_filter == ['in_progress'],
-        hide_home=default_home,
+        # A date range alone is still Home: the day view is Home's own drill-in,
+        # so it hides what Home hides. Explicit reveal filters still opt out.
+        hide_home=not reveal,
         show_held=show_held,
     )
 
@@ -1192,6 +1200,8 @@ def get_conversations(
             include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
         ),
     )
+    if response is not None:
+        list_page_headers.apply(response, page)
     _heal_locked_conversations_if_eligible(uid, conversations)
     conversations = [
         transcribing_hold.project(home_step.project(row, show_held=show_held), home_list=True) for row in conversations
