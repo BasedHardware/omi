@@ -15605,4 +15605,13 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Praca zgłoszona przez serwer';
+
+  @override
+  String get finishNothingToProcess => 'Na razie nie ma czego przetworzyć.';
+
+  @override
+  String get finishStillProcessing => 'Nadal trwa przetwarzanie. Pojawi się na ekranie głównym.';
+
+  @override
+  String get finishBackToHome => 'Wróć do ekranu głównego';
 }

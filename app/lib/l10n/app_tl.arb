@@ -12243,5 +12243,8 @@
     "downloadNow": "I-download Ngayon",
     "onWifiLater": "Mamaya sa Wi-Fi",
     "conversationWritingSummary": "Isinusulat ang iyong buod…",
-    "onTheWayServerWork": "Trabahong iniulat ng server"
+    "onTheWayServerWork": "Trabahong iniulat ng server",
+    "finishNothingToProcess": "Wala pang ipoproseso.",
+    "finishStillProcessing": "Pinoproseso pa. Lalabas ito sa Home.",
+    "finishBackToHome": "Bumalik sa Home"
 }
