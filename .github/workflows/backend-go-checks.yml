@@ -3,6 +3,14 @@ name: Backend Go Checks
 # Runs `make check` for backend-go: vet, the lint contract, the structural rules and the
 # tests with the race detector, including the queue's integration tests against Postgres 16.
 on:
+  # Nightly calls run this same job against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   pull_request:
     paths:
       - "backend-go/**"
@@ -17,7 +25,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: backend-go-checks-${{ github.event.pull_request.number || github.ref }}
+  group: backend-go-checks-${{ github.event.pull_request.number || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: true
 
 env:
@@ -47,6 +55,9 @@ jobs:
           --health-retries 12
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-go@v7
         with:
           go-version-file: backend-go/go.mod
