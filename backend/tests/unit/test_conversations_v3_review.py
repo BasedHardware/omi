@@ -96,8 +96,8 @@ async def test_same_start_fresh_windows_get_distinct_ids_and_audio(builder, monk
         claims=[{'conversation_id': prior_id, 'start': AT, 'end': prior_end}],
         audio_files=[{'id': 'f', 'duration': 14}],
         transcript_segments=[
-            {'id': 'first', 'text': 'One synthetic sentence.', 'start': 0, 'end': 12},
-            {'id': 'second', 'text': 'A different synthetic sentence.', 'start': 0, 'end': 14},
+            {'id': 'first', 'text': 'one ' * 300, 'start': 0, 'end': 12},
+            {'id': 'second', 'text': 'two ' * 300, 'start': 0, 'end': 14},
         ],
     )
     monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, {prior_id: prior}, []))

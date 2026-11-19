@@ -48,6 +48,10 @@ def rotation_seconds() -> tuple[float, float]:
     return age, cap
 
 
+def stretch_cohesion_enabled() -> bool:
+    return os.getenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
+
+
 def backfill_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_BACKFILL', 'off').strip().lower() == 'on'
 

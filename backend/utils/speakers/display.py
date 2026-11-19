@@ -18,6 +18,7 @@ from typing import Any
 from utils.speaker_display import SpeakerLabeler
 from utils.speakers.display_metrics import record_count_guard
 from utils.speakers.policy import MIN_EVIDENCE_SECONDS
+from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL, canonical_speaker_label
 
 MAX_UNNAMED_VOICES = 8
 MIN_VOICE_SECONDS = 3.0
@@ -39,6 +40,32 @@ class DiarizationLabel:
 
 def field(row: Any, key: str, default: Any = None) -> Any:
     return row.get(key, default) if isinstance(row, Mapping) else getattr(row, key, default)
+
+
+def outline_speaker_labels(segments: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Use stretch-local prompt labels without treating abstentions as voices."""
+    labeler = SpeakerLabeler(lambda index: f'S{index + 1}')
+    labels = []
+    for segment in segments:
+        speaker_id = segment.get('speaker_id')
+        raw = str(segment.get('speaker') or '').strip()
+        key = raw.casefold()
+        if segment.get('is_user'):
+            labels.append('ME')
+        elif speaker_id == OMI_SPEAKER_ID_SENTINEL:
+            labels.append('Omi')
+        elif name := segment.get('person_name'):
+            labels.append(str(name))
+        elif (
+            (not key and speaker_id is None)
+            or key in {'speaker', 'unknown', 'unknown speaker', 'unassigned', 's?'}
+            or key.startswith(('batch_unassigned_', 'unassigned_', 'abstain_', 'abstained_'))
+        ):
+            labels.append('S?')
+        else:
+            voice = canonical_speaker_label(raw) if raw else f'SPEAKER_{speaker_id}'
+            labels.append(labeler.label(DiarizationLabel(voice, segment.get('speaker_id_scope'))))
+    return labels
 
 
 def _seconds(row: Any) -> float:
