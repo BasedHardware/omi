@@ -37,3 +37,5 @@ by `job`. The cap is eight reader values
 times two kinds per process. The counter measures authenticated SDK attempts
 and includes SDK retries and ranges. Direct client requests using signed URLs
 and requests outside the shared client remain in the native bucket total.
+The `other` reader is part of the instrumented subtotal and includes such
+calls as the Pusher write path's chunk existence and collision checks.
