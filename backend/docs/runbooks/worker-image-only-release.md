@@ -72,6 +72,18 @@ prod-train serialization remains necessary, and post-roll verification also
 refuses sibling drift. The workflow waits for the existing rollout/status gates,
 then compares the target spec hash and all sibling bindings again.
 
+### Autoscaling and CronJob history (2026-11-19)
+
+Identity hashes exclude `.spec.replicas` on Deployments and StatefulSets, which the worker's and
+record-seal-worker's HorizontalPodAutoscalers own, and the inventory omits Jobs whose controller
+is a CronJob in the same namespace read (CronJob run history). The CronJob itself stays bound, so
+a jobTemplate or image change still refuses. Everything else still fails closed: any image or
+digest change, a changed object UID, any other spec field, a standalone Job or a Job whose
+controller CronJob is absent. An activated T4 fallback is checked directly before the write and
+again at verify. The admission dry-run and the CAS write still compare the whole spec, replicas
+included, because they act on the object just read. Receipts written before this change hash the
+full spec and no longer match; take a fresh inventory and forward receipt.
+
 ## Verification and rollback custody
 
 The workflow logs and step summary contain the safe JSON image diff and rollback
