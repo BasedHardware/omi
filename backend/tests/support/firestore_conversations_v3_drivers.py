@@ -60,6 +60,7 @@ def entries():
         DriverEntry(
             'database.conversations_v3_live.recent_windows',
             base={'uid': SHAPE_UID, 'now': FROZEN_NOW, 'max_idle': timedelta(hours=2)},
+            domains={'finished_before': [None, FROZEN_NOW]},
             neutrals={'max_rows': (200, 'read bound only')},
         ),
         DriverEntry(

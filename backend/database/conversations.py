@@ -1283,7 +1283,8 @@ def _collect_visible_conversation_page(
                     has_more = True
                     break
         except ListReadBudgetExhausted:
-            has_more = True
+            # An empty page advances nothing, so saying more would invite the same request again.
+            has_more = bool(conversations)
         # This scan's offset counts visible rows, so the advance is the page size.
         return finish(conversations, last_doc, storage_rows=len(conversations), has_more=has_more)
 

@@ -131,6 +131,13 @@ def test_budget_spent_before_the_first_row_does_not_say_more(monkeypatch):
     assert info == {'storage_rows': 0, 'has_more': False}
 
 
+def test_discarded_scan_spent_before_a_row_does_not_say_more(monkeypatch):
+    data, _ = owner()
+    ids, info, _ = page(monkeypatch, data, offset=0, budget=budget(0), include_discarded=True)
+    assert ids == []
+    assert info['storage_rows'] == 0 and info['has_more'] is False
+
+
 def test_offset_charge_that_exhausts_the_budget_ends_the_walk(monkeypatch):
     data, _ = owner()
     ids, info, counts = page(monkeypatch, data, offset=100, budget=budget(60))

@@ -47,11 +47,19 @@ START_SKEW = timedelta(minutes=5)
 
 
 def recent_windows(
-    uid: str, *, now: datetime, max_idle: timedelta, max_rows: int = READ_CAP, firestore_client: Any = None
+    uid: str,
+    *,
+    now: datetime,
+    max_idle: timedelta,
+    finished_before: Optional[datetime] = None,
+    max_rows: int = READ_CAP,
+    firestore_client: Any = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
     """v3 windows whose last speech is inside ``max_idle``, projected to the live fields.
 
-    Returns the prepared rows and the number of documents read (at most ``max_rows``).
+    ``finished_before`` excludes windows whose last speech is at or after it, so a wider band
+    does not re-read a narrower one. Returns the prepared rows and the number of
+    documents read (at most ``max_rows``).
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     query = (
@@ -61,8 +69,10 @@ def recent_windows(
         .where(filter=FieldFilter('v3_derived', '==', True))
         .where(filter=FieldFilter('finished_at', '>=', now - max_idle))
         .where(filter=FieldFilter('started_at', '<=', now + START_SKEW))
-        .select(LIVE_FIELDS)
     )
+    if finished_before is not None:
+        query = query.where(filter=FieldFilter('finished_at', '<', finished_before))
+    query = query.select(LIVE_FIELDS)
     rows: List[Dict[str, Any]] = []
     read = 0
     last: Optional[Any] = None
@@ -77,7 +87,7 @@ def recent_windows(
         if len(snapshots) < size:
             return rows, read
         last = snapshots[-1]
-    logger.warning('v3 live read stopped at its cap of %d windows', READ_CAP)
+    logger.warning('v3 live read stopped at its bound of %d windows', max_rows)
     return rows, read
 
 
@@ -91,8 +101,17 @@ def live_window(
 ) -> Optional[Mapping[str, Any]]:
     """The window ``pick`` chooses, reading the recent band first and widening only if needed."""
     left = READ_CAP
-    for band in (min(RECENT_BAND, max_idle), max_idle):
-        rows, read = recent_windows(uid, now=now, max_idle=band, max_rows=left, firestore_client=firestore_client)
+    recent = min(RECENT_BAND, max_idle)
+    # The bands are disjoint, so the wider one never re-reads the recent one.
+    for band, finished_before in ((recent, None), (max_idle, now - recent)):
+        rows, read = recent_windows(
+            uid,
+            now=now,
+            max_idle=band,
+            finished_before=finished_before,
+            max_rows=left,
+            firestore_client=firestore_client,
+        )
         row = pick(rows, now)
         left -= read
         if row is not None or left <= 0:

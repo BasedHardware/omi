@@ -499,7 +499,7 @@ class _WindowQuery:
         )
 
     def _matches(self, doc):
-        ops = {'==': lambda a, b: a == b, '>=': lambda a, b: a >= b, '<=': lambda a, b: a <= b}
+        ops = {'==': lambda a, b: a == b, '>=': lambda a, b: a >= b, '<=': lambda a, b: a <= b, '<': lambda a, b: a < b}
         return all(ops[op](doc._data.get(field), value) for field, op, value in self.bounds)
 
     def select(self, fields):
@@ -568,6 +568,8 @@ def test_live_read_widens_to_the_idle_cap_for_a_quiet_open_window(monkeypatch):
     _, row = _live_read(monkeypatch, docs, log)
     assert row['id'] == 'quiet'
     assert len(log) == 2
+    # The wider band excludes the recent one, so no recent window is read twice.
+    assert log[1]['filters'][-1] == ('finished_at', '<')
 
 
 def test_live_read_with_nothing_open_stops_at_its_cap_and_logs(monkeypatch, caplog):
@@ -581,7 +583,7 @@ def test_live_read_with_nothing_open_stops_at_its_cap_and_logs(monkeypatch, capl
     assert row is None
     # The cap is shared across both bands: 4 rows in the recent band, then 3 more.
     assert [call['size'] for call in log] == [3, 3, 3]
-    assert 'stopped at its cap' in caplog.text
+    assert 'stopped at its bound of 3 windows' in caplog.text
 
 
 def test_merge_rejects_recording_before_admission(monkeypatch):
