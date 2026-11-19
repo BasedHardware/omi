@@ -13,6 +13,7 @@ import io
 import hashlib
 import json
 import logging
+import math
 import os
 import time
 import wave
@@ -128,13 +129,19 @@ def _pending(reason: RecordUploadWait, record: str | None = None, *, path: str =
 
 
 def _seconds(value) -> float | None:
+    """A finite epoch for a stored clock; anything unreadable is None (never final)."""
     if isinstance(value, bool):
         return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, datetime):
-        return value.timestamp() if value.tzinfo is not None else None
-    return None
+    try:
+        if isinstance(value, (int, float)):
+            seconds = float(value)
+        elif isinstance(value, datetime) and value.tzinfo is not None:
+            seconds = value.timestamp()
+        else:
+            return None
+    except (ValueError, OverflowError, OSError):
+        return None
+    return seconds if math.isfinite(seconds) else None
 
 
 def coverage_final(row: dict, now: float | None = None) -> bool:

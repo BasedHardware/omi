@@ -56,10 +56,28 @@ record markers, so the router sees them without another document read.
 No shipped build deletes or releases audio on a 400; only a 200 or a completed
 202 does. Unknown `code` values map to the closed `server_refused` token.
 
+A refused multi-file batch is isolated and each file is re-sent once, so one
+looping batch of N files produces about 1 + N 400s before it settles.
+
+## What this does not recover
+
+About 35% of the measured negatives are `wal_audio_past_record` or
+`wal_audio_outside_record`: the phone holds audio the final record lacks.
+Today that audio is never transcribed either (gap fill, the token-lease
+retained copy and the WAL handoff are all dark in production). After this
+change the phone keeps it as a refused upload and stops re-offering it after
+seven days, so a later server-side recovery (a gap-fill or handoff ramp) only
+picks it up if it serves inside that window, or through an app build that
+re-offers refused rows. The audio itself stays on the phone; nothing is deleted.
+
 ## Telemetry and rollback
 
 - Log: `event=sync_record_upload outcome=terminal reason=audio_coverage_unproven record=<16 hex> path=coverage memo=<hit|miss|off>`.
 - Counter: `omi_pipeline_record_coverage_terminal_total{memo}`.
+  Terminal answers are not waits: they are not counted in
+  `omi_pipeline_record_wait_answers_total` or
+  `omi_pipeline_record_wait_memo_hits_total`, so both fall by the terminal share.
+  Read them together with this counter.
 - Readback: the unsampled request-log 503 count for `POST /v2/sync-local-files`
   on backend-sync (the `omi_pipeline_upload_admission_503` log metric) falls,
   with a matching transient rise in 400s that decays as phones stop re-offering.

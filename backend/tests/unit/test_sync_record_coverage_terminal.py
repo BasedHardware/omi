@@ -128,6 +128,9 @@ async def test_final_record_answers_terminal_keep_local_refusal(monkeypatch, cap
         {'record_sealed_at': True},
         {'finished_at': 'not-a-time'},
         {'finished_at': datetime(2026, 11, 18, 0, 0)},
+        {'finished_at': float('-inf')},
+        {'record_sealed_at': float('nan')},
+        {'record_sealed_at': float('inf')},
     ],
 )
 async def test_record_that_can_still_change_keeps_the_retryable_wait(monkeypatch, changes):
@@ -135,6 +138,32 @@ async def test_record_that_can_still_change_keeps_the_retryable_wait(monkeypatch
     response = await answer(final_row(**changes))
     assert response.status_code == 503
     assert json.loads(response.body)['code'] == 'record_capture_pending'
+
+
+@pytest.mark.parametrize('route', ['late_memo_hit', 'memo_off'])
+async def test_every_coverage_negative_return_is_terminal_for_a_final_record(monkeypatch, route):
+    memo = 'hit' if route == 'late_memo_hit' else 'off'
+    world(monkeypatch, memo_hit=route == 'late_memo_hit')
+    if route == 'late_memo_hit':
+        # Memo-first off: the identical check answers after the retained copy.
+        monkeypatch.setenv('SYNC_RECORD_WAIT_MEMO_FIRST', 'false')
+    else:
+        # No upload identity (a file vanished): no memo key, a fresh check.
+        monkeypatch.setattr(live_upload, '_upload_identity', lambda paths: None)
+    before = terminal_count(memo)
+    response = await answer(final_row())
+    assert response.status_code == 400
+    assert json.loads(response.body)['code'] == 'record_capture_unprovable'
+    assert terminal_count(memo) == before + 1
+
+
+def test_unrepresentable_datetime_clock_is_not_final():
+    class Broken(datetime):
+        def timestamp(self):
+            raise OverflowError('synthetic')
+
+    row = final_row(finished_at=Broken(2026, 11, 18, tzinfo=timezone.utc))
+    assert not live_upload.coverage_final(row, now=NOW.timestamp())
 
 
 async def test_kill_switch_restores_the_retryable_wait(monkeypatch):
