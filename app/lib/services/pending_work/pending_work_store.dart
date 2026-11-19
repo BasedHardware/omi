@@ -18,12 +18,14 @@ class PendingWorkStore extends ChangeNotifier {
     Future<ApiResult<AttentionRetryResult>> Function(String id, {required String idempotencyKey})? retry,
     Future<ApiResult<List<AttentionRetryResult>>> Function({required String idempotencyKey})? retryAll,
     Future<ApiResult<void>> Function(List<String> ids)? markSeen,
+    Future<ApiResult<void>> Function(String id)? dismiss,
     String Function()? newKey,
   })  : _loadPending = loadPending ?? api.getPendingWork,
         _loadAttention = loadAttention ?? api.getAttentionItems,
         _retry = retry ?? api.retryAttentionItem,
         _retryAll = retryAll ?? api.retryAllAttentionItems,
         _markSeen = markSeen ?? api.markAttentionItemsSeen,
+        _dismiss = dismiss ?? api.dismissAttentionItem,
         _newKey = newKey ?? (() => const Uuid().v4());
 
   static PendingWorkStore instance = PendingWorkStore();
@@ -33,6 +35,7 @@ class PendingWorkStore extends ChangeNotifier {
   final Future<ApiResult<AttentionRetryResult>> Function(String id, {required String idempotencyKey}) _retry;
   final Future<ApiResult<List<AttentionRetryResult>>> Function({required String idempotencyKey}) _retryAll;
   final Future<ApiResult<void>> Function(List<String> ids) _markSeen;
+  final Future<ApiResult<void>> Function(String id) _dismiss;
   final String Function() _newKey;
 
   List<PendingWorkItem> _pending = const [];
@@ -241,6 +244,41 @@ class PendingWorkStore extends ChangeNotifier {
     hasUnseenAttention.value = false;
     notifyListeners();
     await _markSeen(unseen);
+  }
+
+  /// Removes one item at once and tells the server. A failed request puts the row back with the
+  /// same quiet error line as a failed retry; a 404 means it is already gone.
+  Future<bool> dismiss(AttentionItem item) async {
+    final index = _attention.indexWhere((i) => i.id == item.id);
+    if (index < 0) return false;
+    final session = _session;
+    _attentionRevision++;
+    final removed = _attention[index];
+    final retryKey = _retryKeys[item.id];
+    retryErrors.remove(item.id);
+    _setAttention([
+      for (final i in _attention)
+        if (i.id != item.id) i
+    ]);
+    notifyListeners();
+    final result = await _read(() => _dismiss(item.id));
+    if (session != _session) return false;
+    switch (result) {
+      case ApiSuccess():
+        return true;
+      case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
+        return true;
+      case ApiFailure():
+        if (!_attention.any((i) => i.id == item.id)) {
+          _attentionRevision++;
+          _setAttention([..._attention]..insert(index.clamp(0, _attention.length), removed));
+          // An ambiguous earlier retry keeps its claim, so the next Try Again cannot start a second run.
+          if (retryKey != null) _retryKeys[item.id] = retryKey;
+        }
+        retryErrors.add(item.id);
+        notifyListeners();
+        return false;
+    }
   }
 
   void _replace(String id, AttentionItem Function(AttentionItem) change) {

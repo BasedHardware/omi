@@ -32,6 +32,7 @@ PendingWorkStore _store(
   ApiResult<AttentionItemsPage>? attention,
   ApiResult<AttentionRetryResult> Function(String id)? retry,
   ApiResult<List<AttentionRetryResult>> Function()? retryAll,
+  Future<ApiResult<void>> Function(String id)? dismiss,
 }) {
   var keys = 0;
   return PendingWorkStore(
@@ -56,6 +57,7 @@ PendingWorkStore _store(
       calls.seen.add(ids);
       return const ApiSuccess(null);
     },
+    dismiss: dismiss ?? (_) async => const ApiSuccess(null),
     newKey: () => 'key-${keys++}',
   );
 }
@@ -321,5 +323,66 @@ void main() {
     final pending = PendingWorkSnapshot.fromJson({'enabled': false});
     expect(pending.enabled, isFalse);
     expect(pending.items, isEmpty);
+  });
+
+  group('dismiss', () {
+    ApiResult<AttentionItemsPage> page(List<AttentionItem> items) =>
+        ApiSuccess(AttentionItemsPage(enabled: true, items: items, unseenCount: 0));
+
+    test('removes the row before the server answers and keeps it gone', () async {
+      final answer = Completer<ApiResult<void>>();
+      final dismissed = <String>[];
+      final store = _store(_Calls(), attention: page([_item('x'), _item('y')]), dismiss: (id) {
+        dismissed.add(id);
+        return answer.future;
+      });
+      await store.refresh();
+      final pending = store.dismiss(store.attention.first);
+      expect(store.attention.map((i) => i.id), ['y']);
+      expect(dismissed, ['x']);
+      answer.complete(const ApiSuccess(null));
+      expect(await pending, isTrue);
+      expect(store.attention.map((i) => i.id), ['y']);
+    });
+
+    test('a failed request puts the row back in place with the quiet error line', () async {
+      final store = _store(_Calls(),
+          attention: page([_item('x'), _item('y'), _item('z')]),
+          dismiss: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)));
+      await store.refresh();
+      expect(await store.dismiss(store.attention[1]), isFalse);
+      expect(store.attention.map((i) => i.id), ['x', 'y', 'z']);
+      expect(store.retryErrors, {'y'});
+    });
+
+    test('a 404 means the row is already gone', () async {
+      final store = _store(_Calls(),
+          attention: page([_item('x')]), dismiss: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
+      await store.refresh();
+      expect(await store.dismiss(store.attention.single), isTrue);
+      expect(store.attention, isEmpty);
+    });
+
+    test('a read that started before the dismiss cannot bring the row back', () async {
+      final read = Completer<ApiResult<AttentionItemsPage>>();
+      var first = true;
+      final store = PendingWorkStore(
+        loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+        loadAttention: () {
+          if (first) {
+            first = false;
+            return Future.value(page([_item('x')]));
+          }
+          return read.future;
+        },
+        dismiss: (_) async => const ApiSuccess(null),
+      );
+      await store.refresh();
+      final refreshing = store.refresh();
+      await store.dismiss(store.attention.single);
+      read.complete(page([_item('x')]));
+      await refreshing;
+      expect(store.attention, isEmpty);
+    });
   });
 }
