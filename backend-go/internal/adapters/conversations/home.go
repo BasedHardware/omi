@@ -15,6 +15,22 @@ type homeWrite struct {
 	fields map[string]any
 }
 
+func updateWithHome(tx *docstore.Tx, ref Ref, path docstore.Ref, fields map[string]any) error {
+	home, err := stageHome(tx, ref, fields)
+	if err != nil {
+		return err
+	}
+	if err := tx.Update(path, fields); err != nil {
+		return err
+	}
+	for _, update := range home {
+		if err := update.apply(tx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // stageHome mirrors the Python commit hook for these conversation field updates.
 // All reads precede all writes. The caller commits these receipts with the source update.
 func stageHome(tx *docstore.Tx, ref Ref, fields map[string]any) ([]homeWrite, error) {

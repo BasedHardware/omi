@@ -2,9 +2,12 @@ package conversations
 
 import "strings"
 
-func finalizationFields(row map[string]any, patch Finalization) (map[string]any, error) {
-	if err := checkStatus(row, patch); err != nil {
-		return nil, err
+func finalizationFields(row map[string]any, patch Finalization) (map[string]any, bool) {
+	refused := refusesLifecycle(row, patch)
+	if refused {
+		patch.Status = nil
+		patch.FinalizationStatus = nil
+		patch.Discarded = nil
 	}
 	fields := make(map[string]any)
 	if patch.Status != nil {
@@ -14,7 +17,7 @@ func finalizationFields(row map[string]any, patch Finalization) (map[string]any,
 		fields["finalization_status"] = string(*patch.FinalizationStatus)
 	}
 	if patch.Discarded != nil {
-		fields["discarded"] = *patch.Discarded && !field[bool](row, "sync_relevance_user_kept")
+		fields["discarded"] = effectiveDiscard(row, *patch.Discarded)
 	}
 	if patch.FinishedAt != nil {
 		fields["finished_at"] = patch.FinishedAt.UTC()
@@ -32,7 +35,7 @@ func finalizationFields(row map[string]any, patch Finalization) (map[string]any,
 	if patch.Overview != nil {
 		fields["structured.overview"] = effectiveOverview(row, *patch.Overview)
 	}
-	return fields, nil
+	return fields, refused
 }
 
 func effectiveTitle(row map[string]any, generated string) string {
@@ -49,14 +52,15 @@ func effectiveOverview(row map[string]any, generated string) string {
 	return generated
 }
 
-func checkStatus(row map[string]any, patch Finalization) error {
+func effectiveDiscard(row map[string]any, discarded bool) bool {
+	return discarded && !field[bool](row, "sync_relevance_user_kept")
+}
+
+func validateStatus(patch Finalization) error {
 	if patch.Status != nil {
 		switch *patch.Status {
 		case InProgress, Processing, Merging, Completed, Failed:
 		default:
-			return ErrStatus
-		}
-		if Status(field[string](row, "status")) == Completed && *patch.Status != Completed {
 			return ErrStatus
 		}
 	}
@@ -66,16 +70,21 @@ func checkStatus(row map[string]any, patch Finalization) error {
 		default:
 			return ErrStatus
 		}
-		if FinalizationStatus(field[string](row, "finalization_status")) == Finalized && *patch.FinalizationStatus != Finalized {
-			return ErrStatus
-		}
-	}
-	completing := patch.Status != nil && *patch.Status == Completed ||
-		patch.FinalizationStatus != nil && *patch.FinalizationStatus == Finalized
-	if completing && terminalFailure(row) {
-		return ErrStatus
 	}
 	return nil
+}
+
+func refusesLifecycle(row map[string]any, patch Finalization) bool {
+	status := Status(field[string](row, "status"))
+	finalization := FinalizationStatus(field[string](row, "finalization_status"))
+	statusChanged := patch.Status != nil && *patch.Status != status
+	finalizationChanged := patch.FinalizationStatus != nil && *patch.FinalizationStatus != finalization
+	discardChanged := patch.Discarded != nil && effectiveDiscard(row, *patch.Discarded) != field[bool](row, "discarded")
+
+	if terminalFailure(row) {
+		return statusChanged || finalizationChanged || discardChanged
+	}
+	return (status == Completed && statusChanged) || (finalization == Finalized && finalizationChanged)
 }
 
 func terminalFailure(row map[string]any) bool {

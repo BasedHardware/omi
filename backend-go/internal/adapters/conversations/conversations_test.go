@@ -258,6 +258,7 @@ func TestApplyFinalizationRefusesStaleMissingAndProtectedRows(t *testing.T) {
 		{"soft delete", "deleted", true, docstore.ErrMissing, queue.Fail(conversations.CauseMissing)},
 		{"physical delete", "", nil, docstore.ErrMissing, queue.Fail(conversations.CauseMissing)},
 		{"lock", "is_locked", true, conversations.ErrRestricted, queue.Fail(conversations.CauseRestricted)},
+		{"private", "data_protection_level", "private", conversations.ErrRestricted, queue.Fail(conversations.CauseRestricted)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -368,6 +369,8 @@ func TestLoadDoesNotReturnStorageIdentitySidecars(t *testing.T) {
 		"transcript_segments": []any{map[string]any{
 			"text": "spoken", "id": "s1", "recurring_voice_id": "unverified",
 			"speaker_grouping_internal": "sealed", "provider_speaker": map[string]any{"id": 1},
+			"speaker_grouping_shadow":            map[string]any{"candidate": "unverified"},
+			"speaker_grouping_shadow_expires_at": 1234567890,
 		}},
 	})
 	got, err := s.Load(t.Context(), g, ref)
@@ -377,29 +380,77 @@ func TestLoadDoesNotReturnStorageIdentitySidecars(t *testing.T) {
 	assertJSON(t, got.Transcript, []map[string]any{{"id": "s1", "text": "spoken"}})
 }
 
-func TestApplyFinalizationRefusesTerminalRegressions(t *testing.T) {
+func TestLoadRefusesPrivateRows(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		status, family string
-		next           conversations.Status
-	}{
-		{"completed", "", conversations.Processing},
-		{"failed", "", conversations.Completed},
-		{"completed", "oversized", conversations.Completed},
-	}
-	for _, tc := range cases {
-		t.Run(tc.status+"/"+tc.family, func(t *testing.T) {
+	b, s, g := open(t)
+	ref := seed(t, b, "private", map[string]any{
+		"data_protection_level": "private", "transcript_segments": "protected",
+	})
+	_, err := s.Load(t.Context(), g, ref)
+	assertOutcome(t, err, conversations.ErrRestricted, queue.Fail(conversations.CauseRestricted))
+}
+
+func TestApplyFinalizationRefusesDeadLetterReopen(t *testing.T) {
+	t.Parallel()
+	for _, next := range []conversations.FinalizationStatus{conversations.Queued, conversations.Leased, conversations.BlockedBYOK} {
+		t.Run(string(next), func(t *testing.T) {
 			t.Parallel()
 			b, s, g := open(t)
-			row := map[string]any{"status": tc.status, "terminal_family": tc.family}
+			row := map[string]any{
+				"status": "completed", "finalization_status": "dead_letter", "discarded": true,
+			}
 			ref := seed(t, b, "terminal", row)
 			before, err := s.Load(t.Context(), g, ref)
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = s.ApplyFinalization(t.Context(), g, before.Revision, conversations.Finalization{Status: &tc.next, Title: new("Stale")})
-			assertOutcome(t, err, conversations.ErrStatus, queue.Fail(conversations.CauseRejected))
+			err = s.ApplyFinalization(t.Context(), g, before.Revision, conversations.Finalization{FinalizationStatus: &next})
+			assertOutcome(t, err, conversations.ErrLifecycleRefused, queue.Fail(conversations.CauseRejected))
 			assertJSON(t, read(t, b, ref), row)
+			if b.Exists(t, "users/"+owner+"/episode_links/"+ref.ID) {
+				t.Fatal("lifecycle-only refusal dirtied Home")
+			}
+		})
+	}
+}
+
+func TestApplyFinalizationCommitsContentWhileRefusingLifecycle(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name, status, family, finalization string
+		next                               conversations.Status
+	}{
+		{"completed regression", "completed", "", "completed", conversations.Processing},
+		{"legacy failed", "failed", "", "leased", conversations.Completed},
+		{"terminal family", "completed", "oversized", "leased", conversations.Completed},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			b, s, g := open(t)
+			row := map[string]any{
+				"status": tc.status, "terminal_family": tc.family, "finalization_status": tc.finalization, "discarded": true,
+				"structured": map[string]any{"title": "Previous", "emoji": "💬"},
+			}
+			ref := seed(t, b, "terminal", row)
+			before, err := s.Load(t.Context(), g, ref)
+			if err != nil {
+				t.Fatal(err)
+			}
+			finished := time.Date(2026, time.January, 2, 3, 5, 6, 0, time.UTC)
+			err = s.ApplyFinalization(t.Context(), g, before.Revision, conversations.Finalization{
+				Status: &tc.next, FinalizationStatus: new(conversations.Finalized), Discarded: new(false),
+				Title: new("Refreshed"), Overview: new("Refreshed overview"), FinishedAt: &finished, SummaryCoversThrough: &finished,
+			})
+			assertOutcome(t, err, conversations.ErrLifecycleRefused, queue.Fail(conversations.CauseRejected))
+			got := read(t, b, ref)
+			assertNewVersion(t, got["home_source_version"], "")
+			delete(got, "home_source_version")
+			row["structured"] = map[string]any{"title": "Refreshed", "overview": "Refreshed overview", "emoji": "💬"}
+			row["finished_at"] = finished
+			row["summary_covers_through"] = finished
+			assertJSON(t, got, row)
+			assertJSON(t, readPath(t, b, "users/"+owner+"/episode_links/"+ref.ID), map[string]any{"home_dirty": true})
 		})
 	}
 }

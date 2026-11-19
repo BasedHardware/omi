@@ -113,12 +113,15 @@ func (s Store) Load(ctx context.Context, g queue.Guarded, ref Ref) (Conversation
 
 // ApplyFinalization updates the existing conversation if its stored contents still match
 // the revision read before processing. A changed revision requires a fresh load and decision.
+// ErrLifecycleRefused reports that a terminal transition was refused, after any content
+// fields and their Home receipts have committed.
 func (s Store) ApplyFinalization(ctx context.Context, g queue.Guarded, revision Revision, patch Finalization) error {
 	ref := revision.ref
 	path, err := docstore.Doc("users", ref.Owner, "conversations", ref.ID)
 	if err != nil {
 		return classify(err)
 	}
+	var refused bool
 	err = s.Docs.Fenced(ctx, g, ref.Owner, func(tx *docstore.Tx) error {
 		row, getErr := get(tx, path)
 		if getErr != nil {
@@ -131,24 +134,19 @@ func (s Store) ApplyFinalization(ctx context.Context, g queue.Guarded, revision 
 		if current != revision {
 			return ErrChanged
 		}
-		fields, patchErr := finalizationFields(row, patch)
-		if patchErr != nil || len(fields) == 0 {
-			return patchErr
+		if statusErr := validateStatus(patch); statusErr != nil {
+			return statusErr
 		}
-		home, homeErr := stageHome(tx, ref, fields)
-		if homeErr != nil {
-			return homeErr
+		fields, lifecycleRefused := finalizationFields(row, patch)
+		refused = lifecycleRefused
+		if len(fields) == 0 {
+			return nil
 		}
-		if updateErr := tx.Update(path, fields); updateErr != nil {
-			return updateErr
-		}
-		for _, update := range home {
-			if writeErr := update.apply(tx); writeErr != nil {
-				return writeErr
-			}
-		}
-		return nil
+		return updateWithHome(tx, ref, path, fields)
 	})
+	if err == nil && refused {
+		err = ErrLifecycleRefused
+	}
 	return classify(err)
 }
 
@@ -182,7 +180,9 @@ var (
 	ErrPointer     = errors.New("conversations: object-lake transcript requires a reader")
 	ErrRestricted  = errors.New("conversations: protected row does not permit finalization")
 	ErrUndecodable = errors.New("conversations: unsupported document encoding")
-	ErrStatus      = errors.New("conversations: invalid lifecycle update")
+	// ErrLifecycleRefused reports a refused lifecycle transition after any content commit.
+	ErrLifecycleRefused = errors.New("conversations: terminal lifecycle transition refused")
+	ErrStatus           = errors.New("conversations: invalid lifecycle update")
 )
 
 // Causes returned by the adapter. Consumers register Causes with their kind.

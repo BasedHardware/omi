@@ -16,8 +16,16 @@ The transaction rechecks those values and the account deletion marker before the
 | User title, user overview and explicit keep decisions take precedence over generated output | `TestApplyFinalizationPreservesOwnerOverrides` |
 | Legacy rows can acquire structured fields. The v3 summary title lock preserves the stored title | `TestApplyFinalizationAddsStructuredFieldsToLegacyRows` |
 | A stale input, lock or deletion fences a late result. A writer cannot recreate a missing document | `TestApplyFinalizationRefusesStaleMissingAndProtectedRows` |
-| Completed rows cannot be reopened by stale processing. Terminal failure cannot become success through this port | `TestApplyFinalizationRefusesTerminalRegressions` |
+| Private rows fail with `ErrRestricted` and `queue.Fail(CauseRestricted)` on load and update | `TestLoadRefusesPrivateRows`, `TestApplyFinalizationRefusesStaleMissingAndProtectedRows` |
+| Reopening a dead-letter row requires an explicit restore path. This port refuses queued, leased and BYOK transitions | `TestApplyFinalizationRefusesDeadLetterReopen` |
+| If terminal lifecycle fields are refused, content fields and their Home receipts still commit | `TestApplyFinalizationCommitsContentWhileRefusingLifecycle` |
 | Only the guarded owner can read and update. An active deletion marker holds that owner | `TestDeletionMarkerAndGuardFenceReadsAndWrites` |
+
+For a refused terminal transition, `ApplyFinalization` preserves `status`,
+`finalization_status` and `discarded`, then returns `ErrLifecycleRefused` with
+`queue.Fail(CauseRejected)` after the transaction succeeds. A lifecycle-only
+refusal leaves the document and Home receipts untouched. Invalid status values
+return `ErrStatus` without writing.
 
 The wire fixture comes from the Python transcript encryption/compression helpers,
 the processing-result field mask and Firestore emulator snapshots. Regenerate it
