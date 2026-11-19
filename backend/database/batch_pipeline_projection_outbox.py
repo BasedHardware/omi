@@ -21,7 +21,14 @@ KIND = 'project_conversation_v1'
 PATCH_FIELDS = frozenset({DUE_FIELD, TOKEN_FIELD, REASON_FIELD})
 RUNNABLE = frozenset({'pending', 'persisted', 'ready'})
 CLAIM_SECONDS = 180.0
-RETRY_DELAYS = {'predecessor': 10.0, 'claim_busy': 10.0, 'incomplete': 60.0, 'blocked': 60.0, 'retry': 60.0}
+RETRY_DELAYS = {
+    'predecessor': 10.0,
+    'claim_busy': 10.0,
+    'contention': 10.0,
+    'incomplete': 60.0,
+    'blocked': 60.0,
+    'retry': 60.0,
+}
 
 
 @dataclass(frozen=True)
