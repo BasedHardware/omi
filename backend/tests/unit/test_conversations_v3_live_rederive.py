@@ -212,6 +212,8 @@ async def test_fragmented_lunch_folds_into_one_card_that_keeps_the_earliest_id(o
         retired = after[cid]
         assert retired['deleted'] is True and retired['discarded'] is True
         assert retired['sync_merged_into'] == 'c0' and retired['v3_derived'] is False
+    # The survivor lists its bridges, so deleting it purges them (the sync merge contract).
+    assert card['sync_merged_from'] == ['c1', 'c2', 'c3', 'c4', 'c5']
     # Every source names exactly the surviving card; no claim points at a retired row.
     held = claims_by_row({rid: after[rid] for rid in (s['id'] for s in sources)})
     assert set(held) == {'c0'} and sorted(r for r, _a, _b in held['c0']) == [s['id'] for s in sources]
@@ -440,6 +442,8 @@ async def test_undo_restores_every_row_and_claim_exactly(owner, strict, ledger):
     assert len(ledger.erased) == 1 and ledger.erased[0] not in before
     assert conversations(strict) == before
     assert ledger.run['status'] == 'undone'
+    # Restored exactly, the run keeps no copies of the owner's rows.
+    assert not priors(strict)
     # Rerunning an undo changes nothing.
     assert backfill.undo_run(UID, RUN)['outcome'] == 'undone' and conversations(strict) == before
 
@@ -549,7 +553,19 @@ async def test_undo_of_a_later_run_over_an_earlier_runs_rows_can_be_rerun(owner,
     )
     assert outcome == 'committed' and priors(strict, later)
     assert conversations(strict)['c0']['v3_rederive_live_run'] == later
-    assert backfill.undo_run(UID, later)['outcome'] == 'undone' and conversations(strict) == after_first
+    # The first attempt restores every group, then stops before finishing.
+    drop = runs.drop_priors
+
+    def interrupted(*args, **kwargs):
+        raise RuntimeError('interrupted')
+
+    runs.drop_priors = interrupted
+    try:
+        with pytest.raises(RuntimeError):
+            backfill.undo_run(UID, later)
+    finally:
+        runs.drop_priors = drop
+    assert conversations(strict) == after_first and priors(strict, later)
     # Rows the first attempt restored carry the earlier run's stamp; a rerun is not a newer run.
     assert backfill.undo_run(UID, later)['outcome'] == 'undone' and conversations(strict) == after_first
     expected = deepcopy(before)
@@ -561,6 +577,59 @@ async def test_undo_of_a_later_run_over_an_earlier_runs_rows_can_be_rerun(owner,
     for row in expected.values():
         row.pop('v3_backfill_process_pending', None)
     assert restored == expected
+
+
+@pytest.mark.asyncio
+async def test_undo_refuses_once_the_owner_account_deletion_began(owner, strict, ledger):
+    from database.account_deletion_marker import account_deletion_document
+
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    await rederive()
+    after = conversations(strict)
+    strict.rows[account_deletion_document(UID, firestore_client=strict).path] = {'status': 'pending'}
+    assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': 'account_deletion'}
+    assert conversations(strict) == after
+
+
+@pytest.mark.asyncio
+async def test_undo_refuses_a_group_too_large_for_one_transaction_before_restoring_any(
+    owner, strict, ledger, monkeypatch
+):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    await rederive()
+    after = conversations(strict)
+    monkeypatch.setattr(rederive_store, 'UNDO_GROUP_BYTES', 1)
+    assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': 'undo_group_too_large'}
+    assert conversations(strict) == after
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_rebuilt_conversation_purges_its_undo_copies(owner, strict, monkeypatch):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    await rederive()
+    ledger_runs = [{'run_id': RUN, 'mode': backfill.LIVE_MODE}, {'run_id': 'legacy', 'mode': 'derive'}]
+    monkeypatch.setattr(runs, 'list_runs', lambda uid, **kw: ledger_runs)
+    assert {e['id'] for e in priors(strict)} == {'c0', 'c1', 'c2'}
+    survivor = conversations(strict)['c0']
+    runs.purge_conversation_priors(UID, ['c0', *survivor['sync_merged_from']], firestore_client=strict)
+    assert not priors(strict)
+
+
+def test_priors_are_never_written_for_a_conversation_the_owner_deleted(strict):
+    strict.rows[('users', UID, 'deleted_conversations', 'c0')] = {'conversation_id': 'c0'}
+    with pytest.raises(store.Conflict, match='target_deleted'):
+        runs.save_priors(UID, RUN, [{'id': 'c0', 'raw': {'id': 'c0'}, 'claims': []}], firestore_client=strict)
+    assert not priors(strict)
+
+
+def test_the_dry_run_reports_live_speech_no_window_claimed(owner, strict):
+    sources, rows = lunch()
+    owner(*sources, *rows, source('r9', AT + timedelta(minutes=30), words=400))
+    est = backfill.estimate_live_partition(UID, {'since': SINCE, 'until': UNTIL}, 'dry-run', now=UNTIL)
+    assert est['sources_unclaimed'] == 1
 
 
 def test_priors_are_never_written_once_the_owner_account_deletion_began(strict, monkeypatch):

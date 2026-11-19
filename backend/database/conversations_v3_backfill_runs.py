@@ -20,6 +20,8 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from utils.conversations.v3 import Conflict
 
 COLLECTION = 'conversations_v3_backfill_runs'
+# The run mode whose ledger keeps undo priors (utils.conversations.v3.backfill.LIVE_MODE).
+LIVE_MODE = 'rederive-live'
 # Terminal run states; the task route refuses work for a run in one of these or undoing.
 FINISHED = frozenset({'committed', 'blocked', 'undone'})
 STOPPED = FINISHED | {'undoing'}
@@ -151,6 +153,11 @@ def save_priors(uid, run_id, entries, *, firestore_client=None):
             marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
         ):
             raise Conflict('account_deletion')
+        # A conversation the owner deleted since the load is never copied (the commit refuses it too).
+        user = client.collection('users').document(uid)
+        for entry in batch:
+            if user.collection('deleted_conversations').document(entry['id']).get(transaction=tx).exists:
+                raise Conflict('target_deleted')
         for entry in batch:
             tx.set(coll.document(entry['id']), {**entry, 'recorded_at': datetime.now(timezone.utc)})
 
@@ -160,6 +167,33 @@ def save_priors(uid, run_id, entries, *, firestore_client=None):
 
 
 PRIORS_READ_PAGE = 200
+
+
+def drop_priors(uid, run_id, conversation_ids, *, firestore_client=None):
+    """Delete these conversations' priors from one run (blind deletes, a page per transaction)."""
+    client = firestore_client or get_firestore_client()
+    coll = _priors(client, uid, run_id)
+    ids = sorted(set(conversation_ids))
+
+    @firestore.transactional
+    def drop(tx, page):
+        for cid in page:
+            tx.delete(coll.document(cid))
+
+    for start in range(0, len(ids), PRIORS_PAGE_DOCS):
+        drop(client.transaction(), ids[start : start + PRIORS_PAGE_DOCS])
+    return len(ids)
+
+
+def purge_conversation_priors(uid, conversation_ids, *, firestore_client=None):
+    """A deleted conversation's undo copies go with it, from every live re-derive run of its owner."""
+    client = firestore_client or get_firestore_client()
+    runs = [
+        r['run_id'] for r in list_runs(uid, firestore_client=client) if r.get('mode') == LIVE_MODE and r.get('run_id')
+    ]
+    for run_id in runs:
+        drop_priors(uid, run_id, conversation_ids, firestore_client=client)
+    return len(runs)
 
 
 def list_priors(uid, run_id, *, firestore_client=None):

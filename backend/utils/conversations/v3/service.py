@@ -825,7 +825,6 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
     before_speech = set().union(*(_spoken(prior['_v3_original']) for prior in eligible.values()))
     if before_speech - kept_speech:
         raise Conflict('rederive_live_coverage')
-    write = [row for row in planned if row['id'] not in unchanged]
     planned_ids = {row['id'] for row in planned}
     retire, kept = {}, 0
     for cid, prior in eligible.items():
@@ -837,6 +836,17 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
             kept += 1
             continue
         retire[cid] = _retire_patch(survivor, run_id)
+    # The survivor lists its bridges (sync_merged_from), as a sync merge does: deleting it purges them.
+    merged_from = {}
+    for cid, patch in retire.items():
+        donors = merged_from.setdefault(patch['sync_merged_into'], set())
+        donors.add(cid)
+        donors.update(eligible[cid]['_v3_raw'].get('sync_merged_from') or [])
+    for row in planned:
+        if row['id'] in merged_from:
+            had = (eligible.get(row['id']) or {}).get('_v3_raw', {}).get('sync_merged_from') or []
+            row['sync_merged_from'] = sorted({*had, *merged_from[row['id']]})
+    write = [row for row in planned if row['id'] not in unchanged or row['id'] in merged_from]
     touched = {row['id'] for row in write} | set(retire)
     sources = {rid for row in write for rid in row.get('v3_recording_ids') or []} & recordings.keys()
     sources |= {

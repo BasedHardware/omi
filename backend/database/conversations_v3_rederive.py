@@ -17,6 +17,8 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
+from database.account_deletion_marker import account_deletion_document
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from utils.conversations.v3 import Conflict, policy
 
@@ -346,6 +348,18 @@ def record_baselines(uid, run_id, *, firestore_client=None):
     return recorded
 
 
+# Firestore caps a transaction at 500 writes and about 10 MiB; an undo group restores in one.
+UNDO_GROUP_BYTES = 8_000_000
+
+
+def undo_group_fits(entries):
+    """One undo group's restore (rows, their sources and the lease read) fits one transaction."""
+    sources = {c['recording_id'] for e in entries for c in e.get('claims') or []}
+    sources.update(rid for e in entries for rid in e.get('sources') or [])
+    size = sum(stored_bytes(e.get('raw') or {}) for e in entries)
+    return len(entries) + len(sources) < store.BATCH_MAX_WRITES and size <= UNDO_GROUP_BYTES
+
+
 def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
     """Checked before any group restores, so a refusal leaves the run whole (each group re-checks)."""
     client = firestore_client or store.get_firestore_client()
@@ -387,6 +401,11 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
     @firestore.transactional
     def undo(tx):
         lease = held.get(transaction=tx).to_dict() or {}
+        deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
+        if account_deletion_marker_blocks_access(
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+        ):
+            raise Conflict('account_deletion')
         docs = {cid: coll.document(cid).get(transaction=tx) for cid in ids}
         tombstones = {cid: deleted.document(cid).get(transaction=tx) for cid in ids}
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):

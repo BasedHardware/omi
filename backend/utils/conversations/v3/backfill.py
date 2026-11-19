@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 PARTITION_ROWS = 48
 # A live re-derive partition reads sources and rows together (conversations_v3_rederive.REDERIVE_LIVE_LIMIT is 256) and
 # rewrites only claims on its sources, so it plans larger partitions: fewer forced cuts in a busy day.
-LIVE_MODE = 'rederive-live'
+LIVE_MODE = runs.LIVE_MODE
 LIVE_PARTITION_ROWS = 192
 # A step (outline pass plus notes) stops taking new notes work this long after it started; the
 # route timeout and the Cloud Tasks dispatch deadline are both 25 minutes.
@@ -591,7 +591,7 @@ def estimate_live_partition(uid, partition, run_id, *, now=None):
         'usd': 0.0,
     }
     for key, value in counts.items():
-        if key.startswith(('protected_', 'sources_blocked_', 'skipped_')):
+        if key.startswith(('protected_', 'sources_', 'skipped_')):
             est[key] = value
     for group in groups:
         words = sum(len(line['text'].split()) for line in group['lines'])
@@ -676,11 +676,15 @@ def undo_live_run(uid, run_id, *, firestore_client=None):
         if any(leases.held(uid, 'summary-' + e['id'], firestore_client=firestore_client) for e in priors):
             return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client)
         blocker = rederive_store.live_undo_blocker(uid, run_id, priors, firestore_client=firestore_client)
+        groups = _undo_groups(priors)
+        if not blocker and not all(rederive_store.undo_group_fits(group) for group in groups):
+            # Each group restores in one transaction; one too large would fail midway on every retry.
+            blocker = 'undo_group_too_large'
         if blocker:
             return _undo_refused(uid, run_id, blocker, firestore_client)
         totals = {'rows_restored': 0, 'rows_removed': 0, 'sources_repaired': 0}
         try:
-            for group in _undo_groups(priors):
+            for group in groups:
                 result = rederive_store.undo_live_rederive(uid, token, run_id, group, firestore_client=firestore_client)
                 totals['rows_restored'] += result['rows_restored']
                 totals['sources_repaired'] += result['sources_repaired']
@@ -691,9 +695,17 @@ def undo_live_run(uid, run_id, *, firestore_client=None):
                 for key, held_token in held:
                     leases.renew(uid, key, held_token, firestore_client=firestore_client)
         except store.Conflict as error:
-            if str(error) not in {'undo_newer_run_first', 'owner_deleted_rebuilt_row', 'owner_edited_rebuilt_row'}:
+            refusals = {
+                'undo_newer_run_first',
+                'owner_deleted_rebuilt_row',
+                'owner_edited_rebuilt_row',
+                'account_deletion',
+            }
+            if str(error) not in refusals:
                 raise
             return _undo_refused(uid, run_id, str(error), firestore_client)
+        # Restored exactly: the copies of the owner's rows are no longer needed, so none are kept.
+        runs.drop_priors(uid, run_id, [e['id'] for e in priors], firestore_client=firestore_client)
     finally:
         for key, held_token in held:
             leases.release(uid, key, held_token, firestore_client=firestore_client)

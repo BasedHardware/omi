@@ -345,7 +345,8 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     its row (speech, bounds, claims and Home decision) is not written and its notes do not re-run.
     Every other row it absorbs is retired as a sync bridge (`deleted`, `discarded`,
     `sync_merged_into` the survivor, `v3_derived=false`): reads by id follow it, and no v3 read
-    treats it as a deletion. Its claims leave the sources in the same commit. No audio purge is
+    treats it as a deletion. The survivor lists its bridges in `sync_merged_from`, so deleting it
+    purges them, as with a sync merge. Its claims leave the sources in the same commit. No audio purge is
     armed or cancelled.
   - Dry-run: reads only and calls no model. Before counts are exact; `windows_after` and
     `visible_after` replan with one outline chapter per stretch, so the outline can only add windows
@@ -361,7 +362,9 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     (rows this run already wrote are replanned, their first prior kept), and `undo` is exact from
     either state.
   - Undo: before each commit, the run writes every changed, created or retired row's stored document
-    and claim positions to `conversations_v3_backfill_runs/{run_id}/conversations_v3_rederive_priors` (purged with the account).
+    and claim positions to `conversations_v3_backfill_runs/{run_id}/conversations_v3_rederive_priors` (purged with the account,
+    with a conversation the owner deletes, and after a finished undo; never written for a conversation
+    already deleted or once account deletion began).
     `undo --run` takes both builder leases, waits for in-flight notes, then restores each group of
     rows that share a source in one transaction: stored documents back exactly, created rows removed,
     each source's claim list back in its original order. It refuses (`undo.reason`) after the owner
@@ -370,7 +373,9 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     against the owner-surface digest each settled partition records), or while a newer live run
     restamped one (`undo_newer_run_first`: undo that one first). An interrupted undo is rerun as is:
     rows it already restored, and created rows it already hid (`v3_rederive_live_undone`), are
-    finished rather than refused. A later live speech append to a rebuilt row is
+    finished rather than refused. It also refuses once account deletion began (`account_deletion`),
+    and before restoring anything when a group of rows sharing sources is too large for one
+    transaction (`undo_group_too_large`). A later live speech append to a rebuilt row is
     replaced by the restored document. Not undone: outline cache entries and gateway spend.
 
 Rollout owner: lead2. Step 0: set CONVERSATIONS_V3_FIRST_APP_BUILD through the shared runtime source

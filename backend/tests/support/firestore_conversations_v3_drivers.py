@@ -105,6 +105,10 @@ def entries():
         DriverEntry(
             'database.conversations_v3_backfill_runs.list_priors', base={'uid': SHAPE_UID, 'run_id': 'shape-run'}
         ),
+        DriverEntry(
+            'database.conversations_v3_backfill_runs.purge_conversation_priors',
+            base={'uid': SHAPE_UID, 'conversation_ids': ['shape-conversation']},
+        ),
         DriverEntry('database.conversations_v3_backfill_runs.pending_starts', base={'limit': 20}),
         DriverEntry('database.conversations_v3_processing.pending_created', base={'uid': SHAPE_UID}),
         DriverEntry(
