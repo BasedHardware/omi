@@ -412,7 +412,8 @@ async def reconcile(
                 row.pop('v3_unlocked', None)
                 if deferred_lock:
                     row['v3_unlocked'] = True
-                    row['_v3_preview_due_at'] = max(row['finished_at'] + lock_delay, now + RACE_RETRY)
+                    lock_end = window.get('_lock_end', row['finished_at'])
+                    row['_v3_preview_due_at'] = max(lock_end + lock_delay, now + RACE_RETRY)
                 published_ids = window.get('_published_ids', ())
                 if not prior and (row['id'] in excluded | taken or row['id'] in published_ids):
                     first = window['lines'][0]['conversation_id']

@@ -1026,6 +1026,7 @@ async def test_multiple_previews_defer_topic_lock_and_owe_no_notes(builder, monk
     assert first['status'] == 'processing' and second['status'] == 'in_progress'
     assert all(row['v3_unlocked'] and not row.get('v3_process_pending') for row in (first, second))
     assert all(not row['title_locked'] for row in (first, second))
+    assert first['_v3_preview_due_at'] == second['_v3_preview_due_at'] == start + timedelta(seconds=3630)
     assert len(messages) == 1
 
     inputs[1] = {row['id']: row for row in (first, second)}
@@ -1188,6 +1189,31 @@ def test_indexed_preview_with_unreadable_transcript_keeps_its_custody(monkeypatc
 
     def decode(*args):
         raise store.TranscriptBlobAbsent('synthetic unavailable blob')
+
+    monkeypatch.setattr(store, 'decode_row', decode)
+    with pytest.raises(store.Conflict, match='recording_decode_unavailable'):
+        store.load('synthetic', firestore_client=MemoryQuery(rows))
+
+
+def test_indexed_preview_with_unreadable_source_keeps_its_wake(monkeypatch):
+    prefix = '/users/synthetic/'
+    rows = {
+        prefix + 'conversation_v3_leases/builder': {'unlocked_ids': ['preview']},
+        prefix
+        + 'conversations/preview': {
+            'id': 'preview',
+            'v3_unlocked': True,
+            'status': 'processing',
+            'v3_recording_ids': ['r'],
+        },
+        prefix + 'conversations/r': source(v3_pending=True, v3_pending_since=AT),
+    }
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
+
+    def decode(uid, snapshot):
+        if snapshot.id == 'r':
+            raise store.TranscriptBlobAbsent('synthetic unavailable source')
+        return snapshot.to_dict() if snapshot.exists else None
 
     monkeypatch.setattr(store, 'decode_row', decode)
     with pytest.raises(store.Conflict, match='recording_decode_unavailable'):

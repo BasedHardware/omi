@@ -172,6 +172,7 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                 }
                 if defer_topic_lock and not group.get('locked', group['finished']) and part_index == len(capped) - 1:
                     candidate['_defer_lock'] = True
+                    candidate['_lock_end'] = group['end']
                 if cohesion:
                     candidate['_stretch_words'] = group['_stretch_words']
                     candidate['_stretch_partition'] = first_result
@@ -196,6 +197,8 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                     prior['manual_end'] = candidate['manual_end']
                     if defer_topic_lock:
                         prior['_defer_lock'] = candidate.get('_defer_lock', False)
+                        if candidate.get('_defer_lock'):
+                            prior['_lock_end'] = candidate['_lock_end']
                 else:
                     result.append(candidate)
     return result

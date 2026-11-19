@@ -165,8 +165,17 @@ def wanted(groups, cache):
     ]
 
 
-def _anchor(line):
-    return f"{line['conversation_id']}:{line['start'].isoformat()}"
+def _line_anchors(lines):
+    counts = {}
+    for line in lines:
+        segment_id = line.get('segment', {}).get('id')
+        if isinstance(segment_id, (str, int)) and segment_id != '':
+            key = (line['conversation_id'], 'segment', segment_id)
+        else:
+            key = (line['conversation_id'], 'start', line['start'].isoformat())
+        occurrence = counts.get(key, 0)
+        counts[key] = occurrence + 1
+        yield json.dumps([*key, occurrence], separators=(',', ':'))
 
 
 def _section_line(section):
@@ -176,7 +185,7 @@ def _section_line(section):
 
 def preview_anchors(group, entries):
     """Keep stable coordinates for each selected topic or section, without storing more speech."""
-    lines = group['lines']
+    anchors = list(_line_anchors(group['lines']))
     indexes = {entry['first_line'] for entry in entries}
     indexes.update(
         index
@@ -184,12 +193,12 @@ def preview_anchors(group, entries):
         for section in entry.get('sections') or ()
         if (index := _section_line(section)) is not None
     )
-    return {str(index): _anchor(lines[index - 1]) for index in indexes if 1 <= index <= len(lines)}
+    return {str(index): anchors[index - 1] for index in indexes if 1 <= index <= len(anchors)}
 
 
 def reuse_preview(group, preview):
     """Rebase the existing outline when revisions or late speech change line numbers."""
-    positions = {_anchor(line): index for index, line in enumerate(group['lines'], 1)}
+    positions = {anchor: index for index, anchor in enumerate(_line_anchors(group['lines']), 1)}
     moved = {int(index): positions.get(anchor) for index, anchor in preview['anchors'].items()}
     entries = []
     for entry in preview['entries']:

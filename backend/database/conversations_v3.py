@@ -415,6 +415,17 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         queried.update(row['id'] for row in fresh)
     else:
         raise Conflict('v3_source_closure_budget')
+    preview_sources = {
+        rid
+        for row in existing.values()
+        if row.get('v3_unlocked') and not row.get('deleted')
+        for rid in row.get('v3_recording_ids') or ()
+    }
+    for rid in preview_sources & unreadable.keys():
+        # Fail closed when an otherwise eligible source temporarily cannot be
+        # decoded. Replanning without it could clear the preview's index and wake.
+        if policy.builder_eligible({**unreadable[rid], '_v3_unreadable': False}):
+            raise Conflict('recording_decode_unavailable')
     _mark_successor_pending(coll, recordings)
     return {**recordings, **unreadable}, existing, cache
 

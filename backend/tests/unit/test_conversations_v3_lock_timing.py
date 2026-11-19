@@ -223,6 +223,22 @@ def test_preview_anchors_skip_model_sections_without_line_numbers():
     assert rebased['sections'] == [{'title': 'valid', 'first_line': 2}]
 
 
+@pytest.mark.parametrize('segment_ids', [('first', 'second'), (None, None)])
+def test_preview_anchors_disambiguate_lines_with_the_same_clock(segment_ids):
+    first, second = [{'conversation_id': 'r', 'start': AT, 'segment': {'id': segment_id}} for segment_id in segment_ids]
+    leading = {'conversation_id': 'r', 'start': AT - timedelta(seconds=1), 'segment': {}}
+    entries = [
+        {'first_line': 1, 'sections': [{'title': 'first', 'first_line': 1}]},
+        {'first_line': 2, 'sections': [{'title': 'second', 'first_line': 2}]},
+    ]
+    anchors = outline.preview_anchors({'lines': [first, second]}, entries)
+
+    rebased = outline.reuse_preview({'lines': [leading, first, second]}, {'entries': entries, 'anchors': anchors})
+
+    assert [entry['first_line'] for entry in rebased] == [1, 3]
+    assert [entry['sections'][0]['first_line'] for entry in rebased] == [2, 3]
+
+
 def test_locked_refinement_keeps_overview_only_card_in_place():
     from utils.conversations.v3 import refinement
 
