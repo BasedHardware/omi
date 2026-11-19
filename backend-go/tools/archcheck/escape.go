@@ -9,16 +9,21 @@ import (
 )
 
 func typedCapability(t types.Type, queuePath string) bool {
-	if t == nil {
-		return false
+	seen := make(map[types.Type]bool)
+	for t != nil {
+		t = types.Unalias(t)
+		if named, ok := t.(*types.Named); ok && named.Obj().Pkg() != nil &&
+			named.Obj().Pkg().Path() == queuePath && slices.Contains(capabilities, named.Obj().Name()) {
+			return true
+		}
+		ptr, ok := t.Underlying().(*types.Pointer)
+		if !ok || seen[t] { // A named pointer type can refer back to itself.
+			return false
+		}
+		seen[t] = true
+		t = ptr.Elem()
 	}
-	t = types.Unalias(t)
-	if ptr, ok := t.(*types.Pointer); ok {
-		t = types.Unalias(ptr.Elem())
-	}
-	named, ok := t.(*types.Named)
-	return ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == queuePath &&
-		slices.Contains(capabilities, named.Obj().Name())
+	return false
 }
 
 // A literal can use capabilities declared inside it. A reference to an outer
@@ -33,6 +38,12 @@ func capabilityEscapes(file *ast.File, fset *token.FileSet, info *types.Info, qu
 		if node, ok := n.(*ast.GoStmt); ok {
 			if asyncCapability(node.Call, info, queuePath) {
 				report(node)
+			}
+		}
+		if sel, ok := n.(*ast.SelectorExpr); ok && boundCapabilityMethod(sel, info, queuePath) {
+			call, _ := enclosingCall(stack)
+			if call == nil || ast.Unparen(call.Fun) != sel {
+				report(sel)
 			}
 		}
 		if node, ok := n.(*ast.FuncLit); ok {
@@ -64,7 +75,8 @@ func asyncCapability(call *ast.CallExpr, info *types.Info, queuePath string) boo
 			return true
 		}
 	}
-	return transfersCapability(call.Fun, info, queuePath)
+	sel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
+	return ok && boundCapabilityMethod(sel, info, queuePath)
 }
 
 func transfersCapability(expr ast.Expr, info *types.Info, queuePath string) bool {
@@ -75,11 +87,18 @@ func transfersCapability(expr ast.Expr, info *types.Info, queuePath string) bool
 	if conversion, ok := expr.(*ast.CallExpr); ok && info.Types[conversion.Fun].IsType() && len(conversion.Args) == 1 {
 		return transfersCapability(conversion.Args[0], info, queuePath)
 	}
-	sel, ok := expr.(*ast.SelectorExpr)
-	return ok && !info.Types[sel.X].IsType() && typedCapability(info.TypeOf(sel.X), queuePath)
+	return false
 }
 
-func synchronousLiteral(lit *ast.FuncLit, stack []ast.Node, info *types.Info, queuePath string) bool {
+// A bound method keeps the receiver even after assignment erases its type from
+// the call site. Check at the selection, before a function value can travel.
+func boundCapabilityMethod(sel *ast.SelectorExpr, info *types.Info, queuePath string) bool {
+	_, method := info.Uses[sel.Sel].(*types.Func)
+	return method && !info.Types[sel.X].IsType() && typedCapability(info.TypeOf(sel.X), queuePath)
+}
+
+// enclosingCall ignores parentheses and reports whether go starts the call.
+func enclosingCall(stack []ast.Node) (*ast.CallExpr, bool) {
 	i := len(stack) - 1
 	for i >= 0 {
 		if _, parens := stack[i].(*ast.ParenExpr); !parens {
@@ -88,13 +107,19 @@ func synchronousLiteral(lit *ast.FuncLit, stack []ast.Node, info *types.Info, qu
 		i--
 	}
 	if i < 1 {
-		return false
+		return nil, false
 	}
 	call, ok := stack[i].(*ast.CallExpr)
 	if !ok {
-		return false
+		return nil, false
 	}
-	if _, async := stack[i-1].(*ast.GoStmt); async {
+	_, async := stack[i-1].(*ast.GoStmt)
+	return call, async
+}
+
+func synchronousLiteral(lit *ast.FuncLit, stack []ast.Node, info *types.Info, queuePath string) bool {
+	call, async := enclosingCall(stack)
+	if call == nil || async {
 		return false
 	}
 	if ast.Unparen(call.Fun) == lit {

@@ -112,7 +112,13 @@ interface it declares and the binary fills in. A new family needs no entry in an
 - Archcheck rejects direct capability arguments and receivers of `go` calls, and closures that
   capture a typed capability and are stored, returned, sent, or passed to an unknown callback
   consumer. A directly invoked closure and the synchronous `Scope.Subject` callback may capture
-  an outer capability. The check uses the static type at the use site. Values previously
+  an outer capability. Each nested closure is checked separately. Assigning a capturing
+  helper to a local variable is rejected even if its only use is a synchronous call inside
+  `Scope.Subject`. Call the literal directly or pass the capability as a parameter.
+- Pointer chains retain the capability. Call its methods directly: a stored or passed bound
+  method value retains the receiver, so archcheck rejects it at the selection. An unbound
+  method expression such as `queue.Guarded.Err` can be stored and called with a guard.
+  The check uses the static type at the use site. Values previously
   hidden behind an interface or container require review. Adapters still check `g.Err()`.
 
 ## 7. Plain SQL with typed rows

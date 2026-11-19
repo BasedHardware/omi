@@ -89,6 +89,7 @@ refuse a mismatch.
 | `queue_lanes` | One row per tenant, kind and order key, for indexed lane lookup. |
 | `queue_lease_token` | The fencing sequence. Gaps are fine; it only grows. |
 | `queue_settings`, `queue_erasure` | The deployment's erasure salt, and one salted hash per erased tenant. |
+| `queue_acquire_tenant` | `Store.Tenant` takes the shared tenant barrier, then reads the erasure tombstone with a fresh snapshot. |
 | `queue_acquire_guard` | The function `Run.Guard` calls: both locks, then a fresh read of the lease. |
 
 ## How a claim works

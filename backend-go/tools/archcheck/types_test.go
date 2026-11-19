@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -59,5 +60,48 @@ func escape(g proof, sc *q.Scope, ch chan func(), submit func(func())) func() {
 	}
 	if len(problems) != 10 {
 		t.Errorf("unexpected diagnostics:\n%s", strings.Join(problems, "\n"))
+	}
+}
+
+func TestIndirectCapabilitiesStayInsideTheGuard(t *testing.T) {
+	t.Parallel()
+	const fixture = `package billing
+import q "` + module + `/internal/queue"
+type handle **q.Scope
+type recursive *recursive
+func scope(**q.Scope) {}
+func methods(g q.Guarded, sc *q.Scope, cycle recursive) {
+	ptr := &sc
+	go scope(ptr) // reject
+	go func(){ scope(ptr) }() // reject
+	var h handle = ptr
+	go func(){ scope(h) }() // reject
+	check := (g.Err) // reject
+	go check()
+	sc.Subject(func(){ local := func(){ _ = g.Err() }; local() }) // reject
+	(g.Err)()
+	defer g.Err()
+	method := q.Guarded.Err
+	_ = method(g)
+	go func(){ _ = cycle }()
+}
+`
+	root := write(t, map[string]string{
+		"internal/queue/queue.go":  queueStub + "\nfunc (Guarded) Err() error { return nil }\nfunc (*Scope) Subject(f func()) { f() }\n",
+		"internal/billing/uses.go": fixture,
+	})
+	problems, err := checkTypes(t.Context(), root, module)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := 0
+	for i, line := range strings.Split(fixture, "\n") {
+		if strings.Contains(line, "// reject") {
+			want++
+			expect(t, problems, fmt.Sprintf("uses.go:%d:", i+1), "outlive")
+		}
+	}
+	if len(problems) != want {
+		t.Fatalf("got %d diagnostics, want %d:\n%s", len(problems), want, strings.Join(problems, "\n"))
 	}
 }
