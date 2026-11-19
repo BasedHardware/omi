@@ -670,7 +670,8 @@ def commit_projection(
                 changed = sorted(
                     k
                     for k in set(current) | set(observed[rid])
-                    if k not in owned and current.get(k) != observed[rid].get(k)
+                    if k not in owned
+                    and ((k in current) != (k in observed[rid]) or current.get(k) != observed[rid].get(k))
                 )
                 if changed:
                     # Claims are ours between batches; any other protected change still conflicts.

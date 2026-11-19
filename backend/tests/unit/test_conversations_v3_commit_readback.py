@@ -9,7 +9,6 @@ from database import conversations_v3_leases as leases
 
 from datetime import datetime, timedelta, timezone
 from copy import deepcopy
-import importlib
 import logging
 from uuid import uuid4
 
@@ -24,11 +23,6 @@ UID = 'synthetic'
 AT = datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc)
 R = ('users', UID, 'conversations', 'r')
 LEASE = ('users', UID, 'conversation_v3_leases', 'builder')
-
-
-@pytest.fixture(scope='module', autouse=True)
-def owners_import():
-    return importlib.import_module('utils.conversations.lifecycle')
 
 
 @pytest.fixture
@@ -106,9 +100,30 @@ def commit(strict, rows):
     return store.commit_projection(UID, token, {'r': source}, {}, rows, [], firestore_client=strict)
 
 
-def test_multi_batch_commit_reaches_the_final_batch_through_commit_stamps(strict):
+def batch_counter(monkeypatch):
+    original = store.firestore.transactional
+    batches = []
+
+    def transactional(body):
+        wrapped = original(body)
+
+        def run(tx, *args):
+            if body.__name__ == 'commit':
+                batches.append(len(args[0]))
+            return wrapped(tx, *args)
+
+        return run
+
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+    return batches
+
+
+def test_multi_batch_commit_reaches_the_final_batch_through_commit_stamps(strict, monkeypatch):
+    batches = batch_counter(monkeypatch)
     rows = planned(64)
     moved = commit(strict, rows)
+    # The readback only runs between batches: the commit must really split.
+    assert len(batches) >= 2 and sum(batches) == 64
     assert moved == set()
     assert all(('users', UID, 'conversations', row['id']) in strict.rows for row in rows)
     # The final batch landed: the obligation is cleared and the owner's park is reset.
@@ -154,5 +169,51 @@ def test_commit_stamped_fields_match_what_the_home_hook_adds():
         update_mask=DocumentMask(field_paths=['transcript_segments', 'status']),
     )
     augmented = home_feed_writer.augment_home_writes([source])
-    stamped = set(augmented[0].update.fields) - set(source.update.fields)
-    assert stamped and stamped <= home_feed_writer.COMMIT_STAMPED_FIELDS
+    assert set(augmented[0].update.fields) - set(source.update.fields) == home_feed_writer.COMMIT_STAMPED_FIELDS
+    metadata = Write(
+        update=Document(name=f'{owner}/conversations/c', fields={'status': Value(string_value='completed')}),
+        update_mask=DocumentMask(field_paths=['status']),
+    )
+    augmented = home_feed_writer.augment_home_writes([metadata])
+    assert set(augmented[0].update.fields) - set(metadata.update.fields) == {'home_source_version'}
+
+
+def mutate_after_first_batch(strict, monkeypatch, change):
+    original = store.firestore.transactional
+    done = []
+
+    def transactional(body):
+        wrapped = original(body)
+
+        def run(tx, *args):
+            result = wrapped(tx, *args)
+            if body.__name__ == 'commit' and not done:
+                done.append(1)
+                change()
+            return result
+
+        return run
+
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+
+
+@pytest.mark.parametrize('field,value', [('is_locked', True), ('data_protection_level', 'private')])
+def test_a_protected_source_change_between_batches_still_conflicts(strict, monkeypatch, caplog, field, value):
+    mutate_after_first_batch(strict, monkeypatch, lambda: strict.rows[R].__setitem__(field, value))
+    with caplog.at_level(logging.WARNING, logger=store.logger.name), pytest.raises(
+        store.Conflict, match='source_changed'
+    ):
+        commit(strict, planned(64))
+    [message] = [r.getMessage() for r in caplog.records if 'readback changed' in r.getMessage()]
+    assert 'kind=recording' in message and repr(field) in message
+    assert strict.rows[R]['v3_pending'] is True
+
+
+def test_live_speech_between_batches_is_moved_not_a_conflict(strict, monkeypatch):
+    def speak():
+        strict.rows[R]['transcript_segments'] = [{'text': 'more live speech'}]
+
+    mutate_after_first_batch(strict, monkeypatch, speak)
+    assert commit(strict, planned(64)) == {'r'}
+    # The new speech stays owed to the next pass.
+    assert strict.rows[R]['v3_pending'] is True
