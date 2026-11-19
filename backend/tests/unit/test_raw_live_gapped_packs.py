@@ -293,3 +293,75 @@ def test_framed_pack_still_uses_its_declared_frame_schema(remote, monkeypatch, n
     packs = raw_audio_read.list_packs(remote, UID, CID)
     assert [(p['timestamp'], p['span']['samples']) for p in packs] == [(1000.0, 320), (1003.02, 160)]
     assert raw_audio_read.read_pack(remote, receipt.path, UID) == first + second
+
+
+@pytest.mark.parametrize('mode', ['on', 'off', 'stale', 'missing_metageneration', 'deleted', 'corrupt'])
+def test_gapped_discovery_can_use_versioned_listing_without_skipping_payload_proof(monkeypatch, mode):
+    from unittest.mock import Mock
+
+    from google.api_core.exceptions import NotFound, PreconditionFailed
+
+    from utils.other.audio_frame_table import unframed_frames
+
+    path = 'audio-outbox/owner/manifest'
+    media = SimpleNamespace(name='raw-live/owner/pack', generation=9, metadata={'sha256': 'media-digest'})
+    table = [
+        {'sequence': 0, 'start': 1.0, 'samples': 16, 'gap_before': False},
+    ]
+    manifest = json.dumps(
+        {
+            'schema': 'audio_custody_v1',
+            'capture': {'sample_rate': RATE},
+            'frames': table,
+            'media': {'bucket': 'private-synthetic', 'path': media.name, 'generation': '9', 'sha256': 'media-digest'},
+        }
+    ).encode()
+    properties = {'encrypted': 'false', 'sha256': hashlib.sha256(manifest).hexdigest()}
+    listed = SimpleNamespace(
+        name=path,
+        generation=3,
+        metageneration=None if mode == 'missing_metageneration' else 2,
+        size=len(manifest),
+        metadata=properties,
+    )
+    loaded = SimpleNamespace(
+        name=path,
+        generation=4,
+        size=len(manifest),
+        metadata=properties,
+        reload=Mock(),
+        download_as_bytes=Mock(return_value=manifest),
+    )
+    bucket = SimpleNamespace(name='private-synthetic', blob=Mock(return_value=loaded))
+    if mode == 'stale':
+        loaded.download_as_bytes.side_effect = [PreconditionFailed('synthetic stale listing'), manifest]
+    if mode == 'deleted':
+        loaded.download_as_bytes.side_effect = NotFound('synthetic deletion')
+    if mode == 'corrupt':
+        loaded.download_as_bytes.return_value = b'wrong hash'
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', bucket.name)
+    monkeypatch.setenv('PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED', 'false' if mode == 'off' else 'true')
+    if mode == 'deleted':
+        with pytest.raises(NotFound):
+            unframed_frames(bucket, media, UID, path, listed_manifest=listed)
+    elif mode == 'corrupt':
+        with pytest.raises(ValueError, match='checksum mismatch'):
+            unframed_frames(bucket, media, UID, path, listed_manifest=listed)
+    else:
+        assert unframed_frames(bucket, media, UID, path, listed_manifest=listed) == (table, RATE)
+    bucket.blob.assert_called_once_with(path)
+    conditions = [
+        {key: value for key, value in call.kwargs.items() if key.startswith('if_')}
+        for call in loaded.download_as_bytes.call_args_list
+    ]
+    fast = {'if_generation_match': 3, 'if_metageneration_match': 2}
+    legacy = {'if_generation_match': 4}
+    if mode == 'stale':
+        loaded.reload.assert_called_once()
+        assert conditions == [fast, legacy]
+    elif mode in ('off', 'missing_metageneration'):
+        loaded.reload.assert_called_once()
+        assert conditions == [legacy]
+    else:
+        loaded.reload.assert_not_called()
+        assert conditions == [fast]

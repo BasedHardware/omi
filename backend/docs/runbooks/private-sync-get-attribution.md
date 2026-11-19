@@ -2,9 +2,9 @@
 
 The Nov 15 Pusher image replaced `634484b20ec6` with `0714c5198be8`. Gapped,
 unframed originals began contributing playback entries once the writer's
-manifest proved their frame positions. Each of those manifests needed two Cloud Storage requests per discovery, once for metadata and once for the
-body. Durable receipt readback and the 300-second playback refresh interval
-did not change.
+manifest proved their frame positions. Each of those manifests needed two
+storage requests per discovery, one for metadata and one for the body.
+Durable receipt readback and the 300-second refresh interval stayed the same.
 
 ## Readback
 
@@ -27,5 +27,12 @@ sum by (method) (
 
 The expected reduction is one redundant metadata request for each eligible
 manifest whose re-read uses the current generation and metageneration from
-its listing. The payload remains a live, conditional GET. Size this from the
-serving counters and discovery volume before booking savings.
+its listing. The payload remains a live, conditional GET. Set
+`PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED=false` to restore the metadata
+reload. A stale listing takes the same fallback path. A missing object
+remains missing.
+
+Compare only one scrape job per workload. The cap is eight reader values
+times two kinds per process. The counter measures authenticated SDK attempts
+and includes SDK retries and ranges. Direct client requests using signed URLs
+and requests outside the shared client remain in the native bucket total.
