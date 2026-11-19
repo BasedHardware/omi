@@ -245,7 +245,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           : l.syncCardReadyCount(groupRecordingBlocks(readyWals).length);
       action = statusActionPill(l.sync, OmiColors.accent, startSync);
     } else if (p.derivedWals.stalledUploadsAt().isNotEmpty) {
-      title = l.transcriptionUnavailable;
+      title = l.deviceUploadsWaitingOnServer;
       titleColor = Colors.orangeAccent;
       action = statusActionPill(l.syncDetailsTitle, OmiColors.accent,
           () => showSyncDetailsSheet(context, onHowSyncingWorks: () => _showInfoSheet(context)));

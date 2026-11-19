@@ -579,7 +579,7 @@ class _SyncPageState extends State<SyncPage> {
         }
       });
     } else if (syncProvider.derivedWals.stalledUploadsAt().isNotEmpty) {
-      title = l.transcriptionUnavailable;
+      title = l.deviceUploadsWaitingOnServer;
       titleColor = Colors.orangeAccent;
     } else {
       title = l.syncCardAllBackedUp;

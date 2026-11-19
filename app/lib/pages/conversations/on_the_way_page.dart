@@ -153,7 +153,7 @@ class _OnTheWayPageState extends State<OnTheWayPage> with _PendingWorkListener {
                     OmiSettingsRow(
                       key: const Key('on_the_way_stalled_details'),
                       title: l.syncCardNeedsAttention(groupRecordingBlocks(stalled).length),
-                      subtitle: l.transcriptionUnavailable,
+                      subtitle: l.deviceUploadsWaitingOnServerSubtitle,
                       onTap: () => openOfflineSyncDetails(context, p, multiFileSync: widget.multiFileSync),
                     ),
                   ],
