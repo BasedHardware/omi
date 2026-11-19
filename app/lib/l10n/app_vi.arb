@@ -4690,5 +4690,8 @@
     "finishNothingToProcess": "Chưa có gì để xử lý.",
     "finishStillProcessing": "Vẫn đang xử lý. Nó sẽ xuất hiện ở Trang chủ.",
     "finishBackToHome": "Về Trang chủ",
-    "conversationSummaryWhenItEnds": "Bản tóm tắt khi cuộc trò chuyện này kết thúc"
+    "conversationSummaryWhenItEnds": "Bản tóm tắt khi cuộc trò chuyện này kết thúc",
+    "conversationCatchMeUp": "Tóm tắt giúp tôi",
+    "conversationSummaryThrough": "Tóm tắt đến {time}",
+    "conversationRecentTranscript": "Bản chép lời gần đây"
 }

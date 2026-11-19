@@ -15600,4 +15600,15 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Resumo quando esta conversa terminar';
+
+  @override
+  String get conversationCatchMeUp => 'Me atualize';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Resumo até $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Transcrição recente';
 }

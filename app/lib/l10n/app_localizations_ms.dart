@@ -15609,4 +15609,15 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Ringkasan apabila perbualan ini tamat';
+
+  @override
+  String get conversationCatchMeUp => 'Kemas kini saya';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Ringkasan sehingga $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Transkrip terkini';
 }

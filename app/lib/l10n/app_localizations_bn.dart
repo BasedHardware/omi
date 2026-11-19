@@ -15567,4 +15567,15 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'এই কথোপকথন শেষ হলে সারাংশ';
+
+  @override
+  String get conversationCatchMeUp => 'আমাকে আপডেট করুন';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time পর্যন্ত সারসংক্ষেপ';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'সাম্প্রতিক প্রতিলিপি';
 }

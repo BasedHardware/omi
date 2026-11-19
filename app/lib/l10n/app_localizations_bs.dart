@@ -15601,4 +15601,15 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Sažetak kada se ovaj razgovor završi';
+
+  @override
+  String get conversationCatchMeUp => 'Šta sam propustio?';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Sažetak do $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Nedavni prepis';
 }

@@ -15581,4 +15581,15 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Sammanfattning när det här samtalet avslutas';
+
+  @override
+  String get conversationCatchMeUp => 'Uppdatera mig';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Sammanfattning till $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Senaste transkription';
 }

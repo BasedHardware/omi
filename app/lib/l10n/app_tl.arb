@@ -12247,5 +12247,8 @@
     "finishNothingToProcess": "Wala pang ipoproseso.",
     "finishStillProcessing": "Pinoproseso pa. Lalabas ito sa Home.",
     "finishBackToHome": "Bumalik sa Home",
-    "conversationSummaryWhenItEnds": "Buod kapag natapos ang usapang ito"
+    "conversationSummaryWhenItEnds": "Buod kapag natapos ang usapang ito",
+    "conversationCatchMeUp": "Ibuod ang usapan",
+    "conversationSummaryThrough": "Buod hanggang {time}",
+    "conversationRecentTranscript": "Pinakabagong Transcript"
 }

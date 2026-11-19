@@ -15351,4 +15351,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => '이 대화가 끝나면 요약이 표시됩니다';
+
+  @override
+  String get conversationCatchMeUp => '지금까지 요약';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time까지의 요약';
+  }
+
+  @override
+  String get conversationRecentTranscript => '최근 녹취록';
 }

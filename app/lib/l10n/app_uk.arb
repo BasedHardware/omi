@@ -4690,5 +4690,8 @@
     "finishNothingToProcess": "Поки що нічого обробляти.",
     "finishStillProcessing": "Ще обробляється. З'явиться на головній.",
     "finishBackToHome": "На головну",
-    "conversationSummaryWhenItEnds": "Підсумок, коли ця розмова завершиться"
+    "conversationSummaryWhenItEnds": "Підсумок, коли ця розмова завершиться",
+    "conversationCatchMeUp": "Розкажіть, що було досі",
+    "conversationSummaryThrough": "Підсумок станом на {time}",
+    "conversationRecentTranscript": "Останній транскрипт"
 }

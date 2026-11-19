@@ -4690,5 +4690,8 @@
     "finishNothingToProcess": "还没有可处理的内容。",
     "finishStillProcessing": "仍在处理中。完成后会显示在首页。",
     "finishBackToHome": "返回首页",
-    "conversationSummaryWhenItEnds": "对话结束后生成摘要"
+    "conversationSummaryWhenItEnds": "对话结束后生成摘要",
+    "conversationCatchMeUp": "帮我回顾一下",
+    "conversationSummaryThrough": "截至 {time} 的摘要",
+    "conversationRecentTranscript": "最近的文字记录"
 }

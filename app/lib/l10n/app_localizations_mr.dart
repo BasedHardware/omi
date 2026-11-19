@@ -15580,4 +15580,15 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'हे संभाषण संपल्यावर सारांश';
+
+  @override
+  String get conversationCatchMeUp => 'मला अपडेट करा';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time पर्यंतचा सारांश';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'अलीकडील प्रतिलेख';
 }

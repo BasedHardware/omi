@@ -15637,4 +15637,15 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Резиме кога ќе заврши овој разговор';
+
+  @override
+  String get conversationCatchMeUp => 'Ажурирај ме';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Резиме до $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Скорешен транскрипт';
 }

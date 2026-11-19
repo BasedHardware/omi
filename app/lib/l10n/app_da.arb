@@ -4732,5 +4732,8 @@
     "finishNothingToProcess": "Intet at behandle endnu.",
     "finishStillProcessing": "Behandles stadig. Den vises på Hjem.",
     "finishBackToHome": "Tilbage til Hjem",
-    "conversationSummaryWhenItEnds": "Resumé, når denne samtale slutter"
+    "conversationSummaryWhenItEnds": "Resumé, når denne samtale slutter",
+    "conversationCatchMeUp": "Opdater mig",
+    "conversationSummaryThrough": "Opsummering indtil {time}",
+    "conversationRecentTranscript": "Seneste udskrift"
 }

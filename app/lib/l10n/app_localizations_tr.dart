@@ -15583,4 +15583,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Bu konuşma bittiğinde özet';
+
+  @override
+  String get conversationCatchMeUp => 'Özet geç';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time itibariyle özet';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Son transkript';
 }

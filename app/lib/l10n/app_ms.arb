@@ -4690,5 +4690,8 @@
     "finishNothingToProcess": "Belum ada apa-apa untuk diproses.",
     "finishStillProcessing": "Masih diproses. Ia akan muncul di Laman Utama.",
     "finishBackToHome": "Kembali ke Laman Utama",
-    "conversationSummaryWhenItEnds": "Ringkasan apabila perbualan ini tamat"
+    "conversationSummaryWhenItEnds": "Ringkasan apabila perbualan ini tamat",
+    "conversationCatchMeUp": "Kemas kini saya",
+    "conversationSummaryThrough": "Ringkasan sehingga {time}",
+    "conversationRecentTranscript": "Transkrip terkini"
 }

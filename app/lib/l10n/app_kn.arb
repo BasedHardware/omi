@@ -12247,5 +12247,8 @@
     "finishNothingToProcess": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಏನೂ ಇಲ್ಲ.",
     "finishStillProcessing": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತಿದೆ. ಇದು ಹೋಮ್‌ನಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.",
     "finishBackToHome": "ಹೋಮ್‌ಗೆ ಹಿಂತಿರುಗಿ",
-    "conversationSummaryWhenItEnds": "ಈ ಸಂಭಾಷಣೆ ಮುಗಿದಾಗ ಸಾರಾಂಶ"
+    "conversationSummaryWhenItEnds": "ಈ ಸಂಭಾಷಣೆ ಮುಗಿದಾಗ ಸಾರಾಂಶ",
+    "conversationCatchMeUp": "ನನ್ನನ್ನು ಅಪ್‌ಡೇಟ್ ಮಾಡಿ",
+    "conversationSummaryThrough": "{time} ವರೆಗಿನ ಸಾರಾಂಶ",
+    "conversationRecentTranscript": "ಇತ್ತೀಚಿನ ಪ್ರತಿಲಿಪಿ"
 }

@@ -15321,4 +15321,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => '对话结束后生成摘要';
+
+  @override
+  String get conversationCatchMeUp => '帮我回顾一下';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '截至 $time 的摘要';
+  }
+
+  @override
+  String get conversationRecentTranscript => '最近的文字记录';
 }

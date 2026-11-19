@@ -15498,4 +15498,15 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'สรุปเมื่อการสนทนานี้จบลง';
+
+  @override
+  String get conversationCatchMeUp => 'สรุปให้ฟัง';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'สรุปถึง $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'บทถอดความล่าสุด';
 }

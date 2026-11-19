@@ -15573,4 +15573,15 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Bản tóm tắt khi cuộc trò chuyện này kết thúc';
+
+  @override
+  String get conversationCatchMeUp => 'Tóm tắt giúp tôi';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Tóm tắt đến $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Bản chép lời gần đây';
 }

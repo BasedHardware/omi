@@ -15565,4 +15565,15 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'خلاصه پس از پایان این گفتگو';
+
+  @override
+  String get conversationCatchMeUp => 'من را به‌روز کن';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'خلاصه تا $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'رونویسی اخیر';
 }

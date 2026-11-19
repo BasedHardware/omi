@@ -15650,4 +15650,15 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Riepilogo al termine di questa conversazione';
+
+  @override
+  String get conversationCatchMeUp => 'Aggiornami';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Riepilogo fino alle $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Trascrizione recente';
 }

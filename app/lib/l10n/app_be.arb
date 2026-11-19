@@ -12247,5 +12247,8 @@
     "finishNothingToProcess": "Пакуль няма чаго апрацоўваць.",
     "finishStillProcessing": "Яшчэ апрацоўваецца. З'явіцца на галоўнай.",
     "finishBackToHome": "На галоўную",
-    "conversationSummaryWhenItEnds": "Рэзюмэ, калі гэтая размова скончыцца"
+    "conversationSummaryWhenItEnds": "Рэзюмэ, калі гэтая размова скончыцца",
+    "conversationCatchMeUp": "Што я прапусціў?",
+    "conversationSummaryThrough": "Рэзюмэ да {time}",
+    "conversationRecentTranscript": "Апошняя транскрыпцыя"
 }

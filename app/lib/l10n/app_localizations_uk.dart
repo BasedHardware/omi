@@ -15606,4 +15606,15 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Підсумок, коли ця розмова завершиться';
+
+  @override
+  String get conversationCatchMeUp => 'Розкажіть, що було досі';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Підсумок станом на $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Останній транскрипт';
 }

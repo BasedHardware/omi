@@ -12247,5 +12247,8 @@
     "finishNothingToProcess": "עדיין אין מה לעבד.",
     "finishStillProcessing": "עדיין בעיבוד. זה יופיע במסך הבית.",
     "finishBackToHome": "חזרה למסך הבית",
-    "conversationSummaryWhenItEnds": "סיכום כשהשיחה הזו תסתיים"
+    "conversationSummaryWhenItEnds": "סיכום כשהשיחה הזו תסתיים",
+    "conversationCatchMeUp": "עדכן אותי",
+    "conversationSummaryThrough": "סיכום עד {time}",
+    "conversationRecentTranscript": "תמלול אחרון"
 }

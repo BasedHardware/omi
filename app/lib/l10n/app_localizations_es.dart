@@ -15616,4 +15616,15 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Resumen cuando termine esta conversación';
+
+  @override
+  String get conversationCatchMeUp => 'Ponme al día';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Resumen hasta las $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Transcripción reciente';
 }

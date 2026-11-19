@@ -15565,4 +15565,15 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Kokkuvõte, kui see vestlus lõpeb';
+
+  @override
+  String get conversationCatchMeUp => 'Tee mulle kokkuvõte';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Kokkuvõte kuni $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Hiljutine transkriptsioon';
 }

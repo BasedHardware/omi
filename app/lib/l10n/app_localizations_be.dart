@@ -15608,4 +15608,15 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Рэзюмэ, калі гэтая размова скончыцца';
+
+  @override
+  String get conversationCatchMeUp => 'Што я прапусціў?';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Рэзюмэ да $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Апошняя транскрыпцыя';
 }

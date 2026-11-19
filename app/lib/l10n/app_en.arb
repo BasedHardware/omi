@@ -19021,5 +19021,22 @@
     "conversationSummaryWhenItEnds": "Summary when this conversation ends",
     "@conversationSummaryWhenItEnds": {
         "description": "On the detail page of a conversation still in progress (v3): the summary is written once it ends."
+    },
+    "conversationCatchMeUp": "Catch me up",
+    "@conversationCatchMeUp": {
+        "description": "Button on a live conversation. Ask for a recap of what has been said so far."
+    },
+    "conversationSummaryThrough": "Summary through {time}",
+    "@conversationSummaryThrough": {
+        "description": "Timestamp of the last speech included in the displayed conversation summary. The local time is formatted, e.g. 10:42 AM.",
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "conversationRecentTranscript": "Recent transcript",
+    "@conversationRecentTranscript": {
+        "description": "Heading for the latest spoken lines from the current conversation."
     }
 }

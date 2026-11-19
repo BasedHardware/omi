@@ -15555,4 +15555,15 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'यह बातचीत खत्म होने पर सारांश';
+
+  @override
+  String get conversationCatchMeUp => 'मुझे अपडेट करें';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time तक का सारांश';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'हालिया ट्रांसक्रिप्ट';
 }

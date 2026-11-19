@@ -4690,5 +4690,8 @@
     "finishNothingToProcess": "Pagaidām nav ko apstrādāt.",
     "finishStillProcessing": "Joprojām tiek apstrādāts. Tas parādīsies sākumlapā.",
     "finishBackToHome": "Atpakaļ uz sākumu",
-    "conversationSummaryWhenItEnds": "Kopsavilkums, kad šī saruna beigsies"
+    "conversationSummaryWhenItEnds": "Kopsavilkums, kad šī saruna beigsies",
+    "conversationCatchMeUp": "Atjauniniet mani",
+    "conversationSummaryThrough": "Kopsavilkums līdz {time}",
+    "conversationRecentTranscript": "Jaunākā transkripcija"
 }

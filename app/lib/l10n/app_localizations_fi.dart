@@ -15577,4 +15577,15 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Yhteenveto, kun tämä keskustelu päättyy';
+
+  @override
+  String get conversationCatchMeUp => 'Tiivistä minulle';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Yhteenveto klo $time asti';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Viimeisin litterointi';
 }

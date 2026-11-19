@@ -15576,4 +15576,15 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Sammendrag når denne samtalen avsluttes';
+
+  @override
+  String get conversationCatchMeUp => 'Oppdater meg';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Sammendrag til $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Siste transkripsjon';
 }

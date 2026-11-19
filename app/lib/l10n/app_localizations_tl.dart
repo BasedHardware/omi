@@ -15695,4 +15695,15 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Buod kapag natapos ang usapang ito';
+
+  @override
+  String get conversationCatchMeUp => 'Ibuod ang usapan';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Buod hanggang $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Pinakabagong Transcript';
 }

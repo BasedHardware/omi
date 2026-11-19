@@ -4690,5 +4690,8 @@
     "finishNothingToProcess": "まだ処理するものがありません。",
     "finishStillProcessing": "まだ処理中です。ホームに表示されます。",
     "finishBackToHome": "ホームに戻る",
-    "conversationSummaryWhenItEnds": "この会話が終わると要約が表示されます"
+    "conversationSummaryWhenItEnds": "この会話が終わると要約が表示されます",
+    "conversationCatchMeUp": "ここまでのまとめ",
+    "conversationSummaryThrough": "{time}までの要約",
+    "conversationRecentTranscript": "最近の文字起こし"
 }

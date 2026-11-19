@@ -15584,4 +15584,15 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'یہ گفتگو ختم ہونے پر خلاصہ';
+
+  @override
+  String get conversationCatchMeUp => 'اب تک کا خلاصہ بتائیں';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time تک کا خلاصہ';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'حالیہ ٹرانسکرپٹ';
 }

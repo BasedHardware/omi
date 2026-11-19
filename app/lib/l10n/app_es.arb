@@ -4690,5 +4690,8 @@
     "finishNothingToProcess": "Todavía no hay nada que procesar.",
     "finishStillProcessing": "Todavía se está procesando. Aparecerá en Inicio.",
     "finishBackToHome": "Volver a Inicio",
-    "conversationSummaryWhenItEnds": "Resumen cuando termine esta conversación"
+    "conversationSummaryWhenItEnds": "Resumen cuando termine esta conversación",
+    "conversationCatchMeUp": "Ponme al día",
+    "conversationSummaryThrough": "Resumen hasta las {time}",
+    "conversationRecentTranscript": "Transcripción reciente"
 }

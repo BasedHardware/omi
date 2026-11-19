@@ -4690,5 +4690,8 @@
     "finishNothingToProcess": "Kol kas nėra ką apdoroti.",
     "finishStillProcessing": "Vis dar apdorojama. Tai atsiras pagrindiniame puslapyje.",
     "finishBackToHome": "Grįžti į pagrindinį",
-    "conversationSummaryWhenItEnds": "Santrauka, kai šis pokalbis baigsis"
+    "conversationSummaryWhenItEnds": "Santrauka, kai šis pokalbis baigsis",
+    "conversationCatchMeUp": "Atnaujink mane",
+    "conversationSummaryThrough": "Santrauka iki {time}",
+    "conversationRecentTranscript": "Naujausia transkripcija"
 }

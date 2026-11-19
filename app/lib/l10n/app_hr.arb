@@ -12247,5 +12247,8 @@
     "finishNothingToProcess": "Još nema ničega za obradu.",
     "finishStillProcessing": "Još se obrađuje. Pojavit će se na početnoj.",
     "finishBackToHome": "Natrag na početnu",
-    "conversationSummaryWhenItEnds": "Sažetak kada ovaj razgovor završi"
+    "conversationSummaryWhenItEnds": "Sažetak kada ovaj razgovor završi",
+    "conversationCatchMeUp": "Ukratko mi prepričaj",
+    "conversationSummaryThrough": "Sažetak do {time}",
+    "conversationRecentTranscript": "Nedavna transkripcija"
 }

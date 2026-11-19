@@ -4690,5 +4690,8 @@
     "finishNothingToProcess": "अभी प्रोसेस करने के लिए कुछ नहीं है।",
     "finishStillProcessing": "अभी प्रोसेस हो रहा है। यह होम पर दिखेगा।",
     "finishBackToHome": "होम पर वापस जाएं",
-    "conversationSummaryWhenItEnds": "यह बातचीत खत्म होने पर सारांश"
+    "conversationSummaryWhenItEnds": "यह बातचीत खत्म होने पर सारांश",
+    "conversationCatchMeUp": "मुझे अपडेट करें",
+    "conversationSummaryThrough": "{time} तक का सारांश",
+    "conversationRecentTranscript": "हालिया ट्रांसक्रिप्ट"
 }

@@ -15649,4 +15649,15 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Resum quan acabi aquesta conversa';
+
+  @override
+  String get conversationCatchMeUp => 'Posa\'m al dia';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Resum fins a $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Transcripció recent';
 }

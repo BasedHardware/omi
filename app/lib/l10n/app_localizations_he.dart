@@ -15460,4 +15460,15 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'סיכום כשהשיחה הזו תסתיים';
+
+  @override
+  String get conversationCatchMeUp => 'עדכן אותי';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'סיכום עד $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'תמלול אחרון';
 }

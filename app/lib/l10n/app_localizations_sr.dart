@@ -15580,4 +15580,15 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Резиме када се овај разговор заврши';
+
+  @override
+  String get conversationCatchMeUp => 'Кажи ми укратко';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Резиме до $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Недавни препис';
 }

@@ -15622,4 +15622,15 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Сводка появится, когда разговор закончится';
+
+  @override
+  String get conversationCatchMeUp => 'Кратко о главном';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Сводка до $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Последняя расшифровка';
 }

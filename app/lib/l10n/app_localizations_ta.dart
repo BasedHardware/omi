@@ -15676,4 +15676,15 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'இந்த உரையாடல் முடிந்ததும் சுருக்கம்';
+
+  @override
+  String get conversationCatchMeUp => 'என்னைப் புதுப்பிக்கவும்';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time வரையிலான சாரம்';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'சமீபத்திய உரையாடல் உரை';
 }

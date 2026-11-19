@@ -27332,6 +27332,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Summary when this conversation ends'**
   String get conversationSummaryWhenItEnds;
+
+  /// Button on a live conversation. Ask for a recap of what has been said so far.
+  ///
+  /// In en, this message translates to:
+  /// **'Catch me up'**
+  String get conversationCatchMeUp;
+
+  /// Timestamp of the last speech included in the displayed conversation summary. The local time is formatted, e.g. 10:42 AM.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary through {time}'**
+  String conversationSummaryThrough(String time);
+
+  /// Heading for the latest spoken lines from the current conversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent transcript'**
+  String get conversationRecentTranscript;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

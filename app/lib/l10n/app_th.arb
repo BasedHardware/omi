@@ -4690,5 +4690,8 @@
     "finishNothingToProcess": "ยังไม่มีอะไรให้ประมวลผล",
     "finishStillProcessing": "ยังประมวลผลอยู่ จะแสดงที่หน้าหลัก",
     "finishBackToHome": "กลับไปหน้าหลัก",
-    "conversationSummaryWhenItEnds": "สรุปเมื่อการสนทนานี้จบลง"
+    "conversationSummaryWhenItEnds": "สรุปเมื่อการสนทนานี้จบลง",
+    "conversationCatchMeUp": "สรุปให้ฟัง",
+    "conversationSummaryThrough": "สรุปถึง {time}",
+    "conversationRecentTranscript": "บทถอดความล่าสุด"
 }

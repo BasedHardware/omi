@@ -4690,5 +4690,8 @@
     "finishNothingToProcess": "Zatiaľ nie je čo spracovať.",
     "finishStillProcessing": "Stále sa spracúva. Zobrazí sa na domovskej stránke.",
     "finishBackToHome": "Späť domov",
-    "conversationSummaryWhenItEnds": "Zhrnutie po skončení tohto rozhovoru"
+    "conversationSummaryWhenItEnds": "Zhrnutie po skončení tohto rozhovoru",
+    "conversationCatchMeUp": "Daj mi prehľad",
+    "conversationSummaryThrough": "Zhrnutie do {time}",
+    "conversationRecentTranscript": "Najnovší prepis"
 }
