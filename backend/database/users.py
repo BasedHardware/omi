@@ -13,13 +13,13 @@ from config.firestore_read_levers import lever_enabled
 import uuid
 from database.fsr_read_cache import cache_writer, cached_read, memo, plane_id, ttl, user_snapshot, writing
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Optional, TypedDict
+from typing import Any, Literal, NotRequired, Optional, TypedDict
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
 from ._client import get_data_plane_firestore_client
-from database.go_queue_erase import ARMED_AT, RECEIPT_AT, mark_wipe_running
+from database.go_queue_erase import ARMED_AT, RECEIPT_AT, mark_wipe_running, running_stale_window
 from database.account_deletion_marker import (
     account_deletion_collection,
     account_deletion_document,
@@ -85,6 +85,7 @@ ONBOARDING_ADMISSION_TTL = timedelta(minutes=20)
 class DeletionWipeTaskResolution(TypedDict):
     outcome: Literal['resolved', 'missing', 'ambiguous', 'completed', 'not_actionable']
     uid: str | None
+    go_queue_erase_armed: NotRequired[bool]
 
 
 class DeletionWipeIntent(TypedDict):
@@ -671,6 +672,8 @@ def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution
         return {'outcome': 'completed', 'uid': None}
     if status in _DELETION_WIPE_TERMINAL_STATUSES:
         return {'outcome': 'not_actionable', 'uid': None}
+    if marker.get(ARMED_AT) is not None and marker.get(RECEIPT_AT) is None:
+        return {'outcome': 'resolved', 'uid': doc.id, 'go_queue_erase_armed': True}
     return {'outcome': 'resolved', 'uid': doc.id}
 
 
@@ -734,12 +737,6 @@ def cancel_user_deletion_wipe(uid: str):
         account_deletion_document(uid, firestore_client=client),
         {'wipe_status': 'cancelled', 'wipe_cancelled_at': datetime.now(timezone.utc)},
     )
-
-
-def _running_stale_window(marker: dict, default: timedelta) -> timedelta:
-    if marker.get(ARMED_AT) is not None and marker.get(RECEIPT_AT) is None:
-        return min(default, timedelta(minutes=4))
-    return default
 
 
 def get_pending_deletion_wipes(
@@ -831,7 +828,7 @@ def get_pending_deletion_wipes(
                 break
             data = doc.to_dict()
             running_at = data.get('wipe_running_at')
-            if running_at and running_at < now - _running_stale_window(data, running_stale_after):
+            if running_at and running_at < now - running_stale_window(data, running_stale_after):
                 result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
@@ -859,7 +856,7 @@ def get_pending_deletion_wipes(
             # Use the longer ``running_stale_after`` window so a queued-but-
             # not-yet-running retrying claim is not returned as a candidate
             # before the worker has had a chance to start.
-            if claimed_at and claimed_at < now - _running_stale_window(data, running_stale_after):
+            if claimed_at and claimed_at < now - running_stale_window(data, running_stale_after):
                 result.append(data | {'uid': doc.id})
 
     return result
@@ -939,7 +936,7 @@ def _claim_deletion_wipe_txn(
         # certainly crashed or the pod was killed mid-execution. A fresh or
         # moderately recent ``running`` marker belongs to a live worker.
         running_at = data.get('wipe_running_at')
-        if running_at and running_at >= now - _running_stale_window(data, running_stale_after):
+        if running_at and running_at >= now - running_stale_window(data, running_stale_after):
             return None
         write_account_authority(
             transaction,
@@ -966,7 +963,7 @@ def _claim_deletion_wipe_txn(
         # beyond ``stale_after`` (10 min) without transitioning to ``running``.
         # Using the short window would let the periodic reconciler enqueue
         # another copy every pass, causing duplicate wipes to race.
-        if claimed_at and claimed_at < now - _running_stale_window(data, running_stale_after):
+        if claimed_at and claimed_at < now - running_stale_window(data, running_stale_after):
             # Stale claim (worker probably crashed). Re-claim it.
             transaction.update(doc_ref, {'wipe_claimed_at': now})
             return snapshot.id
@@ -993,7 +990,9 @@ def claim_deletion_wipe(
 
 
 @transactional
-def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: timedelta, *, operation_id: str) -> str:
+def _claim_deletion_wipe_task_txn(
+    transaction, doc_ref, running_stale_after: timedelta, *, operation_id: str, expected_job_id: str | None = None
+) -> str:
     """Claim a Cloud Tasks delivery before running an account-deletion wipe.
 
     The claim intentionally stays in ``retrying`` until the cleanup worker
@@ -1006,6 +1005,8 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
         return 'missing'
 
     data = snapshot.to_dict()
+    if expected_job_id is not None and data.get('wipe_job_id') != expected_job_id:
+        return 'not_actionable'
     status = data.get('wipe_status')
     now = datetime.now(timezone.utc)
 
@@ -1018,7 +1019,7 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
             return 'not_actionable'
     if status == 'running':
         running_at = data.get('wipe_running_at')
-        if running_at and running_at >= now - _running_stale_window(data, running_stale_after):
+        if running_at and running_at >= now - running_stale_window(data, running_stale_after):
             return 'running'
 
     # A queued task retries transient pre-Auth billing failures. The reconciler
@@ -1037,17 +1038,17 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
 
 
 @cache_writer('deletion_marker_cache')
-def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER) -> str:
-    """Claim an account-deletion wipe for a Cloud Tasks worker.
-
-    Returns one of: ``claimed``, ``running``, ``completed``, ``missing``, or
-    ``not_actionable``. Only ``claimed`` callers may run the destructive wipe.
-    """
+def claim_deletion_wipe_for_task(
+    uid: str, running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER, *, expected_job_id: str | None = None
+) -> str:
+    """Claim a Cloud Tasks wipe; only a claimed delivery may run the wipe."""
     operation_id = uuid.uuid4().hex
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
     transaction = client.transaction()
-    return _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after, operation_id=operation_id)
+    return _claim_deletion_wipe_task_txn(
+        transaction, doc_ref, running_stale_after, operation_id=operation_id, expected_job_id=expected_job_id
+    )
 
 
 def create_person(uid: str, data: dict):

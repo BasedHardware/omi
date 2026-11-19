@@ -38,7 +38,10 @@ def _oidc_token(audience: str) -> str:
     from google.oauth2.id_token import fetch_id_token
 
     # Bound metadata and identity requests independently of workerd.
-    return fetch_id_token(partial(Request(), timeout=2), audience)
+    token = fetch_id_token(partial(Request(), timeout=2), audience)
+    if not isinstance(token, str) or not token:
+        raise EraseRejected('missing Go queue erase workload token')
+    return token
 
 
 def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
@@ -88,6 +91,8 @@ def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
 
 def _is_network_unavailable(error: httpx.RequestError) -> bool:
     """Only known network availability failures can authorize fallback."""
+    if isinstance(error, httpx.ConnectTimeout):
+        return False
     if isinstance(error, httpx.TimeoutException):
         return True
     current = error.__cause__
@@ -109,12 +114,15 @@ def _is_network_unavailable(error: httpx.RequestError) -> bool:
     return False
 
 
-async def _recover_erase(dsn: str, schema: str, uid: str) -> None:
+async def _recover_erase(dsn: str, schema: str, uid: str, expires: datetime) -> None:
     import psycopg
     from psycopg import sql
 
     try:
-        async with asyncio.timeout(10):
+        remaining = (expires - datetime.now(timezone.utc)).total_seconds()
+        if remaining <= 0:
+            raise EraseUnavailable('Go queue erase recovery grant expired')
+        async with asyncio.timeout(min(10, remaining)):
             connection = await psycopg.AsyncConnection.connect(
                 dsn,
                 sslmode='verify-full',
@@ -135,14 +143,14 @@ async def _recover_erase(dsn: str, schema: str, uid: str) -> None:
         raise EraseUnavailable('Go queue erase recovery unavailable') from None
 
 
-def _erase_at_postgres(uid: str) -> bool:
+def _erase_at_postgres(uid: str, expires: datetime) -> bool:
     dsn = os.getenv('GO_QUEUE_ERASE_RECOVERY_DATABASE_URL', '')
     if not dsn:
         return False
     schema = os.getenv('GO_QUEUE_ERASE_RECOVERY_SCHEMA', '')
     if not schema:
         raise EraseRejected('Go queue erase recovery schema missing')
-    asyncio.run(_recover_erase(dsn, schema, uid))
+    asyncio.run(_recover_erase(dsn, schema, uid, expires))
     return True
 
 
@@ -160,8 +168,9 @@ def require_committed_erase(
                 _erase_at_worker(uid, job_id, claim)
             except EraseUnavailable:
                 owns_claim()
-                receipt.record(uid, job_id, claim, 'verify')
-                if not _erase_at_postgres(uid):
+                current = receipt.record(uid, job_id, claim, 'verify')
+                expires = current.get(receipt.CLAIM_EXPIRES_AT)
+                if not isinstance(expires, datetime) or not _erase_at_postgres(uid, expires):
                     raise
                 path = 'postgres'
             owns_claim()

@@ -155,7 +155,7 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
         calls.append((users_router.run_deletion_wipe_with_lease, args))
         return False
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         calls.append((fn, args))
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
@@ -193,7 +193,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
         background_args.append(args)
         return False
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
         if fn is users_router.try_acquire_job_run_lock:
@@ -222,7 +222,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
 def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):
     release = MagicMock()
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
         if fn is users_router.try_acquire_job_run_lock:
@@ -246,7 +246,7 @@ def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):
 def test_run_account_deletion_wipe_drops_completed_job_without_mutation(monkeypatch):
     calls = []
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         calls.append((fn, args))
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'completed', 'uid': None}
@@ -267,7 +267,7 @@ def test_run_account_deletion_wipe_drops_completed_job_without_mutation(monkeypa
 def test_run_account_deletion_wipe_drops_unknown_or_ambiguous_job_without_mutation(monkeypatch, outcome):
     calls = []
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         calls.append((fn, args))
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': outcome, 'uid': None}
@@ -345,7 +345,7 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
         state['status'] = 'completed'
         return True
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         if fn is users_router.resolve_deletion_wipe_job_id:
             if state['status'] == 'completed':
                 return {'outcome': 'completed', 'uid': None}
@@ -376,7 +376,7 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
 
 
 def test_run_account_deletion_wipe_drops_non_actionable_job(monkeypatch):
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
         if fn is users_router.try_acquire_job_run_lock:
@@ -403,7 +403,7 @@ def test_run_account_deletion_wipe_preserves_lock_on_cancel(monkeypatch):
     async def run_wipe(*args):
         raise asyncio.CancelledError()
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
         if fn is users_router.try_acquire_job_run_lock:

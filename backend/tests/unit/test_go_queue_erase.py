@@ -19,9 +19,10 @@ def test_readback_counts_overdue_and_late_generations():
             {receipts.ARMED_AT: armed, receipts.RECEIPT_AT: now},
             {receipts.ARMED_AT: armed, receipts.RECEIPT_AT: ack, receipts.WIPE_AT: armed},
             {receipts.ARMED_AT: armed, receipts.RECEIPT_AT: ack},
+            {receipts.ARMED_AT: armed, receipts.RECEIPT_AT: ack, receipts.ORDER_UNKNOWN: True},
             {receipts.ARMED_AT: now},
         ],
-    ) == {'met': 2, 'eligible': 5, 'overdue_pending': 1}
+    ) == {'met': 2, 'eligible': 6, 'overdue_pending': 1}
 
 
 @pytest.mark.parametrize(
@@ -39,14 +40,14 @@ def test_only_committed_erase_unlocks_wipe(monkeypatch, error, enabled, expected
     def record(uid, job_id, claim, step, path=None):
         assert (uid, job_id, claim) == ('tenant', 'job', receipts.claim_fingerprint('token'))
         observed.append(step)
-        return {}
+        return {receipts.CLAIM_EXPIRES_AT: datetime.now(timezone.utc) + timedelta(seconds=10)}
 
     def worker(uid, job_id, claim):
         observed.append('workerd')
         if error:
             raise error()
 
-    def recovery(uid):
+    def recovery(uid, expires):
         observed.append('recovery')
         return enabled
 
@@ -82,9 +83,10 @@ def test_workerd_certificate_failure_cannot_authorize_recovery():
     error = httpx.ConnectError('connection rejected')
     error.__cause__ = ssl.SSLCertVerificationError('bad certificate')
     assert not erase._is_network_unavailable(error)
-    assert erase._is_network_unavailable(httpx.ConnectTimeout('timeout'))
+    assert not erase._is_network_unavailable(httpx.ConnectTimeout('ambiguous handshake timeout'))
+    assert erase._is_network_unavailable(httpx.ReadTimeout('timed out after establishing TLS'))
 
 
 def test_recovery_is_off_without_a_database_binding(monkeypatch):
     monkeypatch.delenv('GO_QUEUE_ERASE_RECOVERY_DATABASE_URL', raising=False)
-    assert erase._erase_at_postgres('tenant') is False
+    assert erase._erase_at_postgres('tenant', datetime.now(timezone.utc)) is False

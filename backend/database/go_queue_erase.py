@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
-from typing import Literal
+from typing import Any, Literal
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import transactional
@@ -24,7 +24,14 @@ CLAIM = 'go_queue_erase_claim'
 CLAIM_EXPIRES_AT = 'go_queue_erase_claim_expires_at'
 ERASE_LEASE_SECONDS = 180
 PATH = 'go_queue_erase_path'
+ORDER_UNKNOWN = 'go_queue_erase_prior_wipe_unknown'
 Step = Literal['arm', 'verify', 'receipt', 'wipe']
+
+
+def running_stale_window(marker: dict, default: timedelta) -> timedelta:
+    if marker.get(ARMED_AT) is not None and marker.get(RECEIPT_AT) is None:
+        return min(default, timedelta(minutes=4))
+    return default
 
 
 def claim_fingerprint(token: str) -> str:
@@ -42,7 +49,9 @@ def mark_wipe_running(transaction, ref, job_id: str | None, claim: str | None, o
         raise RuntimeError('account deletion wipe claim generation changed')
     if armed and claim is None:
         raise RuntimeError('armed Go queue erase requires a durable task claim')
-    fields = {'wipe_status': 'running', 'wipe_running_at': datetime.now(timezone.utc)}
+    fields: dict[str, Any] = {'wipe_status': 'running', 'wipe_running_at': datetime.now(timezone.utc)}
+    if marker.get('wipe_running_at') and not armed:
+        fields[ORDER_UNKNOWN] = True
     if claim is not None:
         fields.update({CLAIM: claim, CLAIM_EXPIRES_AT: None})
     write_account_authority(transaction, ref, fields, merge=True, preimage=snapshot, operation_id=operation_id)
@@ -71,7 +80,7 @@ def _record(transaction, client, ref, uid: str, job_id: str, claim: str, step: S
     if step == 'arm':
         if marker.get(RECEIPT_AT) is not None:
             return marker
-        fields = {CLAIM_EXPIRES_AT: datetime.now(timezone.utc) + timedelta(seconds=25)}
+        fields: dict[str, Any] = {CLAIM_EXPIRES_AT: datetime.now(timezone.utc) + timedelta(seconds=25)}
         if marker.get(ARMED_AT) is None:
             fields.update({ARMED_AT: firestore.SERVER_TIMESTAMP, RECEIPT_AT: None})
             if isinstance(marker.get('wipe_auth_deleted_at'), datetime):
@@ -115,7 +124,12 @@ def summarize(now: datetime, markers) -> dict[str, int]:
         if armed < start:
             continue
         total += 1
-        if isinstance(ack, datetime) and armed <= ack <= armed + ERASE_DEADLINE and (wipe is None or ack <= wipe):
+        if (
+            marker.get(ORDER_UNKNOWN) is not True
+            and isinstance(ack, datetime)
+            and armed <= ack <= armed + ERASE_DEADLINE
+            and (wipe is None or ack <= wipe)
+        ):
             good += 1
     return {'met': good, 'eligible': total, 'overdue_pending': overdue}
 
@@ -126,7 +140,7 @@ def readback(now: datetime, collection) -> dict[str, int]:
     recent = (
         collection.where(filter=FieldFilter(ARMED_AT, '>=', now - timedelta(days=7)))
         .where(filter=FieldFilter(ARMED_AT, '<=', cutoff))
-        .select([ARMED_AT, RECEIPT_AT, WIPE_AT])
+        .select([ARMED_AT, RECEIPT_AT, WIPE_AT, ORDER_UNKNOWN])
     )
     result = summarize(now, (snapshot.to_dict() or {} for snapshot in recent.stream()))
     # Only armed, unresolved markers explicitly store a null receipt. Filter

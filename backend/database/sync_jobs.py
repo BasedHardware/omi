@@ -1159,7 +1159,7 @@ def get_sync_job_run_lock_epoch(token: str) -> int:
     return epoch if epoch > 0 else 0
 
 
-def try_acquire_job_run_lock(job_id: str) -> Optional[str]:
+def try_acquire_job_run_lock(job_id: str, lease_seconds: int = RUN_LOCK_TTL_SECONDS) -> Optional[str]:
     """Acquire a generic compare-delete run lock, or return ``None`` if held.
 
     Audio merge and account-deletion tasks share this primitive but do not have
@@ -1167,7 +1167,7 @@ def try_acquire_job_run_lock(job_id: str) -> Optional[str]:
     durable lease epoch.
     """
     token = str(uuid.uuid4())
-    acquired = r.set(_key(f'{RUN_LOCK_KEY_PREFIX}{job_id}'), token, nx=True, ex=RUN_LOCK_TTL_SECONDS)
+    acquired = r.set(_key(f'{RUN_LOCK_KEY_PREFIX}{job_id}'), token, nx=True, ex=lease_seconds)
     return token if acquired else None
 
 

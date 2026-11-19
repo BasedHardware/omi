@@ -76,7 +76,7 @@ func (e eraseEndpoint) handle(w http.ResponseWriter, r *http.Request) {
 	marker, err := e.markers.ReadDeletionMarker(ctx, request.Tenant)
 	if err != nil {
 		e.report(err)
-		http.Error(w, "marker error", eraseFailureStatus(err))
+		http.Error(w, "marker authority unavailable", http.StatusConflict)
 		return
 	}
 	expires, armed := eraseGrant(marker, request, time.Now())
@@ -114,9 +114,6 @@ func eraseGrant(marker map[string]any, req eraseRequest, now time.Time) (time.Ti
 
 func eraseFailureStatus(err error) int {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		return http.StatusServiceUnavailable
-	}
-	if fault, ok := errors.AsType[*docstore.CallError](err); ok && fault.Kind == docstore.KindTransient {
 		return http.StatusServiceUnavailable
 	}
 	if fault, ok := errors.AsType[*pgconn.PgError](err); ok {

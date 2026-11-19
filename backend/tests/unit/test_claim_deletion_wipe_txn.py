@@ -902,3 +902,16 @@ def test_r14_legacy_marker_without_status_is_never_claimed_or_redriven():
         uids = [row['uid'] for row in users_db.get_pending_deletion_wipes(limit=100)]
     assert 'legacy1' not in uids and collection.queried
     assert None not in collection.queried
+
+
+def test_stale_task_cannot_claim_a_replacement_deletion_generation():
+    txn = _make_txn()
+    snapshot = _make_snapshot({'uid': 'uid1', 'wipe_status': 'pending', 'wipe_job_id': 'replacement'})
+    doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    raw_fn = getattr(users_db._claim_deletion_wipe_task_txn, 'to_wrap', users_db._claim_deletion_wipe_task_txn)
+    assert (
+        raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER, operation_id='old', expected_job_id='original')
+        == 'not_actionable'
+    )
+    assert txn._updates == []
+    assert txn._sets == []

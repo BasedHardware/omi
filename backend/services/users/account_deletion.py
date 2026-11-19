@@ -357,7 +357,13 @@ async def _renew_deletion_wipe_lease(
 
 
 async def run_deletion_wipe_with_lease(
-    uid: str, retry_count: int, terminal: bool, token: str, wipe_job_id: str | None = None
+    uid: str,
+    retry_count: int,
+    terminal: bool,
+    token: str,
+    wipe_job_id: str | None = None,
+    *,
+    short_lease: bool = False,
 ) -> bool:
     """Own renewal until the cleanup thread finishes, even if HTTP is cancelled."""
 
@@ -365,6 +371,8 @@ async def run_deletion_wipe_with_lease(
         stop = asyncio.Event()
         lost = Event()
         short_erase_lease = Event()
+        if short_lease:
+            short_erase_lease.set()
         heartbeat = start_background_task(
             _renew_deletion_wipe_lease(uid, token, stop, lost, short_erase_lease), name='account-deletion-lease'
         )
@@ -425,12 +433,17 @@ def background_wipe_user_data(
         if erase_claim is None:
             armed = users_db.mark_user_deletion_wipe_running(uid)
         else:
-            job_id, token, _short_lease = erase_claim
-            if not renew_job_run_lock(deletion_gate_token, token):
+            job_id, token, short_lease_event = erase_claim
+            lease_args = (go_erase_db.ERASE_LEASE_SECONDS,) if short_lease_event.is_set() else ()
+            if not renew_job_run_lock(deletion_gate_token, token, *lease_args):
                 raise RuntimeError('account deletion wipe claim lost')
             armed = users_db.mark_user_deletion_wipe_running(uid, job_id, go_erase_db.claim_fingerprint(token))
         preserve_erase_gate = armed is True
         needs_erase = preserve_erase_gate or go_queue_erase_required()
+        if needs_erase and erase_claim is not None:
+            erase_claim[2].set()
+            if not renew_job_run_lock(deletion_gate_token, erase_claim[1], go_erase_db.ERASE_LEASE_SECONDS):
+                raise RuntimeError('account deletion wipe claim lost')
         # The durable marker and queue claim are the authority for every
         # irreversible step below. In particular, do not cancel billing or
         # remove Firebase Auth from the request thread: a queue NotFound must
