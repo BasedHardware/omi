@@ -85,6 +85,36 @@ async def test_on_open_scopes_load_and_queues_processing(builder, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_same_start_fresh_windows_get_distinct_ids_and_audio(builder, monkeypatch):
+    from uuid import NAMESPACE_URL, uuid5
+
+    committed, _ = builder
+    prior_id = str(uuid5(NAMESPACE_URL, f'v3:u:{AT.isoformat()}'))
+    prior_end = AT + timedelta(seconds=10)
+    prior = {'id': prior_id, 'status': 'completed', 'started_at': AT, 'finished_at': prior_end}
+    recording = source(
+        claims=[{'conversation_id': prior_id, 'start': AT, 'end': prior_end}],
+        audio_files=[{'id': 'f', 'duration': 14}],
+        transcript_segments=[
+            {'id': 'first', 'text': 'one ' * 300, 'start': 0, 'end': 12},
+            {'id': 'second', 'text': 'two ' * 300, 'start': 0, 'end': 14},
+        ],
+    )
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, {prior_id: prior}, []))
+    monkeypatch.setattr(
+        service.models,
+        'outline',
+        lambda *a: '{"conversations":[{"first_line":1,"title":"One","kind":"conversation"},'
+        '{"first_line":2,"title":"Two","kind":"conversation"}]}',
+    )
+
+    await service.reconcile('u')
+    rows = committed[0][4]
+    assert len({prior_id, *(row['id'] for row in rows)}) == 3
+    assert [[(p['start'], p['end']) for p in row['recording_pieces']] for row in rows] == [[(10, 12)], [(12, 14)]]
+
+
+@pytest.mark.asyncio
 async def test_unreadable_markers_are_committed_instead_of_blocking(builder, monkeypatch):
     committed, _ = builder
     monkeypatch.setattr(

@@ -9020,7 +9020,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'تم رفع هذا التسجيل لكن Omi لا يزال ينشئ المحادثة. إذا حذفته الآن وفشلت المعالجة، فلن يمكن استرداده. هل تريد الحذف على أي حال؟';
+      'تم رفع هذا التسجيل بالفعل ويعالجه Omi الآن. الحذف هنا يزيل النسخة الموجودة على الهاتف. إذا فشلت المعالجة، فلن يتمكن Omi من إعادة المحاولة من هذا الهاتف.';
 
   @override
   String get syncCardAllBackedUp => 'تمت مزامنة كل التسجيلات';
@@ -15347,6 +15347,11 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'لم يتم تثبيت التحديث. لا تزال قلادتك تعمل على البرنامج الثابت الحالي ($version). يرجى التواصل مع الدعم بدلاً من إعادة محاولة التحديث.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15481,4 +15486,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'العودة إلى الرئيسية';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'الملخص عند انتهاء هذه المحادثة';
 }

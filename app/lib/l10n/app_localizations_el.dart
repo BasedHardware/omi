@@ -9148,7 +9148,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Αυτή η ηχογράφηση μεταφορτώθηκε, αλλά το Omi δημιουργεί ακόμη τη συνομιλία. Αν τη διαγράψετε τώρα και η επεξεργασία αποτύχει, δεν θα μπορεί να ανακτηθεί. Διαγραφή ούτως ή άλλως;';
+      'Αυτή η εγγραφή έχει ήδη μεταφορτωθεί και το Omi την επεξεργάζεται. Η διαγραφή εδώ αφαιρεί το αντίγραφο του τηλεφώνου. Αν η επεξεργασία αποτύχει, το Omi δεν θα μπορεί να ξαναδοκιμάσει από αυτό το τηλέφωνο.';
 
   @override
   String get syncCardAllBackedUp => 'Όλες οι ηχογραφήσεις συγχρονίστηκαν';
@@ -15537,6 +15537,11 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Η ενημέρωση δεν εγκαταστάθηκε. Το μενταγιόν σας συνεχίζει να λειτουργεί με το τρέχον υλικολογισμικό ($version). Επικοινωνήστε με την υποστήριξη αντί να δοκιμάσετε ξανά την ενημέρωση.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15671,4 +15676,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Πίσω στην Αρχική';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Σύνοψη όταν τελειώσει αυτή η συζήτηση';
 }

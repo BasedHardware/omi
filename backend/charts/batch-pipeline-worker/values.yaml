@@ -113,6 +113,7 @@ worker:
   # shared 1800-audio-second decode budget, not only the first, so the GPU
   # section does not wait on artifact fetches. false restores first-only.
   prepareFlightEnabled: true
+  projectionOutbox: true
   shadowPercent: 0
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: ""
@@ -289,6 +290,3 @@ recordSealSweeper:
   runtimeEnabled: true
   # Lead can observe one in-cluster plan cycle before the apply train.
   mode: apply
-
-# Prod-only bindings; staging post-render remains the sole staging source.
-jobstoreEnv: {}

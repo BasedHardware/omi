@@ -26,6 +26,11 @@
   "seed_review_by": "2026-11-15",
   "budget": 161,
   "names": {
+    "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED": {
+      "owner": "batch-custody / lead2",
+      "review_by": "2026-12-16",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED": {
       "owner": "Goal: Margin / Sol",
       "review_by": "2026-12-12",
@@ -477,6 +482,11 @@
     "BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT": {
       "owner": "firestore-lead / SCA-2280",
       "review_by": "2026-12-14"
+    },
+    "BATCH_PROJECTION_OUTBOX": {
+      "owner": "omi-pipeline / lead2",
+      "review_by": "2026-12-18",
+      "registry": "config/feature-flags.yaml"
     },
     "BATCH_PULL_BUSY_BORROW_ENABLED": {
       "owner": "cl2-gpueff / batch rollout lead",

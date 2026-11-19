@@ -8,6 +8,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 
+from utils.speakers.display import outline_speaker_labels
+
 
 def utc(value):
     if isinstance(value, str):
@@ -106,23 +108,33 @@ def stretches(members, now):
             )
     lines.sort(key=lambda line: (line['start'], line['conversation_id']))
     groups = []
-    manual_cuts = [utc(r['finished_at']) for r in members if r.get('v3_manual_end') and r.get('finished_at')]
+    cuts = iter(sorted(utc(r['finished_at']) for r in members if r.get('v3_manual_end') and r.get('finished_at')))
+    cut = next(cuts, None)
     for line in lines:
-        if (
-            not groups
-            or line['start'] - groups[-1]['end'] >= SILENCE
-            or any(groups[-1]['end'] <= cut < line['start'] for cut in manual_cuts)
-        ):
+        previous = groups[-1] if groups else None
+        # A segment belongs to the side on which it starts, even if it crosses the cut.
+        while cut is not None and cut <= line['start']:
+            if previous and previous['lines'][0]['start'] < cut:
+                previous['manual_end'] = True
+            cut = next(cuts, None)
+        silence = previous is None or line['start'] - previous['end'] >= SILENCE
+        if silence or (previous and previous['manual_end']):
             key = hashlib.sha256(f"{line['conversation_id']}:{line['start'].isoformat()}".encode()).hexdigest()[:24]
-            groups.append({'key': key, 'end': line['end'], 'lines': []})
+            groups.append(
+                {
+                    'key': key,
+                    'end': line['end'],
+                    'lines': [],
+                    'manual_end': False,
+                    'after_manual_end': bool(previous and previous['manual_end'] and not silence),
+                }
+            )
         group = groups[-1]
         group['lines'].append(line)
         group['end'] = max(group['end'], line['end'])
-    for index, group in enumerate(groups):
-        next_start = (
-            groups[index + 1]['lines'][0]['start'] if index + 1 < len(groups) else now + timedelta(microseconds=1)
-        )
-        group['manual_end'] = any(group['lines'][0]['start'] <= cut < next_start for cut in manual_cuts)
+    if groups and cut is not None and cut <= now:
+        groups[-1]['manual_end'] = True
+    for group in groups:
         continues = any(
             r.get('_v3_page_continues') and r['id'] == group['lines'][-1]['conversation_id'] for r in members
         )
@@ -146,14 +158,23 @@ def wanted(groups, cache):
     ]
 
 
-def messages(group, tz):
+def messages(group, tz, *, cohesion=False):
     lines = group['lines']
+    if cohesion:
+        labels = outline_speaker_labels([line['segment'] for line in lines])
+        correction = (
+            '\nS1, S2 and so on are diarization labels, not names. S? marks unassigned speech. '
+            'S? can refer to different people and does not by itself mark a change of people. Omi denotes the assistant.'
+        )
+    else:
+        labels = [line['speaker'] for line in lines]
+        correction = ''
     text = '\n'.join(
-        f"[L{i} {line['start'].astimezone(tz):%H:%M}] {line['speaker']}: {line['text']}"
-        for i, line in enumerate(lines, 1)
+        f"[L{i} {line['start'].astimezone(tz):%H:%M}] {label}: {line['text']}"
+        for i, (line, label) in enumerate(zip(lines, labels), 1)
     )
     return [
-        ('system', SYSTEM_PROMPT),
+        ('system', SYSTEM_PROMPT + correction),
         (
             'human',
             f"Stretch {lines[0]['start'].astimezone(tz):%H:%M} to {group['end'].astimezone(tz):%H:%M}.\n\nTranscript:\n{text}",

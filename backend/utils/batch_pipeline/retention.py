@@ -65,7 +65,9 @@ def batch_object_address(uid: str, uri: str, allowed_buckets: set[str]) -> tuple
     return bucket_name, path, generation
 
 
-def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, storage_client: Any = None) -> None:
+def delete_batch_object(
+    uid: str, uri: str, *, timeout: float | None = None, storage_client: Any = None, resolve_generation: bool = False
+) -> None:
     """Delete only a configured, owner-scoped object; foreign refs fail closed.
 
     Inside ``rpc_deadline`` (a gate-held unit) the delete is one attempt with
@@ -81,6 +83,14 @@ def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, sto
     blob = storage_client.bucket(bucket_name).blob(path, generation=generation)
     left = rpc_deadline.remaining()
     try:
+        if resolve_generation and generation is None:
+            if timeout is None or left is not None:
+                raise ValueError('generation resolution requires a standalone bounded RPC')
+            blob.reload(timeout=timeout, retry=None)
+            generation = blob.generation
+            if not generation:
+                raise RuntimeError('object metadata has no generation')
+            blob = storage_client.bucket(bucket_name).blob(path, generation=generation)
         if left is not None:
             if left <= 0:
                 raise rpc_deadline.RpcDeadlineExceeded('object delete not sent: unit deadline passed')

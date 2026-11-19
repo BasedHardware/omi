@@ -19,6 +19,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud.firestore_v1 import FieldFilter
 
+from config.conversations_v3 import stretch_cohesion_enabled
 from utils.conversations.v3.triggers import enqueue, changed
 from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
@@ -130,17 +131,19 @@ def recording_short_path(fn):
 
 def _match(window, existing, used):
     start, end = window['lines'][0]['start'], window['lines'][-1]['end']
+    published = window.get('_published_ids', ())
     candidates = [
         r
         for r in existing.values()
         if r['id'] not in used
+        and (r['id'] not in published or r.get('deleted'))
         and r.get('started_at')
         and r.get('finished_at')
         and r['started_at'] <= end
         and r['finished_at'] >= start
     ]
-    # First resulting split retains the live id. Deleted targets also retain
-    # their identity, so rebuilds cannot resurrect a deleted time window.
+    # Published claimants are assigned by the planner. Time matching is the fallback
+    # for live rows, legacy rows without claims or playback, and deletion tombstones.
     return min(candidates, key=lambda r: r['started_at']) if candidates else None
 
 
@@ -211,6 +214,7 @@ async def reconcile(
             )
         now = datetime.now(timezone.utc)
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
+        cohesion = stretch_cohesion_enabled()
         groups = outline.stretches(eligible, now)
         if on_open and conversation_id:
             target = existing.get(conversation_id)
@@ -232,7 +236,7 @@ async def reconcile(
         background = await run_blocking(db_executor, context.outline_sources, uid, groups)
         for group in groups:
             await run_blocking(db_executor, leases.renew, uid, key, token)
-            messages = outline.messages(group, timezone.utc)
+            messages = outline.messages(group, timezone.utc, cohesion=cohesion)
             messages.append(
                 (
                     'human',
@@ -283,13 +287,16 @@ async def reconcile(
                 cache.append({'fingerprint': fingerprint, 'entries': entries})
 
         async def plan():
-            windows = planner.preserve_finished_windows(planner.windows(groups, outlines), existing, recordings)
+            windows = planner.preserve_finished_windows(
+                planner.windows(groups, outlines, cohesion=cohesion), existing, recordings
+            )
             # A retained finished conversation owns its id by claim evidence; a fresh window that sorts
             # before it (late speech overlapping its start) must not time-match the same id. Two planned
             # rows with one id each re-add the source's held claims, doubling them every pass until the
             # recording outgrows Firestore's 1 MiB document limit (document_too_large).
             rows, used = [], {window['existing_id'] for window in windows if window.get('existing_id')}
             taken = set()
+            allocated = {}
             await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
             for window in windows:
                 # An affirmative transcription failure is terminal even before the silence deadline.
@@ -298,12 +305,20 @@ async def reconcile(
                 prior = existing.get(window.get('existing_id')) or _match(window, existing, used)
                 if prior:
                     used.add(prior['id'])
-                row = planner.build(uid, window, recordings, prior)
-                if not prior and row['id'] in used | taken:
-                    # A fresh window starting at a planned row's exact start derives the same start-keyed
-                    # id; qualify it with its first recording so one id never names two planned rows.
+                row = planner.build(uid, window, recordings, prior, allocated=allocated)
+                published_ids = window.get('_published_ids', ())
+                if not prior and (row['id'] in used | taken or row['id'] in published_ids):
                     first = window['lines'][0]['conversation_id']
-                    row['id'] = str(uuid5(NAMESPACE_URL, f"v3:{uid}:{row['started_at'].isoformat()}:{first}"))
+                    seed = f"v3:{uid}:{row['started_at'].isoformat()}:{first}"
+                    blocked_ids = used | taken | set(published_ids)
+                    # Preserve the recording-qualified ID when free. Same-clock windows can also
+                    # share a recording, so probe deterministic suffixes in planner order.
+                    identifier = str(uuid5(NAMESPACE_URL, seed))
+                    suffix = 0
+                    while identifier in blocked_ids:
+                        suffix += 1
+                        identifier = str(uuid5(NAMESPACE_URL, f'{seed}:{suffix}'))
+                    row['id'] = identifier
                 taken.add(row['id'])
                 contributing = _backfill_runs(window, recordings)
                 if derive and len(contributing) > 1:
@@ -396,6 +411,8 @@ async def reconcile(
                     row['v3_process_pending'] = False
                     row['v3_backfill_process_pending'] = True
                 rows.append(row)
+                for rid, claims in row['_v3_claims'].items():
+                    allocated.setdefault(rid, []).extend((claim['start'], claim['end']) for claim in claims)
             return rows
 
         rows = await plan()

@@ -3019,7 +3019,7 @@
     "noRecordingsYet": "Még nincs felvétel",
     "syncInProgress": "Szinkronizálás folyamatban",
     "deleteWhileProcessingTitle": "Még feldolgozás alatt",
-    "deleteWhileProcessingMessage": "Ezt a felvételt feltöltöttük, de az Omi még készíti a beszélgetést. Ha most törli és a feldolgozás meghiúsul, nem állítható vissza. Mégis törli?",
+    "deleteWhileProcessingMessage": "Ez a felvétel már fel van töltve, és az Omi feldolgozza. Az itteni törlés eltávolítja a telefonon lévő másolatot. Ha a feldolgozás sikertelen, az Omi erről a telefonról nem tudja újrapróbálni.",
     "syncCardAllBackedUp": "Minden felvétel szinkronizálva",
     "syncCardReadyCount": "{count, plural, one{1 felvétel készen áll a szinkronizálásra} other{{count} felvétel készen áll a szinkronizálásra}}",
     "syncCardProcessing": "Feldolgozás az Omiban…",
@@ -4746,6 +4746,7 @@
     "hasLinkedTasksLabel": "Kapcsolódó feladatokat tartalmaz",
     "hasTasksFilter": "Feladatokkal",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "A frissítés nem települt. A medál továbbra is működik a jelenlegi firmware-rel ({version}). A frissítés újrapróbálása helyett kérjük, fordulj az ügyfélszolgálathoz.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4785,5 +4786,6 @@
     "onTheWayServerWork": "A szerver által jelzett munka",
     "finishNothingToProcess": "Még nincs mit feldolgozni.",
     "finishStillProcessing": "Még feldolgozás alatt. Megjelenik a Kezdőlapon.",
-    "finishBackToHome": "Vissza a Kezdőlapra"
+    "finishBackToHome": "Vissza a Kezdőlapra",
+    "conversationSummaryWhenItEnds": "Összefoglaló, amikor ez a beszélgetés véget ér"
 }

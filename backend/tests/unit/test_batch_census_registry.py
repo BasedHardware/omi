@@ -74,8 +74,9 @@ def test_postgres_batch_selector_contract():
         store.ready_owners: [((None, 100), {}), ((owner, 100), {'ceiling_owner_key': 'z'})],
         store.held_merge_owners: [((100,), {'after': owner})],
         store.oldest_retry: [((0,), {})],
-        store.projection_page: [
+        store._projection_page: [
             ((), {}),
+            ((), {'include_outbox': True}),
             ((), {'due_before': now}),
             ((), {'followup_due_before': now, 'after': (0, 0, segment)}),
         ],

@@ -1,5 +1,7 @@
 import 'package:omi/utils/analytics/lag_work_registry.dart';
 import 'sync_upload_refusal.dart';
+import 'conversation_page_headers.dart';
+export 'conversation_page_headers.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -150,8 +152,10 @@ Future<List<ServerConversation>> getConversations({
 Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversationsResult({
   Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
   void Function(int)? onStorageCount,
+  void Function(ConversationPageHeaders)? onPageHeaders,
   int limit = 50,
   int offset = 0,
+  String? cursor,
   List<ConversationStatus> statuses = const [],
   bool includeDiscarded = false,
   DateTime? startDate,
@@ -169,6 +173,7 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
     endDate: endDate,
     folderId: folderId,
     starred: starred,
+    cursor: cursor,
   );
 
   final held = <String, ServerConversation>{};
@@ -197,6 +202,7 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
         threshold: conversationListBackgroundParseBytes,
         debugName: 'conversation_list_parse');
     onStorageCount?.call(int.tryParse(response.headers['x-omi-conversation-page-size'] ?? '') ?? memories.length);
+    onPageHeaders?.call(ConversationPageHeaders.parse(response.headers));
     // Preserve an exact local fallback for each server omission. If a later
     // overlay refresh drops this episode, its members can still render on Home.
     final retained =
@@ -589,6 +595,7 @@ String conversationCollectionUrl(
   DateTime? endDate,
   String? folderId,
   bool? starred,
+  String? cursor,
 }) {
   final root = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
   var url =
@@ -604,6 +611,9 @@ String conversationCollectionUrl(
   }
   if (starred != null) {
     url += '&starred=$starred';
+  }
+  if (cursor != null && cursor.isNotEmpty) {
+    url += '&cursor=${Uri.encodeQueryComponent(cursor)}';
   }
   return url;
 }
@@ -629,10 +639,14 @@ class ConversationApi {
     bool? starred,
     Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
     void Function(int)? onStorageCount,
+    void Function(ConversationPageHeaders)? onPageHeaders,
+    String? cursor,
   }) =>
       _listHomeConversations(this,
           limit: limit,
           offset: offset,
+          cursor: cursor,
+          onPageHeaders: onPageHeaders,
           statuses: statuses,
           includeDiscarded: includeDiscarded,
           startDate: startDate,

@@ -110,6 +110,8 @@ void main() {
       {bool rollback = false,
       Locale locale = const Locale('en'),
       String firmwareVersion = '2.0.10',
+      String modelNumber = 'Omi CV 1',
+      String deviceName = 'Omi',
       bool expectOffer = true}) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -138,10 +140,10 @@ void main() {
             isRollback: rollback,
             device: BtDevice(
                 id: 'fixture-pendant',
-                name: 'Omi',
+                name: deviceName,
                 type: DeviceType.omi,
                 rssi: -50,
-                modelNumber: 'Omi',
+                modelNumber: modelNumber,
                 firmwareRevision: firmwareVersion),
           ),
         ),
@@ -190,11 +192,47 @@ void main() {
       });
       await tester.pump();
       expect(tester.takeException(), isNull);
-      if (status == 'not-installed') expect(find.text(en.firmwareUpdateNotInstalledMessage('2.0.10')), findsOneWidget);
+      if (status == 'not-installed') {
+        expect(find.text(en.firmwareUpdateNotInstalledCv1Message('2.0.10')), findsOneWidget);
+      }
       if (status == 'no-reconnect') expect(find.text(en.firmwareUpdateUnconfirmedMessage), findsOneWidget);
       if (status == 'verifying') expect(find.text(en.firmwareVerifyingInstallation), findsOneWidget);
       if (status == 'installed') expect(find.text('${en.currentVersion}: 3.0.1'), findsOneWidget);
       await capture(tester, 'ota-$status.png');
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
+  Future<void> showNotInstalled(WidgetTester tester) async {
+    final dynamic state = tester.state(find.byType(FirmwareUpdate));
+    state.setState(() {
+      state.installProgress = 100;
+      state.observedFirmwareVersion = '2.0.10';
+      state.updateFailure = FirmwareUpdateFailure.notInstalled;
+    });
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  }
+
+  testWidgets('CV1 not_installed says the pendant still works and points to support, not a retry', (tester) async {
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80));
+    await showNotInstalled(tester);
+    expect(
+        en.firmwareUpdateNotInstalledCv1Message('2.0.10'),
+        "The update didn't install. Your pendant still works on its current firmware (2.0.10). "
+        'Please contact support rather than retrying the update.');
+    expect(find.text(en.firmwareUpdateNotInstalledCv1Message('2.0.10')), findsOneWidget);
+    expect(find.text(en.firmwareUpdateNotInstalledMessage('2.0.10')), findsNothing);
+    await capture(tester, '003-mobile-ios-firmware-cv1-not-installed.png');
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  for (final (model, name) in [('Omi DevKit 2', 'Omi DevKit 2'), ('Omi Glass', 'Omi Glass'), ('Neo', 'Omi Neo')]) {
+    testWidgets('$model not_installed keeps the try-again copy', (tester) async {
+      await pumpPage(tester, _DeviceProvider(batteryLevel: 80), modelNumber: model, deviceName: name);
+      await showNotInstalled(tester);
+      expect(find.text(en.firmwareUpdateNotInstalledMessage('2.0.10')), findsOneWidget);
+      expect(find.text(en.firmwareUpdateNotInstalledCv1Message('2.0.10')), findsNothing);
       debugDefaultTargetPlatformOverride = null;
     });
   }

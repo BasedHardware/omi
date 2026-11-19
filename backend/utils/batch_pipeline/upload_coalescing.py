@@ -296,7 +296,7 @@ async def drain_group(store, artifacts, group_id, *, admit_upload=None, now=None
     try:
         uploads = []
         for index, member in enumerate(group['members']):
-            item = WorkItem(**member['item'])
+            item = WorkItem.from_dict(member['item'])
             body = await run_blocking(storage_executor, artifacts.fetch_audio, item)
             destination = Path(directory.name) / str(index)
             await run_blocking(storage_executor, destination.mkdir)

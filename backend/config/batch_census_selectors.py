@@ -247,7 +247,7 @@ EXCEPTIONS: dict[str, SelectorException] = {
         200,
         'projection sweep or bounded continuation',
         'Migrate to durable projection wake and qualified due readers',
-        '2887495ccf5f4a5c25e4202120e002f9c8d086f95c64b8e8b7ce14eb3b35bd54',
+        '2208902067e1f1f57b8d207fef7e46f13f937fccb2f3e07376ed97c490ebf40d',
     ),
     'database.batch_pipeline_store.protected_capture_page': _legacy(
         'Capture window enforces service cohort while availability is checked locally',
@@ -492,10 +492,10 @@ _SQL_PORTS = (
         '3c90270b73e52703a861a21900fb4c3a8599fa031397714263022a1f23edcb0f',
     ),
     (
-        'PostgresStore.projection_page',
+        'PostgresStore._projection_page',
         'projection_page',
         200,
-        'a1cdb15c191219fa5322cbb205dbac856ffa0994c0241a29961038442311dbd9',
+        'bacb761635ccee366b1f9c66339a9831923c014b0a2bf05f4a30f2e1670bea51',
     ),
     (
         'PostgresStore.first_pending_in',
