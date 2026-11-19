@@ -89,6 +89,8 @@ async def test_same_start_fresh_windows_get_distinct_ids_and_audio(builder, monk
     from uuid import NAMESPACE_URL, uuid5
 
     committed, _ = builder
+    # Two outline cards in one stretch stay two windows only with sit-down joining off.
+    monkeypatch.setenv('CONVERSATIONS_V3_SITDOWN', 'off')
     prior_id = str(uuid5(NAMESPACE_URL, f'v3:u:{AT.isoformat()}'))
     prior_end = AT + timedelta(seconds=10)
     prior = {'id': prior_id, 'status': 'completed', 'started_at': AT, 'finished_at': prior_end}
@@ -139,8 +141,9 @@ async def test_preceding_outline_context_is_title_and_line(builder, monkeypatch)
     _, messages = builder
     a, b = source('a'), source(
         'b',
-        started_at=AT + timedelta(minutes=10),
-        finished_at=AT + timedelta(minutes=11),
+        # Past the sit-down silence (15 min) too, so the second recording is a new stretch either way.
+        started_at=AT + timedelta(minutes=20),
+        finished_at=AT + timedelta(minutes=21),
         transcript_segments=[{'text': 'another synthetic discussion', 'start': 0, 'end': 10}],
     )
     monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'a': a_row, 'b': b_row}, {}, []))

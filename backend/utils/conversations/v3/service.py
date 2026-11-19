@@ -19,7 +19,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud.firestore_v1 import FieldFilter
 
-from config.conversations_v3 import stretch_cohesion_enabled
+from config.conversations_v3 import sitdown_enabled, stretch_cohesion_enabled
 from utils.conversations.v3.triggers import enqueue, changed
 from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
@@ -215,7 +215,8 @@ async def reconcile(
         now = datetime.now(timezone.utc)
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
         cohesion = stretch_cohesion_enabled()
-        groups = outline.stretches(eligible, now)
+        sitdown = sitdown_enabled()
+        groups = outline.stretches(eligible, now, silence=outline.SITDOWN_SILENCE if sitdown else outline.SILENCE)
         if on_open and conversation_id:
             target = existing.get(conversation_id)
             if target is None:
@@ -236,7 +237,7 @@ async def reconcile(
         background = await run_blocking(db_executor, context.outline_sources, uid, groups)
         for group in groups:
             await run_blocking(db_executor, leases.renew, uid, key, token)
-            messages = outline.messages(group, timezone.utc, cohesion=cohesion)
+            messages = outline.messages(group, timezone.utc, cohesion=cohesion, sitdown=sitdown)
             messages.append(
                 (
                     'human',
@@ -270,7 +271,7 @@ async def reconcile(
                     entries = [{**entry, '_outline_failed': True} for entry in outline.fallback(group)]
             else:
                 # First speech is visible without a paid call. Outline on open
-                # or at the five-minute deadline provides the first real title.
+                # or at the stretch deadline (its silence) provides the first real title.
                 entries = [
                     {
                         'first_line': 1,
@@ -288,7 +289,7 @@ async def reconcile(
 
         async def plan():
             windows = planner.preserve_finished_windows(
-                planner.windows(groups, outlines, cohesion=cohesion), existing, recordings
+                planner.windows(groups, outlines, cohesion=cohesion, sitdown=sitdown), existing, recordings
             )
             # A retained finished conversation owns its id by claim evidence; a fresh window that sorts
             # before it (late speech overlapping its start) must not time-match the same id. Two planned
@@ -471,7 +472,10 @@ async def reconcile(
                 # A different minute than the currently executing task avoids
                 # Cloud Tasks' completed-name dedupe swallowing the continuation.
                 await run_blocking(
-                    db_executor, enqueue, uid, at=max(group['end'] + outline.SILENCE, now + timedelta(minutes=1))
+                    db_executor,
+                    enqueue,
+                    uid,
+                    at=max(group['end'] + group.get('silence', outline.SILENCE), now + timedelta(minutes=1)),
                 )
         for row in rows:
             prior = existing.get(row['id']) or {}

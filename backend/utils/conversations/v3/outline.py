@@ -49,13 +49,31 @@ Return one JSON object: {"conversations": [ ... ]} where each conversation has
 Write in English unless the speech is mostly in another language."""
 
 SILENCE = timedelta(minutes=5)
+# Sit-down cutting (config.conversations_v3.sitdown_enabled): a stretch ends at 15 minutes without
+# speech, so one sit-down with pauses reaches the outline whole.
+SITDOWN_SILENCE = timedelta(minutes=15)
+# A pause this long is shown to the outline as a marker line between numbered lines.
+GAP_MARK = timedelta(minutes=2)
+
+FIVE_MINUTE_RULE = (
+    'Five minutes of recorded silence is a hard boundary, even if the same people or topic return. '
+    'Set resumes_previous only to continue the same activity with the same people before that silence boundary.'
+)
+SITDOWN_RULE = (
+    'Find the sit-downs first: stretches where the wearer is with the same people in the same place. '
+    'A pause marked "min without speech", a new topic or a tangent does not end a sit-down; '
+    'people leaving or arriving, a call ending, or getting up to go somewhere else does. '
+    'Unclear, garbled or foreign-language lines between the lines of a sit-down belong to it: use "background" '
+    'only for a stretch in which the wearer takes no part from start to finish. '
+    'Set resumes_previous only to continue the same activity with the same people.'
+)
 
 
 # Clock slack when matching the same speech captured by two recordings.
 DUPLICATE_OVERLAP_SLACK = timedelta(seconds=2)
 
 
-def stretches(members, now):
+def stretches(members, now, *, silence=SILENCE):
     lines = []
     seen = []
     for row in sorted(
@@ -117,8 +135,8 @@ def stretches(members, now):
             if previous and previous['lines'][0]['start'] < cut:
                 previous['manual_end'] = True
             cut = next(cuts, None)
-        silence = previous is None or line['start'] - previous['end'] >= SILENCE
-        if silence or (previous and previous['manual_end']):
+        gap = previous is None or line['start'] - previous['end'] >= silence
+        if gap or (previous and previous['manual_end']):
             key = hashlib.sha256(f"{line['conversation_id']}:{line['start'].isoformat()}".encode()).hexdigest()[:24]
             groups.append(
                 {
@@ -126,7 +144,8 @@ def stretches(members, now):
                     'end': line['end'],
                     'lines': [],
                     'manual_end': False,
-                    'after_manual_end': bool(previous and previous['manual_end'] and not silence),
+                    'after_manual_end': bool(previous and previous['manual_end'] and not gap),
+                    'silence': silence,
                 }
             )
         group = groups[-1]
@@ -142,7 +161,7 @@ def stretches(members, now):
         continues = not later and any(
             r.get('_v3_page_continues') and r['id'] == group['lines'][-1]['conversation_id'] for r in members
         )
-        group['finished'] = later or (now - group['end'] >= SILENCE and not continues) or group['manual_end']
+        group['finished'] = later or (now - group['end'] >= silence and not continues) or group['manual_end']
         group['fingerprint'] = hashlib.sha256(
             json.dumps(
                 [{k: line[k] for k in ('start', 'end', 'text', 'conversation_id')} for line in group['lines']],
@@ -162,7 +181,17 @@ def wanted(groups, cache):
     ]
 
 
-def messages(group, tz, *, cohesion=False):
+def _with_gap_marks(lines, rendered):
+    out, previous_end = [], None
+    for line, text in zip(lines, rendered):
+        if previous_end is not None and line['start'] - previous_end >= GAP_MARK:
+            out.append(f"---- {round((line['start'] - previous_end).total_seconds() / 60)} min without speech ----")
+        out.append(text)
+        previous_end = line['end'] if previous_end is None else max(previous_end, line['end'])
+    return out
+
+
+def messages(group, tz, *, cohesion=False, sitdown=False):
     lines = group['lines']
     if cohesion:
         labels = outline_speaker_labels([line['segment'] for line in lines])
@@ -173,12 +202,14 @@ def messages(group, tz, *, cohesion=False):
     else:
         labels = [line['speaker'] for line in lines]
         correction = ''
-    text = '\n'.join(
+    rendered = [
         f"[L{i} {line['start'].astimezone(tz):%H:%M}] {label}: {line['text']}"
         for i, (line, label) in enumerate(zip(lines, labels), 1)
-    )
+    ]
+    text = '\n'.join(_with_gap_marks(lines, rendered) if sitdown else rendered)
+    system = SYSTEM_PROMPT.replace(FIVE_MINUTE_RULE, SITDOWN_RULE) if sitdown else SYSTEM_PROMPT
     return [
-        ('system', SYSTEM_PROMPT + correction),
+        ('system', system + correction),
         (
             'human',
             f"Stretch {lines[0]['start'].astimezone(tz):%H:%M} to {group['end'].astimezone(tz):%H:%M}.\n\nTranscript:\n{text}",

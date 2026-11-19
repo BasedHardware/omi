@@ -64,6 +64,14 @@ def stretch_cohesion_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 
 
+def sitdown_enabled() -> bool:
+    """Cut at sit-downs, not five-minute pauses: 15-minute stretches, gap markers, joined talk.
+
+    On by default; ``CONVERSATIONS_V3_SITDOWN=off`` is the kill switch (back to 5-minute stretches).
+    """
+    return os.getenv('CONVERSATIONS_V3_SITDOWN', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
+
+
 def backfill_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_BACKFILL', 'off').strip().lower() == 'on'
 

@@ -97,7 +97,41 @@ def _fold_short_topics(lines: list, entries: list[dict[str, Any]]) -> list[dict[
     return result
 
 
-def _cohesive_groups(groups, outlines) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
+def _join_sitdown(lines: list, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One sit-down is one conversation: neighbouring conversation entries of a stretch join.
+
+    A stretch already ends at a long silence, so talk inside it with the same kind is one card; topics
+    become sections. Short dictation between two conversation entries (under the Home word minimum)
+    joins as a section too; media, background and longer dictation stay their own cards.
+    """
+    starts = [entry['first_line'] - 1 for entry in entries]
+    counts = {start + 1: word_count(lines[start:end]) for start, end in zip(starts, starts[1:] + [len(lines)])}
+    runs: list[list[dict[str, Any]]] = []
+    for index, entry in enumerate(entries):
+        joinable = entry['kind'] == 'conversation' or (
+            entry['kind'] == 'voice_work'
+            and counts[entry['first_line']] < visibility.MIN_HOME_WORDS
+            and 0 < index < len(entries) - 1
+            and entries[index - 1]['kind'] == 'conversation'
+            and entries[index + 1]['kind'] == 'conversation'
+        )
+        if joinable and runs and runs[-1][-1].get('_sitdown_joinable'):
+            runs[-1].append({**entry, '_sitdown_joinable': True})
+        else:
+            runs.append([{**entry, '_sitdown_joinable': joinable}])
+    result = []
+    for run in runs:
+        run = [{k: v for k, v in entry.items() if k != '_sitdown_joinable'} for entry in run]
+        conversations = [entry for entry in run if entry['kind'] == 'conversation']
+        if len(run) == 1 or not conversations:
+            result.extend(run)
+            continue
+        primary = max(conversations, key=lambda entry: counts[entry['first_line']])
+        result.append(_as_sections(run, primary=primary)[0])
+    return result
+
+
+def _cohesive_groups(groups, outlines, sitdown=False) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
     for group, entries in zip(groups, outlines):
         if not entries:
             continue
@@ -136,13 +170,16 @@ def _cohesive_groups(groups, outlines) -> Iterator[tuple[dict[str, Any], list[di
                 'finished': group['finished'] or not last,
                 '_stretch_words': word_count(part),
             }
-            yield bounded, _as_sections(topics) if manual else _fold_short_topics(part, topics)
+            if manual:
+                yield bounded, _as_sections(topics)
+            else:
+                yield bounded, _fold_short_topics(part, _join_sitdown(part, topics) if sitdown else topics)
             start = end
 
 
-def windows(groups, outlines, *, cohesion=False):
+def windows(groups, outlines, *, cohesion=False, sitdown=False):
     result = []
-    pairs = _cohesive_groups(groups, outlines) if cohesion else zip(groups, outlines)
+    pairs = _cohesive_groups(groups, outlines, sitdown) if cohesion else zip(groups, outlines)
     for group, entries in pairs:
         first_result = len(result)
         if len(entries) > 1 and (group.get('manual_end') or group.get('after_manual_end')):
@@ -181,7 +218,8 @@ def windows(groups, outlines, *, cohesion=False):
                     and not prior.get('manual_end')
                     and prior['kind'] == candidate['kind']
                     and prior.get('people') == candidate.get('people')
-                    and max(timedelta(0), part[0]['start'] - max(line['end'] for line in prior['lines'])) < SILENCE
+                    and max(timedelta(0), part[0]['start'] - max(line['end'] for line in prior['lines']))
+                    < group.get('silence', SILENCE)
                     and max(max(line['end'] for line in prior['lines']), max(line['end'] for line in part))
                     - prior['lines'][0]['start']
                     <= CAP
