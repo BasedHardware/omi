@@ -51,6 +51,11 @@ OLDEST = Gauge('omi_summary_debt_oldest_age_seconds', 'Oldest overdue summary de
 SAMPLED_AT = Gauge('omi_summary_debt_sample_timestamp_seconds', "Timestamp of this replica's bounded debt sample")
 EXPIRED_SEEN = Gauge('omi_summary_debt_expired_seen', 'Rows skipped as expired in the last claimed repair tick')
 REPAIR = Counter('omi_summary_debt_repair_total', 'Summary debt repair tick outcomes', ['outcome'])
+REPAIR_DISCOVERY = Counter(
+    'omi_summary_debt_repair_discovery_total',
+    'Summary debt repair discovery and redrive observations',
+    ['phase', 'outcome'],
+)
 NEAR_EXPIRY_ADMITTED = Gauge(
     'omi_summary_debt_near_expiry_admitted', 'Successful urgent redrives in the last claimed repair tick'
 )
