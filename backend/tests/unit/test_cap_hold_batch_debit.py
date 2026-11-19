@@ -140,6 +140,19 @@ async def test_without_reservations_the_same_page_overshoots(harness, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_a_full_ledger_is_logged_as_backpressure_not_a_worker_failure(harness, monkeypatch, caplog):
+    # A ledger full of live reservations defers the hand-off; it is not a worker failure, so it must not
+    # carry a traceback that makes the deadlock class uncountable.
+    def refuse(*args, **kwargs):
+        raise reservations.ReservationBoundExceeded(live=reservations.MAX_OPEN, settled=0)
+
+    monkeypatch.setattr(reservations, 'reserve', refuse)
+    await worker.run(UID, continuation=True)
+    assert f'outcome=reservation_full uid={UID} live={reservations.MAX_OPEN} settled=0' in caplog.text
+    assert 'outcome=deferred' not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_a_second_run_sees_the_first_runs_reservation_until_projection(harness, reservation_db):
     await worker.run(UID, continuation=True)
     harness.job.update(state='processing', lease_until=0, cursor_audio=None, cursor_text=None)
@@ -250,12 +263,17 @@ async def test_projected_handoff_frees_a_slot_in_a_full_ledger(full_reservation_
     assert len(entries(db)) == reservations.MAX_OPEN
 
 
-def test_full_ledger_can_recover_after_projected_handoff_was_already_erased(full_reservation_ledger, monkeypatch):
+def test_full_ledger_can_recover_after_projected_handoff_was_already_erased(
+    full_reservation_ledger, monkeypatch, caplog
+):
     db = full_reservation_ledger
     original = deepcopy(entries(db))
     monkeypatch.setattr(reservations, 'batch_status', lambda uid, job_id: 'pending')
-    with pytest.raises(ValueError, match='cap-hold reservation bound exceeded'):
+    with pytest.raises(reservations.ReservationBoundExceeded) as refused:
         reservations.reserve(UID, 'next-hold', units=1, period=PERIOD, batch_job_id='bp_next')
+    # Every entry is genuinely live: backpressure, not the deadlock (settled == 0).
+    assert (refused.value.live, refused.value.settled) == (reservations.MAX_OPEN, 0)
+    assert f'outcome=bound_exceeded live={reservations.MAX_OPEN} settled=0' in caplog.text
     assert entries(db) == original
 
     monkeypatch.setattr(
