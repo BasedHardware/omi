@@ -396,7 +396,7 @@ void main() {
       await tester.pump();
       expect(events.hasListener, isFalse);
       await tester.pumpWidget(const SizedBox());
-      await events.close();
+      unawaited(events.close());
     });
 
     testWidgets('redacted live detail cannot render a legacy structured recap', (tester) async {
