@@ -20,7 +20,11 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// End would then finalize this phone's capture, not the one on screen; so with no shared segment,
 /// including before the window's transcript has loaded, End is hidden. [leadingGap] goes with it,
 /// so the Ask bar keeps the full width.
-class LiveConversationEndButton extends StatelessWidget {
+///
+/// One tap ends it. The capture keeps its segments until the WAL drain finishes (seconds), so the
+/// button is still on screen meanwhile; later taps are ignored rather than starting a second
+/// finalize, as the pendant's double-tap gate does.
+class LiveConversationEndButton extends StatefulWidget {
   const LiveConversationEndButton({super.key, required this.conversation, this.leadingGap = 10});
 
   final ServerConversation conversation;
@@ -34,13 +38,21 @@ class LiveConversationEndButton extends StatelessWidget {
   }
 
   @override
+  State<LiveConversationEndButton> createState() => _LiveConversationEndButtonState();
+}
+
+class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
+  bool _ended = false;
+
+  @override
   Widget build(BuildContext context) {
-    final mine = context.select<CaptureProvider?, bool>(
-        (capture) => capture != null && ownsCapture(conversation, capture.segments.map((s) => s.id)));
+    final conversation = widget.conversation;
+    final mine = context.select<CaptureProvider?, bool>((capture) =>
+        capture != null && LiveConversationEndButton.ownsCapture(conversation, capture.segments.map((s) => s.id)));
     if (!mine) return const SizedBox.shrink();
     final label = context.l10n.endConversation;
     return Padding(
-      padding: EdgeInsetsDirectional.only(start: leadingGap),
+      padding: EdgeInsetsDirectional.only(start: widget.leadingGap),
       child: Semantics(
         button: true,
         label: label,
@@ -58,10 +70,12 @@ class LiveConversationEndButton extends StatelessWidget {
             child: InkWell(
               borderRadius: OmiRadius.pillAll,
               onTap: () {
+                if (_ended) return;
                 HapticFeedback.mediumImpact();
                 final capture = context.read<CaptureProvider>();
                 // Checked again at the tap: the capture may have moved on since the last build.
-                if (!ownsCapture(conversation, capture.segments.map((s) => s.id))) return;
+                if (!LiveConversationEndButton.ownsCapture(conversation, capture.segments.map((s) => s.id))) return;
+                _ended = true;
                 capture.forceProcessingCurrentConversation();
               },
               // At most half the bar, so Ask Omi keeps its room; a long translation scales down on one

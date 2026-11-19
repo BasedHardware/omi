@@ -204,9 +204,13 @@ class _LiveCapture extends CaptureProvider {
   /// Taps on End: the pendant double-tap's action, without draining a real capture.
   int endCalls = 0;
 
+  /// While set, End's drain has not finished: the segments stay, as during a real WAL drain.
+  bool holdDrain = false;
+
   @override
   Future<void> forceProcessingCurrentConversation() async {
     endCalls++;
+    if (holdDrain) return;
     segments = [];
     notifyListeners();
   }
@@ -622,6 +626,24 @@ void main() {
       expect(find.byKey(const Key('live_conversation_end')), findsNothing,
           reason: "End would finalize this phone's capture, not the conversation on screen");
       expect(home.capture.endCalls, 0);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('End ends once: taps during the drain do not start a second finalize', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.capture.holdDrain = true;
+      await tester.tap(find.text('Launch checklist'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.byKey(const Key('live_conversation_end')));
+      await tester.pump();
+      expect(find.byKey(const Key('live_conversation_end')), findsOneWidget, reason: 'the drain is still running');
+      await tester.tap(find.byKey(const Key('live_conversation_end')));
+      await tester.pump();
+      expect(home.capture.endCalls, 1, reason: 'a second tap would add another processing row and finalize again');
       await _dispose(tester, home);
     });
   });
