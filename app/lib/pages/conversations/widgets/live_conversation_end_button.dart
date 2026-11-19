@@ -1,5 +1,7 @@
 // The End action on a v3 conversation in progress; owns only when it shows and what it calls.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -22,8 +24,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// so the Ask bar keeps the full width.
 ///
 /// One tap ends it. The capture keeps its segments until the WAL drain finishes (seconds), so the
-/// button is still on screen meanwhile; later taps are ignored rather than starting a second
-/// finalize, as the pendant's double-tap gate does.
+/// button is still on screen meanwhile; taps before that settles are ignored rather than starting a
+/// second finalize, as the pendant's double-tap gate does.
 class LiveConversationEndButton extends StatefulWidget {
   const LiveConversationEndButton({super.key, required this.conversation, this.leadingGap = 10});
 
@@ -76,7 +78,9 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 // Checked again at the tap: the capture may have moved on since the last build.
                 if (!LiveConversationEndButton.ownsCapture(conversation, capture.segments.map((s) => s.id))) return;
                 _ended = true;
-                capture.forceProcessingCurrentConversation();
+                // Settled: on success the capture has cleared and End is gone; after a failed drain the
+                // capture keeps its segments, and End works again.
+                unawaited(capture.forceProcessingCurrentConversation().whenComplete(() => _ended = false));
               },
               // At most half the bar, so Ask Omi keeps its room; a long translation scales down on one
               // line, then ellipsizes, rather than overflowing a 320pt screen.

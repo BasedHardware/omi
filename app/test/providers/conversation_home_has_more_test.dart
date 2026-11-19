@@ -41,7 +41,11 @@ void main() {
     expect(parsed.more(storageCount: 10, pageSize: 50, truncated: false), isTrue);
     expect(
         const ConversationPageHeaders(hasMore: false).more(storageCount: 50, pageSize: 50, truncated: false), isFalse);
-    expect(parsed.more(storageCount: 50, pageSize: 50, truncated: true), isFalse);
+    // A budget-cut page: the server's answer decides (it says more only when the page advanced).
+    expect(parsed.more(storageCount: 20, pageSize: 50, truncated: true), isTrue);
+    expect(const ConversationPageHeaders(hasMore: false).more(storageCount: 0, pageSize: 50, truncated: true), isFalse);
+    // An older server: a cut page is never taken for a full one.
+    expect(older.more(storageCount: 50, pageSize: 50, truncated: true), isFalse);
   });
 
   test('a short page the server marks has-more keeps paging, resuming at its cursor', () async {
