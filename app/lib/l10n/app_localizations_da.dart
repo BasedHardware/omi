@@ -15554,6 +15554,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get finishBackToHome => 'Tilbage til Hjem';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Resumé, når denne samtale slutter';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Uploads, der venter på serveren';
 
   @override

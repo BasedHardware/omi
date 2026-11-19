@@ -15626,6 +15626,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get finishBackToHome => 'హోమ్‌కు తిరిగి వెళ్లండి';
 
   @override
+  String get conversationSummaryWhenItEnds => 'ఈ సంభాషణ ముగిసినప్పుడు సారాంశం';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'అప్‌లోడ్‌లు సర్వర్‌పై వేచి ఉన్నాయి';
 
   @override

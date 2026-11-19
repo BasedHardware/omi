@@ -12245,6 +12245,7 @@
     "finishNothingToProcess": "עדיין אין מה לעבד.",
     "finishStillProcessing": "עדיין בעיבוד. זה יופיע במסך הבית.",
     "finishBackToHome": "חזרה למסך הבית",
+    "conversationSummaryWhenItEnds": "סיכום כשהשיחה הזו תסתיים",
     "deviceUploadsWaitingOnServer": "העלאות שממתינות בשרת",
     "deviceUploadsWaitingOnServerSubtitle": "האודיו שלך נשמר בבטחה במכשיר או בטלפון שלך"
 }

@@ -15641,6 +15641,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get finishBackToHome => 'Torna alla Home';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Riepilogo al termine di questa conversazione';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Caricamenti in attesa sul server';
 
   @override

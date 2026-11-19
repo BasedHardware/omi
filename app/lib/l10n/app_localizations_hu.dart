@@ -15622,6 +15622,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get finishBackToHome => 'Vissza a Kezdőlapra';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Összefoglaló, amikor ez a beszélgetés véget ér';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Feltöltések várakoznak a szerveren';
 
   @override

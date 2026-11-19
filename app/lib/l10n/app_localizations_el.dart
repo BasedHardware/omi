@@ -15665,6 +15665,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get finishBackToHome => 'Πίσω στην Αρχική';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Σύνοψη όταν τελειώσει αυτή η συζήτηση';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Μεταφορτώσεις που περιμένουν στον διακομιστή';
 
   @override

@@ -12245,6 +12245,7 @@
     "finishNothingToProcess": "Još nema ništa za obradu.",
     "finishStillProcessing": "Još se obrađuje. Pojavit će se na početnoj.",
     "finishBackToHome": "Nazad na početnu",
+    "conversationSummaryWhenItEnds": "Sažetak kada se ovaj razgovor završi",
     "deviceUploadsWaitingOnServer": "Otpremanja koja čekaju na serveru",
     "deviceUploadsWaitingOnServerSubtitle": "Vaš audio je siguran na vašem uređaju ili telefonu"
 }

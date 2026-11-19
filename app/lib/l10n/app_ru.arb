@@ -4723,6 +4723,7 @@
     "finishNothingToProcess": "Пока нечего обрабатывать.",
     "finishStillProcessing": "Ещё обрабатывается. Появится на главной.",
     "finishBackToHome": "На главную",
+    "conversationSummaryWhenItEnds": "Сводка появится, когда разговор закончится",
     "deviceUploadsWaitingOnServer": "Загрузки, ожидающие на сервере",
     "deviceUploadsWaitingOnServerSubtitle": "Ваше аудио в безопасности на устройстве или телефоне"
 }

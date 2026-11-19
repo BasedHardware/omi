@@ -15564,6 +15564,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get finishBackToHome => 'Về Trang chủ';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Bản tóm tắt khi cuộc trò chuyện này kết thúc';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Các bản tải lên đang chờ trên máy chủ';
 
   @override

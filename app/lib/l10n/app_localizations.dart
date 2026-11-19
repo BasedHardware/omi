@@ -27315,6 +27315,12 @@ abstract class AppLocalizations {
   /// **'Back to Home'**
   String get finishBackToHome;
 
+  /// On the detail page of a conversation still in progress (v3): the summary is written once it ends.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary when this conversation ends'**
+  String get conversationSummaryWhenItEnds;
+
   /// Device Settings row (tappable, opens upload details): some recordings were uploaded but the server has not accepted or processed them yet. Calm status, not an error.
   ///
   /// In en, this message translates to:

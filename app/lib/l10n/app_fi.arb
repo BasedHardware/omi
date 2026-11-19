@@ -4688,6 +4688,7 @@
     "finishNothingToProcess": "Ei vielä mitään käsiteltävää.",
     "finishStillProcessing": "Käsitellään yhä. Se näkyy kotinäkymässä.",
     "finishBackToHome": "Takaisin kotiin",
+    "conversationSummaryWhenItEnds": "Yhteenveto, kun tämä keskustelu päättyy",
     "deviceUploadsWaitingOnServer": "Palvelimelle lähetetyt tiedostot odottavat",
     "deviceUploadsWaitingOnServerSubtitle": "Äänityksesi ovat turvassa laitteella tai puhelimella"
 }

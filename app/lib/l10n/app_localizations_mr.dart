@@ -15571,6 +15571,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get finishBackToHome => 'होमवर परत जा';
 
   @override
+  String get conversationSummaryWhenItEnds => 'हे संभाषण संपल्यावर सारांश';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'सर्व्हरवर प्रतीक्षेत असलेले अपलोड';
 
   @override

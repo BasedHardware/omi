@@ -15607,6 +15607,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get finishBackToHome => 'Volver a Inicio';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Resumen cuando termine esta conversación';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Subidas pendientes en el servidor';
 
   @override

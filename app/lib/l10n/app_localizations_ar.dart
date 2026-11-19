@@ -15475,6 +15475,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get finishBackToHome => 'العودة إلى الرئيسية';
 
   @override
+  String get conversationSummaryWhenItEnds => 'الملخص عند انتهاء هذه المحادثة';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'عمليات الرفع بانتظار الخادم';
 
   @override

@@ -15608,6 +15608,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get finishBackToHome => 'Wróć do ekranu głównego';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Podsumowanie po zakończeniu tej rozmowy';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Wysłane pliki oczekujące na serwerze';
 
   @override

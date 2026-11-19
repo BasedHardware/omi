@@ -15342,6 +15342,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get finishBackToHome => '홈으로 돌아가기';
 
   @override
+  String get conversationSummaryWhenItEnds => '이 대화가 끝나면 요약이 표시됩니다';
+
+  @override
   String get deviceUploadsWaitingOnServer => '서버에서 대기 중인 업로드';
 
   @override

@@ -4688,6 +4688,7 @@
     "finishNothingToProcess": "Chưa có gì để xử lý.",
     "finishStillProcessing": "Vẫn đang xử lý. Nó sẽ xuất hiện ở Trang chủ.",
     "finishBackToHome": "Về Trang chủ",
+    "conversationSummaryWhenItEnds": "Bản tóm tắt khi cuộc trò chuyện này kết thúc",
     "deviceUploadsWaitingOnServer": "Các bản tải lên đang chờ trên máy chủ",
     "deviceUploadsWaitingOnServerSubtitle": "Âm thanh của bạn vẫn an toàn trên thiết bị hoặc điện thoại của bạn"
 }

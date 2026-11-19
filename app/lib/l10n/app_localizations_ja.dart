@@ -15335,6 +15335,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get finishBackToHome => 'ホームに戻る';
 
   @override
+  String get conversationSummaryWhenItEnds => 'この会話が終わると要約が表示されます';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'サーバーで待機中のアップロード';
 
   @override

@@ -16,6 +16,8 @@ import math
 import re
 from typing import Any, Callable
 
+from config.historical_tier import STAND_IN_TITLE_PROVENANCES
+
 OPERATION = 'empty-capture-recovery-v1'
 MARKER = 'capture_empty_recovery'
 ROW_FIELDS = (
@@ -165,7 +167,7 @@ def classify(observed: Observed, decode: Callable) -> str:
         'title_provenance',
         'salience',
     }
-    if structured.get('title_provenance') not in {None, 'server_minimum'}:
+    if structured.get('title_provenance') not in {None, *STAND_IN_TITLE_PROVENANCES}:
         return 'protected_title'
     if any(value for key, value in structured.items() if key not in {'title', 'emoji', 'category', 'title_provenance'}):
         return 'protected_content'

@@ -15568,6 +15568,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get finishBackToHome => 'Takaisin kotiin';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Yhteenveto, kun tämä keskustelu päättyy';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Palvelimelle lähetetyt tiedostot odottavat';
 
   @override

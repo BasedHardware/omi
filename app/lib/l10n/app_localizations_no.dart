@@ -15567,6 +15567,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get finishBackToHome => 'Tilbake til Hjem';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Sammendrag når denne samtalen avsluttes';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Opplastinger som venter på serveren';
 
   @override

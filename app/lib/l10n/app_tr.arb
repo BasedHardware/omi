@@ -4723,6 +4723,7 @@
     "finishNothingToProcess": "Henüz işlenecek bir şey yok.",
     "finishStillProcessing": "Hâlâ işleniyor. Ana sayfada görünecek.",
     "finishBackToHome": "Ana Sayfaya Dön",
+    "conversationSummaryWhenItEnds": "Bu konuşma bittiğinde özet",
     "deviceUploadsWaitingOnServer": "Sunucuda bekleyen yüklemeler",
     "deviceUploadsWaitingOnServerSubtitle": "Sesiniz cihazınızda veya telefonunuzda güvende"
 }

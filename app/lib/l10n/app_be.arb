@@ -12245,6 +12245,7 @@
     "finishNothingToProcess": "Пакуль няма чаго апрацоўваць.",
     "finishStillProcessing": "Яшчэ апрацоўваецца. З'явіцца на галоўнай.",
     "finishBackToHome": "На галоўную",
+    "conversationSummaryWhenItEnds": "Рэзюмэ, калі гэтая размова скончыцца",
     "deviceUploadsWaitingOnServer": "Загрузкі, якія чакаюць на серверы",
     "deviceUploadsWaitingOnServerSubtitle": "Ваш аўдыё ў бяспецы на вашай прыладзе або тэлефоне"
 }

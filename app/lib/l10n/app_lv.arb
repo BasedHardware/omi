@@ -4688,6 +4688,7 @@
     "finishNothingToProcess": "Pagaidām nav ko apstrādāt.",
     "finishStillProcessing": "Joprojām tiek apstrādāts. Tas parādīsies sākumlapā.",
     "finishBackToHome": "Atpakaļ uz sākumu",
+    "conversationSummaryWhenItEnds": "Kopsavilkums, kad šī saruna beigsies",
     "deviceUploadsWaitingOnServer": "Augšupielādes gaida serverī",
     "deviceUploadsWaitingOnServerSubtitle": "Jūsu audio ir droši jūsu ierīcē vai tālrunī"
 }

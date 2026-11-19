@@ -15592,6 +15592,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get finishBackToHome => 'Nazad na početnu';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Sažetak kada se ovaj razgovor završi';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Otpremanja koja čekaju na serveru';
 
   @override

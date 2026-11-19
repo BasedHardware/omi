@@ -15558,6 +15558,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get finishBackToHome => 'হোমে ফিরে যান';
 
   @override
+  String get conversationSummaryWhenItEnds => 'এই কথোপকথন শেষ হলে সারাংশ';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'সার্ভারে অপেক্ষায় থাকা আপলোড';
 
   @override

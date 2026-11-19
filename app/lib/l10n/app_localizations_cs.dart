@@ -15563,6 +15563,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get finishBackToHome => 'Zpět domů';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Shrnutí po skončení tohoto rozhovoru';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Nahrávky čekající na serveru';
 
   @override

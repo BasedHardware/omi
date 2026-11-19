@@ -15686,6 +15686,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get finishBackToHome => 'Bumalik sa Home';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Buod kapag natapos ang usapang ito';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Mga upload na naghihintay sa server';
 
   @override

@@ -15667,6 +15667,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get finishBackToHome => 'முகப்புக்குத் திரும்பு';
 
   @override
+  String get conversationSummaryWhenItEnds => 'இந்த உரையாடல் முடிந்ததும் சுருக்கம்';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'சேவையகத்தில் காத்திருக்கும் பதிவேற்றங்கள்';
 
   @override

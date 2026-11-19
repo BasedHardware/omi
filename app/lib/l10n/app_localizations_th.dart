@@ -15489,6 +15489,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get finishBackToHome => 'กลับไปหน้าหลัก';
 
   @override
+  String get conversationSummaryWhenItEnds => 'สรุปเมื่อการสนทนานี้จบลง';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'อัปโหลดที่กำลังรออยู่บนเซิร์ฟเวอร์';
 
   @override

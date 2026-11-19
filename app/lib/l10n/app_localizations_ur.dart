@@ -15575,6 +15575,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get finishBackToHome => 'ہوم پر واپس جائیں';
 
   @override
+  String get conversationSummaryWhenItEnds => 'یہ گفتگو ختم ہونے پر خلاصہ';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'اپ لوڈز سرور پر انتظار میں ہیں';
 
   @override

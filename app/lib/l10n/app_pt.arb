@@ -4723,6 +4723,7 @@
     "finishNothingToProcess": "Ainda não há nada para processar.",
     "finishStillProcessing": "Ainda a processar. Vai aparecer no Início.",
     "finishBackToHome": "Voltar ao Início",
+    "conversationSummaryWhenItEnds": "Resumo quando esta conversa terminar",
     "deviceUploadsWaitingOnServer": "Uploads aguardando no servidor",
     "deviceUploadsWaitingOnServerSubtitle": "Seu áudio está seguro no seu dispositivo ou celular"
 }

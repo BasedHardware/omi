@@ -15591,6 +15591,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get finishBackToHome => 'Voltar ao Início';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Resumo quando esta conversa terminar';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Uploads aguardando no servidor';
 
   @override

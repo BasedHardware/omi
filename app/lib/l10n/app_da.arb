@@ -4730,6 +4730,7 @@
     "finishNothingToProcess": "Intet at behandle endnu.",
     "finishStillProcessing": "Behandles stadig. Den vises på Hjem.",
     "finishBackToHome": "Tilbage til Hjem",
+    "conversationSummaryWhenItEnds": "Resumé, når denne samtale slutter",
     "deviceUploadsWaitingOnServer": "Uploads, der venter på serveren",
     "deviceUploadsWaitingOnServerSubtitle": "Din lyd er i sikkerhed på din enhed eller telefon"
 }

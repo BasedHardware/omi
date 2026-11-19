@@ -4688,6 +4688,7 @@
     "finishNothingToProcess": "Поки що нічого обробляти.",
     "finishStillProcessing": "Ще обробляється. З'явиться на головній.",
     "finishBackToHome": "На головну",
+    "conversationSummaryWhenItEnds": "Підсумок, коли ця розмова завершиться",
     "deviceUploadsWaitingOnServer": "Завантаження, що очікують на сервері",
     "deviceUploadsWaitingOnServerSubtitle": "Ваше аудіо у безпеці на вашому пристрої або телефоні"
 }

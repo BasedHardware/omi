@@ -12245,6 +12245,7 @@
     "finishNothingToProcess": "Сè уште нема ништо за обработка.",
     "finishStillProcessing": "Сè уште се обработува. Ќе се појави на почетната.",
     "finishBackToHome": "Назад кон почетна",
+    "conversationSummaryWhenItEnds": "Резиме кога ќе заврши овој разговор",
     "deviceUploadsWaitingOnServer": "Подигнувања што чекаат на серверот",
     "deviceUploadsWaitingOnServerSubtitle": "Вашето аудио е безбедно на вашиот уред или телефон"
 }

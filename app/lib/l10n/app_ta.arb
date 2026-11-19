@@ -12245,6 +12245,7 @@
     "finishNothingToProcess": "இன்னும் செயலாக்க எதுவும் இல்லை.",
     "finishStillProcessing": "இன்னும் செயலாக்கப்படுகிறது. இது முகப்பில் தோன்றும்.",
     "finishBackToHome": "முகப்புக்குத் திரும்பு",
+    "conversationSummaryWhenItEnds": "இந்த உரையாடல் முடிந்ததும் சுருக்கம்",
     "deviceUploadsWaitingOnServer": "சேவையகத்தில் காத்திருக்கும் பதிவேற்றங்கள்",
     "deviceUploadsWaitingOnServerSubtitle": "உங்கள் ஆடியோ உங்கள் சாதனத்தில் அல்லது தொலைபேசியில் பாதுகாப்பாக உள்ளது"
 }

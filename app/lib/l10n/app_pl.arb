@@ -4723,6 +4723,7 @@
     "finishNothingToProcess": "Na razie nie ma czego przetworzyć.",
     "finishStillProcessing": "Nadal trwa przetwarzanie. Pojawi się na ekranie głównym.",
     "finishBackToHome": "Wróć do ekranu głównego",
+    "conversationSummaryWhenItEnds": "Podsumowanie po zakończeniu tej rozmowy",
     "deviceUploadsWaitingOnServer": "Wysłane pliki oczekujące na serwerze",
     "deviceUploadsWaitingOnServerSubtitle": "Twoje nagrania są bezpieczne na urządzeniu lub telefonie"
 }

@@ -15614,6 +15614,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get finishBackToHome => 'ಹೋಮ್‌ಗೆ ಹಿಂತಿರುಗಿ';
 
   @override
+  String get conversationSummaryWhenItEnds => 'ಈ ಸಂಭಾಷಣೆ ಮುಗಿದಾಗ ಸಾರಾಂಶ';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'ಸರ್ವರ್‌ನಲ್ಲಿ ಕಾಯುತ್ತಿರುವ ಅಪ್‌ಲೋಡ್‌ಗಳು';
 
   @override

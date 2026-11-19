@@ -4688,6 +4688,7 @@
     "finishNothingToProcess": "まだ処理するものがありません。",
     "finishStillProcessing": "まだ処理中です。ホームに表示されます。",
     "finishBackToHome": "ホームに戻る",
+    "conversationSummaryWhenItEnds": "この会話が終わると要約が表示されます",
     "deviceUploadsWaitingOnServer": "サーバーで待機中のアップロード",
     "deviceUploadsWaitingOnServerSubtitle": "音声はデバイスまたはスマートフォンに安全に保存されています"
 }

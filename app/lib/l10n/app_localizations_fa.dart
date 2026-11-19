@@ -15556,6 +15556,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get finishBackToHome => 'بازگشت به صفحه اصلی';
 
   @override
+  String get conversationSummaryWhenItEnds => 'خلاصه پس از پایان این گفتگو';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'بارگذاری‌های در انتظار در سرور';
 
   @override

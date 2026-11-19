@@ -15592,6 +15592,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get finishBackToHome => 'Nazaj na začetno';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Povzetek, ko se ta pogovor konča';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Nalaganja, ki čakajo na strežniku';
 
   @override

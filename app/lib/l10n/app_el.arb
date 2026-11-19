@@ -4688,6 +4688,7 @@
     "finishNothingToProcess": "Δεν υπάρχει ακόμα κάτι για επεξεργασία.",
     "finishStillProcessing": "Ακόμα σε επεξεργασία. Θα εμφανιστεί στην Αρχική.",
     "finishBackToHome": "Πίσω στην Αρχική",
+    "conversationSummaryWhenItEnds": "Σύνοψη όταν τελειώσει αυτή η συζήτηση",
     "deviceUploadsWaitingOnServer": "Μεταφορτώσεις που περιμένουν στον διακομιστή",
     "deviceUploadsWaitingOnServerSubtitle": "Ο ήχος σας είναι ασφαλής στη συσκευή ή στο τηλέφωνό σας"
 }

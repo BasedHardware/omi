@@ -15312,6 +15312,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get finishBackToHome => '返回首页';
 
   @override
+  String get conversationSummaryWhenItEnds => '对话结束后生成摘要';
+
+  @override
   String get deviceUploadsWaitingOnServer => '上传内容正在等待服务器处理';
 
   @override

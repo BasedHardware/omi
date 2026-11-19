@@ -15600,6 +15600,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get finishBackToHome => 'Natrag na početnu';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Sažetak kada ovaj razgovor završi';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Prijenosi koji čekaju na serveru';
 
   @override

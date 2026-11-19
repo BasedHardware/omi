@@ -15600,6 +15600,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get finishBackToHome => 'Kembali ke Laman Utama';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Ringkasan apabila perbualan ini tamat';
+
+  @override
   String get deviceUploadsWaitingOnServer => 'Fail yang dimuat naik sedang menunggu pada pelayan';
 
   @override

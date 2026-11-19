@@ -4688,6 +4688,7 @@
     "finishNothingToProcess": "Inget att bearbeta än.",
     "finishStillProcessing": "Bearbetas fortfarande. Den visas på Hem.",
     "finishBackToHome": "Tillbaka till Hem",
+    "conversationSummaryWhenItEnds": "Sammanfattning när det här samtalet avslutas",
     "deviceUploadsWaitingOnServer": "Uppladdningar som väntar på servern",
     "deviceUploadsWaitingOnServerSubtitle": "Ditt ljud är säkert på din enhet eller telefon"
 }
