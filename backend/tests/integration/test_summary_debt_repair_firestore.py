@@ -12,6 +12,12 @@ from tests.integration.test_sync_reprocess_emulator import store, loopback_only_
 pytestmark = pytest.mark.integration
 
 
+def _discovery_observations(phase, outcomes):
+    return {
+        outcome: delivery.REPAIR_DISCOVERY.labels(phase=phase, outcome=outcome)._value.get() for outcome in outcomes
+    }
+
+
 @pytest.fixture
 def debt_store(store, monkeypatch):
     client, uid, tasks = store
@@ -668,9 +674,11 @@ def test_tick_repair_counter_matches_returned_counts_and_ignores_unclaimed_ticks
 
     client, uid, tasks, ref, row = debt_store
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setattr(repair, 'REPAIR_PER_OWNER_TICK_LIMIT', 4)
     now = 1_800_000_000.0
     cutoff = now - max_age_seconds()
-    refs = [ref.parent.document(name) for name in ('urgent-ok', 'urgent-error', 'newest-ok', 'created-old')]
+    names = ('urgent-ok', 'urgent-error', 'newest-ok', 'created-old', 'newest-refused')
+    refs = [ref.parent.document(name) for name in names]
     ref.update({'summary_due_at': None})
     keys = {
         'scanned': 'scanned',
@@ -680,28 +688,44 @@ def test_tick_repair_counter_matches_returned_counts_and_ignores_unclaimed_ticks
         'near_expiry_admitted': 'near_expiry_admitted',
     }
     before = {outcome: delivery.REPAIR.labels(outcome=outcome)._value.get() for outcome in keys}
+    expected_discovery = {
+        'near_expiry': {'fetched': 2, 'examined': 2, 'attempted': 2, 'admitted': 1, 'redrive_error': 1},
+        'newest': {'fetched': 3, 'examined': 3, 'attempted': 2, 'admitted': 1, 'not_admitted': 1, 'expired': 1},
+    }
+    discovery_before = {
+        phase: _discovery_observations(phase, expected) for phase, expected in expected_discovery.items()
+    }
 
     def redrive(_, owner, conversation_id, *, now):
         if conversation_id == 'urgent-error':
             raise RuntimeError('synthetic admission failure')
-        return True
+        return conversation_id != 'newest-refused'
 
     monkeypatch.setattr(repair, 'redrive', redrive)
     try:
-        for added, pending in zip(refs, (cutoff + 100, cutoff + 101, now - 1, now - 2)):
+        for added, pending in zip(refs, (cutoff + 100, cutoff + 101, now - 1, now - 2, now - 3)):
             candidate = {**row, 'summary_first_pending_at': pending, 'summary_due_at': now - 1}
             if added.id == 'created-old':
                 candidate['created_at'] = cutoff - 1
             added.set(candidate)
         counts = repair.tick(now=now, client=client)
-        assert counts == {'scanned': 4, 'admitted': 2, 'near_expiry_admitted': 1, 'errors': 1, 'expired_seen': 1}
+        assert counts == {'scanned': 5, 'admitted': 2, 'near_expiry_admitted': 1, 'errors': 1, 'expired_seen': 1}
         after = {outcome: delivery.REPAIR.labels(outcome=outcome)._value.get() for outcome in keys}
         assert {outcome: after[outcome] - before[outcome] for outcome in keys} == {
             outcome: counts[key] for outcome, key in keys.items()
         }
         assert {sample.labels['outcome'] for sample in next(iter(delivery.REPAIR.collect())).samples} == set(keys)
+        discovery_after = {}
+        for phase, expected in expected_discovery.items():
+            observed = _discovery_observations(phase, expected)
+            discovery_after[phase] = observed
+            assert {
+                outcome: value - discovery_before[phase][outcome] for outcome, value in observed.items()
+            } == expected
         assert not any(repair.tick(now=now + 1, client=client).values())
         assert {outcome: delivery.REPAIR.labels(outcome=outcome)._value.get() for outcome in keys} == after
+        for phase, observed in discovery_after.items():
+            assert _discovery_observations(phase, observed) == observed
     finally:
         for added in refs:
             added.delete()
@@ -783,6 +807,12 @@ def test_scan_budget_walks_refusals_in_bounded_chunks(debt_store, monkeypatch, m
     admitted = []
     monkeypatch.setattr(repair, 'due_conversations', tracked)
     monkeypatch.setattr(repair, 'redrive', lambda _, owner, cid, **kwargs: admitted.append(cid) or True)
+    expected_discovery = (
+        {'row_refused': 1199, 'owner_deferred': 0, 'admitted': 1}
+        if mode == 'refusals'
+        else {'row_refused': 599, 'owner_deferred': 597, 'admitted': 4}
+    )
+    before = _discovery_observations('newest', expected_discovery)
     try:
         for start in range(0, len(refs), 500):
             batch = client.batch()
@@ -801,6 +831,8 @@ def test_scan_budget_walks_refusals_in_bounded_chunks(debt_store, monkeypatch, m
         assert counts['scanned'] == 1200
         assert counts['admitted'] == (1 if mode == 'refusals' else 4)
         assert admitted == ([refs[1000].id] if mode == 'refusals' else [s.id for s in refs[:3]] + [refs[600].id])
+        observed = _discovery_observations('newest', expected_discovery)
+        assert {outcome: value - before[outcome] for outcome, value in observed.items()} == expected_discovery
         assert [limit for phase, limit in calls if phase == 'newest'] == [16, 64, 256, 500, 364]
         assert all(limit <= 500 for _, limit in calls)
         progress = client.document(repair.CURSOR).get().to_dict()['phases']['newest']
@@ -851,14 +883,7 @@ def test_scan_stops_before_next_chunk_and_preserves_fetched_tail(debt_store, mon
     monkeypatch.setattr(repair, 'due_conversations', tracked)
     monkeypatch.setattr(repair, 'redrive', redrive)
     outcomes = ('queries', 'fetched', 'examined', 'unexamined', 'attempted')
-
-    def observations():
-        return {
-            outcome: delivery.REPAIR_DISCOVERY.labels(phase='newest', outcome=outcome)._value.get()
-            for outcome in outcomes
-        }
-
-    before = observations()
+    before = _discovery_observations('newest', outcomes)
     try:
         for start in range(0, len(refs), 500):
             batch = client.batch()
@@ -879,7 +904,8 @@ def test_scan_stops_before_next_chunk_and_preserves_fetched_tail(debt_store, mon
         assert counts['scanned'] == 16 and counts['admitted'] == expected
         assert admitted == [s.id for s in refs[:expected]]
         assert [limit for phase, limit in calls if phase == 'newest'] == [16]
-        assert {outcome: value - before[outcome] for outcome, value in observations().items()} == {
+        observed = _discovery_observations('newest', outcomes)
+        assert {outcome: value - before[outcome] for outcome, value in observed.items()} == {
             'queries': 1,
             'fetched': 16,
             'examined': examined,
