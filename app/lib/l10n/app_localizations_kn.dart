@@ -14538,14 +14538,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'ಇತ್ತೀಚೆಗೆ';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration ಸಂಪರ್ಕ ಕಡಿತ';
-  }
-
-  @override
   String get deviceControls => 'ನಿಯಂತ್ರಣಗಳು';
 
   @override
@@ -15628,4 +15620,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'ಈ ಸಂಭಾಷಣೆ ಮುಗಿದಾಗ ಸಾರಾಂಶ';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'ಸರ್ವರ್‌ನಲ್ಲಿ ಕಾಯುತ್ತಿರುವ ಅಪ್‌ಲೋಡ್‌ಗಳು';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'ನಿಮ್ಮ ಆಡಿಯೋ ನಿಮ್ಮ ಸಾಧನ ಅಥವಾ ಫೋನ್‌ನಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿದೆ';
 }

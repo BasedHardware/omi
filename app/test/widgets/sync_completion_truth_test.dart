@@ -221,7 +221,8 @@ void main() {
               : '005-mobile-ios-sync-ready-with-stalled-upload.png');
     });
 
-    testWidgets('expired uploads are unavailable without a processing spinner (legacy=$legacy)', (tester) async {
+    testWidgets('expired uploads wait on the server calmly, without a processing spinner (legacy=$legacy)',
+        (tester) async {
       final wal = Wal(
           timerStart: DateTime.now().subtract(const Duration(days: 40)).millisecondsSinceEpoch ~/ 1000,
           codec: BleAudioCodec.opus,
@@ -229,7 +230,10 @@ void main() {
           status: WalStatus.uploaded,
           storage: WalStorage.disk);
       await _pump(tester, legacy ? const SyncPage() : const AutoSyncPage(), WalStatus.uploaded, recordings: [wal]);
-      expect(find.text('Transcription unavailable'), findsWidgets);
+      // Card header and per-row label share one predicate (stalledUploadsAt), so they share one meaning.
+      expect(find.text('Uploads waiting on the server'), findsOneWidget);
+      expect(find.text('Uploaded, awaiting server'), findsWidgets);
+      expect(find.text('Transcription unavailable'), findsNothing);
       expect(find.byType(OmiSpinner), findsNothing);
       expect(find.textContaining('Turning'), findsNothing);
       expect(wal.status, WalStatus.uploaded);

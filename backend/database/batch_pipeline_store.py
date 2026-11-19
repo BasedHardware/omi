@@ -36,6 +36,7 @@ from database.batch_pipeline_projection_finish import (
 from database.batch_pipeline_projection_finish_backfill import backfill_complete
 from database.batch_pipeline_projection_followup_clock import DUE_FIELD as FOLLOWUP_DUE_FIELD
 from database.batch_pipeline_projection_followup_backfill import backfill_complete as followup_backfill_complete
+from database import batch_pipeline_projection_outbox as outbox
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database import record_recovery_gate
@@ -82,6 +83,7 @@ class Store(Protocol):
     def run(self, body: Callable[[Transaction], T]) -> T: ...
     def projection_finish_backfill_complete(self) -> bool: ...
     def projection_followup_backfill_complete(self) -> bool: ...
+    def projection_outbox_page(self, now: float, limit: int) -> list[outbox.DueObligation]: ...
     def due(self, state: str, now: float, limit: int) -> list[str]: ...
     def protected_retries(self, now: float, limit: int, *, after=None) -> list[dict]: ...
     def oldest(self, priority: int, *, ready_only: bool) -> float | None: ...
@@ -186,8 +188,7 @@ class FirestoreTransaction:
         self.writes[(table, key)] = deepcopy(value)
 
     def patch(self, table: str, key: str, fields: dict) -> None:
-        if table != 'conversations' or set(fields) != {'record_lane_owner'}:
-            raise ValueError('only the conversation route owner may be patched by admission')
+        outbox.validate_batch_patch(table, fields)
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
     def defer_set(self, ref: Any, value: dict) -> None:
@@ -529,7 +530,7 @@ class FirestoreStore:
         exclude_async: bool = False,
         followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
-        return projection_page(
+        page = projection_page(
             self.client,
             self.namespace,
             limit,
@@ -539,6 +540,13 @@ class FirestoreStore:
             exclude_async=exclude_async,
             followup_due_before=followup_due_before,
         )
+        return page[0], page[1]
+
+    def projection_page_with_outbox(self, **scope):
+        return projection_page(self.client, self.namespace, include_outbox=True, **scope)
+
+    def projection_outbox_page(self, now: float, limit: int) -> list[outbox.DueObligation]:
+        return projection_outbox_page(self.client, self.namespace, now, limit)
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         return projection_successor(self.client, self.namespace, owner_key, previous)
@@ -558,7 +566,8 @@ def projection_page(
     due_before: float | None = None,
     exclude_async: bool = False,
     followup_due_before: float | None = None,
-) -> tuple[list[str], Any]:
+    include_outbox: bool = False,
+):
     """Stable keyset page; the cursor survives removal of its source row.
 
     __name__ breaks committed_at ties (including siblings committed together).
@@ -626,7 +635,25 @@ def projection_page(
             cursor = (last[clock_field], last['committed_at'], docs[-1].id)
     else:
         cursor = None
-    return [doc.id for doc in docs], cursor
+    ids = [doc.id for doc in docs]
+    if include_outbox:
+        # Keep the raw page and cursor for telemetry, pagination and budgets.
+        return ids, cursor, {doc.id for doc in docs if outbox.covered(doc.id, doc.to_dict())}
+    return ids, cursor
+
+
+def projection_outbox_page(client: Any, namespace: str, now: float, limit: int) -> list[outbox.DueObligation]:
+    docs = (
+        client.collection(f'{namespace}_results')
+        .where(outbox.KIND_FIELD, '==', outbox.KIND)
+        .where(outbox.DUE_FIELD, '<=', now)
+        .order_by(outbox.DUE_FIELD)
+        .order_by('__name__')
+        .select([outbox.KIND_FIELD, outbox.DUE_FIELD, 'log_sequence'])
+        .limit(max(1, min(limit, 200)))
+        .stream()
+    )
+    return [due for doc in docs if (due := outbox.due_obligation(doc.id, doc.to_dict())) is not None]
 
 
 def projection_successor(client: Any, namespace: str, owner_key: str, previous: str | None) -> str | None:

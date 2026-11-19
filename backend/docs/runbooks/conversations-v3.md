@@ -59,6 +59,16 @@ is final before it seals. A rotation-sealed recording carries
 the cap) or sealed and untranscribed (up to 15 minutes) hold its stretch open. The
 two-hour cap still bounds each resulting window. Missing transcript is not
 proof of acoustic silence; qualify transcript completeness separately.
+
+`CONVERSATIONS_V3_STRETCH_COHESION` defaults to `on`. The outline renders
+stretch-local speaker labels, and short conversational topics fold within the
+same silence, manual-end and two-hour cap boundaries. Home evaluates the
+300-word threshold against that fresh stretch. Media, recognized background
+and late fragments around published claims retain their own visibility rules.
+Set the switch to `off` on v3 builder and backfill runners to restore the prior
+prompt and per-topic Home minimum for subsequent passes. Existing published
+windows and claims remain in place when the switch changes.
+
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product
 conversations. Legacy recording-wide naming keeps its existing behavior.

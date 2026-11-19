@@ -28,8 +28,9 @@ configure_logging(os.getenv('K_SERVICE') or 'backend', default_format='text', ac
 logger = logging.getLogger(__name__)
 
 import firebase_admin
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
 
 from database.google_credentials import prepare_google_credentials
@@ -44,6 +45,7 @@ from utils.observability.external_lists import ExternalListMetricsMiddleware
 
 # app_roles imports every router (the route table) in the original order.
 from app_roles import mount_routers, role_from_env
+from database.batch_account_authority import ErasedAccountMutationRefused
 from routers import messaging  # also used directly for the adapter runtime below
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -106,6 +108,12 @@ else:
 # Bind private cohort resolution once at the serving composition root.
 configure_rollout_runtime()
 app = FastAPI()
+
+
+@app.exception_handler(ErasedAccountMutationRefused)
+async def erased_account_mutation_refused(_request: Request, _error: ErasedAccountMutationRefused) -> JSONResponse:
+    return JSONResponse(status_code=410, content={'detail': 'Account has been erased.'})
+
 
 _local_storage_root = local_storage_root_from_env()
 if _local_storage_root is not None:

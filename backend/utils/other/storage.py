@@ -7,6 +7,7 @@ so deployed code must not assume real bucket semantics
 (backend/utils/other/ARCHITECTURE.md).
 """
 
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.observability.sync_phases import sync_phase
 import datetime
 import base64
@@ -1274,6 +1275,7 @@ def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_in
         invalidate_pack_index(bucket, uid, conversation_id)
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def download_and_decode_chunk_blob(
     bucket: Any,
     path: str,
@@ -1370,6 +1372,7 @@ def download_audio_chunk_pcm(uid: str, path: str, sample_rate: int = 16000) -> b
     return download_and_decode_chunk_blob(bucket, path, uid, sample_rate, download_kwargs={'timeout': 5, 'retry': None})
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def download_audio_chunks_and_merge(
     uid: str,
     conversation_id: str,
@@ -1646,6 +1649,7 @@ def get_cached_merged_audio_path(uid: str, conversation_id: str, audio_file_id: 
 
 
 @coalesce_rebuild
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_or_create_merged_audio(
     uid: str,
     conversation_id: str,
@@ -1745,6 +1749,7 @@ def get_or_create_merged_audio(
     return wav_data, False
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_merged_audio_signed_url(uid: str, conversation_id: str, audio_file_id: str) -> str | None:
     """
     Get a signed URL for cached merged audio if it exists and is valid.
@@ -1810,6 +1815,7 @@ def _speaker_embedding_cache_blob(uid: str, conversation_id: str):
     return bucket.blob(f'audio/{uid}/{conversation_id}/{SPEAKER_EMBEDDING_CACHE_NAME}')
 
 
+@object_get_reader(Reader.SPEAKER_EVIDENCE)
 def download_speaker_embedding_cache(uid: str, conversation_id: str) -> Optional[bytes]:
     try:
         encrypted = _speaker_embedding_cache_blob(uid, conversation_id).download_as_bytes()
@@ -1836,6 +1842,7 @@ def _owner_evidence_cache_blob(uid: str, conversation_id: str):
     return bucket.blob(f'audio/{uid}/{conversation_id}/{OWNER_EVIDENCE_CACHE_NAME}')
 
 
+@object_get_reader(Reader.SPEAKER_EVIDENCE)
 def download_owner_evidence_cache(uid: str, conversation_id: str) -> Optional[bytes]:
     try:
         encrypted = _owner_evidence_cache_blob(uid, conversation_id).download_as_bytes()
@@ -1857,6 +1864,7 @@ def _owner_prompt_embedding_cache_blob(uid: str, conversation_id: str):
     return bucket.blob(f'audio/{uid}/{conversation_id}/owner-prompt-embeddings.v1.enc')
 
 
+@object_get_reader(Reader.SPEAKER_EVIDENCE)
 def download_owner_prompt_embedding_cache(uid: str, conversation_id: str) -> Optional[bytes]:
     try:
         encrypted = _owner_prompt_embedding_cache_blob(uid, conversation_id).download_as_bytes()
@@ -1893,6 +1901,7 @@ def _playback_artifact_blob(uid: str, conversation_id: str, audio_file_id: str):
     return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{audio_file_id}.mp3')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_playback_artifact_signed_url(uid: str, conversation_id: str, audio_file_id: str):
     blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
     if not blob.exists():
@@ -1900,6 +1909,7 @@ def get_playback_artifact_signed_url(uid: str, conversation_id: str, audio_file_
     return _get_signed_url(blob, 60)
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def download_playback_artifact(uid: str, conversation_id: str, audio_file_id: str):
     blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
     try:
@@ -1908,6 +1918,7 @@ def download_playback_artifact(uid: str, conversation_id: str, audio_file_id: st
         return None
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def upload_playback_artifact(uid: str, conversation_id: str, audio_file_id: str, mp3_data: bytes) -> None:
     blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
     with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
@@ -1931,10 +1942,12 @@ def mark_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str
         blob.upload_from_string(reason, content_type='text/plain')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def is_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str) -> bool:
     return _playback_unavailable_blob(uid, conversation_id, audio_file_id).exists()
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_playback_failure_retry_epoch(
     uid: str, conversation_id: str, audio_file_id: str | None = None, *, fingerprint: str | None = None
 ) -> str | None:
@@ -2059,6 +2072,7 @@ def _conversation_playback_blob(uid: str, conversation_id: str, fingerprint: str
     return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{name}.mp3')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_conversation_playback_signed_url(uid: str, conversation_id: str, fingerprint: str | None = None):
     blob = _conversation_playback_blob(uid, conversation_id, fingerprint)
     if not blob.exists():
@@ -2066,6 +2080,7 @@ def get_conversation_playback_signed_url(uid: str, conversation_id: str, fingerp
     return _get_signed_url(blob, 60)
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def upload_conversation_playback_artifact(
     uid: str, conversation_id: str, mp3_data: bytes, fingerprint: str | None = None, *, spans=None
 ) -> None:
@@ -2074,6 +2089,7 @@ def upload_conversation_playback_artifact(
         write_once(blob, mp3_data, spans=spans)
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_conversation_playback_manifest(uid: str, conversation_id: str, fingerprint: str):
     blob = _conversation_playback_blob(uid, conversation_id, fingerprint)
     with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
@@ -2093,6 +2109,7 @@ def mark_conversation_playback_unavailable(uid: str, conversation_id: str, finge
         blob.upload_from_string(f'{fingerprint}:{reason}', content_type='text/plain')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_conversation_playback_unavailable_fingerprint(uid: str, conversation_id: str) -> Optional[str]:
     blob = _conversation_playback_unavailable_blob(uid, conversation_id)
     try:
@@ -2132,6 +2149,7 @@ def enqueue_conversation_artifact_build(
         logger.error(f'audio_merge: conversation enqueue failed conv={conversation_id}: {e}')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def download_legacy_merged_wav(uid: str, conversation_id: str, audio_file_id: str):
     """Download a legacy merged WAV cache blob directly — never merges.
 
@@ -2580,6 +2598,7 @@ def archive_capture_bytes(
     return path
 
 
+@object_get_reader(Reader.SYNC_RECOVERY)
 def archive_record_wal_bytes(uid, conversation_id, raw, entry, protection):
     """Create-only original plus a verified generation-bound custody receipt.
 

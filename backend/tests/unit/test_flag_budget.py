@@ -68,7 +68,9 @@ HELPER_KILL_SWITCHES = {
     'RECORD_FOLLOWUP_WAKE_ENABLED',
     'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
+    'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
     'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
+    'BATCH_PROJECTION_OUTBOX',
     'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF',
     'PROJECTION_DRAIN_CLAIM_AWARE',
     'PROJECTION_DRAIN_PRIVACY_BACKOFF',
@@ -295,6 +297,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         if name == 'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED':
             assert entry['owner'] == flag['owner'] == 'Pipeline / SCA-1894'
             assert entry['review_by'] == '2026-11-23'
+        elif name == 'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED':
+            assert entry['owner'] == flag['owner'] == 'batch-custody / lead2'
+            assert entry['review_by'] == '2026-12-16'
         elif name == 'BATCH_PIPELINE_FRESH_GUARD_ENABLED':
             assert entry['owner'] == 'Goal: Pipeline'
             assert entry['review_by'] == '2026-12-13'
@@ -325,6 +330,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         elif name == 'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED':
             assert entry['owner'] == 'Goal: Pipeline'
             assert entry['review_by'] == '2026-12-13'
+        elif name == 'BATCH_PROJECTION_OUTBOX':
+            assert entry['owner'] == flag['owner'] == 'omi-pipeline / lead2'
+            assert entry['review_by'] == '2026-12-18'
         elif name == 'BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED':
             assert entry['owner'] == flag['owner'] == 'Goal: Pipeline'
             assert entry['review_by'] == '2026-12-19'

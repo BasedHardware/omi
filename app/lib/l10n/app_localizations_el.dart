@@ -14587,14 +14587,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Πρόσφατα';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Αποσυνδεδεμένο για $duration';
-  }
-
-  @override
   String get deviceControls => 'Χειριστήρια';
 
   @override
@@ -15679,4 +15671,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Σύνοψη όταν τελειώσει αυτή η συζήτηση';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Μεταφορτώσεις που περιμένουν στον διακομιστή';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ο ήχος σας είναι ασφαλής στη συσκευή ή στο τηλέφωνό σας';
 }

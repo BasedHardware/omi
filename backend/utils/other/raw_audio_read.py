@@ -10,6 +10,7 @@ from google.cloud.exceptions import NotFound
 from database.audio_timeline import chunk_span, span_valid
 
 from utils import encryption
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.other.raw_audio import WAL_FORMAT, decode_capture, decode_capture_frames
 from utils.other.audio_frame_table import (
     FRAME_SCHEMA,
@@ -90,6 +91,7 @@ def _gap_count_matches(frames: list[dict], gap_count: int) -> bool:
     )
 
 
+@object_get_reader(Reader.PLAYBACK_INVENTORY)
 def list_packs(
     bucket, uid: str, conversation_id: str, *, fresh=False, deadline=None, timeout=10, max_count=10000, strict=False
 ):
@@ -170,7 +172,9 @@ def list_packs(
                     if strict:
                         raise ValueError('raw capture has no unique custody manifest')
                     continue
-                frames, rate = unframed_frames(bucket, blob, uid, manifest.name, deadline=deadline)
+                frames, rate = unframed_frames(
+                    bucket, blob, uid, manifest.name, deadline=deadline, listed_manifest=manifest
+                )
                 if not _gap_count_matches(frames, int(metadata['gap_count'])):
                     raise CoverageMismatch('capture gap count differs from frame table')
                 packs.extend(entries(frames, rate, source, allow_empty=True))
@@ -297,6 +301,7 @@ def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int, *, f
     return pcm
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000, *, frames=None) -> bytes:
     pcm = _read_pack(bucket, path, uid, download_kwargs, sample_rate, frames=frames)
     record('ok')

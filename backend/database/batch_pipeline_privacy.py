@@ -15,12 +15,12 @@ from typing import Any
 
 from config.firestore_read_levers import lever_enabled, lever_percent
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from database.batch_account_authority_schema import PRIVACY_COLLECTION as PRIVACY_COLLECTION
 from database.batch_privacy_attempt import SCHEMA_FIELD, TOKEN_FIELD, TOKEN_SCHEMA, current_attempt, token_version
 from database import privacy_check_metrics as metrics
 from database import batch_privacy_negative_cache as negative_cache
 from database.privacy_ttl_cache import BoundedTTLCache, disabled as ttl_disabled, enabled as ttl_enabled, is_missing
 
-PRIVACY_COLLECTION = 'batch_pipeline_privacy'
 # Token-validated generations shared across task attempts in this process
 # (lever bpp_decision_cache). Keys hold the client object itself, so planes and
 # recycled ids never mix; entries expire 60s after the authority walk started.
@@ -831,6 +831,14 @@ def _mint_worker() -> None:
             metrics.memo_result('batch', 'mint_error')
 
 
+def privacy_purge_patch(previous: dict, *, blocked: bool) -> dict:
+    return {
+        'generation': int(previous.get('generation', 0)) + 1,
+        'blocked': blocked or bool(previous.get('blocked')),
+        'purging': True,
+    }
+
+
 def advance_privacy_generation(client: Any, uid: str, *, blocked: bool) -> int:
     """Invalidate in-flight references before account/protection cleanup."""
     from google.cloud import firestore
@@ -840,11 +848,9 @@ def advance_privacy_generation(client: Any, uid: str, *, blocked: bool) -> int:
     @firestore.transactional
     def advance(transaction):
         previous = reference.get(transaction=transaction).to_dict() or {}
-        generation = int(previous.get('generation', 0)) + 1
-        transaction.set(
-            reference, {'generation': generation, 'blocked': blocked or bool(previous.get('blocked')), 'purging': True}
-        )
-        return generation
+        patch = privacy_purge_patch(previous, blocked=blocked)
+        transaction.set(reference, patch, merge=True)
+        return patch['generation']
 
     return advance(client.transaction())
 

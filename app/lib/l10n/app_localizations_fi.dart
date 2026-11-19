@@ -14495,14 +14495,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Äskettäin';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Yhteys katkesi $duration ajaksi';
-  }
-
-  @override
   String get deviceControls => 'Säätimet';
 
   @override
@@ -15582,4 +15574,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Yhteenveto, kun tämä keskustelu päättyy';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Palvelimelle lähetetyt tiedostot odottavat';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Äänityksesi ovat turvassa laitteella tai puhelimella';
 }

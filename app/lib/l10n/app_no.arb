@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Direkte episode · {duration}",
     "deviceCatchingUp": "Tar igjen",
     "deviceCatchingUpProgress": "{done} av {total} min",
-    "deviceRecently": "Nylig",
-    "deviceDisconnectedFor": "Frakoblet i {duration}",
     "deviceControls": "Kontroller",
     "homeBackgroundLine": "Også: {items}",
     "deviceOnboardingPressButtonTitle": "Trykk på knappen på Omi",
@@ -4691,5 +4689,7 @@
     "finishNothingToProcess": "Ingenting å behandle ennå.",
     "finishStillProcessing": "Behandles fortsatt. Den vises på Hjem.",
     "finishBackToHome": "Tilbake til Hjem",
-    "conversationSummaryWhenItEnds": "Sammendrag når denne samtalen avsluttes"
+    "conversationSummaryWhenItEnds": "Sammendrag når denne samtalen avsluttes",
+    "deviceUploadsWaitingOnServer": "Opplastinger som venter på serveren",
+    "deviceUploadsWaitingOnServerSubtitle": "Lyden din er trygg på enheten eller telefonen din"
 }
