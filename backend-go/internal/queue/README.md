@@ -50,13 +50,15 @@ against Postgres, each test in its own database (`internal/platform/pgtest`).
 | A lane belongs to one tenant | `candidate`, index `queue_jobs_head` | `TestLanesOfTwoTenantsDoNotShareAHead` |
 | A gated job cannot be in an ordered lane | `Scope.admissible`, `Run.block`, a `CHECK` | `TestGatedJobCannotJoinAnOrderedLane` |
 | A tenant with a long backlog does not starve others | `candidate` (tenant turn) | `TestFairnessAndOrderedHold` |
-| `Hold` refunds the attempt and keeps every job of the tenant off the schedule | `Run.hold` | `TestHoldKeepsTheWholeTenantOffTheSchedule` |
+| `Hold` refunds the attempt and keeps every job of the tenant off the schedule | `Run.hold` | `TestHoldKeepsTheWholeTenantOffTheSchedule`, `TestHoldPausesTenantBeforeReleasingJob` |
 | After an erase returns, no row of the tenant remains, nothing for it is admitted, and no guarded call for it starts | `Store.Erase`, `Store.Tenant`, `Run.Guard` | `TestEraseBarrier`, `TestGuardReadsLeaseAfterWaitingForErase` |
 | A `Guarded` is valid only inside its guard, and an operation's identity survives a takeover | `Run.Guard`, `Guarded.Operation` | `TestGuardedStopsBeingValidWhenTheGuardReturns` |
 | A handler panic or a missing outcome is retried and reported; the replica keeps running; locks are released | `Run.step`, `Run.Guard` | `TestHandlerPanicIsRetriedAndTheReplicaKeepsRunning`, `TestPanicInsideGuardReleasesItsLocks` |
-| A resume after `Stop` reports `ErrStopped` and leaves the job untouched | `Workers.take`, `Run.unclaim` | `TestResumeAfterStopReportsStopped` |
+| A resume after `Stop` reports `ErrStopped` and leaves the job untouched | `Workers.take`, `Run.unclaim` | `TestResumeAfterStopReportsStopped`, `TestScheduledResumeHandsBackClaimWhenStopWinsLaunch` |
 | The watcher sleeps until the next timer, and backs off on work it cannot claim | `rules.IdleWait`, `Workers.idle` | `TestIdleWaitSleepsUntilDueWithinBounds` |
 | A cause no kind declared is recorded as `unknown` | `registry.known` | `TestUndeclaredCauseIsRecordedAsUnknown` |
+| Admission acquires its barrier and checks for erasure in one client statement, reading the tombstone after the lock | `Store.Tenant`, `queue_acquire_tenant` | `TestAdmissionSeesEraseCommittedWhileWaitingForLock`, `TestTenantScopeTakesTwoClientStatements` |
+| Every job field is scanned from its matching column | `columns`, `scan` | `TestJobScanMatchesItsProjection` |
 | A database whose applied migration differs from the embedded file is refused | `Store.Migrate`, `Store.Ready` | `TestMigrateRefusesAnEditedMigration` |
 
 ## The erasure contract, and its limit
