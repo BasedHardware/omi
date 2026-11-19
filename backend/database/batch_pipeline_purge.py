@@ -137,7 +137,8 @@ def _erase_artifact(
     delete_uri: Callable[[str, str], None],
     fence: Callable[[Any], None] | None = None,
     client: Any = None,
-) -> None:
+) -> bool:
+    """Erase an artifact, returning whether its upload receipt had to stay."""
     # The default deleter enforces the requested owner's configured storage
     # prefix before any metadata repair. A foreign URI raises, so the purge
     # cannot acknowledge erasure or transfer deletion authority to that row.
@@ -173,6 +174,7 @@ def _erase_artifact(
             raise ValueError('a fenced artifact erase needs the client that owns the row')
         fenced(client.transaction())
     mirror_refresh(namespace, [('artifacts', snapshot.id)])
+    return pending
 
 
 def purge_batch_owner(

@@ -76,12 +76,12 @@ def obligation_pending(db, budget, uid, cid):
     )
 
 
-def remainders(db, gcs, budget, uid, cid):
+def remainders(db, gcs, budget, uid, cid, *, artifacts_only=False):
     found = set()
     allowed_buckets = {value for name in BATCH_OBJECT_BUCKET_ENV if (value := os.getenv(name, '').strip())}
     bucket = private_archive_bucket()
     wal_prefix = _prefix(uid, cid)
-    if budget.read(
+    if not artifacts_only and budget.read(
         'wal_objects',
         lambda: next(iter(gcs.list_blobs(bucket, prefix=wal_prefix, versions=True, max_results=1, **RPC)), None),
     ):
@@ -98,6 +98,8 @@ def remainders(db, gcs, budget, uid, cid):
 
         def inspect(table, data):
             found.add(f'{namespace}_{table}')
+            if artifacts_only:
+                return
             for uri in _references(data):
                 try:
                     name, path, generation = batch_object_address(uid, uri, allowed_buckets)
@@ -107,7 +109,8 @@ def remainders(db, gcs, budget, uid, cid):
                 if budget.read('referenced_objects', lambda: blob.exists(**RPC)):
                     found.add('referenced_objects')
 
-        for table in DISCOVER_TABLES + DEPENDENT_TABLES:
+        tables = DISCOVER_TABLES + (('artifacts',) if artifacts_only else DEPENDENT_TABLES)
+        for table in tables:
             location = f'{namespace}_{table}'
             collection = db.collection(location)
             query = collection.where(filter=FieldFilter('owner_key', '==', owner))
