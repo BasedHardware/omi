@@ -6,6 +6,10 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+// The one Share flow for a conversation (V1, V5): consent, make it shared, open the system sheet,
+// and put it back to private when the sheet is dismissed or fails. It owns the rule that the
+// message the reader sees always matches the conversation's real visibility (ux-contract §17).
+
 /// How sharing a conversation ended. The message always matches its real visibility.
 enum ShareFlowEnd {
   /// The share sheet was used; the conversation is shared.
