@@ -5,19 +5,23 @@ import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/backend/schema/conversation_v3_wire.dart';
 import 'package:omi/env/env.dart';
 
-/// `GET /v1/conversations/{id}/summary/stream`. Ends after [SummaryDone], [SummaryInProgress] or
+/// Streams final notes, or a live catch-up after an explicit tap. Ends after [SummaryDone], [SummaryInProgress] or
 /// [SummaryFailed]; never throws.
 Stream<SummaryStreamEvent> streamConversationSummary(
   String conversationId, {
   ApiStreamingSeams? seams,
+  bool liveCatchup = false,
   Future<void>? cancelSignal,
+  bool Function()? canDispatch,
 }) async* {
   try {
     await for (final frame in makeStreamingApiCall(
-      url: '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}/summary/stream',
+      url: '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}'
+          '/summary/${liveCatchup ? 'live-catchup/' : ''}stream',
       method: 'GET',
       seams: seams,
       cancelSignal: cancelSignal,
+      canDispatch: canDispatch,
     )) {
       final event = parseSummaryFrame(frame);
       if (event == null) continue;

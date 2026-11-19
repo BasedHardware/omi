@@ -12,6 +12,8 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/schema/conversation_v3_wire.dart';
+import 'package:omi/services/conversation_summary_stream.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
@@ -41,6 +43,76 @@ void main() {
       auth: auth,
     );
   }
+
+  test('live catch-up 404 never falls back to the final-summary endpoint', () async {
+    final paths = <String>[];
+    final transport = seams((request) async {
+      paths.add(request.url.path);
+      return sse(const [], status: 404);
+    });
+    expect(
+      await streamConversationSummary('conversation', liveCatchup: true, seams: transport).toList(),
+      [isA<SummaryFailed>()],
+    );
+    expect(paths, ['/v1/conversations/conversation/summary/live-catchup/stream']);
+    await streamConversationSummary('conversation', seams: transport).toList();
+    expect(paths.last, '/v1/conversations/conversation/summary/stream');
+  });
+
+  test('live catch-up refuses stale dispatch after asynchronous header preparation', () async {
+    var stillCurrent = true;
+    var sends = 0;
+    final transport = seams(
+      (request) async {
+        sends++;
+        return sse(const [], status: 404);
+      },
+      headers: () async {
+        stillCurrent = false;
+        return const {'Authorization': 'Bearer stale'};
+      },
+    );
+    expect(
+      await streamConversationSummary(
+        'conversation',
+        liveCatchup: true,
+        seams: transport,
+        canDispatch: () => stillCurrent,
+      ).toList(),
+      [isA<SummaryFailed>()],
+    );
+    expect(sends, 0);
+  });
+
+  test('live catch-up refuses an authenticated replay after the target changes', () async {
+    final auth = AuthService.forTesting(tokenGateway: _Gateway(), refreshDelay: (_) async {});
+    var stillCurrent = true;
+    var headersRead = 0;
+    var sends = 0;
+    final transport = seams(
+      (request) async {
+        sends++;
+        return sse(const [], status: 401);
+      },
+      auth: auth,
+      headers: () async {
+        headersRead++;
+        if (headersRead == 2) stillCurrent = false;
+        return const {'Authorization': 'Bearer token'};
+      },
+    );
+    expect(
+      await streamConversationSummary(
+        'conversation',
+        liveCatchup: true,
+        seams: transport,
+        canDispatch: () => stillCurrent,
+      ).toList(),
+      [isA<SummaryFailed>()],
+    );
+    expect(headersRead, 2);
+    expect(sends, 1);
+  });
 
   test('401 then refreshed replay delivers the response frames', () async {
     final service = AuthService.forTesting(tokenGateway: _Gateway(), refreshDelay: (_) async {});

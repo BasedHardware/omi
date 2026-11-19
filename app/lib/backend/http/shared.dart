@@ -1126,6 +1126,7 @@ Stream<String> makeStreamingApiCall({
   String method = 'POST',
   ApiStreamingSeams? seams,
   Future<void>? cancelSignal,
+  bool Function()? canDispatch,
 }) async* {
   // Setup-deadline abort (same rationale as the multipart variant): the POST
   // must die with the wait, or a retry can submit the chat turn twice. Armed
@@ -1166,7 +1167,14 @@ Stream<String> makeStreamingApiCall({
       return request;
     }
 
-    var streamedResponse = await send(buildRequest()).timeout(ApiClient.streamSetupTimeout);
+    Future<http.StreamedResponse> sendCurrentRequest() {
+      if (canDispatch?.call() == false) {
+        throw const ChatStreamException(ChatStreamFailureClass.notSignedIn);
+      }
+      return send(buildRequest()).timeout(ApiClient.streamSetupTimeout);
+    }
+
+    var streamedResponse = await sendCurrentRequest();
 
     AuthTokenResult? observedRefresh;
     if (requireAuthCheck && streamedResponse.statusCode == 401) {
@@ -1179,7 +1187,7 @@ Stream<String> makeStreamingApiCall({
         onAuthRefresh: (refresh) => observedRefresh = refresh,
         replay: () async {
           builtHeaders = await requestHeaders().timeout(ApiClient.streamSetupTimeout);
-          return send(buildRequest()).timeout(ApiClient.streamSetupTimeout);
+          return sendCurrentRequest();
         },
       ).timeout(ApiClient.streamSetupTimeout);
       if (streamedResponse.statusCode == 401 && observedRefresh is AuthTokenTransientFailure) {

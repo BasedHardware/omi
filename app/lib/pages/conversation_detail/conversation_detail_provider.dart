@@ -1283,6 +1283,7 @@ class ConversationDetailProvider extends ChangeNotifier
   /// silent and never overwrite a tracked failure with "loading".
   Future<bool> refreshConversation({bool trackLoad = false}) async {
     final openedId = conversationOrNull?.id;
+    final ownerUid = SharedPreferencesUtil().uid;
     if (openedId == null) return false;
     if (openedId.startsWith('ondevice-')) {
       detailLoad = ConversationDetailLoad.idle;
@@ -1307,6 +1308,7 @@ class ConversationDetailProvider extends ChangeNotifier
     // A newer read, another conversation or a reprocess result superseded this one: it owns the
     // page now, including [detailLoad].
     if (_isDisposed ||
+        SharedPreferencesUtil().uid != ownerUid ||
         generation != _refreshGeneration ||
         speakerGeneration != _speakerEditGeneration ||
         conversationOrNull?.id != openedId) {

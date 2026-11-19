@@ -1,6 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,11 +27,34 @@ import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-ServerConversation _conversation({ConversationTileState? state, DateTime? covers}) => ServerConversation(
+import '../helpers/sfpro_font_fixtures.dart';
+
+ServerConversation _conversation({
+  ConversationTileState? state,
+  DateTime? covers,
+  DateTime? latestSpeech,
+  String overview = '',
+  String? speech,
+}) =>
+    ServerConversation(
       id: 'c1',
       createdAt: DateTime(2026, 11, 16, 9),
       startedAt: DateTime(2026, 11, 16, 9),
-      structured: Structured('Planning the launch', '', emoji: '🚀', category: 'work'),
+      finishedAt: latestSpeech,
+      structured: Structured('Planning the launch', overview, emoji: '🚀', category: 'work'),
+      transcriptSegments: speech == null
+          ? []
+          : [
+              TranscriptSegment(
+                  id: 'speech',
+                  text: speech,
+                  speaker: 'SPEAKER_00',
+                  personId: null,
+                  isUser: true,
+                  start: 0,
+                  end: 10,
+                  translations: [])
+            ],
       v3: state == null && covers == null
           ? null
           : ConversationV3Fields(kind: 'conversation', tileState: state, summaryCoversThrough: covers),
@@ -47,7 +75,7 @@ Widget _sliver(Widget sliver) => _wrap(CustomScrollView(slivers: [sliver]));
 
 void main() {
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'uid': 'fixture-user'});
     await SharedPreferencesUtil.init();
     PlatformManager.initializeForLocalHarness();
   });
@@ -191,6 +219,218 @@ void main() {
   });
 
   group('LiveSummarySection', () {
+    const output = String.fromEnvironment('V3_LIVE_CATCHUP_RENDER_OUTPUT');
+    final capture = GlobalKey();
+    final enoughSpeech = List.filled(300, 'word').join(' ');
+
+    setUpAll(() async {
+      if (output.isEmpty) return;
+      final manifest = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List;
+      for (final family in manifest) {
+        final loader = FontLoader(family['family'] as String);
+        for (final font in family['fonts'] as List) {
+          loader.addFont(rootBundle.load(font['asset'] as String));
+        }
+        await loader.load();
+      }
+      for (final fontFamily in [
+        '.SF UI Text',
+        '.SF UI Display',
+        '.SF Pro Display',
+        'SF Pro Display',
+        'CupertinoSystemText',
+        'CupertinoSystemDisplay',
+        'FlutterTest',
+        'Roboto'
+      ]) {
+        final loader = FontLoader(fontFamily);
+        for (final style in ['REGULAR', 'MEDIUM', 'BOLD']) {
+          loader.addFont(sfProFont('SFPRODISPLAY$style.OTF'));
+        }
+        await loader.load();
+      }
+      OmiColors.active = OmiColors.forBrightness(Brightness.light);
+    });
+
+    Widget liveSnapshot(LiveSummarySection section) => MaterialApp(
+          theme: buildOmiTheme(brightness: Brightness.light),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: Scaffold(
+            body: RepaintBoundary(
+              key: capture,
+              child: ColoredBox(
+                color: Colors.white,
+                child: CustomScrollView(
+                  slivers: [SliverPadding(padding: const EdgeInsets.all(24), sliver: section)],
+                ),
+              ),
+            ),
+          ),
+        );
+
+    Future<void> shoot(WidgetTester tester, String name) async {
+      if (output.isEmpty) return;
+      await tester.runAsync(() async {
+        final render = capture.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        final image = await render.toImage(pixelRatio: 3);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        await Directory(output).create(recursive: true);
+        await File('$output/$name.png').writeAsBytes(bytes!.buffer.asUint8List());
+        image.dispose();
+      });
+    }
+
+    testWidgets('live summary only starts after a tap and retains honest streamed coverage', (tester) async {
+      final events = StreamController<SummaryStreamEvent>();
+      var opens = 0;
+      var refreshes = 0;
+      final through = DateTime(2026, 11, 16, 9, 20);
+      final conversation = ServerConversation.fromJson({
+        ..._conversation(state: ConversationTileState.live, latestSpeech: through, speech: enoughSpeech).toJson(),
+        'live_summary': {
+          'structured': {'title': 'Launch', 'overview': 'We agreed on the launch plan.'},
+          'summary_covers_through': through.subtract(const Duration(minutes: 3)).toIso8601String(),
+        },
+      });
+      expect(conversation.v3!.summaryCoversThrough, isNull);
+      expect(conversation.toJson().containsKey('live_summary'), isFalse);
+      tester.view.physicalSize = const Size(390, 500);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(liveSnapshot(LiveSummarySection(
+        conversation: conversation,
+        stream: (_) {
+          opens++;
+          return events.stream;
+        },
+        refresh: () async {
+          refreshes++;
+          return false;
+        },
+        onActiveChanged: (_) {},
+      )));
+      await tester.pump();
+      expect(opens, 0);
+      expect(find.textContaining('Summary through'), findsOneWidget);
+      expect(find.textContaining('We agreed on the launch plan.'), findsOneWidget);
+      final action = find.byKey(const Key('live_summary_catch_up'));
+      expect(action, findsOneWidget);
+      await shoot(tester, '01-live-summary-catch-up');
+
+      await tester.tap(action);
+      await tester.pump();
+      await tester.pump();
+      expect(opens, 1);
+      expect(action, findsNothing);
+      expect(find.text('Writing your summary…'), findsOneWidget);
+      events.add(const SummarySection('## Launch\n- We confirmed Thursday.'));
+      await tester.pump();
+      expect(find.textContaining('We confirmed Thursday.'), findsOneWidget);
+      events.add(SummaryDone(Structured('Launch', 'We confirmed Thursday.'), through));
+      await tester.pump();
+      expect(find.textContaining('We confirmed Thursday.'), findsOneWidget);
+      expect(find.textContaining('Summary through'), findsOneWidget);
+      expect(find.text('Writing your summary…'), findsNothing);
+      expect(action, findsOneWidget, reason: 'equal speech clocks can conceal a corrected transcript');
+      expect(refreshes, 0, reason: 'the terminal stream frame already contains the body and coverage');
+      expect(opens, 1);
+      await shoot(tester, '02-live-summary-current-coverage');
+      await tester.pumpWidget(const SizedBox());
+      unawaited(events.close());
+    });
+
+    testWidgets('authoritative correction at the same clock removes the interim preview', (tester) async {
+      final events = StreamController<SummaryStreamEvent>();
+      final through = DateTime(2026, 11, 16, 9, 20);
+      var conversation = _conversation(state: ConversationTileState.live, latestSpeech: through, speech: enoughSpeech);
+      late StateSetter rebuild;
+      await tester.pumpWidget(_wrap(StatefulBuilder(builder: (context, setState) {
+        rebuild = setState;
+        return CustomScrollView(slivers: [
+          LiveSummarySection(
+            conversation: conversation,
+            stream: (_) => events.stream,
+            refresh: () async => false,
+            onActiveChanged: (_) {},
+          ),
+        ]);
+      })));
+      await tester.tap(find.byKey(const Key('live_summary_catch_up')));
+      events.add(SummaryDone(Structured('Launch', 'Interim live private body.'), through));
+      await tester.pump();
+      expect(find.textContaining('Interim live private body.'), findsOneWidget);
+      rebuild(() {
+        conversation = _conversation(
+          state: ConversationTileState.live,
+          latestSpeech: through,
+          speech: '${enoughSpeech} corrected',
+        );
+      });
+      await tester.pump();
+      expect(find.textContaining('Interim live private body.'), findsNothing);
+      expect(find.byKey(const Key('live_summary_coverage')), findsNothing);
+      expect(find.byKey(const Key('live_summary_catch_up')), findsOneWidget);
+      rebuild(() {
+        conversation = ServerConversation.fromJson({
+          ...conversation.toJson(),
+          'home_hidden': true,
+        });
+      });
+      await tester.pump();
+      expect(find.byKey(const Key('live_summary_catch_up')), findsNothing);
+      expect(find.byKey(const Key('live_summary_recent_transcript')), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      unawaited(events.close());
+    });
+
+    testWidgets('an account change drops an outstanding live result', (tester) async {
+      final events = StreamController<SummaryStreamEvent>();
+      final through = DateTime(2026, 11, 16, 9, 20);
+      var opens = 0;
+      await tester.pumpWidget(_sliver(LiveSummarySection(
+        conversation: _conversation(state: ConversationTileState.live, latestSpeech: through, speech: enoughSpeech),
+        stream: (_) {
+          opens++;
+          return events.stream;
+        },
+        refresh: () async => throw StateError('Do not refresh the old account'),
+        onActiveChanged: (_) {},
+      )));
+      await tester.tap(find.byKey(const Key('live_summary_catch_up')));
+      await tester.pump();
+      expect(opens, 1);
+      await SharedPreferencesUtil().saveString('uid', 'replacement-user');
+      events.add(SummaryDone(Structured('Launch', 'Old account private speech.'), through));
+      await tester.pump();
+      expect(find.textContaining('Old account private speech.'), findsNothing);
+      expect(find.byKey(const Key('live_summary_catch_up')), findsNothing);
+      expect(events.hasListener, isFalse);
+      unawaited(events.close());
+    });
+
+    testWidgets('short live speech shows recent transcript instead of inviting model work', (tester) async {
+      tester.view.physicalSize = const Size(390, 500);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(liveSnapshot(LiveSummarySection(
+        conversation: _conversation(
+          state: ConversationTileState.live,
+          speech: 'Sam will send the updated launch checklist after lunch.',
+        ),
+        stream: (_) => throw StateError('A short transcript cannot start a stream'),
+        refresh: () async => false,
+        onActiveChanged: (_) {},
+      )));
+      await tester.pump();
+      expect(find.text('Recent transcript'), findsOneWidget);
+      expect(find.text('Sam will send the updated launch checklist after lunch.'), findsOneWidget);
+      expect(find.byKey(const Key('live_summary_catch_up')), findsNothing);
+      expect(find.byKey(const Key('live_summary_coverage')), findsNothing);
+      await shoot(tester, '03-live-summary-short-transcript');
+      await tester.pumpWidget(const SizedBox());
+    });
+
     testWidgets('still going: no summary write, one line that it comes when it ends, kept current', (tester) async {
       var opens = 0;
       var refreshes = 0;

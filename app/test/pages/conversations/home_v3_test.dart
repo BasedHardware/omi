@@ -714,12 +714,14 @@ void main() {
         _expectLiveDetail(tester);
         await shoot(tester, '002-mobile-ios-v3-live-detail-end');
 
-        // The Summary tab keeps one quiet line: no summary write, no spinner, no "No summary", no link.
+        // Opening Summary shows the available recent transcript without a model write.
         await tester.tap(find.text('Summary'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.byKey(const Key('live_summary_in_progress')), findsOneWidget);
-        expect(find.text('Summary when this conversation ends'), findsOneWidget);
+        expect(find.text('Recent transcript'), findsOneWidget);
+        expect(find.byKey(const Key('live_summary_recent_transcript')), findsOneWidget);
+        expect(find.byKey(const Key('live_summary_catch_up')), findsNothing);
         expect(find.text('Writing your summary…'), findsNothing);
         expect(find.byKey(const Key('live_summary_open_transcript')), findsNothing);
         expect(summaryOpens, 0, reason: 'a conversation still in progress has no summary to write yet');
