@@ -68,6 +68,7 @@ class Transaction(Protocol):
     def put(self, table: str, key: str, value: dict) -> None: ...
     def patch(self, table: str, key: str, fields: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]: ...
     def first_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_first_pending(self, owner_key: str) -> dict | None: ...
     def fresh_first_ready_pending(self, owner_key: str) -> dict | None: ...
@@ -200,6 +201,9 @@ class FirestoreTransaction:
 
     def first_pending(self, owner_key: str) -> dict | None:
         return first_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
+
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        return pending_page(self.client, self.namespace, owner_key, limit, transaction=self.transaction)
 
     def first_ready_pending(self, owner_key: str) -> dict | None:
         return first_ready_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
@@ -645,6 +649,15 @@ def projection_successor(client: Any, namespace: str, owner_key: str, previous: 
 def first_pending(
     client: Any, namespace: str, owner_key: str, *, transaction: Any = None, skip_terminal: bool = True
 ) -> dict | None:
+    docs = pending_page(client, namespace, owner_key, 1, transaction=transaction, skip_terminal=skip_terminal)
+    return docs[0] if docs else None
+
+
+def pending_page(
+    client: Any, namespace: str, owner_key: str, limit: int, *, transaction: Any = None, skip_terminal: bool = True
+) -> list[dict]:
+    """The owner's earliest-captured pending rows, at most ``limit`` (capped at 160)."""
+    limit = max(1, min(limit, 160))
     query = (
         client.collection(f'{namespace}_jobs').where('owner_key', '==', owner_key).where('merge_pending', '==', True)
     )
@@ -653,12 +666,12 @@ def first_pending(
     if skip:
         query = query.where('state', 'not-in', list(MERGE_POLL_TERMINAL_STATES))
     try:
-        docs = list(query.order_by('capture_at').order_by('segment_id').limit(1).stream(transaction=transaction))
+        docs = list(query.order_by('capture_at').order_by('segment_id').limit(limit).stream(transaction=transaction))
     except (FailedPrecondition, InvalidArgument):
         if not skip:
             raise
-        docs = list(base.order_by('capture_at').order_by('segment_id').limit(1).stream(transaction=transaction))
-    return docs[0].to_dict() if docs else None
+        docs = list(base.order_by('capture_at').order_by('segment_id').limit(limit).stream(transaction=transaction))
+    return [doc.to_dict() for doc in docs]
 
 
 def first_ready_pending(client: Any, namespace: str, owner_key: str, *, transaction: Any = None) -> dict | None:

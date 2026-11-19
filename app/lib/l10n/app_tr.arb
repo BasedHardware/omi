@@ -352,6 +352,7 @@
     "enterYourName": "Adınızı girin",
     "nameCannotBeEmpty": "İsim boş olamaz",
     "nameUpdatedSuccessfully": "İsim başarıyla güncellendi!",
+    "calendarReadSelectionHelp": "Seçili takvimleri oku. Yeni etkinlikler {calendar} takvimini kullanır.",
     "calendarSettings": "Takvim ayarları",
     "calendarProviders": "Takvim Sağlayıcıları",
     "macOsCalendar": "macOS Takvimi",
@@ -4695,7 +4696,7 @@
     "monthlySwitchDoneTitle": "Artık aylık ödüyorsunuz",
     "monthlySwitchDoneBody": "Bugün {price} ödendi. Her ay yenilenir.",
     "processingDeleteScopeChanged": "İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Bu ayın {minutes} dakikasını kullandınız",
     "freeCapBody": "Omi kayda devam ediyor. Transkripsiyona nasıl devam edileceğini seçin.",
     "omiProPlanName": "Omi Pro",
@@ -4721,5 +4722,8 @@
     "onWifiLater": "Sonra Wi-Fi'da",
     "conversationWritingSummary": "Özetiniz yazılıyor…",
     "onTheWayServerWork": "Sunucunun bildirdiği işler",
-    "firmwareUpdateCheckUnavailable": "Cihazınız için en son donanım yazılımı doğrulanamadı. İnternet bağlantınızı kontrol edin ve Omi uygulamasının güncel olduğundan emin olun, ardından tekrar deneyin."
+    "firmwareUpdateCheckUnavailable": "Cihazınız için en son donanım yazılımı doğrulanamadı. İnternet bağlantınızı kontrol edin ve Omi uygulamasının güncel olduğundan emin olun, ardından tekrar deneyin.",
+    "finishNothingToProcess": "Henüz işlenecek bir şey yok.",
+    "finishStillProcessing": "Hâlâ işleniyor. Ana sayfada görünecek.",
+    "finishBackToHome": "Ana Sayfaya Dön"
 }

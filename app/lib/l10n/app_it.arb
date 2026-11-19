@@ -352,6 +352,7 @@
     "enterYourName": "Inserisci il tuo nome",
     "nameCannotBeEmpty": "Il nome non può essere vuoto",
     "nameUpdatedSuccessfully": "Nome aggiornato con successo!",
+    "calendarReadSelectionHelp": "Leggi i calendari selezionati. I nuovi eventi usano {calendar}.",
     "calendarSettings": "Impostazioni calendario",
     "calendarProviders": "Provider Calendario",
     "macOsCalendar": "Calendario macOS",
@@ -4660,7 +4661,7 @@
     "monthlySwitchDoneTitle": "Ora sei sul mensile",
     "monthlySwitchDoneBody": "{price} pagati oggi. Si rinnova ogni mese.",
     "processingDeleteScopeChanged": "L'elenco in elaborazione è cambiato. Controllalo e riprova.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Hai usato i {minutes} minuti di questo mese",
     "freeCapBody": "Omi continua a registrare. Scegli come continuare la trascrizione.",
     "omiProPlanName": "Omi Pro",
@@ -4686,5 +4687,8 @@
     "onWifiLater": "Più tardi su Wi-Fi",
     "conversationWritingSummary": "Sto scrivendo il tuo riepilogo…",
     "onTheWayServerWork": "Lavoro segnalato dal server",
-    "firmwareUpdateCheckUnavailable": "Impossibile confermare il firmware più recente per il tuo dispositivo. Controlla la connessione a Internet e assicurati che l'app Omi sia aggiornata, poi riprova."
+    "firmwareUpdateCheckUnavailable": "Impossibile confermare il firmware più recente per il tuo dispositivo. Controlla la connessione a Internet e assicurati che l'app Omi sia aggiornata, poi riprova.",
+    "finishNothingToProcess": "Ancora niente da elaborare.",
+    "finishStillProcessing": "Ancora in elaborazione. Apparirà nella Home.",
+    "finishBackToHome": "Torna alla Home"
 }

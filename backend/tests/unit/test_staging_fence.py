@@ -156,7 +156,14 @@ def test_prod_reference_anywhere_is_refused(value):
 
 # M1 review L02-1: prod ILBs (Parakeet, diarizer) and prod external LB addresses.
 @pytest.mark.parametrize(
-    'value', ['http://172.16.160.20/diarizer', 'http://172.16.160.20/diarizer-batch', '172.16.128.250', '34.54.223.100']
+    'value',
+    [
+        'http://172.16.160.20/diarizer',
+        'http://172.16.160.20/diarizer-batch',
+        '172.16.128.250',
+        '34.54.223.100',
+        '172.25.29.2',
+    ],
 )
 def test_prod_network_address_anywhere_is_refused(value):
     env = _clean_env()
@@ -165,7 +172,15 @@ def test_prod_network_address_anywhere_is_refused(value):
 
 
 @pytest.mark.parametrize(
-    'value', ['http://127.0.0.1:9', 'http://172.16.48.49/diarizer', '172.16.63.67', '172.20.207.3', 'nomi.mesh.dev']
+    'value',
+    [
+        'http://127.0.0.1:9',
+        'http://172.16.48.49/diarizer',
+        '172.16.63.67',
+        '172.20.207.3',
+        '172.25.29.20',
+        'nomi.mesh.dev',
+    ],
 )
 def test_dev_and_blackhole_addresses_are_allowed(value):
     env = _clean_env()

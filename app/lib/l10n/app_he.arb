@@ -1225,6 +1225,7 @@
     "enterYourName": "הזן את שמך",
     "nameCannotBeEmpty": "השם לא יכול להיות ריק",
     "nameUpdatedSuccessfully": "השם עודכן בהצלחה!",
+    "calendarReadSelectionHelp": "קריאת היומנים שנבחרו. אירועים חדשים משתמשים ב־{calendar}.",
     "calendarSettings": "הגדרות קלנדר",
     "calendarProviders": "ספקי קלנדר",
     "macOsCalendar": "קלנדר macOS",
@@ -12217,7 +12218,7 @@
     "monthlySwitchDoneTitle": "עברת לתשלום חודשי",
     "monthlySwitchDoneBody": "{price} שולמו היום. מתחדש מדי חודש.",
     "processingDeleteScopeChanged": "רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "ניצלת את {minutes} הדקות של החודש",
     "freeCapBody": "Omi ממשיך להקליט. בחרו איך להמשיך בתמלול.",
     "omiProPlanName": "Omi Pro",
@@ -12243,5 +12244,8 @@
     "onWifiLater": "מאוחר יותר ב-Wi-Fi",
     "conversationWritingSummary": "כותבים את הסיכום שלך…",
     "onTheWayServerWork": "עבודה שדווחה מהשרת",
-    "firmwareUpdateCheckUnavailable": "לא ניתן היה לאמת את הקושחה העדכנית ביותר למכשיר שלך. בדוק את החיבור לאינטרנט וודא שאפליקציית Omi מעודכנת, ואז נסה שוב."
+    "firmwareUpdateCheckUnavailable": "לא ניתן היה לאמת את הקושחה העדכנית ביותר למכשיר שלך. בדוק את החיבור לאינטרנט וודא שאפליקציית Omi מעודכנת, ואז נסה שוב.",
+    "finishNothingToProcess": "עדיין אין מה לעבד.",
+    "finishStillProcessing": "עדיין בעיבוד. זה יופיע במסך הבית.",
+    "finishBackToHome": "חזרה למסך הבית"
 }

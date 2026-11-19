@@ -1129,6 +1129,11 @@ class AppLocalizationsTa extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'பெயர் வெற்றிகரமாக புதுப்பிக்கப்பட்டது!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'தேர்ந்தெடுத்த நாட்காட்டிகளைப் படிக்கவும். புதிய நிகழ்வுகள் $calendar ஐப் பயன்படுத்தும்.';
+  }
+
+  @override
   String get calendarSettings => 'நாட்காட்டி அமைப்புகள்';
 
   @override
@@ -15575,7 +15580,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15663,4 +15668,13 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get firmwareUpdateCheckUnavailable =>
       'உங்கள் சாதனத்திற்கான சமீபத்திய ஃபர்ம்வேரை உறுதிப்படுத்த முடியவில்லை. உங்கள் இணைய இணைப்பைச் சரிபார்த்து, Omi ஆப் புதுப்பிக்கப்பட்டுள்ளதா என உறுதிசெய்து, மீண்டும் முயலவும்.';
+
+  @override
+  String get finishNothingToProcess => 'இன்னும் செயலாக்க எதுவும் இல்லை.';
+
+  @override
+  String get finishStillProcessing => 'இன்னும் செயலாக்கப்படுகிறது. இது முகப்பில் தோன்றும்.';
+
+  @override
+  String get finishBackToHome => 'முகப்புக்குத் திரும்பு';
 }

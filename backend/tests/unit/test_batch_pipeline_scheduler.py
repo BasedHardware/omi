@@ -53,6 +53,14 @@ class MemoryTransaction:
         ]
         return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
 
+    def pending_page(self, owner_key, limit):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs' and v['owner_key'] == owner_key and v['merge_pending']
+        ]
+        return deepcopy(sorted(jobs, key=lambda v: (v['capture_at'], v['segment_id']))[:limit])
+
     def first_ready_pending(self, owner_key):
         jobs = [
             v

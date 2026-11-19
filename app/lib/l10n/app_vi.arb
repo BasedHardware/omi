@@ -352,6 +352,7 @@
     "enterYourName": "Nhập tên của bạn",
     "nameCannotBeEmpty": "Tên không được để trống",
     "nameUpdatedSuccessfully": "Đã cập nhật tên thành công!",
+    "calendarReadSelectionHelp": "Đọc các lịch đã chọn. Sự kiện mới sử dụng {calendar}.",
     "calendarSettings": "Cài đặt lịch",
     "calendarProviders": "Nhà cung cấp lịch",
     "macOsCalendar": "Lịch macOS",
@@ -4660,7 +4661,7 @@
     "monthlySwitchDoneTitle": "Bạn đã chuyển sang trả theo tháng",
     "monthlySwitchDoneBody": "Đã thanh toán {price} hôm nay. Gia hạn hằng tháng.",
     "processingDeleteScopeChanged": "Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Bạn đã dùng hết {minutes} phút của tháng này",
     "freeCapBody": "Omi vẫn đang ghi âm. Chọn cách tiếp tục chép lời.",
     "omiProPlanName": "Omi Pro",
@@ -4686,5 +4687,8 @@
     "onWifiLater": "Sau, qua Wi-Fi",
     "conversationWritingSummary": "Đang viết bản tóm tắt của bạn…",
     "onTheWayServerWork": "Công việc do máy chủ báo cáo",
-    "firmwareUpdateCheckUnavailable": "Không thể xác nhận firmware mới nhất cho thiết bị của bạn. Hãy kiểm tra kết nối internet và đảm bảo ứng dụng Omi đã được cập nhật, sau đó thử lại."
+    "firmwareUpdateCheckUnavailable": "Không thể xác nhận firmware mới nhất cho thiết bị của bạn. Hãy kiểm tra kết nối internet và đảm bảo ứng dụng Omi đã được cập nhật, sau đó thử lại.",
+    "finishNothingToProcess": "Chưa có gì để xử lý.",
+    "finishStillProcessing": "Vẫn đang xử lý. Nó sẽ xuất hiện ở Trang chủ.",
+    "finishBackToHome": "Về Trang chủ"
 }

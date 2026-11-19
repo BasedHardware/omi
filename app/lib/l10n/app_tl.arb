@@ -1225,6 +1225,7 @@
     "enterYourName": "Ilagay ang iyong pangalan",
     "nameCannotBeEmpty": "Ang pangalan ay hindi maaaring walang laman",
     "nameUpdatedSuccessfully": "Ang pangalan ay na-update na!",
+    "calendarReadSelectionHelp": "Basahin ang mga napiling kalendaryo. Gagamit ang mga bagong event ng {calendar}.",
     "calendarSettings": "Mga setting ng Calendar",
     "calendarProviders": "Mga Calendar Provider",
     "macOsCalendar": "macOS Calendar",
@@ -12217,7 +12218,7 @@
     "monthlySwitchDoneTitle": "Buwanan ka na",
     "monthlySwitchDoneBody": "Nabayaran ang {price} ngayon. Nire-renew buwan-buwan.",
     "processingDeleteScopeChanged": "Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Nagamit mo na ang {minutes} minuto ngayong buwan",
     "freeCapBody": "Nagre-record pa rin ang Omi. Piliin kung paano magpapatuloy ang transcription.",
     "omiProPlanName": "Omi Pro",
@@ -12243,5 +12244,8 @@
     "onWifiLater": "Mamaya sa Wi-Fi",
     "conversationWritingSummary": "Isinusulat ang iyong buod…",
     "onTheWayServerWork": "Trabahong iniulat ng server",
-    "firmwareUpdateCheckUnavailable": "Hindi makumpirma ang pinakabagong firmware para sa iyong device. Tingnan ang iyong koneksyon sa internet at tiyaking updated ang Omi app, pagkatapos ay subukang muli."
+    "firmwareUpdateCheckUnavailable": "Hindi makumpirma ang pinakabagong firmware para sa iyong device. Tingnan ang iyong koneksyon sa internet at tiyaking updated ang Omi app, pagkatapos ay subukang muli.",
+    "finishNothingToProcess": "Wala pang ipoproseso.",
+    "finishStillProcessing": "Pinoproseso pa. Lalabas ito sa Home.",
+    "finishBackToHome": "Bumalik sa Home"
 }

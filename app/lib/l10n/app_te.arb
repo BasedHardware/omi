@@ -1225,6 +1225,7 @@
     "enterYourName": "మీ పేరు నమోదు చేయండి",
     "nameCannotBeEmpty": "పేరు ఖాళీగా ఉండకూడదు",
     "nameUpdatedSuccessfully": "పేరు విజయవంతంగా నవీకరించబడింది!",
+    "calendarReadSelectionHelp": "ఎంచుకున్న క్యాలెండర్‌లను చదవండి. కొత్త ఈవెంట్‌లు {calendar}ను ఉపయోగిస్తాయి.",
     "calendarSettings": "క్యాలెండర్ సెట్టింగ్‌లు",
     "calendarProviders": "క్యాలెండర్ ప్రదాతలు",
     "macOsCalendar": "macOS క్యాలెండర్",
@@ -12217,7 +12218,7 @@
     "monthlySwitchDoneTitle": "మీరు ఇప్పుడు నెలవారీ ప్లాన్‌లో ఉన్నారు",
     "monthlySwitchDoneBody": "ఈరోజు {price} చెల్లించబడింది. ప్రతి నెలా పునరుద్ధరించబడుతుంది.",
     "processingDeleteScopeChanged": "ప్రాసెసింగ్ జాబితా మారింది. జాబితాను పరిశీలించి మళ్లీ ప్రయత్నించండి.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "ఈ నెల {minutes} నిమిషాలు వాడేశారు",
     "freeCapBody": "Omi ఇంకా రికార్డ్ చేస్తోంది. ట్రాన్స్‌క్రిప్షన్ ఎలా కొనసాగించాలో ఎంచుకోండి.",
     "omiProPlanName": "Omi Pro",
@@ -12243,5 +12244,8 @@
     "onWifiLater": "తర్వాత Wi-Fiలో",
     "conversationWritingSummary": "మీ సారాంశం రాస్తున్నాం…",
     "onTheWayServerWork": "సర్వర్ నివేదించిన పని",
-    "firmwareUpdateCheckUnavailable": "మీ పరికరానికి తాజా ఫర్మ్‌వేర్‌ను నిర్ధారించలేకపోయాము. మీ ఇంటర్నెట్ కనెక్షన్‌ను తనిఖీ చేసి, Omi యాప్ నవీకరించబడిందని నిర్ధారించుకోండి, ఆపై మళ్లీ ప్రయత్నించండి."
+    "firmwareUpdateCheckUnavailable": "మీ పరికరానికి తాజా ఫర్మ్‌వేర్‌ను నిర్ధారించలేకపోయాము. మీ ఇంటర్నెట్ కనెక్షన్‌ను తనిఖీ చేసి, Omi యాప్ నవీకరించబడిందని నిర్ధారించుకోండి, ఆపై మళ్లీ ప్రయత్నించండి.",
+    "finishNothingToProcess": "ఇంకా ప్రాసెస్ చేయడానికి ఏమీ లేదు.",
+    "finishStillProcessing": "ఇంకా ప్రాసెస్ అవుతోంది. ఇది హోమ్‌లో కనిపిస్తుంది.",
+    "finishBackToHome": "హోమ్‌కు తిరిగి వెళ్లండి"
 }

@@ -352,6 +352,7 @@
     "enterYourName": "Ange ditt namn",
     "nameCannotBeEmpty": "Namnet kan inte vara tomt",
     "nameUpdatedSuccessfully": "Namnet har uppdaterats!",
+    "calendarReadSelectionHelp": "Läs valda kalendrar. Nya händelser använder {calendar}.",
     "calendarSettings": "Kalenderinställningar",
     "calendarProviders": "Kalenderleverantörer",
     "macOsCalendar": "macOS Kalender",
@@ -4660,7 +4661,7 @@
     "monthlySwitchDoneTitle": "Du betalar nu månadsvis",
     "monthlySwitchDoneBody": "{price} betalt i dag. Förnyas varje månad.",
     "processingDeleteScopeChanged": "Bearbetningslistan har ändrats. Granska listan och försök igen.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Du har använt månadens {minutes} minuter",
     "freeCapBody": "Omi spelar fortfarande in. Välj hur du vill fortsätta transkribera.",
     "omiProPlanName": "Omi Pro",
@@ -4686,5 +4687,8 @@
     "onWifiLater": "Senare via Wi-Fi",
     "conversationWritingSummary": "Skriver din sammanfattning…",
     "onTheWayServerWork": "Arbete rapporterat av servern",
-    "firmwareUpdateCheckUnavailable": "Det gick inte att bekräfta den senaste firmwaren för din enhet. Kontrollera internetanslutningen och se till att Omi-appen är uppdaterad, och försök sedan igen."
+    "firmwareUpdateCheckUnavailable": "Det gick inte att bekräfta den senaste firmwaren för din enhet. Kontrollera internetanslutningen och se till att Omi-appen är uppdaterad, och försök sedan igen.",
+    "finishNothingToProcess": "Inget att bearbeta än.",
+    "finishStillProcessing": "Bearbetas fortfarande. Den visas på Hem.",
+    "finishBackToHome": "Tillbaka till Hem"
 }

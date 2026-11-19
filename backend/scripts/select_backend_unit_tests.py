@@ -17,6 +17,7 @@ from pathlib import PurePosixPath
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = BACKEND_DIR.parent
 WORKFLOW_CONTRACTS_PATH = BACKEND_DIR / 'testing' / 'workflow_contracts.json'
+RUNTIME_IMAGES_PATH = BACKEND_DIR / 'runtime_images.json'
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
@@ -306,6 +307,28 @@ LIFECYCLE_SOURCE_REGRESSION_TESTS = {
 }
 
 AREA_TESTS = (
+    # Isolated-router tests stub google.cloud.firestore_v1 as a non-package and load routers.conversations
+    # (or process_conversation) fresh. A module-level import added to these four modules can break them
+    # without the import graph selecting them (main red after #25734, fixed by #25739). Other modules on
+    # that chain are not mapped here.
+    (
+        (
+            'backend/database/conversations_v3.py',
+            'backend/database/conversations_v3_processing.py',
+            'backend/database/home_feed_writer.py',
+            'backend/database/home_feed_fields.py',
+        ),
+        (),
+        (
+            'tests/unit/test_conversations_date_range_validation.py',
+            'tests/unit/test_conversations_merge_duplicate_guard.py',
+            'tests/unit/test_dev_api_lock_bypass.py',
+            'tests/unit/test_lock_bypass_fixes.py',
+            'tests/unit/test_recovery_rule_skip.py',
+            'tests/unit/test_client_processing_finalize.py',
+            'tests/unit/test_process_conversation_duplicate_capture.py',
+        ),
+    ),
     (
         ('backend/scripts/jobstore_operator/',),
         (),
@@ -781,6 +804,33 @@ def workflow_contract_tests_for_path(path: str, all_tests: List[str]) -> Set[str
     return selected
 
 
+def deployment_workflow_contract_errors(
+    registry: dict[str, Any], contracts: list[dict[str, Any]], all_tests: list[str]
+) -> list[str]:
+    """Require explicit, executable selector coverage of the deployment registry.
+
+    #25261 changed a deploy workflow without selecting its contract test;
+    #25272 repaired that instance. Wildcard contracts cannot cover new entries.
+    """
+    workflows = {path for image in registry['images'] for path in image.get('deployment_workflows', [])} | {
+        path
+        for service in registry['services'].values()
+        for path in service.get('current_deploy', [])
+        if path.startswith('.github/workflows/')
+    }
+    discovered = set(all_tests)
+    errors = []
+    for path in sorted(workflows):
+        exact_contracts = [contract for contract in contracts if path in (contract.get('sources') or [])]
+        if not exact_contracts:
+            errors.append(f'{path}: registered deployment workflow has no exact-path workflow contract')
+        elif not any(discovered.intersection(contract.get('tests') or []) for contract in exact_contracts):
+            errors.append(f'{path}: exact-path workflow contracts select no existing discovered backend tests')
+        elif not (REPO_DIR / path).is_file():
+            errors.append(f'{path}: registered deployment workflow does not exist; update registry and exact mapping')
+    return errors
+
+
 def workflow_contract_matches_path(path: str) -> bool:
     for workflow in load_workflow_contracts():
         sources: Tuple[str, ...] = tuple(workflow.get('sources') or ())
@@ -998,6 +1048,7 @@ def main() -> None:
     mode.add_argument('--all', action='store_true', help='print every backend unit test file')
     mode.add_argument('--changed-files', type=Path, help='file containing repo-relative changed paths')
     mode.add_argument('--from-test-list', type=Path, help='file containing backend-relative test paths')
+    mode.add_argument('--check-deployment-contracts', action='store_true', help='validate deployment selector coverage')
     parser.add_argument('--output', type=Path, help='write selected tests to this file instead of stdout')
     parser.add_argument('--reason-output', type=Path, help='write the selection reason to this file')
     parser.add_argument(
@@ -1026,6 +1077,14 @@ def main() -> None:
             parser.error('--rotation needs N >= 1 and 0 <= K < N')
 
     all_tests = discover_all_tests()
+    errors = deployment_workflow_contract_errors(
+        json.loads(RUNTIME_IMAGES_PATH.read_text(encoding='utf-8')), load_workflow_contracts(), all_tests
+    )
+    if errors:
+        raise SystemExit('\n'.join(errors))
+    if args.check_deployment_contracts:
+        print('Deployment workflow selector contracts passed.')
+        return
     reason = 'full backend unit suite'
     if args.all:
         selected = discover_unit_tests()

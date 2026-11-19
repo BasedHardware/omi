@@ -108,6 +108,15 @@ def _calendar_module():
         GoogleAPIError=GoogleAPIError,
         refresh_google_token=MagicMock(),
     )
+    google_transport = _module(
+        "utils.retrieval.google_transport",
+        google_api_request=AsyncMock(),
+        GoogleAPIError=GoogleAPIError,
+    )
+    observability_fallback = _module(
+        "utils.observability.fallback",
+        record_fallback=MagicMock(),
+    )
     telemetry = _module(
         "utils.integration_telemetry",
         GOOGLE_CALENDAR="google_calendar",
@@ -117,6 +126,9 @@ def _calendar_module():
         emit_sync_succeeded=MagicMock(),
     )
     stubs = {
+        "database.google_calendar_preferences": _module(
+            "database.google_calendar_preferences", get_selections=lambda _uid: {}
+        ),
         "httpx": httpx,
         "langchain_core": _package("langchain_core"),
         "langchain_core.tools": langchain_tools,
@@ -130,6 +142,9 @@ def _calendar_module():
         "utils.executors": executors,
         "utils.http_client": http_client,
         "utils.retrieval": _package("utils.retrieval"),
+        "utils.retrieval.google_transport": google_transport,
+        "utils.observability": _package("utils.observability"),
+        "utils.observability.fallback": observability_fallback,
         "utils.retrieval.tools": _package("utils.retrieval.tools"),
         "utils.retrieval.tools.integration_base": integration_base,
         "utils.retrieval.tools.google_utils": google_utils,
@@ -137,6 +152,15 @@ def _calendar_module():
     }
 
     with stub_modules(stubs):
+        load_module_fresh("utils.google_calendar_identity", str(BACKEND_DIR / "utils/google_calendar_identity.py"))
+        load_module_fresh(
+            "utils.retrieval.google_calendar_catalog_cache",
+            str(BACKEND_DIR / "utils/retrieval/google_calendar_catalog_cache.py"),
+        )
+        load_module_fresh(
+            "utils.retrieval.google_calendar_selection",
+            str(BACKEND_DIR / "utils/retrieval/google_calendar_selection.py"),
+        )
         load_module_fresh("utils.log_sanitizer", str(BACKEND_DIR / "utils" / "log_sanitizer.py"))
         model_text = load_module_fresh("utils.model_text", str(BACKEND_DIR / "utils" / "model_text.py"))
         load_module_fresh("utils.user_clock", str(BACKEND_DIR / "utils" / "user_clock.py"))

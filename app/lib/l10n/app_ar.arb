@@ -352,6 +352,7 @@
     "enterYourName": "أدخل اسمك",
     "nameCannotBeEmpty": "لا يمكن أن يكون الاسم فارغاً",
     "nameUpdatedSuccessfully": "تم تحديث الاسم بنجاح!",
+    "calendarReadSelectionHelp": "اقرأ التقاويم المحددة. تستخدم الأحداث الجديدة {calendar}.",
     "calendarSettings": "إعدادات التقويم",
     "calendarProviders": "موفرو التقويم",
     "macOsCalendar": "تقويم macOS",
@@ -4660,7 +4661,7 @@
     "monthlySwitchDoneTitle": "أصبحت على الدفع الشهري",
     "monthlySwitchDoneBody": "تم دفع {price} اليوم. يتجدد شهريًا.",
     "processingDeleteScopeChanged": "تغيّرت قائمة المعالجة. راجع القائمة وحاول مرة أخرى.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "لقد استخدمت {minutes} دقيقة هذا الشهر",
     "freeCapBody": "لا يزال Omi يسجّل. اختر كيف تواصل التفريغ.",
     "omiProPlanName": "Omi Pro",
@@ -4686,5 +4687,8 @@
     "onWifiLater": "لاحقًا عبر Wi-Fi",
     "conversationWritingSummary": "جارٍ كتابة ملخصك…",
     "onTheWayServerWork": "عمل أبلغ عنه الخادم",
-    "firmwareUpdateCheckUnavailable": "تعذّر التحقق من أحدث برنامج ثابت لجهازك. تحقّق من اتصالك بالإنترنت وتأكّد من تحديث تطبيق Omi، ثم حاول مرة أخرى."
+    "firmwareUpdateCheckUnavailable": "تعذّر التحقق من أحدث برنامج ثابت لجهازك. تحقّق من اتصالك بالإنترنت وتأكّد من تحديث تطبيق Omi، ثم حاول مرة أخرى.",
+    "finishNothingToProcess": "لا يوجد شيء لمعالجته بعد.",
+    "finishStillProcessing": "لا تزال المعالجة جارية. ستظهر على الشاشة الرئيسية.",
+    "finishBackToHome": "العودة إلى الرئيسية"
 }

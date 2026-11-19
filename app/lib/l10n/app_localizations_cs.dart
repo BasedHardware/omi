@@ -1125,6 +1125,11 @@ class AppLocalizationsCs extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Jméno úspěšně aktualizováno!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Číst vybrané kalendáře. Nové události používají $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Nastavení kalendáře';
 
   @override
@@ -15471,7 +15476,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15559,4 +15564,13 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get firmwareUpdateCheckUnavailable =>
       'Nepodařilo se ověřit nejnovější firmware pro vaše zařízení. Zkontrolujte připojení k internetu a ujistěte se, že je aplikace Omi aktuální, a zkuste to znovu.';
+
+  @override
+  String get finishNothingToProcess => 'Zatím není co zpracovat.';
+
+  @override
+  String get finishStillProcessing => 'Stále se zpracovává. Objeví se na domovské stránce.';
+
+  @override
+  String get finishBackToHome => 'Zpět domů';
 }

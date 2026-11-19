@@ -365,6 +365,104 @@ def test_every_external_workflow_contract_source_triggers_backend_unit_workflow(
     assert missing == set()
 
 
+def test_registered_deployment_workflows_have_exact_discovered_tests(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+    registry = json.loads(selector.RUNTIME_IMAGES_PATH.read_text(encoding='utf-8'))
+    contracts = selector.load_workflow_contracts()
+
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == []
+
+
+@pytest.mark.parametrize('registration', ['image', 'service'])
+@pytest.mark.parametrize('sources', [[], ['.github/workflows/**'], ['.github/workflows/new_*.yml']])
+def test_new_deployment_workflow_requires_exact_mapping(selector_and_all_tests, registration, sources):
+    selector, all_tests = selector_and_all_tests
+    path = '.github/workflows/new_deploy.yml'
+    registry = {'images': [], 'services': {}}
+    if registration == 'image':
+        registry['images'].append({'deployment_workflows': [path]})
+    else:
+        registry['services']['new-service'] = {'current_deploy': [path, 'backend/deploy/new-service.yaml']}
+    contracts = [{'sources': sources, 'tests': ['tests/unit/test_workflow_contracts.py']}]
+
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == [
+        f'{path}: registered deployment workflow has no exact-path workflow contract'
+    ]
+
+
+@pytest.mark.parametrize(
+    'targets', [[], ['tests/unit/test_nonexistent_deploy.py'], ['tests/integration/test_deploy.py']]
+)
+def test_deployment_workflow_exact_mapping_requires_discovered_target(selector_and_all_tests, targets):
+    selector, all_tests = selector_and_all_tests
+    path = '.github/workflows/gcp_diarizer.yml'
+    registry = {'images': [{'deployment_workflows': [path]}], 'services': {}}
+    contracts = [
+        {'sources': [path], 'tests': targets},
+        # A broad contract selecting a real test cannot repair an empty exact entry.
+        {'sources': ['.github/workflows/**'], 'tests': ['tests/unit/test_workflow_contracts.py']},
+    ]
+
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == [
+        f'{path}: exact-path workflow contracts select no existing discovered backend tests'
+    ]
+    contracts[0]['tests'] = ['tests/unit/test_workflow_contracts.py']
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == []
+
+
+@pytest.mark.parametrize('registration', ['image', 'service'])
+def test_renamed_deployment_workflow_rejects_stale_registry_and_catalog(
+    selector_and_all_tests, monkeypatch, tmp_path, registration
+):
+    selector, all_tests = selector_and_all_tests
+    monkeypatch.setattr(selector, 'REPO_DIR', tmp_path)
+    path = '.github/workflows/deploy.yml'
+    workflow = tmp_path / path
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text('jobs: {}\n', encoding='utf-8')
+    registry = {'images': [], 'services': {}}
+    if registration == 'image':
+        registry['images'].append({'deployment_workflows': [path]})
+    else:
+        registry['services']['service'] = {'current_deploy': [path]}
+    contracts = [{'sources': [path], 'tests': ['tests/unit/test_workflow_contracts.py']}]
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == []
+
+    workflow.rename(workflow.with_name('renamed_deploy.yml'))
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == [
+        f'{path}: registered deployment workflow does not exist; update registry and exact mapping'
+    ]
+
+
+@pytest.mark.parametrize('mode', ['--all', '--changed-files', '--from-test-list', '--check-deployment-contracts'])
+def test_selector_cli_fails_before_emitting_tests_for_unmapped_deployment(
+    selector_and_all_tests, monkeypatch, tmp_path, capsys, mode
+):
+    selector, _ = selector_and_all_tests
+    registry = json.loads(selector.RUNTIME_IMAGES_PATH.read_text(encoding='utf-8'))
+    registry['images'].append({'deployment_workflows': ['.github/workflows/new_deploy.yml']})
+    registry_path = tmp_path / 'runtime_images.json'
+    registry_path.write_text(json.dumps(registry), encoding='utf-8')
+    monkeypatch.setattr(selector, 'RUNTIME_IMAGES_PATH', registry_path)
+    argv = ['select_backend_unit_tests.py', mode]
+    if mode in ('--changed-files', '--from-test-list'):
+        inputs = tmp_path / 'inputs.txt'
+        inputs.write_text('backend/runtime_images.json\n', encoding='utf-8')
+        argv.append(str(inputs))
+    monkeypatch.setattr(sys, 'argv', argv)
+
+    with pytest.raises(SystemExit, match='new_deploy.yml: registered deployment workflow has no exact-path'):
+        selector.main()
+    assert capsys.readouterr().out == ''
+
+
+def test_deployment_inventory_and_selector_changes_select_coverage_guard(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+    for path in ('backend/runtime_images.json', 'backend/scripts/select_backend_unit_tests.py'):
+        selected, _ = selector.tests_for_changed_paths([path], all_tests)
+        assert 'tests/unit/test_workflow_contracts.py' in selected
+
+
 def test_backend_unit_ci_runner_stays_in_ci_while_pre_push_keeps_its_budget():
     """#9440: CI is full-suite authority; push latency must remain bounded."""
     repo = BACKEND_DIR.parent

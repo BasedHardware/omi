@@ -1225,6 +1225,7 @@
     "enterYourName": "اپنا نام درج کریں",
     "nameCannotBeEmpty": "نام خالی نہیں ہو سکتا",
     "nameUpdatedSuccessfully": "نام کامیابی سے اپ ڈیٹ ہو گیا!",
+    "calendarReadSelectionHelp": "منتخب کیلنڈرز پڑھیں۔ نئے ایونٹس {calendar} استعمال کریں گے۔",
     "calendarSettings": "کیلنڈر کی ترتیبات",
     "calendarProviders": "کیلنڈر فراہم کنندگان",
     "macOsCalendar": "macOS کیلنڈر",
@@ -12217,7 +12218,7 @@
     "monthlySwitchDoneTitle": "اب آپ ماہانہ پلان پر ہیں",
     "monthlySwitchDoneBody": "آج {price} ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔",
     "processingDeleteScopeChanged": "پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "آپ نے اس مہینے کے {minutes} منٹ استعمال کر لیے ہیں",
     "freeCapBody": "Omi اب بھی ریکارڈ کر رہا ہے۔ منتخب کریں کہ ٹرانسکرپشن کیسے جاری رکھیں۔",
     "omiProPlanName": "Omi Pro",
@@ -12243,5 +12244,8 @@
     "onWifiLater": "بعد میں Wi-Fi پر",
     "conversationWritingSummary": "آپ کا خلاصہ لکھا جا رہا ہے…",
     "onTheWayServerWork": "سرور کی بتائی ہوئی کارروائی",
-    "firmwareUpdateCheckUnavailable": "آپ کے آلے کے لیے تازہ ترین فرم ویئر کی تصدیق نہیں ہو سکی۔ اپنا انٹرنیٹ کنکشن چیک کریں اور یقینی بنائیں کہ Omi ایپ اپ ڈیٹ ہے، پھر دوبارہ کوشش کریں۔"
+    "firmwareUpdateCheckUnavailable": "آپ کے آلے کے لیے تازہ ترین فرم ویئر کی تصدیق نہیں ہو سکی۔ اپنا انٹرنیٹ کنکشن چیک کریں اور یقینی بنائیں کہ Omi ایپ اپ ڈیٹ ہے، پھر دوبارہ کوشش کریں۔",
+    "finishNothingToProcess": "ابھی پروسیس کرنے کے لیے کچھ نہیں ہے۔",
+    "finishStillProcessing": "ابھی پروسیس ہو رہا ہے۔ یہ ہوم پر نظر آئے گا۔",
+    "finishBackToHome": "ہوم پر واپس جائیں"
 }

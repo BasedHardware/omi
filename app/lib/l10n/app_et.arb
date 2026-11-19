@@ -352,6 +352,7 @@
     "enterYourName": "Sisestage oma nimi",
     "nameCannotBeEmpty": "Nimi ei saa olla tühi",
     "nameUpdatedSuccessfully": "Nimi edukalt uuendatud!",
+    "calendarReadSelectionHelp": "Loe valitud kalendreid. Uued sündmused kasutavad kalendrit {calendar}.",
     "calendarSettings": "Kalendri seaded",
     "calendarProviders": "Kalendri pakkujad",
     "macOsCalendar": "macOS kalender",
@@ -4660,7 +4661,7 @@
     "monthlySwitchDoneTitle": "Maksad nüüd igakuiselt",
     "monthlySwitchDoneBody": "Täna makstud {price}. Uueneb igakuiselt.",
     "processingDeleteScopeChanged": "Töötlemise loend on muutunud. Vaata see üle ja proovi uuesti.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Oled selle kuu {minutes} minutit ära kasutanud",
     "freeCapBody": "Omi salvestab edasi. Vali, kuidas transkribeerimist jätkata.",
     "omiProPlanName": "Omi Pro",
@@ -4686,5 +4687,8 @@
     "onWifiLater": "Hiljem Wi-Fi kaudu",
     "conversationWritingSummary": "Kirjutame sinu kokkuvõtet…",
     "onTheWayServerWork": "Serveri teatatud töö",
-    "firmwareUpdateCheckUnavailable": "Sinu seadme uusimat püsivara ei õnnestunud kinnitada. Kontrolli internetiühendust ja veendu, et Omi rakendus on ajakohane, seejärel proovi uuesti."
+    "firmwareUpdateCheckUnavailable": "Sinu seadme uusimat püsivara ei õnnestunud kinnitada. Kontrolli internetiühendust ja veendu, et Omi rakendus on ajakohane, seejärel proovi uuesti.",
+    "finishNothingToProcess": "Veel pole midagi töödelda.",
+    "finishStillProcessing": "Veel töödeldakse. See ilmub avalehele.",
+    "finishBackToHome": "Tagasi avalehele"
 }

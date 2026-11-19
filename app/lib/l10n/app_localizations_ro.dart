@@ -1129,6 +1129,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nume actualizat cu succes!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Citește calendarele selectate. Evenimentele noi folosesc $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Setări calendar';
 
   @override
@@ -15536,7 +15541,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15624,4 +15629,13 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get firmwareUpdateCheckUnavailable =>
       'Nu am putut confirma cel mai recent firmware pentru dispozitivul tău. Verifică conexiunea la internet și asigură-te că aplicația Omi este actualizată, apoi încearcă din nou.';
+
+  @override
+  String get finishNothingToProcess => 'Încă nu este nimic de procesat.';
+
+  @override
+  String get finishStillProcessing => 'Încă se procesează. Va apărea pe pagina principală.';
+
+  @override
+  String get finishBackToHome => 'Înapoi la pagina principală';
 }

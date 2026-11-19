@@ -1134,6 +1134,11 @@ class AppLocalizationsFr extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nom mis à jour avec succès !';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Lire les agendas sélectionnés. Les nouveaux événements utilisent $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Paramètres du calendrier';
 
   @override
@@ -15599,7 +15604,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15687,4 +15692,13 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get firmwareUpdateCheckUnavailable =>
       'Impossible de confirmer le dernier firmware pour votre appareil. Vérifiez votre connexion Internet et assurez-vous que l\'application Omi est à jour, puis réessayez.';
+
+  @override
+  String get finishNothingToProcess => 'Rien à traiter pour l\'instant.';
+
+  @override
+  String get finishStillProcessing => 'Traitement en cours. Elle apparaîtra sur l\'accueil.';
+
+  @override
+  String get finishBackToHome => 'Retour à l\'accueil';
 }

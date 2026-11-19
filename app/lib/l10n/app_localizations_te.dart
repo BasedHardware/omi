@@ -1126,6 +1126,11 @@ class AppLocalizationsTe extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'పేరు విజయవంతంగా నవీకరించబడింది!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'ఎంచుకున్న క్యాలెండర్‌లను చదవండి. కొత్త ఈవెంట్‌లు $calendarను ఉపయోగిస్తాయి.';
+  }
+
+  @override
   String get calendarSettings => 'క్యాలెండర్ సెట్టింగ్‌లు';
 
   @override
@@ -15534,7 +15539,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15622,4 +15627,13 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get firmwareUpdateCheckUnavailable =>
       'మీ పరికరానికి తాజా ఫర్మ్‌వేర్‌ను నిర్ధారించలేకపోయాము. మీ ఇంటర్నెట్ కనెక్షన్‌ను తనిఖీ చేసి, Omi యాప్ నవీకరించబడిందని నిర్ధారించుకోండి, ఆపై మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get finishNothingToProcess => 'ఇంకా ప్రాసెస్ చేయడానికి ఏమీ లేదు.';
+
+  @override
+  String get finishStillProcessing => 'ఇంకా ప్రాసెస్ అవుతోంది. ఇది హోమ్‌లో కనిపిస్తుంది.';
+
+  @override
+  String get finishBackToHome => 'హోమ్‌కు తిరిగి వెళ్లండి';
 }

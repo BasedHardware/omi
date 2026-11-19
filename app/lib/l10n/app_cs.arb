@@ -352,6 +352,7 @@
     "enterYourName": "Zadejte své jméno",
     "nameCannotBeEmpty": "Jméno nemůže být prázdné",
     "nameUpdatedSuccessfully": "Jméno úspěšně aktualizováno!",
+    "calendarReadSelectionHelp": "Číst vybrané kalendáře. Nové události používají {calendar}.",
     "calendarSettings": "Nastavení kalendáře",
     "calendarProviders": "Poskytovatelé kalendáře",
     "macOsCalendar": "Kalendář macOS",
@@ -4660,7 +4661,7 @@
     "monthlySwitchDoneTitle": "Teď platíte měsíčně",
     "monthlySwitchDoneBody": "Dnes zaplaceno {price}. Obnovuje se měsíčně.",
     "processingDeleteScopeChanged": "Seznam zpracování se změnil. Zkontrolujte jej a zkuste to znovu.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Využili jste letošních měsíčních {minutes} minut",
     "freeCapBody": "Omi stále nahrává. Vyberte, jak pokračovat v přepisu.",
     "omiProPlanName": "Omi Pro",
@@ -4686,5 +4687,8 @@
     "onWifiLater": "Později přes Wi-Fi",
     "conversationWritingSummary": "Píšeme vaše shrnutí…",
     "onTheWayServerWork": "Práce hlášená serverem",
-    "firmwareUpdateCheckUnavailable": "Nepodařilo se ověřit nejnovější firmware pro vaše zařízení. Zkontrolujte připojení k internetu a ujistěte se, že je aplikace Omi aktuální, a zkuste to znovu."
+    "firmwareUpdateCheckUnavailable": "Nepodařilo se ověřit nejnovější firmware pro vaše zařízení. Zkontrolujte připojení k internetu a ujistěte se, že je aplikace Omi aktuální, a zkuste to znovu.",
+    "finishNothingToProcess": "Zatím není co zpracovat.",
+    "finishStillProcessing": "Stále se zpracovává. Objeví se na domovské stránce.",
+    "finishBackToHome": "Zpět domů"
 }

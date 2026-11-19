@@ -1126,6 +1126,11 @@ class AppLocalizationsMs extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nama berjaya dikemas kini!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Baca kalendar yang dipilih. Acara baharu menggunakan $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Tetapan kalendar';
 
   @override
@@ -15508,7 +15513,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15596,4 +15601,13 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get firmwareUpdateCheckUnavailable =>
       'Tidak dapat mengesahkan perisian tegar terkini untuk peranti anda. Semak sambungan internet anda dan pastikan apl Omi dikemas kini, kemudian cuba lagi.';
+
+  @override
+  String get finishNothingToProcess => 'Belum ada apa-apa untuk diproses.';
+
+  @override
+  String get finishStillProcessing => 'Masih diproses. Ia akan muncul di Laman Utama.';
+
+  @override
+  String get finishBackToHome => 'Kembali ke Laman Utama';
 }

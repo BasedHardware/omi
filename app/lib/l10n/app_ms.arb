@@ -352,6 +352,7 @@
     "enterYourName": "Masukkan nama anda",
     "nameCannotBeEmpty": "Nama tidak boleh kosong",
     "nameUpdatedSuccessfully": "Nama berjaya dikemas kini!",
+    "calendarReadSelectionHelp": "Baca kalendar yang dipilih. Acara baharu menggunakan {calendar}.",
     "calendarSettings": "Tetapan kalendar",
     "calendarProviders": "Penyedia Kalendar",
     "macOsCalendar": "Kalendar macOS",
@@ -4660,7 +4661,7 @@
     "monthlySwitchDoneTitle": "Anda kini membayar bulanan",
     "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperbaharui setiap bulan.",
     "processingDeleteScopeChanged": "Senarai pemprosesan telah berubah. Semak senarai dan cuba lagi.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Anda telah menggunakan {minutes} minit bulan ini",
     "freeCapBody": "Omi masih merakam. Pilih cara untuk terus mentranskripsi.",
     "omiProPlanName": "Omi Pro",
@@ -4686,5 +4687,8 @@
     "onWifiLater": "Kemudian melalui Wi-Fi",
     "conversationWritingSummary": "Menulis ringkasan anda…",
     "onTheWayServerWork": "Kerja yang dilaporkan pelayan",
-    "firmwareUpdateCheckUnavailable": "Tidak dapat mengesahkan perisian tegar terkini untuk peranti anda. Semak sambungan internet anda dan pastikan apl Omi dikemas kini, kemudian cuba lagi."
+    "firmwareUpdateCheckUnavailable": "Tidak dapat mengesahkan perisian tegar terkini untuk peranti anda. Semak sambungan internet anda dan pastikan apl Omi dikemas kini, kemudian cuba lagi.",
+    "finishNothingToProcess": "Belum ada apa-apa untuk diproses.",
+    "finishStillProcessing": "Masih diproses. Ia akan muncul di Laman Utama.",
+    "finishBackToHome": "Kembali ke Laman Utama"
 }

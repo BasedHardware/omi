@@ -1110,6 +1110,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get nameUpdatedSuccessfully => '이름이 성공적으로 업데이트되었습니다!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return '선택한 캘린더를 읽습니다. 새 일정은 $calendar에 생성됩니다.';
+  }
+
+  @override
   String get calendarSettings => '캘린더 설정';
 
   @override
@@ -15250,7 +15255,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15337,4 +15342,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get firmwareUpdateCheckUnavailable => '기기의 최신 펌웨어를 확인하지 못했습니다. 인터넷 연결을 확인하고 Omi 앱이 최신 버전인지 확인한 후 다시 시도하세요.';
+
+  @override
+  String get finishNothingToProcess => '아직 처리할 내용이 없어요.';
+
+  @override
+  String get finishStillProcessing => '아직 처리 중이에요. 홈에 표시될 거예요.';
+
+  @override
+  String get finishBackToHome => '홈으로 돌아가기';
 }

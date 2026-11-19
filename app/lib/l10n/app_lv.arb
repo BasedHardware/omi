@@ -352,6 +352,7 @@
     "enterYourName": "Ievadiet savu vārdu",
     "nameCannotBeEmpty": "Vārds nevar būt tukšs",
     "nameUpdatedSuccessfully": "Vārds veiksmīgi atjaunināts!",
+    "calendarReadSelectionHelp": "Lasīt atlasītos kalendārus. Jauniem notikumiem tiek izmantots {calendar}.",
     "calendarSettings": "Kalendāra iestatījumi",
     "calendarProviders": "Kalendāra pakalpojumu sniedzēji",
     "macOsCalendar": "macOS kalendārs",
@@ -4660,7 +4661,7 @@
     "monthlySwitchDoneTitle": "Tagad jūs maksājat katru mēnesi",
     "monthlySwitchDoneBody": "Šodien samaksāts {price}. Atjaunojas katru mēnesi.",
     "processingDeleteScopeChanged": "Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Esat izmantojis šī mēneša {minutes} minūtes",
     "freeCapBody": "Omi joprojām ieraksta. Izvēlieties, kā turpināt transkribēšanu.",
     "omiProPlanName": "Omi Pro",
@@ -4686,5 +4687,8 @@
     "onWifiLater": "Vēlāk ar Wi-Fi",
     "conversationWritingSummary": "Rakstām jūsu kopsavilkumu…",
     "onTheWayServerWork": "Servera ziņotais darbs",
-    "firmwareUpdateCheckUnavailable": "Neizdevās apstiprināt jaunāko programmaparatūru jūsu ierīcei. Pārbaudiet interneta savienojumu un pārliecinieties, ka lietotne Omi ir atjaunināta, pēc tam mēģiniet vēlreiz."
+    "firmwareUpdateCheckUnavailable": "Neizdevās apstiprināt jaunāko programmaparatūru jūsu ierīcei. Pārbaudiet interneta savienojumu un pārliecinieties, ka lietotne Omi ir atjaunināta, pēc tam mēģiniet vēlreiz.",
+    "finishNothingToProcess": "Pagaidām nav ko apstrādāt.",
+    "finishStillProcessing": "Joprojām tiek apstrādāts. Tas parādīsies sākumlapā.",
+    "finishBackToHome": "Atpakaļ uz sākumu"
 }

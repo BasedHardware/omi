@@ -221,6 +221,17 @@ def refuse(
     return TranscriptionAllowance('on_device', 0, REASON, limit_seconds=0)
 
 
+def defers_upload(uid: str, allowance: TranscriptionAllowance, *, now: Optional[datetime] = None) -> bool:
+    """The one enforcement point: a backfill upload over the day cap is deferred, not held.
+
+    Sync upload admission answers it with a retryable ``backfill_capacity`` before any
+    audio is consumed, so the client keeps the recording and retries after the UTC day
+    rolls. Sync segments and batch units never consult the cap, so no server hold is
+    ever created for it.
+    """
+    return refuse(uid, allowance, plane='sync', now=now).reason == REASON
+
+
 def refuses(uid: str, *, plane: str = 'sync', now: Optional[datetime] = None) -> bool:
     """Whether this backfill admission is refused by the cap, recording the surface."""
     if plane not in BACKFILL_PLANES:

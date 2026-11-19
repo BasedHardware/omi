@@ -1225,6 +1225,7 @@
     "enterYourName": "Унеси своје име",
     "nameCannotBeEmpty": "Име не може бити празно",
     "nameUpdatedSuccessfully": "Име је успешно ажурирано!",
+    "calendarReadSelectionHelp": "Читај изабране календаре. Нови догађаји користе {calendar}.",
     "calendarSettings": "Подешавања календара",
     "calendarProviders": "Добављачи календара",
     "macOsCalendar": "macOS календар",
@@ -12217,7 +12218,7 @@
     "monthlySwitchDoneTitle": "Сада плаћате месечно",
     "monthlySwitchDoneBody": "Данас плаћено {price}. Обнавља се месечно.",
     "processingDeleteScopeChanged": "Листа обраде се променила. Прегледајте је и покушајте поново.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Искористили сте {minutes} минута за овај месец",
     "freeCapBody": "Omi и даље снима. Изаберите како да наставите са транскрипцијом.",
     "omiProPlanName": "Omi Pro",
@@ -12243,5 +12244,8 @@
     "onWifiLater": "Касније на Wi-Fi",
     "conversationWritingSummary": "Пишемо ваш сажетак…",
     "onTheWayServerWork": "Рад који је пријавио сервер",
-    "firmwareUpdateCheckUnavailable": "Није могуће потврдити најновији фирмвер за ваш уређај. Проверите интернет везу и уверите се да је апликација Omi ажурирана, а затим покушајте поново."
+    "firmwareUpdateCheckUnavailable": "Није могуће потврдити најновији фирмвер за ваш уређај. Проверите интернет везу и уверите се да је апликација Omi ажурирана, а затим покушајте поново.",
+    "finishNothingToProcess": "Још нема ничега за обраду.",
+    "finishStillProcessing": "Још се обрађује. Појавиће се на почетној.",
+    "finishBackToHome": "Назад на почетну"
 }

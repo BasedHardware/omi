@@ -1243,6 +1243,15 @@
     "enterYourName": "Enter your name",
     "nameCannotBeEmpty": "Name cannot be empty",
     "nameUpdatedSuccessfully": "Name updated successfully!",
+    "calendarReadSelectionHelp": "Read selected calendars. New events use {calendar}.",
+    "@calendarReadSelectionHelp": {
+        "description": "Explains that read/import choices do not change the primary calendar used for new events",
+        "placeholders": {
+            "calendar": {
+                "type": "String"
+            }
+        }
+    },
     "calendarSettings": "Calendar settings",
     "calendarProviders": "Calendar Providers",
     "macOsCalendar": "macOS Calendar",
@@ -18873,7 +18882,7 @@
     "@processingDeleteScopeChanged": {
         "description": "Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again."
     },
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "You've used this month's {minutes} minutes",
     "@freeCapTitle": {
         "description": "Title of the sheet shown when a free plan has used all of its monthly cloud transcription minutes",
@@ -19000,5 +19009,17 @@
     "firmwareUpdateCheckUnavailable": "Couldn't confirm the latest firmware for your device. Check your internet connection and make sure the Omi app is up to date, then try again.",
     "@firmwareUpdateCheckUnavailable": {
         "description": "Firmware update page: the check could not confirm the latest firmware (lookup failed, release metadata missing or a newer app is required), so the device is not reported as up to date."
+    },
+    "finishNothingToProcess": "Nothing to process yet.",
+    "@finishNothingToProcess": {
+        "description": "Brief notice after tapping Finish on the live capture page when nothing was heard since the last conversation, so no conversation is made."
+    },
+    "finishStillProcessing": "Still processing. It will appear on Home.",
+    "@finishStillProcessing": {
+        "description": "Shown on the page Finish opens when the conversation has not arrived after a long wait; it will show up on Home by itself."
+    },
+    "finishBackToHome": "Back to Home",
+    "@finishBackToHome": {
+        "description": "Button that leaves the processing page for the Home conversation list."
     }
 }

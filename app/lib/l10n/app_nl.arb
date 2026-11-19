@@ -352,6 +352,7 @@
     "enterYourName": "Voer uw naam in",
     "nameCannotBeEmpty": "Naam mag niet leeg zijn",
     "nameUpdatedSuccessfully": "Naam succesvol bijgewerkt!",
+    "calendarReadSelectionHelp": "Geselecteerde agenda’s lezen. Nieuwe afspraken gebruiken {calendar}.",
     "calendarSettings": "Agenda-instellingen",
     "calendarProviders": "Agenda-providers",
     "macOsCalendar": "macOS-agenda",
@@ -4660,7 +4661,7 @@
     "monthlySwitchDoneTitle": "Je betaalt nu maandelijks",
     "monthlySwitchDoneBody": "{price} vandaag betaald. Verlengt maandelijks.",
     "processingDeleteScopeChanged": "De verwerkingslijst is gewijzigd. Controleer de lijst en probeer het opnieuw.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Je hebt de {minutes} minuten van deze maand gebruikt",
     "freeCapBody": "Omi neemt nog steeds op. Kies hoe je verder wilt transcriberen.",
     "omiProPlanName": "Omi Pro",
@@ -4686,5 +4687,8 @@
     "onWifiLater": "Later via wifi",
     "conversationWritingSummary": "Je samenvatting wordt geschreven…",
     "onTheWayServerWork": "Door de server gemeld werk",
-    "firmwareUpdateCheckUnavailable": "De nieuwste firmware voor je apparaat kon niet worden bevestigd. Controleer je internetverbinding en zorg dat de Omi-app up-to-date is. Probeer het daarna opnieuw."
+    "firmwareUpdateCheckUnavailable": "De nieuwste firmware voor je apparaat kon niet worden bevestigd. Controleer je internetverbinding en zorg dat de Omi-app up-to-date is. Probeer het daarna opnieuw.",
+    "finishNothingToProcess": "Nog niets om te verwerken.",
+    "finishStillProcessing": "Wordt nog verwerkt. Het verschijnt op Home.",
+    "finishBackToHome": "Terug naar Home"
 }

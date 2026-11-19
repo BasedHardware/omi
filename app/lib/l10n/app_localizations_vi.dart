@@ -1127,6 +1127,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Đã cập nhật tên thành công!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Đọc các lịch đã chọn. Sự kiện mới sử dụng $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Cài đặt lịch';
 
   @override
@@ -15472,7 +15477,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15560,4 +15565,13 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get firmwareUpdateCheckUnavailable =>
       'Không thể xác nhận firmware mới nhất cho thiết bị của bạn. Hãy kiểm tra kết nối internet và đảm bảo ứng dụng Omi đã được cập nhật, sau đó thử lại.';
+
+  @override
+  String get finishNothingToProcess => 'Chưa có gì để xử lý.';
+
+  @override
+  String get finishStillProcessing => 'Vẫn đang xử lý. Nó sẽ xuất hiện ở Trang chủ.';
+
+  @override
+  String get finishBackToHome => 'Về Trang chủ';
 }

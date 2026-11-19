@@ -1123,6 +1123,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Vardas sėkmingai atnaujintas!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Skaityti pasirinktus kalendorius. Naujiems įvykiams naudojamas $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalendoriaus nustatymai';
 
   @override
@@ -15495,7 +15500,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15583,4 +15588,13 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get firmwareUpdateCheckUnavailable =>
       'Nepavyko patvirtinti naujausios jūsų įrenginio programinės aparatinės įrangos. Patikrinkite interneto ryšį ir įsitikinkite, kad Omi programėlė atnaujinta, tada bandykite dar kartą.';
+
+  @override
+  String get finishNothingToProcess => 'Kol kas nėra ką apdoroti.';
+
+  @override
+  String get finishStillProcessing => 'Vis dar apdorojama. Tai atsiras pagrindiniame puslapyje.';
+
+  @override
+  String get finishBackToHome => 'Grįžti į pagrindinį';
 }

@@ -352,6 +352,7 @@
     "enterYourName": "Entrez votre nom",
     "nameCannotBeEmpty": "Le nom ne peut pas être vide",
     "nameUpdatedSuccessfully": "Nom mis à jour avec succès !",
+    "calendarReadSelectionHelp": "Lire les agendas sélectionnés. Les nouveaux événements utilisent {calendar}.",
     "calendarSettings": "Paramètres du calendrier",
     "calendarProviders": "Fournisseurs de calendrier",
     "macOsCalendar": "Calendrier macOS",
@@ -4695,7 +4696,7 @@
     "monthlySwitchDoneTitle": "Vous êtes passé au mensuel",
     "monthlySwitchDoneBody": "{price} payés aujourd'hui. Renouvellement mensuel.",
     "processingDeleteScopeChanged": "La liste en cours de traitement a changé. Vérifiez-la et réessayez.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Vous avez utilisé les {minutes} minutes de ce mois-ci",
     "freeCapBody": "Omi enregistre toujours. Choisissez comment continuer la transcription.",
     "omiProPlanName": "Omi Pro",
@@ -4721,5 +4722,8 @@
     "onWifiLater": "Plus tard en Wi-Fi",
     "conversationWritingSummary": "Rédaction de votre résumé…",
     "onTheWayServerWork": "Traitement signalé par le serveur",
-    "firmwareUpdateCheckUnavailable": "Impossible de confirmer le dernier firmware pour votre appareil. Vérifiez votre connexion Internet et assurez-vous que l'application Omi est à jour, puis réessayez."
+    "firmwareUpdateCheckUnavailable": "Impossible de confirmer le dernier firmware pour votre appareil. Vérifiez votre connexion Internet et assurez-vous que l'application Omi est à jour, puis réessayez.",
+    "finishNothingToProcess": "Rien à traiter pour l'instant.",
+    "finishStillProcessing": "Traitement en cours. Elle apparaîtra sur l'accueil.",
+    "finishBackToHome": "Retour à l'accueil"
 }

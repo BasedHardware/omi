@@ -1131,6 +1131,11 @@ class AppLocalizationsEl extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Το όνομα ενημερώθηκε επιτυχώς!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Ανάγνωση επιλεγμένων ημερολογίων. Τα νέα συμβάντα χρησιμοποιούν το $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Ρυθμίσεις ημερολογίου';
 
   @override
@@ -15573,7 +15578,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15661,4 +15666,13 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get firmwareUpdateCheckUnavailable =>
       'Δεν ήταν δυνατή η επιβεβαίωση του πιο πρόσφατου υλικολογισμικού για τη συσκευή σας. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο και βεβαιωθείτε ότι η εφαρμογή Omi είναι ενημερωμένη και, στη συνέχεια, δοκιμάστε ξανά.';
+
+  @override
+  String get finishNothingToProcess => 'Δεν υπάρχει ακόμα κάτι για επεξεργασία.';
+
+  @override
+  String get finishStillProcessing => 'Ακόμα σε επεξεργασία. Θα εμφανιστεί στην Αρχική.';
+
+  @override
+  String get finishBackToHome => 'Πίσω στην Αρχική';
 }

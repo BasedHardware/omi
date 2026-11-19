@@ -1123,6 +1123,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nimi edukalt uuendatud!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Loe valitud kalendreid. Uued sündmused kasutavad kalendrit $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalendri seaded';
 
   @override
@@ -15464,7 +15469,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15552,4 +15557,13 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get firmwareUpdateCheckUnavailable =>
       'Sinu seadme uusimat püsivara ei õnnestunud kinnitada. Kontrolli internetiühendust ja veendu, et Omi rakendus on ajakohane, seejärel proovi uuesti.';
+
+  @override
+  String get finishNothingToProcess => 'Veel pole midagi töödelda.';
+
+  @override
+  String get finishStillProcessing => 'Veel töödeldakse. See ilmub avalehele.';
+
+  @override
+  String get finishBackToHome => 'Tagasi avalehele';
 }

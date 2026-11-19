@@ -165,6 +165,30 @@ _RECORD_LATENCY_LISTEN_ONLY = frozenset(
         'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     }
 )
+# Listen's users/conversation routes synchronously erase retained jobstore copies.
+# pusher/main.py mounts no account/conversation purge routes and has no call to
+# batch_pipeline_shadow_hook.purge_owner; sharing finalization does not make it
+# an erasure executor. These production target/context bindings stay on listen.
+_JOBSTORE_ERASURE_LISTEN_ONLY = frozenset(
+    {
+        'BATCH_JOBSTORE_MODE',
+        'FIRESTORE_DATABASE_ID',
+        'JOBSTORE_PG_DATABASE',
+        'JOBSTORE_PG_HOST',
+        'JOBSTORE_PG_USER',
+        'JOBSTORE_PRODUCTION_MIRROR',
+        'JOBSTORE_SHADOW_NAMESPACES',
+        'OMI_DEPLOYMENT',
+    }
+)
+# Only the listen lifecycle loop rotates live v3 recordings; pusher never owns a capture socket.
+_V3_ROTATION_LISTEN_ONLY = frozenset(
+    {
+        'CONVERSATIONS_V3_RECORDING_ROTATION',
+        'CONVERSATIONS_V3_ROTATION_MIN_SECONDS',
+        'CONVERSATIONS_V3_ROTATION_MAX_SECONDS',
+    }
+)
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
@@ -271,6 +295,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _DEMAND_LISTEN_ONLY
     | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
+    | _V3_ROTATION_LISTEN_ONLY
     | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
@@ -389,8 +414,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA",
             "PUBLIC_SHARED_CONVERSATION_CHAT_MODE",
             "REFERRAL_PUBLIC_BASE_URL",
-            "SYNC_TASKS_LOCATION",
-            "SYNC_TASKS_PROJECT",
             "TRANSLATION_SERVICE_MODELS",
             # HTTP read-aloud routers mount only on backend-listen, not pusher.
             "TTS_PROVIDER",
@@ -412,7 +435,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _DEMAND_LISTEN_ONLY
     | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
+    | _V3_ROTATION_LISTEN_ONLY
     | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'})
+    | _JOBSTORE_ERASURE_LISTEN_ONLY
     | _FINALIZATION_REPLAY_LISTEN_ONLY,
 }
 

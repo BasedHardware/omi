@@ -542,7 +542,8 @@ def with_conversations_v3_env(payload: str) -> str:
             rf'("{service}":\s*\{{.*?"env":\s*\[)',
             r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "beta"},'
             r'\n        {"name": "CONVERSATIONS_V3_FIRST_APP_BUILD", "value": ""},'
-            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},',
+            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},'
+            r'\n        {"name": "CONVERSATIONS_V3_BACKFILL_QUEUE", "value": "conversations-v3-backfill"},',
             payload,
             count=1,
             flags=re.DOTALL,
@@ -3732,6 +3733,52 @@ def test_guarded_long_recovery_stays_disabled_and_hours_are_inert():
             env = services[name]['env']
             assert env['SYNC_BACKFILL_GLOBAL_DAILY_HOURS']['value'] == '1665'
             assert env.get('SYNC_BACKFILL_ADMISSION_LIMITS', {}).get('value', 'false') == 'false'
+
+
+def _settings_named(node, key):
+    if isinstance(node, dict):
+        for name, child in node.items():
+            if name == key:
+                yield child
+            else:
+                yield from _settings_named(child, key)
+    elif isinstance(node, list):
+        for child in node:
+            yield from _settings_named(child, key)
+
+
+def test_prod_sync_backfill_lookback_is_sixty_days_and_no_release_reach_undercuts_it():
+    # The lookback is checked once, at upload admission; a backlog that older app builds
+    # or slow drains cannot clear within the window gets a terminal 422 on the phone.
+    # Prod admits 60 days. The batch backlog-release reach (capture-age based) must never
+    # hold back what admission accepted, on any prod surface (Cloud Run services and
+    # jobs, GKE). This covers the env seed only: the effective reach lives on the
+    # Firestore gate row, whose code floor is MIN_REACH_SECONDS (30 days).
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    prod = manifest['environments']['prod']
+    services = prod['cloud_run']['services']
+    lookback = 60 * 86400
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['SYNC_BACKFILL_MAX_AGE_SECONDS']['value'] == str(lookback)
+    assert len(list(_settings_named(prod, 'SYNC_BACKFILL_MAX_AGE_SECONDS'))) >= 2  # walker reaches service env
+    for setting in _settings_named(prod, 'BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS'):
+        reach = int(setting.get('value', '0') if isinstance(setting, dict) else setting)
+        assert reach == 0 or reach >= lookback
+
+
+def test_prod_unlimited_backfill_day_cap_is_on_at_24_hours_on_every_declaring_surface():
+    # Enforced only at sync upload (retryable 503 backfill_capacity); dev keeps it off.
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    for stage, expected in (('prod', 'true'), ('dev', 'false')):
+        environment = manifest['environments'][stage]
+        enabled = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED'))
+        hours = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS'))
+        assert len(enabled) == len(hours) >= 5
+        assert {setting['value'] for setting in enabled} == {expected}
+        assert {setting['value'] for setting in hours} == {'24'}
+    services = manifest['environments']['prod']['cloud_run']['services']
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED']['value'] == 'true'
 
 
 # M7: compose and validate declarations offline; no cloud clients or rollout writes.

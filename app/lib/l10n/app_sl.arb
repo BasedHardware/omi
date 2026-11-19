@@ -1225,6 +1225,7 @@
     "enterYourName": "Vnesite svoje ime",
     "nameCannotBeEmpty": "Ime ne sme biti prazno",
     "nameUpdatedSuccessfully": "Ime je bilo uspešno posodobljeno!",
+    "calendarReadSelectionHelp": "Beri izbrane koledarje. Novi dogodki uporabljajo {calendar}.",
     "calendarSettings": "Nastavitve koledarja",
     "calendarProviders": "Ponudniki koledarjev",
     "macOsCalendar": "Koledar macOS",
@@ -12217,7 +12218,7 @@
     "monthlySwitchDoneTitle": "Zdaj plačujete mesečno",
     "monthlySwitchDoneBody": "Danes plačano {price}. Obnavlja se mesečno.",
     "processingDeleteScopeChanged": "Seznam obdelave se je spremenil. Preglejte ga in poskusite znova.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Porabili ste {minutes} minut tega meseca",
     "freeCapBody": "Omi še vedno snema. Izberite, kako nadaljevati s prepisovanjem.",
     "omiProPlanName": "Omi Pro",
@@ -12243,5 +12244,8 @@
     "onWifiLater": "Pozneje prek Wi-Fi",
     "conversationWritingSummary": "Pišemo vaš povzetek…",
     "onTheWayServerWork": "Delo, ki ga poroča strežnik",
-    "firmwareUpdateCheckUnavailable": "Najnovejše vdelane programske opreme za vašo napravo ni bilo mogoče potrditi. Preverite internetno povezavo in se prepričajte, da je aplikacija Omi posodobljena, nato poskusite znova."
+    "firmwareUpdateCheckUnavailable": "Najnovejše vdelane programske opreme za vašo napravo ni bilo mogoče potrditi. Preverite internetno povezavo in se prepričajte, da je aplikacija Omi posodobljena, nato poskusite znova.",
+    "finishNothingToProcess": "Še ni ničesar za obdelavo.",
+    "finishStillProcessing": "Še v obdelavi. Prikazalo se bo na začetni strani.",
+    "finishBackToHome": "Nazaj na začetno"
 }

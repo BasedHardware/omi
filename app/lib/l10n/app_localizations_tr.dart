@@ -1126,6 +1126,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'İsim başarıyla güncellendi!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Seçili takvimleri oku. Yeni etkinlikler $calendar takvimini kullanır.';
+  }
+
+  @override
   String get calendarSettings => 'Takvim ayarları';
 
   @override
@@ -15482,7 +15487,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15570,4 +15575,13 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get firmwareUpdateCheckUnavailable =>
       'Cihazınız için en son donanım yazılımı doğrulanamadı. İnternet bağlantınızı kontrol edin ve Omi uygulamasının güncel olduğundan emin olun, ardından tekrar deneyin.';
+
+  @override
+  String get finishNothingToProcess => 'Henüz işlenecek bir şey yok.';
+
+  @override
+  String get finishStillProcessing => 'Hâlâ işleniyor. Ana sayfada görünecek.';
+
+  @override
+  String get finishBackToHome => 'Ana Sayfaya Dön';
 }

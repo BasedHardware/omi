@@ -137,7 +137,7 @@ LIVE_MANAGED_ENV_ALLOWLIST: dict[str, frozenset[str]] = {
             'DREAM_AGENT_FULL_CONTEXT_UIDS',
         }
     ),
-    'backend-integration': frozenset({'OMI_BACKEND_RELEASE_SHA'}),
+    'backend-integration': frozenset({'OMI_BACKEND_RELEASE_SHA', 'BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST'}),
 }
 
 

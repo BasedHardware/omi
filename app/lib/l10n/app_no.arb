@@ -352,6 +352,7 @@
     "enterYourName": "Skriv inn navnet ditt",
     "nameCannotBeEmpty": "Navn kan ikke være tomt",
     "nameUpdatedSuccessfully": "Navn oppdatert!",
+    "calendarReadSelectionHelp": "Les valgte kalendere. Nye hendelser bruker {calendar}.",
     "calendarSettings": "Kalenderinnstillinger",
     "calendarProviders": "Kalenderleverandører",
     "macOsCalendar": "macOS-kalender",
@@ -4660,7 +4661,7 @@
     "monthlySwitchDoneTitle": "Du betaler nå månedlig",
     "monthlySwitchDoneBody": "{price} betalt i dag. Fornyes månedlig.",
     "processingDeleteScopeChanged": "Behandlingslisten er endret. Se gjennom listen og prøv igjen.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Du har brukt månedens {minutes} minutter",
     "freeCapBody": "Omi tar fortsatt opp. Velg hvordan du vil fortsette å transkribere.",
     "omiProPlanName": "Omi Pro",
@@ -4686,5 +4687,8 @@
     "onWifiLater": "Senere på Wi-Fi",
     "conversationWritingSummary": "Skriver sammendraget ditt…",
     "onTheWayServerWork": "Arbeid rapportert av serveren",
-    "firmwareUpdateCheckUnavailable": "Kunne ikke bekrefte den nyeste fastvaren for enheten din. Sjekk internettforbindelsen og sørg for at Omi-appen er oppdatert, og prøv deretter på nytt."
+    "firmwareUpdateCheckUnavailable": "Kunne ikke bekrefte den nyeste fastvaren for enheten din. Sjekk internettforbindelsen og sørg for at Omi-appen er oppdatert, og prøv deretter på nytt.",
+    "finishNothingToProcess": "Ingenting å behandle ennå.",
+    "finishStillProcessing": "Behandles fortsatt. Den vises på Hjem.",
+    "finishBackToHome": "Tilbake til Hjem"
 }

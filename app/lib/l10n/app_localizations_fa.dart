@@ -1124,6 +1124,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'نام با موفقیت به‌روزرسانی شد!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'تقویم‌های انتخاب‌شده خوانده می‌شوند. رویدادهای جدید از $calendar استفاده می‌کنند.';
+  }
+
+  @override
   String get calendarSettings => 'تنظیمات تقویم';
 
   @override
@@ -15464,7 +15469,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15552,4 +15557,13 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get firmwareUpdateCheckUnavailable =>
       'تأیید آخرین فریم‌ور دستگاه شما ممکن نشد. اتصال اینترنت خود را بررسی کنید و مطمئن شوید برنامه Omi به‌روز است، سپس دوباره امتحان کنید.';
+
+  @override
+  String get finishNothingToProcess => 'هنوز چیزی برای پردازش نیست.';
+
+  @override
+  String get finishStillProcessing => 'هنوز در حال پردازش است. در صفحه اصلی نمایش داده می‌شود.';
+
+  @override
+  String get finishBackToHome => 'بازگشت به صفحه اصلی';
 }

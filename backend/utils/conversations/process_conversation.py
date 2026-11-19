@@ -81,7 +81,10 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from config.refactor_modes import serving_for
-from utils.conversations.empty_structure_minimum import apply_empty_structure_minimum
+from utils.conversations.empty_structure_minimum import (
+    apply_empty_structure_minimum,
+    recovery_minimum_would_drop_metadata,
+)
 from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
@@ -115,10 +118,12 @@ from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingT
 from utils.conversations.recovery import (
     RECOVERY_QUIET_MINIMUM_MAX_WORDS,
     RecoveryStructureUnavailableError,
+    recovery_batch_audio_pending,
     recovery_minimum_terminal_enabled,
     recovery_rule_discard,
     recovery_transcript_below_content_floor,
     recovery_transcript_word_count,
+    stored_structure_is_replaceable,
     structured_is_rich,
     verified_recovery_discard,
 )
@@ -606,7 +611,9 @@ def _get_structured(
                     uid, main_conv.started_at, main_conv.finished_at
                 ),
             )
-            if recovery_rule_discard(ordinary):
+            # A batch-owned capture's live text is a preview; its audio still owes a transcript.
+            batch_audio_owed = recovery_rule_discard(ordinary) and recovery_batch_audio_pending(main_conv)
+            if recovery_rule_discard(ordinary) and not batch_audio_owed:
                 logger.info('selfheal recovery skipped paid notes reason=ordinary_rule_discard')
                 if relevance_observer is not None:
                     relevance_observer(
@@ -614,15 +621,12 @@ def _get_structured(
                     )
                 return Structured(), True
             stored_structured = getattr(main_conv, 'structured', None)
-            stored_title = getattr(stored_structured, 'title', '') or ''
-            stored_title_provenance = getattr(stored_structured, 'title_provenance', None)
-            stored_content_is_replaceable = not structured_is_rich(stored_structured) and (
-                not stored_title.strip() or stored_title_provenance == 'server_minimum'
-            )
-            if (
-                recovery_transcript_decoded
-                and stored_content_is_replaceable
-                and not getattr(main_conv, 'user_title', None)
+            stored_content_is_replaceable = stored_structure_is_replaceable(stored_structured)
+            # Batch audio still owed follows the existing handoff path. The short
+            # transcript minimum also needs to preserve prior notes metadata.
+            if stored_content_is_replaceable and (
+                batch_audio_owed
+                or recovery_transcript_decoded
                 and not is_release_probe_uid(uid)
                 and not user_kept
                 and not getattr(main_conv, 'photos', None)
@@ -630,11 +634,11 @@ def _get_structured(
                 and not summary_app_selected
                 and english_word_floor(main_conv, discard_transcript)
                 and recovery_transcript_below_content_floor(main_conv)
+                and not recovery_minimum_would_drop_metadata(main_conv)
             ):
+                reason = 'batch_audio_owed' if batch_audio_owed else 'content_below_floor'
                 if relevance_observer is not None:
-                    relevance_observer(
-                        RelevanceDecision('keep', 'rule', 'content_below_floor', ProcessingTrigger.SERVER_RECOVERY)
-                    )
+                    relevance_observer(RelevanceDecision('keep', 'rule', reason, ProcessingTrigger.SERVER_RECOVERY))
                 if recovery_minimum_fallback_observer is not None:
                     recovery_minimum_fallback_observer()
                 return (
@@ -2702,6 +2706,11 @@ def process_conversation(
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     bind_generation(uid, generated_conversation_id)
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
+    # A v3 backfill window runs the live notes path (same trigger, relevance, speakers, meeting
+    # context and floors) but is historical: like silent backfill it takes no derived effects.
+    historical = silent_backfill or (
+        v3_policy.flag(conversation, 'v3_derived') and v3_policy.flag(conversation, 'backfilled')
+    )
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess = mode.run_now, mode.reprocess
@@ -2762,7 +2771,7 @@ def process_conversation(
         for settle in final_pass_settlements:
             settle(current)
         final_pass_settlements.clear()
-        if current and completed is not None:
+        if current and completed is not None and not historical:
             record_capture_loss(completed)
             _observe_owner_recognition_completion(completed)
         if persistence_observer is not None:
@@ -2771,7 +2780,7 @@ def process_conversation(
             derived_effects_disposition_observer(derived_effects)
         # Sync/REST callers finalize here; leased jobs defer this metadata work
         # to finalizer.py after the fanout fence, including completed replays.
-        if current and completed is not None and not defer_derived_effects and not silent_backfill:
+        if current and completed is not None and not defer_derived_effects and not historical:
             link_duplicate_captures(uid, completed)
             dispatch_primary_notes_refresh(uid, completed)
 
@@ -2922,7 +2931,7 @@ def process_conversation(
                 {
                     'event': 'selfheal_guard',
                     'outcome': 'kept_minimum',
-                    'reason': 'content_below_floor',
+                    'reason': decisions[-1].reason if decisions else 'content_below_floor',
                     'transcript_words': recovery_transcript_word_count(conversation),
                     'content_floor_words': RECOVERY_QUIET_MINIMUM_MAX_WORDS,
                 }
@@ -3033,7 +3042,7 @@ def process_conversation(
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()
-    if recovery_minimum_fallback or silent_backfill or empty_structure_minimum_applied:
+    if recovery_minimum_fallback or historical or empty_structure_minimum_applied:
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
     if conversation.processing_state is not None:
         # The payload merge-clears the stale state (an upgraded-then-reprocessed
@@ -3057,7 +3066,7 @@ def process_conversation(
         )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    if recovery_minimum_fallback or silent_backfill or content_excluded or empty_structure_minimum_applied:
+    if recovery_minimum_fallback or historical or content_excluded or empty_structure_minimum_applied:
         report_persistence(
             persisted,
             completed=conversation,
@@ -3073,7 +3082,7 @@ def process_conversation(
         )
         return conversation
 
-    if silent_backfill or content_excluded:
+    if historical or content_excluded:
         # Historical enrichment is summary-only. No extraction/reminder, app,
         # goal, webhook, lazy-effects queue or notification can escape this seam.
         if derived_effects_disposition_observer is not None:

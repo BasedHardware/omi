@@ -1225,6 +1225,7 @@
     "enterYourName": "உங்கள் பெயரை உள்ளிடவும்",
     "nameCannotBeEmpty": "பெயர் வெற்றிடமாக இருக்க முடியாது",
     "nameUpdatedSuccessfully": "பெயர் வெற்றிகரமாக புதுப்பிக்கப்பட்டது!",
+    "calendarReadSelectionHelp": "தேர்ந்தெடுத்த நாட்காட்டிகளைப் படிக்கவும். புதிய நிகழ்வுகள் {calendar} ஐப் பயன்படுத்தும்.",
     "calendarSettings": "நாட்காட்டி அமைப்புகள்",
     "calendarProviders": "நாட்காட்டி வழங்குநர்கள்",
     "macOsCalendar": "macOS நாட்காட்டி",
@@ -12217,7 +12218,7 @@
     "monthlySwitchDoneTitle": "நீங்கள் இப்போது மாதாந்திரத் திட்டத்தில் உள்ளீர்கள்",
     "monthlySwitchDoneBody": "இன்று {price} செலுத்தப்பட்டது. மாதந்தோறும் புதுப்பிக்கப்படும்.",
     "processingDeleteScopeChanged": "செயலாக்கப் பட்டியல் மாறிவிட்டது. பட்டியலைச் சரிபார்த்து மீண்டும் முயலவும்.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "இந்த மாதத்தின் {minutes} நிமிடங்களைப் பயன்படுத்திவிட்டீர்கள்",
     "freeCapBody": "Omi இன்னும் பதிவு செய்கிறது. எப்படி எழுத்துப்படியைத் தொடர்வது என்பதைத் தேர்வுசெய்க.",
     "omiProPlanName": "Omi Pro",
@@ -12243,5 +12244,8 @@
     "onWifiLater": "பின்னர் Wi-Fi இல்",
     "conversationWritingSummary": "உங்கள் சுருக்கம் எழுதப்படுகிறது…",
     "onTheWayServerWork": "சேவையகம் தெரிவித்த பணி",
-    "firmwareUpdateCheckUnavailable": "உங்கள் சாதனத்திற்கான சமீபத்திய ஃபர்ம்வேரை உறுதிப்படுத்த முடியவில்லை. உங்கள் இணைய இணைப்பைச் சரிபார்த்து, Omi ஆப் புதுப்பிக்கப்பட்டுள்ளதா என உறுதிசெய்து, மீண்டும் முயலவும்."
+    "firmwareUpdateCheckUnavailable": "உங்கள் சாதனத்திற்கான சமீபத்திய ஃபர்ம்வேரை உறுதிப்படுத்த முடியவில்லை. உங்கள் இணைய இணைப்பைச் சரிபார்த்து, Omi ஆப் புதுப்பிக்கப்பட்டுள்ளதா என உறுதிசெய்து, மீண்டும் முயலவும்.",
+    "finishNothingToProcess": "இன்னும் செயலாக்க எதுவும் இல்லை.",
+    "finishStillProcessing": "இன்னும் செயலாக்கப்படுகிறது. இது முகப்பில் தோன்றும்.",
+    "finishBackToHome": "முகப்புக்குத் திரும்பு"
 }

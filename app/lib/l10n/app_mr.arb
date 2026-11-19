@@ -1225,6 +1225,7 @@
     "enterYourName": "आपले नाव प्रविष्ट करा",
     "nameCannotBeEmpty": "नाव रिक्त असू शकत नाही",
     "nameUpdatedSuccessfully": "नाव यशस्वीरित्या अपडेट केलं!",
+    "calendarReadSelectionHelp": "निवडलेले कॅलेंडर वाचा. नवीन इव्हेंटसाठी {calendar} वापरले जाईल.",
     "calendarSettings": "कॅलेंडर सेटिंग्ज",
     "calendarProviders": "कॅलेंडर प्रदाते",
     "macOsCalendar": "macOS कॅलेंडर",
@@ -12217,7 +12218,7 @@
     "monthlySwitchDoneTitle": "तुम्ही आता मासिक प्लॅनवर आहात",
     "monthlySwitchDoneBody": "आज {price} भरले. दर महिन्याला नूतनीकरण होते.",
     "processingDeleteScopeChanged": "प्रक्रियेची यादी बदलली आहे. यादी तपासा आणि पुन्हा प्रयत्न करा.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "या महिन्याची {minutes} मिनिटे वापरली गेली आहेत",
     "freeCapBody": "Omi अजूनही रेकॉर्ड करत आहे. ट्रान्सक्रिप्शन कसे सुरू ठेवायचे ते निवडा.",
     "omiProPlanName": "Omi Pro",
@@ -12243,5 +12244,8 @@
     "onWifiLater": "नंतर Wi-Fi वर",
     "conversationWritingSummary": "तुमचा सारांश लिहित आहे…",
     "onTheWayServerWork": "सर्व्हरने नोंदवलेले काम",
-    "firmwareUpdateCheckUnavailable": "तुमच्या डिव्हाइससाठी नवीनतम फर्मवेअरची खात्री करता आली नाही. तुमचे इंटरनेट कनेक्शन तपासा आणि Omi अ‍ॅप अद्ययावत असल्याची खात्री करा, नंतर पुन्हा प्रयत्न करा."
+    "firmwareUpdateCheckUnavailable": "तुमच्या डिव्हाइससाठी नवीनतम फर्मवेअरची खात्री करता आली नाही. तुमचे इंटरनेट कनेक्शन तपासा आणि Omi अ‍ॅप अद्ययावत असल्याची खात्री करा, नंतर पुन्हा प्रयत्न करा.",
+    "finishNothingToProcess": "अजून प्रक्रिया करण्यासाठी काहीही नाही.",
+    "finishStillProcessing": "अजून प्रक्रिया सुरू आहे. हे होमवर दिसेल.",
+    "finishBackToHome": "होमवर परत जा"
 }
