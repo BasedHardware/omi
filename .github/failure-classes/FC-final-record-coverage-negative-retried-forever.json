@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-final-record-coverage-negative-retried-forever",
+  "family": "retry-classification",
+  "violated_contract": "An upload whose admission proof is a pure function of inputs that can no longer change (a sealed, settled record's units and the uploaded bytes) must get a terminal answer the shipped client keeps audio for, not a retryable 503 that the phone repeats every 30 seconds forever. The retryable wait is only for proofs that can still arrive; transient check failures stay retryable.",
+  "canonical_prevention": "Decide finality from durable markers on the row the request already read (closed, sealed, not partial, no producer session or seal refusal, settled for a bounded window), answer the deterministic negative with the client's definitive keep-local refusal, and test both the terminal and every still-changing case with synthetic rows.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_record_coverage_terminal.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/batch_pipeline/live_upload.py",
+    "backend/utils/sync/fsr_metadata.py"
+  ],
+  "status": "open"
+}

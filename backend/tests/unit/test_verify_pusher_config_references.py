@@ -222,6 +222,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "SYNC_RECORD_COVERAGE_WAIT_MEMO": "true",
         "SYNC_RECORD_WAIT_MEMO_FIRST": "true",
         "SYNC_RECORD_DECODE_FAILURE_MEMO": "true",
+        "SYNC_RECORD_COVERAGE_TERMINAL": "true",
         "HOME_TRANSCRIPTION_PRESENTATION_GATE": "true",
         "HOME_TRANSCRIPTION_DEADLINE_SECONDS": "7200",
         "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED": "true",

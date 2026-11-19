@@ -1199,6 +1199,10 @@
       "owner": "omi-pipeline / SCA-2229",
       "review_by": "2026-12-11"
     },
+    "SYNC_RECORD_COVERAGE_TERMINAL": {
+      "owner": "omi-pipeline / upload-retry-loop",
+      "review_by": "2026-12-19"
+    },
     "SYNC_RECORD_WAIT_MEMO_FIRST": {
       "owner": "omi-pipeline / SCA-2229",
       "review_by": "2026-12-11"

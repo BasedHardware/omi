@@ -14,16 +14,23 @@ import hashlib
 import json
 import logging
 import os
+import time
 import wave
 
 from fastapi.responses import JSONResponse
+from prometheus_client import Counter
 
 from config.batch_pipeline import (
     known_unsupported_batch_language,
     record_capture_eligible,
 )
 from config.policy import resolve_batch_policy
-from config.batch_pipeline_coverage_wait import coverage_wait_memo_enabled, record_wait_memo_first_enabled
+from config.batch_pipeline_coverage_wait import (
+    COVERAGE_FINAL_AFTER_SECONDS,
+    coverage_terminal_enabled,
+    coverage_wait_memo_enabled,
+    record_wait_memo_first_enabled,
+)
 from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
@@ -61,6 +68,12 @@ class RecordUploadRoute(Enum):
 
 
 logger = logging.getLogger(__name__)
+
+OMI_PIPELINE_RECORD_COVERAGE_TERMINAL_TOTAL = Counter(
+    'omi_pipeline_record_coverage_terminal_total',
+    'Unproven WALs of a final registered record answered with the terminal keep-local refusal',
+    ['memo'],
+)
 
 
 class RecordUploadWait(StrEnum):
@@ -112,6 +125,72 @@ def _pending(reason: RecordUploadWait, record: str | None = None, *, path: str =
             'retry_after_seconds': RECORD_WAIT_CACHE_SECONDS,
         },
     )
+
+
+def _seconds(value) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, datetime):
+        return value.timestamp() if value.tzinfo is not None else None
+    return None
+
+
+def coverage_final(row: dict, now: float | None = None) -> bool:
+    """True once no normal path can still change this record's units.
+
+    ``_covered`` is a pure function of the WAL bytes, the record's job list
+    and their pinned artifacts. The known ways a record gains units each
+    leave a marker here: a reconnect re-opens the row, a late producer leaves
+    an upload session or a seal refusal, a continuation marks it partial, and
+    every seal moves ``record_sealed_at``. A closed, sealed row with none of
+    those markers whose finish and last seal are both older than
+    ``COVERAGE_FINAL_AFTER_SECONDS`` keeps giving the same negative.
+    """
+    if not row.get('record_audio_closed') or row.get('record_audio_partial'):
+        return False
+    if row.get('record_upload_sessions') or row.get('record_seal_refused_at') is not None or row.get('deleted'):
+        return False
+    sealed, finished = _seconds(row.get('record_sealed_at')), _seconds(row.get('finished_at'))
+    if sealed is None or finished is None:
+        return False
+    now = time.time() if now is None else now
+    return now - max(sealed, finished) >= COVERAGE_FINAL_AFTER_SECONDS
+
+
+def _unprovable(record: str | None, *, memo: str):
+    """Terminal keep-local answer for a WAL a final record can never prove.
+
+    Shipped apps treat 400 as a definitive refusal: the WAL keeps its audio,
+    is marked refused (no user attention, no Retry) and is re-offered at most
+    once a day for seven days; builds from before mid-October keep it pending
+    under the ordinary retry budget. No shipped build deletes audio on a 400,
+    and none releases it: only a 200/202 completion does. A later proof (a
+    reseal adding units) is still accepted on one of those daily attempts.
+    """
+    OMI_PIPELINE_RECORD_COVERAGE_TERMINAL_TOTAL.labels(memo=memo).inc()
+    logger.info(
+        'event=sync_record_upload outcome=terminal reason=%s record=%s path=coverage memo=%s',
+        RecordUploadWait.AUDIO_COVERAGE_UNPROVEN.value,
+        (record or '-')[:16],
+        memo,
+    )
+    return JSONResponse(
+        status_code=400,
+        content={
+            'code': 'record_capture_unprovable',
+            'detail': 'The registered record is final and cannot prove this audio; keep the local copy',
+            'retryable': False,
+        },
+    )
+
+
+def _coverage_unproven(row: dict, record: str | None, *, memo: str):
+    """Retryable while proof can still arrive; terminal once the record is final."""
+    if coverage_terminal_enabled() and coverage_final(row):
+        return _unprovable(record, memo=memo)
+    return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, record, path='coverage', memo=memo)
 
 
 # Conversation-level waits: any WAL for the conversation gets the same answer
@@ -457,7 +536,7 @@ async def registered_record_response(
         memo_checked = True
         if await run_blocking(db_executor, cached_coverage_wait, coverage_key):
             await rearm_partial(uid, conversation_id, row, store)
-            return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content, path='coverage', memo='hit')
+            return _coverage_unproven(row, content, memo='hit')
     await retain_upload(uid, conversation_id, row, paths, store)
     if prior.get('dispatch_protocol') == 'batch_v1' and prior.get('job_id') == 'bp_' + content:
         status = await run_blocking(db_executor, durable_status, store, uid, prior['job_id'])
@@ -489,7 +568,7 @@ async def registered_record_response(
     ):
         # Memo disabled at the fast path, or a receipt/jobs branch kept this
         # request below it: the identical check still answers without decoding.
-        return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content, path='coverage', memo='hit')
+        return _coverage_unproven(row, content, memo='hit')
     failure_reason = RecordUploadWait.ARTIFACT_LOOKUP_FAILED
     try:
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
@@ -497,12 +576,7 @@ async def registered_record_response(
         if not await run_blocking(sync_executor, _covered, paths, jobs, artifacts):
             if coverage_key is not None:
                 await run_blocking(db_executor, remember_coverage_wait, coverage_key)
-            return _pending(
-                RecordUploadWait.AUDIO_COVERAGE_UNPROVEN,
-                content,
-                path='coverage',
-                memo='miss' if coverage_key is not None else 'off',
-            )
+            return _coverage_unproven(row, content, memo='miss' if coverage_key is not None else 'off')
 
         def alias(tx):
             current = tx.get('content', f'{uid}/{content_id}')
