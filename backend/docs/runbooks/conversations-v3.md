@@ -262,8 +262,9 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
   and notes path as a backfill; rebuilt rows are stamped `backfilled` and `v3_rederive_live_run`, so
   their notes take no derived effects and they never fan out again.
   - Never touched: open windows and every source they hold, rows that overlap `since` or `until`,
-    sources that are pending, unsealed, still transcribing, failed, purge-pending, private, deleted
-    or legacy backfill donors (and every row on them), and rows that are edited (`user_title`,
+    sources that are pending, unsealed, still transcribing, failed, purge-pending, private, deleted,
+    legacy backfill donors or within a claims update of Firestore's 1 MiB document limit
+    (`size_limit`, reported by the dry-run; and every row on them), and rows that are edited (`user_title`,
     corrections, speaker assignments, star, folder, photos, kept), locked, shared, private,
     discarded, deleted, backfilled by a legacy run, unreadable or still owed notes. These are offered
     to the planner as published finished rows, so their speech, claims and audio stay theirs. The
@@ -282,7 +283,12 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     `rows_rebuilt`, `rows_created`, `rows_unchanged`, `rows_retired` and `outline_calls`.
   - Blocked: `rederive_live_open` (speech within five minutes of now), `rederive_live_boundary` (a
     rebuilt window would cross `since` or `until`), `rederive_live_outline_failed` (the outline fell
-    back; never committed as failed tiles).
+    back; never committed as failed tiles), `rederive_live_coverage` (a row's speech would be lost),
+    `document_too_large` (a source's planned claims would cross the document limit; checked before
+    any write) and `backfill_partition_budget` (the final commit would exceed the write cap). A
+    commit that fails after earlier batches landed leaves the partition blocked: `resume` replans it
+    (rows this run already wrote are replanned, their first prior kept), and `undo` is exact from
+    either state.
   - Undo: before each commit, the run writes every changed, created or retired row's stored document
     and claim positions to `conversations_v3_backfill_runs/{run_id}/conversations_v3_rederive_priors` (purged with the account).
     `undo --run` takes both builder leases, waits for in-flight notes, then restores each group of

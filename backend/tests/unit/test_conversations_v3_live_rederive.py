@@ -364,6 +364,10 @@ def test_protection_reasons():
         rederive_store.live_row_protection({**base, 'backfilled': True, 'v3_rederive_live_run': 'old'}, **window)
         is None
     )
+    # Its own run's notes marker does not protect a row from that run's resumed pass; another run's does.
+    pending = {**base, 'backfilled': True, 'v3_rederive_live_run': RUN, 'v3_backfill_process_pending': True}
+    assert rederive_store.live_row_protection(pending, **window, run_id=RUN) is None
+    assert rederive_store.live_row_protection(pending, **window, run_id='other') == 'notes_pending'
     assert rederive_store.live_source_block({'recording': True, 'status': 'completed'}) is None
     assert (
         rederive_store.live_source_block({'recording': True, 'status': 'completed', 'v3_pending': True}) == 'unsealed'
@@ -476,6 +480,88 @@ async def test_a_partition_over_the_transaction_write_cap_blocks(owner, strict, 
     outcome, report = await rederive()
     assert outcome == 'blocked' and report['blocked_reason'] == 'backfill_partition_budget'
     assert conversations(strict) == before and not priors(strict)
+
+
+def padded(src, total):
+    """A source whose stored document estimates at ``total`` bytes (the projection's size estimate)."""
+    src = {**src, 'padding': ''}
+    src['padding'] = 'x' * (total - rederive_store.stored_bytes(src))
+    assert rederive_store.stored_bytes(src) == total
+    return src
+
+
+@pytest.mark.asyncio
+async def test_a_source_at_the_document_limit_is_reported_up_front_and_left_alone(owner, strict):
+    sources, rows = lunch(count=4)
+    big = padded(sources[1], rederive_store.SOURCE_MAX_BYTES)
+    sources[1] = big
+    owner(*sources, *rows)
+    est = backfill.estimate_live_partition(UID, {'since': SINCE, 'until': UNTIL}, 'dry-run', now=UNTIL)
+    assert est['sources_blocked_size_limit'] == 1 and est['protected_source_blocked'] == 1
+    before = conversations(strict)
+    outcome, report = await rederive()
+    assert outcome == 'committed' and report['sources_blocked_size_limit'] == 1
+    after = conversations(strict)
+    assert after['r1'] == before['r1'] and after['c1'] == before['c1']
+
+
+@pytest.mark.asyncio
+async def test_a_claims_update_that_would_grow_a_source_past_the_limit_blocks_before_any_write(
+    owner, strict, monkeypatch
+):
+    sources, rows = lunch(count=3)
+    # Unclaimed speech on a source the loader admits (no claim headroom): its new claim crosses the limit.
+    monkeypatch.setattr(rederive_store, 'CLAIM_BYTES', 0)
+    extra = padded(source('r9', AT + timedelta(minutes=30), words=400), rederive_store.SOURCE_MAX_BYTES - 20)
+    owner(*sources, *rows, extra)
+    before = conversations(strict)
+    outcome, report = await rederive()
+    assert outcome == 'blocked' and report['blocked_reason'] == 'document_too_large'
+    assert conversations(strict) == before and not priors(strict)
+
+
+@pytest.mark.asyncio
+async def test_a_commit_that_fails_midway_resumes_and_undoes_exactly(owner, strict, ledger, monkeypatch):
+    from google.api_core.exceptions import InvalidArgument
+
+    sources, rows = lunch()
+    extra = source('r9', AT + timedelta(minutes=30), words=400)
+    owner(*sources, *rows, extra)
+    before = conversations(strict)
+    # One row per commit batch, and the second batch's transaction fails at Firestore's size limit.
+    monkeypatch.setattr(store, 'BATCH_ROW_BYTES', 1)
+    run_transaction = store.firestore.transactional
+    commits = []
+
+    def transactional(body):
+        inner = run_transaction(body)
+
+        def run(tx, *args, **kwargs):
+            if body.__name__ == 'commit':
+                commits.append(1)
+                if len(commits) == 2:
+                    raise InvalidArgument('Document exceeds the maximum allowed size')
+            return inner(tx, *args, **kwargs)
+
+        return run
+
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+    outcome, report = await rederive()
+    assert outcome == 'blocked' and report['blocked_reason'] == 'document_too_large'
+    partial = conversations(strict)
+    assert partial != before and partial['c0']['v3_rederive_live_run'] == RUN
+    # Undo from the partial state is exact.
+    assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
+    assert conversations(strict) == before
+    # The same partial failure, then a resume that finishes, is still undone exactly.
+    commits.clear()
+    ledger.run['status'] = 'committed'
+    assert (await rederive())[0] == 'blocked'
+    monkeypatch.setattr(store.firestore, 'transactional', run_transaction)
+    outcome, report = await rederive()
+    assert outcome == 'committed' and conversations(strict)['c1']['sync_merged_into'] == 'c0'
+    assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
+    assert conversations(strict) == before
 
 
 @pytest.mark.asyncio

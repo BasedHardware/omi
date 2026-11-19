@@ -20,6 +20,18 @@ from utils.conversations.v3 import Conflict, policy
 
 # Documents (sources and rows) one partition's started_at read may return; more blocks the partition.
 REDERIVE_LIVE_LIMIT = 256
+# A source whose stored document (by the same JSON estimate the projection's size log uses) is this
+# close to Firestore's 1 MiB document limit cannot take a claims update safely: its rows stay as they
+# are, and the dry-run reports it. CLAIM_BYTES is the estimate for one claim entry.
+SOURCE_MAX_BYTES = 1_000_000
+CLAIM_BYTES = 120
+
+
+def stored_bytes(value):
+    """The projection's JSON size estimate (database.conversations_v3 size log) for a stored value."""
+    return len(json.dumps(value, default=str).encode())
+
+
 # Fields whose presence means the owner acted on a row (or another conversation absorbed it).
 OWNER_EDIT_FIELDS = (
     'user_title',
@@ -37,7 +49,7 @@ OWNER_EDIT_FIELDS = (
 )
 
 
-def live_row_protection(raw, *, since, until):
+def live_row_protection(raw, *, since, until, run_id=None):
     """Why a live v3 row must stay exactly as it is during a re-derive (None: it may be rebuilt)."""
     if raw.get('deleted') or raw.get('sync_merged_into'):
         return 'deleted'
@@ -59,9 +71,12 @@ def live_row_protection(raw, *, since, until):
         return 'edited'
     if raw.get('discarded'):
         return 'discarded'
+    # A row this run already wrote (an interrupted multi-batch commit, then resume) owes its notes on
+    # the run's own marker, drained after the partition commits; it is replanned like any other.
+    ours = run_id is not None and raw.get('v3_rederive_live_run') == run_id
     if (
         raw.get('v3_process_pending')
-        or raw.get('v3_backfill_process_pending')
+        or (raw.get('v3_backfill_process_pending') and not ours)
         or raw.get('tile_state') == 'transcribing'
         or raw.get('status') not in ('completed', 'processing', 'failed')
     ):
@@ -83,6 +98,8 @@ def live_source_block(raw):
         return 'transcription_failed'
     if raw.get('v3_audio_purge_pending'):
         return 'purge_pending'
+    if stored_bytes(raw) + 4 * CLAIM_BYTES > SOURCE_MAX_BYTES:
+        return 'size_limit'
     return None
 
 
@@ -184,7 +201,12 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
             continue
         if raws[rid].get('deleted_spans'):
             count('sources_with_deleted_spans')
-        recordings[rid] = {**row, '_v3_rederive_live': True}
+        recordings[rid] = {
+            **row,
+            '_v3_rederive_live': True,
+            '_v3_stored_bytes': stored_bytes(raws[rid]),
+            '_v3_stored_claims_bytes': stored_bytes(raws[rid].get('claims') or []),
+        }
     # An open window's sources belong to the live builder until it closes.
     for cid in rows:
         if raws[cid].get('status') == 'in_progress':
@@ -196,7 +218,7 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
     existing = {}
     for cid, snapshot in rows.items():
         raw = raws[cid]
-        reason = live_row_protection(raw, since=since, until=until)
+        reason = live_row_protection(raw, since=since, until=until, run_id=run_id)
         if reason == 'deleted':
             count('skipped_deleted')
             continue

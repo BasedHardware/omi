@@ -113,6 +113,8 @@ def plan_owner(uid: str, label: str, since: datetime, until: datetime, mode: str
                 'windows': f"{totals.get('rows_eligible', 0)}->{totals.get('windows_after', 0)}",
                 'visible': f"{totals.get('visible_before', 0)}->{totals.get('visible_after', 0)}",
                 'rows_retired_est': totals.get('rows_retired_est', 0),
+                # Sources too close to Firestore's 1 MiB document limit for a claims update: their rows stay.
+                'sources_size_limit': totals.get('sources_blocked_size_limit', 0),
                 'llm_calls': totals.get('outline_calls', 0)
                 + totals.get('notes_calls', 0)
                 + totals.get('short_task_calls', 0),

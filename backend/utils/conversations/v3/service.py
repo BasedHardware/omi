@@ -695,6 +695,19 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
         for rid, recording in recordings.items()
         if any(isinstance(c, dict) and c.get('conversation_id') in touched for c in recording.get('claims') or [])
     }
+    for rid in sources:
+        recording = recordings[rid]
+        claims = [
+            c
+            for c in recording.get('claims') or []
+            if not (isinstance(c, dict) and c.get('conversation_id') in touched)
+        ]
+        claims += [{'conversation_id': row['id'], **span} for row in write for span in row['_v3_claims'].get(rid) or []]
+        stored = recording.get('_v3_stored_bytes', 0)
+        after = stored - recording.get('_v3_stored_claims_bytes', 0) + rederive_store.stored_bytes(claims)
+        if after > stored and after > rederive_store.SOURCE_MAX_BYTES:
+            # Growing a source past the document limit fails every retry; block before any write.
+            raise Conflict('document_too_large')
     if len(sources) + len(retire) + 2 > store.BATCH_MAX_WRITES:
         # The final batch writes every committed source, every retire patch, a row and the lease in one
         # transaction; more than Firestore's write cap would fail on every retry.
