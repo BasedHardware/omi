@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import os
-from threading import Event
+from threading import Barrier, Event
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -252,3 +252,22 @@ def test_claim_expiry_does_not_renew_or_allow_a_stale_settlement(db, headers):
         original.finish(response)
     replacement.finish(response)
     assert replacement.lookup() == response
+
+
+def test_concurrent_fresh_claims_have_one_winner(db, headers):
+    operation = idempotency_store.Operation(headers['X-Omi-User-Uid'], uuid4().hex)
+    stores = [idempotency_store.Store(operation, client=db) for _ in range(2)]
+    start = Barrier(2, timeout=10)
+
+    def compete(store):
+        start.wait()
+        try:
+            assert store.claim_or_replay('same-fingerprint') is None
+        except idempotency_store.IdempotencyError as exc:
+            assert exc.status == 409
+            return exc.code
+        return 'claimed'
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(compete, store) for store in stores]
+        assert sorted(future.result(timeout=20) for future in futures) == ['claimed', 'idempotency_pending']

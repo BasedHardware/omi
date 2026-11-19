@@ -1,13 +1,15 @@
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 import pytest
 
-from llm_gateway.gateway import idempotency
+from llm_gateway.gateway import idempotency, idempotency_store
 from llm_gateway.gateway.executor import ProviderRegistry
 from llm_gateway.gateway.providers import FakeChatCompletionProvider
 from llm_gateway.main import app
 from llm_gateway.routers import dependencies
+from scripts.batch_pipeline_ttl import ttl_resources
 
 POST = '/v1/chat/completions'
 BODY = {'model': 'omi:auto:conv-structure', 'messages': [{'role': 'user', 'content': 'synthetic prompt'}]}
@@ -56,3 +58,12 @@ def test_keyed_request_bounds_reject_before_storage_or_provider(gateway, monkeyp
     headers.pop('Idempotency-Key')
     assert client.post(f'{POST}/operations', json=BODY, headers=headers).status_code == 400
     assert provider.calls == []
+
+
+def test_ttl_policy_covers_exactly_the_gateway_claim_and_result_collections():
+    policy = Path(__file__).resolve().parents[2] / 'deploy' / 'llm-gateway' / 'retention.json'
+    resources = [
+        f'projects/demo-gateway/databases/(default)/collectionGroups/{collection}/fields/expires_at'
+        for collection in (idempotency_store.CLAIMS, idempotency_store.RESULTS)
+    ]
+    assert sorted(ttl_resources('demo-gateway', policy_path=policy)) == sorted(resources)
