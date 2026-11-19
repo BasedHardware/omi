@@ -1,4 +1,3 @@
-import 'package:clock/clock.dart';
 import 'dart:async';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
@@ -16,7 +15,6 @@ import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
 import 'package:omi/pages/episodes/finish_capture.dart';
-import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -627,21 +625,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   style: _metaStyle,
                   maxLines: 1,
                 ),
-              if (_isLive)
-                // The conversation in progress counts from its start, whether or not its transcript
-                // came with the live read.
-                LiveEpisodeClock(
-                  key: const Key('conversation_row_live_length'),
-                  clock: clock.now,
-                  builder: (context, now) {
-                    final start = widget.conversation.startedAt ?? widget.conversation.createdAt;
-                    final seconds = now.difference(start).inSeconds;
-                    return seconds <= 0
-                        ? const SizedBox.shrink()
-                        : Text('• ${OmiDuration.compact(seconds, context.l10n)}', style: _metaStyle, maxLines: 1);
-                  },
-                )
-              else if (duration.isNotEmpty)
+              if (_isLive) ...[
+                // The conversation in progress shows its speech so far, through the same duration
+                // authority as its detail. Counting from its start to now grew it through silence.
+                if (duration.isNotEmpty)
+                  Text('• $duration', key: const Key('conversation_row_live_length'), style: _metaStyle, maxLines: 1),
+              ] else if (duration.isNotEmpty)
                 Text('• $duration', style: _metaStyle, maxLines: 1),
               if (widget.homeCard?.memberCount case final count? when count > 1)
                 Text(context.l10n.homeRecordingsCount(count), style: _metaStyle),
@@ -826,19 +815,16 @@ class _ConversationListItemState extends State<ConversationListItem> {
     final l10n = context.l10n;
     final style = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
     final Widget child = switch (state) {
-      ConversationTileState.live => LiveEpisodeClock(
+      // Speech so far, through the same duration authority as the meta row and the detail page
+      // (#25725): counting from the start to now would grow it through silence.
+      ConversationTileState.live => Builder(
           key: const ValueKey('conversation_row_status_live'),
-          clock: clock.now,
-          builder: (context, now) {
-            final start = widget.conversation.startedAt ?? widget.conversation.createdAt;
-            final seconds = now.difference(start).inSeconds;
-            return Text(
-              seconds <= 0 ? l10n.live : l10n.listeningWithDuration(OmiDuration.compact(seconds, l10n)),
-              style: style,
-              maxLines: 1,
-            );
-          },
-        ),
+          builder: (context) {
+            final duration = _getConversationDuration(context);
+            // Keyed like the meta row's live length: the row's one live length, found the same way.
+            return Text(duration.isEmpty ? l10n.listening : l10n.listeningWithDuration(duration),
+                key: const Key('conversation_row_live_length'), style: style, maxLines: 1);
+          }),
       ConversationTileState.transcribing => Text(l10n.homeStepTranscribing,
           key: const ValueKey('conversation_row_status_transcribing'), style: style, maxLines: 1),
       ConversationTileState.writing => Text(l10n.writingSummaryStatus,

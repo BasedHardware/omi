@@ -4725,6 +4725,7 @@
     "finishNothingToProcess": "Na razie nie ma czego przetworzyć.",
     "finishStillProcessing": "Nadal trwa przetwarzanie. Pojawi się na ekranie głównym.",
     "finishBackToHome": "Wróć do ekranu głównego",
+    "conversationSummaryWhenItEnds": "Podsumowanie po zakończeniu tej rozmowy",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

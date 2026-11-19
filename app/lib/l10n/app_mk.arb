@@ -12247,6 +12247,7 @@
     "finishNothingToProcess": "Сè уште нема ништо за обработка.",
     "finishStillProcessing": "Сè уште се обработува. Ќе се појави на почетната.",
     "finishBackToHome": "Назад кон почетна",
+    "conversationSummaryWhenItEnds": "Резиме кога ќе заврши овој разговор",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

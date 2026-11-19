@@ -4690,6 +4690,7 @@
     "finishNothingToProcess": "Kol kas nėra ką apdoroti.",
     "finishStillProcessing": "Vis dar apdorojama. Tai atsiras pagrindiniame puslapyje.",
     "finishBackToHome": "Grįžti į pagrindinį",
+    "conversationSummaryWhenItEnds": "Santrauka, kai šis pokalbis baigsis",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

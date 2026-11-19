@@ -4690,6 +4690,7 @@
     "finishNothingToProcess": "Nog niets om te verwerken.",
     "finishStillProcessing": "Wordt nog verwerkt. Het verschijnt op Home.",
     "finishBackToHome": "Terug naar Home",
+    "conversationSummaryWhenItEnds": "Samenvatting wanneer dit gesprek eindigt",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

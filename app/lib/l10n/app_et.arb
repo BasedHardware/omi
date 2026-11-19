@@ -4690,6 +4690,7 @@
     "finishNothingToProcess": "Veel pole midagi töödelda.",
     "finishStillProcessing": "Veel töödeldakse. See ilmub avalehele.",
     "finishBackToHome": "Tagasi avalehele",
+    "conversationSummaryWhenItEnds": "Kokkuvõte, kui see vestlus lõpeb",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

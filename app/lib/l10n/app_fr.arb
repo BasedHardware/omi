@@ -4725,6 +4725,7 @@
     "finishNothingToProcess": "Rien à traiter pour l'instant.",
     "finishStillProcessing": "Traitement en cours. Elle apparaîtra sur l'accueil.",
     "finishBackToHome": "Retour à l'accueil",
+    "conversationSummaryWhenItEnds": "Résumé à la fin de cette conversation",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

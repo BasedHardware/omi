@@ -19,11 +19,12 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// progress surface, so this draws only when another tab is on screen — a request started from the
 /// Transcript tab (the ⋯ menu, the speaker refresh) still shows progress.
 ///
-/// While the server reports the conversation as processing (or, on v3, its tile as transcribing or
-/// writing), the strip re-reads it every [pollInterval] (at most [maxPolls] times) so the result
-/// replaces the strip without the reader leaving and coming back. On v3 it names the step:
-/// "Transcribing…", then "Writing summary…". When the reads run out it says it is still working,
-/// with Try Again, and reads again when the app comes back to the front (X12).
+/// While the server reports the conversation as processing, the strip re-reads it every
+/// [pollInterval] (at most [maxPolls] times) so the result replaces the strip without the reader
+/// leaving and coming back. When the reads run out it says it is still working, with Try Again, and
+/// reads again when the app comes back to the front (X12). On v3 it names the step, "Transcribing…"
+/// then "Writing summary…"; the page's LiveConversationRefresher and the LiveSummarySection own
+/// those reads, so the strip does not poll for them.
 class ConversationActivityStrip extends StatefulWidget {
   const ConversationActivityStrip({
     super.key,
@@ -80,16 +81,10 @@ class _ConversationActivityStripState extends State<ConversationActivityStrip> w
     unawaited(provider.refreshConversation());
   }
 
-  static bool _waiting(ServerConversation? conversation, {required bool v3}) {
-    if (conversation == null) return false;
-    if (conversation.status == ConversationStatus.processing) return true;
-    final tile = v3 ? conversation.v3?.tileState : null;
-    return tile == ConversationTileState.transcribing || tile == ConversationTileState.writing;
-  }
-
-  void _syncPolling(ConversationDetailProvider provider, ServerConversation? conversation, {required bool v3}) {
+  void _syncPolling(ConversationDetailProvider provider, ServerConversation? conversation) {
     _provider = provider;
-    final processingId = _waiting(conversation, v3: v3) ? conversation!.id : null;
+    final processingId =
+        conversation != null && conversation.status == ConversationStatus.processing ? conversation.id : null;
     if (processingId == _pollingId) return;
     _poll?.cancel();
     _poll = null;
@@ -129,7 +124,7 @@ class _ConversationActivityStripState extends State<ConversationActivityStrip> w
     final provider = context.watch<ConversationDetailProvider>();
     final conversation = provider.conversationOrNull;
     final v3 = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false);
-    _syncPolling(provider, conversation, v3: v3);
+    _syncPolling(provider, conversation);
     final tile = v3 ? conversation?.v3?.tileState : null;
 
     final l10n = context.l10n;

@@ -4690,6 +4690,7 @@
     "finishNothingToProcess": "Încă nu este nimic de procesat.",
     "finishStillProcessing": "Încă se procesează. Va apărea pe pagina principală.",
     "finishBackToHome": "Înapoi la pagina principală",
+    "conversationSummaryWhenItEnds": "Rezumat când se încheie această conversație",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

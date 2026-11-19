@@ -15636,6 +15636,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get finishBackToHome => 'Назад кон почетна';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Резиме кога ќе заврши овој разговор';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

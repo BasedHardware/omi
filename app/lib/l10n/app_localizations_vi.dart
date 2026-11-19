@@ -15572,6 +15572,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get finishBackToHome => 'Về Trang chủ';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Bản tóm tắt khi cuộc trò chuyện này kết thúc';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

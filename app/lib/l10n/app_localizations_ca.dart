@@ -15648,6 +15648,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get finishBackToHome => 'Torna a l\'inici';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Resum quan acabi aquesta conversa';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

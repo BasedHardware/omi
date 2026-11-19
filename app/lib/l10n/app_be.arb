@@ -12247,6 +12247,7 @@
     "finishNothingToProcess": "Пакуль няма чаго апрацоўваць.",
     "finishStillProcessing": "Яшчэ апрацоўваецца. З'явіцца на галоўнай.",
     "finishBackToHome": "На галоўную",
+    "conversationSummaryWhenItEnds": "Рэзюмэ, калі гэтая размова скончыцца",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

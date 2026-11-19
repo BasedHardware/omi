@@ -15579,6 +15579,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get finishBackToHome => 'Назад на почетну';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Резиме када се овај разговор заврши';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

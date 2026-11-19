@@ -4690,6 +4690,7 @@
     "finishNothingToProcess": "لا يوجد شيء لمعالجته بعد.",
     "finishStillProcessing": "لا تزال المعالجة جارية. ستظهر على الشاشة الرئيسية.",
     "finishBackToHome": "العودة إلى الرئيسية",
+    "conversationSummaryWhenItEnds": "الملخص عند انتهاء هذه المحادثة",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

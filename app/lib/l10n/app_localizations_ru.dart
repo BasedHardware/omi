@@ -15621,6 +15621,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get finishBackToHome => 'На главную';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Сводка появится, когда разговор закончится';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

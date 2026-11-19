@@ -15611,6 +15611,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get finishBackToHome => 'Terug naar Home';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Samenvatting wanneer dit gesprek eindigt';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

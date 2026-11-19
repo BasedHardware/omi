@@ -15634,6 +15634,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get finishBackToHome => 'హోమ్‌కు తిరిగి వెళ్లండి';
 
   @override
+  String get conversationSummaryWhenItEnds => 'ఈ సంభాషణ ముగిసినప్పుడు సారాంశం';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

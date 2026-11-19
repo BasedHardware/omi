@@ -12247,6 +12247,7 @@
     "finishNothingToProcess": "Wala pang ipoproseso.",
     "finishStillProcessing": "Pinoproseso pa. Lalabas ito sa Home.",
     "finishBackToHome": "Bumalik sa Home",
+    "conversationSummaryWhenItEnds": "Buod kapag natapos ang usapang ito",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

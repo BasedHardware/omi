@@ -15586,6 +15586,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get finishBackToHome => 'Kembali ke Beranda';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Ringkasan saat percakapan ini berakhir';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

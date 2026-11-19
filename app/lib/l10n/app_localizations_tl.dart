@@ -15694,6 +15694,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get finishBackToHome => 'Bumalik sa Home';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Buod kapag natapos ang usapang ito';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

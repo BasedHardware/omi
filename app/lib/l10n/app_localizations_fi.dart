@@ -15576,6 +15576,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get finishBackToHome => 'Takaisin kotiin';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Yhteenveto, kun tämä keskustelu päättyy';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

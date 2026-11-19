@@ -15575,6 +15575,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get finishBackToHome => 'Tilbake til Hjem';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Sammendrag når denne samtalen avsluttes';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

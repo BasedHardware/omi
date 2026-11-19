@@ -15564,6 +15564,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get finishBackToHome => 'Tagasi avalehele';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Kokkuvõte, kui see vestlus lõpeb';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

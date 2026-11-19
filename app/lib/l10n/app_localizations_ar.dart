@@ -15483,6 +15483,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get finishBackToHome => 'العودة إلى الرئيسية';
 
   @override
+  String get conversationSummaryWhenItEnds => 'الملخص عند انتهاء هذه المحادثة';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

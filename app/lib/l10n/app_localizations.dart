@@ -27327,6 +27327,12 @@ abstract class AppLocalizations {
   /// **'Back to Home'**
   String get finishBackToHome;
 
+  /// On the detail page of a conversation still in progress (v3): the summary is written once it ends.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary when this conversation ends'**
+  String get conversationSummaryWhenItEnds;
+
   /// Toast after tapping Finish on a live recording when the server had already saved that conversation on its own. 'Home' is the app's conversation list tab.
   ///
   /// In en, this message translates to:

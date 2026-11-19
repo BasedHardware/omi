@@ -4732,6 +4732,7 @@
     "finishNothingToProcess": "Intet at behandle endnu.",
     "finishStillProcessing": "Behandles stadig. Den vises på Hjem.",
     "finishBackToHome": "Tilbage til Hjem",
+    "conversationSummaryWhenItEnds": "Resumé, når denne samtale slutter",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

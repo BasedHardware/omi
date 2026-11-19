@@ -15605,6 +15605,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get finishBackToHome => 'На головну';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Підсумок, коли ця розмова завершиться';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

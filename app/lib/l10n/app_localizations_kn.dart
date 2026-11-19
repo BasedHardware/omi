@@ -15622,6 +15622,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get finishBackToHome => 'ಹೋಮ್‌ಗೆ ಹಿಂತಿರುಗಿ';
 
   @override
+  String get conversationSummaryWhenItEnds => 'ಈ ಸಂಭಾಷಣೆ ಮುಗಿದಾಗ ಸಾರಾಂಶ';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

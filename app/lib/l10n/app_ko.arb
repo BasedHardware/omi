@@ -4690,6 +4690,7 @@
     "finishNothingToProcess": "아직 처리할 내용이 없어요.",
     "finishStillProcessing": "아직 처리 중이에요. 홈에 표시될 거예요.",
     "finishBackToHome": "홈으로 돌아가기",
+    "conversationSummaryWhenItEnds": "이 대화가 끝나면 요약이 표시됩니다",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

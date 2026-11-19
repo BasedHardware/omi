@@ -15600,6 +15600,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get finishBackToHome => 'Nazad na početnu';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Sažetak kada se ovaj razgovor završi';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

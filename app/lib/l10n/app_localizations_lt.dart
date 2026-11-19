@@ -15595,6 +15595,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get finishBackToHome => 'Grįžti į pagrindinį';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Santrauka, kai šis pokalbis baigsis';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

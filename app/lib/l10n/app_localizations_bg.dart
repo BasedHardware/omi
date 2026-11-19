@@ -15622,6 +15622,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get finishBackToHome => 'Към началото';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Обобщение, когато този разговор приключи';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

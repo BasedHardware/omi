@@ -12247,6 +12247,7 @@
     "finishNothingToProcess": "Još nema ničega za obradu.",
     "finishStillProcessing": "Još se obrađuje. Pojavit će se na početnoj.",
     "finishBackToHome": "Natrag na početnu",
+    "conversationSummaryWhenItEnds": "Sažetak kada ovaj razgovor završi",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

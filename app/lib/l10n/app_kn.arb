@@ -12247,6 +12247,7 @@
     "finishNothingToProcess": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಏನೂ ಇಲ್ಲ.",
     "finishStillProcessing": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತಿದೆ. ಇದು ಹೋಮ್‌ನಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.",
     "finishBackToHome": "ಹೋಮ್‌ಗೆ ಹಿಂತಿರುಗಿ",
+    "conversationSummaryWhenItEnds": "ಈ ಸಂಭಾಷಣೆ ಮುಗಿದಾಗ ಸಾರಾಂಶ",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

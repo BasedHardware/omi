@@ -15320,6 +15320,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get finishBackToHome => '返回首页';
 
   @override
+  String get conversationSummaryWhenItEnds => '对话结束后生成摘要';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

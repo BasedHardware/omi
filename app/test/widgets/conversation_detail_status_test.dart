@@ -188,7 +188,7 @@ void main() {
       expect(find.byKey(const Key('conversation_activity_strip')), findsNothing);
     });
 
-    testWidgets('X12: v3 names the step; when the reads run out it says so with Try Again', (tester) async {
+    testWidgets('X12: v3 names the step and leaves its reads to the page', (tester) async {
       final writing = ServerConversation(
         id: 'detail-status',
         createdAt: DateTime(2026, 11, 19, 10),
@@ -212,6 +212,31 @@ void main() {
       ));
       expect(find.text('Writing summary…'), findsOneWidget);
       expect(find.text(_l10n(tester).processingConversationProgress), findsNothing);
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump();
+      }
+      expect(fetches, 0, reason: 'LiveConversationRefresher and LiveSummarySection own v3 reads');
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('X12: when the reads run out it says so with Try Again', (tester) async {
+      final processing = ServerConversation(
+        id: 'detail-status',
+        createdAt: DateTime(2026, 11, 19, 10),
+        structured: Structured('Choosing a Table', '', emoji: '🍽️'),
+        status: ConversationStatus.processing,
+      );
+      var fetches = 0;
+      final detail = _detail(processing, fetch: (_) async {
+        fetches++;
+        return processing;
+      });
+      addTearDown(detail.dispose);
+      await tester
+          .pumpWidget(_app(detail, const ConversationActivityStrip(pollInterval: Duration(seconds: 1), maxPolls: 2)));
+      final waiting = _l10n(tester).processingConversationProgress;
+      expect(find.text(waiting), findsOneWidget);
 
       for (var i = 0; i < 4; i++) {
         await tester.pump(const Duration(seconds: 1));
@@ -224,7 +249,7 @@ void main() {
       await tester.tap(find.text('Try Again'));
       await tester.pump();
       expect(fetches, 3, reason: 'Try Again reads now');
-      expect(find.text('Writing summary…'), findsOneWidget, reason: 'and polls again');
+      expect(find.text(waiting), findsOneWidget, reason: 'and polls again');
       await tester.pumpWidget(const SizedBox());
     });
 

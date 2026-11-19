@@ -12247,6 +12247,7 @@
     "finishNothingToProcess": "ఇంకా ప్రాసెస్ చేయడానికి ఏమీ లేదు.",
     "finishStillProcessing": "ఇంకా ప్రాసెస్ అవుతోంది. ఇది హోమ్‌లో కనిపిస్తుంది.",
     "finishBackToHome": "హోమ్‌కు తిరిగి వెళ్లండి",
+    "conversationSummaryWhenItEnds": "ఈ సంభాషణ ముగిసినప్పుడు సారాంశం",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

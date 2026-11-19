@@ -15686,6 +15686,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get finishBackToHome => 'Zur Startseite';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Zusammenfassung, wenn dieses Gespräch endet';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

@@ -4690,6 +4690,7 @@
     "finishNothingToProcess": "还没有可处理的内容。",
     "finishStillProcessing": "仍在处理中。完成后会显示在首页。",
     "finishBackToHome": "返回首页",
+    "conversationSummaryWhenItEnds": "对话结束后生成摘要",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

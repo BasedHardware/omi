@@ -12247,6 +12247,7 @@
     "finishNothingToProcess": "ابھی پروسیس کرنے کے لیے کچھ نہیں ہے۔",
     "finishStillProcessing": "ابھی پروسیس ہو رہا ہے۔ یہ ہوم پر نظر آئے گا۔",
     "finishBackToHome": "ہوم پر واپس جائیں",
+    "conversationSummaryWhenItEnds": "یہ گفتگو ختم ہونے پر خلاصہ",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

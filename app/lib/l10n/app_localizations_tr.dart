@@ -15582,6 +15582,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get finishBackToHome => 'Ana Sayfaya Dön';
 
   @override
+  String get conversationSummaryWhenItEnds => 'Bu konuşma bittiğinde özet';
+
+  @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override

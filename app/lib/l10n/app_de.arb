@@ -4690,6 +4690,7 @@
     "finishNothingToProcess": "Noch nichts zu verarbeiten.",
     "finishStillProcessing": "Wird noch verarbeitet. Es erscheint auf der Startseite.",
     "finishBackToHome": "Zur Startseite",
+    "conversationSummaryWhenItEnds": "Zusammenfassung, wenn dieses Gespräch endet",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",

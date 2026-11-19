@@ -19018,6 +19018,10 @@
     "@finishBackToHome": {
         "description": "Button that leaves the processing page for the Home conversation list."
     },
+    "conversationSummaryWhenItEnds": "Summary when this conversation ends",
+    "@conversationSummaryWhenItEnds": {
+        "description": "On the detail page of a conversation still in progress (v3): the summary is written once it ends."
+    },
     "finishAlreadySaved": "Already saved. It's on Home.",
     "@finishAlreadySaved": {
         "description": "Toast after tapping Finish on a live recording when the server had already saved that conversation on its own. 'Home' is the app's conversation list tab."

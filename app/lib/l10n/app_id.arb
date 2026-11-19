@@ -4725,6 +4725,7 @@
     "finishNothingToProcess": "Belum ada yang perlu diproses.",
     "finishStillProcessing": "Masih diproses. Ini akan muncul di Beranda.",
     "finishBackToHome": "Kembali ke Beranda",
+    "conversationSummaryWhenItEnds": "Ringkasan saat percakapan ini berakhir",
     "finishAlreadySaved": "Already saved. It's on Home.",
     "finishAudioNotReceived": "Audio's still on its way.",
     "finishFailedOffline": "Didn't go through. Your audio is safe.",
