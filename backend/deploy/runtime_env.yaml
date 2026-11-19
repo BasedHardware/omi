@@ -1084,7 +1084,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
@@ -1911,7 +1911,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
@@ -4137,7 +4137,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
@@ -5267,7 +5267,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_INPUT_EXPIRING_ENABLED:
               value: 'true'
