@@ -30,7 +30,7 @@ from testing.pipeline_lab.sinks.capture import CaptureSinks
 from testing.pipeline_lab.stack.clock import LabClock, installed_clock
 from testing.pipeline_lab.stack.config import LabStackConfig
 from testing.pipeline_lab.stack.env import lab_environment
-from testing.pipeline_lab.stack.io import append_jsonl, write_json
+from testing.pipeline_lab.stack.io import append_jsonl, parse_time, write_json
 from testing.pipeline_lab.stack.overlay import Overlay
 from testing.pipeline_lab.v3.driver import V3Driver, default_horizon
 from testing.pipeline_lab.v3.export import home_visible, normalize_v3_conversation, pair_by_recordings
@@ -111,6 +111,19 @@ def export_conversations(
         )
         write_json(Path(run_dir) / 'conversations' / f'{cid}.json', payload)
         out.append(payload)
+    return out
+
+
+def replayed_rows(
+    derived: Sequence[Mapping[str, Any]], replayed: set[str], day_start: datetime
+) -> list[Mapping[str, Any]]:
+    """The v3 conversations this replay planned: any that holds a replayed recording or starts in the day.
+    Start-state conversations from earlier days stay out of the run's output."""
+    out = []
+    for row in derived:
+        started = parse_time(row.get('started_at'))
+        if replayed & {str(r) for r in row.get('v3_recording_ids') or []} or (started and started >= day_start):
+            out.append(row)
     return out
 
 
@@ -220,6 +233,7 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
         )
         result['driver'] = report.summary()
         derived, recordings = read_v3_rows(config.uid)
+        derived = replayed_rows(derived, {a.recording_id for a in plan.arrivals}, spec.day_start)
         exported = export_conversations(
             run_dir, uid=config.uid, derived=derived, production=spec.production, store=ProductChainStore(), sinks=sinks
         )

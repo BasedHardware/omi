@@ -147,6 +147,10 @@ def build_parser() -> argparse.ArgumentParser:
     from_env.add_argument(
         '--owner-uid-env', help='name of an env var holding the owner uid, to resolve partial cohorts (never written)'
     )
+    from_env.add_argument(
+        '--owner-uid-file',
+        help='0600 file holding the owner uid, to resolve cohorts and uid allow-lists (never written)',
+    )
     from_env.add_argument('--out', help='write the overlay here (outside git) instead of stdout')
 
     sub.add_parser('stages', parents=[common], help='stages in order and their registered drivers')
@@ -352,6 +356,23 @@ def _verdicts(args: argparse.Namespace, store: Store) -> tuple[Any, int]:
     return payload, 0
 
 
+def read_private_value(path: Path) -> str:
+    """The stripped contents of an owner-only regular file (no link, mode 0600 or tighter)."""
+    import os
+    import stat
+
+    try:
+        info = os.lstat(path)
+    except OSError:
+        raise CliError('private file not found') from None
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+        raise CliError('private file must be a regular file owned by you with mode 0600')
+    value = path.read_text(encoding='utf-8').strip()
+    if not value:
+        raise CliError('private file is empty')
+    return value
+
+
 def _overlay_from_runtime_env(args: argparse.Namespace) -> Any:
     import os
 
@@ -365,6 +386,8 @@ def _overlay_from_runtime_env(args: argparse.Namespace) -> Any:
     owner_uid = os.environ.get(args.owner_uid_env) if args.owner_uid_env else None
     if args.owner_uid_env and not owner_uid:
         raise CliError(f'{args.owner_uid_env} is not set')
+    if args.owner_uid_file:
+        owner_uid = read_private_value(Path(args.owner_uid_file))
     overlay, report = overlay_from_runtime_env(
         path, environment=args.environment, service=args.service, owner_uid=owner_uid
     )

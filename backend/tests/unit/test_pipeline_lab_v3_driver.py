@@ -252,3 +252,14 @@ def test_driver_stops_at_max_events():
         )
     )
     assert report.stopped == 'max_events' and len(report.events) == 3
+
+
+def test_replayed_rows_keep_only_conversations_this_replay_planned():
+    from testing.pipeline_lab.v3.run import replayed_rows
+
+    rows = [
+        {'id': 'old', 'started_at': (T0 - timedelta(days=1)).isoformat(), 'v3_recording_ids': ['prev']},
+        {'id': 'spans', 'started_at': (T0 - timedelta(minutes=5)).isoformat(), 'v3_recording_ids': ['prev', 'a']},
+        {'id': 'today', 'started_at': T0.isoformat(), 'v3_recording_ids': ['b']},
+    ]
+    assert [r['id'] for r in replayed_rows(rows, {'a'}, T0)] == ['spans', 'today']

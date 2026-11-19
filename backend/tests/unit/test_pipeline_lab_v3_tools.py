@@ -58,7 +58,9 @@ def test_default_service_is_backend_sync_and_v3_switches_are_reported(runtime_en
 
 
 def test_every_static_serve_decision_is_pinned(runtime_env):
-    assert static_mode_names(runtime_env.parents[1]) == {'NOTES_PACKET_V2_MODE', 'LIFECYCLE_V2_MODE'}
+    (runtime_env.parents[1] / 'config' / 'modes.py').write_text("BOUNDARIES_MODE_ENV = 'EPISODE_BOUNDARIES_MODE'\n")
+    names = static_mode_names(runtime_env.parents[1])
+    assert names == {'NOTES_PACKET_V2_MODE', 'LIFECYCLE_V2_MODE', 'EPISODE_BOUNDARIES_MODE'}
     overlay, report = overlay_from_runtime_env(runtime_env)
     assert {'NOTES_PACKET_V2_MODE', 'LIFECYCLE_V2_MODE'} <= set(overlay['serving'])
     assert overlay['serving']['NOTES_PACKET_V2_MODE'] is False  # unset mode: shadow, no cohort -> nobody
@@ -205,3 +207,17 @@ def test_output_and_guard_are_refused_outside_the_rules(tmp_path):
         prod_export.load_guard(guard)  # no load_secret
     guard.write_text('def owner_uid(path):\n    return "x"\n\ndef load_secret(path):\n    return None\n')
     assert prod_export.load_guard(guard).owner_uid('f') == 'x'
+
+
+def test_owner_uid_file_must_be_private(tmp_path):
+    from testing.pipeline_lab.cli import CliError, read_private_value
+
+    path = tmp_path / 'uid.txt'
+    path.write_text(OWNER + '\n')
+    path.chmod(0o644)
+    with pytest.raises(CliError):
+        read_private_value(path)
+    path.chmod(0o600)
+    assert read_private_value(path) == OWNER
+    with pytest.raises(CliError):
+        read_private_value(tmp_path / 'missing')

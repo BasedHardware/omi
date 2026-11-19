@@ -47,6 +47,8 @@ COHORT_SUFFIXES = ('_SERVE_PERCENT', '_SERVE_UID_SHA256S')
 DEFAULT_SERVICE = 'backend-sync'
 UID_LIST = re.compile(r'(_UID_ALLOWLIST|_ALLOWLIST_UIDS|_UIDS|_UID)$')
 SERVING_LITERAL = re.compile(r"serving_for\(\s*['\"]([A-Z][A-Z0-9_]+)['\"]")
+# Mode names bound through constants (``X_MODE_ENV = 'X_MODE'``) are found as string literals.
+MODE_LITERAL = re.compile(r"['\"]([A-Z][A-Z0-9_]*_MODE)['\"]")
 V3_SWITCHES = (
     'CONVERSATIONS_V3',
     'CONVERSATIONS_V3_STAGE',
@@ -62,7 +64,10 @@ V3_SWITCHES = (
 
 
 def static_mode_names(backend: Path) -> set[str]:
-    """Serve-mode names the ref's product code passes to ``serving_for`` as literals."""
+    """Serve-mode names in the ref's product code: ``serving_for`` literals and ``'*_MODE'`` strings.
+
+    A superset is harmless: pinning a name nothing reads changes nothing.
+    """
     names: set[str] = set()
     for path in Path(backend).rglob('*.py'):
         parts = path.relative_to(backend).parts
@@ -74,6 +79,8 @@ def static_mode_names(backend: Path) -> set[str]:
             continue
         if 'serving_for' in text:
             names.update(SERVING_LITERAL.findall(text))
+        if '_MODE' in text:
+            names.update(MODE_LITERAL.findall(text))
     return names
 
 
