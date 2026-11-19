@@ -207,7 +207,9 @@ def windows(groups, outlines, *, cohesion=False, sitdown=False):
                     'finished': group['finished'] or end < len(group['lines']) or part_index < len(capped) - 1,
                 }
                 if cohesion:
-                    candidate['_stretch_words'] = group['_stretch_words']
+                    # A sit-down stretch can span two hours of separate cards, so each joined card meets
+                    # the Home word minimum on its own words; a five-minute stretch is judged whole.
+                    candidate['_stretch_words'] = word_count(part) if sitdown else group['_stretch_words']
                     candidate['_stretch_partition'] = first_result
                 # A model can undo a topic split, never a recorded silence boundary.
                 prior = result[-1] if result else None
@@ -227,6 +229,8 @@ def windows(groups, outlines, *, cohesion=False, sitdown=False):
                     if cohesion:
                         prior['sections'] = _as_sections([prior, candidate], primary=prior)[0]['sections']
                     prior['lines'].extend(part)
+                    if cohesion and sitdown:
+                        prior['_stretch_words'] = word_count(prior['lines'])
                     prior['finished'] = candidate['finished']
                     prior['manual_end'] = candidate['manual_end']
                 else:

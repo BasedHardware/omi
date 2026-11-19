@@ -98,3 +98,18 @@ def test_sitdown_silence_is_bounded_and_defaults_to_fifteen_minutes(monkeypatch)
     for raw, expected in (('300', 300), ('1800', 1800), ('120', 900), ('7200', 900), ('soon', 900)):
         monkeypatch.setenv('CONVERSATIONS_V3_SITDOWN_SILENCE_SECONDS', raw)
         assert sitdown_silence_seconds() == expected
+
+
+def test_a_joined_sitdown_card_meets_the_home_minimum_on_its_own_words():
+    # One 400-word sit-down and, after media, a 40-word aside: the stretch total would pass both.
+    raw = recording([segment(0, 400), segment(2, 30), segment(4, 40)])
+    groups = outline.stretches([raw], AT + timedelta(hours=1), silence=outline.SITDOWN_SILENCE)
+    entries = [[entry(1), entry(2, 'media'), entry(3)]]
+    joined = planner.windows(groups, entries, cohesion=True, sitdown=True)
+    assert [(w['kind'], w['_stretch_words']) for w in joined] == [
+        ('conversation', 400),
+        ('media', 30),
+        ('conversation', 40),
+    ]
+    stretch_level = planner.windows(groups, entries, cohesion=True)
+    assert {w['_stretch_words'] for w in stretch_level} == {470}
