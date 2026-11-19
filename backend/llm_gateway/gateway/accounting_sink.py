@@ -6,6 +6,8 @@ import asyncio
 import logging
 import os
 
+from prometheus_client import Counter
+
 from database.llm_gateway_accounting import record_llm_gateway_attempt
 from llm_gateway.gateway.accounting import AccountingContext, AttemptTrace, ProviderAttempt, build_accounting_event
 from llm_gateway.gateway.metrics import observe_accounting_event
@@ -18,6 +20,10 @@ DEFAULT_ACCOUNTING_WRITE_TIMEOUT_SECONDS = 1.0
 DEFAULT_ACCOUNTING_MAX_PENDING_TRACES = 1_000
 _background_persistence_tasks: set[asyncio.Task[None]] = set()
 logger = logging.getLogger(__name__)
+KEYED_PROVIDER_ATTEMPTS_TOTAL = Counter(
+    'llm_gateway_keyed_provider_attempts_total',
+    'Keyed provider attempts observed by the gateway before accounting persistence',
+)
 
 
 def schedule_attempt_trace(context: AccountingContext, trace: AttemptTrace) -> None:
@@ -27,6 +33,8 @@ def schedule_attempt_trace(context: AccountingContext, trace: AttemptTrace) -> N
     tails. Pending work is explicitly bounded: overflow is not silently lost,
     but observed as a dropped accounting event for alerting and reconciliation.
     """
+    if context.idempotency_scope is not None and trace.attempts:
+        KEYED_PROVIDER_ATTEMPTS_TOTAL.inc(len(trace.attempts))
     if not accounting_enabled() or not trace.attempts:
         return
     if len(_background_persistence_tasks) >= accounting_max_pending_traces():

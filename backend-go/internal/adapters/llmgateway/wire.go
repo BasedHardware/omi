@@ -14,6 +14,11 @@ import (
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
 
+const (
+	idempotencyHeader = "Idempotency-Key"
+	idempotencyAck    = "X-Omi-Idempotency-Key"
+)
+
 type message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
@@ -68,13 +73,13 @@ func (c *Client) request(ctx context.Context, g queue.Guarded, in Request) (*htt
 	if err != nil {
 		return nil, classify(CauseRejected, 0, 0)
 	}
-	// No idempotent replays in the transport. This is a correlation header.
+	// Keep retries under the queue's attempt budget, including when the transport sees the key.
 	req.GetBody = nil
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("X-Omi-Service-Caller", "backend")
-	req.Header.Set("X-Omi-Request-Id", requestID(g.Operation(in.Step)))
-	req.Header.Set("X-Omi-User-Uid", g.Tenant())
+	c.authorize(req, g.Tenant())
+	key := requestID(g.Operation(in.Step))
+	req.Header.Set(idempotencyHeader, key)
+	req.Header.Set("X-Omi-Request-Id", key)
 	req.Header.Set("X-Omi-LLM-Feature", string(payloadFeature(in)))
 	switch platform := strings.ToLower(strings.TrimSpace(in.AppPlatform)); platform {
 	case "desktop", "mobile", "web":
@@ -84,6 +89,12 @@ func (c *Client) request(ctx context.Context, g queue.Guarded, in Request) (*htt
 		return nil, err
 	}
 	return req, nil
+}
+
+func (c *Client) authorize(req *http.Request, tenant string) {
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("X-Omi-Service-Caller", "backend")
+	req.Header.Set("X-Omi-User-Uid", tenant)
 }
 
 func payloadFeature(in Request) Feature {
@@ -172,22 +183,29 @@ type completionResponse struct {
 	} `json:"choices"`
 }
 
-func (c *Client) send(req *http.Request) (string, error) {
+func (c *Client) send(req *http.Request, key string, lookup bool) (string, error) {
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return "", classify(CauseTransient, 0, 0)
 	}
-	text, err := c.read(resp)
+	text, err := c.read(resp, key, lookup)
 	if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
 		return "", classify(CauseTransient, resp.StatusCode, 0)
 	}
 	return text, err
 }
 
-func (c *Client) read(resp *http.Response) (string, error) {
+func (c *Client) read(resp *http.Response, key string, lookup bool) (string, error) {
 	if resp.StatusCode != http.StatusOK {
+		cause, code := readCause(resp)
+		if lookup && (code == "idempotency_not_found" || code == "idempotency_expired" || code == "idempotency_indeterminate") {
+			return "", ErrNotCommitted
+		}
 		delay := httpx.RetryAfter(resp.Header.Get("Retry-After"), c.clock.Now())
-		return "", classify(readCause(resp), resp.StatusCode, delay)
+		return "", classify(cause, resp.StatusCode, delay)
+	}
+	if resp.Header.Get(idempotencyAck) != key {
+		return "", classify(CauseIndeterminate, resp.StatusCode, 0)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxCompletionBytes+1))
 	if err != nil {

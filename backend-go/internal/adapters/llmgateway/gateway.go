@@ -100,7 +100,7 @@ func New(cfg Config, c clock.Clock) (*Client, error) {
 		return nil, errors.New("llmgateway: service token, positive timeout and clock are required")
 	}
 	return &Client{
-		endpoint: strings.TrimRight(base.String(), "/") + "/v1/chat/completions",
+		endpoint: strings.TrimRight(base.String(), "/") + "/v1/chat/completions/operations",
 		token:    token,
 		clock:    c,
 		http: &http.Client{
@@ -113,7 +113,7 @@ func New(cfg Config, c clock.Clock) (*Client, error) {
 }
 
 // Complete executes a single gateway POST and returns the first choice's text in memory.
-// The request ID correlates replays but the gateway can execute and charge each replay.
+// The operation key identifies the same gateway result across retries and takeovers.
 func (c *Client) Complete(ctx context.Context, g queue.Guarded, in Request) (string, error) {
 	if err := g.Err(); err != nil {
 		return "", err
@@ -125,7 +125,7 @@ func (c *Client) Complete(ctx context.Context, g queue.Guarded, in Request) (str
 	if err != nil {
 		return "", err
 	}
-	text, err := c.send(req)
+	text, err := c.send(req, req.Header.Get(idempotencyHeader), false)
 	if guardErr := g.Err(); guardErr != nil {
 		return "", guardErr
 	}
@@ -135,17 +135,34 @@ func (c *Client) Complete(ctx context.Context, g queue.Guarded, in Request) (str
 	return text, err
 }
 
-// ErrNotCommitted means the gateway cannot supply a previously committed completion.
-var ErrNotCommitted = errors.New("llmgateway: committed completion lookup unavailable")
+// ErrNotCommitted means the gateway has no recoverable completion for this operation.
+var ErrNotCommitted = errors.New("llmgateway: no recoverable completion")
 
-// Recover reports that the gateway has no lookup by operation ID, without starting a call.
-// The operation must be the one produced by Guarded.Operation for the paid call.
-func (c *Client) Recover(ctx context.Context, g queue.Guarded, _ string) (string, error) {
+// Recover fetches a committed result by the value produced by Guarded.Operation.
+// A lookup never submits work to a provider.
+func (c *Client) Recover(ctx context.Context, g queue.Guarded, operation string) (string, error) {
 	if err := g.Err(); err != nil {
 		return "", err
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	return "", ErrNotCommitted
+	if operation == "" {
+		return "", classify(CauseRejected, 0, 0)
+	}
+	key := requestID(operation)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpoint+"/"+key, nil)
+	if err != nil {
+		return "", classify(CauseRejected, 0, 0)
+	}
+	c.authorize(req, g.Tenant())
+	req.Header.Set("X-Omi-Request-Id", key)
+	text, err := c.send(req, key, true)
+	if guardErr := g.Err(); guardErr != nil {
+		return "", guardErr
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return "", ctxErr
+	}
+	return text, err
 }
