@@ -43,6 +43,27 @@ def test_manual_end_wake_survives_a_completed_live_task_in_same_minute(monkeypat
     assert all(kw['schedule_at'] == int(fixed.timestamp()) for _, kw in tasks.values())
 
 
+def test_scheduled_wake_rounds_up_and_coalesces_in_delivery_minute(monkeypatch):
+    tasks = {}
+    attempts = []
+    monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
+
+    def enqueue(queue, url, name, payload, *, schedule_at):
+        attempts.append((name, schedule_at))
+        tasks.setdefault(name, schedule_at)
+
+    monkeypatch.setattr(triggers, 'enqueue_named_task', enqueue)
+    start = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
+    for seconds in (5, 5.5, 60, 59.5):
+        triggers.enqueue('owner', at=start + timedelta(seconds=seconds))
+
+    epoch = int(start.timestamp())
+    assert [when - epoch for _, when in attempts] == [5, 6, 60, 60]
+    assert [name.rsplit('-', 1)[-1] for name, when in attempts] == [str(when // 60) for _, when in attempts]
+    assert len(tasks) == 2
+    assert attempts[2] == attempts[3]
+
+
 @pytest.mark.parametrize(
     'stage,seen,capable,cohort,expected',
     [

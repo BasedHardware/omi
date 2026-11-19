@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import math
 import os
 import time
 from datetime import datetime, timezone
@@ -76,8 +77,10 @@ def task_base():
 
 
 def enqueue(uid, *, at=None, manual_end_id=None):
-    instant = at or datetime.now(timezone.utc)
-    minute = int(instant.timestamp()) // 60
+    # A fractional silence deadline must have elapsed when reconcile runs.
+    # Truncating can wake it early and defer a finished group for another minute.
+    scheduled = math.ceil(at.timestamp()) if at is not None else int(datetime.now(timezone.utc).timestamp())
+    minute = scheduled // 60
     task_id = 'conversations-v3-' + hashlib.sha256(uid.encode()).hexdigest()[:32] + '-' + str(minute)
     if manual_end_id:
         # A live task may already have completed in this minute. Its retained
@@ -89,7 +92,7 @@ def enqueue(uid, *, at=None, manual_end_id=None):
         base + '/v1/conversations-v3/reconcile',
         task_id,
         {'uid': uid},
-        schedule_at=int(instant.timestamp()),
+        schedule_at=scheduled,
     )
 
 
