@@ -54,6 +54,7 @@ class ReasonFamily(StrEnum):
     LISTEN_NO_AUDIO_CLOSE = 'listen_no_audio_close'
     DUE_MARKER_SWEEP = 'due_marker_sweep'
     RECORD_SEAL_REPAIR = 'record_seal_repair'
+    HISTORICAL_SUMMARY_OPEN = 'historical_summary_open'
 
 
 REASON_UNKNOWN_TOTAL = Counter(

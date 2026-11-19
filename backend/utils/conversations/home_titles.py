@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any, Callable, Optional
 
 from config.episodes import home_neutral_minimum_titles_enabled
+from config.historical_tier import STAND_IN_TITLE_PROVENANCES, TITLE_PROVENANCE
 
 from utils.conversations.deterministic_minimum import fallback_title, first_sentence, truncate_on_word_boundary
 from utils.conversations.summary_delivery import field, present
@@ -138,7 +139,7 @@ def is_deferred_preview_title(row: Any) -> bool:
 def title_for_stability(row: Any) -> str:
     """A deterministic/preview title is provisional until real enrichment lands."""
     structured = field(row, 'structured')
-    if field(structured, 'title_provenance') == 'server_minimum' or is_deferred_preview_title(row):
+    if field(structured, 'title_provenance') in STAND_IN_TITLE_PROVENANCES or is_deferred_preview_title(row):
         return ''
     return field(structured, 'title') or ''
 
@@ -173,7 +174,7 @@ def neutralize_minimum_title(
     title = structured.get('title')
     lazy = is_deferred_preview_title(row)
     minimum = (short or floor or summary_owed(row)) and (
-        provenance == 'server_minimum'
+        provenance in STAND_IN_TITLE_PROVENANCES
         or (not provenance and text and title == truncate_on_word_boundary(first_sentence(text)))
     )
     if not minimum and not lazy:
@@ -182,7 +183,8 @@ def neutralize_minimum_title(
     result['structured'] = {
         **structured,
         'title': fallback_title(row.get('started_at') or row.get('created_at'), tz_name=_zone(tz_name_provider)),
-        'title_provenance': 'server_minimum',
+        # A historical stand-in stays historical: it owes no automatic summary, so Home must not read it as one.
+        'title_provenance': provenance if provenance == TITLE_PROVENANCE else 'server_minimum',
     }
     return result
 
