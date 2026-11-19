@@ -138,11 +138,12 @@ async def _recover_erase(dsn: str, schema: str, uid: str, expires: datetime) -> 
     from psycopg import sql
 
     try:
-        remaining = (expires - datetime.now(timezone.utc)).total_seconds()
-        if remaining <= 0:
-            raise EraseUnavailable('Go queue erase recovery grant expired')
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + min(10, remaining)
+        started = loop.time()
+        remaining = (expires - datetime.now(timezone.utc)).total_seconds()
+        deadline = started + min(10, remaining)
+        if loop.time() >= deadline:
+            raise EraseUnavailable('Go queue erase recovery grant expired')
         async with asyncio.timeout_at(deadline):
             connection = await psycopg.AsyncConnection.connect(
                 dsn,
@@ -154,7 +155,7 @@ async def _recover_erase(dsn: str, schema: str, uid: str, expires: datetime) -> 
         async def commit_erase() -> None:
             await connection.set_isolation_level(psycopg.IsolationLevel.READ_COMMITTED)
             await connection.execute(sql.SQL('SELECT {}.queue_erase_tenant(%s)').format(sql.Identifier(schema)), (uid,))
-            if loop.time() >= deadline:
+            if loop.time() >= deadline or datetime.now(timezone.utc) >= expires:
                 raise TimeoutError
             await connection.commit()
 

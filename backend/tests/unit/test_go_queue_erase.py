@@ -172,3 +172,30 @@ async def test_recovery_never_issues_commit_after_expiry(monkeypatch):
 
     connection.commit.assert_not_awaited()
     connection.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_recovery_does_not_extend_grant_when_clock_sampling_is_interrupted(monkeypatch):
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    import psycopg
+
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    wall_clock = datetime.now(timezone.utc)
+    clock_samples = iter((started, started + 15))
+
+    class PausedClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return wall_clock
+
+    connect = AsyncMock()
+    with monkeypatch.context() as patch:
+        patch.setattr(loop, 'time', lambda: next(clock_samples))
+        patch.setattr(erase, 'datetime', PausedClock)
+        patch.setattr(psycopg.AsyncConnection, 'connect', connect)
+        with pytest.raises(erase.EraseUnavailable, match='grant expired'):
+            await erase._recover_erase('test-only', 'queue', 'tenant', wall_clock + timedelta(seconds=10))
+    connect.assert_not_awaited()
