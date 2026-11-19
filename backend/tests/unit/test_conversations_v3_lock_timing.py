@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from config.conversations_v3 import boundary_seconds
+from utils.conversations.summary_selection import render_sections_markdown, select_primary_summary
 from utils.conversations.v3 import context, outline
 
 AT = datetime(2026, 11, 19, tzinfo=timezone.utc)
@@ -105,7 +106,9 @@ def test_locked_refinement_keeps_earliest_id_notes_and_single_copy_of_audio():
     assert merged['_v3_absorbed'] == ['late']
     assert merged['summary_covers_through'] == merged['finished_at'] == existing['late']['finished_at']
     assert [section['heading'] for section in merged['structured']['sections']] == ['A', 'Late', 'B']
-    assert merged['structured']['overview'] == 'Recap'
+    summary = select_primary_summary(merged)
+    assert summary.kind == 'sections'
+    assert 'Recap' in summary.content and 'Second' in summary.content
     assert merged['_v3_claims'] == {'r': [{'start': AT, 'end': AT + timedelta(seconds=30)}]}
     assert [(piece['start'], piece['end']) for piece in merged['recording_pieces']] == [(0, 20), (20, 30)]
 
@@ -225,4 +228,24 @@ def test_locked_refinement_keeps_overview_only_card_in_place():
 
     window, existing, recordings = _locked_pair()
     existing['late']['structured'].pop('sections')
+    assert refinement.candidate([window], existing, recordings) is None
+
+
+def test_locked_refinement_keeps_both_generated_notes_in_the_primary_summary():
+    from utils.conversations.v3 import refinement
+
+    window, existing, recordings = _locked_pair()
+    for row in existing.values():
+        row['structured']['overview'] = render_sections_markdown(row['structured']['sections'])
+    _, merged = refinement.candidate([window], existing, recordings)
+    summary = select_primary_summary(merged)
+    assert summary.kind == 'sections'
+    assert summary.content.count('First') == summary.content.count('Second') == 1
+
+
+def test_locked_refinement_does_not_absorb_a_card_owning_open_loop_extractions():
+    from utils.conversations.v3 import refinement
+
+    window, existing, recordings = _locked_pair()
+    existing['late']['open_loop_extractions'] = 'synthetic-protected-payload'
     assert refinement.candidate([window], existing, recordings) is None

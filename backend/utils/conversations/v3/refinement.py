@@ -5,7 +5,9 @@ from datetime import timedelta
 import json
 from typing import Any
 
+from utils.conversations.summary_selection import render_sections_markdown
 from utils.conversations.v3 import planner
+from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD
 
 
 def _eligible(row):
@@ -105,9 +107,9 @@ def _union_claims(claims):
 
 
 def _merged_row(rows, claims):
-    winner, *donors = rows
+    winner = rows[0]
     merged = deepcopy(winner)
-    sections: list[dict[str, Any]] = list(merged['structured'].get('sections') or ())
+    sections: list[dict[str, Any]] = []
     segments = {}
     files = {}
     pieces = []
@@ -125,13 +127,19 @@ def _merged_row(rows, claims):
         for file in row.get('audio_files') or ():
             files.setdefault(file['id'], file)
         pieces.extend(row.get('recording_pieces') or ())
-    for row in donors:
+    for row in rows:
         structured = row['structured']
-        if overview := structured.get('overview'):
-            if not merged['structured'].get('overview'):
-                merged['structured']['overview'] = overview
+        row_sections = structured.get('sections') or []
+        overview = structured.get('overview')
+        if (
+            isinstance(overview, str)
+            and overview.strip()
+            and overview.strip() != render_sections_markdown(row_sections)
+        ):
             sections.append({'heading': structured.get('title') or '', 'body_markdown': overview})
-        sections.extend(structured.get('sections') or ())
+        sections.extend(row_sections)
+        if row is winner:
+            continue
         for field in ('action_items', 'events', 'participants', 'insights', 'note_claims'):
             current = list(merged['structured'].get(field) or ())
             for item in structured.get(field) or ():
@@ -140,6 +148,7 @@ def _merged_row(rows, claims):
             if current:
                 merged['structured'][field] = current
     merged['structured']['sections'] = sections
+    merged['structured']['overview'] = render_sections_markdown(sections)
     end = max(row['finished_at'] for row in rows)
     merged.update(
         finished_at=end,
@@ -151,7 +160,7 @@ def _merged_row(rows, claims):
         sync_content_revision=int(winner.get('sync_content_revision') or 0) + 1,
         _v3_claims={rid: _union_claims(spans) for rid, spans in claims.items()},
         v3_refined=True,
-        _v3_absorbed=[row['id'] for row in donors],
+        _v3_absorbed=[row['id'] for row in rows[1:]],
     )
     return merged
 
@@ -175,7 +184,9 @@ def candidate(windows, existing, recordings):
             if left <= row['started_at'] and row['finished_at'] <= right and row['kind'] == window['kind']
         ]
         # Bound one atomic refinement per pass. Additional candidates stay intact.
-        if not 2 <= len(rows) <= 8 or any(row.get('v3_open_locked') for row in rows[1:]):
+        if not 2 <= len(rows) <= 8 or any(
+            row.get('v3_open_locked') or row.get(OPEN_LOOP_EXTRACTIONS_FIELD) for row in rows[1:]
+        ):
             continue
         members = {row['id'] for row in rows}
         if any(
@@ -195,7 +206,8 @@ def candidate(windows, existing, recordings):
         # separate provenance marker, so preserve sectionless cards in place.
         if any(
             not isinstance(row.get('structured'), dict)
-            or not row['structured'].get('sections')
+            or not isinstance(row['structured'].get('sections'), list)
+            or not row['structured']['sections']
             or not row.get('transcript_segments')
             for row in rows
         ):
