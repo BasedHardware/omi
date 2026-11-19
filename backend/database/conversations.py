@@ -1778,6 +1778,18 @@ def persist_processing_result_with_lifecycle(
                 )
 
         _offload_processing_transcript(uid, write_data, existing)
+        if (
+            write_data.get('status') == ConversationStatus.completed
+            and write_data.get('summary_output_present') is True
+            and not any(write_data.get(key) for key in ('discarded', 'terminal_no_derived_effects', 'deferred'))
+        ):
+            from utils.conversations.v3 import policy as v3_policy
+
+            visibility_receipt = v3_policy.native_manual_notes_receipt(existing)
+            if visibility_receipt:
+                # Commit with the genuine notes, before the builder can observe
+                # a new upload revision and revoke the transient native proof.
+                write_data[v3_policy.NATIVE_MANUAL_NOTES_VISIBILITY] = visibility_receipt
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
         ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
         delivery_outcome = summary_terminal_outcome(existing, write_data)

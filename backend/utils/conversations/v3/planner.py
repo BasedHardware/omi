@@ -174,14 +174,22 @@ def build(uid, window, recordings, existing=None):
     # A real legacy marker keeps its precedence. An existing native marker is
     # retained only through the newly validated owner of the exact tail.
     manual_end = bool(legacy_manual_end or native_binding)
+    recording_ids = list(dict.fromkeys(line['conversation_id'] for line in lines))
+    visibility_receipt = (existing or {}).get(policy.NATIVE_MANUAL_NOTES_VISIBILITY)
+    keeps_native_visibility = isinstance(visibility_receipt, dict) and visibility_receipt == (
+        policy.native_manual_notes_window(
+            {'id': cid, 'started_at': start, 'finished_at': end, 'v3_recording_ids': recording_ids},
+            visibility_receipt.get('recording_id'),
+        )
+    )
     outline_kind = window.get('outline_kind', window['kind'])
     kind, hidden, reason = visibility.project(
         outline_kind,
         recordings,
-        {line['conversation_id'] for line in lines},
+        recording_ids,
         words=sum(len(s.get('text', '').split()) for s in segments),
         finished=window['finished'],
-        manual_end=manual_end,
+        manual_end=manual_end or keeps_native_visibility,
     )
     row: dict[str, Any] = {
         **(existing or {}),
@@ -191,6 +199,11 @@ def build(uid, window, recordings, existing=None):
         **(
             {policy.NATIVE_MANUAL_BINDING: None if legacy_manual_end else native_binding}
             if native_binding or policy.NATIVE_MANUAL_BINDING in (existing or {})
+            else {}
+        ),
+        **(
+            {policy.NATIVE_MANUAL_NOTES_VISIBILITY: visibility_receipt if keeps_native_visibility else None}
+            if policy.NATIVE_MANUAL_NOTES_VISIBILITY in (existing or {})
             else {}
         ),
         'created_at': start,
@@ -244,7 +257,7 @@ def build(uid, window, recordings, existing=None):
             or (title and (not hidden or not window['finished']) and kind not in {'media', 'background'})
         ),
         'tile_state': 'writing' if window['finished'] else 'live',
-        'v3_recording_ids': list(dict.fromkeys(l['conversation_id'] for l in lines)),
+        'v3_recording_ids': recording_ids,
         'transcript_segments': segments,
         'recording_pieces': pieces,
         'audio_files': files,

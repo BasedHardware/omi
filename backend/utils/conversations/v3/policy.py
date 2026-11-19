@@ -15,6 +15,7 @@ NATIVE_MANUAL_INPUT_REVISION = 'v3_native_manual_input_revision'
 NATIVE_MANUAL_READY = 'v3_native_manual_ready_revision'
 NATIVE_MANUAL_PROOF = 'v3_native_manual_ready_proof'
 NATIVE_MANUAL_BINDING = 'v3_native_manual_binding'
+NATIVE_MANUAL_NOTES_VISIBILITY = 'v3_native_manual_notes_visibility'
 NATIVE_MANUAL_SOURCE_FIELDS = (
     NATIVE_MANUAL_STOP,
     NATIVE_MANUAL_READY,
@@ -105,6 +106,37 @@ def native_manual_binding(row, *, recording_id=None):
         'finished_at': finished_at,
         'finalization_revision': finalization_revision,
     }
+
+
+def native_manual_notes_window(row, recording_id):
+    """The exact derived window where validated native notes became visible."""
+    if (
+        not row.get('id')
+        or not row.get('started_at')
+        or not row.get('finished_at')
+        or not recording_id
+        or recording_id not in (row.get('v3_recording_ids') or [])
+    ):
+        return None
+    return {
+        'conversation_id': row['id'],
+        'recording_id': recording_id,
+        'started_at': row['started_at'],
+        'finished_at': row['finished_at'],
+    }
+
+
+def native_manual_notes_receipt(row):
+    """Call only alongside the notes write after the raw source passed its fence."""
+    binding = row.get(NATIVE_MANUAL_BINDING)
+    if (
+        isinstance(binding, Mapping)
+        and manual_intent(row)
+        and row.get('home_hidden') is False
+        and not any(row.get(key) for key in ('deleted', 'discarded', 'is_locked'))
+    ):
+        return native_manual_notes_window(row, binding.get('recording_id'))
+    return None
 
 
 def manual_intent(row):

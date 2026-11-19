@@ -143,3 +143,44 @@ def test_only_native_tail_gets_full_notes_and_its_actual_input_binding():
     # An existing genuine legacy stop survives a native proof arriving or disappearing.
     legacy = {**manual, policy.NATIVE_MANUAL_BINDING: None}
     assert planner.build('owner', manual_window, recordings, legacy)['manual_end']
+
+
+def test_committed_native_notes_keep_only_the_written_window_visible_without_manual_authority():
+    capture = recording('recording', 7, 15)
+    recordings = {'recording': capture, 'other': recording('other', 0, 5)}
+    native_lines = [line('recording', 7, 15)]
+    (native_window,) = planner.windows([group(native_lines)], [[entry(1)]])
+    prior = planner.build('owner', native_window, recordings)
+    receipt = policy.native_manual_notes_receipt(prior)
+    assert receipt and receipt['conversation_id'] == prior['id']
+    assert receipt['recording_id'] == 'recording'
+    prior.update(
+        status='completed',
+        v3_notes_written=True,
+        structured={**prior['structured'], 'overview': 'Already written and visible.'},
+    )
+    capture['record_upload_revision'] = 8
+    (fallback,) = planner.windows([group(native_lines, native=False)], [[entry(1)]])
+
+    # Older natural notes do not establish a native visibility receipt.
+    assert planner.build('owner', fallback, recordings, prior)['home_hidden']
+    prior[policy.NATIVE_MANUAL_NOTES_VISIBILITY] = receipt
+    retained = planner.build('owner', fallback, recordings, prior)
+    assert not retained['home_hidden']
+    assert not policy.full_notes(retained)
+    assert retained[policy.NATIVE_MANUAL_BINDING] is None
+    assert retained[policy.NATIVE_MANUAL_NOTES_VISIBILITY] == receipt
+    assert retained['structured']['overview'] == 'Already written and visible.'
+    assert not planner.build('owner', fallback, recordings, retained)['home_hidden']
+
+    # A split creates no receipt. Copying the receipt to a different row ID
+    # or removing the original source from the window cannot grant visibility.
+    fresh = planner.build('owner', fallback, recordings)
+    assert fresh['home_hidden'] and policy.NATIVE_MANUAL_NOTES_VISIBILITY not in fresh
+    copied = planner.build('owner', fallback, recordings, {**retained, 'id': 'different'})
+    assert copied['home_hidden'] and copied[policy.NATIVE_MANUAL_NOTES_VISIBILITY] is None
+    different_source = planner.build('owner', {**fallback, 'lines': [line('other', 7, 15)]}, recordings, retained)
+    assert different_source['home_hidden'] and different_source[policy.NATIVE_MANUAL_NOTES_VISIBILITY] is None
+
+    media = planner.build('owner', {**fallback, 'kind': 'media'}, recordings, retained)
+    assert media['home_hidden']
