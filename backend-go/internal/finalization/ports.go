@@ -3,6 +3,7 @@ package finalization
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/BasedHardware/omi/backend-go/internal/finalization/rules"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
@@ -20,14 +21,16 @@ type Outbox interface {
 // A lifecycle write must check the token and its authoritative document state
 // in the same transaction as the write.
 type Claim struct {
-	Intent Intent
-	Epoch  int64
+	Intent    Intent
+	Epoch     int64
+	LiveBYOK  bool
+	Reconcile bool
 }
 
 // Conversation is the guarded document snapshot used by ordinary finalization.
 // The opaque comparison token maps to lane 2's document-bound revision at wiring.
 type Conversation struct {
-	Comparison       string
+	Comparison       any
 	Status           rules.Status
 	JobID            string
 	Revision         int64
@@ -92,12 +95,15 @@ const (
 
 // Lifecycle owns the transactions that span the job and conversation documents.
 // Active mutations refuse account deletion, superseded epochs and bindings.
+// Begin records ownership of the mirror under the accepted queue claim after
+// checking its durable intent. Repeating it for the same claim is inert.
 // ReconcileCompletion checks for a committed fanout and closes its job
 // idempotently. It returns pending without mutating a job that has no commit.
 // DeadLetter closes the still-bound processing row and job together, preserving
 // transcript and prior output. Fence closes a stale job without mutating a
 // replacement conversation. Both recheck the fanout journal before closing.
 type Lifecycle interface {
+	Begin(ctx context.Context, g queue.Guarded, claim Claim) error
 	ClaimFanout(ctx context.Context, g queue.Guarded, claim Claim) (Fanout, error)
 	CompleteFanout(ctx context.Context, g queue.Guarded, claim Claim, dropped bool) error
 	ReconcileCompletion(ctx context.Context, g queue.Guarded, claim Claim) (TerminalState, error)
@@ -120,6 +126,7 @@ type Message struct {
 // CompletionRequest describes one guarded text call.
 type CompletionRequest struct {
 	Step, Feature string
+	JobCreatedAt  time.Time
 	Messages      []Message
 	AppPlatform   string
 	BYOK          *BYOK
@@ -131,10 +138,12 @@ type BYOK struct {
 }
 
 // Gateway must durably commit one completion per g.Operation(req.Step) and
-// recover its result on repeat, even when the first response was lost. Only
-// adapters with that property can be used for paid finalization.
+// recover its result on repeat, even when the first response was lost. Recover
+// makes no paid call and returns ErrCompletionAbsent when it cannot supply a
+// committed result.
 type Gateway interface {
 	Complete(ctx context.Context, g queue.Guarded, req CompletionRequest) (string, error)
+	Recover(ctx context.Context, g queue.Guarded, step string) (string, error)
 }
 
 // Effects run only after ownership has been acquired. Implementations deduplicate

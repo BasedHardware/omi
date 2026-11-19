@@ -88,7 +88,10 @@ func (s *Service) Work(ctx context.Context, run *queue.Run) queue.Outcome {
 	if err != nil {
 		return queue.Fail(CauseInvalid)
 	}
-	claim := Claim{Intent: in, Epoch: run.Job().Token}
+	claim := Claim{Intent: in, Epoch: run.Job().Token, LiveBYOK: run.Secret() != ""}
+	if beginErr := s.begin(ctx, run, claim); beginErr != nil {
+		return s.workError(ctx, run, claim, beginErr)
+	}
 	state, err := s.completion(ctx, run, claim)
 	if err != nil {
 		return s.workError(ctx, run, claim, err)
@@ -141,6 +144,12 @@ type guardedRun interface {
 	Guard(context.Context, func(context.Context, queue.Guarded) error) error
 }
 
+func (s *Service) begin(ctx context.Context, run guardedRun, claim Claim) error {
+	return run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
+		return s.Lifecycle.Begin(ctx, g, claim)
+	})
+}
+
 func (s *Service) completion(ctx context.Context, run guardedRun, claim Claim) (TerminalState, error) {
 	var state TerminalState
 	err := run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
@@ -182,7 +191,11 @@ func (s *Service) Exhausted(ctx context.Context, run *queue.Reconcile) queue.Res
 	if err != nil {
 		return queue.Park()
 	}
-	claim := Claim{Intent: in, Epoch: run.Job().Token}
+	claim := Claim{Intent: in, Epoch: run.Job().Token, LiveBYOK: run.Secret() != "", Reconcile: true}
+	beginErr := s.begin(ctx, run, claim)
+	if beginErr != nil && !errors.Is(beginErr, ErrStale) {
+		return queue.LaterOnError(beginErr, CauseStore)
+	}
 	state, err := s.completion(ctx, run, claim)
 	if err == nil && state == TerminalPending && !run.WillBudgetRequeue() {
 		err = run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
@@ -204,8 +217,12 @@ func (s *Service) Exhausted(ctx context.Context, run *queue.Reconcile) queue.Res
 		return queue.ResolvedWith(CauseDeliveryDropped)
 	case TerminalStale:
 		return queue.Fenced(CauseStale)
-	case TerminalDeadLetter, TerminalPending:
+	case TerminalDeadLetter:
 		return queue.Park()
+	case TerminalPending:
+		if run.WillBudgetRequeue() {
+			return queue.Park()
+		}
 	}
 	return queue.Later(CauseStore, 0)
 }

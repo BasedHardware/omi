@@ -78,13 +78,15 @@ func (s *Service) structure(ctx context.Context, run *queue.Run, claim Claim, sn
 	if reusableNotes(snapshot, hash) {
 		return s.persist(ctx, run, claim, snapshot, nil, "", "")
 	}
+	recoverPaid := run.Job().Step == StepNotes
+	req.JobCreatedAt = run.Job().CreatedAt
 	if stepErr := run.SetStep(ctx, StepNotes); stepErr != nil {
 		return stepErr
 	}
 	var completion string
 	err = run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
 		var callErr error
-		completion, callErr = s.Gateway.Complete(ctx, g, req)
+		completion, callErr = s.completeNotes(ctx, g, req, recoverPaid)
 		return callErr
 	})
 	if err != nil {
@@ -95,6 +97,16 @@ func (s *Service) structure(ctx context.Context, run *queue.Run, claim Claim, sn
 		return err
 	}
 	return s.persist(ctx, run, claim, snapshot, &notes, hash, output)
+}
+
+func (s *Service) completeNotes(ctx context.Context, g queue.Guarded, req CompletionRequest, recoverPaid bool) (string, error) {
+	if recoverPaid {
+		text, err := s.Gateway.Recover(ctx, g, req.Step)
+		if !errors.Is(err, ErrCompletionAbsent) {
+			return text, err
+		}
+	}
+	return s.Gateway.Complete(ctx, g, req)
 }
 
 func (s *Service) persist(ctx context.Context, run *queue.Run, claim Claim, before Conversation, notes *Notes, inputHash, outputHash string) error {

@@ -141,8 +141,8 @@ func TestF10LostPaidResponseUsesOneOperation(t *testing.T) {
 	settled(t, h, intent, queue.TerminalSuccess)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.paid != 1 || p.gatewayCalls != 2 || p.applied != 1 {
-		t.Fatalf("payments %d, calls %d, writes %d", p.paid, p.gatewayCalls, p.applied)
+	if p.paid != 1 || p.gatewayCalls != 1 || p.gatewayRecoveries != 1 || p.applied != 1 {
+		t.Fatalf("payments %d, calls %d, recoveries %d, writes %d", p.paid, p.gatewayCalls, p.gatewayRecoveries, p.applied)
 	}
 }
 
@@ -249,7 +249,7 @@ func TestF32MissingConversationFencesBeforePaidWork(t *testing.T) {
 func TestF35OrdinaryPolicyDefaults(t *testing.T) {
 	t.Parallel()
 	lease, gate, delay, attemptCap := Defaults()
-	if lease != 1500*time.Second || gate != 336*time.Hour || delay != 2700*time.Second || attemptCap != 4 {
+	if lease != 1500*time.Second || gate != 336*time.Hour || delay != 2700*time.Second || attemptCap != 4 || ReconcileStaleness != 300*time.Second {
 		t.Fatal("ordinary finalization policy changed")
 	}
 }

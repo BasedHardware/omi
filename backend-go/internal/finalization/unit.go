@@ -52,6 +52,8 @@ var (
 	ErrInvalid = errors.New("finalization: invalid intent")
 	// ErrDispatchUnavailable indicates the caller required durable dispatch.
 	ErrDispatchUnavailable = errors.New("finalization: required durable dispatch unavailable")
+	// ErrCompletionAbsent means recovery found no committed notes response.
+	ErrCompletionAbsent = errors.New("finalization: no committed completion")
 	// ErrStale fences work for a missing or superseded conversation.
 	ErrStale = errors.New("finalization: conversation is missing or no longer bound")
 )
@@ -132,6 +134,9 @@ func readIntent(job queue.Job) (Intent, error) {
 	}
 	return in, nil
 }
+
+// ReconcileStaleness is the default delay before revisiting a queued dispatch.
+const ReconcileStaleness = 5 * time.Minute
 
 // Defaults returns the ordinary finalization lease, gated inactivity period,
 // deterministic cap and delayed budget grant. The binary must combine these

@@ -11,6 +11,7 @@ import (
 )
 
 type fakePorts struct {
+	gatewayRecoveries                                                        int
 	fenced                                                                   bool
 	integrationTransient                                                     bool
 	closedSuccess                                                            int
@@ -116,6 +117,23 @@ func (p *fakePorts) Complete(_ context.Context, g queue.Guarded, req CompletionR
 		return "", errors.New("lost paid response")
 	}
 	return result, nil
+}
+
+func (p *fakePorts) Recover(_ context.Context, g queue.Guarded, step string) (string, error) {
+	if err := g.Err(); err != nil {
+		return "", err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.gatewayRecoveries++
+	if text, ok := p.operations[g.Operation(step)]; ok {
+		return text, nil
+	}
+	return "", ErrCompletionAbsent
+}
+
+func (p *fakePorts) Begin(_ context.Context, g queue.Guarded, _ Claim) error {
+	return g.Err()
 }
 
 func (p *fakePorts) ClaimFanout(_ context.Context, g queue.Guarded, claim Claim) (Fanout, error) {

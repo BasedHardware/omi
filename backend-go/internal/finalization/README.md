@@ -9,7 +9,9 @@ credentials exist only in the live resume and the guarded provider request.
 `unit.go` declares the kind and input format. `rules` holds pure decisions. `service.go`
 runs each external step under a queue capability. The job closes after the durable
 fanout commit. Exhaustion checks for that commit before granting a requeue or dead
-lettering. The Postgres tests use real workers and synthetic in-package collaborators.
+lettering. The package tests use real PostgreSQL workers and synthetic collaborators.
+The Firestore implementation and cross-adapter test are described in
+[`finalizationdocs`](../adapters/finalizationdocs/README.md).
 
 ## Contract coverage in this draft
 
@@ -40,12 +42,15 @@ is pending.
 
 ## Wiring dependencies
 
-- Lane 2 supplies guarded load and compare-and-apply for conversation fields. The outbox
-  admission, fanout journal and terminal transitions need transactions spanning the
-  conversation and finalization job. The current adapter does not expose those
-  transactions or all fields used by the worker.
-- Lane 3 accepts a correlated operation ID. It needs durable completion recovery and
-  replay deduplication before it can implement this worker's paid port.
+- The Firestore job adapter implements ordinary admission, accepted-claim fencing,
+  fanout and terminal transitions. The merged conversation adapter handles guarded
+  transcript load and title/overview compare-and-apply. The emulator compatibility
+  test composes both. Worker wiring still needs the conversation policy fields,
+  sections and hash writes, as well as object-lake transcript custody.
+- Lane 3's pending PR offers keyed submission and guarded completion recovery.
+  The family supplies the queue row's creation time and checks for a recoverable
+  completion before repeating a paid notes step. Serving use needs the gateway
+  protocol and retention policy active on every replica.
 - Lane 5's event and target fields match this worker's inputs. Its delivery service
   accepts a queue run and acquires its own guards. It needs a guarded entry point
   to implement the family port directly. The contract also allows previously successful

@@ -117,11 +117,11 @@ func Admission(trigger Trigger, cutoff time.Time, requireExpiredLease bool, fact
 		}
 	case CaptureEnd, ClientFinalize:
 		switch {
-		case facts.Status == Completed || facts.Status == Failed || facts.Discarded || facts.Deferred || !facts.HasContent:
+		case facts.Status == Completed || facts.Status == Failed || facts.Discarded || facts.Deferred || facts.Protected || !facts.HasContent:
 			return Refuse
 		case facts.ExistingJob:
 			return UseBound
-		case facts.Status == InProgress && !facts.Discarded && !facts.Deferred && !facts.Protected && facts.HasContent:
+		case facts.Status == InProgress:
 			return BindNext
 		}
 	case SyncUpdate, FirstOpen, BacklogChoice, UserReprocess, Merge, SmartMerge, CaptureGroup, ScreenEvidence, HistoricalOpen:
