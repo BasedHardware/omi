@@ -4757,7 +4757,7 @@
     "monthlySwitchDoneTitle": "Mostantól havonta fizet",
     "monthlySwitchDoneBody": "Ma kifizetve: {price}. Havonta megújul.",
     "processingDeleteScopeChanged": "A feldolgozási lista megváltozott. Ellenőrizd, és próbáld újra.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Felhasználtad a havi {minutes} percet",
     "freeCapBody": "Az Omi továbbra is rögzít. Válaszd ki, hogyan folytatódjon az átírás.",
     "omiProPlanName": "Omi Pro",
