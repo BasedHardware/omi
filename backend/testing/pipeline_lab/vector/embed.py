@@ -30,6 +30,9 @@ from typing import Any, Protocol, Sequence
 
 _TOKEN = re.compile(r'[a-z0-9]+')
 logger = logging.getLogger(__name__)
+# Seeding a real day sent 60-64 texts per call; the dev gateway answered every one of those
+# with a provider 5xx after ~18 s while every 30-32 text call succeeded. Lab calls stay small.
+EMBED_BATCH_ITEMS = int(os.environ.get('OMI_PIPELINE_LAB_EMBED_BATCH', '24') or 24)
 
 
 class Embedder(Protocol):
@@ -170,7 +173,9 @@ class CachedEmbedder:
             self.hits += len(texts) - len(missing)
             self.misses += len(missing)
         if missing:
-            fresh = self._embed_resilient([texts[i] for i in missing])
+            fresh: list[list[float] | None] = []
+            for start in range(0, len(missing), EMBED_BATCH_ITEMS):
+                fresh.extend(self._embed_resilient([texts[i] for i in missing[start : start + EMBED_BATCH_ITEMS]]))
             if len(fresh) != len(missing):
                 raise RuntimeError('embedder returned the wrong number of vectors')
             for i, values in zip(missing, fresh):

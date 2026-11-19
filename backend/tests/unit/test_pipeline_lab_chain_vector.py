@@ -198,3 +198,18 @@ def test_cached_embedder_never_swallows_a_spend_cap_or_client_error(tmp_path):
         embedder = CachedEmbedder(_PoisonEmbedder('x', status=status), tmp_path)
         with pytest.raises(_Status):
             embedder.embed(['a', 'x'])
+
+
+def test_cached_embedder_sends_small_batches(tmp_path, monkeypatch):
+    from testing.pipeline_lab.vector import embed
+
+    monkeypatch.setattr(embed, 'EMBED_BATCH_ITEMS', 4)
+    sizes = []
+
+    class Recording(FakeEmbedder):
+        def embed(self, texts):
+            sizes.append(len(texts))
+            return super().embed(texts)
+
+    vectors = CachedEmbedder(Recording(dimension=8), tmp_path).embed([f't{i}' for i in range(10)])
+    assert len(vectors) == 10 and sizes == [4, 4, 2]
