@@ -56,6 +56,47 @@ def deployment(name=worker.TARGET):
     }
 
 
+THIRD = worker.REPOSITORY + "@sha256:" + "3" * 64
+
+
+def cronjob(name):
+    obj = deployment(name)
+    obj["apiVersion"] = "batch/v1"
+    obj["kind"] = "CronJob"
+    obj["spec"] = {"schedule": "0 * * * *", "jobTemplate": {"spec": {"template": obj["spec"]["template"]}}}
+    return obj
+
+
+def hpa(target):
+    return {
+        "apiVersion": "autoscaling/v2",
+        "kind": "HorizontalPodAutoscaler",
+        "metadata": {"name": target, "namespace": worker.NAMESPACE, "uid": target + "-hpa-uid"},
+        "spec": {"scaleTargetRef": {"apiVersion": "apps/v1", "kind": "Deployment", "name": target},
+                 "minReplicas": 1, "maxReplicas": 16},
+    }
+
+
+def job(name, owner=None):
+    obj = deployment(name)
+    obj["apiVersion"] = "batch/v1"
+    obj["kind"] = "Job"
+    source = owner["spec"]["jobTemplate"]["spec"]["template"] if owner is not None else obj["spec"]["template"]
+    template = copy.deepcopy(source)
+    # What the Job controller and API defaulting add to a CronJob-created run (live shape, 2026-11-19).
+    uid = obj["metadata"]["uid"]
+    template["metadata"]["labels"].update({"batch.kubernetes.io/job-name": name, "job-name": name,
+                                           "batch.kubernetes.io/controller-uid": uid, "controller-uid": uid})
+    obj["spec"] = {"template": template, "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": uid}},
+                   **worker.JOB_DEFAULTED}
+    if owner is not None:
+        obj["metadata"]["ownerReferences"] = [
+            {"apiVersion": "batch/v1", "kind": "CronJob", "name": owner["metadata"]["name"],
+             "uid": owner["metadata"]["uid"], "controller": True}
+        ]
+    return obj
+
+
 class Cluster:
     """Execute real JSON-patch tests/replacement against a mutable fake API object."""
 
@@ -63,6 +104,10 @@ class Cluster:
         self.target = deployment()
         self.siblings = [deployment("record-seal-worker"), deployment(worker.TARGET + "-t4")]
         self.siblings[-1]["spec"]["replicas"] = 0
+        self.hpas = [hpa(worker.TARGET), hpa("record-seal-worker")]
+        self.admission_mutates_on_write = False
+        self.rescale_before_write = None
+        self.deployment_reads = 0
         self.writes = 0
         self.drift_on_patch = False
         self.consumer_reads = 0
@@ -72,11 +117,17 @@ class Cluster:
     def __call__(self, *args):
         if args[0] == "get":
             if args[1] == "deployment":
+                self.deployment_reads += 1
+                # Fire on the read after deploy()'s snapshot: an HPA write lands before the fresh read.
+                if self.rescale_before_write is not None and self.deployment_reads == 2:
+                    self.target["spec"]["replicas"] = self.rescale_before_write
+                    self.target["metadata"]["resourceVersion"] = "40"
+                    self.rescale_before_write = None
                 return copy.deepcopy(self.target)
             self.consumer_reads += 1
             if self.consumer_reads == self.drift_on_consumer_read:
-                self.siblings[0]["spec"]["replicas"] += 1
-            return {"items": copy.deepcopy([self.target, *self.siblings])}
+                self.siblings[0]["spec"]["template"]["spec"]["serviceAccountName"] = "changed"
+            return {"items": copy.deepcopy([self.target, *self.siblings, *self.hpas])}
         if self.drift_on_patch and "--dry-run=server" not in args:
             self.target["metadata"]["resourceVersion"] = "18"
         patch = json.loads(args[args.index("-p") + 1])
@@ -92,7 +143,7 @@ class Cluster:
                     raise ValueError("API conflict")
             else:
                 parent[key] = op["value"]
-        if self.admission_mutates:
+        if self.admission_mutates or (self.admission_mutates_on_write and "--dry-run=server" not in args):
             candidate["spec"]["replicas"] = 2
         if "--dry-run=server" not in args:
             self.target = candidate
@@ -138,7 +189,7 @@ class PreservationTests(unittest.TestCase):
         self.assertEqual(self.cluster.target["spec"], before)
 
     def test_target_spec_drift_refuses_before_write(self):
-        self.cluster.target["spec"]["replicas"] = 7
+        self.cluster.target["spec"]["template"]["spec"]["terminationGracePeriodSeconds"] = 30
         with self.assertRaisesRegex(ValueError, "drift"):
             self.deploy()
         self.assertEqual(self.cluster.writes, 0)
@@ -246,6 +297,342 @@ class PreservationTests(unittest.TestCase):
         obj["kind"] = "Job"
         obj["spec"] = obj["spec"]["jobTemplate"]["spec"]
         self.assertEqual(len(worker.consumers([obj])), 2)
+
+
+    # --- HPA replica changes and CronJob Job turnover (SCA-2944) ---------------------------
+
+    def add_sweeper(self, jobs=("record-seal-sweeper-1", "record-seal-sweeper-2")):
+        sweeper = cronjob("record-seal-sweeper")
+        self.cluster.siblings.append(sweeper)
+        for name in jobs:
+            self.cluster.siblings.append(job(name, sweeper))
+        self.baseline = worker.snapshot(self.cluster)[1]
+        return sweeper
+
+    def turn_over_jobs(self, sweeper, created, deleted):
+        names = [s["metadata"]["name"] for s in self.cluster.siblings]
+        self.assertIn(deleted, names)
+        self.assertNotIn(created, names)
+        self.cluster.siblings = [s for s in self.cluster.siblings if s["metadata"]["name"] != deleted]
+        self.cluster.siblings.append(job(created, sweeper))
+
+    def test_hpa_replica_change_before_deploy_is_tolerated_and_preserved(self):
+        self.cluster.target["spec"]["replicas"] = 7
+        receipt = self.deploy()
+        self.assertEqual(self.cluster.writes, 1)
+        self.assertEqual(self.cluster.target["spec"]["replicas"], 7)
+        worker.verify(receipt, self.cluster)
+
+    def test_verify_and_rollback_tolerate_hpa_replica_changes_on_target_and_siblings(self):
+        receipt = self.deploy()
+        self.cluster.target["spec"]["replicas"] = 14
+        self.cluster.siblings[0]["spec"]["replicas"] = 3  # record-seal-worker has its own HPA
+        worker.verify(receipt, self.cluster)
+        self.cluster.target["spec"]["replicas"] = 16
+        baseline = worker.snapshot(self.cluster)[1]
+        with contextlib.redirect_stdout(io.StringIO()):
+            reverse = worker.deploy(baseline, OLD, self.receipt_path, self.cluster, rollback_receipt=receipt)
+        self.cluster.target["spec"]["replicas"] = 4
+        worker.verify(reverse, self.cluster)
+        self.assertEqual(self.cluster.writes, 2)
+        self.assertEqual(self.cluster.target["spec"]["template"]["spec"]["containers"][0]["image"], OLD)
+
+    def test_cronjob_job_created_or_deleted_between_reads_is_tolerated(self):
+        sweeper = self.add_sweeper()
+        self.turn_over_jobs(sweeper, "record-seal-sweeper-3", "record-seal-sweeper-1")
+        receipt = self.deploy()
+        self.turn_over_jobs(sweeper, "record-seal-sweeper-4", "record-seal-sweeper-2")
+        worker.verify(receipt, self.cluster)
+        self.turn_over_jobs(sweeper, "record-seal-sweeper-5", "record-seal-sweeper-3")
+        baseline = worker.snapshot(self.cluster)[1]
+        with contextlib.redirect_stdout(io.StringIO()):
+            reverse = worker.deploy(baseline, OLD, self.receipt_path, self.cluster, rollback_receipt=receipt)
+        self.turn_over_jobs(sweeper, "record-seal-sweeper-6", "record-seal-sweeper-4")
+        worker.verify(reverse, self.cluster)
+        self.assertEqual(self.cluster.writes, 2)
+
+    def test_target_image_change_after_roll_fails_closed(self):
+        receipt = self.deploy()
+        self.cluster.target["spec"]["template"]["spec"]["containers"][0]["image"] = THIRD
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+
+    def test_sibling_or_cronjob_image_change_fails_closed(self):
+        sweeper = self.add_sweeper()
+        receipt = self.deploy()
+        worker.pod_spec(sweeper)["containers"][0]["image"] = THIRD
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+        worker.pod_spec(sweeper)["containers"][0]["image"] = OLD
+        worker.verify(receipt, self.cluster)
+        worker.pod_spec(self.cluster.siblings[0])["containers"][0]["image"] = THIRD
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+
+    def test_uid_change_fails_closed_for_target_and_siblings(self):
+        sweeper = self.add_sweeper()
+        receipt = self.deploy()
+        self.cluster.target["metadata"]["uid"] = "recreated-uid"
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+        self.cluster.target["metadata"]["uid"] = worker.TARGET + "-uid"
+        sweeper["metadata"]["uid"] = "recreated-cronjob"
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+
+    def test_unrelated_spec_change_still_fails_closed(self):
+        sweeper = self.add_sweeper()
+        receipt = self.deploy()
+        for mutate, restore in (
+            (lambda: self.cluster.target["spec"].update(minReadySeconds=5),
+             lambda: self.cluster.target["spec"].pop("minReadySeconds")),
+            (lambda: self.cluster.target["spec"]["template"]["spec"]["nodeSelector"].update(pool="cpu"),
+             lambda: self.cluster.target["spec"]["template"]["spec"]["nodeSelector"].update(pool="gpu")),
+            (lambda: sweeper["spec"].update(schedule="*/5 * * * *"),
+             lambda: sweeper["spec"].update(schedule="0 * * * *")),
+            (lambda: self.cluster.siblings[0]["spec"]["template"]["spec"].update(serviceAccountName="x"),
+             lambda: self.cluster.siblings[0]["spec"]["template"]["spec"].update(serviceAccountName="existing-worker")),
+        ):
+            mutate()
+            with self.assertRaisesRegex(ValueError, "drift"):
+                worker.verify(receipt, self.cluster)
+            restore()
+        worker.verify(receipt, self.cluster)
+
+    def test_jobs_without_a_listed_cronjob_controller_stay_tracked(self):
+        sweeper = self.add_sweeper()
+        receipt = self.deploy()
+        self.cluster.siblings.append(job("manual-repair"))  # standalone Job using the worker image
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+        self.cluster.siblings.pop()
+        foreign = cronjob("not-listed")
+        self.cluster.siblings.append(job("orphaned", foreign))  # owner CronJob absent from the namespace read
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+        self.cluster.siblings.pop()
+        bad = job("record-seal-sweeper-9", sweeper)
+        worker.pod_spec(bad)["containers"][0]["image"] = worker.REPOSITORY + ":latest"
+        self.cluster.siblings.append(bad)  # owned Jobs are still image-validated
+        with self.assertRaisesRegex(ValueError, "mutable"):
+            worker.verify(receipt, self.cluster)
+
+    def test_t4_fallback_activating_on_old_image_after_roll_fails_closed(self):
+        receipt = self.deploy()
+        self.cluster.siblings[-1]["spec"]["replicas"] = 1
+        with self.assertRaisesRegex(ValueError, "drift|active T4"):
+            worker.verify(receipt, self.cluster)
+
+    def test_t4_activated_between_early_check_and_final_reread_refuses_before_write(self):
+        # Reads in deploy(): snapshot consumers (1), early T4 check (2), final pre-write reread (3).
+        start = self.cluster.consumer_reads
+        original = Cluster.__call__
+
+        def activate_t4(cluster, *args):
+            if args[0] == "get" and args[1] != "deployment" and cluster.consumer_reads == start + 2:
+                cluster.siblings[-1]["spec"]["replicas"] = 1  # operator scales T4 on the old image
+            return original(cluster, *args)
+
+        self.cluster.__class__ = type("T4Cluster", (Cluster,), {"__call__": activate_t4})
+        with self.assertRaisesRegex(ValueError, "consumer drift"):  # T4 replicas are bound
+            self.deploy()
+        self.assertEqual(self.cluster.writes, 0)
+
+    def test_t4_replica_count_stays_bound(self):
+        receipt = self.deploy()
+        self.cluster.siblings[-1]["spec"]["replicas"] = 1
+        worker.pod_spec(self.cluster.siblings[-1])["containers"][0]["image"] = NEW
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+
+    def test_active_t4_init_container_on_old_image_refuses(self):
+        t4 = self.cluster.siblings[-1]
+        t4["spec"]["replicas"] = 1
+        worker.pod_spec(t4)["containers"][0]["image"] = NEW
+        worker.pod_spec(t4)["initContainers"] = [{"name": "warm", "image": OLD}]
+        self.baseline = worker.snapshot(self.cluster)[1]
+        with self.assertRaisesRegex(ValueError, "active T4"):
+            self.deploy()
+        self.assertEqual(self.cluster.writes, 0)
+
+    def test_unlisted_deployment_and_statefulset_replicas_stay_bound(self):
+        other = deployment("other-consumer")
+        stateful = deployment("stateful-consumer")
+        stateful["kind"] = "StatefulSet"
+        self.cluster.siblings += [other, stateful]
+        self.baseline = worker.snapshot(self.cluster)[1]
+        receipt = self.deploy()
+        for obj in (other, stateful):
+            obj["spec"]["replicas"] += 1
+            with self.assertRaisesRegex(ValueError, "drift"):
+                worker.verify(receipt, self.cluster)
+            obj["spec"]["replicas"] -= 1
+
+    def test_owned_job_on_a_different_digest_than_its_cronjob_stays_bound(self):
+        sweeper = self.add_sweeper()
+        receipt = self.deploy()
+        stale = job("record-seal-sweeper-7", sweeper)
+        worker.pod_spec(stale)["containers"][0]["image"] = THIRD
+        self.cluster.siblings.append(stale)
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+
+    def test_uidless_cronjob_does_not_adopt_uidless_owner_references(self):
+        sweeper = self.add_sweeper()
+        receipt = self.deploy()
+        orphan = job("ghost-1", sweeper)
+        orphan["metadata"]["ownerReferences"][0].pop("uid")
+        self.cluster.siblings += [orphan]
+        self.assertFalse(worker.cronjob_history(orphan, {None: sweeper}))
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+
+    def test_require_t4_serves_is_a_direct_guard(self):
+        t4 = copy.deepcopy(self.cluster.siblings[-1])
+        worker.require_t4_serves([t4], NEW)  # inactive T4 is ignored
+        t4["spec"]["replicas"] = 2
+        with self.assertRaisesRegex(ValueError, "active T4"):
+            worker.require_t4_serves([t4], NEW)
+        worker.pod_spec(t4)["containers"][0]["image"] = NEW
+        worker.require_t4_serves([t4], NEW)
+        worker.pod_spec(t4)["initContainers"] = [{"name": "warm", "image": OLD}]
+        with self.assertRaisesRegex(ValueError, "active T4"):
+            worker.require_t4_serves([t4], NEW)
+
+    def test_replica_exclusion_requires_a_live_hpa_per_listed_deployment(self):
+        for mutate in (
+            lambda c: c.hpas.pop(0),
+            lambda c: c.hpas[0]["spec"]["scaleTargetRef"].update(name="elsewhere"),
+            lambda c: c.hpas[1]["spec"].update(minReplicas=0),
+            lambda c: c.hpas.append(hpa(worker.TARGET)),
+        ):
+            with self.subTest(mutate=mutate):
+                self.cluster = Cluster()
+                mutate(self.cluster)
+                with self.assertRaisesRegex(ValueError, "HPA"):
+                    worker.snapshot(self.cluster)
+
+    def test_hpa_spec_or_uid_change_after_roll_fails_closed(self):
+        receipt = self.deploy()
+        self.cluster.hpas[0]["spec"]["maxReplicas"] = 40
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+        self.cluster.hpas[0]["spec"]["maxReplicas"] = 16
+        self.cluster.hpas[1]["metadata"]["uid"] = "recreated"
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+
+    def test_owned_job_with_independent_spec_change_stays_bound(self):
+        sweeper = self.add_sweeper()
+        receipt = self.deploy()
+        for change in ({"parallelism": 3}, {"suspend": True}, {"activeDeadlineSeconds": 60}):
+            with self.subTest(change=change):
+                run = job("record-seal-sweeper-8", sweeper)
+                run["spec"].update(change)
+                self.cluster.siblings.append(run)
+                with self.assertRaisesRegex(ValueError, "drift"):
+                    worker.verify(receipt, self.cluster)
+                self.cluster.siblings.pop()
+        run = job("record-seal-sweeper-8", sweeper)
+        worker.pod_spec(run)["serviceAccountName"] = "other"
+        self.cluster.siblings.append(run)
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+
+    def test_owner_reference_on_a_non_generated_job_name_stays_bound(self):
+        sweeper = self.add_sweeper()
+        receipt = self.deploy()
+        self.cluster.siblings.append(job("hand-made", sweeper))
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+
+    def test_hpa_rescale_between_first_read_and_write_still_writes(self):
+        self.cluster.deployment_reads = 0
+        self.cluster.rescale_before_write = 11
+        receipt = self.deploy()
+        self.assertEqual(self.cluster.writes, 1)
+        self.assertEqual(self.cluster.target["spec"]["replicas"], 11)
+        self.assertEqual(self.cluster.target["spec"]["template"]["spec"]["containers"][0]["image"], NEW)
+        worker.verify(receipt, self.cluster)
+
+    def test_owned_job_with_foreign_selector_or_generated_labels_stays_bound(self):
+        sweeper = self.add_sweeper()
+        receipt = self.deploy()
+        for mutate in (
+            lambda j: j["spec"].update(selector={"matchLabels": {"app": "record-seal-sweeper"}}),
+            lambda j: j["spec"]["template"]["metadata"]["labels"].update({"controller-uid": "someone-else"}),
+            lambda j: j["spec"]["template"]["metadata"]["labels"].pop("job-name"),
+        ):
+            with self.subTest(mutate=mutate):
+                run = job("record-seal-sweeper-8", sweeper)
+                mutate(run)
+                self.cluster.siblings.append(run)
+                with self.assertRaisesRegex(ValueError, "drift"):
+                    worker.verify(receipt, self.cluster)
+                self.cluster.siblings.pop()
+
+    def test_hpa_with_wrong_target_api_version_is_not_proof(self):
+        self.cluster.hpas[0]["spec"]["scaleTargetRef"]["apiVersion"] = "extensions/v1beta1"
+        with self.assertRaisesRegex(ValueError, "HPA"):
+            worker.snapshot(self.cluster)
+
+    def test_terminating_hpa_is_not_proof(self):
+        self.cluster.hpas[1]["metadata"]["deletionTimestamp"] = "2026-11-19T00:00:00Z"
+        with self.assertRaisesRegex(ValueError, "HPA"):
+            worker.snapshot(self.cluster)
+
+    def test_rescale_after_the_fresh_read_still_refuses_by_cas(self):
+        self.cluster.drift_on_patch = True  # resourceVersion moves after the fresh read
+        with self.assertRaisesRegex(ValueError, "API conflict"):
+            self.deploy()
+        self.assertEqual(self.cluster.writes, 0)
+
+    def test_printed_patch_is_the_patch_sent(self):
+        self.cluster.deployment_reads = 0
+        self.cluster.rescale_before_write = 11
+        self.deploy()
+        printed = json.loads(self.output.strip().splitlines()[-1])["patch"]
+        self.assertIn({"op": "test", "path": "/metadata/resourceVersion", "value": "40"}, printed)
+
+    def test_hpa_chart_tripwire_matches_listed_deployments(self):
+        # If the chart renders another HPA-scaled worker-image Deployment (e.g. borrowed node pools),
+        # HPA_DEPLOYMENTS must be reviewed; this test is triggered by chart changes.
+        chart = Path(__file__).parents[2] / "backend/charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml"
+        values = yaml.safe_load(chart.read_text())
+        self.assertFalse((values.get("borrowedNodePools") or {}).get("enabled", False))
+        self.assertEqual(worker.HPA_DEPLOYMENTS, frozenset({worker.TARGET, "record-seal-worker"}))
+
+    def test_admission_change_on_the_real_write_only_escalates(self):
+        self.cluster.admission_mutates_on_write = True
+        with self.assertRaisesRegex(ValueError, "stop and escalate"):
+            self.deploy()
+
+    def test_replay_2026_11_14_post_roll_drift_shape_now_verifies(self):
+        # Run 43619755069 (2026-11-14): image moved, then verify refused with
+        # "post-roll runtime/consumer drift". Its receipt bound two CronJobs, the T4 and
+        # record-seal-worker Deployments and seven CronJob-owned Jobs; the target is HPA-scaled.
+        repair, sweeper = cronjob("record-seal-repair"), cronjob("record-seal-sweeper")
+        self.cluster.siblings += [repair, sweeper]
+        for name in ("29910915", "29911010", "29911230", "29911260"):
+            self.cluster.siblings.append(job("record-seal-repair-" + name, repair))
+        for name in ("29906100", "29906820", "29911260"):
+            self.cluster.siblings.append(job("record-seal-sweeper-" + name, sweeper))
+        self.cluster.target["spec"]["replicas"] = 16
+        self.baseline = worker.snapshot(self.cluster)[1]
+        receipt = self.deploy()
+        full_after = worker.digest(self.cluster.target["spec"])
+        legacy_consumers = sum(o["metadata"]["name"].startswith("record-seal-") and o["kind"] == "Job" for o in self.cluster.siblings)
+        # During the Recreate rollout: the HPA rescales and both CronJobs rotate history.
+        self.cluster.target["spec"]["replicas"] = 12
+        self.cluster.siblings = [s for s in self.cluster.siblings
+                                 if s["metadata"]["name"] not in ("record-seal-repair-29910915", "record-seal-sweeper-29906100")]
+        self.cluster.siblings += [job("record-seal-repair-29911290", repair), job("record-seal-sweeper-29911320", sweeper)]
+        _, actual = worker.snapshot(self.cluster)
+        # The pre-fix full-spec hash and Job binding set both change, which is the 11-14 refusal.
+        self.assertNotEqual(worker.digest(self.cluster.target["spec"]), full_after)
+        self.assertEqual(legacy_consumers, 7)
+        worker.verify(receipt, self.cluster)
+        self.assertEqual(actual, {"target": receipt["after"], "consumers": receipt["consumers"]})
 
 
 class WorkflowTests(unittest.TestCase):

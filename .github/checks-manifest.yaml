@@ -6,7 +6,7 @@
 checks:
   - id: worker-image-only-tests
     command: ["python3", ".github/scripts/test_worker_image_only.py"]
-    triggers: [".github/scripts/worker_image_only.py", ".github/scripts/test_worker_image_only.py", ".github/workflows/gcp_diarizer.yml", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/worker_image_only.py", ".github/scripts/test_worker_image_only.py", ".github/workflows/gcp_diarizer.yml", ".github/checks-manifest.yaml", "backend/charts/batch-pipeline-worker/**"]
     lanes: ["local", "ci"]
     reason: "SCA-2149: image.digest-only Helm overrides would activate 28 levers over the approved live empty map; execute the guarded image-only primitive against private-runtime and drift fixtures"
   - id: batch-pipeline-tuning-disclosure
