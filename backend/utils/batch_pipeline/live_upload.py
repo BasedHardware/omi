@@ -73,7 +73,7 @@ logger = logging.getLogger(__name__)
 OMI_PIPELINE_RECORD_COVERAGE_TERMINAL_TOTAL = Counter(
     'omi_pipeline_record_coverage_terminal_total',
     'Unproven WALs of a final registered record answered with the terminal keep-local refusal',
-    ['memo'],
+    ['cause', 'memo'],
 )
 
 
@@ -147,7 +147,7 @@ def _seconds(value) -> float | None:
 def coverage_final(row: dict, now: float | None = None) -> bool:
     """True once no normal path can still change this record's units.
 
-    ``_covered`` is a pure function of the WAL bytes, the record's job list
+    ``_coverage_gap`` is a pure function of the WAL bytes, the record's job list
     and their pinned artifacts. The known ways a record gains units each
     leave a marker here: a reconnect re-opens the row, a late producer leaves
     an upload session or a seal refusal, a continuation marks it partial, and
@@ -166,8 +166,11 @@ def coverage_final(row: dict, now: float | None = None) -> bool:
     return now - max(sealed, finished) >= COVERAGE_FINAL_AFTER_SECONDS
 
 
-def _unprovable(record: str | None, *, memo: str):
+def _unprovable(record: str | None, *, cause: str, memo: str):
     """Terminal keep-local answer for a WAL a final record can never prove.
+
+    Only for ``TERMINAL_COVERAGE_CAUSES``: the record already holds audio at
+    every instant of this WAL, so the phone's copy is redundant for it.
 
     Shipped apps treat 400 as a definitive refusal: the WAL keeps its audio,
     is marked refused (no user attention, no Retry) and is re-offered at most
@@ -176,10 +179,11 @@ def _unprovable(record: str | None, *, memo: str):
     and none releases it: only a 200/202 completion does. A later proof (a
     reseal adding units) is still accepted on one of those daily attempts.
     """
-    OMI_PIPELINE_RECORD_COVERAGE_TERMINAL_TOTAL.labels(memo=memo).inc()
+    OMI_PIPELINE_RECORD_COVERAGE_TERMINAL_TOTAL.labels(cause=cause, memo=memo).inc()
     logger.info(
-        'event=sync_record_upload outcome=terminal reason=%s record=%s path=coverage memo=%s',
+        'event=sync_record_upload outcome=terminal reason=%s cause=%s record=%s path=coverage memo=%s',
         RecordUploadWait.AUDIO_COVERAGE_UNPROVEN.value,
+        cause,
         (record or '-')[:16],
         memo,
     )
@@ -193,10 +197,19 @@ def _unprovable(record: str | None, *, memo: str):
     )
 
 
-def _coverage_unproven(row: dict, record: str | None, *, memo: str):
-    """Retryable while proof can still arrive; terminal once the record is final."""
-    if coverage_terminal_enabled() and coverage_final(row):
-        return _unprovable(record, memo=memo)
+def _cached_cause(cached) -> str:
+    """The stored negative's cause; a legacy ``1`` marker or anything else is unknown."""
+    return cached if isinstance(cached, str) and cached in COVERAGE_CAUSES else 'unknown'
+
+
+def _coverage_unproven(row: dict, record: str | None, *, cause: str | None, memo: str):
+    """Retryable while proof can still arrive or the server lacks the audio.
+
+    Terminal only for a final record whose negative is a known terminal cause;
+    an unknown cause (a memo written before causes were stored) stays retryable.
+    """
+    if cause in TERMINAL_COVERAGE_CAUSES and coverage_terminal_enabled() and coverage_final(row):
+        return _unprovable(record, cause=cause, memo=memo)
     return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, record, path='coverage', memo=memo)
 
 
@@ -278,13 +291,21 @@ def _coverage_wait_key(uid, conversation_id, content_id, jobs, upload_identity):
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def _covered(paths, jobs, artifacts):
+def _coverage_gap(paths, jobs, artifacts) -> str | None:
+    """None when every WAL sample is proven; otherwise the static cause.
+
+    ``audio_bytes_differ`` means the record holds audio at every WAL instant
+    and only the bytes disagree: after the first mismatch the walk continues
+    on time alone, so a WAL that also reaches outside or past the record is
+    reported by that cause instead (the server lacks some of its audio).
+    """
     # Input bundles and raw captures can have different chunk boundaries. Match
     # their actual sample intervals and bytes, never just timestamps or text.
     record = [
         WorkItem(**{field.name: job[field.name] for field in fields(WorkItem) if field.name in job})
         for job in sorted(jobs, key=lambda job: (job['capture_at'], job['segment_id']))
     ]
+    differs = False
     # A long recording can have 128 units. Keep one source unit at a time and
     # fetch only intersections, rather than retaining many hours of decoded PCM.
     for unit in decode_units(paths):
@@ -305,8 +326,11 @@ def _covered(paths, jobs, artifacts):
             length = min(len(source) - offset, len(pcm) - consumed)
             if length <= 0:
                 return _unproven('record_unit_exhausted')
-            if memoryview(source)[offset : offset + length] != memoryview(pcm)[consumed : consumed + length]:
-                return _unproven('audio_bytes_differ')
+            if (
+                not differs
+                and memoryview(source)[offset : offset + length] != memoryview(pcm)[consumed : consumed + length]
+            ):
+                differs = True
             consumed += length
             del source
             if consumed == len(pcm):
@@ -314,13 +338,22 @@ def _covered(paths, jobs, artifacts):
         if consumed != len(pcm):
             # The record ends (or has no unit) before this WAL unit does.
             return _unproven('wal_audio_past_record')
-    return True
+    return _unproven('audio_bytes_differ') if differs else None
 
 
-def _unproven(cause: str) -> bool:
+COVERAGE_CAUSES = frozenset(
+    {'wal_audio_outside_record', 'wal_audio_past_record', 'audio_bytes_differ', 'record_unit_exhausted', 'unknown'}
+)
+# Only a WAL the final record already holds audio for at every instant may end
+# terminally. Outside/past audio is not on the server: it stays retryable until
+# a gap-fill or handoff path can admit it.
+TERMINAL_COVERAGE_CAUSES = frozenset({'audio_bytes_differ'})
+
+
+def _unproven(cause: str) -> str:
     # Static vocabulary only: says which way the WAL and record disagree.
     logger.info('event=sync_record_coverage outcome=unproven cause=%s', cause)
-    return False
+    return cause
 
 
 async def _legacy_mode(legacy_mode, uid):
@@ -541,9 +574,10 @@ async def registered_record_response(
         # discover chunks it already holds, and dropping it would trade one
         # kind of wasted work for slower delivery.
         memo_checked = True
-        if await run_blocking(db_executor, cached_coverage_wait, coverage_key):
+        cached = await run_blocking(db_executor, cached_coverage_wait, coverage_key)
+        if cached:
             await rearm_partial(uid, conversation_id, row, store)
-            return _coverage_unproven(row, content, memo='hit')
+            return _coverage_unproven(row, content, cause=_cached_cause(cached), memo='hit')
     await retain_upload(uid, conversation_id, row, paths, store)
     if prior.get('dispatch_protocol') == 'batch_v1' and prior.get('job_id') == 'bp_' + content:
         status = await run_blocking(db_executor, durable_status, store, uid, prior['job_id'])
@@ -568,22 +602,24 @@ async def registered_record_response(
             if acked:
                 return covered_response()
         return await conversation_pending(RecordUploadWait.RECORD_JOBS_MISSING, uid, conversation_id)
-    if (
-        coverage_key is not None
-        and not memo_checked
-        and await run_blocking(db_executor, cached_coverage_wait, coverage_key)
-    ):
+    cached = (
+        await run_blocking(db_executor, cached_coverage_wait, coverage_key)
+        if coverage_key is not None and not memo_checked
+        else None
+    )
+    if cached:
         # Memo disabled at the fast path, or a receipt/jobs branch kept this
         # request below it: the identical check still answers without decoding.
-        return _coverage_unproven(row, content, memo='hit')
+        return _coverage_unproven(row, content, cause=_cached_cause(cached), memo='hit')
     failure_reason = RecordUploadWait.ARTIFACT_LOOKUP_FAILED
     try:
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
         failure_reason = RecordUploadWait.COVERAGE_CHECK_FAILED
-        if not await run_blocking(sync_executor, _covered, paths, jobs, artifacts):
+        cause = await run_blocking(sync_executor, _coverage_gap, paths, jobs, artifacts)
+        if cause is not None:
             if coverage_key is not None:
-                await run_blocking(db_executor, remember_coverage_wait, coverage_key)
-            return _coverage_unproven(row, content, memo='miss' if coverage_key is not None else 'off')
+                await run_blocking(db_executor, remember_coverage_wait, coverage_key, cause)
+            return _coverage_unproven(row, content, cause=cause, memo='miss' if coverage_key is not None else 'off')
 
         def alias(tx):
             current = tx.get('content', f'{uid}/{content_id}')

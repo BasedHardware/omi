@@ -7684,9 +7684,12 @@ survive artifact expiry and producer rollback. Missing tails, clock/byte conflic
 503 with local audio retained, while proof can still arrive. Once the record is
 final (closed, sealed, not partial, no open upload session or seal refusal, and
 both `finished_at` and the last `record_sealed_at` at least 6 hours old) an
-unproven coverage answer is terminal HTTP 400 `record_capture_unprovable`
+unproven coverage answer whose cause is `audio_bytes_differ` (the record holds
+audio at every WAL instant; only bytes differ) is terminal HTTP 400 `record_capture_unprovable`
 (`retryable: false`, no Retry-After): the phone keeps the WAL as a refused
-upload and stops the 30-second retry. Coverage-check errors stay retryable.
+upload and stops the 30-second retry. WAL audio outside or past the record,
+unknown causes and coverage-check errors stay retryable. The coverage memo
+stores the static cause.
 `SYNC_RECORD_COVERAGE_TERMINAL` defaults `true`; `false` restores the 503.
 Privacy refusals return terminal 409. Neither
 creates a legacy twin. Desktop uploads targeting an existing

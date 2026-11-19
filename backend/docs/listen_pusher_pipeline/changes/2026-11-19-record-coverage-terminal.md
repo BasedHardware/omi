@@ -24,12 +24,24 @@ rest `wal_audio_past_record` / `wal_audio_outside_record`.
 
 ## What
 
-When coverage is unproven (a fresh negative or a memo hit) and the record is
-final, the upload gets HTTP 400:
+When coverage is unproven (a fresh negative or a memo hit), the cause is
+`audio_bytes_differ`, and the record is final, the upload gets HTTP 400:
 
 ```json
 {"code": "record_capture_unprovable", "detail": "...keep the local copy", "retryable": false}
 ```
+
+`audio_bytes_differ` now means the record holds audio at every instant of the
+WAL and only the bytes disagree: after the first mismatch the coverage walk
+continues on time alone, so a WAL that also reaches outside or past the record
+reports that cause instead. `wal_audio_past_record`, `wal_audio_outside_record`,
+`record_unit_exhausted` and an unknown cause keep the retryable 503, because the
+server may not hold that audio (coordinator decision on #25770).
+
+The coverage memo now stores the cause instead of `1`, so a memo hit answers the
+same way. A `1` written by the previous revision reads as an unknown cause
+(503); the previous revision reads a cause value as a miss and recomputes. The
+memo's 300 s TTL bounds that mixed window.
 
 Final means: `record_audio_closed`, not `record_audio_partial`, no
 `record_upload_sessions`, no `record_seal_refused_at`, not deleted, and both
@@ -59,27 +71,27 @@ No shipped build deletes or releases audio on a 400; only a 200 or a completed
 A refused multi-file batch is isolated and each file is re-sent once, so one
 looping batch of N files produces about 1 + N 400s before it settles.
 
-## What this does not recover
+## Follow-up: audio the record lacks
 
-About 35% of the measured negatives are `wal_audio_past_record` or
-`wal_audio_outside_record`: the phone holds audio the final record lacks.
-Today that audio is never transcribed either (gap fill, the token-lease
-retained copy and the WAL handoff are all dark in production). After this
-change the phone keeps it as a refused upload and stops re-offering it after
-seven days, so a later server-side recovery (a gap-fill or handoff ramp) only
-picks it up if it serves inside that window, or through an app build that
-re-offers refused rows. The audio itself stays on the phone; nothing is deleted.
+`wal_audio_past_record` and `wal_audio_outside_record` were about 35% of the
+measured negatives (20% and 15% of sampled cause lines, 2026-11-19 06:31–07:31Z).
+The phone holds audio the final record lacks, so those WALs keep looping on the
+503 until a gap-fill or WAL-handoff path can admit them; a terminal answer would
+let phones stop re-offering the only copy after seven days. The looping records
+overall started from under an hour to 30 days earlier (6–24 h was the largest
+bucket). Admitting that audio is a separate change.
 
 ## Telemetry and rollback
 
-- Log: `event=sync_record_upload outcome=terminal reason=audio_coverage_unproven record=<16 hex> path=coverage memo=<hit|miss|off>`.
-- Counter: `omi_pipeline_record_coverage_terminal_total{memo}`.
+- Log: `event=sync_record_upload outcome=terminal reason=audio_coverage_unproven cause=audio_bytes_differ record=<16 hex> path=coverage memo=<hit|miss|off>`.
+- Counter: `omi_pipeline_record_coverage_terminal_total{cause,memo}` (cause is always `audio_bytes_differ` today).
   Terminal answers are not waits: they are not counted in
   `omi_pipeline_record_wait_answers_total` or
   `omi_pipeline_record_wait_memo_hits_total`, so both fall by the terminal share.
   Read them together with this counter.
 - Readback: the unsampled request-log 503 count for `POST /v2/sync-local-files`
-  on backend-sync (the `omi_pipeline_upload_admission_503` log metric) falls,
+  on backend-sync (the `omi_pipeline_upload_admission_503` log metric) falls by
+  about the final `audio_bytes_differ` share (roughly 40%; see the PR DESIGN),
   with a matching transient rise in 400s that decays as phones stop re-offering.
 - Rollback: `SYNC_RECORD_COVERAGE_TERMINAL=false` restores the 503 for every
   unproven WAL. Refused WALs stay on the phone.

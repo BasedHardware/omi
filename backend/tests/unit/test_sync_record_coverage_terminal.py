@@ -50,7 +50,11 @@ def final_row(**changes):
     return {key: value for key, value in row.items() if value is not None}
 
 
-def world(monkeypatch, *, covered=False, memo_hit=False):
+def world(monkeypatch, *, gap='audio_bytes_differ', memo_hit=False):
+    """``gap`` is the coverage answer (None = proven, a cause, or a raising callable).
+
+    ``memo_hit`` makes the memo answer with that same cause.
+    """
     store = MemoryStore()
     content, _ = live_upload.record_identity(UID, CID)
     store.rows['intakes', 'bp_' + content] = {'segment_ids': ['synthetic-segment']}
@@ -58,11 +62,11 @@ def world(monkeypatch, *, covered=False, memo_hit=False):
     monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: store)
     monkeypatch.setattr(live_upload, 'artifacts_for', lambda *_: object())
     monkeypatch.setattr(live_upload, '_upload_identity', lambda paths: (len(paths), 0))
-    monkeypatch.setattr(live_upload, 'cached_coverage_wait', lambda *_: memo_hit)
-    if callable(covered):
-        monkeypatch.setattr(live_upload, '_covered', covered)
+    monkeypatch.setattr(live_upload, 'cached_coverage_wait', lambda *_: gap if memo_hit else None)
+    if callable(gap):
+        monkeypatch.setattr(live_upload, '_coverage_gap', gap)
     else:
-        monkeypatch.setattr(live_upload, '_covered', lambda *_: covered)
+        monkeypatch.setattr(live_upload, '_coverage_gap', lambda *_: gap)
     return store, content
 
 
@@ -79,8 +83,9 @@ async def answer(row):
     )
 
 
-def terminal_count(memo):
-    return REGISTRY.get_sample_value('omi_pipeline_record_coverage_terminal_total', {'memo': memo}) or 0
+def terminal_count(memo, cause='audio_bytes_differ'):
+    labels = {'cause': cause, 'memo': memo}
+    return REGISTRY.get_sample_value('omi_pipeline_record_coverage_terminal_total', labels) or 0
 
 
 @pytest.mark.parametrize('memo_hit', [False, True])
@@ -106,7 +111,7 @@ async def test_final_record_answers_terminal_keep_local_refusal(monkeypatch, cap
     assert terminal_count(memo) == before + 1
     messages = [record.getMessage() for record in caplog.records if 'event=sync_record_upload' in record.getMessage()]
     assert messages == [
-        'event=sync_record_upload outcome=terminal reason=audio_coverage_unproven '
+        'event=sync_record_upload outcome=terminal reason=audio_coverage_unproven cause=audio_bytes_differ '
         f'record={content[:16]} path=coverage memo={memo}'
     ]
     assert UID not in messages[0] and CID not in messages[0]
@@ -166,6 +171,27 @@ def test_unrepresentable_datetime_clock_is_not_final():
     assert not live_upload.coverage_final(row, now=NOW.timestamp())
 
 
+@pytest.mark.parametrize('memo_hit', [False, True])
+@pytest.mark.parametrize(
+    'cause', ['wal_audio_past_record', 'wal_audio_outside_record', 'record_unit_exhausted', 'unknown']
+)
+async def test_final_record_keeps_retrying_when_the_server_may_lack_the_audio(monkeypatch, cause, memo_hit):
+    # Past/outside audio is not on the server: a terminal answer would let the
+    # phone stop re-offering the only copy. Unknown causes (a legacy memo) too.
+    world(monkeypatch, gap=cause, memo_hit=memo_hit)
+    before = terminal_count('hit' if memo_hit else 'miss', cause)
+    response = await answer(final_row())
+    assert response.status_code == 503
+    assert json.loads(response.body)['code'] == 'record_capture_pending'
+    assert terminal_count('hit' if memo_hit else 'miss', cause) == before
+
+
+def test_legacy_memo_marker_reads_as_unknown_cause():
+    assert live_upload._cached_cause('1') == 'unknown'
+    assert live_upload._cached_cause(True) == 'unknown'
+    assert live_upload._cached_cause('audio_bytes_differ') == 'audio_bytes_differ'
+
+
 async def test_kill_switch_restores_the_retryable_wait(monkeypatch):
     world(monkeypatch)
     monkeypatch.setenv('SYNC_RECORD_COVERAGE_TERMINAL', 'false')
@@ -178,14 +204,14 @@ async def test_transient_coverage_failure_on_a_final_record_stays_retryable(monk
     def fail(*_):
         raise RuntimeError('synthetic storage failure')
 
-    world(monkeypatch, covered=fail)
+    world(monkeypatch, gap=fail)
     response = await answer(final_row())
     assert response.status_code == 503
     assert json.loads(response.body)['code'] == 'record_capture_pending'
 
 
 async def test_proven_coverage_on_a_final_record_still_reuses_the_record_result(monkeypatch):
-    store, content = world(monkeypatch, covered=True)
+    store, content = world(monkeypatch, gap=None)
     store.rows['content', f'{UID}/{content}'] = {'dispatch_protocol': 'batch_v1', 'job_id': 'bp_' + content}
     status = {
         'job_id': 'bp_' + content,
