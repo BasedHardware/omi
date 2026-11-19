@@ -36,6 +36,7 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/live_summary_section.dart';
+import 'package:omi/pages/conversation_detail/widgets/summary_tab.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
@@ -302,6 +303,19 @@ class _Home {
   int episodeCalls = 0;
   int liveReads = 0;
 
+  /// Reads of the open conversation by its detail page, and the state those reads return.
+  int detailReads = 0;
+  ConversationTileState detailState = ConversationTileState.live;
+
+  ServerConversation? detailRead(String id) {
+    detailReads++;
+    if (id != 'live-1') return null;
+    return _conversation('live-1', _now.subtract(const Duration(minutes: 20)), 'Launch checklist',
+        lastSpeech: _now.subtract(const Duration(minutes: 9)),
+        segments: _liveSoFar,
+        v3: ConversationV3Fields(kind: 'conversation', tileState: detailState));
+  }
+
   /// False once the conversation in progress has closed.
   bool liveOpen = true;
   final sync = _StubSyncProvider();
@@ -428,9 +442,10 @@ Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
             ),
           ),
           ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
-            create: (_) => ConversationDetailProvider(),
+            create: (_) => ConversationDetailProvider(fetchConversation: (id) async => home.detailRead(id)),
             update: (_, app, conversations, previous) =>
-                (previous?..setProviders(app, conversations)) ?? ConversationDetailProvider(),
+                (previous?..setProviders(app, conversations)) ??
+                ConversationDetailProvider(fetchConversation: (id) async => home.detailRead(id)),
           ),
         ],
         child: MaterialApp(
@@ -644,6 +659,38 @@ void main() {
       await tester.tap(find.byKey(const Key('live_conversation_end')));
       await tester.pump();
       expect(home.capture.endCalls, 1, reason: 'a second tap would add another processing row and finalize again');
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('the live page opened on Transcript keeps re-reading until the summary is being written', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      await tester.tap(find.text('Launch checklist'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(SummaryTab), findsNothing, reason: 'it opens on Transcript; Summary is not built');
+      final atOpen = home.detailReads;
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      expect(home.detailReads, atOpen + 1, reason: 'the page, not the Summary tab, keeps a live window current');
+
+      // It ended; its transcript is still arriving. The page keeps reading.
+      home.detailState = ConversationTileState.transcribing;
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      expect(home.detailReads, atOpen + 3);
+
+      // Its summary is being written: the page has seen it move on and stops re-reading.
+      home.detailState = ConversationTileState.writing;
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      expect(home.detailReads, atOpen + 4);
       await _dispose(tester, home);
     });
   });

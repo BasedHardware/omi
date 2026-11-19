@@ -13,6 +13,7 @@ import 'package:omi/services/conversation_summary_stream.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
+import 'package:omi/pages/conversation_detail/live_conversation_refresher.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -23,9 +24,11 @@ typedef SummaryStreamOpener = Stream<SummaryStreamEvent> Function(String convers
 ///
 /// While the conversation is still going (tile state live) there is no summary to write yet: the
 /// section says in one line that it comes when the conversation ends (the page opens on the
-/// Transcript tab, where the content is), and re-reads the conversation every [liveRefreshEvery] so
-/// the transcript stays current and the end is noticed. It
-/// never waits on a summary write, so the page cannot spin and then fall back to "No summary".
+/// Transcript tab, where the content is). Once it has ended but its transcript is still arriving
+/// (transcribing), the line says so, and the summary still waits. The page re-reads the conversation
+/// meanwhile ([LiveConversationRefresher], whichever tab is open), and this section starts the write
+/// when the conversation moves on. It never waits on a summary write while the conversation is
+/// still going, so the page cannot spin and then fall back to "No summary".
 ///
 /// Once the conversation has ended, the summary is written when the page opens. The server answers
 /// at once with a fresh stored summary, streams a new one section by section, or (another writer
@@ -41,7 +44,6 @@ class LiveSummarySection extends StatefulWidget {
     this.stream,
     this.pollInterval = const Duration(seconds: 2),
     this.pollFor = const Duration(seconds: 60),
-    this.liveRefreshEvery = const Duration(seconds: 15),
   });
 
   final ServerConversation conversation;
@@ -58,12 +60,12 @@ class LiveSummarySection extends StatefulWidget {
   static SummaryStreamOpener? debugStream;
   final Duration pollInterval;
   final Duration pollFor;
-  final Duration liveRefreshEvery;
 
-  /// A v3 conversation in progress, or one whose summary is being written.
+  /// A v3 conversation in progress, ended with its transcript still arriving, or one whose summary is
+  /// being written.
   static bool wants(ServerConversation? conversation) {
     final state = conversation?.v3?.tileState;
-    return state == ConversationTileState.live || state == ConversationTileState.writing;
+    return LiveConversationRefresher.awaitsSummary(conversation) || state == ConversationTileState.writing;
   }
 
   @override
@@ -113,19 +115,16 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
     return c.v3?.tileState == ConversationTileState.done;
   }
 
-  static bool _isLive(ServerConversation c) => c.v3?.tileState == ConversationTileState.live;
+  /// Not ready for its summary yet: still going, or its transcript still arriving.
+  static bool _isLive(ServerConversation c) => LiveConversationRefresher.awaitsSummary(c);
 
   void _begin() {
     _openedId = widget.conversation.id;
     _coveredAtOpen = widget.conversation.v3?.summaryCoversThrough;
     _active(true);
     if (_isLive(widget.conversation)) {
+      // The page keeps the conversation current; didUpdateWidget starts the write when it moves on.
       _phase = _Phase.live;
-      _poll = Timer.periodic(widget.liveRefreshEvery, (_) {
-        // Only while the page is in front: a page under another route reads nothing.
-        if (!mounted || _phase != _Phase.live || ModalRoute.of(context)?.isCurrent == false) return;
-        unawaited(widget.refresh().catchError((Object _) => false));
-      });
       return;
     }
     final open = widget.stream ??
@@ -294,7 +293,10 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
         padding: const EdgeInsets.only(top: 4, bottom: 12),
         child: Semantics(
           liveRegion: true,
-          child: Text(context.l10n.conversationSummaryWhenItEnds,
+          child: Text(
+              widget.conversation.v3?.tileState == ConversationTileState.transcribing
+                  ? context.l10n.transcribing
+                  : context.l10n.conversationSummaryWhenItEnds,
               style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
         ),
       ),
