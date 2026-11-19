@@ -6,6 +6,7 @@ block; owner triggers generate a summary that takes no derived effects.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,6 +24,7 @@ from tests.unit.test_process_conversation_free_tier_branch import (  # noqa: F40
 from utils.conversations import historical_minimum
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.minimum_derived import is_server_minimum as pc_is_server_minimum
 
 AUTOMATIC = sorted(set(ProcessingTrigger) - historical_minimum.SUMMARY_TRIGGERS, key=lambda t: t.value)
 OWNER = sorted(historical_minimum.SUMMARY_TRIGGERS, key=lambda t: t.value)
@@ -81,9 +83,9 @@ def test_automatic_triggers_store_without_a_model_before_the_funded_block(monkey
     assert payload[pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is True
     assert payload['summary_blocked_reason'] == 'historical_on_open'
     assert payload['processing_tier'] == 'historical'
-    # The final deterministic title carries no provenance, so it owes no summary.
-    assert result.structured.title and result.structured.title_provenance is None
-    assert 'title_provenance' not in (payload['structured'] or {}) or payload['structured']['title_provenance'] is None
+    # The historical stand-in title owes no summary: it is not the server_minimum marker.
+    assert result.structured.title and result.structured.title_provenance == 'historical_minimum'
+    assert payload['structured']['title_provenance'] == 'historical_minimum'
 
 
 def test_a_later_append_keeps_the_open_time_summary(monkeypatch, pc):
@@ -159,7 +161,43 @@ def test_a_non_historical_row_still_takes_the_funded_block(monkeypatch, pc):
     enabled.assert_called()
 
 
-def test_minimum_without_provenance_has_no_title_marker():
+def test_the_historical_minimum_carries_its_own_stand_in_provenance():
     row = _existing_desktop()
     assert build_deterministic_minimum_structured(row, uid='uid').title_provenance == 'server_minimum'
-    assert build_deterministic_minimum_structured(row, uid='uid', provenance=False).title_provenance is None
+    historical = build_deterministic_minimum_structured(row, uid='uid', historical=True)
+    assert historical.title_provenance == 'historical_minimum'
+    # A stand-in for the title rules, never the summary-debt or derived-effects marker.
+    assert not pc_is_server_minimum(SimpleNamespace(structured=historical))
+
+
+def test_the_open_time_summary_replaces_the_deterministic_title(monkeypatch, pc):
+    # Real title path: title_for_stability and stable_title, no title mock.
+    monkeypatch.setattr(pc, 'finish_home_salience', lambda uid, structured, conversation, **_: structured)
+    monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: None)
+    row = _historical(transcript_segments=_existing_desktop().transcript_segments)
+    row.structured = build_deterministic_minimum_structured(row, uid='uid', historical=True)
+    stand_in = row.structured.title
+    generated = Structured(title='Planning the spring garden beds', overview='We chose what to plant.')
+    result = pc._get_conversation_obj('uid', generated, row, relevance_discarded=False)
+    assert stand_in and result.structured.title == 'Planning the spring garden beds'
+
+
+@pytest.mark.parametrize('fence', ['capture_group', 'smart_merge'])
+def test_the_automatic_short_circuit_keeps_the_refresh_write_fences(monkeypatch, pc, fence):
+    _forbid_funded_block(monkeypatch, pc)
+    calls = []
+    monkeypatch.setattr(
+        pc.lifecycle_service, 'persist_processed_conversation', lambda uid, data, **kwargs: calls.append(kwargs) or True
+    )
+    kwargs = (
+        {'capture_group_refresh_fence': ('group-1', 4, 'reservation-1')}
+        if fence == 'capture_group'
+        else {'smart_merge_refresh': (2, 'refresh-1')}
+    )
+    pc.process_conversation('uid', 'en', _historical(), trigger=ProcessingTrigger.SYNC_UPDATE, **kwargs)
+    expected = (
+        {'expected_capture_group': ('group-1', 4), 'capture_group_notes_refresh': ('group-1', 'reservation-1')}
+        if fence == 'capture_group'
+        else {'smart_merge_refresh': (2, 'refresh-1')}
+    )
+    assert calls == [expected]

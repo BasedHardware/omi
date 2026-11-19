@@ -13,7 +13,6 @@ from typing import Any
 
 from config import historical_tier
 from models.conversation import Conversation
-from models.conversation_enums import ConversationStatus
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.projection_payload import omit_null_processing_state, strip_client_processing
@@ -38,10 +37,12 @@ def short_circuits(conversation: Any, trigger: ProcessingTrigger) -> bool:
 
 
 def payload(uid: str, conversation: Conversation) -> dict[str, Any]:
-    """The completed, model-free persist for an automatic trigger; mutates ``conversation`` to match."""
+    """The model-free persist for an automatic trigger; mutates ``conversation`` to match.
+
+    The caller (``process_conversation``, the lifecycle owner) marks the row completed first.
+    """
     if not present(conversation.structured) and not (conversation.structured.title or '').strip():
-        conversation.structured = build_deterministic_minimum_structured(conversation, uid=uid, provenance=False)
-    conversation.status = ConversationStatus.completed
+        conversation.structured = build_deterministic_minimum_structured(conversation, uid=uid, historical=True)
     conversation.deferred = False
     write = omit_null_processing_state(strip_client_processing(conversation.model_dump()))
     write[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True

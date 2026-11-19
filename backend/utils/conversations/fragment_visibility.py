@@ -16,6 +16,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
+
+from config.historical_tier import STAND_IN_TITLE_PROVENANCES
 from utils.conversations import phase_shadow
 
 BATCH_RECORD_OWNERS = frozenset({'batch_live_v1', 'batch_sync_v1'})
@@ -241,7 +243,9 @@ def is_settling_fragment(data: Mapping[str, Any], *, now: float | None = None, s
     if current - finished.timestamp() >= SETTLING_MAX_HOLD_SECONDS:
         return False
     structured = data.get('structured')
-    server_minimum = isinstance(structured, Mapping) and structured.get('title_provenance') == 'server_minimum'
+    server_minimum = (
+        isinstance(structured, Mapping) and structured.get('title_provenance') in STAND_IN_TITLE_PROVENANCES
+    )
     batch_short = (
         isinstance(started, datetime)
         and data.get('record_lane_owner') in BATCH_RECORD_OWNERS

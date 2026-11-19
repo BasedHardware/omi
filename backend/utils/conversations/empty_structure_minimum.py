@@ -12,6 +12,7 @@ import logging
 import sys
 from typing import Any, Optional
 
+from config.historical_tier import STAND_IN_TITLE_PROVENANCES
 import database.notifications as notification_db
 from models.conversation import Conversation, CreateConversation
 from models.structured import Structured
@@ -82,7 +83,7 @@ def _eligible(
     stored = conversation.structured
     stored_title = (getattr(stored, 'title', '') or '').strip()
     return (
-        (not stored_title or getattr(stored, 'title_provenance', None) == 'server_minimum')
+        (not stored_title or getattr(stored, 'title_provenance', None) in STAND_IN_TITLE_PROVENANCES)
         and not structured_is_rich(stored)
         and not recovery_minimum_would_drop_metadata(conversation)
     )

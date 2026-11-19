@@ -32,8 +32,9 @@ from database.legal_holds import destructive_operation_gate
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.list_version_check import ListVersionCheck
+from config import historical_tier
 from config.episodes import home_step_projection_enabled, home_transcription_presentation_gate_enabled
-from utils.conversations import historical_summary, home_step, transcribing_hold
+from utils.conversations import historical_projection, home_step, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
     delete_action_item_vector,
@@ -931,6 +932,7 @@ def reprocess_conversation(
         return pending
     from database import processing_attention as attention_db
 
+    historical_slots = _admit_historical_reprocess(uid, conversation_id, conversation)
     input_generation = attention_db.generation(conversation)
     was_discarded = bool(conversation.get('discarded'))
     user_kept = was_discarded or bool(conversation.get('sync_relevance_user_kept'))
@@ -949,8 +951,10 @@ def reprocess_conversation(
             uid, conversation_id, expected_generation=input_generation, restart_succeeded=True
         )
     except attention_db.ClaimRejected as error:
+        _release_historical(historical_slots)
         raise HTTPException(status_code=404, detail='Conversation not found') from error
     if not owned or not attention_db.owns_live_claim(uid, operation):
+        _release_historical(historical_slots)
         # Echoing the stale row as 200 made clients report "updated" with no new
         # summary; another writer still owns this conversation. Every released
         # client treats a non-200 reprocess answer as failure.
@@ -982,6 +986,22 @@ def reprocess_conversation(
         raise
     attention_db.finish(uid, operation, 'succeeded' if _reprocess_succeeded(result, app_id) else 'failed')
     return result
+
+
+def _admit_historical_reprocess(uid: str, conversation_id: str, row: dict) -> list:
+    """A historical row's reprocess (old builds' Summarize CTA) takes the open endpoint's gates and slots."""
+    if not historical_tier.is_historical(row):
+        return []
+    from utils.conversations import historical_summary
+
+    return historical_summary.admit(uid, conversation_id)
+
+
+def _release_historical(slots: list) -> None:
+    if slots:
+        from utils.conversations import historical_summary
+
+        historical_summary.release(slots)
 
 
 REPROCESS_IN_PROGRESS_ERROR_DETAIL = {
@@ -1047,7 +1067,9 @@ def execute_reprocess(
         processed_conversation.discarded = not restored
         if restored and processed_conversation.sync_relevance == 'review':
             processed_conversation.sync_relevance = 'keep'
-    if historical_summary.historical_tier.is_historical(processed_conversation):
+    if historical_tier.is_historical(processed_conversation):
+        from utils.conversations import historical_summary
+
         # Old builds' "Summarize" CTA lands here: the marker kept the run summary-only.
         historical_summary.after_summary(uid, processed_conversation)
         return processed_conversation
@@ -1208,7 +1230,7 @@ def get_conversations(
         list_page_headers.apply(response, page)
     _heal_locked_conversations_if_eligible(uid, conversations)
     conversations = [
-        historical_summary.project(
+        historical_projection.project(
             transcribing_hold.project(home_step.project(row, show_held=show_held), home_list=True)
         )
         for row in conversations
@@ -1359,7 +1381,7 @@ def get_conversation_by_id(
             response.headers['X-Translation-Status'] = translation_status
             if next_cursor is not None:
                 response.headers['X-Translation-Cursor'] = next_cursor
-    return historical_summary.project(transcribing_hold.project(conversation))
+    return historical_projection.project(transcribing_hold.project(conversation))
 
 
 @router.patch(
@@ -2899,6 +2921,8 @@ def open_historical_summary(
     response: Response = None,  # type: ignore[assignment]
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    from utils.conversations import historical_summary
+
     body, outcome = historical_summary.open_summary(uid, conversation_id)
     if response is not None:
         response.headers[historical_summary.OUTCOME_HEADER] = outcome
