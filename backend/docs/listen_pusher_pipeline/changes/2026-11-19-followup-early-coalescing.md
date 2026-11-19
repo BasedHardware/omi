@@ -1,16 +1,16 @@
 # Projection follow-up read reduction
 
-Proposed for review. Periodic discovery can encounter several ready siblings
-from one upload on the same page. A sibling that already has a completion
-probe on that page still pays for a read-only projection session check before
-the existing coalescer discards it.
-
-Use the job and result hints to decide whether a ready sibling can take the
-same coalesced exit earlier. Use the full read-only check for uncertain hints
-and for work that may progress. The completion probe still verifies privacy,
-ownership, receipt state and accounting in the existing transactions. Keep
-targeted and owed wakes on the existing path.
+A periodic page can discover several ready siblings from one upload. The
+[follow-up contract](../../listen_pusher_pipeline.mdx#projection-discovery-progress)
+allows a duplicate to skip its read-only session check if the same process
+already completed a probe on that page. The first live privacy and deletion
+walk must cover the later sibling's full privacy scope. A fresh, bounded
+token read certifies the unchanged authority revision. Incomplete probes,
+errors, refusals, missing evidence, and invalidation take the full path.
+Every mutation retains its original privacy and custody fences.
 
 Set `BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED=false` to restore the
 original check order. Compare six-hour Firestore privacy and projection
-session reads per completed audio-second on backend-integration.
+session reads per completed audio-second on backend-integration. Use
+`omi_batch_pipeline_projection_followup_outcomes_total{outcome="early_check_skipped"}`
+to measure how often the fast path actually fires.
