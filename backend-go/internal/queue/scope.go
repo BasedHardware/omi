@@ -28,18 +28,7 @@ func (sc *Scope) Admitting() Admitting { return Admitting{open: sc.open, tenant:
 // Tenant runs fn while holding the tenant's shared erasure barrier. It returns ErrErased
 // for a tenant that was erased.
 func (s *Store) Tenant(ctx context.Context, tenant string, fn func(*Scope) error) error {
-	return s.withTenant(ctx, tenant, false, func(sc *Scope) error {
-		var erased bool
-		err := sc.conn.QueryRow(ctx,
-			"SELECT EXISTS(SELECT 1 FROM queue_erasure WHERE tenant_hash="+tenantHashSQL+")", tenant).Scan(&erased)
-		if err != nil {
-			return fmt.Errorf("check erasure: %w", err)
-		}
-		if erased {
-			return ErrErased
-		}
-		return fn(sc)
-	})
+	return s.withTenant(ctx, tenant, false, fn)
 }
 
 func (s *Store) withTenant(ctx context.Context, tenant string, exclusive bool, fn func(*Scope) error) (err error) {
@@ -48,16 +37,20 @@ func (s *Store) withTenant(ctx context.Context, tenant string, exclusive bool, f
 		return fmt.Errorf("acquire connection: %w", err)
 	}
 	defer conn.Release()
-	lock := "pg_advisory_lock_shared"
+	allowed := true
 	if exclusive {
-		lock = "pg_advisory_lock"
+		_, err = conn.Exec(ctx, "SELECT pg_advisory_lock("+tenantLock+")", tenant)
+	} else {
+		err = conn.QueryRow(ctx, "SELECT queue_acquire_tenant($1)", tenant).Scan(&allowed)
 	}
-	if _, lockErr := conn.Exec(ctx, "SELECT "+lock+"("+tenantLock+")", tenant); lockErr != nil {
+	if err != nil {
 		// The lock state of this session is unknown: do not return it to the pool.
-		return errors.Join(fmt.Errorf("tenant lock: %w", lockErr), discard(ctx, conn))
+		return errors.Join(fmt.Errorf("tenant lock: %w", err), discard(ctx, conn))
 	}
-	// Registered before fn runs, so the lock is dropped even if fn panics.
 	defer func() { err = errors.Join(err, unlock(ctx, conn)) }()
+	if !allowed {
+		return ErrErased
+	}
 	open := &atomic.Bool{}
 	open.Store(true)
 	defer open.Store(false)
