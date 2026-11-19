@@ -643,6 +643,17 @@ void main() {
         expect(find.byKey(const Key('live_conversation_end')), findsOneWidget);
         await shoot(tester, '002-mobile-ios-v3-live-detail-end');
 
+        // The in-progress note links the transcript tab.
+        await tester.tap(find.byKey(const Key('live_summary_open_transcript')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(
+            find.byWidgetPredicate((w) =>
+                w is TabBar &&
+                (w.controller?.index ?? DefaultTabController.of(tester.element(find.byWidget(w))).index) == 1),
+            findsOneWidget,
+            reason: 'Open transcript selects the Transcript tab');
+        // End stays in the bar on the Transcript tab too.
         await tester.tap(find.byKey(const Key('live_conversation_end')));
         await tester.pump();
         expect(home.capture.endCalls, 1, reason: "the pendant double-tap's action");

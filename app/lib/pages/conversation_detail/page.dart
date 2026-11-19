@@ -16,6 +16,7 @@ import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
@@ -1202,7 +1203,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     final hasBar = conversation.transcriptSegments.isNotEmpty ||
         conversation.photos.isNotEmpty ||
         conversation.externalIntegration != null ||
-        conversation.v3?.tileState == ConversationTileState.live;
+        (context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false) &&
+            conversation.v3?.tileState == ConversationTileState.live);
 
     return MessageListener<ConversationDetailProvider>(
       showError: (error) {
@@ -1314,6 +1316,11 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                             summarySearchResultOffset: _summaryContentSearchResults,
                             onTapWhenSearchEmpty: _closeSearchIfEmpty,
                             onShowActionItemInTranscript: _showActionItemInTranscript,
+                            onOpenTranscript: () {
+                              _hasExplicitTabSelection = true;
+                              setState(() => selectedTab = ConversationTab.transcript);
+                              _controller!.animateTo(_transcriptTabIndex);
+                            },
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),

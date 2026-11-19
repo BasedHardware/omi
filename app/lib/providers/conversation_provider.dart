@@ -874,9 +874,9 @@ class ConversationProvider extends ChangeNotifier {
     // Refresh pages exclude discarded/bridged donors. Absence is authoritative
     // inside this page's time window, not for older paginated rows. Failed or
     // truncated reads never remove rows, nor do they override a live update.
-    // A page that consumed a full page of storage rows covers only down to its
-    // oldest row; one with no visible row covers nothing.
-    final fullPage = result.storageCount >= _conversationPageSize;
+    // A page with more after it (the server's answer, else a full page of storage
+    // rows) covers only down to its oldest row; one with no visible row covers nothing.
+    final fullPage = result.page.hasMore ?? result.storageCount >= _conversationPageSize;
     if (!result.truncated && !(fullPage && rawNewConversations.isEmpty)) {
       final coveredAfter = fullPage
           ? rawNewConversations.map((c) => c.startedAt ?? c.createdAt).reduce((a, b) => a.isBefore(b) ? a : b)

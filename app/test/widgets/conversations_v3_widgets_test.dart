@@ -208,6 +208,9 @@ void main() {
       await tester.pump();
       expect(opens, 1);
       expect(find.text('Writing your summary…'), findsOneWidget);
+      // The live re-read stops once it has ended.
+      await tester.pump(const Duration(seconds: 15));
+      expect(refreshes, 2);
       unawaited(events.close());
     });
 

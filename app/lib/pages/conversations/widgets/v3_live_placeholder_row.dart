@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
+import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -23,7 +24,9 @@ class V3LivePlaceholderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final title = captureStateLabel(l10n, CaptureDisplayState.listening);
+    // The capture's own state (listening, paused, reconnecting…), resolved as the capture card did.
+    final state = context.select<CaptureProvider, CaptureDisplayState>(EpisodePresentation.displayState);
+    final title = captureStateLabel(l10n, state);
     return Padding(
       padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
       child: Semantics(

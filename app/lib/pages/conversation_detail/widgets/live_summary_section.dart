@@ -126,7 +126,9 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
     if (_isLive(widget.conversation)) {
       _phase = _Phase.live;
       _poll = Timer.periodic(widget.liveRefreshEvery, (_) {
-        if (mounted && _phase == _Phase.live) unawaited(widget.refresh().catchError((Object _) => false));
+        // Only while the page is in front: a page under another route reads nothing.
+        if (!mounted || _phase != _Phase.live || ModalRoute.of(context)?.isCurrent == false) return;
+        unawaited(widget.refresh().catchError((Object _) => false));
       });
       return;
     }
