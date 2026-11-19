@@ -27,6 +27,10 @@ class OmiBleDiscoveryNamingTest < Minitest::Test
                 return [CBAdvertisementDataManufacturerDataKey: manufacturerData]
             }
 
+            static func advertisement(serviceUuids: [String]) -> [String: Any] {
+                [CBAdvertisementDataServiceUUIDsKey: serviceUuids.map { CBUUID(string: $0) }]
+            }
+
             static func main() {
                 // PLAUD manufacturer id 93 little-endian with the NotePin payload.
                 let notePin = Data([0x5D, 0x00, 0x04, 0x56, 0xCF, 0x00])
@@ -44,6 +48,13 @@ class OmiBleDiscoveryNamingTest < Minitest::Test
                     advertisement(Data([0x00, 0x00, 0x04, 0x56, 0xCF, 0x00]))
                 ), "other manufacturer is rejected")
                 check(!OmiBleDiscoveryNaming.isNotePinAdvertisement([:]), "missing manufacturer data is rejected")
+
+                // PLAUD service UUID 0x1910, short and 128-bit forms (#20033).
+                check(OmiBleDiscoveryNaming.isNotePinAdvertisement(advertisement(serviceUuids: ["1910"])), "short 1910 matches")
+                check(OmiBleDiscoveryNaming.isNotePinAdvertisement(
+                    advertisement(serviceUuids: ["00001910-0000-1000-8000-00805F9B34FB"])
+                ), "128-bit 1910 matches")
+                check(!OmiBleDiscoveryNaming.isNotePinAdvertisement(advertisement(serviceUuids: ["180A"])), "other service is rejected")
 
                 // Precedence: advertised > cached > NotePin fallback > empty.
                 check(OmiBleDiscoveryNaming.discoveredName(
@@ -71,6 +82,21 @@ class OmiBleDiscoveryNamingTest < Minitest::Test
                     cachedName: nil,
                     advertisementData: advertisement(notePin)
                 ) == "NotePin", "NotePin fallback fills the empty name")
+                check(OmiBleDiscoveryNaming.discoveredName(
+                    advertisedLocalName: nil,
+                    cachedName: nil,
+                    advertisementData: advertisement(serviceUuids: ["1910"])
+                ) == "NotePin", "unnamed peripheral with PLAUD service UUID gets the NotePin fallback")
+                check(OmiBleDiscoveryNaming.discoveredName(
+                    advertisedLocalName: nil,
+                    cachedName: nil,
+                    advertisementData: advertisement(serviceUuids: ["180A"])
+                ) == "", "unnamed peripheral with another service stays empty")
+                check(OmiBleDiscoveryNaming.discoveredName(
+                    advertisedLocalName: "My Recorder",
+                    cachedName: nil,
+                    advertisementData: advertisement(serviceUuids: ["1910"])
+                ) == "My Recorder", "named peripheral keeps its name")
                 check(OmiBleDiscoveryNaming.discoveredName(
                     advertisedLocalName: "",
                     cachedName: "  ",

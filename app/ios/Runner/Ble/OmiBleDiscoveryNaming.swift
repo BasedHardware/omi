@@ -5,7 +5,8 @@ import Foundation
 /// live radio), mirroring `OmiBlePairingPolicy`.
 ///
 /// `CBPeripheral.name` is often empty until the phone has connected once, while
-/// NotePin S puts "NotePin" only in the advertisement (#18705).
+/// NotePin S puts "NotePin" only in the advertisement (#18705), and may advertise
+/// no local name at all, only the PLAUD service UUID 0x1910 (#20033).
 enum OmiBleDiscoveryNaming {
     /// Fallback name when a NotePin advertisement carries no local name.
     /// `NativeBluetoothDiscoverer` classifies PLAUD via `name.contains("notepin")`,
@@ -16,6 +17,10 @@ enum OmiBleDiscoveryNaming {
     /// matching macOS discovery in `desktop/macos/.../BtDevice.swift`.
     private static let plaudManufacturerId: UInt16 = 93
     private static let notePinPayload: [UInt8] = [0x04, 0x56, 0xCF, 0x00]
+
+    /// PLAUD service UUID 0x1910. 16-bit UUID, so only a heuristic: `discoveredName`
+    /// reaches it solely for peripherals with no advertised or cached name.
+    private static let plaudServiceUuids = [CBUUID(string: "1910"), CBUUID(string: "00001910-0000-1000-8000-00805F9B34FB")]
 
     /// Resolve the scan-time name, preferring what the advertisement itself
     /// carries over `CBPeripheral`'s cached name, then the NotePin fallback.
@@ -36,8 +41,12 @@ enum OmiBleDiscoveryNaming {
         return ""
     }
 
-    /// PLAUD manufacturer id with the NotePin payload.
+    /// PLAUD service UUID, or PLAUD manufacturer id with the NotePin payload.
     static func isNotePinAdvertisement(_ advertisementData: [String: Any]) -> Bool {
+        if let serviceUuids = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID],
+           serviceUuids.contains(where: plaudServiceUuids.contains) {
+            return true
+        }
         guard let manufacturerData = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data,
               manufacturerData.count >= 2 + notePinPayload.count
         else {
