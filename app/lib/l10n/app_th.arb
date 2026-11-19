@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "งานที่เซิร์ฟเวอร์รายงาน",
     "finishNothingToProcess": "ยังไม่มีอะไรให้ประมวลผล",
     "finishStillProcessing": "ยังประมวลผลอยู่ จะแสดงที่หน้าหลัก",
-    "finishBackToHome": "กลับไปหน้าหลัก"
+    "finishBackToHome": "กลับไปหน้าหลัก",
+    "conversationSummaryWhenItEnds": "สรุปเมื่อการสนทนานี้จบลง"
 }

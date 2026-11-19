@@ -12246,5 +12246,6 @@
     "onTheWayServerWork": "Rad koji je prijavio poslužitelj",
     "finishNothingToProcess": "Još nema ničega za obradu.",
     "finishStillProcessing": "Još se obrađuje. Pojavit će se na početnoj.",
-    "finishBackToHome": "Natrag na početnu"
+    "finishBackToHome": "Natrag na početnu",
+    "conversationSummaryWhenItEnds": "Sažetak kada ovaj razgovor završi"
 }

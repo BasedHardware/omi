@@ -15570,4 +15570,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Về Trang chủ';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Bản tóm tắt khi cuộc trò chuyện này kết thúc';
 }

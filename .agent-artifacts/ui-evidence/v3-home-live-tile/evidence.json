@@ -2,30 +2,30 @@
   "version": 1,
   "images": [
     {
-      "file": "001-mobile-ios-v3-live-tile-end.png",
+      "file": "001-mobile-ios-v3-home-live-row.png",
       "platform": "mobile-ios",
-      "description": "v3 Home: the live tile shows the speech span (11m, same as its detail) instead of start-to-now, with an End Conversation button while this phone is capturing",
+      "description": "v3 Home: the live row shows the speech span (11m, same as its detail) and no End button; Home stays uncluttered",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "002-mobile-ios-v3-live-detail-end.png",
       "platform": "mobile-ios",
-      "description": "v3 live conversation detail: End Conversation above the summary being written; the header length (11m) matches the Home tile",
+      "description": "v3 live conversation detail: 'Summary when this conversation ends' instead of a summary spinner, End Conversation in the bottom bar beside Ask Omi while this phone is capturing",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "003-mobile-ios-v3-live-summary-streamed.png",
+      "file": "003-mobile-ios-v3-home-live-placeholder.png",
       "platform": "mobile-ios",
-      "description": "v3 live detail after summary sections stream in; End stays above the summary while capturing",
+      "description": "v3 Home while the pendant streams with no window open yet: a live-row placeholder (Listening, Live) instead of the pendant capture card",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "004-mobile-ios-v3-home-light.png",
       "platform": "mobile-ios",
-      "description": "v3 Home in light mode: live tile with speech span and End Conversation",
+      "description": "v3 Home in light mode: live row with speech span, no End button",
       "captured_by": "agent",
       "source": "visual-audit"
     }

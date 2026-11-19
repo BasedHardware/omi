@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "Arbete rapporterat av servern",
     "finishNothingToProcess": "Inget att bearbeta än.",
     "finishStillProcessing": "Bearbetas fortfarande. Den visas på Hem.",
-    "finishBackToHome": "Tillbaka till Hem"
+    "finishBackToHome": "Tillbaka till Hem",
+    "conversationSummaryWhenItEnds": "Sammanfattning när det här samtalet avslutas"
 }

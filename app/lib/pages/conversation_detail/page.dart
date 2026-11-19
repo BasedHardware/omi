@@ -15,6 +15,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
@@ -1196,10 +1197,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       return const Scaffold();
     }
 
-    // The bottom bar (and its backdrop) shows once there is something to play or ask about.
+    // The bottom bar (and its backdrop) shows once there is something to play or ask about, and always
+    // on a conversation still in progress, whose bar carries End before its transcript arrives.
     final hasBar = conversation.transcriptSegments.isNotEmpty ||
         conversation.photos.isNotEmpty ||
-        conversation.externalIntegration != null;
+        conversation.externalIntegration != null ||
+        conversation.v3?.tileState == ConversationTileState.live;
 
     return MessageListener<ConversationDetailProvider>(
       showError: (error) {

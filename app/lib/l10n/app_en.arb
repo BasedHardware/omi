@@ -19017,5 +19017,9 @@
     "finishBackToHome": "Back to Home",
     "@finishBackToHome": {
         "description": "Button that leaves the processing page for the Home conversation list."
+    },
+    "conversationSummaryWhenItEnds": "Summary when this conversation ends",
+    "@conversationSummaryWhenItEnds": {
+        "description": "On the detail page of a conversation still in progress (v3): the summary is written once it ends."
     }
 }

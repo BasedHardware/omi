@@ -15597,4 +15597,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Voltar ao Início';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Resumo quando esta conversa terminar';
 }

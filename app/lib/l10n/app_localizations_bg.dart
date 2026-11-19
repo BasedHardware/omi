@@ -15620,4 +15620,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Към началото';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Обобщение, когато този разговор приключи';
 }

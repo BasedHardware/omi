@@ -164,12 +164,59 @@ void main() {
   });
 
   group('LiveSummarySection', () {
+    testWidgets('still going: no summary write, a note that it comes when it ends, kept current', (tester) async {
+      var opens = 0;
+      var refreshes = 0;
+      var opened = 0;
+      var conversation = _conversation(state: ConversationTileState.live);
+      late StateSetter rebuild;
+      final events = StreamController<SummaryStreamEvent>();
+      await tester.pumpWidget(_wrap(StatefulBuilder(builder: (context, setState) {
+        rebuild = setState;
+        return CustomScrollView(slivers: [
+          LiveSummarySection(
+            conversation: conversation,
+            stream: (_) {
+              opens++;
+              return events.stream;
+            },
+            refresh: () async {
+              refreshes++;
+              return true;
+            },
+            onActiveChanged: (_) {},
+            onOpenTranscript: () => opened++,
+          ),
+        ]);
+      })));
+      await tester.pump();
+      expect(find.text('Summary when this conversation ends'), findsOneWidget);
+      expect(find.text('Writing your summary…'), findsNothing);
+      expect(find.text('Something went wrong'), findsNothing);
+      expect(opens, 0, reason: 'a conversation still going has no summary to write');
+
+      await tester.tap(find.byKey(const Key('live_summary_open_transcript')));
+      expect(opened, 1);
+
+      // The open page re-reads the conversation so its transcript stays current and its end is seen.
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump(const Duration(seconds: 15));
+      expect(refreshes, 2);
+
+      // It ended while the page was open: the summary is written now.
+      rebuild(() => conversation = _conversation(state: ConversationTileState.writing));
+      await tester.pump();
+      expect(opens, 1);
+      expect(find.text('Writing your summary…'), findsOneWidget);
+      unawaited(events.close());
+    });
+
     testWidgets('pen and skeleton, then the summary streams in, then the stored summary takes over', (tester) async {
       final events = StreamController<SummaryStreamEvent>();
       var refreshes = 0;
       final active = <bool>[];
       await tester.pumpWidget(_sliver(LiveSummarySection(
-        conversation: _conversation(state: ConversationTileState.live),
+        conversation: _conversation(state: ConversationTileState.writing),
         stream: (_) => events.stream,
         refresh: () async {
           refreshes++;
@@ -253,7 +300,7 @@ void main() {
 
     testWidgets('a summary that arrives whole stays up when the follow-up read fails', (tester) async {
       await tester.pumpWidget(_sliver(LiveSummarySection(
-        conversation: _conversation(state: ConversationTileState.live),
+        conversation: _conversation(state: ConversationTileState.writing),
         stream: (_) => Stream.value(SummaryDone(Structured('Planning', 'You set the launch for Thursday.'), null)),
         refresh: () async => false,
         onActiveChanged: (_) {},
@@ -267,7 +314,7 @@ void main() {
     testWidgets('a failure with no stored summary offers to try again', (tester) async {
       var opens = 0;
       await tester.pumpWidget(_sliver(LiveSummarySection(
-        conversation: _conversation(state: ConversationTileState.live),
+        conversation: _conversation(state: ConversationTileState.writing),
         stream: (_) {
           opens++;
           return opens == 1
@@ -290,7 +337,7 @@ void main() {
     testWidgets('a failure with an older summary stored steps aside', (tester) async {
       final active = <bool>[];
       await tester.pumpWidget(_sliver(LiveSummarySection(
-        conversation: _conversation(state: ConversationTileState.live, covers: DateTime.utc(2026, 11, 16, 9)),
+        conversation: _conversation(state: ConversationTileState.writing, covers: DateTime.utc(2026, 11, 16, 9)),
         stream: (_) => Stream.value(const SummaryFailed('server')),
         refresh: () async => true,
         onActiveChanged: active.add,

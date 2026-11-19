@@ -21,8 +21,6 @@ import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/app_review_prompt.dart';
-import 'package:omi/backend/schema/conversation_v3.dart';
-import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:uuid/uuid.dart';
@@ -149,22 +147,12 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                         // Redo with Omi Cloud waits on a re-transcription endpoint.
                         if (conversation != null && !discarded)
                           SliverToBoxAdapter(child: OnDeviceProvenanceSection(conversationId: conversation.id)),
-                        // The conversation in progress ends here too, as the pendant's double-tap does.
-                        if (liveWanted && conversation.v3?.tileState == ConversationTileState.live)
-                          const SliverToBoxAdapter(
-                            child: Padding(
-                              padding: EdgeInsets.only(bottom: OmiSpacing.xs),
-                              child: Align(
-                                alignment: AlignmentDirectional.centerStart,
-                                child: LiveConversationEndButton(),
-                              ),
-                            ),
-                          ),
                         if (liveWanted)
                           LiveSummarySection(
                             key: ValueKey('live-summary-${conversation.id}'),
                             conversation: conversation,
                             refresh: provider.refreshConversation,
+                            onOpenTranscript: widget.onOpenTranscript,
                             onActiveChanged: (active) {
                               if (mounted && active != _liveSummaryActive) {
                                 setState(() => _liveSummaryActive = active);

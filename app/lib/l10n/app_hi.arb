@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "सर्वर द्वारा बताया गया काम",
     "finishNothingToProcess": "अभी प्रोसेस करने के लिए कुछ नहीं है।",
     "finishStillProcessing": "अभी प्रोसेस हो रहा है। यह होम पर दिखेगा।",
-    "finishBackToHome": "होम पर वापस जाएं"
+    "finishBackToHome": "होम पर वापस जाएं",
+    "conversationSummaryWhenItEnds": "यह बातचीत खत्म होने पर सारांश"
 }

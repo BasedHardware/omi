@@ -12,6 +12,8 @@ import 'package:just_audio/just_audio.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
@@ -914,10 +916,17 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   /// The detail page's one bar (v3): on Transcript the recording's waveform player with a round Ask
   /// button beside it; on Summary, or a conversation without audio, the Ask Omi bar alone. The
-  /// summarizing app is picked from the ⋯ menu.
+  /// summarizing app is picked from the ⋯ menu. A conversation still in progress that this phone is
+  /// capturing has End Conversation beside Ask Omi, the pendant double-tap's action.
   Widget _buildDetailBar(BuildContext context) {
     final hasAudio = widget.conversation?.hasAudio() ?? false;
     final showPlayer = widget.selectedTab == ConversationTab.transcript && hasAudio;
+    if (!showPlayer && widget.conversation?.v3?.tileState == ConversationTileState.live) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+        child: Row(children: [Expanded(child: _buildAskBar(context)), const LiveConversationEndButton()]),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
       child: showPlayer

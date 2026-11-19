@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "عمل أبلغ عنه الخادم",
     "finishNothingToProcess": "لا يوجد شيء لمعالجته بعد.",
     "finishStillProcessing": "لا تزال المعالجة جارية. ستظهر على الشاشة الرئيسية.",
-    "finishBackToHome": "العودة إلى الرئيسية"
+    "finishBackToHome": "العودة إلى الرئيسية",
+    "conversationSummaryWhenItEnds": "الملخص عند انتهاء هذه المحادثة"
 }

@@ -15613,4 +15613,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Volver a Inicio';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Resumen cuando termine esta conversación';
 }

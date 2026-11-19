@@ -15457,4 +15457,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'חזרה למסך הבית';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'סיכום כשהשיחה הזו תסתיים';
 }

@@ -15620,4 +15620,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'ಹೋಮ್‌ಗೆ ಹಿಂತಿರುಗಿ';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'ಈ ಸಂಭಾಷಣೆ ಮುಗಿದಾಗ ಸಾರಾಂಶ';
 }

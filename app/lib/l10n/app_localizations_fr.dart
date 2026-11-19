@@ -15697,4 +15697,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Retour à l\'accueil';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Résumé à la fin de cette conversation';
 }

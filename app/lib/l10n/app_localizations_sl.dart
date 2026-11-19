@@ -15598,4 +15598,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Nazaj na začetno';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Povzetek, ko se ta pogovor konča';
 }

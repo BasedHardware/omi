@@ -15606,4 +15606,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Natrag na početnu';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Sažetak kada ovaj razgovor završi';
 }

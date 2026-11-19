@@ -38,6 +38,8 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/live_summary_section.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
@@ -511,13 +513,9 @@ void main() {
       expect(tester.widget<Text>(find.byKey(const Key('conversation_row_live_length'))).data, length.data,
           reason: 'silence after the last words does not grow it');
 
-      // End on the live tile is the pendant double-tap: it ends the conversation this phone is capturing.
-      expect(find.byKey(const Key('live_conversation_end')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('live_conversation_end')));
-      await tester.pump();
-      expect(home.capture.endCalls, 1);
-      expect(find.byKey(const Key('live_conversation_end')), findsNothing,
-          reason: 'nothing is left on this phone to end');
+      // Home stays uncluttered: End lives on the live conversation's detail page, not on its row.
+      expect(find.byKey(const Key('live_conversation_end')), findsNothing);
+      expect(find.byType(V3LivePlaceholderRow), findsNothing);
       await _dispose(tester, home);
     });
   });
@@ -536,6 +534,20 @@ void main() {
       expect(home.conversationsV3.live, isNull);
       expect(home.conversations.listReads, before + 1,
           reason: 'the closed conversation comes back as an ordinary row from the list read');
+
+      // The pendant is still streaming with no window open: the live row's placeholder stands in, and
+      // the pendant capture card does not come back between windows.
+      expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
+      expect(find.descendant(of: find.byType(ConversationCaptureWidget), matching: find.byType(GestureDetector)),
+          findsNothing);
+
+      // The next window opens: its row replaces the placeholder.
+      home.liveOpen = true;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(V3LivePlaceholderRow), findsNothing);
+      expect(_rowIds(tester).first, 'live-1');
       await _dispose(tester, home);
     });
   });
@@ -606,31 +618,62 @@ void main() {
         final palette = OmiColors.active;
         addTearDown(() => OmiColors.active = palette);
         OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        var summaryOpens = 0;
         final sections = StreamController<SummaryStreamEvent>();
-        LiveSummarySection.debugStream = (_) => sections.stream;
+        LiveSummarySection.debugStream = (_) {
+          summaryOpens++;
+          return sections.stream;
+        };
         final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
-        await shoot(tester, '001-mobile-ios-v3-live-tile-end');
+        expect(find.byKey(const Key('live_conversation_end')), findsNothing);
+        await shoot(tester, '001-mobile-ios-v3-home-live-row');
 
         await tester.tap(find.text('Launch checklist'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.byType(ConversationDetailPage), findsOneWidget);
-        expect(find.text('Writing your summary…'), findsOneWidget);
+        // Still going: no summary write, no spinner, no "No summary"; the summary comes when it ends.
+        expect(find.byKey(const Key('live_summary_in_progress')), findsOneWidget);
+        expect(find.text('Summary when this conversation ends'), findsOneWidget);
+        expect(find.text('Writing your summary…'), findsNothing);
+        expect(summaryOpens, 0, reason: 'a conversation still in progress has no summary to write yet');
+        // End sits in the bottom bar beside Ask Omi.
+        expect(find.byKey(const ValueKey('detail_ask_omi')), findsOneWidget);
+        expect(find.byKey(const Key('live_conversation_end')), findsOneWidget);
         await shoot(tester, '002-mobile-ios-v3-live-detail-end');
 
-        sections
-          ..add(const SummarySection('## Venue and date\n- The venue holds Thursday the 26th; deposit due Friday.'
-              '\n- Capacity is 180 seated, so the guest list needs a cut of about 20.'))
-          ..add(const SummarySection('## Run of show\n- Doors at 6, talks at 7, demos after.'
-              '\n- You own the slide order; Priya sends speaker bios by Tuesday.'));
+        await tester.tap(find.byKey(const Key('live_conversation_end')));
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 100));
-        expect(find.textContaining('deposit due Friday'), findsOneWidget);
-        await shoot(tester, '003-mobile-ios-v3-live-summary-streamed');
+        expect(home.capture.endCalls, 1, reason: "the pendant double-tap's action");
+        expect(find.byKey(const Key('live_conversation_end')), findsNothing,
+            reason: 'nothing is left on this phone to end');
 
         LiveSummarySection.debugStream = null;
         unawaited(sections.close());
+        await tester.pageBack();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        // Between windows the live row's placeholder holds the place, not the pendant capture card.
+        home.capture.segments = [
+          TranscriptSegment(
+              id: 's2',
+              text: 'Next item.',
+              speaker: 'SPEAKER_00',
+              isUser: true,
+              personId: null,
+              start: 0,
+              end: 2,
+              translations: []),
+        ];
+        home.liveOpen = false;
+        await home.conversationsV3.refresh();
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
+        await shoot(tester, '003-mobile-ios-v3-home-live-placeholder');
+
         debugDefaultTargetPlatformOverride = null;
         await _dispose(tester, home);
       });

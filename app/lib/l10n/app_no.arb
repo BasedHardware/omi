@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "Arbeid rapportert av serveren",
     "finishNothingToProcess": "Ingenting å behandle ennå.",
     "finishStillProcessing": "Behandles fortsatt. Den vises på Hjem.",
-    "finishBackToHome": "Tilbake til Hjem"
+    "finishBackToHome": "Tilbake til Hjem",
+    "conversationSummaryWhenItEnds": "Sammendrag når denne samtalen avsluttes"
 }

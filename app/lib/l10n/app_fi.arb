@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "Palvelimen ilmoittama työ",
     "finishNothingToProcess": "Ei vielä mitään käsiteltävää.",
     "finishStillProcessing": "Käsitellään yhä. Se näkyy kotinäkymässä.",
-    "finishBackToHome": "Takaisin kotiin"
+    "finishBackToHome": "Takaisin kotiin",
+    "conversationSummaryWhenItEnds": "Yhteenveto, kun tämä keskustelu päättyy"
 }

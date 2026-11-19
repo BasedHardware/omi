@@ -15577,4 +15577,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'होमवर परत जा';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'हे संभाषण संपल्यावर सारांश';
 }

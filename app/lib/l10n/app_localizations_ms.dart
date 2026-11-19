@@ -15606,4 +15606,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Kembali ke Laman Utama';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Ringkasan apabila perbualan ini tamat';
 }
