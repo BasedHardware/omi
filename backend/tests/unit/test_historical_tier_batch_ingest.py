@@ -46,21 +46,11 @@ def test_batch_old_capture_is_built_historical():
     assert incoming['structured']['title_provenance'] == 'historical_minimum'
 
 
-@pytest.mark.parametrize('fields', [{}, {'capture_time_trust': 'untrusted'}, {'capture_clock_estimated': True}])
+@pytest.mark.parametrize('fields', [{}, {'capture_time_trust': 'untrusted'}])
 def test_batch_recent_or_untrusted_capture_keeps_full_processing(fields):
     incoming = _batch_incoming(2 if not fields else 80, **fields)
     assert incoming.get('processing_tier') is None
     assert incoming['structured']['title_provenance'] == 'server_minimum'
-
-
-def test_the_estimated_clock_bit_stays_off_the_wire_unless_set():
-    item = WorkItem('seg', 'sim-owner', 1.0, 'gs://synthetic/audio', 1.0, Priority.DEEP)
-    assert 'capture_clock_estimated' not in item.to_dict()
-    flagged = WorkItem(
-        'seg', 'sim-owner', 1.0, 'gs://synthetic/audio', 1.0, Priority.DEEP, capture_clock_estimated=True
-    )
-    assert flagged.to_dict()['capture_clock_estimated'] is True
-    assert WorkItem(**flagged.to_dict()) == flagged
 
 
 def _finish(monkeypatch, settled):

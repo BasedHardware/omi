@@ -319,10 +319,13 @@ def build_incoming(
         client_platform=binding.client_platform,
         geolocation=geolocation,
     )
-    # An untrusted (clamped or estimated) capture clock proves no age: such rows keep full processing.
+    # An untrusted (receipt-clock) capture proves no age: such rows keep full processing.
+    # Deferred (T1+ review M2): a batch upload with an estimated device clock (``_clke<run>_``)
+    # still counts as trusted here. WorkItem carries no estimated bit yet; a reader-first
+    # follow-up makes strict WorkItem readers tolerate it before a later deploy writes it.
     historical = historical_ingest.applies_at_create(
         started,
-        trusted=item.capture_time_trust is None and not item.capture_clock_estimated,
+        trusted=item.capture_time_trust is None,
         now=datetime.now(timezone.utc),
     )
     incoming = Conversation(
