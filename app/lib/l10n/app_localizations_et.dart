@@ -14484,14 +14484,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Hiljuti';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Ühendus puudus $duration';
-  }
-
-  @override
   String get deviceControls => 'Juhtimine';
 
   @override
@@ -15570,4 +15562,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Kokkuvõte, kui see vestlus lõpeb';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Üleslaadimised ootavad serveris';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Teie audio on turvaliselt teie seadmes või telefonis';
 }

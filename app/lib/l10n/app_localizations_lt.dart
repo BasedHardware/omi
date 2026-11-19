@@ -14513,14 +14513,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Neseniai';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Atsijungta $duration';
-  }
-
-  @override
   String get deviceControls => 'Valdikliai';
 
   @override
@@ -15601,4 +15593,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Santrauka, kai šis pokalbis baigsis';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Įkėlimai laukia serveryje';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Jūsų garso įrašai saugūs jūsų įrenginyje arba telefone';
 }

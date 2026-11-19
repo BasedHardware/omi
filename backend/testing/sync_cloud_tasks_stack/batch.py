@@ -505,7 +505,10 @@ def _drive_to_status(stack: BatchStack, upload: Upload, wanted: str, *, timeout:
         time.sleep(STATUS_POLL_SECONDS)
         return False
 
-    _wait_until(done, label=f'{upload.job_id} status {wanted} (observed {observed})', timeout=timeout)
+    try:
+        _wait_until(done, label=f'{upload.job_id} status {wanted}', timeout=timeout)
+    except StackFailure as error:
+        raise StackFailure(f'{error} (observed {observed})') from error
     _record_job_event({'event': 'batch_status_path', 'job_id': upload.job_id, 'statuses': observed})
     return result
 

@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "بخش زنده · {duration}",
     "deviceCatchingUp": "در حال همگام شدن",
     "deviceCatchingUpProgress": "{done} از {total} دقیقه",
-    "deviceRecently": "اخیراً",
-    "deviceDisconnectedFor": "قطع اتصال به مدت {duration}",
     "deviceControls": "کنترل‌ها",
     "homeBackgroundLine": "همچنین: {items}",
     "deviceOnboardingPressButtonTitle": "دکمه Omi را فشار دهید",
@@ -12248,5 +12246,7 @@
     "finishNothingToProcess": "هنوز چیزی برای پردازش نیست.",
     "finishStillProcessing": "هنوز در حال پردازش است. در صفحه اصلی نمایش داده می‌شود.",
     "finishBackToHome": "بازگشت به صفحه اصلی",
-    "conversationSummaryWhenItEnds": "خلاصه پس از پایان این گفتگو"
+    "conversationSummaryWhenItEnds": "خلاصه پس از پایان این گفتگو",
+    "deviceUploadsWaitingOnServer": "بارگذاری‌های در انتظار در سرور",
+    "deviceUploadsWaitingOnServerSubtitle": "صدای شما روی دستگاه یا گوشی شما در امان است"
 }

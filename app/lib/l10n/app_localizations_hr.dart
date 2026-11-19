@@ -14527,14 +14527,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Nedavno';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Bez veze $duration';
-  }
-
-  @override
   String get deviceControls => 'Kontrole';
 
   @override
@@ -15614,4 +15606,10 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Sažetak kada ovaj razgovor završi';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Prijenosi koji čekaju na serveru';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Tvoj je audio siguran na tvom uređaju ili telefonu';
 }

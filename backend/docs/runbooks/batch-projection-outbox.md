@@ -27,12 +27,12 @@ result. The existing assignment, privacy, ledger, enrichment and accounting
 fences apply separately on every attempt. Legacy and outbox follow-up workers
 share the existing process-wide follow-up slot budget.
 
-The consumer defers predecessor or claim contention for 10 seconds and retries
-unfinished assignment after 60 seconds. For persisted or ready receipts, it
-honors a future `projection_followup_due_at` and uses the configured follow-up
-backoff for unsuccessful finish, with a 60-second retry when that setting is
-zero. The outbox settlement owns this retry clock and skips the legacy durable
-deferral. A pending predecessor also uses the existing owner replay path, which
+The consumer defers predecessor, claim and Firestore transaction contention for
+10 seconds and retries other unfinished assignments after 60 seconds. For
+persisted or ready receipts, it honors a future `projection_followup_due_at`.
+Other unsuccessful finishes use the configured follow-up backoff, with a
+60-second retry when that setting is zero. Outbox settlement owns this retry
+clock. A pending predecessor also uses the existing owner replay path, which
 can find unstamped commits from older writers. A ready multipart receipt can
 still owe work for siblings. Only canonical completion settles it as completed.
 A durable quarantine parks the obligation for the existing held/release owner.

@@ -248,6 +248,10 @@
       "owner": "planscost / gpu efficiency sprint",
       "review_by": "2026-12-02"
     },
+    "BATCH_PIPELINE_PACKING_SAMPLE_RATE": {
+      "owner": "batch owner-state / lead2",
+      "review_by": "2026-12-18"
+    },
     "BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS": {
       "owner": "cl2-gpueff",
       "review_by": "2026-12-05"

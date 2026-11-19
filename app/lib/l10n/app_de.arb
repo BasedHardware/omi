@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Live-Episode · {duration}",
     "deviceCatchingUp": "Holt auf",
     "deviceCatchingUpProgress": "{done} von {total} Min.",
-    "deviceRecently": "Kürzlich",
-    "deviceDisconnectedFor": "{duration} getrennt",
     "deviceControls": "Steuerung",
     "homeBackgroundLine": "Außerdem: {items}",
     "deviceOnboardingPressButtonTitle": "Drücke die Taste an deinem Omi",
@@ -4691,5 +4689,7 @@
     "finishNothingToProcess": "Noch nichts zu verarbeiten.",
     "finishStillProcessing": "Wird noch verarbeitet. Es erscheint auf der Startseite.",
     "finishBackToHome": "Zur Startseite",
-    "conversationSummaryWhenItEnds": "Zusammenfassung, wenn dieses Gespräch endet"
+    "conversationSummaryWhenItEnds": "Zusammenfassung, wenn dieses Gespräch endet",
+    "deviceUploadsWaitingOnServer": "Uploads, die auf dem Server warten",
+    "deviceUploadsWaitingOnServerSubtitle": "Ihr Audio ist auf Ihrem Gerät oder Telefon sicher"
 }
