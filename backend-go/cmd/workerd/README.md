@@ -17,7 +17,7 @@ Lane B needs to provide a bounded drain and fenced handback API before enabling 
 
 | Setting | Default | Unit or range |
 | --- | --- | --- |
-| `DATABASE_URL` | required | PostgreSQL URL with explicit host, user and database |
+| `DATABASE_URL` | required | PostgreSQL URL with explicit host, user and database; TLS required except for loopback hosts |
 | `FIRESTORE_PROJECT` | required | Google Cloud project ID |
 | `ENCRYPTION_SECRET` | required | At least 32 bytes, per `crypt.Check` |
 | `HEALTH_PORT` | 8080 | 1–65535 |
@@ -39,7 +39,10 @@ the worker Deployment.
 | Rule | Test |
 | --- | --- |
 | Invalid inputs are rejected without echoing sensitive values | `TestConfigRefusesInvalidSettingsWithoutEchoingInputs` |
+| Remote database URLs cannot disable or downgrade TLS, while local loopback runs may disable it | `TestConfigRefusesInvalidSettingsWithoutEchoingInputs`, `TestConfigAllowsTLSDisabledOnlyForLoopback` |
 | Configuration sets typed worker policy, and migration needs only the database credentials | `TestConfigReadsTypedPolicyAndSecrets`, `TestMigrationConfigUsesOnlyPostgresCredentials` |
 | The health listener has no job or metrics route, and readiness follows the real schema and shutdown signal | `TestHealthRoutesAndReadinessFollowQueueSchemaAndShutdown` |
+| Listener failures, context cancellation and a missed worker shutdown deadline are reported | `TestServeReturnsListenerFailure`, `TestServeReturnsCleanlyAfterContextCancellation`, `TestStopServersReportsWorkerShutdownDeadline` |
+| Queue and PostgreSQL failures use closed log fields without remote error text | `TestReportQueueErrorUsesClosedClassification` |
 | Queue observer metrics constrain all labels to declared values and `unknown` | `TestQueueObserverUsesOnlyDeclaredLabels` |
 | The metrics listener counts real Postgres jobs that lack a local handler | `TestMetricsScrapeCountsJobsWithNoHandler` |

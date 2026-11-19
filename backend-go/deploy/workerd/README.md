@@ -16,12 +16,19 @@ selected dev GKE context.
    `dev-omi-workerd-runtime` with its own `DATABASE_URL` and dev-only `ENCRYPTION_SECRET`.
    Use the dev secret provisioning process. The chart pins `FIRESTORE_PROJECT` to
    `based-hardware-dev` and the initial worker requires no Google API credentials.
-3. Use the authorized dev registry identity to build and publish
-   `gcr.io/based-hardware-dev/workerd:<short-sha>` with
-   `make -C backend-go image IMAGE=gcr.io/based-hardware-dev/workerd:<short-sha>` and
-   `docker push`. Resolve the pushed registry digest into `WORKERD_DIGEST`. Set
-   `DEV_GKE_CONTEXT` to the verified dev Kubernetes context and confirm Managed Prometheus is
-   installed.
+3. The normal image path is the `Build and publish workerd development image` job in
+   `.github/workflows/gcp_backend_auto_dev.yml`. When a successful Release Eligibility run for
+   a main SHA includes `backend-go/` changes, source admission resolves the newest eligible
+   main SHA and the job builds from that exact admitted SHA. It pushes
+   `gcr.io/based-hardware-dev/workerd:<short-sha>` with the development Workload Identity, and
+   prints the immutable digest in the job summary. The job does not deploy or change dev
+   services. Use that digest as `WORKERD_DIGEST`.
+
+   Until the workflow job is available, the following local build and push is an interim path
+   only: use the authorized dev registry identity to run
+   `make -C backend-go image IMAGE=gcr.io/based-hardware-dev/workerd:<short-sha>`, then
+   `docker push` and resolve the digest. Set `DEV_GKE_CONTEXT` to the verified dev Kubernetes
+   context and confirm Managed Prometheus is installed.
 4. Create the one-shot migration Job, wait for completion, then install the Deployment
    with the same image digest.
 

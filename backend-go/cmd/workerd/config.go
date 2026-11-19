@@ -3,9 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -74,8 +76,41 @@ func validDatabaseURL(raw string) bool {
 	if u.Hostname() == "" || u.User == nil || u.User.Username() == "" || len(u.Path) < 2 {
 		return false
 	}
-	_, err = pgxpool.ParseConfig(raw)
-	return err == nil
+	parsed, err := pgxpool.ParseConfig(raw)
+	if err != nil {
+		return false
+	}
+	if configUsesOnlyLoopback(parsed) {
+		return true
+	}
+	if parsed.ConnConfig.TLSConfig == nil {
+		return false
+	}
+	for _, fallback := range parsed.ConnConfig.Fallbacks {
+		if fallback.TLSConfig == nil {
+			return false
+		}
+	}
+	return true
+}
+
+func configUsesOnlyLoopback(parsed *pgxpool.Config) bool {
+	if !isLoopbackHost(parsed.ConnConfig.Host) {
+		return false
+	}
+	for _, fallback := range parsed.ConnConfig.Fallbacks {
+		if !isLoopbackHost(fallback.Host) {
+			return false
+		}
+	}
+	return true
+}
+
+func isLoopbackHost(host string) bool {
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return strings.EqualFold(strings.TrimSuffix(host, "."), "localhost")
 }
 
 func (c *config) readPolicy(lookup lookupEnv) error {

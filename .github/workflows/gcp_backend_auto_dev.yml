@@ -53,7 +53,7 @@ env:
 
 jobs:
   scope:
-    name: Decide backend deployment scope
+    name: Decide backend build and deployment scope
     # This unprivileged decision runs before source admission, Firestore
     # readiness, image work, or any cloud mutation. workflow_run does not
     # support a safe workflow-level paths filter, so inspect its immutable SHA.
@@ -62,6 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       applies: ${{ steps.scope.outputs.applies }}
+      workerd: ${{ steps.scope.outputs.workerd }}
     steps:
       - name: Checkout triggering main commit for scope decision
         uses: actions/checkout@v7
@@ -71,7 +72,7 @@ jobs:
           # main/supersession proof below is bounded to read-only GitHub API calls.
           fetch-depth: 2
 
-      - name: Decide whether the triggering commit can affect the backend deployment
+      - name: Decide backend and workerd build scope
         id: scope
         env:
           RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -93,16 +94,25 @@ jobs:
             # An unavailable parent is uncertain scope: retain the existing
             # exact-SHA admission and deployment path rather than skip.
             echo "applies=true" >> "$GITHUB_OUTPUT"
+            echo "workerd=true" >> "$GITHUB_OUTPUT"
             {
-              echo "### Backend development deploy scope"
-              echo "In scope: could not resolve the triggering commit parent."
+              echo "### Backend development build scope"
+              echo "In scope: could not resolve the triggering commit parent; retain the admitted backend and workerd paths."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
           changed_files="$(git diff --name-only "$parent_sha" "$RELEASE_SHA")"
           printf 'Changed files for %s:\n%s\n' "$RELEASE_SHA" "$changed_files"
-          if grep -Eq '^(backend/|\.github/workflows/(gcp_backend_auto_dev|gcp_llm_gateway|release-eligibility)\.yml$|\.github/actions/(release-eligibility|sync-backfill-lifecycle|deploy-backend-stack|firestore-readiness)/|\.github/scripts/(verify_auto_backend_release_admission|desktop_release_manifest)\.py$)' <<<"$changed_files"; then
+          if grep -Eq '^backend-go/' <<<"$changed_files"; then
+            echo "workerd=true" >> "$GITHUB_OUTPUT"
+            echo "Workerd image publishing is in scope for this admitted source SHA."
+          else
+            echo "workerd=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Workerd source changes publish only the dev image. Edits to this
+          # workflow itself also must not roll out the unrelated backend stack.
+          if grep -Eq '^(backend/|\.github/workflows/(gcp_llm_gateway|release-eligibility)\.yml$|\.github/actions/(release-eligibility|sync-backfill-lifecycle|deploy-backend-stack|firestore-readiness)/|\.github/scripts/(verify_auto_backend_release_admission|desktop_release_manifest)\.py$)' <<<"$changed_files"; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
             {
               echo "### Backend development deploy scope"
@@ -123,7 +133,7 @@ jobs:
     # uses that admitted SHA rather than a mutable default branch ref.
     needs: scope
     if: >-
-      needs.scope.outputs.applies == 'true' &&
+      (needs.scope.outputs.applies == 'true' || needs.scope.outputs.workerd == 'true') &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.run_attempt == 1 &&
@@ -244,7 +254,8 @@ jobs:
           verify_credential_project: 'true'
 
   deploy:
-    needs: firestore_readiness
+    needs: [scope, firestore_readiness]
+    if: needs.scope.outputs.applies == 'true'
     environment: development
     permissions:
       contents: 'read'
@@ -279,3 +290,62 @@ jobs:
           region: ${{ env.REGION }}
           service: ${{ env.SERVICE }}
           candidate_tag: ${{ env.CANDIDATE_TAG }}
+
+  publish_workerd:
+    name: Build and publish workerd development image
+    needs: [scope, firestore_readiness]
+    if: needs.scope.outputs.workerd == 'true'
+    environment: development
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - name: Checkout admitted workerd source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          persist-credentials: false
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: based-hardware-dev
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker --quiet
+
+      - name: Build and publish admitted workerd image
+        id: publish
+        env:
+          ADMITTED_SHA: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$ADMITTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid admitted source SHA for workerd image." >&2
+            exit 1
+          fi
+          short_sha="${ADMITTED_SHA:0:7}"
+          image="gcr.io/based-hardware-dev/workerd:${short_sha}"
+          docker build --platform linux/amd64 --tag "$image" --file backend-go/Dockerfile backend-go
+          docker push "$image"
+          digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)')"
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Development registry did not return a valid workerd image digest." >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Workerd development image published"
+            echo "- Source SHA: \`$ADMITTED_SHA\`"
+            echo "- Image: \`gcr.io/based-hardware-dev/workerd@$digest\`"
+            echo "- Deployment: none; dev services were not changed."
+          } >> "$GITHUB_STEP_SUMMARY"

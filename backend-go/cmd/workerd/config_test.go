@@ -8,7 +8,7 @@ import (
 
 func fixtureEnv() map[string]string {
 	return map[string]string{
-		"DATABASE_URL":      "postgres://workerd:synthetic@localhost/queue?sslmode=disable",
+		"DATABASE_URL":      "postgres://workerd:synthetic@localhost/queue?sslmode=require",
 		"FIRESTORE_PROJECT": "demo-workerd",
 		"ENCRYPTION_SECRET": strings.Repeat("t", 32),
 	}
@@ -30,6 +30,9 @@ func TestConfigRefusesInvalidSettingsWithoutEchoingInputs(t *testing.T) {
 		{"database URL user", "DATABASE_URL", "postgres://localhost/queue"},
 		{"database URL name", "DATABASE_URL", "postgres://synthetic@localhost"},
 		{"database URL invalid options", "DATABASE_URL", "postgres://synthetic@localhost/queue?sslmode=invalid"},
+		{"remote database URL disables TLS", "DATABASE_URL", "postgres://workerd:synthetic@db.example.test/queue?sslmode=disable"},
+		{"remote database URL allows TLS downgrade", "DATABASE_URL", "postgres://workerd:synthetic@db.example.test/queue?sslmode=prefer"},
+		{"remote database URL defaults to TLS downgrade", "DATABASE_URL", "postgres://workerd:synthetic@db.example.test/queue"},
 		{"empty Firestore project", "FIRESTORE_PROJECT", ""},
 		{"malformed Firestore project", "FIRESTORE_PROJECT", "projects/demo-workerd"},
 		{"empty encryption secret", "ENCRYPTION_SECRET", ""},
@@ -91,5 +94,23 @@ func TestMigrationConfigUsesOnlyPostgresCredentials(t *testing.T) {
 	_, err := readConfig(envLookup(env), true)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestConfigAllowsTLSDisabledOnlyForLoopback(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{
+		"postgres://workerd:synthetic@localhost/queue?sslmode=disable",
+		"postgres://workerd:synthetic@127.0.0.1/queue?sslmode=disable",
+		"postgres://workerd:synthetic@[::1]/queue?sslmode=disable",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+			env := fixtureEnv()
+			env["DATABASE_URL"] = raw
+			if _, err := readConfig(envLookup(env), false); err != nil {
+				t.Fatalf("loopback database URL should allow disabled TLS: %v", err)
+			}
+		})
 	}
 }

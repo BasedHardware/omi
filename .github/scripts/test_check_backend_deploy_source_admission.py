@@ -268,8 +268,8 @@ class WorkflowContractTests(unittest.TestCase):
             ),
             (
                 "scope output predicate",
-                "needs.scope.outputs.applies == 'true' &&",
-                "needs.scope.outputs.applies == 'false' &&",
+                "(needs.scope.outputs.applies == 'true' || needs.scope.outputs.workerd == 'true') &&",
+                "(needs.scope.outputs.applies == 'false' || needs.scope.outputs.workerd == 'true') &&",
                 "auto source-admission job must use exactly the fail-closed Release Eligibility predicate",
             ),
             (
@@ -438,10 +438,37 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.AUTO_WORKFLOW_PATH,
-            "    needs: firestore_readiness\n",
-            "    needs: firestore_readiness\n    if: always()\n",
+            "    if: needs.scope.outputs.applies == 'true'\n",
+            "    if: always()\n",
         )
-        self.assertIn("auto backend deploy must not override source-admission dependency", CHECKER.validate(root))
+        self.assertIn("auto backend deploy must run only for backend changes", CHECKER.validate(root))
+
+    def test_workerd_publish_is_admitted_dev_only_and_never_deploys(self) -> None:
+        cases = (
+            (
+                "mutable source checkout",
+                "ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}",
+                "ref: main",
+                "workerd publishing must check out the admitted source SHA",
+            ),
+            (
+                "wrong scope",
+                "if: needs.scope.outputs.workerd == 'true'",
+                "if: always()",
+                "workerd publishing must run only for workerd changes",
+            ),
+            (
+                "deployment added",
+                "docker push \"$image\"",
+                "docker push \"$image\"\n          gcloud run deploy workerd",
+                "workerd image publishing must not deploy development services (gcloud run)",
+            ),
+        )
+        for name, old, new, expected in cases:
+            with self.subTest(name=name):
+                root = self.fixture_root()
+                self.mutate(root, CHECKER.AUTO_WORKFLOW_PATH, old, new)
+                self.assertIn(expected, CHECKER.validate(root))
 
     def test_auto_workflow_rejects_steps_outside_the_source_admission_sequence(self) -> None:
         cases = (

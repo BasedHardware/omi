@@ -48,6 +48,7 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 	startup, endStartup := context.WithTimeout(ctx, startupTimeout)
 	store, err := queue.Open(startup, cfg.databaseURL, cfg.policy, kinds, metrics, clock.System{})
 	if err != nil {
+		reportQueueError(logger, "open", err)
 		endStartup()
 		return errors.New("could not open PostgreSQL queue")
 	}
@@ -55,6 +56,7 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 		defer store.Close()
 		defer endStartup()
 		if migrationErr := store.Migrate(startup); migrationErr != nil {
+			reportQueueError(logger, "migrate", migrationErr)
 			return errors.New("could not migrate PostgreSQL queue")
 		}
 		return nil
@@ -62,15 +64,16 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 	err = store.Ready(startup)
 	endStartup()
 	if err != nil {
+		reportQueueError(logger, "ready", err)
 		store.Close()
 		return errors.New("could not verify PostgreSQL queue schema; check connectivity and migration state")
 	}
 
-	workers, err := queue.Start(ctx, store, handlers, func(error) {
-		// Driver errors can include remote text and credentials.
-		logger.Error("queue worker operation failed")
+	workers, err := queue.Start(ctx, store, handlers, func(err error) {
+		reportQueueError(logger, "worker", err)
 	})
 	if err != nil {
+		reportQueueError(logger, "start_workers", err)
 		store.Close()
 		return errors.New("could not start queue workers")
 	}
