@@ -29,8 +29,8 @@ class PendingWorkStore extends ChangeNotifier {
         _retryAll = retryAll ?? api.retryAllAttentionItems,
         _markSeen = markSeen ?? api.markAttentionItemsSeen,
         _dismiss = dismiss ?? api.dismissAttentionItem,
-        _loadDismissed = loadDismissed ?? (() => SharedPreferencesUtil().dismissedAttentionConversations),
-        _saveDismissed = saveDismissed ?? ((ids) => SharedPreferencesUtil().dismissedAttentionConversations = ids),
+        _loadDismissed = loadDismissed ?? (() => SharedPreferencesUtil().getStringList(_dismissedKey)),
+        _saveDismissed = saveDismissed ?? ((ids) => SharedPreferencesUtil().saveStringList(_dismissedKey, ids)),
         _newKey = newKey ?? (() => const Uuid().v4());
 
   static PendingWorkStore instance = PendingWorkStore();
@@ -104,6 +104,7 @@ class PendingWorkStore extends ChangeNotifier {
   /// after a relaunch. Kept on the device, newest last, bounded.
   late final Set<String> _dismissedConversations = {..._loadDismissed()};
   static const _maxDismissed = 500;
+  static const _dismissedKey = 'dismissedAttentionConversations';
 
   void _saveDismissedConversations() {
     final ids = _dismissedConversations.toList();
