@@ -38,7 +38,7 @@ env:
 
 jobs:
   port-tasks:
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: inputs.nightly_main_sha == ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -52,6 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           persist-credentials: false
           fetch-depth: ${{ github.event_name == 'push' && '0' || '1' }}
       - name: Scope Go checks and find first-parent merges
