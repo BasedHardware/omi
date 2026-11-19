@@ -761,6 +761,21 @@ class DryRunTests(unittest.TestCase):
             worker.dry_run(self.baseline, NEW, self.receipt_path, recorder, rollback_receipt=receipt)
         self.assertEqual(self.cluster.writes, writes)
 
+    def test_forward_dry_run_refuses_when_the_inverse_gates_would_refuse(self):
+        t4 = self.cluster.siblings[-1]
+        t4["spec"]["replicas"] = 1
+        worker.pod_spec(t4)["containers"][0]["image"] = NEW  # active T4 already on the candidate
+        self.baseline = worker.snapshot(self.cluster)[1]
+        with self.assertRaisesRegex(ValueError, "inverse would refuse"):
+            self.dry_run(NEW)
+        self.cluster = Cluster()
+        self.cluster.target["metadata"]["annotations"] = {"omi.ai/required-companion-deployment": "record-seal-worker"}
+        worker.pod_spec(self.cluster.siblings[0])["containers"][0]["image"] = NEW
+        self.baseline = worker.snapshot(self.cluster)[1]
+        with self.assertRaisesRegex(ValueError, "inverse would refuse"):
+            self.dry_run(NEW)
+        self.assertEqual(self.cluster.writes, 0)
+
     def test_dry_run_applies_the_required_companion_gate(self):
         self.cluster.target["metadata"]["annotations"] = {"omi.ai/required-companion-deployment": "record-seal-worker"}
         self.baseline = worker.snapshot(self.cluster)[1]

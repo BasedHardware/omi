@@ -288,6 +288,19 @@ def private_json(path, data):
         handle.write("\n")
 
 
+def require_companion_serves(obj, actual, image):
+    # Keep existing rollout/report gates satisfiable without silently rolling siblings.
+    companion = obj["metadata"].get("annotations", {}).get("omi.ai/required-companion-deployment")
+    for binding in actual["consumers"]:
+        if binding["kind"] == "Deployment" and binding["name"] == companion:
+            require(binding["image"] == image, "required companion must already serve the candidate")
+    if companion:
+        require(
+            any(b["kind"] == "Deployment" and b["name"] == companion for b in actual["consumers"]),
+            "required companion missing from shared-image inventory",
+        )
+
+
 def preflight(baseline, image, run, rollback_receipt=None, allow_same=False):
     """Every gate the writer applies before its first API write; shared by deploy and dry-run."""
     if rollback_receipt is not None:
@@ -299,16 +312,7 @@ def preflight(baseline, image, run, rollback_receipt=None, allow_same=False):
     obj, actual = snapshot(run)
     require(actual == baseline, "target or shared-consumer drift from admitted baseline")
     patch_for(obj, image, allow_same=allow_same)
-    # Keep existing rollout/report gates satisfiable without silently rolling siblings.
-    companion = obj["metadata"].get("annotations", {}).get("omi.ai/required-companion-deployment")
-    for binding in actual["consumers"]:
-        if binding["kind"] == "Deployment" and binding["name"] == companion:
-            require(binding["image"] == image, "required companion must already serve the candidate")
-    if companion:
-        require(
-            any(b["kind"] == "Deployment" and b["name"] == companion for b in actual["consumers"]),
-            "required companion missing from shared-image inventory",
-        )
+    require_companion_serves(obj, actual, image)
     require_t4_serves(run("get", RESOURCES, "-o", "json")["items"], image)
     expected = copy.deepcopy(obj)
     _, index = target_state(obj)
@@ -408,6 +412,13 @@ def dry_run(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
             restored = target_state(post_roll)[0]
             require(restored == receipt["before"], "inverse of the forward patch does not restore the live identity")
             require(reverse[2]["value"] == image and reverse[3]["value"] == live_image, "inverse patch shape")
+            # The rollback writer's sibling gates run against the prior image; siblings never move, so
+            # a gate that the forward passes only on the candidate (active T4, companion) blocks the inverse.
+            try:
+                require_companion_serves(obj, actual, live_image)
+                require_t4_serves(run("get", RESOURCES, "-o", "json")["items"], live_image)
+            except ValueError as exc:
+                raise ValueError(f"inverse would refuse after the forward roll: {exc}") from None
             result["forward"] = {"admitted": True, "after": identity, "patch": patch, "would_write_receipt": receipt,
                                  "inverse_restores_before": True}
         identity, patch = server_preview(run, fresh, live_image, allow_same=True)
