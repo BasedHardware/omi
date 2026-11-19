@@ -12245,6 +12245,6 @@
     "finishNothingToProcess": "Wala pang ipoproseso.",
     "finishStillProcessing": "Pinoproseso pa. Lalabas ito sa Home.",
     "finishBackToHome": "Bumalik sa Home",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Mga upload na naghihintay sa server",
+    "deviceUploadsWaitingOnServerSubtitle": "Ligtas ang iyong audio sa iyong device o phone"
 }

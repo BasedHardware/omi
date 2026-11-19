@@ -15546,8 +15546,8 @@ class AppLocalizationsHi extends AppLocalizations {
   String get finishBackToHome => 'होम पर वापस जाएं';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'सर्वर पर प्रतीक्षारत अपलोड';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'आपका ऑडियो आपके डिवाइस या फ़ोन पर सुरक्षित है';
 }

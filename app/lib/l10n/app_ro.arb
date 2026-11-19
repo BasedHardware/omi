@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "Încă nu este nimic de procesat.",
     "finishStillProcessing": "Încă se procesează. Va apărea pe pagina principală.",
     "finishBackToHome": "Înapoi la pagina principală",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Încărcări în așteptare pe server",
+    "deviceUploadsWaitingOnServerSubtitle": "Audioul tău este în siguranță pe dispozitiv sau pe telefon"
 }

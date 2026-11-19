@@ -4723,6 +4723,6 @@
     "finishNothingToProcess": "Belum ada yang perlu diproses.",
     "finishStillProcessing": "Masih diproses. Ini akan muncul di Beranda.",
     "finishBackToHome": "Kembali ke Beranda",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Unggahan menunggu di server",
+    "deviceUploadsWaitingOnServerSubtitle": "Audio Anda aman di perangkat atau ponsel Anda"
 }

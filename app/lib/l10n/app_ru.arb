@@ -4723,6 +4723,6 @@
     "finishNothingToProcess": "Пока нечего обрабатывать.",
     "finishStillProcessing": "Ещё обрабатывается. Появится на главной.",
     "finishBackToHome": "На главную",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Загрузки, ожидающие на сервере",
+    "deviceUploadsWaitingOnServerSubtitle": "Ваше аудио в безопасности на устройстве или телефоне"
 }

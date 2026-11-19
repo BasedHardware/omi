@@ -15563,8 +15563,8 @@ class AppLocalizationsCs extends AppLocalizations {
   String get finishBackToHome => 'Zpět domů';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Nahrávky čekající na serveru';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Váš zvuk je v bezpečí na vašem zařízení nebo telefonu';
 }

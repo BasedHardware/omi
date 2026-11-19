@@ -15640,8 +15640,8 @@ class AppLocalizationsCa extends AppLocalizations {
   String get finishBackToHome => 'Torna a l\'inici';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Pujades pendents al servidor';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'El vostre àudio està segur al vostre dispositiu o telèfon';
 }

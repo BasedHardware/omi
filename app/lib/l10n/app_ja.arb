@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "まだ処理するものがありません。",
     "finishStillProcessing": "まだ処理中です。ホームに表示されます。",
     "finishBackToHome": "ホームに戻る",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "サーバーで待機中のアップロード",
+    "deviceUploadsWaitingOnServerSubtitle": "音声はデバイスまたはスマートフォンに安全に保存されています"
 }

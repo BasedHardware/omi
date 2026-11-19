@@ -12245,6 +12245,6 @@
     "finishNothingToProcess": "Сè уште нема ништо за обработка.",
     "finishStillProcessing": "Сè уште се обработува. Ќе се појави на почетната.",
     "finishBackToHome": "Назад кон почетна",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Подигнувања што чекаат на серверот",
+    "deviceUploadsWaitingOnServerSubtitle": "Вашето аудио е безбедно на вашиот уред или телефон"
 }

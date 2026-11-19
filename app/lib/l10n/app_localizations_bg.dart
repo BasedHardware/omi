@@ -15614,8 +15614,8 @@ class AppLocalizationsBg extends AppLocalizations {
   String get finishBackToHome => 'Към началото';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Качвания, чакащи на сървъра';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Аудиото ви е в безопасност на устройството или телефона';
 }

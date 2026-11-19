@@ -4784,6 +4784,6 @@
     "finishNothingToProcess": "Még nincs mit feldolgozni.",
     "finishStillProcessing": "Még feldolgozás alatt. Megjelenik a Kezdőlapon.",
     "finishBackToHome": "Vissza a Kezdőlapra",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Feltöltések várakoznak a szerveren",
+    "deviceUploadsWaitingOnServerSubtitle": "A hanganyagod biztonságban van az eszközödön vagy telefonodon"
 }

@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "Todavía no hay nada que procesar.",
     "finishStillProcessing": "Todavía se está procesando. Aparecerá en Inicio.",
     "finishBackToHome": "Volver a Inicio",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Subidas pendientes en el servidor",
+    "deviceUploadsWaitingOnServerSubtitle": "Tu audio está seguro en tu dispositivo o teléfono"
 }

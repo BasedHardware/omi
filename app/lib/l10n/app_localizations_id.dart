@@ -15578,8 +15578,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get finishBackToHome => 'Kembali ke Beranda';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Unggahan menunggu di server';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Audio Anda aman di perangkat atau ponsel Anda';
 }

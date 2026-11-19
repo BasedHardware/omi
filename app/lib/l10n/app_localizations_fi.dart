@@ -15568,8 +15568,8 @@ class AppLocalizationsFi extends AppLocalizations {
   String get finishBackToHome => 'Takaisin kotiin';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Palvelimelle lähetetyt tiedostot odottavat';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Äänityksesi ovat turvassa laitteella tai puhelimella';
 }

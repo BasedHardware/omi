@@ -15686,8 +15686,8 @@ class AppLocalizationsTl extends AppLocalizations {
   String get finishBackToHome => 'Bumalik sa Home';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Mga upload na naghihintay sa server';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ligtas ang iyong audio sa iyong device o phone';
 }

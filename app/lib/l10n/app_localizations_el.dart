@@ -15665,8 +15665,8 @@ class AppLocalizationsEl extends AppLocalizations {
   String get finishBackToHome => 'Πίσω στην Αρχική';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Μεταφορτώσεις που περιμένουν στον διακομιστή';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ο ήχος σας είναι ασφαλής στη συσκευή ή στο τηλέφωνό σας';
 }

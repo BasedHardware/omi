@@ -15622,8 +15622,8 @@ class AppLocalizationsHu extends AppLocalizations {
   String get finishBackToHome => 'Vissza a Kezdőlapra';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Feltöltések várakoznak a szerveren';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'A hanganyagod biztonságban van az eszközödön vagy telefonodon';
 }

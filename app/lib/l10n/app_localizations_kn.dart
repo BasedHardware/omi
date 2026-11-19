@@ -15614,8 +15614,8 @@ class AppLocalizationsKn extends AppLocalizations {
   String get finishBackToHome => 'ಹೋಮ್‌ಗೆ ಹಿಂತಿರುಗಿ';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'ಸರ್ವರ್‌ನಲ್ಲಿ ಕಾಯುತ್ತಿರುವ ಅಪ್‌ಲೋಡ್‌ಗಳು';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'ನಿಮ್ಮ ಆಡಿಯೋ ನಿಮ್ಮ ಸಾಧನ ಅಥವಾ ಫೋನ್‌ನಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿದೆ';
 }

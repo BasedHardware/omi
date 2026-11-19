@@ -15600,8 +15600,8 @@ class AppLocalizationsMs extends AppLocalizations {
   String get finishBackToHome => 'Kembali ke Laman Utama';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Fail yang dimuat naik sedang menunggu pada pelayan';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Audio anda selamat pada peranti atau telefon anda';
 }

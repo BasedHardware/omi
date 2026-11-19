@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "Δεν υπάρχει ακόμα κάτι για επεξεργασία.",
     "finishStillProcessing": "Ακόμα σε επεξεργασία. Θα εμφανιστεί στην Αρχική.",
     "finishBackToHome": "Πίσω στην Αρχική",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Μεταφορτώσεις που περιμένουν στον διακομιστή",
+    "deviceUploadsWaitingOnServerSubtitle": "Ο ήχος σας είναι ασφαλής στη συσκευή ή στο τηλέφωνό σας"
 }

@@ -15608,8 +15608,8 @@ class AppLocalizationsPl extends AppLocalizations {
   String get finishBackToHome => 'Wróć do ekranu głównego';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Wysłane pliki oczekujące na serwerze';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Twoje nagrania są bezpieczne na urządzeniu lub telefonie';
 }

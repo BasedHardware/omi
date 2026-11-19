@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "Ei vielä mitään käsiteltävää.",
     "finishStillProcessing": "Käsitellään yhä. Se näkyy kotinäkymässä.",
     "finishBackToHome": "Takaisin kotiin",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Palvelimelle lähetetyt tiedostot odottavat",
+    "deviceUploadsWaitingOnServerSubtitle": "Äänityksesi ovat turvassa laitteella tai puhelimella"
 }

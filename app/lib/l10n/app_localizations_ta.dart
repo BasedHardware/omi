@@ -15667,8 +15667,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get finishBackToHome => 'முகப்புக்குத் திரும்பு';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'சேவையகத்தில் காத்திருக்கும் பதிவேற்றங்கள்';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle =>
+      'உங்கள் ஆடியோ உங்கள் சாதனத்தில் அல்லது தொலைபேசியில் பாதுகாப்பாக உள்ளது';
 }

@@ -15628,8 +15628,8 @@ class AppLocalizationsMk extends AppLocalizations {
   String get finishBackToHome => 'Назад кон почетна';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Подигнувања што чекаат на серверот';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Вашето аудио е безбедно на вашиот уред или телефон';
 }

@@ -15600,8 +15600,8 @@ class AppLocalizationsHr extends AppLocalizations {
   String get finishBackToHome => 'Natrag na početnu';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Prijenosi koji čekaju na serveru';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Tvoj je audio siguran na tvom uređaju ili telefonu';
 }

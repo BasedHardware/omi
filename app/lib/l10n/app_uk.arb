@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "Поки що нічого обробляти.",
     "finishStillProcessing": "Ще обробляється. З'явиться на головній.",
     "finishBackToHome": "На головну",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Завантаження, що очікують на сервері",
+    "deviceUploadsWaitingOnServerSubtitle": "Ваше аудіо у безпеці на вашому пристрої або телефоні"
 }

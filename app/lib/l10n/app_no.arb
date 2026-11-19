@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "Ingenting å behandle ennå.",
     "finishStillProcessing": "Behandles fortsatt. Den vises på Hjem.",
     "finishBackToHome": "Tilbake til Hjem",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Opplastinger som venter på serveren",
+    "deviceUploadsWaitingOnServerSubtitle": "Lyden din er trygg på enheten eller telefonen din"
 }

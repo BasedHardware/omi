@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "Pagaidām nav ko apstrādāt.",
     "finishStillProcessing": "Joprojām tiek apstrādāts. Tas parādīsies sākumlapā.",
     "finishBackToHome": "Atpakaļ uz sākumu",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Augšupielādes gaida serverī",
+    "deviceUploadsWaitingOnServerSubtitle": "Jūsu audio ir droši jūsu ierīcē vai tālrunī"
 }

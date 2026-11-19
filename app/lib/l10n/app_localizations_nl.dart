@@ -15603,8 +15603,8 @@ class AppLocalizationsNl extends AppLocalizations {
   String get finishBackToHome => 'Terug naar Home';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Uploads die op de server wachten';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Je audio is veilig op je apparaat of telefoon';
 }

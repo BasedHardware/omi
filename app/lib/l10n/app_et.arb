@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "Veel pole midagi töödelda.",
     "finishStillProcessing": "Veel töödeldakse. See ilmub avalehele.",
     "finishBackToHome": "Tagasi avalehele",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Üleslaadimised ootavad serveris",
+    "deviceUploadsWaitingOnServerSubtitle": "Teie audio on turvaliselt teie seadmes või telefonis"
 }

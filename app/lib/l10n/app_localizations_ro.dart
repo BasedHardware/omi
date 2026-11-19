@@ -15628,8 +15628,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get finishBackToHome => 'Înapoi la pagina principală';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Încărcări în așteptare pe server';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Audioul tău este în siguranță pe dispozitiv sau pe telefon';
 }

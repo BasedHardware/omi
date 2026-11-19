@@ -12245,6 +12245,6 @@
     "finishNothingToProcess": "هنوز چیزی برای پردازش نیست.",
     "finishStillProcessing": "هنوز در حال پردازش است. در صفحه اصلی نمایش داده می‌شود.",
     "finishBackToHome": "بازگشت به صفحه اصلی",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "بارگذاری‌های در انتظار در سرور",
+    "deviceUploadsWaitingOnServerSubtitle": "صدای شما روی دستگاه یا گوشی شما در امان است"
 }

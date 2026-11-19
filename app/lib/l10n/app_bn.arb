@@ -12245,6 +12245,6 @@
     "finishNothingToProcess": "এখনও প্রক্রিয়া করার কিছু নেই।",
     "finishStillProcessing": "এখনও প্রক্রিয়া চলছে। এটি হোমে দেখা যাবে।",
     "finishBackToHome": "হোমে ফিরে যান",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "সার্ভারে অপেক্ষায় থাকা আপলোড",
+    "deviceUploadsWaitingOnServerSubtitle": "আপনার অডিও আপনার ডিভাইস বা ফোনে নিরাপদ আছে"
 }

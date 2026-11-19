@@ -15556,8 +15556,8 @@ class AppLocalizationsEt extends AppLocalizations {
   String get finishBackToHome => 'Tagasi avalehele';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Üleslaadimised ootavad serveris';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Teie audio on turvaliselt teie seadmes või telefonis';
 }

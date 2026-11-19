@@ -15598,8 +15598,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get finishBackToHome => 'Atpakaļ uz sākumu';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Augšupielādes gaida serverī';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Jūsu audio ir droši jūsu ierīcē vai tālrunī';
 }

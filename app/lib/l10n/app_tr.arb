@@ -4723,6 +4723,6 @@
     "finishNothingToProcess": "Henüz işlenecek bir şey yok.",
     "finishStillProcessing": "Hâlâ işleniyor. Ana sayfada görünecek.",
     "finishBackToHome": "Ana Sayfaya Dön",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Sunucuda bekleyen yüklemeler",
+    "deviceUploadsWaitingOnServerSubtitle": "Sesiniz cihazınızda veya telefonunuzda güvende"
 }

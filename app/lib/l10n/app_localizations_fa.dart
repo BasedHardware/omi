@@ -15556,8 +15556,8 @@ class AppLocalizationsFa extends AppLocalizations {
   String get finishBackToHome => 'بازگشت به صفحه اصلی';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'بارگذاری‌های در انتظار در سرور';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'صدای شما روی دستگاه یا گوشی شما در امان است';
 }

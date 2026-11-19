@@ -15489,8 +15489,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get finishBackToHome => 'กลับไปหน้าหลัก';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'อัปโหลดที่กำลังรออยู่บนเซิร์ฟเวอร์';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'เสียงของคุณปลอดภัยบนอุปกรณ์หรือโทรศัพท์ของคุณ';
 }

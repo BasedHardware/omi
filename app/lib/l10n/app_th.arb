@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "ยังไม่มีอะไรให้ประมวลผล",
     "finishStillProcessing": "ยังประมวลผลอยู่ จะแสดงที่หน้าหลัก",
     "finishBackToHome": "กลับไปหน้าหลัก",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "อัปโหลดที่กำลังรออยู่บนเซิร์ฟเวอร์",
+    "deviceUploadsWaitingOnServerSubtitle": "เสียงของคุณปลอดภัยบนอุปกรณ์หรือโทรศัพท์ของคุณ"
 }

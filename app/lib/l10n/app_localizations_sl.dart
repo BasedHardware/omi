@@ -15592,8 +15592,8 @@ class AppLocalizationsSl extends AppLocalizations {
   String get finishBackToHome => 'Nazaj na začetno';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Nalaganja, ki čakajo na strežniku';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Vaš zvok je varen v vaši napravi ali telefonu';
 }

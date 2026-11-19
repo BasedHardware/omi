@@ -15564,8 +15564,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get finishBackToHome => 'Về Trang chủ';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Các bản tải lên đang chờ trên máy chủ';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle =>
+      'Âm thanh của bạn vẫn an toàn trên thiết bị hoặc điện thoại của bạn';
 }

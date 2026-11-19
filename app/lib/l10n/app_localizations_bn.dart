@@ -15558,8 +15558,8 @@ class AppLocalizationsBn extends AppLocalizations {
   String get finishBackToHome => 'হোমে ফিরে যান';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'সার্ভারে অপেক্ষায় থাকা আপলোড';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'আপনার অডিও আপনার ডিভাইস বা ফোনে নিরাপদ আছে';
 }

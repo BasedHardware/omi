@@ -15575,8 +15575,8 @@ class AppLocalizationsUr extends AppLocalizations {
   String get finishBackToHome => 'ہوم پر واپس جائیں';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'اپ لوڈز سرور پر انتظار میں ہیں';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'آپ کا آڈیو آپ کی ڈیوائس یا فون پر محفوظ ہے';
 }

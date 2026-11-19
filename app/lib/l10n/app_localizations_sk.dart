@@ -15559,8 +15559,8 @@ class AppLocalizationsSk extends AppLocalizations {
   String get finishBackToHome => 'Späť domov';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Nahrávky čakajúce na serveri';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Vaše zvukové nahrávky sú v bezpečí na zariadení alebo telefóne';
 }

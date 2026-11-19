@@ -15574,8 +15574,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get finishBackToHome => 'Ana Sayfaya Dön';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Sunucuda bekleyen yüklemeler';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Sesiniz cihazınızda veya telefonunuzda güvende';
 }

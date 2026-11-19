@@ -12245,6 +12245,6 @@
     "finishNothingToProcess": "Još nema ništa za obradu.",
     "finishStillProcessing": "Još se obrađuje. Pojavit će se na početnoj.",
     "finishBackToHome": "Nazad na početnu",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Otpremanja koja čekaju na serveru",
+    "deviceUploadsWaitingOnServerSubtitle": "Vaš audio je siguran na vašem uređaju ili telefonu"
 }

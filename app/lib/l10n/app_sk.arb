@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "Zatiaľ nie je čo spracovať.",
     "finishStillProcessing": "Stále sa spracúva. Zobrazí sa na domovskej stránke.",
     "finishBackToHome": "Späť domov",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Nahrávky čakajúce na serveri",
+    "deviceUploadsWaitingOnServerSubtitle": "Vaše zvukové nahrávky sú v bezpečí na zariadení alebo telefóne"
 }

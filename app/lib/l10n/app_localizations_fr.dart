@@ -15691,8 +15691,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get finishBackToHome => 'Retour à l\'accueil';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Envois en attente sur le serveur';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle =>
+      'Votre audio est en sécurité sur votre appareil ou votre téléphone';
 }

@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "Chưa có gì để xử lý.",
     "finishStillProcessing": "Vẫn đang xử lý. Nó sẽ xuất hiện ở Trang chủ.",
     "finishBackToHome": "Về Trang chủ",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Các bản tải lên đang chờ trên máy chủ",
+    "deviceUploadsWaitingOnServerSubtitle": "Âm thanh của bạn vẫn an toàn trên thiết bị hoặc điện thoại của bạn"
 }

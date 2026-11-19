@@ -12245,6 +12245,6 @@
     "finishNothingToProcess": "ابھی پروسیس کرنے کے لیے کچھ نہیں ہے۔",
     "finishStillProcessing": "ابھی پروسیس ہو رہا ہے۔ یہ ہوم پر نظر آئے گا۔",
     "finishBackToHome": "ہوم پر واپس جائیں",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "اپ لوڈز سرور پر انتظار میں ہیں",
+    "deviceUploadsWaitingOnServerSubtitle": "آپ کا آڈیو آپ کی ڈیوائس یا فون پر محفوظ ہے"
 }

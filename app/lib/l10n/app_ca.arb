@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "Encara no hi ha res per processar.",
     "finishStillProcessing": "Encara s'està processant. Apareixerà a l'inici.",
     "finishBackToHome": "Torna a l'inici",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Pujades pendents al servidor",
+    "deviceUploadsWaitingOnServerSubtitle": "El vostre àudio està segur al vostre dispositiu o telèfon"
 }

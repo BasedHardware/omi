@@ -4730,6 +4730,6 @@
     "finishNothingToProcess": "Intet at behandle endnu.",
     "finishStillProcessing": "Behandles stadig. Den vises på Hjem.",
     "finishBackToHome": "Tilbage til Hjem",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Uploads, der venter på serveren",
+    "deviceUploadsWaitingOnServerSubtitle": "Din lyd er i sikkerhed på din enhed eller telefon"
 }

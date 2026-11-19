@@ -15312,8 +15312,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get finishBackToHome => '返回首页';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => '上传内容正在等待服务器处理';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => '您的音频安全保存在您的设备或手机上';
 }

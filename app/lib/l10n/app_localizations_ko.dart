@@ -15342,8 +15342,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get finishBackToHome => '홈으로 돌아가기';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => '서버에서 대기 중인 업로드';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => '오디오는 기기 또는 휴대전화에 안전하게 저장되어 있습니다';
 }

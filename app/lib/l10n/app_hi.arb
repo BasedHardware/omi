@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "अभी प्रोसेस करने के लिए कुछ नहीं है।",
     "finishStillProcessing": "अभी प्रोसेस हो रहा है। यह होम पर दिखेगा।",
     "finishBackToHome": "होम पर वापस जाएं",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "सर्वर पर प्रतीक्षारत अपलोड",
+    "deviceUploadsWaitingOnServerSubtitle": "आपका ऑडियो आपके डिवाइस या फ़ोन पर सुरक्षित है"
 }

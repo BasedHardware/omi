@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "Inget att bearbeta än.",
     "finishStillProcessing": "Bearbetas fortfarande. Den visas på Hem.",
     "finishBackToHome": "Tillbaka till Hem",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Uppladdningar som väntar på servern",
+    "deviceUploadsWaitingOnServerSubtitle": "Ditt ljud är säkert på din enhet eller telefon"
 }

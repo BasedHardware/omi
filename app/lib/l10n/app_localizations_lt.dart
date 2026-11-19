@@ -15587,8 +15587,8 @@ class AppLocalizationsLt extends AppLocalizations {
   String get finishBackToHome => 'Grįžti į pagrindinį';
 
   @override
-  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+  String get deviceUploadsWaitingOnServer => 'Įkėlimai laukia serveryje';
 
   @override
-  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+  String get deviceUploadsWaitingOnServerSubtitle => 'Jūsų garso įrašai saugūs jūsų įrenginyje arba telefone';
 }

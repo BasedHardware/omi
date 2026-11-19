@@ -12245,6 +12245,6 @@
     "finishNothingToProcess": "עדיין אין מה לעבד.",
     "finishStillProcessing": "עדיין בעיבוד. זה יופיע במסך הבית.",
     "finishBackToHome": "חזרה למסך הבית",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "העלאות שממתינות בשרת",
+    "deviceUploadsWaitingOnServerSubtitle": "האודיו שלך נשמר בבטחה במכשיר או בטלפון שלך"
 }

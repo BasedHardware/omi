@@ -4723,6 +4723,6 @@
     "finishNothingToProcess": "Rien à traiter pour l'instant.",
     "finishStillProcessing": "Traitement en cours. Elle apparaîtra sur l'accueil.",
     "finishBackToHome": "Retour à l'accueil",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Envois en attente sur le serveur",
+    "deviceUploadsWaitingOnServerSubtitle": "Votre audio est en sécurité sur votre appareil ou votre téléphone"
 }

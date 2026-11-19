@@ -4688,6 +4688,6 @@
     "finishNothingToProcess": "Nog niets om te verwerken.",
     "finishStillProcessing": "Wordt nog verwerkt. Het verschijnt op Home.",
     "finishBackToHome": "Terug naar Home",
-    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
-    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
+    "deviceUploadsWaitingOnServer": "Uploads die op de server wachten",
+    "deviceUploadsWaitingOnServerSubtitle": "Je audio is veilig op je apparaat of telefoon"
 }
