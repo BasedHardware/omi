@@ -76,13 +76,20 @@ def task_base():
     return base
 
 
-def enqueue(uid, *, at=None, manual_end_id=None):
+def enqueue(uid, *, at=None, manual_end_id=None, native_manual_ready=None):
     # A fractional silence deadline must have elapsed when reconcile runs.
     # Truncating can wake it early and defer a finished group for another minute.
     scheduled = math.ceil(at.timestamp()) if at is not None else int(datetime.now(timezone.utc).timestamp())
     minute = scheduled // 60
-    task_id = 'conversations-v3-' + hashlib.sha256(uid.encode()).hexdigest()[:32] + '-' + str(minute)
-    if manual_end_id:
+    prefix = 'conversations-v3-' + hashlib.sha256(uid.encode()).hexdigest()[:32]
+    task_id = f'{prefix}-{minute}'
+    payload = {'uid': uid}
+    if native_manual_ready is not None:
+        cid, upload_revision = native_manual_ready
+        recording_key = hashlib.sha256(cid.encode()).hexdigest()[:32]
+        task_id = f'{prefix}-native-ready-{recording_key}-{upload_revision}'
+        payload['trigger'] = 'native_manual_ready'
+    elif manual_end_id:
         # A live task may already have completed in this minute. Its retained
         # Cloud Tasks name must not swallow the user's later explicit close.
         task_id += '-end-' + hashlib.sha256(manual_end_id.encode()).hexdigest()[:32]
@@ -91,9 +98,21 @@ def enqueue(uid, *, at=None, manual_end_id=None):
         os.getenv('CONVERSATIONS_V3_TASKS_QUEUE', 'conversations-v3'),
         base + '/v1/conversations-v3/reconcile',
         task_id,
-        {'uid': uid},
+        payload,
         schedule_at=scheduled,
     )
+
+
+def wake_native_manual_ready(uid: str, cid: str, upload_revision: int) -> None:
+    """Dispatch only after the existing v3 outbox marker commits."""
+    try:
+        enqueue(uid, native_manual_ready=(cid, upload_revision))
+    except Exception as error:
+        metrics.RECONCILES.labels('dispatch_error').inc()
+        logger.warning('v3 native manual dispatch deferred exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='other', from_mode='dispatch', to_mode='sweeper', reason='enqueue_failed', outcome='degraded'
+        )
 
 
 def changed(uid, cid, *, manual_end=False):

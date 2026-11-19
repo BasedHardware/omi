@@ -328,6 +328,7 @@ async def reconcile(
                     and (
                         row.get('manual_end')
                         and not prior.get('manual_end')
+                        and not (window.get('native_manual_end') and prior.get('v3_notes_written'))
                         or prior.get('kind') == 'background'
                         and row['kind'] == 'conversation'
                     )

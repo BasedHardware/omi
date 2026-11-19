@@ -41,6 +41,40 @@ def test_five_minute_silence_boundary():
     assert len(outline.stretches([row], NOW + timedelta(hours=1))) == 1
 
 
+@pytest.mark.parametrize('gap', [0, 1])
+def test_native_manual_cut_keeps_final_tail_and_separates_next_recording(gap):
+    end = NOW + timedelta(seconds=30)
+    previous = recording(
+        'previous',
+        segments=[
+            {'text': 'opening thought', 'start': 0, 'end': 10},
+            {'text': 'final decision', 'start': 21, 'end': 30},
+        ],
+        finished_at=end,
+        v3_native_manual_stop={'finished_at': end, 'revision': 1, 'job_id': 'job'},
+    )
+    successor = recording('next', at=end + timedelta(seconds=gap))
+    assert len(outline.stretches([previous, successor], end + timedelta(seconds=15))) == 1
+    previous.update(v3_manual_end=True, v3_native_manual_ready_revision=7)
+    old, new = outline.stretches([previous, successor], end + timedelta(seconds=15))
+    assert old['manual_end'] and old['finished']
+    assert [line['text'] for line in old['lines']] == ['opening thought', 'final decision']
+    assert not new['manual_end'] and not new['finished']
+    assert {line['conversation_id'] for line in new['lines']} == {'next'}
+
+
+def test_ambiguous_native_overlap_keeps_existing_natural_policy():
+    end = NOW + timedelta(seconds=10)
+    previous = recording('previous', finished_at=end, v3_manual_end=True, v3_native_manual_ready_revision=7)
+    overlapping = recording(
+        'overlapping', at=NOW + timedelta(seconds=8), segments=[{'text': 'other source', 'start': 0, 'end': 10}]
+    )
+    (group,) = outline.stretches([previous, overlapping], end + timedelta(seconds=15))
+    assert not group['manual_end'] and not group['finished']
+    (group,) = outline.stretches([previous, overlapping], end + timedelta(minutes=6))
+    assert not group['manual_end'] and group['finished']
+
+
 def test_recorded_clock_and_near_duplicate():
     a = recording('a', segments=[{'text': 'We should meet at the office tomorrow morning.', 'start': 1, 'end': 11}])
     b = recording('b', segments=[{'text': 'we should meet at the office tomorrow morning', 'start': 2, 'end': 12}])

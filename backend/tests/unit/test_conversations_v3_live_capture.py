@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from database import conversations_v3 as store, conversations_v3_leases as leases
-from utils.conversations.v3 import Conflict, service
+from utils.conversations.v3 import Conflict, created, service
 from tests.unit.test_conversations_v3_transactions import R, strict  # noqa: F401
 
 C = ('users', 'synthetic', 'conversations', 'c')
@@ -97,6 +97,8 @@ def test_an_unmoved_source_is_still_settled(strict):
         {'is_locked': True},
         {'claims': [{'conversation_id': 'elsewhere'}]},
         {'recording': False},
+        {'v3_native_manual_stop': {'revision': 1}},
+        {'v3_native_manual_ready_revision': 7, 'v3_manual_end': True},
     ],
 )
 def test_any_non_speech_source_change_keeps_the_strict_fence(strict, change):
@@ -195,3 +197,73 @@ async def test_manual_end_during_a_pass_lands_a_processing_row_within_one_follow
     assert len(derived) == 1 and derived[0]['status'] == 'processing' and derived[0]['v3_process_pending'] is True
     assert derived[0]['manual_end'] is True
     assert strict.rows[R]['v3_pending'] is False
+
+
+@pytest.mark.asyncio
+async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_replay(strict, monkeypatch):
+    end = datetime.now(timezone.utc) - timedelta(seconds=10)
+    start = end - timedelta(seconds=20)
+    successor_key = ('users', 'synthetic', 'conversations', 'successor')
+    old = live(start, status='completed', v3_manual_end=True, v3_native_manual_ready_revision=7)
+    old['transcript_segments'][-1].update(text='The final decision was to ship tomorrow.', end=20)
+    strict.rows[R] = old
+    strict.rows[successor_key] = live(end, words=1, id='successor')
+
+    def load(uid):
+        sources = {key[-1]: loaded(strict.rows[key], 1) for key in (R, successor_key)}
+        existing = {
+            key[-1]: {**deepcopy(row), '_v3_revision': 1}
+            for key, row in strict.rows.items()
+            if key[2] == 'conversations' and row.get('v3_derived')
+        }
+        return sources, existing, []
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    async def no_fanout(uid):
+        return None
+
+    def pending(uid):
+        return [
+            deepcopy(row)
+            for key, row in strict.rows.items()
+            if key[2] == 'conversations' and row.get('v3_process_pending')
+        ]
+
+    summary_writes = []
+
+    async def write_synthetic_summary(uid, row, token):
+        assert row['manual_end'] and row['v3_recording_ids'] == ['r']
+        assert row['transcript_segments'][-1]['text'] == 'The final decision was to ship tomorrow.'
+        summary = {'overview': row['transcript_segments'][-1]['text']}
+        strict.rows[('users', uid, 'conversations', row['id'])].update(structured=summary, status='completed')
+        service.writers.settle_processing(
+            uid, row['id'], token, row['sync_content_revision'], row['finished_at'], notes=True, firestore_client=strict
+        )
+        summary_writes.append(row['id'])
+
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(store, 'load', load)
+    monkeypatch.setattr(service, 'run_blocking', blocking)
+    monkeypatch.setattr(service, 'has_pending', lambda uid: False)
+    monkeypatch.setattr(service, 'pending_processing', pending)
+    monkeypatch.setattr(service, '_process_leased', write_synthetic_summary)
+    monkeypatch.setattr(service, 'enqueue', lambda *a, **kw: None)
+    monkeypatch.setattr(created, 'deliver', no_fanout)
+    monkeypatch.setattr(service.context, 'outline_sources', lambda *a: ({}, [], []))
+    monkeypatch.setattr(
+        service.models,
+        'outline',
+        lambda uid, messages: json.dumps(
+            {'conversations': [{'first_line': 1, 'kind': 'conversation', 'title': 'Plan', 'line': 'You planned.'}]}
+        ),
+    )
+    assert await service.reconcile('synthetic') == 'committed'
+    assert await service.reconcile('synthetic') == 'committed'
+    assert len(summary_writes) == 1
+    produced = strict.rows[('users', 'synthetic', 'conversations', summary_writes[0])]
+    assert produced['v3_notes_written'] and produced['summary_covers_through'] == end
+    windows = [row for row in strict.rows.values() if row.get('v3_derived')]
+    (successor,) = [row for row in windows if row['status'] == 'in_progress']
+    assert successor['v3_recording_ids'] == ['successor']

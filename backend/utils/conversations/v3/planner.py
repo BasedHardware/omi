@@ -53,6 +53,7 @@ def windows(groups, outlines):
                     **entry,
                     'lines': part,
                     'manual_end': group.get('manual_end', False),
+                    'native_manual_end': group.get('native_manual_end', False),
                     'finished': group['finished'] or end < len(group['lines']) or part_index < len(capped) - 1,
                 }
                 # A model can undo a topic split, never a recorded silence boundary.

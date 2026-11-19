@@ -8,6 +8,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 
+from utils.conversations.v3.policy import NATIVE_MANUAL_READY
+
 
 def utc(value):
     if isinstance(value, str):
@@ -106,10 +108,34 @@ def stretches(members, now):
             )
     lines.sort(key=lambda line: (line['start'], line['conversation_id']))
     groups = []
-    manual_cuts = [utc(r['finished_at']) for r in members if r.get('v3_manual_end') and r.get('finished_at')]
+    native_cuts = {
+        row['id']: utc(row['finished_at'])
+        for row in members
+        if row.get(NATIVE_MANUAL_READY) is not None and row.get('v3_manual_end') and row.get('finished_at')
+    }
+    recording_starts = {row['id']: utc(row.get('started_at')) for row in members} if native_cuts else {}
+    native_tails = {line['conversation_id']: line for line in lines if line['conversation_id'] in native_cuts}
+    manual_cuts = [
+        utc(row['finished_at'])
+        for row in members
+        if row.get('v3_manual_end') and row.get('finished_at') and row['id'] not in native_cuts
+    ]
     for line in lines:
+        prior_line = groups[-1]['lines'][-1] if groups else None
+        native_cut = False
+        if prior_line:
+            prior_source = prior_line['conversation_id']
+            next_start = recording_starts.get(line['conversation_id'])
+            native_cut = bool(
+                prior_line is native_tails.get(prior_source)
+                and line['conversation_id'] != prior_source
+                and next_start
+                and next_start >= native_cuts[prior_source]
+                and groups[-1]['end'] <= line['start']
+            )
         if (
             not groups
+            or native_cut
             or line['start'] - groups[-1]['end'] >= SILENCE
             or any(groups[-1]['end'] <= cut < line['start'] for cut in manual_cuts)
         ):
@@ -122,7 +148,17 @@ def stretches(members, now):
         next_start = (
             groups[index + 1]['lines'][0]['start'] if index + 1 < len(groups) else now + timedelta(microseconds=1)
         )
-        group['manual_end'] = any(group['lines'][0]['start'] <= cut < next_start for cut in manual_cuts)
+        tail = group['lines'][-1]
+        native_source = tail['conversation_id']
+        native_manual_end = (
+            tail is native_tails.get(native_source)
+            and native_cuts[native_source] <= now
+            and group['end'] <= max(tail['end'], native_cuts[native_source])
+        )
+        group['native_manual_end'] = native_manual_end
+        group['manual_end'] = native_manual_end or any(
+            group['lines'][0]['start'] <= cut < next_start for cut in manual_cuts
+        )
         continues = any(
             r.get('_v3_page_continues') and r['id'] == group['lines'][-1]['conversation_id'] for r in members
         )

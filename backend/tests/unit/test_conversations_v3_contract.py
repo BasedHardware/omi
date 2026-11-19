@@ -43,6 +43,58 @@ def test_manual_end_wake_survives_a_completed_live_task_in_same_minute(monkeypat
     assert all(kw['schedule_at'] == int(fixed.timestamp()) for _, kw in tasks.values())
 
 
+def test_native_ready_name_survives_live_tombstone_and_retains_same_revision(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
+    from google.api_core.exceptions import AlreadyExists
+    from utils import cloud_tasks
+
+    class FakeCloudTasks:
+        tasks = {}
+
+        @staticmethod
+        def queue_path(project, location, queue):
+            return queue
+
+        @staticmethod
+        def task_path(project, location, queue, task_id):
+            return queue + '/' + task_id
+
+        def create_task(self, *, parent, task):
+            if task.name in self.tasks:
+                raise AlreadyExists('completed name retained')
+            self.tasks[task.name] = task
+
+    fake = FakeCloudTasks()
+    monkeypatch.setattr(cloud_tasks, '_get_tasks_client', lambda: fake)
+    monkeypatch.setenv('SYNC_TASKS_PROJECT', 'synthetic')
+    monkeypatch.setenv('SYNC_TASKS_LOCATION', 'synthetic')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'synthetic@example.invalid')
+    start = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
+    triggers.enqueue('owner', at=start)
+    triggers.enqueue('owner', at=start, native_manual_ready=('recording', 7))
+    triggers.enqueue('owner', at=start + timedelta(minutes=1), native_manual_ready=('recording', 7))
+    triggers.enqueue('owner', at=start, native_manual_ready=('recording', 8))
+    assert len(fake.tasks) == 3
+    ready = [task for task in fake.tasks.values() if b'native_manual_ready' in task.http_request.body]
+    assert len(ready) == 2
+
+
+@pytest.mark.asyncio
+async def test_busy_native_ready_leaves_cloud_task_retryable(monkeypatch):
+    from routers import conversations_v3_tasks
+
+    async def busy(uid):
+        return 'busy'
+
+    monkeypatch.setattr(service, 'reconcile', busy)
+    request = conversations_v3_tasks.ReconcileRequest(uid='owner')
+    assert await conversations_v3_tasks.reconcile(request) == {'outcome': 'busy'}
+    request = conversations_v3_tasks.ReconcileRequest(uid='owner', trigger='native_manual_ready')
+    with pytest.raises(HTTPException) as error:
+        await conversations_v3_tasks.reconcile(request)
+    assert error.value.status_code == 503
+
+
 def test_scheduled_wake_rounds_up_and_coalesces_in_delivery_minute(monkeypatch):
     tasks = {}
     attempts = []

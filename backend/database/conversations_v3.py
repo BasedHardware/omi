@@ -67,6 +67,8 @@ SOURCE_FENCE_FIELDS = (
     'started_at',
     'claims',
     'v3_derived',
+    policy.NATIVE_MANUAL_STOP,
+    policy.NATIVE_MANUAL_READY,
 )
 
 
