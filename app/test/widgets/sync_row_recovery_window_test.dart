@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -236,6 +237,18 @@ void main() {
     expect(find.text('Too large'), findsOneWidget, reason: 'the refusal label outranks the generic Failed banner');
     expect(find.text('Try Again'), findsNothing, reason: 'the same bytes are the same size');
     expect(find.text('Delete'), findsNothing, reason: 'a refusal is removed by swiping the row, after confirmation');
+  });
+
+  testWidgets('every unsyncable row keeps its detail/export chevron next to Delete', (tester) async {
+    for (final status in [WalStatus.corrupted, WalStatus.outsideRecoveryWindow, WalStatus.unsupportedAudio]) {
+      await pumpRow(tester, makeWal(status));
+      expect(
+        find.byWidgetPredicate((w) => w is FaIcon && w.icon?.codePoint == FontAwesomeIcons.chevronRight.codePoint),
+        findsOneWidget,
+        reason: '$status must lead to its detail page',
+      );
+      expect(find.text('Delete'), findsOneWidget, reason: '$status still offers Delete');
+    }
   });
 }
 
