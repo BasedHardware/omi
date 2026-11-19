@@ -15,6 +15,7 @@ from config.pusher_record import close_fast_path_enabled
 from config.batch_pipeline_projection_rebuild import enabled as durable_debt_enabled
 from database import conversations as conversations_db, record_projection_rebuild
 from database.audio_chunk_metadata import audio_chunk_entry
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.other import storage
 from utils.batch_pipeline.record_projection_rebuild import (
     projected_chunks,
@@ -66,6 +67,7 @@ class Inventory:
     listed_at: float
 
 
+@object_get_reader(Reader.PLAYBACK_INVENTORY)
 def get_uploaded_audio_chunks(uid: str, conversation_id: str, paths: List[str]) -> List[Dict[str, Any]]:
     """Read exact encoded objects; never discover siblings or raw archive packs.
 

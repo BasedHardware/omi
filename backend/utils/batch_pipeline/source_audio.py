@@ -13,6 +13,7 @@ from typing import Callable
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.batch_pipeline.audio import audio_unit, with_context
 from utils.batch_pipeline import leaf_timings, record_seal_profile
 from utils.other.audio_frame_table import FRAME_SCHEMA, gapped_frames
@@ -90,6 +91,7 @@ def validate_reference(ref: dict, uid: str, conversation_id: str, allowed_bucket
         raise InvalidRetainedManifest('retained audio reference is outside admitted source')
 
 
+@object_get_reader(Reader.BATCH_SOURCE)
 def read_reference(
     client,
     ref: dict,
