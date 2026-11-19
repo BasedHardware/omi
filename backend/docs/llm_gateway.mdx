@@ -596,6 +596,74 @@ Background callers use the gateway for latency-insensitive structured decisions 
 
 The default provider registry includes the OpenAI-compatible adapter for the checked-in `openai` provider route. It is cached per process, closed during FastAPI lifespan shutdown, uses `OPENAI_API_KEY`, optional `OPENAI_BASE_URL`, and optional `OPENAI_MAX_RESPONSE_BYTES`, posts to `/chat/completions` with `httpx.AsyncClient`, and fails closed with `invalid_route_config` when the managed key is absent or rejected. Tests can still override the registry with fake providers.
 
+## Keyed Chat Completions
+
+Finalization sends a canonical lowercase UUID in `Idempotency-Key` to
+`POST /v1/chat/completions/operations`. This route requires a key and older
+gateway versions return 404 without dispatching. The ordinary
+`POST /v1/chat/completions` also honors the header. Keyed callers use the existing service bearer
+and caller headers and must supply `X-Omi-User-Uid`. The gateway scopes each
+key to the authenticated service caller, user, and optional
+`X-Omi-Tenant-Id`. It compares the canonical JSON body and forwarded
+credential context. The request limit is 1 MiB.
+
+Keyed calls support non-streaming OpenAI, OpenRouter, and Anthropic serving
+routes. The gateway commits a claim before a single provider dispatch and
+disables route fallback and retries for that request. Unkeyed calls follow
+the usual routing policy.
+
+| Condition | Gateway behavior |
+| --- | --- |
+| First successful request | Commits the encrypted response before returning it and echoes the key in `X-Omi-Idempotency-Key` |
+| Matching POST after commit | Returns the same status and body, including a committed deterministic rejection |
+| Matching POST or lookup during the five-minute pending window | HTTP 409 `idempotency_pending`, with `Retry-After: 2` |
+| Same key with different JSON or credentials | HTTP 409 `idempotency_conflict` |
+| Possible provider submission without a committed result | Keeps the claim fenced. HTTP 409 `idempotency_indeterminate` on later requests |
+| Result expired | HTTP 410 `idempotency_expired`. The claim still fences the key |
+| Claim TTL elapsed and the document still exists | HTTP 410 `idempotency_expired`. The gateway does not renew the claim |
+| Storage unavailable or feature disabled | HTTP 503. The operation cannot start without a committed claim |
+
+`GET /v1/chat/completions/operations/{key}` uses the same auth and scope and
+returns only a committed successful completion. A missing result returns 404.
+Lookup never calls a provider. A timeout or a crash after submission can
+leave an operation indeterminate for the rest of its claim lifetime. A response larger than
+256 KiB is fenced as indeterminate and never returned as a successful result.
+
+The customer Firestore stores the claim in
+`users/{uid}/llm_gateway_idempotency_claims` and the authenticated-encrypted
+response in `users/{uid}/llm_gateway_idempotency_results`. The response is
+readable for 24 hours after commit, capped by the claim expiry. The claim has a
+fixed 30-day TTL from the initial claim, and replay and lookup leave it unchanged.
+The claim fences the key after result expiry. After Firestore deletes the claim,
+the gateway has no record of the previous use. Callers must end all keyed retries
+and redrives before the 30-day horizon. Claim, settlement and lookup
+transactions read the account deletion marker. The existing recursive account
+wipe removes both subcollections. A first successful request adds four reads
+and three writes, plus two eventual TTL deletes. Replay and lookup add up to
+three reads and no writes. Transaction retries can increase the read count.
+
+The keyed protocol defaults on. Set `LLM_GATEWAY_IDEMPOTENCY_ENABLED=off`
+on every gateway replica to refuse keyed calls while keeping unkeyed traffic
+available. Before pointing Go workers at the gateway, verify all replicas
+serve the keyed protocol and enable Firestore TTL on the `expires_at` field
+for both collection groups. The Helm values mount the existing `ENCRYPTION_SECRET` when available.
+Keyed calls require it, and startup and unkeyed calls can run without it.
+Use the repository's scoped TTL helper with
+`--policy backend/deploy/llm-gateway/retention.json --project <customer-project>`
+to print the plan. An authorized operator applies it with `--apply` and
+verifies that both TTL policies are active. Drain or disable keyed clients on the ordinary chat route before
+rolling back to an older image that ignores the header.
+
+Measure excess provider attempts per 1,000 keyed POSTs with replay traffic
+present. Group attempt ledger rows by `idempotency_scope` and sum all attempts
+beyond the first per group. Divide by the increase in
+`llm_gateway_keyed_posts_total` and multiply by 1,000. The target is zero.
+Compare `llm_gateway_keyed_provider_attempts_total` with
+`llm_gateway_keyed_accounting_delivery_total{delivery="written"}` across a
+settled window and require coverage before judging the target. Track replay,
+conflict, pending, indeterminate and storage errors in
+`llm_gateway_idempotency_outcomes_total`.
+
 ## Provider Execution
 
 Implemented executor behavior is non-streaming only:
