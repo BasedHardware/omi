@@ -26,6 +26,11 @@ from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, 
 logger = logging.getLogger(__name__)
 
 LIMIT = 128
+# The live closure's derived rows. A pending recording's own claimants are all needed (a replan of the
+# recording must see every row that owns its lines), and one long recording can own hundreds of short
+# windows, so the bound is on rows and on their stored speech rather than a small row count.
+DERIVED_LIMIT = 1024
+DERIVED_BYTES = 16 * 1024 * 1024
 # The backfill holds its own builder lease (and outline cache) so a running backfill never makes the
 # owner's live builder busy; the two passes touch disjoint documents and both are revision-fenced.
 BACKFILL_LEASE = 'backfill-builder'
@@ -251,8 +256,16 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         if opened:
             existing[opened['id']] = opened
     queried = set()
+    loaded_bytes = sum(_encoded_bytes(row.get('transcript_segments') or []) for row in existing.values())
+
+    def add(row):
+        nonlocal loaded_bytes
+        if row['id'] not in existing:
+            loaded_bytes += _encoded_bytes(row.get('transcript_segments') or [])
+        existing[row['id']] = row
+
     # Follow linked recordings until the closure converges. Each round adds at least one recording and
-    # derived rows stay bounded by LIMIT; a fixed hop depth failed the same owner on every retry.
+    # derived rows stay bounded by DERIVED_LIMIT; a fixed hop depth failed the same owner on every retry.
     for _round in range(LIMIT + 1):
         ids = {rid for row in existing.values() for rid in row.get('v3_recording_ids') or []}
         ids.update(
@@ -271,10 +284,38 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         fresh = [r for rid, r in recordings.items() if rid not in queried and r and r.get('started_at')]
         if not fresh:
             break
+        # Every row a loaded recording's claims name owns some of its lines: load those exactly, by id.
+        claimed: set[str] = set()
+        for r in fresh:
+            for c in r.get('claims') or []:
+                cid = c.get('conversation_id') if isinstance(c, dict) else None
+                if isinstance(cid, str) and cid not in existing:
+                    claimed.add(cid)
+        for snapshot in client.get_all([coll.document(cid) for cid in sorted(claimed)]) if claimed else ():
+            raw = snapshot.to_dict() or {} if snapshot.exists else {}
+            if raw.get('v3_derived'):
+                row = decode_row(uid, snapshot)
+                if row:
+                    add(row)
+        if len(existing) > DERIVED_LIMIT or loaded_bytes > DERIVED_BYTES:
+            raise Conflict('v3_derived_budget')
+        # Only a recording that can still be replanned needs its neighbours by time: a pending one (new
+        # speech), one an open window holds, or one with speech and no claims. A settled recording's lines
+        # all belong to the rows its claims name; a time query around it chained through the owner's whole
+        # contiguous history and parked heavy owners on v3_derived_budget.
+        open_sources = {
+            rid
+            for row in existing.values()
+            if row.get('status') == 'in_progress'
+            for rid in row.get('v3_recording_ids') or []
+        }
         # Query disjoint affected source windows separately: historical sync must
         # not scan every conversation between its recorded day and today's live row.
         intervals = []
         for row in sorted(fresh, key=lambda r: r['started_at']):
+            settled = row.get('claims') or not row.get('transcript_segments')
+            if settled and not row.get('v3_pending') and row['id'] not in open_sources:
+                continue
             left = row['started_at'] - timedelta(minutes=20)
             right = min(speech_end(row), datetime.now(timezone.utc) + timedelta(minutes=5)) + timedelta(minutes=20)
             if intervals and left <= intervals[-1][1]:
@@ -286,14 +327,14 @@ def load(uid, *, conversation_id=None, firestore_client=None):
                 coll.where(filter=FieldFilter('v3_derived', '==', True))
                 .where(filter=FieldFilter('finished_at', '>=', left))
                 .where(filter=FieldFilter('started_at', '<=', right))
-                .limit(LIMIT + 1)
+                .limit(DERIVED_LIMIT + 1)
                 .stream()
             )
             for doc in snapshots:
                 row = decode_row(uid, doc)
                 if row:
-                    existing[row['id']] = row
-            if len(snapshots) > LIMIT or len(existing) > LIMIT:
+                    add(row)
+            if len(snapshots) > DERIVED_LIMIT or len(existing) > DERIVED_LIMIT or loaded_bytes > DERIVED_BYTES:
                 raise Conflict('v3_derived_budget')
         queried.update(row['id'] for row in fresh)
     else:
