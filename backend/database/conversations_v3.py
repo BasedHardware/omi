@@ -130,6 +130,8 @@ def speech_moved(recording, current):
         fence is not None
         and current
         and not recording.get('_v3_derive')
+        # A live re-derive replans sealed sources only; any change during its pass is a conflict.
+        and not recording.get('_v3_rederive_live')
         and not recording.get('deleted')
         and not recording.get('sync_merged_into')
         and current.get('recording')
@@ -528,10 +530,14 @@ def commit_projection(
     *,
     clear_pending=True,
     remove=(),
+    retire=None,
     key='builder',
     firestore_client=None,
 ):
     """Commit derived rows and source claims; returns the ids of source recordings that kept moving.
+
+    ``retire`` (live re-derive only) maps a row id to the soft-retirement patch the final batch applies:
+    its claims leave every loaded recording with the same commit that writes the rows absorbing them.
 
     A recording that only received more speech during the pass does not fail the commit (a live
     wearer would otherwise starve every pass): the windows planned from the loaded snapshot commit,
@@ -539,6 +545,7 @@ def commit_projection(
     new speech. Derived rows and any other source change keep the strict source_changed fence.
     """
     client = firestore_client or get_firestore_client()
+    retire = dict(retire or {})
     moved = set()
     coll = user_conversations(client, uid)
     held = leases.lease_ref(client, uid, key)
@@ -632,11 +639,13 @@ def commit_projection(
         if final:
             for cid in remove:
                 tx.delete(coll.document(cid))
+            for cid, patch in retire.items():
+                tx.update(coll.document(cid), patch)
         for rid, recording in recordings.items():
             if recording.get('deleted') or recording.get('sync_merged_into'):
                 tx.update(coll.document(rid), {'v3_pending': False, 'v3_pending_since': None})
                 continue
-            replaced = {r['id'] for r in batch_rows} | (set(remove) if final else set())
+            replaced = {r['id'] for r in batch_rows} | (set(remove) | set(retire) if final else set())
             if rid in moved:
                 # Merge onto the re-read document; never write the stale snapshot's view of a live source.
                 claims = [c for c in observed[rid].get('claims') or [] if c['conversation_id'] not in replaced]
@@ -692,6 +701,10 @@ def commit_projection(
                 and recording.get('status') == 'completed',
                 **(backfill_conversion(recording) if recording.get('_v3_derive') else {}),
             }
+            if recording.get('_v3_rederive_live'):
+                # A live re-derive loads only settled sources (never pending) and changes nothing but their
+                # claims: it never arms or cancels an audio purge, so undo can restore every row it touched.
+                update = {'claims': claims}
             staged['recordings'][rid] = (observed.get(rid) or {}, update)
             tx.update(coll.document(rid), update)
         lease_update = {
@@ -707,7 +720,7 @@ def commit_projection(
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
     # The final batch also deletes a re-derive's retired copies.
-    max_rows = max(1, BATCH_MAX_WRITES - len(recordings) - len(remove) - 1)
+    max_rows = max(1, BATCH_MAX_WRITES - len(recordings) - len(remove) - len(retire) - 1)
     batches, current, size = [], [], 0
     for raw, encoded in zip(rows, prepared):
         amount = len(json.dumps(encoded, default=str).encode())
@@ -1033,6 +1046,8 @@ def backfill_window_metadata(uid, since, until, *, firestore_client=None):
                 'is_locked',
                 'data_protection_level',
                 'v3_backfill_run',
+                'home_hidden',
+                'v3_rederive_live_run',
             ]
         )
         .limit(BACKFILL_WINDOW_MAX + 1)

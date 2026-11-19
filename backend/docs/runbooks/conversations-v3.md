@@ -194,6 +194,8 @@ PYTHONPATH=backend backend/.venv/bin/python $S status --owners-file $O
 PYTHONPATH=backend backend/.venv/bin/python $S resume --owners-file $O --run RUN_ID      # stalled/blocked
 PYTHONPATH=backend backend/.venv/bin/python $S undo --owners-file $O --run RUN_ID [--dry-run]
 PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --mode rederive
+PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026-11-19T00:00:00Z \
+  --until 2026-11-20T00:00:00Z --mode rederive-live --dry-run                            # live windows
 ```
 
 - **Plan.** The window is cut into partitions of at most 48 documents. Each cut is at a recorded gap
@@ -253,6 +255,42 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --m
   recorded in the ledger. Fix the cause, then `resume`. Never describe a blocked or partial run as
   complete. `status` shows partitions committed, windows, Home-visible rows, outline calls and
   notes processed or failed.
+- **Live re-derive (`--mode rederive-live`).** Replans one owner's finished live v3 windows in
+  `[since, until)` from their source recordings with the current planner, after a planner fix (the
+  live builder keeps finished windows as they are). `until` must be at least 15 minutes ago.
+  Partitions hold up to 192 documents (the loader refuses more than 256). Same lease, queue, outline
+  and notes path as a backfill; rebuilt rows are stamped `backfilled` and `v3_rederive_live_run`, so
+  their notes take no derived effects and they never fan out again.
+  - Never touched: open windows and every source they hold, rows that overlap `since` or `until`,
+    sources that are pending, unsealed, still transcribing, failed, purge-pending, private, deleted
+    or legacy backfill donors (and every row on them), and rows that are edited (`user_title`,
+    corrections, speaker assignments, star, folder, photos, kept), locked, shared, private,
+    discarded, deleted, backfilled by a legacy run, unreadable or still owed notes. These are offered
+    to the planner as published finished rows, so their speech, claims and audio stay theirs. The
+    ledger counts each as `protected_<reason>`, `sources_blocked_<reason>` or `skipped_deleted`,
+    plus `sources_with_deleted_spans` (deleted spans are never replanned).
+  - Adoption: a rebuilt window keeps the id of the earliest row it absorbs. A rebuilt window equal to
+    its row (speech, bounds, claims and Home decision) is not written and its notes do not re-run.
+    Every other row it absorbs is retired as a sync bridge (`deleted`, `discarded`,
+    `sync_merged_into` the survivor, `v3_derived=false`): reads by id follow it, and no v3 read
+    treats it as a deletion. Its claims leave the sources in the same commit. No audio purge is
+    armed or cancelled.
+  - Dry-run: reads only and calls no model. Before counts are exact; `windows_after` and
+    `visible_after` replan with one outline chapter per stretch, so the outline can only add windows
+    (`rows_retired_max` is the most it retires). Spend: one outline per stretch plus notes per
+    window after. The run's ledger records the exact `windows_after`, `visible_after`,
+    `rows_rebuilt`, `rows_created`, `rows_unchanged`, `rows_retired` and `outline_calls`.
+  - Blocked: `rederive_live_open` (speech within five minutes of now), `rederive_live_boundary` (a
+    rebuilt window would cross `since` or `until`), `rederive_live_outline_failed` (the outline fell
+    back; never committed as failed tiles).
+  - Undo: before each commit, the run writes every changed, created or retired row's stored document
+    and claim positions to `conversations_v3_backfill_runs/{run_id}/conversations_v3_rederive_priors` (purged with the account).
+    `undo --run` takes both builder leases, waits for in-flight notes, then restores each group of
+    rows that share a source in one transaction: stored documents back exactly, created rows removed,
+    each source's claim list back in its original order. It refuses (`undo.reason`) after the owner
+    deleted a rebuilt row (`owner_deleted_rebuilt_row`) or while a newer live run restamped one
+    (`undo_newer_run_first`: undo that one first). A later live speech append to a rebuilt row is
+    replaced by the restored document. Not undone: outline cache entries and gateway spend.
 
 Rollout owner: lead2. Step 0: set CONVERSATIONS_V3_FIRST_APP_BUILD through the shared runtime source
 from the first TestFlight build containing this PR. Then dev named accounts,

@@ -131,7 +131,17 @@ FIELD_SITES = {
                 'v3_process_fingerprint',
                 'v3_rewrites',
             ),
-        )
+        ),
+    ],
+    # Reviewed live re-derive: an in-memory planning copy of a protected row, offered as a published
+    # finished window so it keeps its lines; it is never written.
+    'database/conversations_v3_rederive.py': [
+        (
+            'load_live_rederive',
+            'status',
+            "'completed' if row.get('status') == 'in_progress' else row.get('status')",
+            ('_v3_protected', 'status'),
+        ),
     ],
     # Reviewed backfill run ledger: run and partition status, not a conversation lifecycle field.
     'database/conversations_v3_backfill_runs.py': [

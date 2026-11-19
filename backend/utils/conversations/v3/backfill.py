@@ -5,7 +5,9 @@ v3 builder and notes path (service.reconcile(derive=True) and service._process).
 it (backend/scripts/conversations_v3_backfill.py), which writes the run ledger and a start marker;
 the five-minute sweep starts it once CONVERSATIONS_V3_BACKFILL=on, and each partition then runs as a
 task on the dedicated backfill queue, one at a time per owner. Undo restores the legacy rows exactly
-and removes the derived copies. Runbook: backend/docs/runbooks/conversations-v3.md.
+and removes the derived copies. A ``rederive-live`` run instead replans the owner's finished live v3
+windows from their sealed sources after a planner fix; its undo restores every row it changed,
+created or retired from the run's priors. Runbook: backend/docs/runbooks/conversations-v3.md.
 """
 
 import hashlib
@@ -14,11 +16,13 @@ import os
 import time
 from datetime import datetime, timezone
 
+from config.conversations_v3 import stretch_cohesion_enabled
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
+from database import conversations_v3_rederive as rederive_store
 from utils.cloud_tasks import enqueue_named_task
-from utils.conversations.v3 import outline, policy, service
+from utils.conversations.v3 import outline, planner, policy, service, visibility
 from utils.conversations.v3.triggers import task_base
 from utils.executors import db_executor, run_blocking
 
@@ -27,6 +31,10 @@ logger = logging.getLogger(__name__)
 # Rows per partition at plan time. A resumed or re-derived partition also loads its derived copies,
 # and the loader refuses more than store.LIMIT (128) documents, so plan well under half of it.
 PARTITION_ROWS = 48
+# A live re-derive partition reads sources and rows together (conversations_v3_rederive.REDERIVE_LIVE_LIMIT is 256) and
+# rewrites only claims on its sources, so it plans larger partitions: fewer forced cuts in a busy day.
+LIVE_MODE = 'rederive-live'
+LIVE_PARTITION_ROWS = 192
 # A step (outline pass plus notes) stops taking new notes work this long after it started; the
 # route timeout and the Cloud Tasks dispatch deadline are both 25 minutes.
 STEP_SECONDS = 20 * 60
@@ -324,6 +332,7 @@ async def run_step(uid, run_id, index, phase):
             until=_utc(part['until']),
             run_id=run_id,
             rederive=run.get('mode') == 'rederive',
+            live=run.get('mode') == LIVE_MODE,
             report=report,
         )
         if outcome == 'busy':
@@ -441,6 +450,8 @@ def undo_run(uid, run_id, *, firestore_client=None):
     run = runs.get_run(uid, run_id, firestore_client=firestore_client)
     if run is None:
         return {'outcome': 'unknown_run'}
+    if run.get('mode') == LIVE_MODE:
+        return undo_live_run(uid, run_id, firestore_client=firestore_client)
     if run.get('mode') == 'rederive':
         # A re-derive keeps each row's original run stamp; undo that run to remove its rows.
         return {'outcome': 'undo_the_original_run'}
@@ -494,6 +505,174 @@ def undo_run(uid, run_id, *, firestore_client=None):
         'donors_kept_deleted': len(kept_donors),
         'rows_kept_deleted': len(kept_rows),
     }
+    runs.update_run(
+        uid,
+        run_id,
+        status='undone',
+        patch={'undo': {**result, 'at': datetime.now(timezone.utc)}},
+        firestore_client=firestore_client,
+    )
+    return {'outcome': 'undone', **result}
+
+
+# ---- live re-derive -------------------------------------------------------------------------------
+
+
+def classify_live_window(meta):
+    """Counts for the operator before a live re-derive: what the window holds, by metadata only."""
+    counts = {
+        'documents': len(meta),
+        'live_sources': 0,
+        'live_rows': 0,
+        'live_rows_visible': 0,
+        'backfilled_rows': 0,
+        'legacy_rows': 0,
+        'deleted': 0,
+    }
+    for raw in meta:
+        if raw.get('deleted') or raw.get('sync_merged_into'):
+            counts['deleted'] += 1
+        elif raw.get('recording') and not raw.get('v3_derived'):
+            counts['live_sources'] += 1
+        elif raw.get('v3_derived') and raw.get('backfilled') and not raw.get('v3_rederive_live_run'):
+            counts['backfilled_rows'] += 1
+        elif raw.get('v3_derived'):
+            counts['live_rows'] += 1
+            counts['live_rows_visible'] += 0 if raw.get('home_hidden') else 1
+        else:
+            counts['legacy_rows'] += 1
+    return counts
+
+
+def estimate_live_partition(uid, partition, run_id, *, now=None):
+    """Read-only preview of one live re-derive partition. Writes nothing and calls no model.
+
+    Before counts are exact. After counts come from the real planner with one window per stretch
+    (each stretch outlined as a single conversation), so ``windows_after`` is the fewest windows the
+    run can make and ``rows_retired_max`` the most it can retire; the outline can split a stretch
+    into more windows (each with at least 300 words, or the manual-end window). Spend is priced
+    like a backfill: one outline per stretch, plus notes or tasks for every window after.
+    """
+    now = now or datetime.now(timezone.utc)
+    recordings, existing, _cache, counts = rederive_store.load_live_rederive(
+        uid, since=partition['since'], until=partition['until'], run_id=run_id
+    )
+    eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
+    groups = outline.stretches(eligible, now)
+    protected = {cid for cid, row in existing.items() if row.get('_v3_protected')}
+    outlines = [outline.fallback(group) for group in groups]
+    windows = planner.preserve_finished_windows(
+        planner.windows(groups, outlines, cohesion=stretch_cohesion_enabled()), existing, recordings
+    )
+    # Retained windows belong to protected rows, which the run never writes.
+    fresh = [w for w in windows if w.get('existing_id') not in protected]
+    est = {
+        'sources': len(eligible),
+        'stretches': len(groups),
+        'open_stretches': sum(1 for g in groups if not g['finished']),
+        'rows_eligible': counts.get('rows_eligible', 0),
+        'visible_before': counts.get('visible_before', 0),
+        'windows_after': len(fresh),
+        'visible_after': 0,
+        'rows_retired_max': max(0, counts.get('rows_eligible', 0) - len(fresh)),
+        'protected': sum(v for k, v in counts.items() if k.startswith('protected_')),
+        'sources_blocked': sum(v for k, v in counts.items() if k.startswith('sources_blocked_')),
+        'outline_calls': len(groups),
+        'notes_calls': 0,
+        'agent_notes': 0,
+        'short_task_calls': 0,
+        'words': 0,
+        'usd': 0.0,
+    }
+    for key, value in counts.items():
+        if key.startswith(('protected_', 'sources_blocked_', 'skipped_')):
+            est[key] = value
+    for group in groups:
+        words = sum(len(line['text'].split()) for line in group['lines'])
+        est['words'] += words
+        est['usd'] += _usd(OUTLINE_TOKENS['in'] + words * TOKENS_PER_WORD, OUTLINE_TOKENS['out'])
+    for window in fresh:
+        words = window.get('_stretch_words', planner.word_count(window['lines']))
+        manual = bool(window.get('manual_end'))
+        hidden = window['finished'] and not manual and words < visibility.MIN_HOME_WORDS
+        est['visible_after'] += 0 if hidden else 1
+        own = planner.word_count(window['lines'])
+        if own >= visibility.MIN_HOME_WORDS or (manual and own > 0):
+            est['notes_calls'] += 1
+            if own >= AGENT_MIN_WORDS:
+                est['agent_notes'] += 1
+                est['usd'] += AGENT_MAX_USD
+            else:
+                est['usd'] += _usd(NOTES_TOKENS['in'] + own * TOKENS_PER_WORD, NOTES_TOKENS['out'])
+        elif own >= 20:
+            est['short_task_calls'] += 1
+            est['usd'] += _usd(SHORT_TASKS_TOKENS['in'] + own * TOKENS_PER_WORD, SHORT_TASKS_TOKENS['out'])
+    return est
+
+
+def _undo_groups(priors):
+    """Priors that share a source restore together, so each source gets its exact claim list back."""
+    parent = {}
+
+    def find(key):
+        parent.setdefault(key, key)
+        while parent[key] != key:
+            parent[key] = parent[parent[key]]
+            key = parent[key]
+        return key
+
+    for entry in priors:
+        row = ('row', entry['id'])
+        find(row)
+        for rid in set(entry.get('sources') or []) | {c['recording_id'] for c in entry.get('claims') or []}:
+            parent[find(('source', rid))] = find(row)
+    groups = {}
+    for entry in priors:
+        groups.setdefault(find(('row', entry['id'])), []).append(entry)
+    return list(groups.values())
+
+
+def undo_live_run(uid, run_id, *, firestore_client=None):
+    """Restore every row a live re-derive changed, created or retired, exactly, from its priors.
+
+    Same fences as a backfill undo: both builder leases, no notes in flight. Each group of rows that
+    shares a source restores in one transaction (rows and their sources' claims together), so an
+    interrupted undo is simply rerun. Refuses while a newer live re-derive restamped one of the rows
+    (undo that one first) or after the owner deleted a rebuilt row (restoring would resurrect it).
+    """
+    runs.update_run(uid, run_id, status='undoing', firestore_client=firestore_client)
+    held = []
+    try:
+        for key, reason in ((store.BACKFILL_LEASE, 'backfill_pass_in_flight'), ('builder', 'live_builder_in_flight')):
+            token = leases.acquire(uid, key, firestore_client=firestore_client)
+            if token is None:
+                return _undo_refused(uid, run_id, reason, firestore_client)
+            held.append((key, token))
+        token = held[0][1]
+        priors = runs.list_priors(uid, run_id, firestore_client=firestore_client)
+        if any(leases.held(uid, 'summary-' + e['id'], firestore_client=firestore_client) for e in priors):
+            return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client)
+        blocker = rederive_store.live_undo_blocker(
+            uid, run_id, [e['id'] for e in priors], firestore_client=firestore_client
+        )
+        if blocker:
+            return _undo_refused(uid, run_id, blocker, firestore_client)
+        totals = {'rows_restored': 0, 'rows_removed': 0, 'sources_repaired': 0}
+        try:
+            for group in _undo_groups(priors):
+                result = rederive_store.undo_live_rederive(uid, token, run_id, group, firestore_client=firestore_client)
+                for key in totals:
+                    totals[key] += result[key]
+                for key, held_token in held:
+                    leases.renew(uid, key, held_token, firestore_client=firestore_client)
+        except store.Conflict as error:
+            if str(error) not in {'undo_newer_run_first', 'owner_deleted_rebuilt_row'}:
+                raise
+            return _undo_refused(uid, run_id, str(error), firestore_client)
+    finally:
+        for key, held_token in held:
+            leases.release(uid, key, held_token, firestore_client=firestore_client)
+    result = {**totals, 'priors': len(priors)}
     runs.update_run(
         uid,
         run_id,

@@ -8,6 +8,10 @@ from database import conversations_v3_leases as leases
 
 from database import conversations_v3_processing as writers
 
+from database import conversations_v3_backfill_runs as backfill_runs
+
+from database import conversations_v3_rederive as rederive_store
+
 import asyncio
 import hashlib
 import logging
@@ -54,6 +58,10 @@ BLOCKED = frozenset(
         'remove_not_backfilled',
         'rederive_mixed_runs',
         'backfill_source_unreadable',
+        'rederive_live_open',
+        'rederive_live_boundary',
+        'rederive_live_outline_failed',
+        'rederive_live_coverage',
     }
 )
 
@@ -135,8 +143,9 @@ def _match(window, existing, used):
     candidates = [
         r
         for r in existing.values()
-        if r['id'] not in used
-        and (r['id'] not in published or r.get('deleted'))
+        if r['id'] not in used and (r['id'] not in published or r.get('deleted'))
+        # A live re-derive's protected rows keep their own lines; they never absorb a window.
+        and not r.get('_v3_protected')
         and r.get('started_at')
         and r.get('finished_at')
         and r['started_at'] <= end
@@ -168,6 +177,7 @@ async def reconcile(
     until=None,
     run_id=None,
     rederive=False,
+    live=False,
     report=None,
     _pass=0,
 ):
@@ -176,6 +186,8 @@ async def reconcile(
     A derive pass applies every live planning, visibility and notes rule; it differs only in its
     inputs (legacy donors instead of v3_pending recordings), in stamping rows ``backfilled`` and in
     queueing notes on its own marker, drained by the backfill task instead of the live queue.
+    ``live`` (with ``derive``) replans the owner's finished live windows from their sealed sources:
+    see rederive_store.load_live_rederive and _live_outcome.
     """
     report = {} if report is None else report
     key = store.BACKFILL_LEASE if derive else 'builder'
@@ -195,7 +207,12 @@ async def reconcile(
         metrics.RECONCILES.labels('busy').inc()
         return 'busy'
     try:
-        if derive:
+        if derive and live:
+            recordings, existing, cached, skipped = await run_blocking(
+                db_executor, rederive_store.load_live_rederive, uid, since=since, until=until, run_id=run_id
+            )
+            report.update(skipped)
+        elif derive:
             recordings, existing, cached = await run_blocking(
                 db_executor,
                 store.load_derive,
@@ -216,6 +233,9 @@ async def reconcile(
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
         cohesion = stretch_cohesion_enabled()
         groups = outline.stretches(eligible, now)
+        if live and not all(group['finished'] for group in groups):
+            # Speech within five minutes of now is still the live builder's; refuse before any paid call.
+            raise Conflict('rederive_live_open')
         if on_open and conversation_id:
             target = existing.get(conversation_id)
             if target is None:
@@ -303,6 +323,9 @@ async def reconcile(
                 if any(policy.transcription_failed(recordings[line['conversation_id']]) for line in window['lines']):
                     window['finished'] = True
                 prior = existing.get(window.get('existing_id')) or _match(window, existing, used)
+                if live and window.get('_outline_failed') and not (prior or {}).get('_v3_protected'):
+                    # A repair never replaces windows with the fallback outline's failed tiles; retry later.
+                    raise Conflict('rederive_live_outline_failed')
                 if prior:
                     used.add(prior['id'])
                 row = planner.build(uid, window, recordings, prior, allocated=allocated)
@@ -331,6 +354,8 @@ async def reconcile(
                     row['backfilled'] = True
                     if run:
                         row['v3_backfill_run'] = run
+                if live:
+                    row['v3_rederive_live_run'] = run_id
                 if prior and prior.get('deleted'):
                     continue
                 before = sum(len(s.get('text', '').split()) for s in (prior or {}).get('transcript_segments') or [])
@@ -437,18 +462,29 @@ async def reconcile(
                 recordings.pop(rid)
         # A re-derive reuses prior ids; a prior copy no rebuilt window claims is retired with the commit.
         remove = [cid for cid in existing if cid not in planned] if derive and rederive else []
+        retire, commit_recordings, commit_existing = {}, recordings, existing
+        if live:
+            rows, retire, touched, sources, priors, outcome = _live_outcome(
+                rows, existing, recordings, since=since, until=until, run_id=run_id
+            )
+            report.update(outcome)
+            commit_existing = {cid: existing[cid] for cid in touched if cid in existing}
+            commit_recordings = {rid: recordings[rid] for rid in sources}
+            # The undo ledger is durable before the commit that changes its rows.
+            await run_blocking(db_executor, backfill_runs.save_priors, uid, run_id, priors)
         await run_blocking(db_executor, leases.renew, uid, key, token)
         moved = await run_blocking(
             db_executor,
             _commit,
             uid,
             token,
-            recordings,
-            existing,
+            commit_recordings,
+            commit_existing,
             rows,
             cache[-128:],
             clear_pending=not on_open,
             remove=remove,
+            retire=retire,
             key=key,
         )
         report.update(
@@ -543,14 +579,173 @@ async def reconcile(
     return 'committed'
 
 
-def _commit(uid, token, recordings, existing, rows, cache, *, clear_pending=True, remove=(), key='builder'):
+def _held_claims(recordings, cid):
+    """(recording id, list position, claim) for every claim the loaded sources hold for one row."""
+    return [
+        (rid, index, claim)
+        for rid, recording in recordings.items()
+        for index, claim in enumerate(recording.get('claims') or [])
+        if isinstance(claim, dict) and claim.get('conversation_id') == cid
+    ]
+
+
+def _speech(row):
+    return [(s.get('id'), s.get('start'), s.get('end'), s.get('text')) for s in row.get('transcript_segments') or []]
+
+
+def _spoken(row):
+    """Each stored segment of a row by recorded clock: (segment id, text, absolute start to 10 ms)."""
+    keys = set()
+    for s in row.get('transcript_segments') or []:
+        try:
+            at = row['started_at'] + timedelta(seconds=float(s.get('start') or 0))
+        except (TypeError, ValueError, KeyError):
+            continue
+        keys.add((s.get('id'), ' '.join(str(s.get('text') or '').split()), round(at.timestamp(), 2)))
+    return keys
+
+
+def _same_window(row, original, held):
+    """The rebuilt window has the stored row's speech, bounds, claims and Home decision: leave it alone."""
+    if any(
+        row.get(k) != original.get(k)
+        for k in ('started_at', 'finished_at', 'kind', 'home_hidden', 'home_hidden_reason', 'manual_end')
+    ):
+        return False
+    if _speech(row) != _speech(original):
+        return False
+    before = {}
+    for rid, _index, claim in held:
+        before.setdefault(rid, []).append((claim.get('start'), claim.get('end')))
+    after = {rid: [(c['start'], c['end']) for c in spans] for rid, spans in row['_v3_claims'].items() if spans}
+    return {k: sorted(v) for k, v in before.items()} == {k: sorted(v) for k, v in after.items()}
+
+
+def _survivor(original, planned):
+    """The rebuilt window that absorbed most of a retired row's time (earliest on a tie), if any."""
+    start, end = original.get('started_at'), original.get('finished_at')
+    best, best_overlap = None, None
+    for row in sorted(planned, key=lambda r: r['started_at']):
+        overlap = (min(end, row['finished_at']) - max(start, row['started_at'])).total_seconds()
+        touches = overlap > 0 or row['started_at'] <= start <= row['finished_at']
+        if touches and (best_overlap is None or overlap > best_overlap):
+            best, best_overlap = row['id'], overlap
+    return best
+
+
+def _retire_patch(survivor, run_id):
+    """A retired live row becomes a sync bridge to the window that absorbed it.
+
+    Deleted and discarded hide it everywhere a merged-away conversation is hidden, reads by id follow
+    ``sync_merged_into`` to the survivor, and dropping ``v3_derived`` keeps every v3 planning read
+    (closure claims, time queries, adoption) from treating it as a deletion tombstone.
+    """
+    return {
+        'deleted': True,
+        'discarded': True,
+        'sync_merged_into': survivor,
+        'v3_derived': False,
+        'v3_rederive_live_run': run_id,
+    }
+
+
+def _live_outcome(rows, existing, recordings, *, since, until, run_id):
+    """Turn a live re-derive's planned rows into what it writes, retires and records for undo.
+
+    Protected rows are never written. A rebuilt window equal to its stored row is not written (no
+    notes re-run). A rebuilt window keeps the id of the earliest row it absorbs (service._match);
+    every other eligible row it absorbs is retired into it. Returns (rows to write, retire patches,
+    touched row ids, recordings to commit, undo priors, ledger counts).
+    """
+    protected = {cid for cid, row in existing.items() if row.get('_v3_protected')}
+    eligible = {cid: row for cid, row in existing.items() if cid not in protected}
+    planned = [row for row in rows if row['id'] not in protected]
+    for row in planned:
+        if row['status'] == 'in_progress':
+            raise Conflict('rederive_live_open')
+        if row['started_at'] < since or row['finished_at'] > until:
+            raise Conflict('rederive_live_boundary')
+    unchanged = {
+        row['id']
+        for row in planned
+        if row['id'] in eligible
+        and _same_window(row, eligible[row['id']]['_v3_original'], _held_claims(recordings, row['id']))
+    }
+    # Nothing a row said may disappear: every eligible row's speech is in a rebuilt or protected row.
+    kept_speech = set().union(*(_spoken(row) for row in planned), *(_spoken(existing[cid]) for cid in protected))
+    before_speech = set().union(*(_spoken(prior['_v3_original']) for prior in eligible.values()))
+    if before_speech - kept_speech:
+        raise Conflict('rederive_live_coverage')
+    write = [row for row in planned if row['id'] not in unchanged]
+    planned_ids = {row['id'] for row in planned}
+    retire, kept = {}, 0
+    for cid, prior in eligible.items():
+        if cid in planned_ids:
+            continue
+        survivor = _survivor(prior['_v3_original'], planned)
+        if survivor is None:
+            # No rebuilt window covers its time: nothing absorbed it, so it stays as it is.
+            kept += 1
+            continue
+        retire[cid] = _retire_patch(survivor, run_id)
+    touched = {row['id'] for row in write} | set(retire)
+    sources = {rid for row in write for rid in row.get('v3_recording_ids') or []} & recordings.keys()
+    sources |= {
+        rid
+        for rid, recording in recordings.items()
+        if any(isinstance(c, dict) and c.get('conversation_id') in touched for c in recording.get('claims') or [])
+    }
+    new_sources = {row['id']: set(row.get('v3_recording_ids') or []) for row in write}
+    priors = []
+    for cid in sorted(touched):
+        prior = eligible.get(cid)
+        if prior is not None and prior['_v3_raw'].get('v3_rederive_live_run') == run_id:
+            # Already this run's (a resumed partition): its first prior is the one undo restores.
+            continue
+        held = _held_claims(recordings, cid)
+        entry = {
+            'id': cid,
+            'sources': sorted(new_sources.get(cid, set()) | {rid for rid, _i, _c in held}),
+            'claims': [{'recording_id': rid, 'index': index, 'claim': claim} for rid, index, claim in held],
+        }
+        if prior is None:
+            entry['created'] = True
+        else:
+            entry['raw'] = prior['_v3_raw']
+        priors.append(entry)
+    counts = {
+        'windows_after': len(planned),
+        'visible_after': sum(1 for row in planned if not row.get('home_hidden')),
+        'rows_unchanged': len(unchanged),
+        'rows_rebuilt': sum(1 for row in write if row['id'] in eligible),
+        'rows_created': sum(1 for row in write if row['id'] not in eligible),
+        'rows_retired': len(retire),
+        'rows_kept_unabsorbed': kept,
+        'priors_recorded': len(priors),
+        'segments_checked': len(before_speech),
+    }
+    return write, retire, touched, sources, priors, counts
+
+
+def _commit(
+    uid, token, recordings, existing, rows, cache, *, clear_pending=True, remove=(), retire=None, key='builder'
+):
     from google.api_core.exceptions import InvalidArgument
 
     from utils.conversations import lifecycle
 
     try:
         return lifecycle.commit_v3_projection(
-            uid, token, recordings, existing, rows, cache, clear_pending=clear_pending, remove=remove, key=key
+            uid,
+            token,
+            recordings,
+            existing,
+            rows,
+            cache,
+            clear_pending=clear_pending,
+            remove=remove,
+            retire=retire,
+            key=key,
         )
     except InvalidArgument as error:
         # A document over Firestore's 1 MiB limit, or a commit request over its payload limit, fails the

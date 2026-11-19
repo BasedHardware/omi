@@ -1,4 +1,7 @@
-"""Per-owner v3 backfill run ledger. Counts, windows and outcomes only; never user content.
+"""Per-owner v3 backfill run ledger. The run document holds counts, windows and outcomes only.
+
+A live re-derive also keeps its undo priors (the touched rows' stored documents) in the run's
+`priors` subcollection, at the same protection level as the rows they copy.
 
 `users/{uid}/conversations_v3_backfill_runs/{run_id}` lives under the owner, so account deletion
 erases it with the account. A run is a planned list of partitions (each a silence-bounded slice of
@@ -6,6 +9,7 @@ the window); the Cloud Tasks chain walks them in order and every step is recorde
 a run resumable, idempotent and the unit that undo targets.
 """
 
+import json
 from datetime import datetime, timezone
 
 from google.cloud import firestore
@@ -109,3 +113,56 @@ def pending_starts(limit, *, firestore_client=None):
 def clear_start(uid, run_id, *, firestore_client=None):
     client = firestore_client or get_firestore_client()
     _starts(client, uid).document(run_id).delete()
+
+
+# Live re-derive undo ledger: per touched row, its stored document before the run (or that the run
+# created it) and the claims it held, under the run itself so account deletion purges it with the run.
+PRIORS = 'conversations_v3_rederive_priors'
+# Writes per prior transaction; a prior is one conversation document (at most 1 MiB).
+PRIORS_PAGE_BYTES = 4 * 1024 * 1024
+PRIORS_PAGE_DOCS = 100
+
+
+def _priors(client, uid, run_id):
+    return run_ref(client, uid, run_id).collection(PRIORS)
+
+
+def save_priors(uid, run_id, entries, *, firestore_client=None):
+    """Record priors before the commit that changes their rows; a later attempt overwrites its own."""
+    client = firestore_client or get_firestore_client()
+    coll = _priors(client, uid, run_id)
+    pages, page, size = [], [], 0
+    for entry in entries:
+        amount = len(json.dumps(entry, default=str).encode())
+        if page and (size + amount > PRIORS_PAGE_BYTES or len(page) >= PRIORS_PAGE_DOCS):
+            pages.append(page)
+            page, size = [], 0
+        page.append(entry)
+        size += amount
+
+    @firestore.transactional
+    def write(tx, batch):
+        for entry in batch:
+            tx.set(coll.document(entry['id']), {**entry, 'recorded_at': datetime.now(timezone.utc)})
+
+    for batch in [*pages, page] if page else pages:
+        write(client.transaction(), batch)
+    return len(entries)
+
+
+PRIORS_READ_PAGE = 200
+
+
+def list_priors(uid, run_id, *, firestore_client=None):
+    """Every prior of one run, in id-ordered pages."""
+    client = firestore_client or get_firestore_client()
+    found, cursor = [], None
+    while True:
+        query = _priors(client, uid, run_id).order_by('__name__').limit(PRIORS_READ_PAGE)
+        if cursor is not None:
+            query = query.start_after(cursor)
+        page = list(query.stream())
+        found.extend({**(doc.to_dict() or {}), 'id': doc.id} for doc in page)
+        if len(page) < PRIORS_READ_PAGE:
+            return found
+        cursor = page[-1]

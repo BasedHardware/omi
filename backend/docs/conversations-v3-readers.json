@@ -115,6 +115,10 @@
     "policy": "both",
     "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."
   },
+  "backend/database/conversations_v3_rederive.py:user_conversations": {
+    "policy": "storage",
+    "reason": "Operator live re-derive and its undo: one owner's window and claim closure under the backfill-builder lease; transaction-fenced, owner scoped, rows written only through commit_projection or the exact undo restore."
+  },
   "backend/database/daily_summaries.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
