@@ -134,13 +134,14 @@ def _cohesive_groups(groups, outlines) -> Iterator[tuple[dict[str, Any], list[di
                 'manual_end': bool(last and group.get('manual_end')),
                 '_keep_unmatched_together': bool(manual),
                 'finished': group['finished'] or not last,
+                'locked': group.get('locked', group['finished']) or not last,
                 '_stretch_words': word_count(part),
             }
             yield bounded, _as_sections(topics) if manual else _fold_short_topics(part, topics)
             start = end
 
 
-def windows(groups, outlines, *, cohesion=False):
+def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topic_lock=False):
     result = []
     pairs = _cohesive_groups(groups, outlines) if cohesion else zip(groups, outlines)
     for group, entries in pairs:
@@ -167,8 +168,11 @@ def windows(groups, outlines, *, cohesion=False):
                         or group.get('manual_end')
                         or group.get('after_manual_end')
                     ),
-                    'finished': group['finished'] or end < len(group['lines']) or part_index < len(capped) - 1,
+                    'finished': (group['finished'] or end < len(group['lines']) or part_index < len(capped) - 1),
                 }
+                if defer_topic_lock and not group.get('locked', group['finished']) and part_index == len(capped) - 1:
+                    candidate['_defer_lock'] = True
+                    candidate['_lock_end'] = group['end']
                 if cohesion:
                     candidate['_stretch_words'] = group['_stretch_words']
                     candidate['_stretch_partition'] = first_result
@@ -181,7 +185,7 @@ def windows(groups, outlines, *, cohesion=False):
                     and not prior.get('manual_end')
                     and prior['kind'] == candidate['kind']
                     and prior.get('people') == candidate.get('people')
-                    and max(timedelta(0), part[0]['start'] - max(line['end'] for line in prior['lines'])) < SILENCE
+                    and max(timedelta(0), part[0]['start'] - max(line['end'] for line in prior['lines'])) < silence_gap
                     and max(max(line['end'] for line in prior['lines']), max(line['end'] for line in part))
                     - prior['lines'][0]['start']
                     <= CAP
@@ -191,6 +195,10 @@ def windows(groups, outlines, *, cohesion=False):
                     prior['lines'].extend(part)
                     prior['finished'] = candidate['finished']
                     prior['manual_end'] = candidate['manual_end']
+                    if defer_topic_lock:
+                        prior['_defer_lock'] = candidate.get('_defer_lock', False)
+                        if candidate.get('_defer_lock'):
+                            prior['_lock_end'] = candidate['_lock_end']
                 else:
                     result.append(candidate)
     return result
@@ -210,10 +218,26 @@ def _unowned_spans(start, end, occupied):
         yield cursor, end
 
 
+def nonoverlapping_pieces(pieces):
+    result = []
+    occupied = {}
+    for piece in pieces:
+        key = piece['recording_id'], piece['audio_file_id']
+        spans = occupied.setdefault(key, [])
+        for start, end in list(_unowned_spans(piece['start'], piece['end'], spans)):
+            result.append({**piece, 'start': start, 'end': end})
+            spans.append((start, end))
+    return result
+
+
+def is_unlocked(row):
+    return row.get('status') == 'in_progress' or bool(row.get('v3_unlocked'))
+
+
 def build(uid, window, recordings, existing=None, *, allocated=None):
     lines = window['lines']
     start, end = lines[0]['start'], max(line['end'] for line in lines)
-    if existing and existing.get('status') != 'in_progress':
+    if existing and (not is_unlocked(existing) or window.get('_held_provisional')):
         start, end = existing['started_at'], existing['finished_at']
     cid = existing['id'] if existing else str(uuid5(NAMESPACE_URL, f'v3:{uid}:{start.isoformat()}'))
     first = recordings[lines[0]['conversation_id']]
@@ -224,14 +248,14 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         segments.append(segment)
     pieces, files, claims = [], [], {}
     published = window.get('_published', {})
-    retained = existing and existing.get('status') != 'in_progress'
+    retained = existing and not is_unlocked(existing)
     for rid in dict.fromkeys(line['conversation_id'] for line in lines):
         recording = recordings[rid]
         owned = [line for line in lines if line['conversation_id'] == rid]
         left, right = min(l['start'] for l in owned), max(l['end'] for l in owned)
         occupied = published.get(rid, {})
         held = [(c['start'], c['end']) for c in recording.get('claims') or [] if c['conversation_id'] == cid]
-        if retained and held:
+        if (retained or window.get('_held_provisional')) and held:
             spans = sorted(set(held))
         else:
             blocked_claims = [*occupied.get('claims', ()), *(allocated or {}).get(rid, ())]
@@ -288,13 +312,19 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
 
         segments = old_segments + [s for s in segments if not already_present(s)]
         segments.sort(key=lambda s: s['start'])
-        for piece in existing.get('recording_pieces') or []:
-            if piece not in pieces:
-                pieces.append(piece)
+        previous_pieces = existing.get('recording_pieces') or []
+        if existing.get('v3_refined'):
+            pieces = nonoverlapping_pieces([*previous_pieces, *pieces])
+        else:
+            pieces.extend(piece for piece in previous_pieces if piece not in pieces)
         known_files = {af['id'] for af in files}
         files.extend(af for af in existing.get('audio_files') or [] if af['id'] not in known_files)
-    title = (
-        (existing or {}).get('structured', {}).get('title') if (existing or {}).get('title_locked') else window['title']
+    prior = existing or {}
+    structured = prior.get('structured', {})
+    preview = bool(window.get('_title_preview') or prior.get('v3_unlocked'))
+    title_locked = bool(prior.get('title_locked') and (not preview or prior.get('user_title')))
+    title = (prior.get('user_title') if preview else None) or (
+        structured.get('title') if title_locked else window['title']
     )
     manual_end = bool(window.get('manual_end') or (existing or {}).get('manual_end'))
     outline_kind = window.get('outline_kind', window['kind'])
@@ -314,7 +344,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         recordings,
         {line['conversation_id'] for line in lines},
         words=words,
-        finished=window['finished'],
+        finished=window['finished'] and not window.get('_title_preview'),
         manual_end=manual_end,
     )
     row: dict[str, Any] = {
@@ -369,10 +399,15 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         'home_hidden_reason': reason,
         'home_hidden': hidden,
         'title_locked': bool(
-            (existing or {}).get('title_locked')
-            or (title and (not hidden or not window['finished']) and kind not in {'media', 'background'})
+            title_locked
+            or (
+                not window.get('_title_preview')
+                and title
+                and (not hidden or not window['finished'])
+                and kind not in {'media', 'background'}
+            )
         ),
-        'tile_state': 'writing' if window['finished'] else 'live',
+        'tile_state': 'writing' if window['finished'] and not window.get('_title_preview') else 'live',
         'v3_recording_ids': list(dict.fromkeys(l['conversation_id'] for l in lines)),
         'transcript_segments': segments,
         'recording_pieces': pieces,
@@ -380,12 +415,8 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         'structured': {
             **(existing or {}).get('structured', {}),
             'title': title or '',
-            'overview': (existing or {}).get('structured', {}).get('overview') or window['line'],
-            'emoji': (
-                (existing or {}).get('structured', {}).get('emoji')
-                if (existing or {}).get('title_locked')
-                else window.get('emoji', '💬')
-            ),
+            'overview': (window['line'] if preview else structured.get('overview')) or window['line'],
+            'emoji': structured.get('emoji') if title_locked else window.get('emoji', '💬'),
         },
     }
     if not (existing or {}).get('summary_covers_through'):
@@ -403,7 +434,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         dict.fromkeys([*(existing or {}).get('v3_recording_ids', []), *row['v3_recording_ids']])
     )
     row['_v3_claims'] = claims
-    if retained:
+    if retained or window.get('_held_provisional'):
         for rid in row['v3_recording_ids']:
             if rid not in claims:
                 held = {
@@ -417,6 +448,27 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         row.pop(policy.LIVE_SUMMARY_FIELD, None)
     row.pop('updated_at', None)
     return row
+
+
+def unavailable_preview(row, recordings):
+    """Settle an unprojectable preview without releasing any of its old audio claims."""
+    return {
+        **row,
+        'status': 'completed',
+        'tile_state': 'done',
+        'home_hidden': True,
+        'home_hidden_reason': 'source_unavailable',
+        'v3_unlocked': False,
+        'v3_process_pending': False,
+        '_v3_claims': {
+            rid: [
+                {'start': claim['start'], 'end': claim['end']}
+                for claim in recordings.get(rid, {}).get('claims') or ()
+                if claim['conversation_id'] == row['id']
+            ]
+            for rid in row.get('v3_recording_ids') or ()
+        },
+    }
 
 
 def _contains_line(row, line, spans):
@@ -439,13 +491,28 @@ def _contains_line(row, line, spans):
     )
 
 
-def preserve_finished_windows(planned, existing, recordings=None):
+def preserve_finished_windows(planned, existing, recordings=None, *, protect_provisional=False):
     """Late speech cannot move a published finished conversation's boundaries."""
     finished = [
-        r
-        for r in existing.values()
-        if r.get('status') != 'in_progress' and r.get('started_at') and r.get('finished_at')
+        row
+        for row in existing.values()
+        if not is_unlocked(row)
+        and row.get('started_at')
+        and row.get('finished_at')
+        and not (row.get('v3_refined') and row.get('v3_claims_transferred_to'))
     ]
+    # When an updated outline joins multiple provisional owners, retain their
+    # custody independently until lock and ordinary merge-only refinement.
+    provisional = set()
+    if protect_provisional:
+        open_rows = [row for row in existing.values() if row.get('v3_unlocked') and not row.get('deleted')]
+        for window in planned:
+            left = window['lines'][0]['start']
+            right = max(line['end'] for line in window['lines'])
+            overlaps = [row for row in open_rows if left < row['finished_at'] and row['started_at'] < right]
+            if len(overlaps) > 1:
+                provisional.update(row['id'] for row in overlaps)
+        finished.extend(row for row in open_rows if row['id'] in provisional)
     protected = {r['id'] for r in finished}
     published_ids = set()
     claims_by_recording = {}
@@ -490,7 +557,9 @@ def preserve_finished_windows(planned, existing, recordings=None):
                     {
                         **window,
                         'lines': [],
-                        'finished': True,
+                        'finished': owner['id'] not in provisional,
+                        '_held_provisional': owner['id'] in provisional,
+                        '_defer_lock': owner['id'] in provisional and window.get('_defer_lock', False),
                         'manual_end': False,
                         'title': owner.get('structured', {}).get('title', ''),
                         'kind': owner.get('outline_kind') or owner.get('kind', 'conversation'),
@@ -500,6 +569,9 @@ def preserve_finished_windows(planned, existing, recordings=None):
                 )
                 target.pop('_stretch_words', None)
                 target['lines'].append(line)
+                target['finished'] = target['finished'] or window['finished']
+                if not window.get('_defer_lock'):
+                    target['_defer_lock'] = False
                 if line is window['lines'][-1] and window.get('manual_end'):
                     target['manual_end'] = True
             else:
@@ -523,4 +595,8 @@ def preserve_finished_windows(planned, existing, recordings=None):
     for window in fresh:
         if window.get('_stretch_partition') in published_partitions:
             window.pop('_stretch_words', None)
-    return sorted([*retained.values(), *fresh], key=lambda w: w['lines'][0]['start'])
+    windows = sorted([*retained.values(), *fresh], key=lambda w: w['lines'][0]['start'])
+    open_windows = [window for window in windows if not window['finished']]
+    for window in open_windows[:-1]:
+        window['finished'] = True
+    return windows

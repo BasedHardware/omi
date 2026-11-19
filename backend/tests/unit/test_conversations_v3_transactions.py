@@ -528,3 +528,179 @@ def test_terminal_failure_counter_counts_committed_transitions_once(strict):
     assert writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
     assert not writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
     assert metrics.TERMINAL_FAILURES.labels('processing')._value.get() == before + 1
+
+
+def test_locked_refinement_commits_redirect_and_transferred_claims_together(strict, monkeypatch):
+    monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: False)
+    older, later = R[:-1] + ('older',), R[:-1] + ('later',)
+    end = AT + timedelta(seconds=30)
+    midpoint = AT + timedelta(seconds=10)
+    old_claims = [
+        {'conversation_id': 'older', 'start': AT, 'end': midpoint},
+        {'conversation_id': 'later', 'start': midpoint, 'end': end},
+    ]
+    strict.rows[R] = {'recording': True, 'claims': old_claims, 'v3_pending': True}
+    strict.rows[older] = {'id': 'older', 'status': 'completed', 'v3_derived': True}
+    strict.rows[later] = {'id': 'later', 'status': 'completed', 'v3_derived': True, 'sync_content_revision': 3}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    source = {'id': 'r', **strict.rows[R], '_v3_revision': 1}
+    existing = {path[-1]: {**strict.rows[path], '_v3_revision': 1} for path in (older, later)}
+    survivor = {
+        **existing['older'],
+        'started_at': AT,
+        'finished_at': end,
+        'v3_recording_ids': ['r'],
+        '_v3_absorbed': ['later'],
+        '_v3_claims': {'r': [{'start': AT, 'end': midpoint}, {'start': midpoint, 'end': end}]},
+    }
+    strict.rows[later]['_test_revision'] = 2
+    with pytest.raises(store.Conflict, match='source_changed'):
+        store.commit_projection('synthetic', token, {'r': source}, existing, [survivor], [], firestore_client=strict)
+    assert strict.rows[R]['claims'] == old_claims
+    assert 'deleted' not in strict.rows[later]
+
+    existing['later']['_v3_revision'] = 2
+    tombstone = ('users', 'synthetic', 'deleted_conversations', 'later')
+    strict.rows[tombstone] = {'conversation_id': 'later'}
+    with pytest.raises(store.Conflict, match='target_deleted'):
+        store.commit_projection('synthetic', token, {'r': source}, existing, [survivor], [], firestore_client=strict)
+    assert strict.rows[R]['claims'] == old_claims
+    del strict.rows[tombstone]
+
+    monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: True)
+    with pytest.raises(store.Conflict, match='source_changed'):
+        store.commit_projection('synthetic', token, {'r': source}, existing, [survivor], [], firestore_client=strict)
+    assert strict.rows[R]['claims'] == old_claims
+    assert 'deleted' not in strict.rows[later]
+    monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: False)
+
+    store.commit_projection('synthetic', token, {'r': source}, existing, [survivor], [], firestore_client=strict)
+    assert strict.rows[older]['finished_at'] == end
+    assert '_v3_absorbed' not in strict.rows[older]
+    assert strict.rows[later]['deleted'] and strict.rows[later]['home_hidden']
+    assert strict.rows[later]['sync_merged_into'] == strict.rows[later]['v3_claims_transferred_to'] == 'older'
+    assert strict.rows[later]['sync_content_revision'] == 4
+    assert strict.rows[R]['claims'] == [{**claim, 'conversation_id': 'older'} for claim in old_claims]
+
+
+def test_full_builder_prunes_stale_provisional_lease_ids(strict):
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    strict.rows[L]['unlocked_ids'] = ['settled', 'live', 'missing']
+    live, settled = R[:-1] + ('live',), R[:-1] + ('settled',)
+    strict.rows[live] = {'id': 'live', 'v3_unlocked': True, 'status': 'processing'}
+    strict.rows[settled] = {'id': 'settled', 'v3_unlocked': False, 'status': 'completed'}
+    existing = {path[-1]: {**strict.rows[path], '_v3_revision': 1} for path in (live, settled)}
+    new = {'id': 'new', 'v3_unlocked': True, 'status': 'in_progress'}
+    store.commit_projection('synthetic', token, {}, existing, [new], [], firestore_client=strict)
+    assert strict.rows[L]['unlocked_ids'] == ['new']
+    assert strict.rows[live]['v3_unlocked']
+
+
+@pytest.mark.parametrize('already_open_locked', [False, True])
+def test_on_open_summary_commit_finalizes_provisional_snapshot(strict, already_open_locked):
+    card = R[:-1] + ('card',)
+    strict.rows[card] = {
+        'id': 'card',
+        'v3_derived': True,
+        'v3_unlocked': not already_open_locked,
+        'v3_open_locked': already_open_locked,
+        'v3_process_pending': already_open_locked,
+        'status': 'processing' if already_open_locked else 'in_progress',
+        'finished_at': AT,
+    }
+    token = leases.acquire('synthetic', 'summary-card', firestore_client=strict)
+    writers.store_summary('synthetic', 'card', token, 1, {'title': 'Synthetic'}, AT, firestore_client=strict)
+    row = strict.rows[card]
+    assert row['status'] == 'completed' and row['v3_open_locked'] and not row['v3_unlocked']
+    assert row['summary_covers_through'] == AT and row['v3_process_pending']
+
+
+@pytest.mark.asyncio
+async def test_open_notes_failure_keeps_an_older_preview_live(strict, monkeypatch):
+    card = R[:-1] + ('card',)
+    row = {
+        'id': 'card',
+        'v3_derived': True,
+        'v3_unlocked': True,
+        'status': 'processing',
+        'tile_state': 'live',
+        'finished_at': AT,
+        'transcript_segments': [{'text': 'word ' * 300}],
+    }
+    strict.rows[card] = row
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(store, 'decode_row', lambda uid, snap: snap.to_dict())
+    monkeypatch.setattr(writers, 'fail_processing', lambda *a, **kw: pytest.fail('unlocked card marked terminal'))
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    def fail(*args):
+        raise RuntimeError('synthetic model failure')
+
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(summary, 'write', fail)
+    token = await summary.prepare('synthetic', row)
+    frames = [frame async for frame in summary.stream('synthetic', row, token=token)]
+    assert frames[-1].startswith('error: ')
+    assert strict.rows[card]['tile_state'] == 'live'
+
+
+def test_preview_deadline_keeps_a_durable_sweep_obligation_until_lock(strict):
+    strict.rows[R] = {'recording': True, 'v3_pending': True, 'v3_pending_since': AT}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    raw = {'id': 'r', **strict.rows[R], '_v3_revision': 1}
+    preview = {
+        'id': 'preview',
+        'status': 'in_progress',
+        'v3_unlocked': True,
+        'started_at': AT,
+        'finished_at': AT,
+        'v3_recording_ids': ['r'],
+        '_v3_preview_due_at': AT + timedelta(minutes=30),
+    }
+    store.commit_projection('synthetic', token, {'r': raw}, {}, [preview], [], firestore_client=strict)
+    assert strict.rows[R]['v3_pending'] is True
+    assert strict.rows[R]['v3_pending_since'] == AT + timedelta(minutes=30)
+
+    prior = {**strict.rows[R[:-1] + ('preview',)], '_v3_revision': 1}
+    settled = {**prior, 'status': 'processing', 'v3_unlocked': False, 'v3_process_pending': True}
+    store.commit_projection(
+        'synthetic',
+        token,
+        {'r': {**strict.rows[R], '_v3_revision': 1}},
+        {'preview': prior},
+        [settled],
+        [],
+        firestore_client=strict,
+    )
+    assert strict.rows[R]['v3_pending'] is False
+    assert strict.rows[R]['v3_pending_since'] is None
+
+
+@pytest.mark.parametrize('already_pending', [False, True])
+def test_scoped_preview_commit_sets_wake_without_delaying_pending_speech(strict, already_pending):
+    strict.rows[R] = {
+        'recording': True,
+        'v3_pending': already_pending,
+        'v3_pending_since': AT if already_pending else None,
+    }
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    raw = {'id': 'r', **strict.rows[R], '_v3_revision': 1}
+    due = AT + timedelta(minutes=30)
+    preview = {
+        'id': 'preview',
+        'status': 'processing',
+        'v3_unlocked': True,
+        'started_at': AT,
+        'finished_at': AT,
+        'v3_recording_ids': ['r'],
+        '_v3_preview_due_at': due,
+    }
+
+    store.commit_projection(
+        'synthetic', token, {'r': raw}, {}, [preview], [], clear_pending=False, firestore_client=strict
+    )
+
+    assert strict.rows[R]['v3_pending'] is True
+    assert strict.rows[R]['v3_pending_since'] == (AT if already_pending else due)
