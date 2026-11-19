@@ -168,13 +168,19 @@ func (w lateWriter) Put(
 		w.result <- err
 		return batchunit.Receipt{}, err
 	}
-	var killed int
-	err = admin.QueryRow(ctx, `SELECT count(*) FROM (
- SELECT pg_terminate_backend(pid) FROM pg_stat_activity
- WHERE query LIKE 'SELECT queue_acquire_guard(%' AND pid <> pg_backend_pid()) k`).Scan(&killed)
+	// pgtest gives this harness a unique database. Only the session pinned
+	// inside Guard owns the job's exclusive advisory lock; an idle pooled
+	// connection can still show its last query in pg_stat_activity.
+	var killed bool
+	err = admin.QueryRow(ctx, `SELECT coalesce(pg_terminate_backend((
+ SELECT a.pid FROM pg_stat_activity a
+ WHERE a.datname=current_database() AND a.query LIKE 'SELECT queue_acquire_guard(%'
+ AND EXISTS (SELECT 1 FROM pg_locks l WHERE l.pid=a.pid AND l.locktype='advisory'
+             AND l.mode='ExclusiveLock' AND l.granted)
+), 5000), false)`).Scan(&killed)
 	closeErr := admin.Close(ctx)
-	if err != nil || closeErr != nil || killed != 1 {
-		w.result <- errors.Join(err, closeErr, errors.New("did not find exactly one guard session to end"))
+	if err != nil || closeErr != nil || !killed {
+		w.result <- errors.Join(err, closeErr, errors.New("could not end the guard session in the test database"))
 		return batchunit.Receipt{}, errors.New("test setup failed")
 	}
 	// With the guard's session gone, nothing in Postgres stops the erase any more.
@@ -197,11 +203,36 @@ func (w lateWriter) Put(
 	return receipt, err
 }
 
+// siblingGuard leaves an indistinguishable guard query and advisory locks in
+// a different test database on the same server, as a parallel test can.
+func siblingGuard(t *testing.T) *pgx.Conn {
+	t.Helper()
+	h := queuetest.Open(t, queuetest.Policy(), batchunit.Declaration(batchdocs.Causes()...))
+	conn, err := pgx.Connect(t.Context(), h.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 5*time.Second)
+		defer cancel()
+		if err := conn.Close(ctx); err != nil {
+			t.Error(err)
+		}
+	})
+	// The function takes session locks before checking the lease. Keep the
+	// connection pinned with those locks through the other harness's erase.
+	if _, err := conn.Exec(t.Context(), "SELECT queue_acquire_guard($1,$2,$3)", "owner", "u1", int64(1)); err != nil {
+		t.Fatal(err)
+	}
+	return conn
+}
+
 func TestAWriteThatOutlivesItsGuardIsRefusedByFirestoreAfterAnErase(t *testing.T) {
 	t.Parallel()
 	bench := docstoretest.Open(t)
 	results, _ := adapter(bench)
 	h := queuetest.Open(t, queuetest.Policy(), batchunit.Declaration(batchdocs.Causes()...))
+	sibling := siblingGuard(t)
 	late := lateWriter{t: t, inner: results, bench: bench, harness: h, result: make(chan error, 1)}
 	service := &batchunit.Service{
 		Queue: h.Store, Speech: vendor{}, Results: late, Accounts: anyone{}, Observer: quiet{},
@@ -221,6 +252,9 @@ func TestAWriteThatOutlivesItsGuardIsRefusedByFirestoreAfterAnErase(t *testing.T
 		}
 	case <-time.After(90 * time.Second):
 		t.Fatal("the handler never reached the write")
+	}
+	if err := sibling.Ping(t.Context()); err != nil {
+		t.Fatalf("the sibling guard session was interrupted: %v", err)
 	}
 	if bench.Exists(t, "users/owner/batch_unit_results/u1") {
 		t.Fatal("a result was written for an erased owner")
