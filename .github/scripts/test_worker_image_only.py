@@ -1014,40 +1014,61 @@ class WorkflowTests(unittest.TestCase):
                 self.assertRegex(line, allowed)
         self.assertFalse(self.writes(body))
 
-    # Reviewed uses: actions that read, authenticate or report only; any other uses: step must exclude the mode.
+    # Reviewed uses: actions, pinned with their exact ref, that read, authenticate or report only; any other
+    # uses: step (or a ref change) must exclude the mode.
     READ_ONLY_ACTIONS = {
-        "actions/checkout",
+        "actions/checkout@v7",
         "./.github/firestore-workflow/.github/actions/firestore-readiness",
-        "google-github-actions/auth",
-        "google-github-actions/setup-gcloud",
-        "google-github-actions/get-gke-credentials",
-        "BasedHardware/omi/.github/actions/deployment-summary",
-        "BasedHardware/omi/.github/actions/deployment-notifier",
+        "google-github-actions/auth@v3",
+        "google-github-actions/setup-gcloud@v3",
+        "google-github-actions/get-gke-credentials@v3",
+        "BasedHardware/omi/.github/actions/deployment-summary@979b573718fd74b31edab3530adf2ed6082622dc",
+        "BasedHardware/omi/.github/actions/deployment-notifier@979b573718fd74b31edab3530adf2ed6082622dc",
     }
 
-    # Every run: step, in any job, that is NOT excluded from dry-run mode, pinned by name and the sha256 of
-    # its exact script. A new step, or any edit to one of these scripts, fails here until it is reviewed
-    # for writes (fail closed), whatever it calls.
+    EXCLUSION = "inputs.worker_dry_run != true"
+
+    @classmethod
+    def excludes_dry_run(cls, condition):
+        """True only when the step condition is the exclusion itself or `<guard> && <exclusion>` with no
+        top-level `||` in the guard, so it is provably false when worker_dry_run is true."""
+        condition = str(condition or "").strip()
+        if condition == cls.EXCLUSION:
+            return True
+        suffix = " && " + cls.EXCLUSION
+        if not condition.endswith(suffix) or "${{" in condition:
+            return False
+        guard, depth = condition[: -len(suffix)], 0
+        for i, char in enumerate(guard):
+            depth += {"(": 1, ")": -1}.get(char, 0)
+            if depth < 0 or (depth == 0 and guard.startswith("||", i)):
+                return False
+        return depth == 0
+
+    # Every run: step, in any job, that is NOT excluded from dry-run mode, pinned by position, name and the
+    # sha256 of its exact script. A new or moved step, or any edit to one of these scripts, fails here until it
+    # is reviewed for writes (fail closed), whatever it calls.
     DRY_RUN_REACHABLE_RUN_STEPS = {
-        ("deploy", "Validate Environment Input"): "96f625184865014f0b2e49dadbfefb10f33d338bfbc35941a4c2e3603ed3edad",
-        ("deploy", "Delete huge unnecessary tools folder"): "99c44db74408ad1e6174a3bf28a90e72a976ce4005a1bb175f6525c06af417d2",
-        ("deploy", "Select merged production source and image tag"): "259f74511721d4d448b962a9ead92f0fae477ec60ead6fffa9319540b48f745a",
-        ("deploy", "Resolve deployment target"): "63f02fcafe44590aad8e5fba0e997859e4d4ff28dc1f86108a8847dfb0487c73",
-        ("deploy", None): "cea3c6ca1bb08b72231064902dbf642d6c47200f802f6eefef709d24b6534438",  # gcloud auth configure-docker
-        ("deploy", "Verify promoted worker digest"): "f006e9315fa3308a136f384a69bcf27a56dac6112c090c6df316d4c1813d6a2d",
-        ("deploy", "Dry-run worker image preserving live runtime"): "72af588008714cad26482e7b845d922f81070a7bed1b52a16d8588862a111d05",
+        ("deploy", 0, "Validate Environment Input"): "96f625184865014f0b2e49dadbfefb10f33d338bfbc35941a4c2e3603ed3edad",
+        ("deploy", 1, "Delete huge unnecessary tools folder"): "99c44db74408ad1e6174a3bf28a90e72a976ce4005a1bb175f6525c06af417d2",
+        ("deploy", 3, "Select merged production source and image tag"): "259f74511721d4d448b962a9ead92f0fae477ec60ead6fffa9319540b48f745a",
+        ("deploy", 7, "Resolve deployment target"): "63f02fcafe44590aad8e5fba0e997859e4d4ff28dc1f86108a8847dfb0487c73",
+        ("deploy", 11, None): "cea3c6ca1bb08b72231064902dbf642d6c47200f802f6eefef709d24b6534438",  # gcloud auth configure-docker
+        ("deploy", 13, "Verify promoted worker digest"): "f006e9315fa3308a136f384a69bcf27a56dac6112c090c6df316d4c1813d6a2d",
+        ("deploy", 16, "Dry-run worker image preserving live runtime"): "72af588008714cad26482e7b845d922f81070a7bed1b52a16d8588862a111d05",
     }
 
     def test_run_steps_reachable_in_dry_run_mode_are_reviewed(self):
         reachable = {
-            (job_name, step.get("name")): step
+            (job_name, index, step.get("name")): step
             for job_name, job in self.workflow["jobs"].items()
-            for step in job.get("steps", [])
-            if "run" in step and "inputs.worker_dry_run != true" not in str(step.get("if", ""))
+            if not self.excludes_dry_run(job.get("if"))
+            for index, step in enumerate(job.get("steps", []))
+            if "run" in step and not self.excludes_dry_run(step.get("if"))
         }
         digests = {key: hashlib.sha256(step["run"].encode()).hexdigest() for key, step in reachable.items()}
         self.assertEqual(digests, self.DRY_RUN_REACHABLE_RUN_STEPS)
-        self.assertEqual(reachable[("deploy", None)]["run"].strip(), "gcloud auth configure-docker")
+        self.assertEqual(reachable[("deploy", 11, None)]["run"].strip(), "gcloud auth configure-docker")
         for key, step in reachable.items():
             with self.subTest(step=key):
                 self.assertFalse(self.writes(step["run"]))
@@ -1060,8 +1081,7 @@ class WorkflowTests(unittest.TestCase):
         for step in self.steps:
             if "uses" in step:
                 with self.subTest(uses=step["uses"]):
-                    action = step["uses"].split("@")[0]
-                    self.assertTrue(action in self.READ_ONLY_ACTIONS or "inputs.worker_dry_run != true" in step.get("if", ""))
+                    self.assertTrue(step["uses"] in self.READ_ONLY_ACTIONS or self.excludes_dry_run(step.get("if")))
             else:
                 self.assertIn("run", step)
 
@@ -1070,9 +1090,19 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(writers)
         for step in writers:
             with self.subTest(step=step.get("name")):
-                self.assertIn("inputs.worker_dry_run != true", step.get("if", ""))
+                self.assertTrue(self.excludes_dry_run(step.get("if")), step.get("if"))
         for name in ("Verify rollout", "Verify preserved worker runtime and sibling bindings"):
-            self.assertIn("inputs.worker_dry_run != true", self.step(name).get("if", ""))
+            self.assertTrue(self.excludes_dry_run(self.step(name).get("if")))
+
+    def test_exclusion_must_be_a_top_level_conjunct(self):
+        for condition in ("inputs.worker_dry_run != true", "a == 1 && inputs.worker_dry_run != true",
+                          "(a || b) && inputs.worker_dry_run != true"):
+            self.assertTrue(self.excludes_dry_run(condition), condition)
+        for condition in (None, "", "always() || inputs.worker_dry_run != true",
+                          "a || b && inputs.worker_dry_run != true", "inputs.worker_dry_run != true || always()",
+                          "(a && inputs.worker_dry_run != true) || always()", "${{ inputs.worker_dry_run != true }}",
+                          "a) || (b && inputs.worker_dry_run != true"):
+            self.assertFalse(self.excludes_dry_run(condition), condition)
 
     def test_dry_run_step_sets_mode_env_and_calls_only_the_dry_run_command(self):
         step = self.step("Dry-run worker image preserving live runtime")
