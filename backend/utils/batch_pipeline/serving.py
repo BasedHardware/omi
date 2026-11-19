@@ -555,12 +555,12 @@ async def _supervise_fresh_guard(stop):
 
 
 def start_serving_from_env():
-    """Discovery and drain switches are independent of batch admission."""
+    """Start projection consumers on the processes that own projection policy."""
     pump_enabled = projection_pump_enabled()
     serving_enabled = os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() == 'true'
-    outbox_enabled = projection_outbox_enabled()
-    if not (pump_enabled or serving_enabled or outbox_enabled):
+    if not (pump_enabled or serving_enabled):
         return None
+    outbox_enabled = projection_outbox_enabled()
     stop = asyncio.Event()
 
     async def projection_pump():
@@ -711,31 +711,26 @@ def start_serving_from_env():
 
         # Owner drains hold live-target owners passively only while this loop
         # will sweep them again.
-        set_recurring_sweep('pump' if pump_enabled else 'serving' if serving_enabled else None)
+        set_recurring_sweep('pump' if pump_enabled else 'serving')
         try:
-            loops = []
             if pump_enabled:
-                loops.extend((projection_pump(), drain_upload_holds()))
-            elif serving_enabled:
-                loops.extend(
-                    (
-                        supervise(),
-                        drain(),
-                        dispatch_recovery(),
-                        drain_upload_holds(),
-                        _supervise_fresh_guard(stop),
-                        _supervise_backlog_heartbeat(stop),
-                    )
+                loops = (projection_pump(), drain_upload_holds())
+            else:
+                loops = (
+                    supervise(),
+                    drain(),
+                    dispatch_recovery(),
+                    drain_upload_holds(),
+                    _supervise_fresh_guard(stop),
+                    _supervise_backlog_heartbeat(stop),
                 )
             if outbox_enabled:
-                loops.append(supervise_projection_outbox())
+                loops += (supervise_projection_outbox(),)
             await asyncio.gather(*loops)
         finally:
             set_recurring_sweep(None)
 
     supervisor_name = 'batch_projection_pump' if pump_enabled else 'batch_pipeline_serving'
-    if not (pump_enabled or serving_enabled):
-        supervisor_name = 'batch_projection_outbox'
     return stop, start_background_task(run(), name=supervisor_name)
 
 

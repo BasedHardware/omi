@@ -296,7 +296,7 @@ async def test_pump_logs_failure_and_runs_next_tick(monkeypatch, caplog, failure
 @pytest.mark.parametrize('raw', [None, 'false', '', 'bad', '1'])
 def test_disabled_pump_does_not_start_without_serving(monkeypatch, raw):
     monkeypatch.delenv('BATCH_PIPELINE_SERVING_ENABLED', raising=False)
-    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'off')
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'on')
     if raw is None:
         monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', raising=False)
     else:

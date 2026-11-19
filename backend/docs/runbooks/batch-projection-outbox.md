@@ -14,9 +14,11 @@ through the same index that recovers lost serving hints. The `ef42ee8` GPU
 image and earlier backend writers produce unstamped results. All legacy
 assignment, finish and follow-up readers still cover them.
 
-The outbox supervisor starts whenever its switch is on, including when the
-dedicated pump and legacy serving sweep are both disabled. All scanners share
-one strict `projection_outbox_scan` lease per namespace. A holder confirms its
+The outbox supervisor starts on a batch-serving or dedicated projection pump
+process whenever the outbox switch is on. A batch-serving process continues
+outbox discovery with the legacy projection sweep disabled. This keeps the
+projection and first-summary policy stamps on their owning serving roles.
+All scanners share one strict `projection_outbox_scan` lease per namespace. A holder confirms its
 token after reading a bounded `kind, due_at, document ID` page. Loss of the token discards
 the page. Already-admitted delivery has its own 180-second claim and can finish
 through a leadership change. A crashed worker leaves retryable debt at claim

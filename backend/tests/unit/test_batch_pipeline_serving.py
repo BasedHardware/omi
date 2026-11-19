@@ -86,12 +86,13 @@ def test_flag_off_drains_pull_heartbeat_and_idempotent_complete(api):
     assert not client.post('/v2/batch-pipeline/complete', json=body).json()['accepted']
 
 
-def test_disabled_serving_and_outbox_do_not_construct_store_or_task(monkeypatch):
+@pytest.mark.parametrize('outbox_enabled', ['off', 'on'])
+def test_non_serving_process_does_not_construct_store_or_task(monkeypatch, outbox_enabled):
     from utils.batch_pipeline import serving
 
     monkeypatch.delenv('BATCH_PIPELINE_SERVING_ENABLED', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', raising=False)
-    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'off')
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', outbox_enabled)
 
     def forbidden(*args, **kwargs):
         raise AssertionError('disabled serving touched runtime')
@@ -102,12 +103,11 @@ def test_disabled_serving_and_outbox_do_not_construct_store_or_task(monkeypatch)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('serving_enabled', ['false', 'true'])
-async def test_outbox_recovers_without_legacy_projection_discovery(monkeypatch, serving_enabled):
+async def test_serving_outbox_recovers_without_legacy_projection_discovery(monkeypatch):
     from utils.batch_pipeline import serving
     from utils.batch_pipeline.projection_drain import recurring_sweep_active
 
-    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', serving_enabled)
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP', 'off')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'on')
@@ -130,11 +130,10 @@ async def test_outbox_recovers_without_legacy_projection_discovery(monkeypatch, 
     runtime = serving.start_serving_from_env()
     try:
         await asyncio.wait_for(started.wait(), timeout=5)
-        if serving_enabled == 'true':
-            await asyncio.wait_for(reconciled.wait(), timeout=5)
+        await asyncio.wait_for(reconciled.wait(), timeout=5)
     finally:
         await serving.stop_serving(runtime)
-    assert reconcile.await_count == int(serving_enabled == 'true')
+    reconcile.assert_awaited_once()
 
 
 def test_rollback_reconcile_runs_cleanup_and_projection_without_cohort_check(monkeypatch):
