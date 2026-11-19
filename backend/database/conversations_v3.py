@@ -16,7 +16,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from database._client import get_firestore_client
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
-from database.home_feed_writer import COMMIT_STAMPED_FIELDS
+from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.encryption import encrypt, decrypt

@@ -12,6 +12,8 @@ import inspect
 from functools import wraps
 from google.cloud.firestore_v1.types import Document, DocumentMask, Value, Write
 
+from database.home_feed_fields import COMMIT_STAMPED_FIELDS as COMMIT_STAMPED_FIELDS  # re-exported
+
 _ERASING_ROOTS: ContextVar[frozenset[str]] = ContextVar("home_feed_erasing_roots", default=frozenset())
 
 _ERASING: ContextVar[frozenset[str]] = ContextVar("home_feed_erasing_owner", default=frozenset())
@@ -30,9 +32,6 @@ def suppress_during_account_erasure(fn):
 
 
 CONTROL = 'home_feed_control'
-# Fields augment_home_writes stamps onto every conversation write at the Commit boundary. A writer that
-# reads its own write back must not mistake them for an external change.
-COMMIT_STAMPED_FIELDS = frozenset({'home_source_version', 'home_content_invalidated'})
 SCHEMA = 1
 # Metadata progress does not remove source text or change feed ownership.
 SAFE_FIELDS = frozenset(
