@@ -10,6 +10,7 @@ import os
 KILL_SWITCHES = {
     'BATCH_RESULT_PROTOCOL_GUARD_ENABLED': True,
     'BATCH_ALLOWANCE_PARK_ENABLED': True,
+    'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED': True,
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED': True,
     'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED': False,
@@ -87,6 +88,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
     value = env.get(name, str(KILL_SWITCHES[name])).strip().lower()
     if name in {
         'BATCH_ALLOWANCE_PARK_ENABLED',
+        'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED',
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
         'PROJECTION_DRAIN_CLAIM_AWARE',
@@ -116,6 +118,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
     if name not in {
         'CONVERSATION_BATCH_PURGE_COALESCING_ENABLED',
         'BATCH_ALLOWANCE_PARK_ENABLED',
+        'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED',
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',
         'BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED',

@@ -4703,7 +4703,7 @@
     "monthlySwitchDoneTitle": "Du betaler nu månedligt",
     "monthlySwitchDoneBody": "{price} betalt i dag. Fornyes månedligt.",
     "processingDeleteScopeChanged": "Listen under behandling er ændret. Gennemgå den, og prøv igen.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Du har brugt månedens {minutes} minutter",
     "freeCapBody": "Omi optager stadig. Vælg, hvordan du vil fortsætte med at transskribere.",
     "omiProPlanName": "Omi Pro",
@@ -4728,5 +4728,8 @@
     "downloadNow": "Download nu",
     "onWifiLater": "Senere på Wi-Fi",
     "conversationWritingSummary": "Skriver dit resumé…",
-    "onTheWayServerWork": "Arbejde rapporteret af serveren"
+    "onTheWayServerWork": "Arbejde rapporteret af serveren",
+    "finishNothingToProcess": "Intet at behandle endnu.",
+    "finishStillProcessing": "Behandles stadig. Den vises på Hjem.",
+    "finishBackToHome": "Tilbage til Hjem"
 }

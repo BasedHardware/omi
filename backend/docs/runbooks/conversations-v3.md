@@ -46,7 +46,17 @@ this decision and outline_kind retains the original classification.
 Five minutes of placed-speech silence is a hard window boundary. An outline's
 `resumes_previous` may undo a topic split within that interval, never rejoin
 windows across the silence boundary, even with the same people. Short socket
-captures and reconnects do not themselves split a continuous stretch. The
+captures and reconnects do not themselves split a continuous stretch. Listen
+can seal a live v3 recording at the first 1.5 s speech pause once it is
+`CONVERSATIONS_V3_ROTATION_MIN_SECONDS` old (180), or at
+`CONVERSATIONS_V3_ROTATION_MAX_SECONDS` (300) without one.
+`CONVERSATIONS_V3_RECORDING_ROTATION` is `off` by default; `cohort` rotates owners in
+the `v3-recording-rotation` rollout cohort (`scripts/rollout_cohort.py --add`, no roll), `on`
+rotates every v3 owner. Changing the env rolls backend-listen. The successor opens
+first and the archive retargets late frames to it, so the sealed recording's custody
+is final before it seals. A rotation-sealed recording carries
+`v3_rotation_cap_seconds`; only then does a later recording still capturing (under
+the cap) or sealed and untranscribed (up to 15 minutes) hold its stretch open. The
 two-hour cap still bounds each resulting window. Missing transcript is not
 proof of acoustic silence; qualify transcript completeness separately.
 The recording-speaker picker for a derived conversation reads and edits only
@@ -63,10 +73,17 @@ hydration rejects them. Admin raw-index counts may therefore be inflated.
 
 Deterministic reconcile conflicts (`target_exists`, `target_deleted`, `multiple_open_conversations`,
 the closure/derived budgets, `recording_decode_unavailable`, `account_deletion`, and
-`document_too_large` when a copied window exceeds Firestore's 1 MiB limit) answer the task with
+`document_too_large` when a written document exceeds Firestore's 1 MiB limit) answer the task with
 outcome `blocked` instead of a 500 retry and park the owner on the builder lease doc
 (`v3_backoff_until`, 5 min doubling to 1 h, token-fenced); `v3_pending` stays owed, on-open bypasses it,
-backfill never parks the live builder, and the next successful commit clears it. A planned id that
+backfill never parks the live builder, and the next successful commit clears it. `request_too_large`
+is a commit request over Firestore's payload limit. Blocked and backoff live passes still drain notes for
+windows earlier passes committed (not for `account_deletion`). The blocked log carries `owner=<sha256[:12]>`
+and the redacted cause. A size failure also logs `v3 projection write too large
+kind=<derived_row|recording|builder_lease> bytes=<estimate> claims=<n>` for the largest staged document.
+Batches split at 2 MiB of derived rows or 8 MiB of all writes, counting each source claim rewrite. Source `claims` are deduplicated on every
+commit: the 2026-11-18 incident was a fresh late-speech window time-matching a retained finished id, so
+two planned rows re-added the same held claims and the array doubled each pass. A planned id that
 already exists outside the loaded closure is adopted once as the prior (live derived rows only).
 Watch `omi_conversations_v3_blocked_total{reason}` and `omi_conversations_v3_adopted_total`; an owner
 blocked for hours needs investigation, and an operator clears the park by deleting the three

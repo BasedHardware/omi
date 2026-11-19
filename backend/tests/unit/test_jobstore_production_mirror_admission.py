@@ -32,12 +32,24 @@ def test_configured_production_still_refuses_every_namespace_only_caller():
     assert jobstore_shadow_admits(NAMESPACE, env, owner_key=OWNER)
 
 
-@pytest.mark.parametrize('name', tuple(_production_env()))
+OPTIONAL_WHEN_ABSENT = ('OMI_FIRESTORE_DATA_PLANE_PROJECT',)
+
+
+@pytest.mark.parametrize('name', tuple(name for name in _production_env() if name not in OPTIONAL_WHEN_ABSENT))
 def test_every_missing_production_setting_refuses_an_owner(name):
     env = _production_env()
     del env[name]
     assert not jobstore_production_mirror_configured(env)
     assert not jobstore_shadow_admits(NAMESPACE, env, owner_key=OWNER)
+
+
+def test_absent_data_plane_project_uses_the_required_adc_project():
+    # Serving Cloud Run services do not set it; GOOGLE_CLOUD_PROJECT and
+    # OMI_CUSTOMER_DATA_PROJECT are still required to name based-hardware.
+    env = _production_env()
+    del env['OMI_FIRESTORE_DATA_PLANE_PROJECT']
+    assert jobstore_production_mirror_configured(env)
+    assert jobstore_shadow_admits(NAMESPACE, env, owner_key=OWNER)
 
 
 @pytest.mark.parametrize(

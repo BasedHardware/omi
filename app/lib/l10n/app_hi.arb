@@ -4661,7 +4661,7 @@
     "monthlySwitchDoneTitle": "अब आप मासिक प्लान पर हैं",
     "monthlySwitchDoneBody": "आज {price} का भुगतान हुआ। हर महीने रिन्यू होता है।",
     "processingDeleteScopeChanged": "प्रोसेसिंग की सूची बदल गई है। सूची देखें और फिर कोशिश करें।",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "आपने इस महीने के {minutes} मिनट इस्तेमाल कर लिए हैं",
     "freeCapBody": "Omi अभी भी रिकॉर्ड कर रहा है। चुनें कि ट्रांसक्रिप्शन कैसे जारी रखें।",
     "omiProPlanName": "Omi Pro",
@@ -4686,5 +4686,8 @@
     "downloadNow": "अभी डाउनलोड करें",
     "onWifiLater": "बाद में Wi-Fi पर",
     "conversationWritingSummary": "आपका सारांश लिखा जा रहा है…",
-    "onTheWayServerWork": "सर्वर द्वारा बताया गया काम"
+    "onTheWayServerWork": "सर्वर द्वारा बताया गया काम",
+    "finishNothingToProcess": "अभी प्रोसेस करने के लिए कुछ नहीं है।",
+    "finishStillProcessing": "अभी प्रोसेस हो रहा है। यह होम पर दिखेगा।",
+    "finishBackToHome": "होम पर वापस जाएं"
 }

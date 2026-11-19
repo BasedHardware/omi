@@ -15459,7 +15459,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15543,4 +15543,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'सर्वर द्वारा बताया गया काम';
+
+  @override
+  String get finishNothingToProcess => 'अभी प्रोसेस करने के लिए कुछ नहीं है।';
+
+  @override
+  String get finishStillProcessing => 'अभी प्रोसेस हो रहा है। यह होम पर दिखेगा।';
+
+  @override
+  String get finishBackToHome => 'होम पर वापस जाएं';
 }

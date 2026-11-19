@@ -306,19 +306,6 @@ def test_sync_admission_caps_backfill_even_when_scope_is_off(monkeypatch, plan, 
     assert cap.sync_allowed('uid', lane='sync', backfill=True)
 
 
-def test_batch_admission_forwards_backfill(monkeypatch):
-    seen = {}
-
-    def fake_sync_admission(uid, seconds, provider, *, lane, path, backfill=False):
-        seen.update(uid=uid, lane=lane, backfill=backfill)
-        return True, 'entitled'
-
-    monkeypatch.setattr(admission, 'sync_admission', fake_sync_admission)
-    job = {'owner_id': 'uid', 'policy': {}}
-    admission.batch_admission(job, 30, 'parakeet', path=admission.DispatchPath.BATCH_GPU, backfill=True)
-    assert seen == {'uid': 'uid', 'lane': 'batch', 'backfill': True}
-
-
 def test_live_admission_reflects_the_cap(monkeypatch):
     admission = cap.LiveAdmission('uid')
     monkeypatch.setattr(

@@ -6823,6 +6823,29 @@
       ]
     },
     {
+      "collectionGroup": "deleted_conversations",
+      "fieldPath": "deleted_at",
+      "ttl": false,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "conversations",
       "fieldPath": "id",
       "ttl": false,

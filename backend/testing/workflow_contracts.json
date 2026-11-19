@@ -44,6 +44,29 @@
   },
   "workflows": [
     {
+      "id": "home_health_review_and_repair",
+      "risk": "high",
+      "sources": [
+        "backend/scripts/home_health_worker.py",
+        "backend/scripts/home_health_runtime.py",
+        "backend/services/home_health_repair.py",
+        "backend/services/home_health_review.py",
+        "backend/database/batch_summary_debt.py"
+      ],
+      "tests": [
+        "tests/unit/test_home_health_worker.py",
+        "tests/unit/test_batch_live_summary_arming.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "review reads only bounded indexed cohorts and emits content-free aggregates",
+        "private, hidden and intentionally short captures do not become repair candidates",
+        "production apply first verifies repair and admission on the receiving backend integration revisions",
+        "apply verifies protection, original generation, finalizer and outbox in the same transaction",
+        "repair arms only canonical summary scheduling fields with their original clock"
+      ]
+    },
+    {
       "id": "empty_capture_operator_recovery",
       "risk": "high",
       "sources": [

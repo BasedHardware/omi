@@ -12218,7 +12218,7 @@
     "monthlySwitchDoneTitle": "Sada plaćate mjesečno",
     "monthlySwitchDoneBody": "Danas plaćeno {price}. Obnavlja se mjesečno.",
     "processingDeleteScopeChanged": "Lista obrade se promijenila. Pregledajte je i pokušajte ponovo.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Iskoristili ste {minutes} minuta za ovaj mjesec",
     "freeCapBody": "Omi i dalje snima. Odaberite kako nastaviti s transkripcijom.",
     "omiProPlanName": "Omi Pro",
@@ -12243,5 +12243,8 @@
     "downloadNow": "Preuzmi sada",
     "onWifiLater": "Kasnije na Wi-Fi",
     "conversationWritingSummary": "Pišemo vaš sažetak…",
-    "onTheWayServerWork": "Rad prijavljen sa servera"
+    "onTheWayServerWork": "Rad prijavljen sa servera",
+    "finishNothingToProcess": "Još nema ništa za obradu.",
+    "finishStillProcessing": "Još se obrađuje. Pojavit će se na početnoj.",
+    "finishBackToHome": "Nazad na početnu"
 }
