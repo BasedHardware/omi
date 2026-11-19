@@ -151,8 +151,16 @@ class V3Driver:
             event.outcome = 'error'
             event.error = type(error).__name__
             # Where it failed (file:line function), never the message: messages can carry owner data.
-            frames = traceback.extract_tb(error.__traceback__)[-8:]
-            event.detail['where'] = [f'{Path(f.filename).name}:{f.lineno} {f.name}' for f in frames]
+            frames = traceback.extract_tb(error.__traceback__)
+            own = [f for f in frames if 'site-packages' not in f.filename and 'testing/pipeline_lab' not in f.filename]
+            event.detail['where'] = [f'{Path(f.filename).name}:{f.lineno} {f.name}' for f in (own[-6:] + frames[-2:])]
+            # The exception class's own words are code, not owner data (e.g. "document too large").
+            event.detail['kind'] = type(error).__module__ + '.' + type(error).__qualname__
+            if type(error).__module__.startswith('google.api_core'):
+                # Storage errors describe the request ("transaction too big"); quoted values are dropped.
+                import re
+
+                event.detail['reason'] = re.sub(r'"[^"]*"|\'[^\']*\'', '…', str(getattr(error, 'message', '')))[:200]
         event.seconds = round(time.monotonic() - started, 3)
 
     async def run(self, arrivals: Sequence[Arrival]) -> V3Report:

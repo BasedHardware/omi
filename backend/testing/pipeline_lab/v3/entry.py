@@ -50,6 +50,20 @@ def v3_options(overlay: Any) -> dict[str, Any]:
     }
 
 
+def drop_start_conversations(state: Any, prefixes: Any) -> int:
+    """Leave start-state rows whose id starts with a listed prefix out of the seed (``exclude_start_ids``).
+
+    For A/B runs blocked by one source both arms share, e.g. a recording already near Firestore's 1 MiB
+    document limit (every pass that touches it fails, and the owner stops building).
+    """
+    wanted = tuple(str(p) for p in prefixes or () if str(p))
+    if not wanted:
+        return 0
+    before = len(state.conversations)
+    state.conversations = [row for row in state.conversations if not str(row.get('id') or '').startswith(wanted)]
+    return before - len(state.conversations)
+
+
 def run(root: Path, run_id: str, engine: str) -> dict[str, Any]:
     from testing.pipeline_lab.baseline.build import build_baseline
     from testing.pipeline_lab.seed.corpus import DayWindow, load_start_state
@@ -84,13 +98,17 @@ def run(root: Path, run_id: str, engine: str) -> dict[str, Any]:
         else:
             embedder = CachedEmbedder(ProductEmbedder(), store.root / 'cache' / 'embeddings')
         index = NumericVectorIndex.open(run_dir / 'vector_index.json', dimension=embedder.dimension)
+        start_state = load_start_state(store, day.day_id)
+        excluded = ((overlay.model_config or {}).get('v3') or {}).get('exclude_start_ids')
+        if drop_start_conversations(start_state, excluded):
+            print(f'v3: left {len(excluded)} start-state id prefix(es) out of the seed', file=sys.stderr)
         spec = V3RunSpec(
             run_dir=run_dir,
             day_start=window.start,
             day_end=window.end,
             recordings=recordings,
             production=production,
-            start_state=load_start_state(store, day.day_id),
+            start_state=start_state,
             overlay=overlay,
             embedder=embedder,
             vector_index=index,
