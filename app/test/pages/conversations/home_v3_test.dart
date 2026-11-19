@@ -787,30 +787,42 @@ void main() {
     await _dispose(tester, home);
   });
 
-  testWidgets('End during pending first hydration cancels recap intent', (tester) async {
-    final home = await _pumpHome(tester, v3: true);
-    final hydrate = Completer<void>();
-    home.detailBarrier = hydrate;
-    home.detailSegments = recapSpeech;
-    var opens = 0;
-    LiveSummarySection.debugStream = (_) {
-      opens++;
-      return Stream.value(const SummaryFailed('synthetic'));
-    };
-    addTearDown(() => LiveSummarySection.debugStream = null);
+  for (final retained in [false, true]) {
+    testWidgets('End during hydration cancels intent and restores recap only for a retained capture: $retained',
+        (tester) async {
+      final home = await _pumpHome(tester, v3: true);
+      final hydrate = Completer<void>();
+      final drain = retained ? (home.capture.drain = Completer<void>()) : null;
+      home.detailBarrier = hydrate;
+      home.detailSegments = recapSpeech;
+      var opens = 0;
+      LiveSummarySection.debugStream = (_) {
+        opens++;
+        return Stream.value(const SummaryFailed('synthetic'));
+      };
+      addTearDown(() => LiveSummarySection.debugStream = null);
 
-    await tester.tap(find.text('Launch checklist'));
-    await settleDetailTab(tester);
-    await tester.tap(find.text('Summary'));
-    await settleDetailTab(tester);
-    expect(opens, 0);
-    await tester.tap(find.byKey(const Key('live_conversation_end')));
-    expect(home.capture.endCalls, 1);
-    hydrate.complete();
-    await settleDetailTab(tester);
-    expect(opens, 0);
-    await _dispose(tester, home);
-  });
+      await tester.tap(find.text('Launch checklist'));
+      await settleDetailTab(tester);
+      await tester.tap(find.text('Summary'));
+      await settleDetailTab(tester);
+      expect(opens, 0);
+      await tester.tap(find.byKey(const Key('live_conversation_end')));
+      expect(home.capture.endCalls, 1);
+      hydrate.complete();
+      await settleDetailTab(tester);
+      expect(opens, 0);
+      drain?.complete();
+      await settleDetailTab(tester);
+      expect(opens, 0, reason: 'settling End must never spend');
+      await tester.tap(find.text('Transcript'));
+      await settleDetailTab(tester);
+      await tester.tap(find.text('Summary'));
+      await settleDetailTab(tester);
+      expect(opens, retained ? 1 : 0);
+      await _dispose(tester, home);
+    });
+  }
 
   testWidgets('passive growth cannot upgrade a short Summary selection to a recap', (tester) async {
     final home = await _pumpHome(tester, v3: true, size: const Size(393, 852));

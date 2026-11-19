@@ -1609,8 +1609,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                         _controller!.animateTo(index);
                       }
                     },
-                    onLiveEnd: () {
-                      _liveEndRequested = true;
+                    onLiveEndSuppressionChanged: (suppressed) {
+                      if (!mounted) return;
+                      _liveEndRequested = suppressed;
                       _summaryOpenPending = false;
                     },
                     onStopPressed: () {
