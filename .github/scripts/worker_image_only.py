@@ -34,14 +34,18 @@ def require_dry_run_env():
     require(os.environ.get(DRY_RUN_ENV) == "1", f"dry-run command requires {DRY_RUN_ENV}=1")
 
 
+def require_dry_run_allows(args):
+    if dry_run_mode():
+        read = bool(args) and args[0] == "get"
+        # Exactly one dry-run option, and it is server: a later or conflicting flag could override it.
+        dry = [a for a in args if a == "--dry-run" or str(a).startswith("--dry-run=")]
+        preview = bool(args) and args[0] == "patch" and dry == ["--dry-run=server"]
+        require(read or preview, "write refused in dry-run mode")
+
+
 def guarded(run):
     def call(*args):
-        if dry_run_mode():
-            read = bool(args) and args[0] == "get"
-            # Exactly one dry-run option, and it is server: a later or conflicting flag could override it.
-            dry = [a for a in args if a == "--dry-run" or str(a).startswith("--dry-run=")]
-            preview = bool(args) and args[0] == "patch" and dry == ["--dry-run=server"]
-            require(read or preview, "write refused in dry-run mode")
+        require_dry_run_allows(args)
         return run(*args)
 
     return call
@@ -143,6 +147,9 @@ def cronjob_history(obj, cronjobs):
 
 
 def kubectl(*args):
+    # The only process boundary in this helper; the dry-run restriction is enforced here as well as in
+    # guarded(), so no caller can reach the API with a write while the mode env is set.
+    require_dry_run_allows(args)
     result = subprocess.run(
         ["kubectl", "-n", NAMESPACE, *args, "--request-timeout=30s"],
         capture_output=True,

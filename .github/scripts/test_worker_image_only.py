@@ -859,6 +859,50 @@ class DryRunTests(unittest.TestCase):
                 worker.guarded(recorder)(verb, "deployment", worker.TARGET, "--dry-run=server")
         self.assertEqual(recorder.calls, [])
 
+    def test_transport_refuses_writes_in_dry_run_mode_before_subprocess(self):
+        os.environ[worker.DRY_RUN_ENV] = "1"
+        with mock.patch.object(worker.subprocess, "run") as run:
+            for args in (("delete", "deployment", worker.TARGET), ("patch", "deployment", worker.TARGET, "-p", "[]"),
+                         ("patch", "deployment", worker.TARGET, "--dry-run=server", "--dry-run=none")):
+                with self.subTest(args=args), self.assertRaisesRegex(ValueError, "dry-run mode"):
+                    worker.kubectl(*args)
+        run.assert_not_called()
+
+    def test_dry_run_through_the_real_transport_sends_no_write(self):
+        # Route the real kubectl() transport into the fake cluster; every argv that reaches subprocess must
+        # be a read or a single server dry-run.
+        seen = []
+
+        def fake_subprocess_run(argv, **kwargs):
+            self.assertEqual(argv[:3], ["kubectl", "-n", worker.NAMESPACE])
+            self.assertEqual(argv[-1], "--request-timeout=30s")
+            args = tuple(argv[3:-1])
+            seen.append(args)
+            return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(self.cluster(*args)), stderr="")
+
+        os.environ[worker.DRY_RUN_ENV] = "1"
+        with mock.patch.object(worker.subprocess, "run", fake_subprocess_run), contextlib.redirect_stdout(io.StringIO()):
+            worker.dry_run(self.baseline, NEW, self.receipt_path)
+        self.assertTrue(seen)
+        self.assertEqual([args for args in seen if is_write(args)], [])
+        self.assertEqual(self.cluster.writes, 0)
+
+    def test_kubectl_is_the_only_process_or_network_boundary(self):
+        import ast
+        tree = ast.parse(Path(worker.__file__).read_text())
+        imported = {alias.name.split(".")[0] for node in ast.walk(tree) if isinstance(node, (ast.Import, ast.ImportFrom))
+                    for alias in node.names} | {node.module.split(".")[0] for node in ast.walk(tree)
+                                                 if isinstance(node, ast.ImportFrom) and node.module}
+        self.assertFalse(imported & {"socket", "urllib", "http", "requests", "httpx", "kubernetes", "ssl", "asyncio"})
+        callers = set()
+        for function in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)):
+            for node in ast.walk(function):
+                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in ("subprocess", "os"):
+                    if node.attr in ("run", "Popen", "call", "check_call", "check_output", "system", "popen", "exec",
+                                     "execv", "execvp", "spawnv", "fork"):
+                        callers.add(function.name)
+        self.assertEqual(callers, {"kubectl"})
+
     def test_guard_refuses_conflicting_or_duplicate_dry_run_flags(self):
         os.environ[worker.DRY_RUN_ENV] = "1"
         recorder = Recorder(self.cluster)
