@@ -910,17 +910,24 @@ class DryRunTests(unittest.TestCase):
                     found.append(f"from {node.module} import")
                 elif (node.module or "").split(".")[0] in ("os", "subprocess"):
                     found.append(f"from {node.module} import")
-            elif isinstance(node, ast.Name) and node.id in ("__import__", "eval", "exec", "compile"):
+            elif isinstance(node, ast.Name) and node.id in ("__import__", "eval", "exec", "compile", "getattr", "vars",
+                                                              "globals", "locals", "setattr"):
                 found.append(node.id)
         allowed = set()
         for function in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "kubectl"):
             allowed |= {id(n) for n in ast.walk(function)}
+        parents = {id(child): parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
         for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-                if node.value.id == "subprocess" and node.attr != "TimeoutExpired" and id(node) not in allowed:
-                    found.append(f"subprocess.{node.attr}")
-                if node.value.id == "os" and node.attr in self.PROCESS_CALLS:
-                    found.append(f"os.{node.attr}")
+            if not (isinstance(node, ast.Name) and node.id in ("os", "subprocess")):
+                continue
+            parent = parents.get(id(node))
+            # The module may only be used as `module.attr`; a bare reference could re-bind it out of sight.
+            if not (isinstance(parent, ast.Attribute) and parent.value is node):
+                found.append(f"bare {node.id}")
+            elif node.id == "subprocess" and parent.attr != "TimeoutExpired" and id(parent) not in allowed:
+                found.append(f"subprocess.{parent.attr}")
+            elif node.id == "os" and parent.attr in self.PROCESS_CALLS:
+                found.append(f"os.{parent.attr}")
         return found
 
     def test_kubectl_is_the_only_process_or_network_boundary(self):
@@ -929,7 +936,9 @@ class DryRunTests(unittest.TestCase):
     def test_boundary_check_rejects_alternate_clients(self):
         source = Path(worker.__file__).read_text()
         for extra in ("import urllib3\n", "from subprocess import run\n", "import subprocess as sp\n",
-                      "from os import system\n", "import os as o\n", "from kubernetes import client\n", "import importlib\n",
+                      "from os import system\n", "import os as o\n",
+                      "transport = subprocess\ndef w():\n    transport.run(['kubectl'])\n",
+                      "def w():\n    getattr(subprocess, 'run')(['kubectl'])\n", "def w(m=os):\n    m.system('x')\n", "from kubernetes import client\n", "import importlib\n",
                       "def other():\n    return subprocess.run(['kubectl'])\n", "subprocess.Popen(['x'])\n",
                       "def f():\n    os.system('x')\n", "def f():\n    return __import__('socket')\n"):
             with self.subTest(extra=extra):
