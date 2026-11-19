@@ -1008,16 +1008,26 @@
     return h('div', { class: 'left-col' }, player, card);
   }
 
+  /* Batch diarization abstains with a per-segment BATCH_UNASSIGNED_<segment>[_n] label: not a person. */
+  const UNASSIGNED = /^BATCH_UNASSIGNED_/;
+  function unassigned(seg) {
+    return !seg.is_user && UNASSIGNED.test(seg.speaker_name || seg.speaker || '');
+  }
+  function speakerKey(seg) {
+    if (seg.is_user) return '__user';
+    return unassigned(seg) ? '__unassigned' : seg.speaker || seg.speaker_name || '?';
+  }
   function speakerPalette(conv) {
     const map = new Map();
     for (const seg of (conv && conv.segments) || []) {
-      const id = seg.is_user ? '__user' : seg.speaker || seg.speaker_name || '?';
+      const id = speakerKey(seg);
       if (!map.has(id)) map.set(id, seg.is_user ? 0 : (map.size % 5) + 1);
     }
     return map;
   }
   function speakerLabel(seg) {
     if (seg.is_user) return seg.speaker_name || 'You';
+    if (unassigned(seg)) return 'Unassigned speaker';
     if (seg.speaker_name) return seg.speaker_name;
     const m = /(\d+)$/.exec(seg.speaker || '');
     return m ? 'Speaker ' + (+m[1]) : seg.speaker || 'Speaker';
@@ -1028,7 +1038,7 @@
     const pal = speakerPalette(conv);
     const base = audio ? (ms(conv.started_at) - ms(audio.start)) / 1000 : 0;
     return conv.segments.map((seg) => {
-      const idx = pal.get(seg.is_user ? '__user' : seg.speaker || seg.speaker_name || '?');
+      const idx = pal.get(speakerKey(seg));
       const at = base + (seg.start || 0), end = base + (seg.end || seg.start || 0);
       return h('div', { class: 'seg' + (seg.is_user ? ' me' : ''), dataset: audio ? { t: at.toFixed(2), e: Math.max(end, at + 0.5).toFixed(2) } : {}, style: '--sc:var(--spk-' + idx + ')' },
         h('button', { class: 'ts', type: 'button', title: 'Play from here', disabled: !audioEl, onclick: () => { if (audioEl) { audioEl.currentTime = Math.max(0, at); audioEl.play().catch(() => {}); } } }, mmss(seg.start)),
@@ -1053,7 +1063,7 @@
         curSeg = segOf[op.b];
         const seg = segs[curSeg];
         cur = h('p');
-        paras.push(h('div', { class: 'seg diffpara', style: '--sc:var(--spk-' + pal.get(seg.is_user ? '__user' : seg.speaker || seg.speaker_name || '?') + ')' }, h('div', { class: 'spk' }, speakerLabel(seg)), cur));
+        paras.push(h('div', { class: 'seg diffpara', style: '--sc:var(--spk-' + pal.get(speakerKey(seg)) + ')' }, h('div', { class: 'spk' }, speakerLabel(seg)), cur));
       }
       if (!cur) { cur = h('p'); paras.push(h('div', { class: 'seg diffpara' }, cur)); }
       if (op.t === 'eq') cur.append(op.s);

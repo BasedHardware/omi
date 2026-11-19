@@ -21,7 +21,8 @@ from typing import Any, Mapping
 
 from testing.pipeline_lab.chain.barrier import ExecutorBarrier, drain_event_loop
 from testing.pipeline_lab.sinks.capture import capture_scope
-from testing.pipeline_lab.v3.feed import Arrival, pre_v3_row
+from testing.pipeline_lab.stack.io import parse_time
+from testing.pipeline_lab.v3.feed import Arrival, pre_v3_row, speech_segments
 
 V3_MODULES = (
     'config.conversations_v3',
@@ -93,6 +94,7 @@ class ProductV3Ops:
         self.finalizer = finalizer
         self.barrier = barrier
         self.barrier_timeout = barrier_timeout
+        self.seeded: set[str] = set()  # recordings whose live row a partial update created
 
     @staticmethod
     def _seed(uid: str, row: dict[str, Any]) -> bool:
@@ -110,6 +112,42 @@ class ProductV3Ops:
         return row.get('recording') is True
 
     @staticmethod
+    def _write_segments(uid: str, cid: str, segments: list[dict[str, Any]], finished_at: Any) -> bool:
+        """Production's live transcript write; for a v3 recording it calls ``triggers.changed``."""
+        from database import conversations as conversations_db
+        from testing.pipeline_lab.seed.writer import assert_lab_target
+
+        assert_lab_target(uid)
+        return conversations_db.update_conversation_segments(uid, cid, segments, finished_at=finished_at) is not False
+
+    @staticmethod
+    def _end_of(row: Mapping[str, Any], segments: list[dict[str, Any]]) -> Any:
+        from datetime import timedelta
+
+        origin = parse_time(row.get('started_at'))
+        if origin is None or not segments:
+            return origin
+        return origin + timedelta(seconds=max(float(s.get('end') or s.get('start') or 0) for s in segments))
+
+    async def _partial(self, uid: str, arrival: Arrival) -> dict[str, Any]:
+        """A live capture's speech so far: create the in-progress row once, then write segments."""
+        segments = speech_segments(arrival.row)[: arrival.segments]
+        detail: dict[str, Any] = {'words': arrival.words, 'segments': len(segments)}
+        with capture_scope(arrival.recording_id, 'v3_capture'):
+            if arrival.recording_id not in self.seeded:
+                row = pre_v3_row(arrival.row)
+                row['transcript_segments'] = []  # listen creates the row before any speech
+                row['finished_at'] = row.get('started_at')
+                row.pop('recorded_end', None)
+                await asyncio.to_thread(self._seed, uid, row)
+                self.seeded.add(arrival.recording_id)
+            wrote = await asyncio.to_thread(
+                self._write_segments, uid, arrival.recording_id, segments, self._end_of(arrival.row, segments)
+            )
+        detail['outcome'] = 'partial' if wrote else 'partial_refused'
+        return detail
+
+    @staticmethod
     def _read(uid: str, cid: str) -> dict[str, Any]:
         from database._client import get_firestore_client
 
@@ -123,10 +161,24 @@ class ProductV3Ops:
         triggers.changed(uid, cid, manual_end=manual_end)
 
     async def arrive(self, uid: str, arrival: Arrival) -> dict[str, Any]:
+        if arrival.partial:
+            return await self._partial(uid, arrival)
         row = pre_v3_row(arrival.row)
         detail: dict[str, Any] = {'words': arrival.words}
         with capture_scope(arrival.recording_id, 'v3_capture'):
-            recording = await asyncio.to_thread(self._seed, uid, row)
+            if arrival.recording_id in self.seeded:
+                # The live row exists (partials created it, the builder may already claim it): land the
+                # full transcript the way the live write does, then finalize. Re-seeding would drop claims.
+                await asyncio.to_thread(
+                    self._write_segments,
+                    uid,
+                    arrival.recording_id,
+                    list(row.get('transcript_segments') or []),
+                    parse_time(row.get('finished_at')) or self._end_of(row, list(row.get('transcript_segments') or [])),
+                )
+                recording = bool((await asyncio.to_thread(self._read, uid, arrival.recording_id)).get('recording'))
+            else:
+                recording = await asyncio.to_thread(self._seed, uid, row)
             detail['disposition'] = await self.finalizer.finalize(uid, arrival.recording_id, row.get('language'))
             current = await asyncio.to_thread(self._read, uid, arrival.recording_id)
             if recording and not current.get('v3_pending') and current.get('recording') and not current.get('deleted'):

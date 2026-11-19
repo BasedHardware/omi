@@ -27,6 +27,7 @@ from __future__ import annotations
 import base64
 import http.client
 import json
+import os
 import secrets
 import threading
 import time
@@ -45,6 +46,10 @@ CACHE_NAMESPACE = 'llm'
 RETRYABLE_UPSTREAM_STATUS = frozenset({429, 502, 503, 504})
 UPSTREAM_ATTEMPTS = 4
 UPSTREAM_BACKOFF_SECONDS = 2.0
+# A refused or reset connection before the request went out is always safe to retry; the dev gateway
+# is reached through a reconnecting port-forward that can be down for tens of seconds (a 2026-11-18
+# replay lost its daily summary to one such gap after 12 s of retries). Wait up to this long for it.
+UPSTREAM_CONNECT_WAIT_SECONDS = float(os.environ.get('OMI_PIPELINE_LAB_UPSTREAM_CONNECT_WAIT', '120') or 120)
 _HOP = {
     'connection',
     'keep-alive',
@@ -356,7 +361,10 @@ class _Handler(BaseHTTPRequestHandler):
             # A transient gateway answer (429/502/503/504) is retried before anything reaches the
             # client, so one blip does not fail a whole replay. Those answers are not billed upstream.
             # A transport error after the body was sent is never retried: its fate is unknown.
-            for attempt in range(1, UPSTREAM_ATTEMPTS + 1):
+            connect_deadline = time.monotonic() + UPSTREAM_CONNECT_WAIT_SECONDS
+            attempt = 0
+            while True:
+                attempt += 1
                 connection = connection_cls(upstream.hostname, upstream.port, timeout=config.timeout)
                 sent = False
                 try:
@@ -368,10 +376,13 @@ class _Handler(BaseHTTPRequestHandler):
                     sent = True
                     response = connection.getresponse()
                 except (OSError, http.client.HTTPException):
-                    if sent or attempt == UPSTREAM_ATTEMPTS:
-                        raise
                     connection.close()
-                    time.sleep(UPSTREAM_BACKOFF_SECONDS * attempt)
+                    left = connect_deadline - time.monotonic()
+                    if sent or (attempt >= UPSTREAM_ATTEMPTS and left <= 0):
+                        raise
+                    call.extra.setdefault('retries', []).append('transport')
+                    delay = UPSTREAM_BACKOFF_SECONDS * min(attempt, 5)
+                    time.sleep(delay if attempt < UPSTREAM_ATTEMPTS else max(0.0, min(delay, left)))
                     continue
                 if response.status in RETRYABLE_UPSTREAM_STATUS and attempt < UPSTREAM_ATTEMPTS:
                     response.read()

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from testing.pipeline_lab.v3.driver import V3Driver, default_horizon, next_sweep
-from testing.pipeline_lab.v3.feed import arrival_instant, plan_arrivals, pre_v3_row
+from testing.pipeline_lab.v3.feed import arrival_instant, partial_points, plan_arrivals, pre_v3_row
 from testing.pipeline_lab.v3.tasks import RECONCILE_PATH, LoopbackTasks
 
 T0 = datetime(2026, 3, 14, 9, 0, tzinfo=timezone.utc)
@@ -61,6 +61,50 @@ def test_plan_orders_by_instant_and_skips_unusable_rows():
     assert donor.backfill_donor and donor.manual_end and donor.words == 3
     summary = plan.summary()
     assert summary['arrivals'] == 3 and summary['backfill_donors'] == 1 and summary['skipped']['deleted'] == 1
+
+
+def live_rec(rid, start, *, segments, minutes=4, **extra):
+    fields = {
+        'created_at': start.isoformat(),
+        'transcript_segments': [{'text': f'words {i}', 'start': a, 'end': b} for i, (a, b) in enumerate(segments)],
+    }
+    fields.update(extra)
+    return rec(rid, start, minutes=minutes, **fields)
+
+
+def test_partial_points_land_each_segment_after_its_end_at_most_once_per_step():
+    row = live_rec('a', T0, segments=[(200, 210), (0, 2), (30, 32)])  # out of order on purpose
+    final = T0 + timedelta(minutes=5)
+    points = partial_points(row, final, step=timedelta(seconds=60), lag=timedelta(seconds=60))
+    # lands at +62 s, +92 s (inside the step: waits for the +122 s slot) and +270 s.
+    assert points == [
+        (T0 + timedelta(seconds=62), 1),
+        (T0 + timedelta(seconds=122), 2),
+        (T0 + timedelta(seconds=270), 3),
+    ]
+
+
+def test_partial_points_skip_offline_uploads_and_speech_landing_after_the_arrival():
+    offline = live_rec('a', T0, segments=[(0, 2)], created_at=(T0 + timedelta(hours=1)).isoformat())
+    assert partial_points(offline, T0 + timedelta(hours=2), step=timedelta(seconds=60)) == []
+    late = live_rec('b', T0, segments=[(0, 2), (200, 230)])
+    assert partial_points(late, T0 + timedelta(seconds=100), step=timedelta(seconds=60)) == [
+        (T0 + timedelta(seconds=62), 1)
+    ]
+
+
+def test_plan_with_partials_feeds_them_before_the_finished_capture():
+    rows = [live_rec('a', T0, segments=[(0, 2), (120, 125)]), rec('b', T0 + timedelta(minutes=1))]
+    plain = plan_arrivals(rows)
+    assert [a.partial for a in plain.arrivals] == [False, False]
+    plan = plan_arrivals(rows, partial_step=timedelta(seconds=60))
+    a_events = [x for x in plan.arrivals if x.recording_id == 'a']
+    assert [x.segments for x in a_events] == [1, 2, None]
+    assert a_events[-1].instant > a_events[-2].instant and not a_events[-1].partial
+    assert a_events[0].words == 2 and a_events[-1].words == 4
+    summary = plan.summary()
+    assert summary['arrivals'] == 2 and summary['partial_updates'] == 2 and summary['recordings_with_partials'] == 1
+    assert 'partial' not in summary['instant_sources']
 
 
 def test_pre_v3_row_keeps_capture_facts_only():
@@ -266,3 +310,17 @@ def test_replayed_rows_keep_only_conversations_this_replay_planned():
         {'id': 'today', 'started_at': T0.isoformat(), 'v3_recording_ids': ['b']},
     ]
     assert [r['id'] for r in replayed_rows(rows, {'a'}, T0)] == ['spans', 'today']
+
+
+def test_replayed_rows_leave_next_day_conversations_out_like_the_production_baseline():
+    # A recording running past midnight: production's baseline keeps only conversations starting in
+    # the day, so the replay's next-day part must not show up as replay-only.
+    from testing.pipeline_lab.v3.run import replayed_rows
+
+    end = T0 + timedelta(hours=8)
+    rows = [
+        {'id': 'before', 'started_at': (end - timedelta(minutes=20)).isoformat(), 'v3_recording_ids': ['late']},
+        {'id': 'after', 'started_at': (end + timedelta(minutes=7)).isoformat(), 'v3_recording_ids': ['late']},
+    ]
+    assert [r['id'] for r in replayed_rows(rows, {'late'}, T0, end)] == ['before']
+    assert [r['id'] for r in replayed_rows(rows, {'late'}, T0)] == ['before', 'after']

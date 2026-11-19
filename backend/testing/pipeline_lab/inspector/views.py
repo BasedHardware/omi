@@ -540,6 +540,8 @@ def _locate_in(conv: Mapping[str, Any], kind: str, key: str) -> Optional[Any]:
         names = []
         for seg in conv.get('segments') or []:
             label = seg.get('speaker_name') or seg.get('speaker')
+            if not seg.get('is_user') and str(label or '').startswith('BATCH_UNASSIGNED_'):
+                label = 'Unassigned speaker'  # batch diarization's per-segment abstention, not a person
             if label not in names:
                 names.append(label)
         return {'speakers': names}

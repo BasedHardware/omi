@@ -23,13 +23,22 @@ decides admission itself (``triggers.mark_new``) and finalization routes it thro
 ``recording_short_path``. A user's explicit stop (``v3_manual_end``) is a capture fact and
 is replayed after finalization.
 
+**Partial updates.** A live capture's row exists from its first second, and production writes
+its speech as it is transcribed (``database.conversations.update_conversation_segments``, which
+re-arms the builder through ``triggers.changed``). The snapshot keeps only the final transcript,
+not when each segment landed, so with ``partial_step`` set the plan models it: segment ``i`` lands
+at ``started_at + end_i + partial_lag``, and a partial arrival carries every segment landed so
+far, at most one per ``partial_step`` (a segment landing inside the step waits for the next slot). Only rows created before their capture finished get
+partials (an offline upload lands whole), and every partial comes before the recording's own
+arrival, which still finalizes the full capture.
+
 Rows production deleted or merged away (``deleted``, ``sync_merged_into``) are skipped and
 reported; an in-progress recording with no speech is skipped too (it never fed a line).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Mapping
 
@@ -41,6 +50,7 @@ DEFAULT_LAG = timedelta(seconds=60)
 # donors carry their legacy row's late re-finalization in ``terminal_family_at``: hours, not minutes).
 MAX_STAMP_LAG = timedelta(minutes=30)
 MODES = ('production', 'finish')
+DEFAULT_PARTIAL_STEP = timedelta(seconds=60)
 
 
 @dataclass(frozen=True)
@@ -55,6 +65,11 @@ class Arrival:
     manual_end: bool
     backfill_donor: bool  # production converted this row in a backfill pass, not live
     row: Mapping[str, Any] = field(repr=False)
+    segments: int | None = None  # a partial update: the first N speech segments; None = the finished capture
+
+    @property
+    def partial(self) -> bool:
+        return self.segments is not None
 
 
 @dataclass
@@ -66,10 +81,14 @@ class FeedPlan:
         sources: dict[str, int] = {}
         for arrival in self.arrivals:
             sources[arrival.instant_source] = sources.get(arrival.instant_source, 0) + 1
+        partials = [a for a in self.arrivals if a.partial]
+        sources = {k: v for k, v in sources.items() if k != 'partial'}
         return {
-            'arrivals': len(self.arrivals),
-            'backfill_donors': sum(1 for a in self.arrivals if a.backfill_donor),
-            'manual_end': sum(1 for a in self.arrivals if a.manual_end),
+            'arrivals': len(self.arrivals) - len(partials),
+            'partial_updates': len(partials),
+            'recordings_with_partials': len({a.recording_id for a in partials}),
+            'backfill_donors': sum(1 for a in self.arrivals if a.backfill_donor and not a.partial),
+            'manual_end': sum(1 for a in self.arrivals if a.manual_end and not a.partial),
             'instant_sources': sources,
             'skipped': {reason: len(ids) for reason, ids in self.skipped.items()},
         }
@@ -109,6 +128,38 @@ def arrival_instant(row: Mapping[str, Any], *, lag: timedelta = DEFAULT_LAG, mod
     return started + lag, 'started_at+lag'
 
 
+def speech_segments(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The row's segments with text, in speech order (the order partial updates deliver them)."""
+    segments = [dict(s) for s in row.get('transcript_segments') or [] if str(s.get('text') or '').strip()]
+    return sorted(segments, key=lambda s: (float(s.get('start') or 0), float(s.get('end') or 0)))
+
+
+def partial_points(
+    row: Mapping[str, Any], final: datetime, *, step: timedelta, lag: timedelta = DEFAULT_LAG
+) -> list[tuple[datetime, int]]:
+    """``(instant, segments landed)`` for each partial update of a live capture, before ``final``."""
+    origin = parse_time(row.get('started_at'))
+    created = parse_time(row.get('created_at'))
+    finished = parse_time(row.get('finished_at'))
+    if origin is None or created is None or finished is None or created >= finished:
+        return []
+    lands: list[datetime] = []
+    for segment in speech_segments(row):
+        land = origin + timedelta(seconds=max(float(segment.get('end') or 0), float(segment.get('start') or 0))) + lag
+        lands.append(max([land, *lands[-1:]]))
+    # A segment landing inside the step after the previous write waits for the next write slot,
+    # so the tail of the speech still lands before the recording's own arrival.
+    points: list[tuple[datetime, int]] = []
+    delivered = 0
+    while delivered < len(lands):
+        at = lands[delivered] if not points else max(lands[delivered], points[-1][0] + step)
+        if at >= final:
+            break
+        delivered = sum(1 for land in lands if land <= at)
+        points.append((at, delivered))
+    return points
+
+
 def skip_reason(row: Mapping[str, Any]) -> str | None:
     if row.get('deleted'):
         return 'deleted'
@@ -122,7 +173,12 @@ def skip_reason(row: Mapping[str, Any]) -> str | None:
 
 
 def plan_arrivals(
-    rows: Iterable[Mapping[str, Any]], *, lag: timedelta = DEFAULT_LAG, mode: str = 'production'
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    lag: timedelta = DEFAULT_LAG,
+    mode: str = 'production',
+    partial_step: timedelta | None = None,
+    partial_lag: timedelta = DEFAULT_LAG,
 ) -> FeedPlan:
     arrivals: list[Arrival] = []
     skipped: dict[str, list[str]] = {}
@@ -132,21 +188,35 @@ def plan_arrivals(
             skipped.setdefault(reason, []).append(str(row.get('id')))
             continue
         instant, source = arrival_instant(row, lag=lag, mode=mode)
-        arrivals.append(
-            Arrival(
-                recording_id=str(row['id']),
-                instant=instant,
-                instant_source=source,
-                started_at=parse_time(row.get('started_at')),
-                finished_at=parse_time(row.get('finished_at')),
-                lane=str(row.get('record_lane_owner') or f'source:{row.get("source") or "unknown"}'),
-                words=word_count(row),
-                manual_end=row.get('v3_manual_end') is True,
-                backfill_donor=bool(row.get('v3_backfill_run')),
-                row=row,
-            )
+        final = Arrival(
+            recording_id=str(row['id']),
+            instant=instant,
+            instant_source=source,
+            started_at=parse_time(row.get('started_at')),
+            finished_at=parse_time(row.get('finished_at')),
+            lane=str(row.get('record_lane_owner') or f'source:{row.get("source") or "unknown"}'),
+            words=word_count(row),
+            manual_end=row.get('v3_manual_end') is True,
+            backfill_donor=bool(row.get('v3_backfill_run')),
+            row=row,
         )
-    arrivals.sort(key=lambda a: (a.instant, a.started_at or a.instant, a.recording_id))
+        if partial_step is not None:
+            segments = speech_segments(row)
+            for at, count in partial_points(row, instant, step=partial_step, lag=partial_lag):
+                arrivals.append(
+                    replace(
+                        final,
+                        instant=at,
+                        instant_source='partial',
+                        manual_end=False,
+                        words=sum(len(str(s.get('text') or '').split()) for s in segments[:count]),
+                        segments=count,
+                    )
+                )
+        arrivals.append(final)
+    # A recording's partials precede its own arrival (strictly earlier instants); ties between
+    # recordings keep start order, then the partial before a finished capture.
+    arrivals.sort(key=lambda a: (a.instant, a.started_at or a.instant, a.recording_id, not a.partial))
     return FeedPlan(arrivals=arrivals, skipped=skipped)
 
 

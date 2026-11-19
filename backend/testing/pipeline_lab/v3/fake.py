@@ -21,7 +21,7 @@ from testing.pipeline_lab.chain.fake import ask
 from testing.pipeline_lab.stack.io import iso, parse_time, write_json
 from testing.pipeline_lab.v3.driver import V3Driver, default_horizon
 from testing.pipeline_lab.v3.export import normalize_v3_conversation, pair_by_recordings
-from testing.pipeline_lab.v3.feed import DEFAULT_LAG, plan_arrivals
+from testing.pipeline_lab.v3.feed import DEFAULT_LAG, plan_arrivals, speech_segments
 from testing.pipeline_lab.v3.tasks import RECONCILE_PATH, LoopbackTasks
 
 SILENCE = timedelta(minutes=5)
@@ -50,7 +50,10 @@ class FakeV3Ops:
         self.conversations: dict[str, dict[str, Any]] = {}
 
     async def arrive(self, uid: str, arrival: Any) -> dict[str, Any]:
-        self.recordings[arrival.recording_id] = dict(arrival.row)
+        row = dict(arrival.row)
+        if getattr(arrival, 'partial', False):
+            row['transcript_segments'] = speech_segments(arrival.row)[: arrival.segments]
+        self.recordings[arrival.recording_id] = row
         self.pending_ids.add(arrival.recording_id)
         minute = int(self.clock.now().timestamp()) // 60
         self.tasks.enqueue(
@@ -60,7 +63,7 @@ class FakeV3Ops:
             {'uid': uid},
             schedule_at=int(self.clock.now().timestamp()),
         )
-        return {'outcome': 'recording'}
+        return {'outcome': 'partial' if getattr(arrival, 'partial', False) else 'recording'}
 
     def _lines(self) -> list[tuple[datetime, datetime, str, dict]]:
         lines = []
@@ -153,8 +156,12 @@ def replay_v3_fake(
     arrival_lag: timedelta = DEFAULT_LAG,
     tail: timedelta = timedelta(hours=2),
     sweeps: bool = True,
+    partial_step: timedelta | None = None,
+    partial_lag: timedelta = DEFAULT_LAG,
 ) -> dict[str, Any]:
-    plan = plan_arrivals(recordings, lag=arrival_lag, mode=arrival_mode)
+    plan = plan_arrivals(
+        recordings, lag=arrival_lag, mode=arrival_mode, partial_step=partial_step, partial_lag=partial_lag
+    )
     first = plan.arrivals[0].instant if plan.arrivals else datetime.now(timezone.utc)
     clock = _Clock(first - timedelta(minutes=1))
     tasks = LoopbackTasks(clock.now)

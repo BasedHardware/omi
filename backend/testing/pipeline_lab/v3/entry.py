@@ -8,7 +8,9 @@ run's pinned arm or the in-place checkout, exactly like ``chain/entry.py``.
 Inputs (run store): ``corpus/<day>/day.json``, ``start_state/``, ``v3/recordings.jsonl`` (the
 day's recordings, lab uid) and ``baseline/v3_conversations.jsonl`` (production's v3
 conversations, contract shape). Overlay ``model_config.v3`` tunes the replay:
-``{"arrival": "production"|"finish", "arrival_lag_seconds": 60, "tail_hours": 2, "sweeps": true}``.
+``{"arrival": "production"|"finish", "arrival_lag_seconds": 60, "tail_hours": 2, "sweeps": true,
+"partial_step_seconds": 60, "partial_lag_seconds": 60}``. ``partial_step_seconds: 0`` turns partial
+updates off (each recording then lands whole at its arrival, as before 2026-11-19).
 
 Outputs: see ``v3/run.py``; then ``baseline.json`` against production's v3 conversations and
 ``chain_entry.json`` (this summary). Exit 0 when the day ran (even partially), 2 otherwise.
@@ -38,6 +40,12 @@ def v3_options(overlay: Any) -> dict[str, Any]:
         'arrival_lag': timedelta(seconds=float(raw.get('arrival_lag_seconds', 60))),
         'tail': timedelta(hours=float(raw.get('tail_hours', 2))),
         'sweeps': bool(raw.get('sweeps', True)),
+        'partial_step': (
+            timedelta(seconds=float(raw.get('partial_step_seconds', 60)))
+            if float(raw.get('partial_step_seconds', 60)) > 0
+            else None
+        ),
+        'partial_lag': timedelta(seconds=float(raw.get('partial_lag_seconds', 60))),
     }
 
 

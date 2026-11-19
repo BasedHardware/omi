@@ -287,7 +287,37 @@ def test_persistent_gateway_error_is_relayed_after_the_last_attempt(lab, upstrea
     assert lab.read_llm_calls('run-1')[0].usd == 0
 
 
-def test_unreachable_upstream_releases_or_keeps_reservation(lab):
+def test_refused_connections_are_waited_out_past_the_attempt_count(lab, upstream, monkeypatch):
+    # The dev gateway sits behind a reconnecting port-forward; a real day lost its daily summary
+    # when the tunnel was down for longer than four quick retries.
+    import http.client
+
+    from testing.pipeline_lab.llm_proxy import server
+
+    monkeypatch.setattr(server, 'UPSTREAM_BACKOFF_SECONDS', 0.0)
+    monkeypatch.setattr(server, 'UPSTREAM_CONNECT_WAIT_SECONDS', 30.0)
+    refusals = [server.UPSTREAM_ATTEMPTS + 2]
+    upstream_port = int(upstream.url.rsplit(':', 1)[1].split('/')[0])
+    real_connect = http.client.HTTPConnection.connect
+
+    def connect(self):
+        if self.port == upstream_port and refusals[0] > 0:
+            refusals[0] -= 1
+            raise ConnectionRefusedError('tunnel down')
+        return real_connect(self)
+
+    monkeypatch.setattr(http.client.HTTPConnection, 'connect', connect)
+    with _proxy(lab, upstream) as proxy:
+        status, _, _ = _post(proxy.url + '/v1/chat/completions', CHAT)
+    assert status == 200 and len(upstream.requests) == 1
+    assert lab.read_llm_calls('run-1')[0].extra['retries'] == ['transport'] * (server.UPSTREAM_ATTEMPTS + 2)
+
+
+def test_unreachable_upstream_releases_or_keeps_reservation(lab, monkeypatch):
+    from testing.pipeline_lab.llm_proxy import server
+
+    monkeypatch.setattr(server, 'UPSTREAM_BACKOFF_SECONDS', 0.0)
+    monkeypatch.setattr(server, 'UPSTREAM_CONNECT_WAIT_SECONDS', 0.0)
     ledger = SpendLedger(lab.ledger_path('run-1'), budget_usd=1.0)
     proxy = LlmProxy(ProxyConfig(upstream='http://127.0.0.1:9', run_id='run-1', timeout=5), store=lab, ledger=ledger)
     with proxy:

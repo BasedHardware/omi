@@ -68,6 +68,8 @@ class V3RunSpec:
     production_recap_at: Any = None
     arrival_mode: str = 'production'
     arrival_lag: timedelta = DEFAULT_LAG
+    partial_step: timedelta | None = None  # live transcript writes before the capture ends (v3/feed.py)
+    partial_lag: timedelta = DEFAULT_LAG
     tail: timedelta = timedelta(hours=2)
     sweeps: bool = True
     max_events: int = 20000
@@ -116,13 +118,18 @@ def export_conversations(
 
 
 def replayed_rows(
-    derived: Sequence[Mapping[str, Any]], replayed: set[str], day_start: datetime
+    derived: Sequence[Mapping[str, Any]], replayed: set[str], day_start: datetime, day_end: datetime | None = None
 ) -> list[Mapping[str, Any]]:
     """The v3 conversations this replay planned: any that holds a replayed recording or starts in the day.
-    Start-state conversations from earlier days stay out of the run's output."""
+    Start-state conversations from earlier days stay out of the run's output, and so do conversations
+    starting at or after ``day_end``: production's baseline keeps only v3 conversations starting in the
+    day (``v3/corpus.py``), so a recording that runs past midnight would otherwise show its next-day
+    part as replay-only."""
     out = []
     for row in derived:
         started = parse_time(row.get('started_at'))
+        if day_end is not None and started is not None and started >= day_end:
+            continue
         if replayed & {str(r) for r in row.get('v3_recording_ids') or []} or (started and started >= day_start):
             out.append(row)
     return out
@@ -178,7 +185,13 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
     config = spec.config or LabStackConfig.from_env()
     run_dir = Path(spec.run_dir)
     clock = LabClock(spec.day_start)
-    plan = plan_arrivals(spec.recordings, lag=spec.arrival_lag, mode=spec.arrival_mode)
+    plan = plan_arrivals(
+        spec.recordings,
+        lag=spec.arrival_lag,
+        mode=spec.arrival_mode,
+        partial_step=spec.partial_step,
+        partial_lag=spec.partial_lag,
+    )
     result: dict[str, Any] = {'plan': plan.summary(), 'warnings': []}
     timings: dict[str, float] = {}
     result['timings'] = timings
@@ -251,6 +264,7 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
                         'words': a.words,
                         'backfill_donor': a.backfill_donor,
                         'manual_end': a.manual_end,
+                        **({'segments': a.segments} if a.partial else {}),
                     }
                     for a in plan.arrivals
                 ],
@@ -261,7 +275,8 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
         )
         result['driver'] = report.summary()
         derived, recordings = read_v3_rows(config.uid)
-        derived = replayed_rows(derived, {a.recording_id for a in plan.arrivals}, spec.day_start)
+        derived_all = derived
+        derived = replayed_rows(derived, {a.recording_id for a in plan.arrivals}, spec.day_start, spec.day_end)
         exported = export_conversations(
             run_dir, uid=config.uid, derived=derived, production=spec.production, store=ProductChainStore(), sinks=sinks
         )
@@ -269,8 +284,8 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
         replayed = {a.recording_id for a in plan.arrivals}
         fate = recording_fate(
             [r for r in recordings if str(r.get('id')) in replayed],
-            derived,
-            words={a.recording_id: a.words for a in plan.arrivals},
+            derived_all,  # a claim by a next-day conversation still claims the recording
+            words={a.recording_id: a.words for a in plan.arrivals if not a.partial},
         )
         write_json(run_dir / 'v3_recordings.json', fate)
         write_json(
