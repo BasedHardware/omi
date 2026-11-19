@@ -90,7 +90,9 @@ def usage_stamp(now: datetime, usage_period: Any) -> datetime:
 def _native_manual_upload_revision(job) -> int | None:
     legacy = job.get('record_input_upload_revision')
     explicit = job.get(NATIVE_MANUAL_INPUT_REVISION)
-    if type(explicit) is not int or explicit < 1 or (legacy is not None and explicit != legacy):
+    if type(explicit) is not int or explicit < 1:
+        return None
+    if legacy is not None and (type(legacy) is not int or explicit != legacy):
         return None
     return explicit
 

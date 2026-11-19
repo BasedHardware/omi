@@ -317,6 +317,12 @@ def test_native_manual_upload_proof_uses_admission_fields_not_current_row():
 
     assert projection._native_manual_upload_revision({'v3_native_manual_input_revision': 7}) == 7
     assert projection._native_manual_upload_revision({'record_input_upload_revision': 7}) is None
+    assert (
+        projection._native_manual_upload_revision(
+            {'v3_native_manual_input_revision': 1, 'record_input_upload_revision': True}
+        )
+        is None
+    )
     assert projection._native_manual_upload_revision({'record_upload_revision': 7}) is None
     assert (
         projection._native_manual_upload_revision(
