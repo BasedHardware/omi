@@ -124,7 +124,10 @@ func eraseFailureStatus(err error) int {
 // A connection can try several addresses. Every outcome must be transient
 // before another credential may retry an operation.
 func transientEraseFailure(err error, established bool) bool {
-	if joined, ok := errors.AsType[interface{ Unwrap() []error }](err); ok {
+	if joined, ok := errors.AsType[interface {
+		error
+		Unwrap() []error
+	}](err); ok {
 		for _, cause := range joined.Unwrap() {
 			if !transientEraseFailure(cause, established) {
 				return false
