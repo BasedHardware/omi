@@ -426,6 +426,13 @@
       "kind": "start_background_task",
       "count": 2,
       "why": "Joined worker and lease keeper, not detached work: leased_work awaits (shielded) the worker and then the keeper before returning, so both live exactly as long as the request. At SIGKILL the v3 builder lease expires and the named Cloud Tasks reconcile plus the sweeper redrive the user; no partial write is committed without the lease token."
+    },
+    {
+      "path": "utils/conversations/v3/summary.py",
+      "function": "stream",
+      "kind": "start_background_task",
+      "count": 2,
+      "why": "Joined notes worker and summary lease keeper: stream awaits the worker (shielded on cancel) and then the keeper before it stores or releases. At SIGKILL the summary lease expires, nothing is stored without its token and revision fence, and the five-minute close or the next open rewrites the notes."
     }
   ]
 }
