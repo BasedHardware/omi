@@ -261,7 +261,7 @@ Future<void> _tapFinish(WidgetTester tester) async {
 
 void _expectTranscriptKept(_Capture capture) {
   if (capture.source == _Source.pendantBatch) return; // its page shows preview lines, never cleared
-  expect(find.textContaining('We closed the round at forty'), findsWidgets,
+  expect(find.textContaining('We closed the round at forty', findRichText: true), findsWidgets,
       reason: 'the reader still sees what they made after the request that could fail');
 }
 
@@ -289,6 +289,7 @@ void main() {
           (tester) async {
         final capture = _Capture(source, _noAnswer);
         await _pump(tester, capture);
+        _expectTranscriptKept(capture); // the finder sees the transcript before the tap
         await _tapFinish(tester);
 
         expect(find.byType(LiveEpisodePage), findsOneWidget, reason: 'never a silent pop to Home (C1)');

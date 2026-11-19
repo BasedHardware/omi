@@ -3141,7 +3141,7 @@ class CaptureController extends ChangeNotifier
     final outcome = await _capture.dispatch(PhoneStartRequested(resumePolicy: resumeCapture));
     outcome.throwIfFailed();
     if (outcome.result != true) {
-      if (_phoneStartMicDenied) throw const MicPermissionDenied();
+      if (_phoneStartMicDenied) throw MicPermissionDenied();
       throw StateError('phone recording start refused');
     }
   }
@@ -4992,6 +4992,7 @@ class CaptureController extends ChangeNotifier
         checkPhonePermission: () async {
           final granted = await _requestMicrophonePermission();
           _prefetchedMicPermission = granted;
+          if (!granted) _phoneStartMicDenied = true;
           return granted;
         },
         clearPhonePermissionGrant: () => _prefetchedMicPermission = false,

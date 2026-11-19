@@ -201,18 +201,18 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Prefers coffee in the morning since moving'), findsWidgets);
+    expect(find.byKey(const ValueKey('recent_change_toggle_memory-1')), findsOneWidget);
 
     fail = true;
     await tester.tap(find.text('Show More'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('recent_changes_more_failed')), findsOneWidget, reason: 'not a silent end');
-    expect(find.text('Prefers coffee in the morning since moving'), findsWidgets);
+    expect(find.byKey(const ValueKey('recent_change_toggle_memory-1')), findsOneWidget);
 
     await tester.drag(find.byType(ListView), const Offset(0, 400));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('recent_changes_refresh_failed')), findsOneWidget);
-    expect(find.text('Prefers coffee in the morning since moving'), findsWidgets,
+    expect(find.byKey(const ValueKey('recent_change_toggle_memory-1')), findsOneWidget,
         reason: 'a failed refresh keeps the rows it had');
   });
 }

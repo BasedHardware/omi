@@ -193,8 +193,12 @@ void main() {
     )));
     await tester.tap(find.text('delete'));
     await tester.pump();
-    await tester.pump(const Duration(seconds: 6));
-    await tester.pumpAndSettle();
+    expect(provider.goals, isEmpty, reason: 'staged behind Undo');
+    // Let the Undo toast run out (its timer starts once its entrance animation ends).
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    await tester.pump(const Duration(milliseconds: 500));
     expect(provider.goals.map((g) => g.id), ['a']);
     expect(find.text("Couldn't delete the goal. It's back in your list."), findsOneWidget);
     await tester.pump(const Duration(seconds: 9));
@@ -291,11 +295,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('ai_consent_use_different_account')));
     await tester.tap(find.byKey(const Key('ai_consent_use_different_account')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
     expect(signedOut, 0, reason: 'one tap no longer signs out and wipes preferences');
     expect(find.text('Sign Out?'), findsOneWidget);
     await tester.tap(find.text('Sign Out').last);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
     expect(signedOut, 1);
   });
 
