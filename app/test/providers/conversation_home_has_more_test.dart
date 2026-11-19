@@ -130,4 +130,32 @@ void main() {
     // its oldest visible row; rows older than that stay.
     expect(provider.conversations, hasLength(50));
   });
+
+  test('refresh coverage follows created_at, the order pages are read in', () async {
+    // A row created now for a recording that started long ago: newest by created_at, oldest by start.
+    final stale = ServerConversation(
+        id: 'stale',
+        createdAt: DateTime.utc(2026, 11, 18, 1),
+        startedAt: DateTime.utc(2026, 11, 1),
+        finishedAt: DateTime.utc(2026, 11, 1, 0, 2),
+        structured: Structured('Stale', 'Summary'));
+    var served = 0;
+    final api = ConversationApi(
+        baseUrl: 'http://127.0.0.1:1/',
+        send: (request) async {
+          served++;
+          final rows =
+              served == 1 ? [stale, for (var i = 0; i < 49; i++) row(i)] : [for (var i = 0; i < 30; i++) row(i)];
+          return http.Response(jsonEncode([for (final c in rows) c.toJson()]), 200,
+              headers: {'x-omi-conversation-page-size': served == 1 ? '50' : '542', 'x-omi-has-more': 'true'});
+        });
+    final provider = ConversationProvider(conversationApi: api, isSignedIn: () => true);
+    addTearDown(provider.dispose);
+    expect(await provider.fetchConversations(), isTrue);
+    expect(provider.conversations.map((c) => c.id), contains('stale'));
+    await provider.forceRefreshConversations();
+    final ids = provider.conversations.map((c) => c.id).toList();
+    expect(ids, isNot(contains('stale')), reason: 'created inside the refreshed range and absent from it: gone');
+    expect(ids, containsAll(['c30', 'c48']), reason: 'older by created_at than the page: kept');
+  });
 }

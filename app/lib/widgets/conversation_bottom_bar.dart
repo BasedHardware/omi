@@ -938,7 +938,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             _buildAskButton(context),
           ] else
             Expanded(child: _buildAskBar(context)),
-          const LiveConversationEndButton(),
+          LiveConversationEndButton(conversation: widget.conversation!),
         ]),
       );
     }

@@ -876,16 +876,16 @@ class ConversationProvider extends ChangeNotifier {
     // truncated reads never remove rows, nor do they override a live update.
     // A page with more after it (the server's answer, else a full page of storage
     // rows) covers only down to its oldest row; one with no visible row covers nothing.
+    // GET /v1/conversations orders pages by created_at, so the boundary is too.
     final fullPage = result.page.hasMore ?? result.storageCount >= _conversationPageSize;
     if (!result.truncated && !(fullPage && rawNewConversations.isEmpty)) {
-      final coveredAfter = fullPage
-          ? rawNewConversations.map((c) => c.startedAt ?? c.createdAt).reduce((a, b) => a.isBefore(b) ? a : b)
-          : null;
+      final coveredAfter =
+          fullPage ? rawNewConversations.map((c) => c.createdAt).reduce((a, b) => a.isBefore(b) ? a : b) : null;
       conversations.removeWhere((row) =>
           !row.id.startsWith('ondevice-') &&
           identical(conversationsAtStart[row.id], row) &&
           !pageConversationIds.contains(row.id) &&
-          (coveredAfter == null || (row.startedAt ?? row.createdAt).isAfter(coveredAfter)));
+          (coveredAfter == null || row.createdAt.isAfter(coveredAfter)));
     }
     conversations.removeWhere((row) => _isHiddenByDelete(row.id));
     for (final conversation in completedById.values) {

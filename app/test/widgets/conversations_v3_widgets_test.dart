@@ -12,6 +12,8 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/widgets/live_summary_section.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
@@ -161,6 +163,31 @@ void main() {
       expect(message(const ApiProblem(ApiProblemKind.authTerminal)), l10n.sessionExpiredSignInAgain);
       expect(message(const ApiProblem(ApiProblemKind.transport)), l10n.checkConnectionTryAgain);
     });
+  });
+
+  test("End's ownership rule: a shared captured segment, nothing else", () {
+    ServerConversation window(List<String> ids) => ServerConversation(
+          id: 'w1',
+          createdAt: DateTime(2026, 11, 16, 9),
+          structured: Structured('', ''),
+          transcriptSegments: [
+            for (final id in ids)
+              TranscriptSegment(
+                  id: id,
+                  text: 'x',
+                  speaker: 'SPEAKER_00',
+                  isUser: true,
+                  personId: null,
+                  start: 0,
+                  end: 1,
+                  translations: []),
+          ],
+        );
+    expect(LiveConversationEndButton.ownsCapture(window(['a', 'b']), ['b', 'z']), isTrue);
+    expect(LiveConversationEndButton.ownsCapture(window(['a', 'b']), ['z']), isFalse,
+        reason: "another device's window");
+    expect(LiveConversationEndButton.ownsCapture(window([]), ['z']), isFalse, reason: 'transcript not loaded yet');
+    expect(LiveConversationEndButton.ownsCapture(window(['a']), const []), isFalse, reason: 'nothing captured here');
   });
 
   group('LiveSummarySection', () {

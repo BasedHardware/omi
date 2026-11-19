@@ -303,8 +303,9 @@ class _Home {
   final sync = _StubSyncProvider();
   late final _LiveCapture capture = _LiveCapture()
     ..segments = [
+      // The same segment the open window's transcript ends with: this phone's capture is in it.
       TranscriptSegment(
-          id: 's1',
+          id: 'l4',
           text: 'Doors at six.',
           speaker: 'SPEAKER_00',
           isUser: true,
@@ -604,6 +605,23 @@ void main() {
       expect(find.byType(ConversationWritingPen), findsNothing);
       expect(_rowIds(tester), isNot(contains('live-1')));
       expect(home.episodeCalls, greaterThan(0));
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets("End is hidden on a live window that is not this phone's capture", (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      // This phone records something else (another device's window is the one in progress).
+      home.capture.segments = [_said('other-1', 'Something only this phone heard.', 0, 3)];
+      await tester.tap(find.text('Launch checklist'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const ValueKey('detail_ask_omi')), findsOneWidget);
+      expect(find.byKey(const Key('live_conversation_end')), findsNothing,
+          reason: "End would finalize this phone's capture, not the conversation on screen");
+      expect(home.capture.endCalls, 0);
       await _dispose(tester, home);
     });
   });
