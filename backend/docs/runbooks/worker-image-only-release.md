@@ -90,7 +90,37 @@ the image-tree check, source floor and all other gates still apply. The replica 
 requires exactly one live HPA (minReplicas >= 1) targeting each of the two Deployments in the
 same read; those HPAs are bound by UID and spec hash, so removing or retargeting one refuses.
 
-## Verification and rollback custody
+### Dry-run mode (SCA-2944, David 2026-11-19)
+
+`worker_dry_run=true` runs the preserve-live path to its server dry-run and stops. It takes the same
+`prod-train` concurrency group (break-glass is refused), promotes an existing `image_digest` (no
+build or push; the image-tree check still runs) and takes no rollback receipt. The step sets
+`WORKER_IMAGE_ONLY_DRY_RUN=1`; while that is set the helper refuses `deploy` outright and refuses any
+API call other than a read or a `--dry-run=server` patch. The Helm, preserve-live writer, rollout
+and post-roll verify steps all exclude the mode in their `if:`.
+
+The helper's `dry-run` command checks the admitted baseline, the T4 fallback and sibling bindings,
+then server-dry-runs:
+
+- the forward patch (live -> `image_digest`) when the digest differs from live, and evaluates the
+  rollback precondition offline against the receipt that forward run would write;
+- the prior-image inverse (the live digest), with the same UID/resourceVersion/image CAS tests the
+  rollback writer sends.
+
+It writes `worker-dry-run-receipt.json` (identities, hashes and patches only) and prints it to the
+step summary. For Release's prior-image proof, dispatch the prior digest with its merged source:
+
+```bash
+python3 .github/scripts/worker_image_only.py inventory > worker-baseline.json
+gh workflow run gcp_diarizer.yml --ref main \
+  -f environment=prod -f service=batch-pipeline-worker \
+  -f branch="$PRIOR_MERGED_SOURCE_SHA" -f image_digest="$PRIOR_DIGEST" \
+  -F preserve_live_worker=true -F worker_dry_run=true \
+  -f worker_live_baseline="$(cat worker-baseline.json)"
+```
+
+The run still needs the prod environment approval; it never changes the cluster.
+
 
 The workflow logs and step summary contain the safe JSON image diff and rollback
 receipt. Retain the `rollback` object as `worker-image-receipt.json` in the

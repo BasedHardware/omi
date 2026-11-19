@@ -9,6 +9,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import subprocess
+import sys
 
 import yaml
 
@@ -635,6 +636,116 @@ class PreservationTests(unittest.TestCase):
         self.assertEqual(actual, {"target": receipt["after"], "consumers": receipt["consumers"]})
 
 
+
+class Recorder:
+    """Wrap a fake cluster and record every API call, so dry-run can prove it never writes."""
+
+    def __init__(self, cluster):
+        self.cluster, self.calls = cluster, []
+
+    def __call__(self, *args):
+        self.calls.append(args)
+        return self.cluster(*args)
+
+
+def is_write(args):
+    return args[0] != "get" and "--dry-run=server" not in args
+
+
+class DryRunTests(unittest.TestCase):
+    def setUp(self):
+        self.cluster = Cluster()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.receipt_path = Path(self.tmp.name) / "dry-run.json"
+        self.baseline = worker.snapshot(self.cluster)[1]
+        self.before = copy.deepcopy(self.cluster.target)
+        env = os.environ.copy()
+        self.addCleanup(lambda: (os.environ.clear(), os.environ.update(env)))
+
+    def dry_run(self, image):
+        os.environ[worker.DRY_RUN_ENV] = "1"
+        recorder = Recorder(self.cluster)
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            result = worker.dry_run(self.baseline, image, self.receipt_path, recorder)
+        self.output = output.getvalue()
+        return result, recorder
+
+    def assert_nothing_written(self, recorder):
+        self.assertEqual(self.cluster.writes, 0)
+        self.assertEqual(self.cluster.target, self.before)
+        self.assertEqual([c for c in recorder.calls if is_write(c)], [])
+        self.assertTrue(any("--dry-run=server" in c for c in recorder.calls))
+
+    def test_prior_image_inverse_dry_run_never_writes_and_records_a_receipt(self):
+        result, recorder = self.dry_run(OLD)  # the prior digest is the live image
+        self.assert_nothing_written(recorder)
+        saved = json.loads(self.receipt_path.read_text())
+        self.assertEqual(saved, result)
+        self.assertEqual(saved["mode"], "dry-run")
+        self.assertTrue(saved["inverse"]["admitted"])
+        self.assertEqual(saved["inverse"]["image"], OLD)
+        self.assertIsNone(saved["forward"])
+        self.assertNotIn("do-not-print-this", self.output + self.receipt_path.read_text())
+
+    def test_forward_and_inverse_dry_run_never_writes(self):
+        result, recorder = self.dry_run(NEW)
+        self.assert_nothing_written(recorder)
+        self.assertTrue(result["forward"]["admitted"])
+        self.assertEqual(result["forward"]["after"]["image"], NEW)
+        self.assertTrue(result["inverse"]["admitted"])
+        # The receipt the forward run would write satisfies the rollback precondition offline.
+        self.assertTrue(result["inverse"]["rollback_precondition"])
+
+    def test_dry_run_still_refuses_drift_admission_change_and_t4(self):
+        self.cluster.target["spec"]["template"]["spec"]["terminationGracePeriodSeconds"] = 30
+        with self.assertRaisesRegex(ValueError, "drift"):
+            self.dry_run(NEW)
+        self.cluster = Cluster()
+        self.baseline = worker.snapshot(self.cluster)[1]
+        self.cluster.admission_mutates = True
+        with self.assertRaisesRegex(ValueError, "admission dry-run"):
+            self.dry_run(NEW)
+        self.cluster = Cluster()
+        self.cluster.siblings[-1]["spec"]["replicas"] = 1
+        self.baseline = worker.snapshot(self.cluster)[1]
+        with self.assertRaisesRegex(ValueError, "active T4"):
+            self.dry_run(NEW)
+        self.assertEqual(self.cluster.writes, 0)
+
+    def test_mode_env_makes_every_write_path_unreachable(self):
+        os.environ[worker.DRY_RUN_ENV] = "1"
+        recorder = Recorder(self.cluster)
+        with self.assertRaisesRegex(ValueError, "dry-run mode"), contextlib.redirect_stdout(io.StringIO()):
+            worker.deploy(self.baseline, NEW, self.receipt_path, recorder)
+        self.assertEqual(self.cluster.writes, 0)
+        self.assertEqual([c for c in recorder.calls if is_write(c)], [])
+        with self.assertRaisesRegex(ValueError, "dry-run mode"):
+            worker.guarded(recorder)("patch", "deployment", worker.TARGET, "--type=json", "-p", "[]", "-o", "json")
+        for verb in ("apply", "replace", "create", "delete", "scale", "rollout", "annotate", "label", "set", "edit"):
+            with self.subTest(verb=verb), self.assertRaisesRegex(ValueError, "dry-run mode"):
+                worker.guarded(recorder)(verb, "deployment", worker.TARGET)
+        self.assertEqual(self.cluster.writes, 0)
+
+    def test_cli_refuses_deploy_when_mode_env_is_set(self):
+        script = Path(worker.__file__)
+        env = {**os.environ, worker.DRY_RUN_ENV: "1", "PATH": "/nonexistent"}  # no kubectl reachable
+        result = subprocess.run([sys.executable, str(script), "deploy", "--baseline", "b", "--image", NEW, "--receipt", "r"],
+                                env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("dry-run mode", result.stderr)
+
+    def test_dry_run_command_requires_the_mode_env(self):
+        with self.assertRaisesRegex(ValueError, "dry-run"):
+            worker.require_dry_run_env()
+        os.environ[worker.DRY_RUN_ENV] = "1"
+        worker.require_dry_run_env()
+
+
+def worker_env_name():
+    return worker.DRY_RUN_ENV
+
+
 class WorkflowTests(unittest.TestCase):
     """Integration tripwires complement the behavioral API tests; no cloud approval simulation."""
 
@@ -649,8 +760,8 @@ class WorkflowTests(unittest.TestCase):
     def test_default_helm_path_and_success_only_writer_keep_existing_controls(self):
         helm = self.step("Deploy Diarizer to GKE cluster using Helm")
         writer = self.step("Deploy worker image preserving live runtime")
-        self.assertEqual(helm["if"], "inputs.preserve_live_worker != true")
-        self.assertEqual(writer["if"], "inputs.preserve_live_worker == true")
+        self.assertEqual(helm["if"], "inputs.preserve_live_worker != true && inputs.worker_dry_run != true")
+        self.assertEqual(writer["if"], "inputs.preserve_live_worker == true && inputs.worker_dry_run != true")
         self.assertIn('helm -n "$DEPLOY_NAMESPACE" upgrade --install', helm["run"])
         self.assertIn("environment", self.workflow["jobs"]["deploy"])
         self.assertFalse(self.workflow["concurrency"]["cancel-in-progress"])
@@ -753,6 +864,63 @@ class WorkflowTests(unittest.TestCase):
                     env={"SERVICE": "batch-pipeline-worker", "PRESERVE_LIVE": preserve, "LIVE_BASELINE": "{}",
                          "ROLLBACK_RECEIPT": "{}", "SOURCE_REF": ref, "CANDIDATE_DIGEST": image, "BREAK_GLASS_LOCK": break_glass}, capture_output=True)
                 self.assertEqual(result.returncode, expected)
+
+
+    # --- dry-run mode (SCA-2944; David 2026-11-19) -------------------------------------------
+
+    WRITE_MARKERS = ("worker_image_only.py deploy", "helm ", "docker push", "kubectl patch", "kubectl apply",
+                     "kubectl replace", "kubectl scale", "kubectl delete", "kubectl create", "rollout restart",
+                     "kubectl set ", "kubectl annotate", "kubectl label", "gcloud container images add-tag")
+
+    def test_every_write_step_is_excluded_from_dry_run_mode(self):
+        writers = [s for s in self.steps if any(m in s.get("run", "") for m in self.WRITE_MARKERS)]
+        self.assertTrue(writers)
+        for step in writers:
+            with self.subTest(step=step.get("name")):
+                self.assertIn("inputs.worker_dry_run != true", step.get("if", ""))
+        for name in ("Verify rollout", "Verify preserved worker runtime and sibling bindings"):
+            self.assertIn("inputs.worker_dry_run != true", self.step(name).get("if", ""))
+
+    def test_dry_run_step_sets_mode_env_and_calls_only_the_dry_run_command(self):
+        step = self.step("Dry-run worker image preserving live runtime")
+        self.assertEqual(step["if"], "inputs.preserve_live_worker == true && inputs.worker_dry_run == true")
+        self.assertEqual(step["env"][worker_env_name()], "1")
+        self.assertIn("worker_image_only.py dry-run", step["run"])
+        self.assertFalse(any(m in step["run"] for m in self.WRITE_MARKERS))
+        names = [s.get("name") for s in self.steps]
+        for gate in ("Select merged production source and image tag", "Verify serving Firestore indexes", "Verify promoted worker digest"):
+            self.assertLess(names.index(gate), names.index(step["name"]))
+        self.assertNotIn("continue-on-error", step)
+
+    def test_dry_run_input_is_declared_and_validated(self):
+        inputs = self.workflow[True]["workflow_dispatch"]["inputs"] if True in self.workflow else self.workflow["on"]["workflow_dispatch"]["inputs"]
+        self.assertEqual(inputs["worker_dry_run"]["type"], "boolean")
+        self.assertFalse(inputs["worker_dry_run"]["default"])
+        self.assertLessEqual(len(inputs), 10)  # GitHub's workflow_dispatch input limit
+        step = self.step("Validate Environment Input")
+        script = step["run"].replace("${{ github.event.inputs.environment }}", "prod").replace("${{ inputs.environment }}", "prod")
+        digest = "sha256:" + "1" * 64
+        for preserve, image, break_glass, receipt, service, expected in (
+            ("true", digest, "false", "", "batch-pipeline-worker", 0),
+            ("false", digest, "false", "", "batch-pipeline-worker", 1),
+            ("true", "", "false", "", "batch-pipeline-worker", 1),       # dry-run never builds or pushes
+            ("true", digest, "true", "", "batch-pipeline-worker", 1),    # dry-run must hold the shared lock
+            ("true", digest, "false", "{}", "batch-pipeline-worker", 1),  # no receipt-driven write path
+        ):
+            with self.subTest(preserve=preserve, image=image, break_glass=break_glass, receipt=receipt):
+                result = subprocess.run(["bash", "-e", "-c", script], capture_output=True,
+                    env={"SERVICE": service, "PRESERVE_LIVE": preserve, "LIVE_BASELINE": "{}", "ROLLBACK_RECEIPT": receipt,
+                         "SOURCE_REF": "a" * 40, "CANDIDATE_DIGEST": image, "BREAK_GLASS_LOCK": break_glass, "DRY_RUN": "true"})
+                self.assertEqual(result.returncode, expected)
+        result = subprocess.run(["bash", "-e", "-c", script.replace("prod", "development", 1)], capture_output=True,
+            env={"SERVICE": "batch-pipeline-worker", "PRESERVE_LIVE": "false", "LIVE_BASELINE": "", "ROLLBACK_RECEIPT": "",
+                 "SOURCE_REF": "main", "CANDIDATE_DIGEST": "", "BREAK_GLASS_LOCK": "false", "DRY_RUN": "true"})
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_dry_run_keeps_the_shared_prod_train_lock(self):
+        group = self.workflow["concurrency"]["group"]
+        self.assertIn("'prod-train'", group)
+        self.assertNotIn("worker_dry_run", group)  # the dry-run never escapes the shared lock
 
 
 if __name__ == "__main__":
