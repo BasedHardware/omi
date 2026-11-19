@@ -76,7 +76,9 @@ def paid_notes_refused(uid, row):
 
 
 async def prepare(uid, row, *, live=False):
-    is_fresh = bool(writers.read_live_summary(uid, row, exact=True)) if live else fresh(row)
+    is_fresh = (
+        bool(await run_blocking(db_executor, writers.read_live_summary, uid, row, exact=True)) if live else fresh(row)
+    )
     if is_fresh or not summary_eligible(row):
         return None
     if await run_blocking(db_executor, paid_notes_refused, uid, row):
@@ -89,7 +91,7 @@ async def prepare(uid, row, *, live=False):
 
 
 async def stream(uid: str, row: dict[str, Any], *, token=None, live=False):
-    cached = writers.read_live_summary(uid, row, exact=True) if live else None
+    cached = await run_blocking(db_executor, writers.read_live_summary, uid, row, exact=True) if live else None
     is_fresh = bool(cached) if live else fresh(row)
     if is_fresh or not summary_eligible(row) or (live and token is None):
         if token:
@@ -129,10 +131,10 @@ async def stream(uid: str, row: dict[str, Any], *, token=None, live=False):
             yield 'error: {"detail":"Conversation not found"}\n\n'
             return
         if live:
-            if not writers.live_summary_target(decoded) or decoded.get('id') != cid:
+            if not policy.live_summary_target(decoded) or decoded.get('id') != cid:
                 yield 'error: {"detail":"Conversation not available"}\n\n'
                 return
-            cached = writers.read_live_summary(uid, decoded, exact=True)
+            cached = await run_blocking(db_executor, writers.read_live_summary, uid, decoded, exact=True)
             if cached:
                 yield done(cached)
                 return

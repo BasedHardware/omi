@@ -30,20 +30,6 @@ _LIVE_INPUT_SCOPE = (
 )
 
 
-def live_summary_target(row):
-    return (
-        row.get('v3_derived') is True
-        and row.get('status') == 'in_progress'
-        and isinstance(row.get('started_at'), datetime)
-        and isinstance(row.get('finished_at'), datetime)
-        and row.get('data_protection_level') not in {'private', 'e2ee'}
-        and not any(
-            row.get(key)
-            for key in ('recording', 'discarded', 'deleted', 'is_locked', 'home_hidden', 'sync_merged_into')
-        )
-    )
-
-
 def _live_scope(row):
     return {key: row.get(key) for key in _LIVE_INPUT_SCOPE}
 
@@ -55,7 +41,7 @@ def _live_summary_fingerprint(row):
 
 def read_live_summary(uid, row, *, exact=False):
     cached = row.get(policy.LIVE_SUMMARY_FIELD)
-    if not isinstance(cached, dict) or not live_summary_target(row):
+    if not isinstance(cached, dict) or not policy.live_summary_target(row):
         return None
     count, coverage, ciphertext = cached.get('segments'), cached.get('coverage'), cached.get('ciphertext')
     if (
@@ -89,7 +75,7 @@ def read_live_summary(uid, row, *, exact=False):
 def _strict_live_append(frozen, current):
     if (
         not current
-        or not live_summary_target(current)
+        or not policy.live_summary_target(current)
         or _live_scope(frozen) != _live_scope(current)
         or current['finished_at'] <= frozen['finished_at']
     ):
@@ -153,7 +139,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
         ):
             raise Conflict('summary_source_changed')
         if live_input is not None:
-            if not live_summary_target(current) or (
+            if not policy.live_summary_target(current) or (
                 snapshot.update_time != revision
                 and not _strict_live_append(live_input, store.decode_row(uid, snapshot))
             ):

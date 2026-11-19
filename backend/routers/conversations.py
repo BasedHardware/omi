@@ -169,7 +169,7 @@ from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
-from utils.conversations.v3 import live as v3_live
+from utils.conversations.v3 import live as v3_live, policy as v3_policy
 from database import conversations_v3_live, conversations_v3_processing
 from utils.conversations import list_page_headers
 
@@ -2938,7 +2938,7 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
 )
 async def conversation_live_catchup_stream(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     row = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
-    if row.get('id') != conversation_id or not conversations_v3_processing.live_summary_target(row):
+    if row.get('id') != conversation_id or not v3_policy.live_summary_target(row):
         raise HTTPException(status_code=404, detail='Live conversation not available')
     await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
     token = await v3_summary.prepare(uid, row, live=True)
