@@ -4687,5 +4687,7 @@
     "onWifiLater": "Kemudian melalui Wi-Fi",
     "conversationWritingSummary": "Menulis ringkasan anda…",
     "onTheWayServerWork": "Kerja yang dilaporkan pelayan",
-    "finishNothingToProcess": "Belum ada apa-apa untuk diproses."
+    "finishNothingToProcess": "Belum ada apa-apa untuk diproses.",
+    "finishStillProcessing": "Masih diproses. Ia akan muncul di Laman Utama.",
+    "finishBackToHome": "Kembali ke Laman Utama"
 }

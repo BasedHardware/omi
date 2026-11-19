@@ -4687,5 +4687,7 @@
     "onWifiLater": "По-късно през Wi-Fi",
     "conversationWritingSummary": "Пишем вашето резюме…",
     "onTheWayServerWork": "Работа, отчетена от сървъра",
-    "finishNothingToProcess": "Все още няма какво да се обработи."
+    "finishNothingToProcess": "Все още няма какво да се обработи.",
+    "finishStillProcessing": "Все още се обработва. Ще се появи на началния екран.",
+    "finishBackToHome": "Към началото"
 }

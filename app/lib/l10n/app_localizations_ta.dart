@@ -15667,4 +15667,10 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'இன்னும் செயலாக்க எதுவும் இல்லை.';
+
+  @override
+  String get finishStillProcessing => 'இன்னும் செயலாக்கப்படுகிறது. இது முகப்பில் தோன்றும்.';
+
+  @override
+  String get finishBackToHome => 'முகப்புக்குத் திரும்பு';
 }

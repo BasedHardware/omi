@@ -12244,5 +12244,7 @@
     "onWifiLater": "পরে Wi-Fi-তে",
     "conversationWritingSummary": "আপনার সারাংশ লেখা হচ্ছে…",
     "onTheWayServerWork": "সার্ভারের জানানো কাজ",
-    "finishNothingToProcess": "এখনও প্রক্রিয়া করার কিছু নেই।"
+    "finishNothingToProcess": "এখনও প্রক্রিয়া করার কিছু নেই।",
+    "finishStillProcessing": "এখনও প্রক্রিয়া চলছে। এটি হোমে দেখা যাবে।",
+    "finishBackToHome": "হোমে ফিরে যান"
 }

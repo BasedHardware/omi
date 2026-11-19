@@ -12244,5 +12244,7 @@
     "onWifiLater": "ನಂತರ Wi-Fi ನಲ್ಲಿ",
     "conversationWritingSummary": "ನಿಮ್ಮ ಸಾರಾಂಶವನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…",
     "onTheWayServerWork": "ಸರ್ವರ್ ವರದಿ ಮಾಡಿದ ಕೆಲಸ",
-    "finishNothingToProcess": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಏನೂ ಇಲ್ಲ."
+    "finishNothingToProcess": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಏನೂ ಇಲ್ಲ.",
+    "finishStillProcessing": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತಿದೆ. ಇದು ಹೋಮ್‌ನಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.",
+    "finishBackToHome": "ಹೋಮ್‌ಗೆ ಹಿಂತಿರುಗಿ"
 }

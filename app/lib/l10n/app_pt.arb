@@ -4722,5 +4722,7 @@
     "onWifiLater": "Depois no Wi-Fi",
     "conversationWritingSummary": "Escrevendo seu resumo…",
     "onTheWayServerWork": "Trabalho informado pelo servidor",
-    "finishNothingToProcess": "Ainda não há nada para processar."
+    "finishNothingToProcess": "Ainda não há nada para processar.",
+    "finishStillProcessing": "Ainda a processar. Vai aparecer no Início.",
+    "finishBackToHome": "Voltar ao Início"
 }

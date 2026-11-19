@@ -15691,4 +15691,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Rien à traiter pour l\'instant.';
+
+  @override
+  String get finishStillProcessing => 'Traitement en cours. Elle apparaîtra sur l\'accueil.';
+
+  @override
+  String get finishBackToHome => 'Retour à l\'accueil';
 }

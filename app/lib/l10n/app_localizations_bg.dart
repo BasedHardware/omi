@@ -15614,4 +15614,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Все още няма какво да се обработи.';
+
+  @override
+  String get finishStillProcessing => 'Все още се обработва. Ще се появи на началния екран.';
+
+  @override
+  String get finishBackToHome => 'Към началото';
 }

@@ -233,7 +233,7 @@ class SummaryRetryWidget extends StatelessWidget {
           );
         }
         if (TranscriptionPendingConversations.contains(provider.conversation.id)) {
-          return SummaryWaitingNotice(
+          return _SummaryWaitingNotice(
             key: const Key('conversation_detail_transcription_pending'),
             title: context.l10n.summaryTranscriptionPendingTitle,
             body: context.l10n.summaryTranscriptionPendingBody,
@@ -251,9 +251,8 @@ class SummaryRetryWidget extends StatelessWidget {
 }
 
 /// A centred status with no action: the server is still transcribing, so there is nothing to retry.
-/// Also the page Finish opens while a just-finished capture's conversation is being made.
-class SummaryWaitingNotice extends StatelessWidget {
-  const SummaryWaitingNotice({super.key, required this.title, required this.body});
+class _SummaryWaitingNotice extends StatelessWidget {
+  const _SummaryWaitingNotice({super.key, required this.title, required this.body});
 
   final String title;
   final String body;

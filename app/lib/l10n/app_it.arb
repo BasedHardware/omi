@@ -4687,5 +4687,7 @@
     "onWifiLater": "Più tardi su Wi-Fi",
     "conversationWritingSummary": "Sto scrivendo il tuo riepilogo…",
     "onTheWayServerWork": "Lavoro segnalato dal server",
-    "finishNothingToProcess": "Ancora niente da elaborare."
+    "finishNothingToProcess": "Ancora niente da elaborare.",
+    "finishStillProcessing": "Ancora in elaborazione. Apparirà nella Home.",
+    "finishBackToHome": "Torna alla Home"
 }

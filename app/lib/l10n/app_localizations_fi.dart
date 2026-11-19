@@ -15568,4 +15568,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Ei vielä mitään käsiteltävää.';
+
+  @override
+  String get finishStillProcessing => 'Käsitellään yhä. Se näkyy kotinäkymässä.';
+
+  @override
+  String get finishBackToHome => 'Takaisin kotiin';
 }

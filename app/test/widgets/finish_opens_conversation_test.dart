@@ -79,14 +79,17 @@ class _Preview extends ChangeNotifier implements LivePreviewController {
   final List<LivePreviewLine> lines;
 
   @override
-  final int totalWordsSeen;
+  int totalWordsSeen;
+
+  @override
+  int get sessionGeneration => 1;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _Capture extends CaptureProvider {
-  _Capture({this.preview, this.closed, this.answer})
+  _Capture({this.preview, this.closed, this.answer, this.answerDelay})
       : super(
           walService: _Wal(),
           connectivity: CaptureConnectivityBoundary(
@@ -100,8 +103,9 @@ class _Capture extends CaptureProvider {
         );
 
   final LivePreviewController? preview;
-  final ({String id, DateTime at, int previewWords})? closed;
+  final ({String id, DateTime at, int previewWords, int previewSession})? closed;
   final CreateConversationResponse? answer;
+  final Future<void>? answerDelay;
   var finishes = 0;
 
   /// The page renders the preview; this fake only answers what Finish reads, so it is handed over
@@ -112,7 +116,11 @@ class _Capture extends CaptureProvider {
   LivePreviewController? get livePreview => tapped ? preview : null;
 
   @override
-  ({String id, DateTime at, int previewWords})? get lastServerClose => closed;
+  ({String id, DateTime at, int previewWords, int previewSession})? get lastServerClose => closed;
+
+  @override
+  void noteClientFinish() => lastClientFinish =
+      (at: DateTime.now(), previewWords: preview?.totalWordsSeen ?? 0, previewSession: preview?.sessionGeneration ?? 0);
 
   @override
   String? get liveCaptureSource => 'omi';
@@ -120,6 +128,7 @@ class _Capture extends CaptureProvider {
   @override
   Future<CreateConversationResponse?> finishCaptureWithResult() async {
     finishes++;
+    await answerDelay;
     return answer;
   }
 }
@@ -150,9 +159,11 @@ ServerConversation _derived(String id, String recordingId, {String createdAt = '
       ],
     });
 
-ServerConversation _recordingDoc(String id) => _conversation(id, extra: {
+/// The recording document Process Now answers with: processing once admitted, still in progress when
+/// the server found nothing to process in it.
+ServerConversation _recordingDoc(String id, {bool notProcessed = false}) => _conversation(id, extra: {
       'recording': true,
-      'status': 'processing',
+      'status': notProcessed ? 'in_progress' : 'processing',
       'structured': {'title': ''}
     });
 
@@ -253,7 +264,7 @@ void main() {
     expect(harness.home.selectedIndex, HomeProvider.homeTab);
     expect(page?.recordingId, 'rec-1', reason: 'v3 answers with the recording; wait for its conversation');
     expect(find.byKey(const Key('finished_capture_processing')), findsOneWidget);
-    expect(find.text('Processing'), findsOneWidget);
+    expect(find.text('Processing conversation…'), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(LiveEpisodePage), findsNothing);
     await tester.pumpWidget(const SizedBox());
@@ -273,7 +284,12 @@ void main() {
       tester,
       _Capture(
         preview: _Preview(const [_line], 4),
-        closed: (id: 'rec-closed', at: DateTime.now().subtract(const Duration(seconds: 3)), previewWords: 4),
+        closed: (
+          id: 'rec-closed',
+          at: DateTime.now().subtract(const Duration(seconds: 3)),
+          previewWords: 4,
+          previewSession: 1
+        ),
       ),
     );
 
@@ -301,6 +317,83 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
   });
 
+  testWidgets('a double tap on Finish sends one request and opens one page', (tester) async {
+    final answer = Completer<void>();
+    final harness = await _pump(
+      tester,
+      _Capture(
+        preview: _Preview(const [_line], 4),
+        answer: CreateConversationResponse(messages: const [], conversation: _recordingDoc('rec-1')),
+        answerDelay: answer.future,
+      ),
+    );
+    final dynamic state = tester.state(find.byType(LiveEpisodePage));
+    harness.capture.tapped = true;
+    final first = state.debugStopConversation(harness.capture) as Future<void>;
+    await tester.pump();
+    final second = state.debugStopConversation(harness.capture) as Future<void>;
+    await tester.pump();
+    expect(find.byType(LiveEpisodePage), findsOneWidget, reason: 'the second tap must not pop Home in');
+    answer.complete();
+    await Future.wait([first, second]);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(harness.capture.finishes, 1);
+    expect(find.byType(FinishedCapturePage), findsOneWidget);
+    expect(find.text('home'), findsNothing, reason: 'Home stays under the Processing page');
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Finish again with no new speech sends nothing and says so', (tester) async {
+    final preview = _Preview(const [_line], 4);
+    final harness = await _pump(
+      tester,
+      _Capture(
+        preview: preview,
+        answer: CreateConversationResponse(messages: const [], conversation: _recordingDoc('rec-1')),
+      ),
+    );
+    await _finishAndCapturePushed(tester, harness.capture);
+    expect(harness.capture.finishes, 1);
+
+    // The reader reopens the live page; the preview still shows the same lines.
+    final nav = Navigator.of(tester.element(find.byType(FinishedCapturePage)));
+    unawaited(nav.pushReplacement(MaterialPageRoute<void>(builder: (_) => const LiveEpisodePage())));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    final dynamic state = tester.state(find.byType(LiveEpisodePage));
+    await (state.debugStopConversation(harness.capture) as Future<void>);
+    await tester.pump();
+
+    expect(harness.capture.finishes, 1, reason: 'no new words since the last Finish');
+    expect(find.text('Nothing to process yet.'), findsWidgets);
+    expect(find.byType(FinishedCapturePage), findsNothing);
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a recording the server could not process says so instead of waiting', (tester) async {
+    final harness = await _pump(
+      tester,
+      _Capture(
+        preview: _Preview(const [_line], 4),
+        answer: CreateConversationResponse(
+            messages: const [], conversation: _recordingDoc('rec-empty', notProcessed: true)),
+      ),
+    );
+    final page = await _finishAndCapturePushed(tester, harness.capture);
+
+    expect(harness.capture.finishes, 1);
+    expect(page, isNull, reason: 'no conversation will come from it');
+    expect(find.text('Nothing to process yet.'), findsWidgets);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(LiveEpisodePage), findsNothing);
+    expect(harness.home.selectedIndex, HomeProvider.homeTab);
+    await tester.pump(const Duration(seconds: 5));
+  });
+
   group('FinishedCapturePage', () {
     test('matches the derived conversation, never the recording or an unrelated sync copy', () {
       final rows = [
@@ -325,6 +418,83 @@ void main() {
       expect(FinishedCapturePage.match([_conversation('c-1')], 'c-1')?.id, 'c-1');
     });
 
+    Widget pageApp(Widget page, {HomeProvider? home}) => ChangeNotifierProvider<HomeProvider>.value(
+          value: home ?? HomeProvider(),
+          child: MaterialApp(
+            locale: const Locale('en'),
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page)),
+                child: const Text('home'),
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('after the wait it stops and says it will appear on Home, with Back to Home', (tester) async {
+      var reads = 0;
+      final home = HomeProvider()..setIndex(HomeProvider.tasksTab);
+      addTearDown(home.dispose);
+      await tester.pumpWidget(pageApp(
+        FinishedCapturePage(
+          recordingId: 'rec-1',
+          maxWait: const Duration(seconds: 12),
+          fetch: () async {
+            reads++;
+            return const [];
+          },
+          open: (_, __) => fail('nothing to open'),
+        ),
+        home: home,
+      ));
+      await tester.tap(find.text('home'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('finished_capture_processing')), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 15));
+      expect(find.byKey(const Key('finished_capture_expired')), findsOneWidget);
+      expect(find.text('Still processing. It will appear on Home.'), findsOneWidget);
+      final readsAtExpiry = reads;
+      await tester.pump(const Duration(seconds: 30));
+      expect(reads, readsAtExpiry, reason: 'no polling after it gave up');
+
+      expect(home.selectedIndex, HomeProvider.tasksTab);
+      await tester.tap(find.text('Back to Home'));
+      await tester.pumpAndSettle();
+      expect(find.byType(FinishedCapturePage), findsNothing);
+      expect(home.selectedIndex, HomeProvider.homeTab);
+    });
+
+    testWidgets('a resume after the wait still reads once and opens it', (tester) async {
+      var ready = false;
+      ServerConversation? opened;
+      await tester.pumpWidget(pageApp(FinishedCapturePage(
+        recordingId: 'rec-1',
+        pollInterval: const Duration(seconds: 10),
+        maxWait: const Duration(seconds: 12),
+        fetch: () async => ready ? [_derived('714c4186', 'rec-1')] : const [],
+        open: (_, conversation) => opened = conversation,
+      )));
+      await tester.tap(find.text('home'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 25));
+      expect(find.byKey(const Key('finished_capture_expired')), findsOneWidget);
+
+      ready = true;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(opened?.id, '714c4186');
+    });
+
     testWidgets('waits, then opens the conversation as soon as it is listed', (tester) async {
       var reads = 0;
       ServerConversation? opened;
@@ -344,8 +514,7 @@ void main() {
         ),
       ));
       await tester.pump();
-      expect(find.text('Processing'), findsOneWidget);
-      expect(find.text('The summary will appear once the transcript is ready.'), findsOneWidget);
+      expect(find.text('Processing conversation…'), findsOneWidget);
       expect(opened, isNull);
 
       await tester.pump(const Duration(seconds: 5));

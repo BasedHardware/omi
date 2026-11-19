@@ -4687,5 +4687,7 @@
     "onWifiLater": "後で Wi-Fi で",
     "conversationWritingSummary": "要約を作成しています…",
     "onTheWayServerWork": "サーバーが報告した処理",
-    "finishNothingToProcess": "まだ処理するものがありません。"
+    "finishNothingToProcess": "まだ処理するものがありません。",
+    "finishStillProcessing": "まだ処理中です。ホームに表示されます。",
+    "finishBackToHome": "ホームに戻る"
 }

@@ -15556,4 +15556,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'هنوز چیزی برای پردازش نیست.';
+
+  @override
+  String get finishStillProcessing => 'هنوز در حال پردازش است. در صفحه اصلی نمایش داده می‌شود.';
+
+  @override
+  String get finishBackToHome => 'بازگشت به صفحه اصلی';
 }

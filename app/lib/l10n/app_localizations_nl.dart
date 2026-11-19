@@ -15603,4 +15603,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Nog niets om te verwerken.';
+
+  @override
+  String get finishStillProcessing => 'Wordt nog verwerkt. Het verschijnt op Home.';
+
+  @override
+  String get finishBackToHome => 'Terug naar Home';
 }

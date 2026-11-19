@@ -15571,4 +15571,10 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Још нема ничега за обраду.';
+
+  @override
+  String get finishStillProcessing => 'Још се обрађује. Појавиће се на почетној.';
+
+  @override
+  String get finishBackToHome => 'Назад на почетну';
 }

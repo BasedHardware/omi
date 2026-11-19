@@ -15559,4 +15559,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Zatiaľ nie je čo spracovať.';
+
+  @override
+  String get finishStillProcessing => 'Stále sa spracúva. Zobrazí sa na domovskej stránke.';
+
+  @override
+  String get finishBackToHome => 'Späť domov';
 }

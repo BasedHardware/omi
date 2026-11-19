@@ -15599,4 +15599,10 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Пакуль няма чаго апрацоўваць.';
+
+  @override
+  String get finishStillProcessing => 'Яшчэ апрацоўваецца. З\'явіцца на галоўнай.';
+
+  @override
+  String get finishBackToHome => 'На галоўную';
 }

@@ -15489,4 +15489,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'ยังไม่มีอะไรให้ประมวลผล';
+
+  @override
+  String get finishStillProcessing => 'ยังประมวลผลอยู่ จะแสดงที่หน้าหลัก';
+
+  @override
+  String get finishBackToHome => 'กลับไปหน้าหลัก';
 }

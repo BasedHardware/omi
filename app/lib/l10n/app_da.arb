@@ -4729,5 +4729,7 @@
     "onWifiLater": "Senere på Wi-Fi",
     "conversationWritingSummary": "Skriver dit resumé…",
     "onTheWayServerWork": "Arbejde rapporteret af serveren",
-    "finishNothingToProcess": "Intet at behandle endnu."
+    "finishNothingToProcess": "Intet at behandle endnu.",
+    "finishStillProcessing": "Behandles stadig. Den vises på Hjem.",
+    "finishBackToHome": "Tilbage til Hjem"
 }

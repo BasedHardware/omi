@@ -4687,5 +4687,7 @@
     "onWifiLater": "Vēlāk ar Wi-Fi",
     "conversationWritingSummary": "Rakstām jūsu kopsavilkumu…",
     "onTheWayServerWork": "Servera ziņotais darbs",
-    "finishNothingToProcess": "Pagaidām nav ko apstrādāt."
+    "finishNothingToProcess": "Pagaidām nav ko apstrādāt.",
+    "finishStillProcessing": "Joprojām tiek apstrādāts. Tas parādīsies sākumlapā.",
+    "finishBackToHome": "Atpakaļ uz sākumu"
 }

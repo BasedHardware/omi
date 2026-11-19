@@ -15640,4 +15640,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Encara no hi ha res per processar.';
+
+  @override
+  String get finishStillProcessing => 'Encara s\'està processant. Apareixerà a l\'inici.';
+
+  @override
+  String get finishBackToHome => 'Torna a l\'inici';
 }

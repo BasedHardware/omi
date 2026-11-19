@@ -4687,5 +4687,7 @@
     "onWifiLater": "Neskôr cez Wi-Fi",
     "conversationWritingSummary": "Píšeme vaše zhrnutie…",
     "onTheWayServerWork": "Práca hlásená serverom",
-    "finishNothingToProcess": "Zatiaľ nie je čo spracovať."
+    "finishNothingToProcess": "Zatiaľ nie je čo spracovať.",
+    "finishStillProcessing": "Stále sa spracúva. Zobrazí sa na domovskej stránke.",
+    "finishBackToHome": "Späť domov"
 }

@@ -12244,5 +12244,7 @@
     "onWifiLater": "Пазней праз Wi-Fi",
     "conversationWritingSummary": "Пішам ваша рэзюмэ…",
     "onTheWayServerWork": "Праца паводле сервера",
-    "finishNothingToProcess": "Пакуль няма чаго апрацоўваць."
+    "finishNothingToProcess": "Пакуль няма чаго апрацоўваць.",
+    "finishStillProcessing": "Яшчэ апрацоўваецца. З'явіцца на галоўнай.",
+    "finishBackToHome": "На галоўную"
 }

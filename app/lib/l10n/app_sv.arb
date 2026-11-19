@@ -4687,5 +4687,7 @@
     "onWifiLater": "Senare via Wi-Fi",
     "conversationWritingSummary": "Skriver din sammanfattning…",
     "onTheWayServerWork": "Arbete rapporterat av servern",
-    "finishNothingToProcess": "Inget att bearbeta än."
+    "finishNothingToProcess": "Inget att bearbeta än.",
+    "finishStillProcessing": "Bearbetas fortfarande. Den visas på Hem.",
+    "finishBackToHome": "Tillbaka till Hem"
 }

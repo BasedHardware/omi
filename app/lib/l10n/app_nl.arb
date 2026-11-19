@@ -4687,5 +4687,7 @@
     "onWifiLater": "Later via wifi",
     "conversationWritingSummary": "Je samenvatting wordt geschreven…",
     "onTheWayServerWork": "Door de server gemeld werk",
-    "finishNothingToProcess": "Nog niets om te verwerken."
+    "finishNothingToProcess": "Nog niets om te verwerken.",
+    "finishStillProcessing": "Wordt nog verwerkt. Het verschijnt op Home.",
+    "finishBackToHome": "Terug naar Home"
 }

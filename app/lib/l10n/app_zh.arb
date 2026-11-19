@@ -4687,5 +4687,7 @@
     "onWifiLater": "稍后通过 Wi-Fi",
     "conversationWritingSummary": "正在撰写你的摘要…",
     "onTheWayServerWork": "服务器报告的任务",
-    "finishNothingToProcess": "还没有可处理的内容。"
+    "finishNothingToProcess": "还没有可处理的内容。",
+    "finishStillProcessing": "仍在处理中。完成后会显示在首页。",
+    "finishBackToHome": "返回首页"
 }

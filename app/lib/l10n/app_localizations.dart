@@ -27314,6 +27314,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nothing to process yet.'**
   String get finishNothingToProcess;
+
+  /// Shown on the page Finish opens when the conversation has not arrived after a long wait; it will show up on Home by itself.
+  ///
+  /// In en, this message translates to:
+  /// **'Still processing. It will appear on Home.'**
+  String get finishStillProcessing;
+
+  /// Button that leaves the processing page for the Home conversation list.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to Home'**
+  String get finishBackToHome;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

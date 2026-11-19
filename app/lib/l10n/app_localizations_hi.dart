@@ -15546,4 +15546,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'अभी प्रोसेस करने के लिए कुछ नहीं है।';
+
+  @override
+  String get finishStillProcessing => 'अभी प्रोसेस हो रहा है। यह होम पर दिखेगा।';
+
+  @override
+  String get finishBackToHome => 'होम पर वापस जाएं';
 }

@@ -15592,4 +15592,10 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Še ni ničesar za obdelavo.';
+
+  @override
+  String get finishStillProcessing => 'Še v obdelavi. Prikazalo se bo na začetni strani.';
+
+  @override
+  String get finishBackToHome => 'Nazaj na začetno';
 }

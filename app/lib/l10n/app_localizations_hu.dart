@@ -15622,4 +15622,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Még nincs mit feldolgozni.';
+
+  @override
+  String get finishStillProcessing => 'Még feldolgozás alatt. Megjelenik a Kezdőlapon.';
+
+  @override
+  String get finishBackToHome => 'Vissza a Kezdőlapra';
 }

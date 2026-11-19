@@ -4687,5 +4687,7 @@
     "onWifiLater": "Пізніше через Wi-Fi",
     "conversationWritingSummary": "Пишемо ваш підсумок…",
     "onTheWayServerWork": "Робота за даними сервера",
-    "finishNothingToProcess": "Поки що нічого обробляти."
+    "finishNothingToProcess": "Поки що нічого обробляти.",
+    "finishStillProcessing": "Ще обробляється. З'явиться на головній.",
+    "finishBackToHome": "На головну"
 }

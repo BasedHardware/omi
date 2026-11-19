@@ -15574,4 +15574,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Henüz işlenecek bir şey yok.';
+
+  @override
+  String get finishStillProcessing => 'Hâlâ işleniyor. Ana sayfada görünecek.';
+
+  @override
+  String get finishBackToHome => 'Ana Sayfaya Dön';
 }

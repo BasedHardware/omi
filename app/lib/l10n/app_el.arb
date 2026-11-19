@@ -4687,5 +4687,7 @@
     "onWifiLater": "Αργότερα μέσω Wi-Fi",
     "conversationWritingSummary": "Γράφεται η σύνοψή σας…",
     "onTheWayServerWork": "Εργασία που αναφέρει ο διακομιστής",
-    "finishNothingToProcess": "Δεν υπάρχει ακόμα κάτι για επεξεργασία."
+    "finishNothingToProcess": "Δεν υπάρχει ακόμα κάτι για επεξεργασία.",
+    "finishStillProcessing": "Ακόμα σε επεξεργασία. Θα εμφανιστεί στην Αρχική.",
+    "finishBackToHome": "Πίσω στην Αρχική"
 }

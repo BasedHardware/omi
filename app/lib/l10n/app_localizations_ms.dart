@@ -15600,4 +15600,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Belum ada apa-apa untuk diproses.';
+
+  @override
+  String get finishStillProcessing => 'Masih diproses. Ia akan muncul di Laman Utama.';
+
+  @override
+  String get finishBackToHome => 'Kembali ke Laman Utama';
 }

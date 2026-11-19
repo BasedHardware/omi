@@ -12244,5 +12244,7 @@
     "onWifiLater": "Kasnije na Wi-Fi",
     "conversationWritingSummary": "Pišemo vaš sažetak…",
     "onTheWayServerWork": "Rad koji je prijavio poslužitelj",
-    "finishNothingToProcess": "Još nema ničega za obradu."
+    "finishNothingToProcess": "Još nema ničega za obradu.",
+    "finishStillProcessing": "Još se obrađuje. Pojavit će se na početnoj.",
+    "finishBackToHome": "Natrag na početnu"
 }

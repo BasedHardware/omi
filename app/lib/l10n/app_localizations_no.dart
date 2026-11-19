@@ -15567,4 +15567,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Ingenting å behandle ennå.';
+
+  @override
+  String get finishStillProcessing => 'Behandles fortsatt. Den vises på Hjem.';
+
+  @override
+  String get finishBackToHome => 'Tilbake til Hjem';
 }

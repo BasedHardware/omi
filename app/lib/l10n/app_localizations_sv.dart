@@ -15572,4 +15572,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get finishNothingToProcess => 'Inget att bearbeta än.';
+
+  @override
+  String get finishStillProcessing => 'Bearbetas fortfarande. Den visas på Hem.';
+
+  @override
+  String get finishBackToHome => 'Tillbaka till Hem';
 }

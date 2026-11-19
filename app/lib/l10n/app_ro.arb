@@ -4687,5 +4687,7 @@
     "onWifiLater": "Mai târziu pe Wi-Fi",
     "conversationWritingSummary": "Se scrie rezumatul tău…",
     "onTheWayServerWork": "Activitate raportată de server",
-    "finishNothingToProcess": "Încă nu este nimic de procesat."
+    "finishNothingToProcess": "Încă nu este nimic de procesat.",
+    "finishStillProcessing": "Încă se procesează. Va apărea pe pagina principală.",
+    "finishBackToHome": "Înapoi la pagina principală"
 }

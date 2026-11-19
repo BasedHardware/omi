@@ -4722,5 +4722,7 @@
     "onWifiLater": "Plus tard en Wi-Fi",
     "conversationWritingSummary": "Rédaction de votre résumé…",
     "onTheWayServerWork": "Traitement signalé par le serveur",
-    "finishNothingToProcess": "Rien à traiter pour l'instant."
+    "finishNothingToProcess": "Rien à traiter pour l'instant.",
+    "finishStillProcessing": "Traitement en cours. Elle apparaîtra sur l'accueil.",
+    "finishBackToHome": "Retour à l'accueil"
 }
