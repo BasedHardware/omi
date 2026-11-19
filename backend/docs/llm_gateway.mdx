@@ -658,8 +658,7 @@ keyed storage. The keyed storage executor admits eight running and eight queued
 transactions per replica. Unkeyed work and accounting use their existing pool.
 
 The Helm values accept a gateway-only Kubernetes secret named
-`<stage>-omi-llm-gateway-idempotency-keys` in the gateway namespace. Its
-optional `active` and `secondary` entries supply the gateway-specific
+`<stage>-omi-llm-gateway-idempotency-keys` in the gateway namespace. Its optional entries use the same names as the gateway environment settings
 `LLM_GATEWAY_IDEMPOTENCY_ENCRYPTION_SECRET` and
 `LLM_GATEWAY_IDEMPOTENCY_SECONDARY_ENCRYPTION_SECRET`. Until an active key is
 provided, the gateway uses `ENCRYPTION_SECRET`. Use cryptographically
@@ -688,8 +687,9 @@ before the claim TTL or any account wipe can remove claims from the cohort.
 
 - `claims` is a customer Firestore collection-group query on
   `llm_gateway_idempotency_claims` with `window_start <= started_at < window_end`.
-  Project the document ID as `scope`, plus `state`. Use a collection-group
-  range index on `started_at` if required by Firestore.
+  Project the document ID as `scope`, plus `state`. If the range index is
+  unavailable, scan the projected `started_at` and `state` fields during the
+  bounded rollout cohort and apply the same time filter in the extract.
 - `attempts` is the union of the participating gateway replicas' accounting
   Firestore ledgers (`llm_gateway_attempts`). For each claim scope, fetch all
   matching `idempotency_scope` rows, including late arrivals after window end.

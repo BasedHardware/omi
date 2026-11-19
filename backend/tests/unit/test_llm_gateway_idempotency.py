@@ -121,13 +121,10 @@ def test_rendered_dev_gateway_uses_customer_firestore(gateway, monkeypatch, rend
     compute = env['GOOGLE_CLOUD_PROJECT']['value']
     assert compute == 'based-hardware-dev'
     assert env[idempotency_store.DATA_PLANE_ENV]['value'] == customer == 'based-hardware'
-    for entry, key in (
-        (idempotency_store.ACTIVE_SECRET_ENV, 'active'),
-        (idempotency_store.SECONDARY_SECRET_ENV, 'secondary'),
-    ):
+    for entry in (idempotency_store.ACTIVE_SECRET_ENV, idempotency_store.SECONDARY_SECRET_ENV):
         assert env[entry]['valueFrom']['secretKeyRef'] == {
             'name': 'dev-omi-llm-gateway-idempotency-keys',
-            'key': key,
+            'key': entry,
             'optional': True,
         }
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', compute)

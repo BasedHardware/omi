@@ -104,6 +104,26 @@ def test_valid_rendered_deployment_satisfies_contract(contracts: SimpleNamespace
     assert contracts.validate_rendered_deployment(contracts.CONTRACTS[0], "dev", [_deployment(contracts)]) == []
 
 
+@pytest.fixture(scope="module")
+def rendered_gateway_deployment(contracts: SimpleNamespace):
+    helm = shutil.which("helm")
+    assert helm is not None, "helm must be installed for the rendered deployment contract"
+    contract = next(item for item in contracts.CONTRACTS if item.service == "llm-gateway")
+    return contract, contracts.render_chart(contract, "dev", helm)
+
+
+def test_gateway_rotation_keys_are_optional_and_scoped(contracts, rendered_gateway_deployment):
+    contract, rendered = rendered_gateway_deployment
+    assert contracts.validate_rendered_deployment(contract, "dev", rendered) == []
+    mutated = deepcopy(rendered)
+    deployment = contracts.deployment_for(mutated, contracts.release_name(contract, "dev"))
+    env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    entry = next(entry for entry in env if entry["name"] == "LLM_GATEWAY_IDEMPOTENCY_SECONDARY_ENCRYPTION_SECRET")
+    entry["valueFrom"]["secretKeyRef"]["name"] = "dev-omi-backend-secrets"
+    errors = contracts.validate_rendered_deployment(contract, "dev", mutated)
+    assert any("must use its optional scoped secret reference" in error for error in errors)
+
+
 def test_stale_or_fallback_image_is_rejected_at_rendered_outcome(contracts: SimpleNamespace):
     failures = contracts.validate_rendered_deployment(
         contracts.CONTRACTS[0], "dev", [_deployment(contracts, image="gcr.io/based-hardware-dev/backend:latest")]

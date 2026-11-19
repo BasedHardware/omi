@@ -47,6 +47,7 @@ class DeploymentContract:
     expected_env: tuple[tuple[str, str], ...] = ()
     required_secret_name: bool = False
     expected_volume_secret: tuple[tuple[str, str], ...] = ()
+    optional_scoped_secrets: tuple[tuple[str, str], ...] = ()
 
 
 # Adding a first-party service means adding one concise entry here.  The
@@ -66,7 +67,15 @@ CONTRACTS = (
         expected_env=(("GOOGLE_CLOUD_PROJECT", "{project}"),),
         required_secret_name=True,
     ),
-    DeploymentContract(service="llm-gateway", image_name="llm-gateway", required_secret_name=True),
+    DeploymentContract(
+        service="llm-gateway",
+        image_name="llm-gateway",
+        required_secret_name=True,
+        optional_scoped_secrets=(
+            ("LLM_GATEWAY_IDEMPOTENCY_ENCRYPTION_SECRET", "omi-llm-gateway-idempotency-keys"),
+            ("LLM_GATEWAY_IDEMPOTENCY_SECONDARY_ENCRYPTION_SECRET", "omi-llm-gateway-idempotency-keys"),
+        ),
+    ),
     DeploymentContract(service="diarizer", image_name="diarizer", required_secret_name=True),
     DeploymentContract(service="parakeet", image_name="parakeet", required_secret_name=True),
     DeploymentContract(service="nllb-translation", image_name="nllb-translation"),
@@ -197,11 +206,18 @@ def validate_rendered_deployment(
             errors.append(f"{prefix}: {name} must be {rendered_expected!r}, got {actual!r}")
 
     expected_secret = f"{environment}-omi-backend-secrets"
-    rendered_secret_refs: list[dict[str, Any]] = []
+    has_shared_secret_ref = False
+    for name, suffix in contract.optional_scoped_secrets:
+        ref = _mapping(_mapping(env.get(name, {}).get("valueFrom")).get("secretKeyRef"))
+        if ref != {"name": f"{environment}-{suffix}", "key": name, "optional": True}:
+            errors.append(f"{prefix}: {name} must use its optional scoped secret reference")
+
+    scoped_names = {name for name, _ in contract.optional_scoped_secrets}
     for entry in env.values():
+        if entry.get("name") in scoped_names:
+            continue
         ref = _mapping(_mapping(entry.get("valueFrom")).get("secretKeyRef"))
         if ref:
-            rendered_secret_refs.append(ref)
             if not ref.get("name") or not ref.get("key"):
                 errors.append(f"{prefix}: secretKeyRef for {entry.get('name')!r} needs non-empty name and key")
             elif ref.get("name") != expected_secret:
@@ -209,7 +225,9 @@ def validate_rendered_deployment(
                     f"{prefix}: secretKeyRef for {entry.get('name')!r} must target {expected_secret!r}, "
                     f"got {ref.get('name')!r}"
                 )
-    if contract.required_secret_name and not rendered_secret_refs:
+            else:
+                has_shared_secret_ref = True
+    if contract.required_secret_name and not has_shared_secret_ref:
         errors.append(f"{prefix}: expected at least one secretKeyRef to {expected_secret!r}")
 
     expected_volume_secret = dict(contract.expected_volume_secret).get(environment)

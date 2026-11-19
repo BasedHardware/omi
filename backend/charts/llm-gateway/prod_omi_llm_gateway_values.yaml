@@ -118,13 +118,13 @@ env:
     valueFrom:
       secretKeyRef:
         name: prod-omi-llm-gateway-idempotency-keys
-        key: active
+        key: LLM_GATEWAY_IDEMPOTENCY_ENCRYPTION_SECRET
         optional: true
   - name: LLM_GATEWAY_IDEMPOTENCY_SECONDARY_ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
         name: prod-omi-llm-gateway-idempotency-keys
-        key: secondary
+        key: LLM_GATEWAY_IDEMPOTENCY_SECONDARY_ENCRYPTION_SECRET
         optional: true
   - name: LLM_GATEWAY_ALLOWED_CALLERS
     value: "backend,omi-web,omi-admin-dashboard"
