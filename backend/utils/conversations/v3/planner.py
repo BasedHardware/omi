@@ -55,7 +55,11 @@ def _as_sections(entries: list[dict[str, Any]], *, primary: dict[str, Any] | Non
             **primary,
             'first_line': first['first_line'],
             'line': primary.get('line') or next((entry['line'] for entry in entries if entry.get('line')), ''),
-            'resumes_previous': first.get('resumes_previous', False),
+            'resumes_previous': (
+                first.get('resumes_previous', False)
+                if keep_later_primary_section
+                else all(entry.get('resumes_previous') for entry in entries)
+            ),
             'people': list(dict.fromkeys(name for entry in entries for name in entry.get('people') or [])),
             'sections': sections,
         }
@@ -128,7 +132,7 @@ def _cohesive_groups(groups, outlines) -> Iterator[tuple[dict[str, Any], list[di
                 **group,
                 'lines': part,
                 'manual_end': bool(last and group.get('manual_end')),
-                'after_manual_end': bool(manual),
+                '_keep_unmatched_together': bool(manual),
                 'finished': group['finished'] or not last,
                 '_stretch_words': word_count(part),
             }
@@ -158,7 +162,11 @@ def windows(groups, outlines, *, cohesion=False):
                     'manual_end': bool(
                         group.get('manual_end') and end == len(group['lines']) and part_index == len(capped) - 1
                     ),
-                    '_keep_unmatched_together': bool(group.get('manual_end') or group.get('after_manual_end')),
+                    '_keep_unmatched_together': bool(
+                        group.get('_keep_unmatched_together')
+                        or group.get('manual_end')
+                        or group.get('after_manual_end')
+                    ),
                     'finished': group['finished'] or end < len(group['lines']) or part_index < len(capped) - 1,
                 }
                 if cohesion:
@@ -290,11 +298,22 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
     )
     manual_end = bool(window.get('manual_end') or (existing or {}).get('manual_end'))
     outline_kind = window.get('outline_kind', window['kind'])
+    words = window.get('_stretch_words', sum(len(s.get('text', '').split()) for s in segments))
+    if (
+        existing is not None
+        and retained
+        and window.get('_stretch_partition') is not None
+        and existing.get('home_hidden') is False
+        and existing.get('home_hidden_reason') in {'conversation', 'wearer_recognition_uncertain'}
+    ):
+        # Finished visible speech already passed the word gate, possibly on its original stretch.
+        # Passive, manual and wearer-recognition rules still apply to the current projection.
+        words = max(words, visibility.MIN_HOME_WORDS)
     kind, hidden, reason = visibility.project(
         outline_kind,
         recordings,
         {line['conversation_id'] for line in lines},
-        words=window.get('_stretch_words', sum(len(s.get('text', '').split()) for s in segments)),
+        words=words,
         finished=window['finished'],
         manual_end=manual_end,
     )

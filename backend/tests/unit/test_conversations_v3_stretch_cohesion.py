@@ -26,9 +26,10 @@ def test_outline_labels_are_stretch_local_and_abstentions_share_one_label(monkey
             segment(4, 1, speaker='raw-9'),
             segment(6, 1, speaker='BATCH_UNASSIGNED_two'),
             segment(8, 1, speaker='raw-3'),
-            segment(10, 1, speaker='speaker_99'),
+            segment(10, 1, speaker='speaker_99', speaker_id=99, person_name='Incorrect binding'),
             segment(12, 1, speaker='raw-4', person_name='Synthetic contact'),
             segment(14, 1, speaker='raw-5', is_user=True),
+            segment(16, 1, speaker='SPEAKER_99', speaker_id=4),
         ]
     )
     group = outline.stretches([raw], AT)[0]
@@ -44,9 +45,13 @@ def test_outline_labels_are_stretch_local_and_abstentions_share_one_label(monkey
         'Omi',
         'Synthetic contact',
         'ME',
+        'S3',
     ]
-    monkeypatch.setenv('CONVERSATIONS_V3_STRETCH_COHESION', 'off')
-    assert 'BATCH_UNASSIGNED_one' in outline.messages(group, timezone.utc, cohesion=stretch_cohesion_enabled())[1][1]
+    for disabled in ('off', 'false', '0', 'no'):
+        monkeypatch.setenv('CONVERSATIONS_V3_STRETCH_COHESION', disabled)
+        assert (
+            'BATCH_UNASSIGNED_one' in outline.messages(group, timezone.utc, cohesion=stretch_cohesion_enabled())[1][1]
+        )
 
 
 def test_six_short_topics_fold_into_one_visible_517_word_card():
@@ -117,6 +122,19 @@ def test_short_media_and_recognized_background_keep_their_visibility_policy():
     assert planner.word_count(windows[-1]['lines']) == 20
     assert not rows[-1]['home_hidden']
 
+    recorded = {
+        **raw,
+        'claims': [{'conversation_id': row['id'], **claim} for row in rows for claim in row['_v3_claims']['r']],
+    }
+    existing = {row['id']: row for row in rows}
+    replay = planner.preserve_finished_windows(windows, existing, {'r': recorded})
+    rebuilt = planner.build('synthetic', replay[-1], {'r': recorded}, existing[replay[-1]['existing_id']])
+    assert rebuilt['id'] == rows[-1]['id'] and not rebuilt['home_hidden']
+
+    disabled = planner.preserve_finished_windows(planner.windows(groups, entries), existing, {'r': recorded})
+    rebuilt_off = planner.build('synthetic', disabled[-1], {'r': recorded}, existing[disabled[-1]['existing_id']])
+    assert rebuilt_off['home_hidden_reason'] == 'below_word_minimum'
+
 
 def test_late_fragment_does_not_borrow_words_from_a_published_claim():
     initial = recording([segment(0, 480)])
@@ -158,3 +176,26 @@ def test_late_topic_past_media_does_not_borrow_from_published_topic():
     assert kept['existing_id'] == prior['id']
     assert planner.build('synthetic', media, {'r': raw})['home_hidden_reason'] == 'media'
     assert planner.build('synthetic', late, {'r': raw})['home_hidden_reason'] == 'below_word_minimum'
+
+
+def test_cap_rebases_sections_for_a_topic_spanning_the_boundary(monkeypatch):
+    monkeypatch.setattr(planner, 'CAP', timedelta(seconds=9))
+    raw = recording([segment(i, 200) for i in (0, 4, 8, 12)])
+    topic = {
+        **entry(1),
+        'sections': [{'first_line': i, 'title': f'Section {i}'} for i in (2, 3, 4)],
+    }
+    left, right = planner.windows(outline.stretches([raw], AT + timedelta(minutes=10)), [[topic]], cohesion=True)
+    assert [line['segment']['id'] for line in left['lines']] == ['0', '4']
+    assert [line['segment']['id'] for line in right['lines']] == ['8', '12']
+    assert [section['first_line'] for section in left['sections']] == [2]
+    assert [section['first_line'] for section in right['sections']] == [1, 2]
+
+
+def test_resume_merges_within_the_cap_partition_and_keeps_sections(monkeypatch):
+    monkeypatch.setattr(planner, 'CAP', timedelta(seconds=10))
+    raw = recording([segment(i, 320) for i in (0, 8, 9, 18)])
+    topics = [entry(1), entry(2), {**entry(3), 'resumes_previous': True}, {**entry(4), 'resumes_previous': True}]
+    windows = planner.windows(outline.stretches([raw], AT + timedelta(minutes=10)), [topics], cohesion=True)
+    assert [[line['segment']['id'] for line in w['lines']] for w in windows] == [['0'], ['8'], ['9', '18']]
+    assert windows[-1]['sections'] == [{'first_line': 2, 'title': 'Topic 4'}]

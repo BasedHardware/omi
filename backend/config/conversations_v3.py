@@ -49,7 +49,7 @@ def rotation_seconds() -> tuple[float, float]:
 
 
 def stretch_cohesion_enabled() -> bool:
-    return os.getenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on').strip().lower() != 'off'
+    return os.getenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 
 
 def backfill_enabled() -> bool:

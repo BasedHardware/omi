@@ -52,10 +52,10 @@ def outline_speaker_labels(segments: Sequence[Mapping[str, Any]]) -> list[str]:
         key = raw.casefold()
         if segment.get('is_user'):
             labels.append('ME')
+        elif speaker_id == OMI_SPEAKER_ID_SENTINEL:
+            labels.append('Omi')
         elif name := segment.get('person_name'):
             labels.append(str(name))
-        elif key == 'speaker_99' or speaker_id == OMI_SPEAKER_ID_SENTINEL:
-            labels.append('Omi')
         elif (
             (not key and speaker_id is None)
             or key in {'speaker', 'unknown', 'unknown speaker', 'unassigned', 's?'}
