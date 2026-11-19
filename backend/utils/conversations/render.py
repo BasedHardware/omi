@@ -164,6 +164,9 @@ def _strip_match_scores(conv: Dict[str, Any]) -> Dict[str, Any]:
 
 def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
+    # The authenticated detail route owns the live preview and its encrypted cache receipt.
+    conv.pop('live_summary', None)
+    conv.pop('v3_live_summary', None)
     _strip_match_scores(conv)
     if not conv.get('is_locked', False):
         return _omit_list_note_claims(conv)
@@ -201,6 +204,9 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
     # Geolocation is private capture metadata and is not part of the public
     # integration contract. Strip it before either locked or unlocked data is
     # serialized into an integration response.
+    # The authenticated detail route owns the live preview and its encrypted cache receipt.
+    conv.pop('live_summary', None)
+    conv.pop('v3_live_summary', None)
     _strip_match_scores(conv)
     conv.pop('geolocation', None)
     # Server-computed capture badge stays on app views, outside the integration contract.
