@@ -310,6 +310,19 @@ runs:
           1) echo 'exists=true' >> "$GITHUB_OUTPUT" ;;
           *) echo 'Duplicate backend-projection-pump service listing' >&2; exit 1 ;;
         esac
+        # A first deploy that died between create and the pin step leaves traffic on
+        # latestRevision, which the zero-traffic sidecar attachment refuses. Stop before
+        # any mutation and name the one command that repairs it.
+        if [[ "$count" == 1 ]]; then
+          following="$(gcloud run services describe backend-projection-pump \
+            --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" --format=json \
+            | jq -er '[.status.traffic[]? | select(.latestRevision == true and (.percent // 0) > 0)] | length')"
+          if [[ "$following" != 0 ]]; then
+            echo 'ERROR: backend-projection-pump traffic follows latestRevision (an earlier first deploy stopped before pinning).' >&2
+            echo 'Pin it to its ready revision, then rerun: gcloud run services update-traffic backend-projection-pump --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=<status.latestReadyRevisionName>=100' >&2
+            exit 1
+          fi
+        fi
 
     # Fixed size (min == max == 4) with CPU always allocated; internal ingress and no
     # public invoker. Scaling literals live here only: ops/prod.yaml takes no entry until

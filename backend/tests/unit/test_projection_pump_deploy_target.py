@@ -332,6 +332,16 @@ def test_pump_composite_never_builds_pushes_or_grants_an_invoker():
     assert names.index('runtime-env') < names.index('deploy-backend-projection-pump')
 
 
+def test_pump_composite_refuses_latest_revision_traffic_before_any_mutation():
+    steps = PUMP_ACTION['runs']['steps']
+    ids = [s.get('id') for s in steps]
+    detect = steps[ids.index('pump-service')]
+    assert '.latestRevision == true' in detect['run']
+    assert 'exit 1' in detect['run'].split('following=', 1)[1]
+    assert 'update-traffic backend-projection-pump' in detect['run']
+    assert ids.index('pump-service') < ids.index('deploy-backend-projection-pump')
+
+
 # --- shape readback ---------------------------------------------------------------------------
 
 

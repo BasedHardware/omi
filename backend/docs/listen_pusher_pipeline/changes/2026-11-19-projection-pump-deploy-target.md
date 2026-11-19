@@ -90,3 +90,17 @@ Rollback order at any step: serving sweep back on first, then the pump flag off,
 - **First create.** gcloud cannot create a service with `--no-traffic`, so the first deploy creates the base
   revision serving, then pins traffic to it by name before attaching the sidecar. The service is internal and
   dark, so this causes no exposure, but this path has not been run live.
+
+## Review follow-ups that are not in this change
+
+- **Read-ledger completeness (before step 2).** `backend/scripts/firestore_read_reconcile.py`
+  requires snapshots only from the four shipped services, so a silent pump ledger would still
+  read as complete. Adding the pump to `SHIPPED_SERVICES` before the service exists would make
+  every reconcile incomplete, so it lands as its own change after the dark deploy is read back
+  and before the pump flag is enabled. Owner: SCA-3120.
+- **Inherited invoker grants.** The pre-traffic check reads the service's own IAM policy and
+  refuses any `roles/run.invoker` member there. It does not read project or folder policy: a
+  principal granted `roles/run.invoker` at the project can invoke every Cloud Run service in
+  it, this one included, and that cannot be narrowed per service. The boundary this service
+  relies on is internal ingress plus no service-level invoker; the routes it mounts keep their
+  own authentication.
