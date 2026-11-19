@@ -115,7 +115,7 @@ def require_committed_erase(uid: str, job_id: str, token: str, owns_claim: Calla
                 receipt.record(uid, job_id, claim, 'verify')
                 if not _erase_at_postgres(uid):
                     raise
-                path = 'postgres_recovery'
+                path = 'postgres'
             owns_claim()
             receipt.record(uid, job_id, claim, 'receipt', path)
     except (EraseRejected, EraseUnavailable) as error:
