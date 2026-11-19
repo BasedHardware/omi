@@ -99,10 +99,14 @@ interface it declares and the binary fills in. A new family needs no entry in an
 - A store of tenant data refuses a write for an account being deleted itself, in the same atomic
   step as the write (`docstore.Fenced`). The queue's guard alone is not enough: its locks end if
   the database session dies mid-call.
+- Only `internal/platform/docstore` imports the Firestore client, so there is no way to write
+  to Firestore that skips the marker read. `Fenced` also refuses a guard that is for a different
+  tenant than the owner it is asked to write for.
 - Enforced by: the type system (a port method cannot be called without the capability);
-  `tools/archcheck` (`ports.go`: a family's port method with a context must take a capability; a
-  capability cannot be made, stored in a struct, or minted with the test constructors outside
-  tests); the contract tests in `internal/queue`, `internal/batchunit` and
+  `tools/archcheck` (`ports.go`: in a family, an interface method, a named function type and a
+  function-typed field or parameter that take a context must take a capability, and
+  `context.Context` may not be renamed; a capability cannot be made, stored in a struct, or
+  minted with the test constructors outside tests; `roles.go`: the Firestore import rule); the contract tests in `internal/queue`, `internal/batchunit` and
   `internal/adapters/batchdocs`. Not enforced: handing a capability to a goroutine that outlives
   the guard. An adapter checks `g.Err()` before it commits, which catches that at run time.
 

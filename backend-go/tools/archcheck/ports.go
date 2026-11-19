@@ -51,42 +51,87 @@ func queueAlias(module string, s source) string {
 	return ""
 }
 
+// contextAlias returns the name the file uses for the context package, or "".
+func contextAlias(s source) string {
+	for _, spec := range s.file.Imports {
+		if strings.Trim(spec.Path.Value, `"`) != "context" {
+			continue
+		}
+		if spec.Name != nil {
+			return spec.Name.Name
+		}
+		return "context"
+	}
+	return ""
+}
+
+// portMethods reports every way a family can declare "a call someone else implements" that
+// takes a context and no capability: an interface method, a named function type, and a
+// function-typed struct field or parameter. Function declarations and literals are the
+// family's own code, which cannot do I/O, so they are not ports.
 func portMethods(s source, alias string) []string {
+	ctx := contextAlias(s)
+	if ctx == "" {
+		return nil
+	}
+	if ctx == "." || ctx == "_" {
+		return []string{s.at(s.file.Pos(), "import context under its own name, so its uses can be checked")}
+	}
+	const need = "takes a context but no queue.Guarded or queue.Admitting: a call that can leave " +
+		"the process must be handed the proof that it runs inside Run.Guard or Store.Tenant"
 	var problems []string
+	unguarded := func(t ast.Expr) bool {
+		fn, ok := t.(*ast.FuncType)
+		return ok && takesContext(fn, ctx) && !mentionsCapability(fn.Params, alias)
+	}
 	ast.Inspect(s.file, func(n ast.Node) bool {
-		spec, ok := n.(*ast.TypeSpec)
-		if !ok {
-			return true
-		}
-		iface, ok := spec.Type.(*ast.InterfaceType)
-		if !ok {
-			return true
-		}
-		for _, method := range iface.Methods.List {
-			fn, ok := method.Type.(*ast.FuncType)
-			if !ok || len(method.Names) == 0 || !takesContext(fn) || mentionsCapability(fn.Params, alias) {
-				continue
+		if spec, ok := n.(*ast.TypeSpec); ok {
+			if isContextType(spec.Type, ctx) {
+				problems = append(problems, s.at(spec.Pos(),
+					"type %s renames context.Context: spell it out, so port checks can see it", spec.Name.Name))
 			}
-			problems = append(problems, s.at(method.Pos(),
-				"port method %s.%s takes a context but no queue.Guarded or queue.Admitting: a call that can leave "+
-					"the process must be handed the proof that it runs inside Run.Guard or Store.Tenant",
-				spec.Name.Name, method.Names[0].Name))
+			if unguarded(spec.Type) {
+				problems = append(problems, s.at(spec.Pos(), "function type %s %s", spec.Name.Name, need))
+			}
+			if iface, ok := spec.Type.(*ast.InterfaceType); ok {
+				for _, method := range iface.Methods.List {
+					if len(method.Names) != 0 && unguarded(method.Type) {
+						problems = append(problems, s.at(method.Pos(), "port method %s.%s %s",
+							spec.Name.Name, method.Names[0].Name, need))
+					}
+				}
+				return false
+			}
+			return true
+		}
+		if field, ok := n.(*ast.Field); ok && unguarded(field.Type) {
+			problems = append(problems, s.at(field.Pos(), "a function-typed field or parameter %s", need))
 		}
 		return true
 	})
 	return problems
 }
 
-func takesContext(fn *ast.FuncType) bool {
-	if fn.Params == nil || len(fn.Params.List) == 0 {
-		return false
-	}
-	sel, ok := fn.Params.List[0].Type.(*ast.SelectorExpr)
+func isContextType(t ast.Expr, ctx string) bool {
+	sel, ok := t.(*ast.SelectorExpr)
 	if !ok {
 		return false
 	}
 	pkg, ok := sel.X.(*ast.Ident)
-	return ok && pkg.Name == "context" && sel.Sel.Name == "Context"
+	return ok && pkg.Name == ctx && sel.Sel.Name == "Context"
+}
+
+// takesContext reports whether any parameter is a context.
+func takesContext(fn *ast.FuncType, ctx string) bool {
+	if fn.Params == nil {
+		return false
+	}
+	for _, param := range fn.Params.List {
+		if isContextType(param.Type, ctx) {
+			return true
+		}
+	}
+	return false
 }
 
 func mentionsCapability(node ast.Node, alias string) bool {

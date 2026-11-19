@@ -170,6 +170,63 @@ type Mailer interface {
 	}
 }
 
+func TestAPortCannotHideAsAFunctionTypeOrBehindARenamedContext(t *testing.T) {
+	t.Parallel()
+	files := clean()
+	files["internal/billing/funcs.go"] = `package billing
+
+import "context"
+
+type Call func(ctx context.Context, to string) error
+
+type Service struct {
+	Send func(context.Context, string) error
+	Name func() string
+}
+
+func run(ctx context.Context, each func(context.Context) error) error { return each(ctx) }
+
+type Ctx = context.Context
+`
+	files["internal/billing/renamed.go"] = `package billing
+
+import c "context"
+
+type Pager interface {
+	Page(ctx c.Context, to string) error
+}
+`
+	found := problems(t, files)
+	expect(t, found, "funcs.go:5", "function type Call")
+	expect(t, found, "funcs.go:8", "function-typed field or parameter")
+	expect(t, found, "funcs.go:12", "function-typed field or parameter")
+	expect(t, found, "funcs.go:14", "renames context.Context")
+	expect(t, found, "renamed.go:6", "Pager.Page")
+	for _, problem := range found {
+		if strings.Contains(problem, "funcs.go:9") {
+			t.Errorf("a function field with no context was reported: %s", problem)
+		}
+	}
+}
+
+func TestOnlyTheDocstoreMayImportTheFirestoreClient(t *testing.T) {
+	t.Parallel()
+	files := clean()
+	raw := "\n\nimport _ \"cloud.google.com/go/firestore\"\n"
+	files["internal/adapters/stripe/raw.go"] = "package stripe" + raw
+	files["cmd/served/raw.go"] = "package main" + raw
+	files["internal/platform/docstore/docstore.go"] = "package docstore" + raw
+	files["internal/platform/docstore/docstore_test.go"] = "package docstore\n\nimport \"testing\"\n\nfunc TestDocstore(t *testing.T) {}\n"
+	found := problems(t, files)
+	expect(t, found, "internal/adapters/stripe/raw.go", "only internal/platform/docstore talks to Firestore")
+	expect(t, found, "cmd/served/raw.go", "only internal/platform/docstore talks to Firestore")
+	for _, problem := range found {
+		if strings.Contains(problem, "internal/platform/docstore/") {
+			t.Errorf("the docstore itself was reported: %s", problem)
+		}
+	}
+}
+
 func TestACapabilityCannotBeForgedStoredOrMintedOutsideTests(t *testing.T) {
 	t.Parallel()
 	files := clean()

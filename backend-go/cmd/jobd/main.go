@@ -81,6 +81,9 @@ func command(args []string) error {
 	if cfg.secret == "" {
 		return errors.New("ENCRYPTION_SECRET required")
 	}
+	if err := crypt.Check(cfg.secret); err != nil {
+		return err
+	}
 	if store.Ready(dbCtx) != nil {
 		return errors.New("database migrations required")
 	}

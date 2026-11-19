@@ -7,6 +7,10 @@
 //
 // Unlike the Python reader, a failed decryption here is always an error. It never returns the
 // ciphertext as if it were text.
+//
+// Not supported yet: a transcript the Python backend moved to the object lake, which is
+// stored as a pointer document instead of the text. This package reports it as ErrUnreadable.
+// The conversation family that first reads such transcripts adds the pointer reader.
 package crypt
 
 import (
@@ -29,6 +33,21 @@ import (
 // ErrUnreadable means stored data could not be decrypted or decoded. It carries no detail,
 // so it is safe to log and to return to a caller.
 var ErrUnreadable = errors.New("transcript_unreadable")
+
+// MinSecretBytes is the shortest deployment secret the Python backend accepts.
+const MinSecretBytes = 32
+
+// ErrWeakSecret means the deployment secret is shorter than MinSecretBytes.
+var ErrWeakSecret = errors.New("crypt: deployment secret is shorter than 32 bytes")
+
+// Check reports whether secret is one the Python backend would also accept. A binary calls
+// it once at start-up, before it serves anything.
+func Check(secret string) error {
+	if len(secret) < MinSecretBytes {
+		return ErrWeakSecret
+	}
+	return nil
+}
 
 const (
 	keyInfo       = "user-data-encryption"

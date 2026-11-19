@@ -225,17 +225,17 @@ deterministic_attempts=deterministic_attempts+(CASE WHEN $7 THEN 1 ELSE 0 END)`,
 }
 
 // hold yields the job and keeps every job of its tenant off the schedule for delay.
+//
+// The tenant is paused first. Releasing the job wakes the dispatchers, and one that woke
+// before the pause was recorded could claim another job of the same tenant.
 func (r *Run) hold(ctx context.Context, c Cause, delay time.Duration) error {
-	if err := r.wait(ctx, c, delay, waitRefund); err != nil {
-		return err
-	}
 	_, err := r.store.pool.Exec(ctx, `UPDATE queue_tenants
 SET check_after=greatest(check_after,clock_timestamp()+$2*interval '1 microsecond') WHERE uid=$1`,
 		r.lease.tenant, delay.Microseconds())
 	if err != nil {
 		return fmt.Errorf("hold tenant: %w", err)
 	}
-	return nil
+	return r.wait(ctx, c, delay, waitRefund)
 }
 
 // exhaust records the terminal intent durably before asking the kind to reconcile it, so a

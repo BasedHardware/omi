@@ -293,11 +293,19 @@ func TestWorkersLeaveKindsTheyHaveNoHandlerFor(t *testing.T) {
 	cfg.Backoff = 10 * time.Millisecond
 	s := openStore(t, url, cfg, kinds)
 	// This replica declares both kinds but runs only one of them.
-	run(t, ctx, s, terminalHandler{})
+	w, _ := run(t, ctx, s, terminalHandler{})
 	enqueue(t, ctx, s, NewJob{Key: "other-kind", Tenant: "tenant", Kind: "added", Format: 1, Step: "start"})
 	enqueue(t, ctx, s, demo("mine", "tenant"))
 	eventually(t, ctx, "the handled kind finishes", finished(t, ctx, s, "mine"))
 	if j, err := s.Get(ctx, "other-kind"); err != nil || j.Attempts != 0 || j.State != StateReady {
 		t.Fatalf("a kind with no handler here was claimed: %+v %v", j, err)
+	}
+	// The store knows the kind, so by declarations alone nothing is stranded. The workers
+	// know they will never run it.
+	if count, _, err := s.Stranded(ctx); err != nil || count != 0 {
+		t.Fatalf("every due job has a declared kind, got %d stranded (%v)", count, err)
+	}
+	if count, _, err := w.Stranded(ctx); err != nil || count != 1 {
+		t.Fatalf("the workers must report the 1 due job they have no handler for, got %d (%v)", count, err)
 	}
 }

@@ -53,3 +53,16 @@ func TestUnreadableTranscript(t *testing.T) {
 		}
 	}
 }
+
+func TestASecretShorterThanPythonAcceptsIsRefused(t *testing.T) {
+	if err := Check(strings.Repeat("k", MinSecretBytes-1)); !errors.Is(err, ErrWeakSecret) {
+		t.Fatalf("a 31-byte secret was accepted: %v", err)
+	}
+	if err := Check(strings.Repeat("k", MinSecretBytes)); err != nil {
+		t.Fatalf("a 32-byte secret was refused: %v", err)
+	}
+	// Python measures UTF-8 bytes, not characters.
+	if err := Check(strings.Repeat("\u03bb", MinSecretBytes/2)); err != nil {
+		t.Fatalf("a 32-byte secret of 16 two-byte characters was refused: %v", err)
+	}
+}

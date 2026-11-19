@@ -14,7 +14,12 @@ import (
 // These tests run against the Firestore emulator (scripts/with-firestore.sh). Each test
 // uses its own project id, which the emulator keeps apart from every other.
 
-type alive struct{ ended atomic.Bool }
+type alive struct {
+	tenant string
+	ended  atomic.Bool
+}
+
+func (a *alive) Tenant() string { return a.tenant }
 
 func (a *alive) Err() error {
 	if a.ended.Load() {
@@ -49,14 +54,14 @@ func TestFencedWritesForAnOwnerWhoIsNotBeingDeleted(t *testing.T) {
 	b.Mark(t, "restored", map[string]any{"wipe_status": "cancelled"})
 	for _, owner := range []string{"plain", "restored"} {
 		doc := ref(t, "users", owner, "notes", "n1")
-		err := b.Store.Fenced(t.Context(), &alive{}, owner, func(tx *docstore.Tx) error {
+		err := b.Store.Fenced(t.Context(), &alive{tenant: owner}, owner, func(tx *docstore.Tx) error {
 			return tx.Create(doc, note{Text: "kept"})
 		})
 		if err != nil {
 			t.Fatalf("%s: %v", owner, err)
 		}
 		var got note
-		err = b.Store.Fenced(t.Context(), &alive{}, owner, func(tx *docstore.Tx) error {
+		err = b.Store.Fenced(t.Context(), &alive{tenant: owner}, owner, func(tx *docstore.Tx) error {
 			found, getErr := tx.Get(doc, &got)
 			if getErr == nil && !found {
 				t.Errorf("%s: the document just written was not found", owner)
@@ -79,7 +84,7 @@ func TestFencedRefusesAnOwnerWithADeletionMarker(t *testing.T) {
 	} {
 		b.Mark(t, owner, marker)
 		ran := false
-		err := b.Store.Fenced(t.Context(), &alive{}, owner, func(tx *docstore.Tx) error {
+		err := b.Store.Fenced(t.Context(), &alive{tenant: owner}, owner, func(tx *docstore.Tx) error {
 			ran = true
 			return tx.Set(ref(t, "users", owner, "notes", "n1"), note{Text: "late"})
 		})
@@ -101,7 +106,7 @@ func TestAWriteNeverCommitsAfterTheDeletionMarker(t *testing.T) {
 	started := false
 	// The marker is written while the transaction is open, the way a deletion starts while
 	// a worker's write is in flight.
-	err := b.Store.Fenced(t.Context(), &alive{}, owner, func(tx *docstore.Tx) error {
+	err := b.Store.Fenced(t.Context(), &alive{tenant: owner}, owner, func(tx *docstore.Tx) error {
 		if !started {
 			started = true
 			go func() {
@@ -141,7 +146,7 @@ func TestAWriteNeverCommitsAfterTheDeletionMarker(t *testing.T) {
 func TestACallerWhoseGuardEndedDuringTheCallbackCommitsNothing(t *testing.T) {
 	t.Parallel()
 	b := open(t)
-	live := &alive{}
+	live := &alive{tenant: "owner"}
 	err := b.Store.Fenced(t.Context(), live, "owner", func(tx *docstore.Tx) error {
 		if err := tx.Set(ref(t, "users", "owner", "notes", "n1"), note{Text: "late"}); err != nil {
 			return err
@@ -165,7 +170,7 @@ func TestCreateAndUpdateReportWhatTheyFound(t *testing.T) {
 	b := open(t)
 	doc := ref(t, "users", "owner", "notes", "n1")
 	write := func(fn func(*docstore.Tx) error) error {
-		return b.Store.Fenced(t.Context(), &alive{}, "owner", fn)
+		return b.Store.Fenced(t.Context(), &alive{tenant: "owner"}, "owner", fn)
 	}
 	if err := write(func(tx *docstore.Tx) error { return tx.Update(doc, map[string]any{"text": "x"}) }); !errors.Is(err, docstore.ErrMissing) {
 		t.Errorf("update of a missing document: %v, want ErrMissing", err)
@@ -196,7 +201,7 @@ func TestAnErrorFromTheCallbackIsReturnedUnchangedAndNothingIsWritten(t *testing
 	t.Parallel()
 	b := open(t)
 	mine := errors.New("the callback's own error")
-	err := b.Store.Fenced(t.Context(), &alive{}, "owner", func(tx *docstore.Tx) error {
+	err := b.Store.Fenced(t.Context(), &alive{tenant: "owner"}, "owner", func(tx *docstore.Tx) error {
 		if err := tx.Set(ref(t, "users", "owner", "notes", "n1"), note{Text: "x"}); err != nil {
 			return err
 		}
@@ -204,5 +209,19 @@ func TestAnErrorFromTheCallbackIsReturnedUnchangedAndNothingIsWritten(t *testing
 	})
 	if !errors.Is(err, mine) || b.Exists(t, "users/owner/notes/n1") {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestAGuardForOneTenantCannotWriteForAnother(t *testing.T) {
+	t.Parallel()
+	b := open(t)
+	err := b.Store.Fenced(t.Context(), &alive{tenant: "someone-else"}, "owner", func(tx *docstore.Tx) error {
+		return tx.Set(ref(t, "users", "owner", "notes", "n1"), note{Text: "crossed"})
+	})
+	if !errors.Is(err, docstore.ErrOwnerMismatch) {
+		t.Fatalf("a guard for another tenant was accepted: %v", err)
+	}
+	if b.Exists(t, "users/owner/notes/n1") {
+		t.Fatal("a document was written under another tenant's guard")
 	}
 }

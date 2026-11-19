@@ -91,8 +91,11 @@ func routeError(w http.ResponseWriter, err error, conflict string) {
 		refusal(w, 404, "not_found")
 	case errors.Is(err, queue.ErrState):
 		refusal(w, 409, conflict)
-	case errors.Is(err, queue.ErrDeferred), errors.As(err, &f) && f.Cause == wire.CauseAccountDeleting:
+	case errors.As(err, &f) && f.Cause == wire.CauseAccountDeleting:
 		refusal(w, 409, "account_deleting")
+	case errors.Is(err, queue.ErrDeferred):
+		// The tenant is busy (another claim, a guard or an erase holds it). Try again.
+		refusal(w, 409, "tenant_busy")
 	case errors.As(err, &refused):
 		status := 409
 		switch refused {

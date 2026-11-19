@@ -262,12 +262,18 @@ FROM queue_jobs GROUP BY state`)
 	return counts, oldest, nil
 }
 
-// Stranded reports due jobs that no kind declared to this store can run: their kind or
-// format is unknown to this binary. During a rolling deployment a small number is normal on
-// the old replicas. A number that stays above zero on every replica means jobs nobody runs.
-// It returns the count and the seconds the oldest has been due.
+// Stranded reports due jobs whose kind or format this binary did not declare. During a
+// rolling deployment a small number is normal on the old replicas. A number that stays above
+// zero on every replica means jobs nobody runs. It returns the count and the seconds the
+// oldest has been due.
+//
+// A replica that runs workers reports Workers.Stranded instead: it also counts declared
+// kinds this replica has no handler for.
 func (s *Store) Stranded(ctx context.Context) (int64, float64, error) {
-	can := s.kinds.pairs(s.kinds.names())
+	return s.stranded(ctx, s.kinds.pairs(s.kinds.names()))
+}
+
+func (s *Store) stranded(ctx context.Context, can supported) (int64, float64, error) {
 	var (
 		count  int64
 		oldest float64

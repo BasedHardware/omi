@@ -221,6 +221,14 @@ func (w *Workers) forget(key string) {
 	w.mu.Unlock()
 }
 
+// handBack returns a claim whose launch lost to Stop, so the job is not left leased with an
+// attempt spent on work that never started.
+func (w *Workers) handBack(ctx context.Context, r *Run) {
+	if err := r.unclaim(ctx); err != nil && !errors.Is(err, ErrLease) {
+		w.report(err)
+	}
+}
+
 // resumeNow claims a scheduled resume when its time comes. A busy lock puts the claim off,
 // so it is tried a few times; after that the secret is dropped and the job stays blocked
 // for the next caller, which is the same result as a restart.
@@ -234,8 +242,12 @@ func (w *Workers) resumeNow(ctx context.Context, key, secret string) {
 			return
 		}
 		w.release()
+		if err == nil {
+			w.handBack(ctx, r)
+			return
+		}
 		if !errors.Is(err, ErrDeferred) {
-			gone := err == nil || errors.Is(err, ErrState) || errors.Is(err, ErrAbsent)
+			gone := errors.Is(err, ErrState) || errors.Is(err, ErrAbsent)
 			if !gone && ctx.Err() == nil {
 				w.report(err)
 			}
@@ -264,10 +276,7 @@ func (w *Workers) dispatch(ctx context.Context, watcher bool) {
 		}
 		w.release()
 		if err == nil {
-			// Claimed, but Stop began before the launch: hand the claim back.
-			if unclaimErr := r.unclaim(ctx); unclaimErr != nil && !errors.Is(unclaimErr, ErrLease) {
-				w.report(unclaimErr)
-			}
+			w.handBack(ctx, r)
 			return
 		}
 		if errors.Is(err, ErrDeferred) || errors.Is(err, errRescheduled) {
@@ -313,4 +322,11 @@ func (w *Workers) idle(ctx context.Context, empty int, watcher bool) bool {
 	case <-w.store.clock.After(wait):
 		return false
 	}
+}
+
+// Stranded reports due jobs this replica will never claim: their kind has no handler here,
+// or their format is not one this binary declared. It returns the count and the seconds the
+// oldest has been due. See Store.Stranded for how to read the number.
+func (w *Workers) Stranded(ctx context.Context) (int64, float64, error) {
+	return w.store.stranded(ctx, w.can)
 }

@@ -85,6 +85,18 @@ var pureStdlib = []string{
 // familyBanned is the standard library a family may not import outside its tests.
 var familyBanned = []string{"net", "os", "io/fs", "syscall", "database", "log", "os/exec", "os/signal"}
 
+// firestoreOwner is the one package that may import the Firestore client, in code or tests.
+const firestoreOwner = "internal/platform/docstore"
+
+func isFirestore(imported string) bool {
+	const client = "cloud.google.com/go/firestore"
+	return imported == client || strings.HasPrefix(imported, client+"/")
+}
+
+func ownsFirestore(dir string) bool {
+	return dir == firestoreOwner || strings.HasPrefix(dir, firestoreOwner+"/")
+}
+
 // testHelpers are the packages any test may import.
 func testHelper(dir string) bool {
 	return roleOf(dir) != roleNone && strings.HasSuffix(dir, "test")
@@ -121,6 +133,10 @@ func checkRoles(t *tree) []string {
 func forbidden(module string, from role, s source, imported string) string {
 	target, internal := strings.CutPrefix(imported, module+"/")
 	if !internal {
+		if isFirestore(imported) && !ownsFirestore(s.dir) {
+			return "only " + firestoreOwner + " talks to Firestore: its Fenced write reads the account deletion " +
+				"marker in the same transaction, and a direct client write would skip that"
+		}
 		return forbiddenExternal(from, s.test, imported)
 	}
 	if s.test && testHelper(target) {

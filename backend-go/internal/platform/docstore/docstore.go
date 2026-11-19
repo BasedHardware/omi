@@ -31,6 +31,8 @@ var (
 	ErrExists = errors.New("docstore: document exists")
 	// ErrMissing means Update found no document to update.
 	ErrMissing = errors.New("docstore: document missing")
+	// ErrOwnerMismatch means the caller's guard is for a different tenant than the owner.
+	ErrOwnerMismatch = errors.New("docstore: guard is for another tenant")
 	// ErrPath means a document path is malformed.
 	ErrPath = errors.New("docstore: invalid document path")
 )
@@ -67,10 +69,16 @@ type Config struct {
 	Emulator string
 }
 
-// Live is proof that the caller still holds the right to act for a tenant: a queue.Guarded
-// or a queue.Admitting. A write is refused once Err is non-nil.
+// Live is the caller's claim that it still holds the right to act for one tenant: a
+// queue.Guarded or a queue.Admitting. A write is refused once Err is non-nil, and refused
+// for any owner other than Tenant.
+//
+// Live is an early exit, not the protection. Anything can implement it; what stops a write
+// for an account being deleted is the marker read inside the transaction, which holds
+// whatever Live says.
 type Live interface {
 	Err() error
+	Tenant() string
 }
 
 // Store is a Firestore database handle. It is safe for concurrent use.
@@ -140,6 +148,9 @@ type Tx struct {
 func (s *Store) Fenced(ctx context.Context, live Live, owner string, fn func(*Tx) error) error {
 	if err := live.Err(); err != nil {
 		return err
+	}
+	if live.Tenant() != owner {
+		return ErrOwnerMismatch
 	}
 	marker, err := Doc(MarkerCollection, owner)
 	if err != nil {
