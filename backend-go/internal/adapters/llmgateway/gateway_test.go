@@ -1,0 +1,291 @@
+package llmgateway
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
+	"github.com/BasedHardware/omi/backend-go/internal/queue"
+)
+
+const okCompletion = `{"id":"test","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"{\"title\":\"Example\"}"}}],"usage":{"prompt_tokens":20,"completion_tokens":5}}`
+
+func testClient(t *testing.T, handler http.Handler) *Client {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	client, err := New(Config{BaseURL: server.URL, ServiceToken: " test-service ", Timeout: 5 * time.Second}, clock.System{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client
+}
+
+func writeResponse(t *testing.T, w http.ResponseWriter, status int, body string) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if _, err := w.Write([]byte(body)); err != nil {
+		t.Error(err)
+	}
+}
+
+func prompt() Request {
+	return Request{Step: "notes", Feature: ConversationStructure, Messages: []Message{{Role: "user", Text: "test prompt"}}}
+}
+
+func TestCompleteSendsFeatureLaneAndAccounting(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		feature Feature
+		lane    string
+	}{
+		{ConversationStructure, "omi:auto:conv-structure"},
+		{ConversationDiscard, "omi:auto:conv-discard"},
+		{ConversationActions, "omi:auto:conv-action-items"},
+		{ConversationFolder, "omi:auto:conv-folder"},
+		{ConversationAppSelect, "omi:auto:conv-app-select"},
+		{ConversationAppResult, "omi:auto:conv-app-result"},
+		{ConversationV3Summary, "omi:auto:conversation-v3-summary"},
+		{ExternalStructure, "omi:auto:external-structure"},
+		{Memories, "omi:auto:memories"},
+		{MemoryL1, "omi:auto:memory-l1"},
+	}
+	for _, tc := range tests {
+		t.Run(string(tc.feature), func(t *testing.T) {
+			t.Parallel()
+			client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/v1/chat/completions" {
+					t.Errorf("unexpected route: %s %s", r.Method, r.URL.Path)
+				}
+				feature := tc.feature
+				if feature == MemoryL1 {
+					feature = Memories
+				}
+				if feature == ExternalStructure || feature == ConversationV3Summary {
+					feature = ConversationStructure
+				}
+				wantHeaders := map[string]string{
+					"Authorization":        "Bearer test-service",
+					"Content-Type":         "application/json",
+					"X-Omi-Service-Caller": "backend",
+					"X-Omi-User-Uid":       "test-owner",
+					"X-Omi-LLM-Feature":    string(feature),
+					"X-Omi-App-Platform":   "mobile",
+				}
+				for name, want := range wantHeaders {
+					if got := r.Header.Get(name); got != want {
+						t.Errorf("%s = %q, want %q", name, got, want)
+					}
+				}
+				var body completionRequest
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
+				if body.Model != tc.lane || body.Stream || body.ResponseFormat != nil ||
+					body.Metadata.Feature != feature || len(body.Messages) != 1 ||
+					body.Messages[0] != (message{Role: "user", Content: "test prompt"}) {
+					t.Errorf("unexpected payload: %+v", body)
+				}
+				writeResponse(t, w, http.StatusOK, okCompletion)
+			}))
+			in := prompt()
+			in.Feature, in.AppPlatform = tc.feature, " Mobile "
+			got, err := client.Complete(t.Context(), queue.GuardedForTest(t, "test-owner", "job"), in)
+			if err != nil || got != `{"title":"Example"}` {
+				t.Fatalf("Complete = %q, %v", got, err)
+			}
+		})
+	}
+}
+
+func TestStructuredBundlesUseStrictSchemaAndVersionMetadata(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		feature Feature
+		name    string
+	}{
+		{StructureShadow, "ConversationStructureExtraction"},
+		{ActionsShadow, "ActionItemsExtraction"},
+	}
+	for _, tc := range tests {
+		t.Run(string(tc.feature), func(t *testing.T) {
+			t.Parallel()
+			schema := `{"type":"object","properties":{"title":{"type":"string"}},"required":["title"],"additionalProperties":false}`
+			client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body completionRequest
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
+				if body.Model != "omi:auto:chat-structured" ||
+					body.Metadata != (metadata{tc.feature, string(tc.feature) + ".v1", tc.name + ".v1"}) ||
+					body.ResponseFormat == nil || body.ResponseFormat.Type != "json_schema" ||
+					body.ResponseFormat.JSONSchema.Name != tc.name || !body.ResponseFormat.JSONSchema.Strict ||
+					string(body.ResponseFormat.JSONSchema.Schema) != schema {
+					t.Errorf("unexpected structured request: %+v", body)
+				}
+				writeResponse(t, w, http.StatusOK, okCompletion)
+			}))
+			in := prompt()
+			in.Feature, in.Schema = tc.feature, &StrictSchema{Name: tc.name, JSON: []byte(schema)}
+			if _, err := client.Complete(t.Context(), queue.GuardedForTest(t, "owner", "job"), in); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestOperationIDSurvivesReplayAndSeparatesJobsAndSteps(t *testing.T) {
+	t.Parallel()
+	ids := make(chan string, 4)
+	client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ids <- r.Header.Get("X-Omi-Request-Id")
+		writeResponse(t, w, http.StatusOK, okCompletion)
+	}))
+	for _, item := range []struct{ job, step string }{
+		{"job", "notes"}, {"job", "notes"}, {"job", "memories"}, {"other", "notes"},
+	} {
+		in := prompt()
+		in.Step = item.step
+		if _, err := client.Complete(t.Context(), queue.GuardedForTest(t, "owner", item.job), in); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, replay, otherStep, otherJob := <-ids, <-ids, <-ids, <-ids
+	if first != replay || first == otherStep || first == otherJob || otherStep == otherJob {
+		t.Fatalf("unexpected request IDs: %q %q %q %q", first, replay, otherStep, otherJob)
+	}
+	if first != "d2241ab4-95e3-880b-bda8-23f7e5334859" {
+		t.Fatalf("request ID derivation changed: %q", first)
+	}
+}
+
+func TestRecoverAndInvalidRequestsDoNotCallGateway(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Error("unexpected paid call")
+		writeResponse(t, w, http.StatusOK, okCompletion)
+	}))
+	guard := queue.GuardedForTest(t, "owner", "job")
+	if _, err := client.Recover(t.Context(), guard, guard.Operation("notes")); !errors.Is(err, ErrNotCommitted) {
+		t.Fatalf("Recover = %v", err)
+	}
+	var dead queue.Guarded
+	if _, err := client.Complete(t.Context(), dead, prompt()); !errors.Is(err, queue.ErrLease) {
+		t.Fatalf("Complete without guard = %v", err)
+	}
+	if _, err := client.Recover(t.Context(), dead, "operation"); !errors.Is(err, queue.ErrLease) {
+		t.Fatalf("Recover without guard = %v", err)
+	}
+	in := prompt()
+	in.BYOK = &BYOK{Provider: "gemini", Key: "test-key"}
+	_, err := client.Complete(t.Context(), guard, in)
+	checkFailure(t, err, CauseBYOK, 0, queue.Fail(CauseBYOK))
+	in.BYOK = &BYOK{Provider: BYOKOpenAI, Key: " "}
+	_, err = client.Complete(t.Context(), guard, in)
+	checkFailure(t, err, CauseBYOK, 0, queue.Fail(CauseBYOK))
+	in.BYOK, in.Step = nil, ""
+	_, err = client.Complete(t.Context(), guard, in)
+	checkFailure(t, err, CauseRejected, 0, queue.Fail(CauseRejected))
+}
+
+func TestBYOKEnvelopeDoesNotRetryOrFallBack(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.Header.Get("X-Omi-Byok-Openai-Key") != "test-user-key" ||
+			r.Header.Get("Authorization") != "Bearer test-service" ||
+			r.Header.Get("X-Omi-App-Platform") != "" {
+			t.Error("incorrect BYOK envelope")
+		}
+		writeResponse(t, w, http.StatusUnauthorized, `{"error":{"message":"sensitive","type":"authentication_error","code":"credential_failure","param":null,"failure_class":"byok_auth"}}`)
+	}))
+	in := prompt()
+	in.BYOK = &BYOK{Provider: BYOKOpenAI, Key: "test-user-key"}
+	in.AppPlatform = "unrecognized"
+	_, err := client.Complete(t.Context(), queue.GuardedForTest(t, "owner", "job"), in)
+	checkFailure(t, err, CauseBYOK, http.StatusUnauthorized, queue.Fail(CauseBYOK))
+	if calls.Load() != 1 {
+		t.Fatalf("requests = %d", calls.Load())
+	}
+}
+
+func checkFailure(t *testing.T, err error, cause queue.Cause, status int, outcome queue.Outcome) {
+	t.Helper()
+	fault, ok := errors.AsType[*CallError](err)
+	if !ok || fault.Cause != cause || fault.Status != status {
+		t.Fatalf("error = %v, want gateway cause %s with status %d", err, cause, status)
+	}
+	if got := queue.FromError(err, "undeclared"); got != outcome {
+		t.Errorf("queue outcome = %#v, want %#v", got, outcome)
+	}
+	if strings.Contains(err.Error(), "sensitive") {
+		t.Error("remote response text leaked")
+	}
+}
+
+func TestGatewayFailureEnvelopesMapToQueueOutcomes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		status int
+		body   string
+		cause  queue.Cause
+		retry  bool
+	}{
+		{"validation", 400, gatewayError("invalid_request_error", "invalid_request", ""), CauseRejected, false},
+		{"capability", 400, gatewayError("invalid_request_error", "capability_not_supported", "capability_mismatch"), CauseRejected, false},
+		{"service auth", 401, `{"detail":"sensitive"}`, CauseRejected, false},
+		{"model missing", 404, gatewayError("api_error", "model_not_found", ""), CauseRejected, false},
+		{"bad route", 503, gatewayError("invalid_request_error", "invalid_route_config", "invalid_config"), CauseRejected, false},
+		{"provider timeout", 502, gatewayError("api_error", "provider_failure", "timeout_before_output"), CauseTransient, true},
+		{"proxy timeout", 504, "<html>sensitive</html>", CauseTransient, true},
+		{"managed capacity", 502, gatewayError("api_error", "provider_failure", "reserved_capacity_unavailable"), CauseTransient, true},
+		{"managed provider 429", 502, gatewayError("api_error", "provider_failure", "provider_429_omi_paid"), CauseQuota, true},
+		{"bare 429", 429, "", CauseQuota, true},
+		{"BYOK quota", 429, gatewayError("rate_limit_error", "credential_failure", "byok_quota"), CauseBYOKQuota, false},
+		{"BYOK rate limit", 429, gatewayError("rate_limit_error", "credential_failure", "byok_rate_limit"), CauseBYOKRateLimit, true},
+		{"missing BYOK key", 401, gatewayError("authentication_error", "credential_failure", "missing_byok_key"), CauseBYOK, false},
+		{"unsupported BYOK", 401, gatewayError("authentication_error", "credential_failure", "byok_unsupported_provider"), CauseBYOK, false},
+		{"refusal", 200, `{"choices":[{"finish_reason":"stop","message":{"content":null,"refusal":"sensitive"}}]}`, CauseRejected, false},
+		{"content filter", 200, `{"choices":[{"finish_reason":"content_filter","message":{"content":""}}]}`, CauseRejected, false},
+		{"truncated", 200, `{"choices":[{"finish_reason":"length","message":{"content":"sensitive"}}]}`, CauseRejected, false},
+		{"malformed", 200, `{"choices":[`, CauseRejected, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Retry-After", "12")
+				writeResponse(t, w, tc.status, tc.body)
+			}))
+			_, err := client.Complete(t.Context(), queue.GuardedForTest(t, "owner", "job"), prompt())
+			outcome := queue.Fail(tc.cause)
+			if tc.retry {
+				outcome = queue.Retry(tc.cause, 12*time.Second)
+			}
+			checkFailure(t, err, tc.cause, tc.status, outcome)
+		})
+	}
+}
+
+func gatewayError(kind, code, failureClass string) string {
+	return fmt.Sprintf(`{"error":{"message":"sensitive","type":%q,"param":null,"code":%q,"failure_class":%q}}`, kind, code, failureClass)
+}
+
+func TestTransportFailureIsTransient(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		panic(http.ErrAbortHandler)
+	}))
+	_, err := client.Complete(t.Context(), queue.GuardedForTest(t, "owner", "job"), prompt())
+	checkFailure(t, err, CauseTransient, 0, queue.Retry(CauseTransient, 0))
+}
