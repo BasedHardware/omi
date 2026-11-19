@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Mapping
+from typing import Any
 
 from fastapi import HTTPException
 from prometheus_client import Counter, Histogram
@@ -27,7 +27,6 @@ from database import redis_db
 from database import users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.conversations import transcribing_hold
-from utils.conversations.historical_projection import project, summary_on_open  # noqa: F401  (re-export)
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.process_conversation import process_conversation, save_structured_vector
 from utils.conversations.processing_trigger import ProcessingTrigger

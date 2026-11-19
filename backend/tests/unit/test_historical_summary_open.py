@@ -14,6 +14,7 @@ from config import historical_tier
 from config.episodes import HOME_STEP_PROJECTION_ENV as home_step_env
 from models.structured import Structured
 from utils import byok as byok_module
+from utils.conversations import historical_projection
 from utils.conversations import historical_summary as hs
 from utils.conversations import home_step, summary_delivery
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
@@ -159,11 +160,11 @@ def test_missing_row_is_404(monkeypatch):
 
 def test_kill_switch_off_is_503_and_stops_advertising(monkeypatch):
     gates = Gates(monkeypatch, _row())
-    assert hs.summary_on_open(gates.row)
+    assert historical_projection.summary_on_open(gates.row)
     monkeypatch.setenv(historical_tier.OPEN_ENABLED_ENV, 'false')
     error = _refusal()
     assert error.status_code == 503 and error.detail['code'] == 'historical_summary_disabled'
-    assert not hs.summary_on_open(gates.row)
+    assert not historical_projection.summary_on_open(gates.row)
     gates.process.assert_not_called()
 
 
@@ -328,14 +329,14 @@ def test_route_sets_the_outcome_header(monkeypatch):
 
 def test_projection_advertises_only_open_unsummarized_historical_rows(monkeypatch):
     monkeypatch.delenv(historical_tier.OPEN_ENABLED_ENV, raising=False)
-    assert hs.project(_row())['summary_on_open'] is True
+    assert historical_projection.project(_row())['summary_on_open'] is True
     for updates in (
         {'processing_tier': None},
         {'structured': {'title': 'T', 'overview': 'done'}},
         {'is_locked': True},
         {'discarded': True},
     ):
-        assert 'summary_on_open' not in hs.project(_row(**updates))
+        assert 'summary_on_open' not in historical_projection.project(_row(**updates))
 
 
 def test_reprocess_of_a_historical_row_is_summary_only(monkeypatch):

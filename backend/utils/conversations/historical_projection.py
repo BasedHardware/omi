@@ -25,3 +25,19 @@ def summary_on_open(row: Mapping[str, Any]) -> bool:
 def project(row: dict[str, Any]) -> dict[str, Any]:
     """Wire copy advertising ``summary_on_open``; nothing is stored."""
     return {**row, 'summary_on_open': True} if summary_on_open(row) else row
+
+
+def admit_reprocess(uid: str, conversation_id: str, row: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """A historical row's ``/reprocess`` (old builds' Summarize CTA) takes the open endpoint's gates."""
+    if not historical_tier.is_historical(dict(row)):
+        return []
+    from utils.conversations import historical_summary
+
+    return historical_summary.admit(uid, conversation_id)
+
+
+def release(slots: list[tuple[str, str]]) -> None:
+    if slots:
+        from utils.conversations import historical_summary
+
+        historical_summary.release(slots)

@@ -932,7 +932,7 @@ def reprocess_conversation(
         return pending
     from database import processing_attention as attention_db
 
-    historical_slots = _admit_historical_reprocess(uid, conversation_id, conversation)
+    historical_slots = historical_projection.admit_reprocess(uid, conversation_id, conversation)
     input_generation = attention_db.generation(conversation)
     was_discarded = bool(conversation.get('discarded'))
     user_kept = was_discarded or bool(conversation.get('sync_relevance_user_kept'))
@@ -951,10 +951,10 @@ def reprocess_conversation(
             uid, conversation_id, expected_generation=input_generation, restart_succeeded=True
         )
     except attention_db.ClaimRejected as error:
-        _release_historical(historical_slots)
+        historical_projection.release(historical_slots)
         raise HTTPException(status_code=404, detail='Conversation not found') from error
     if not owned or not attention_db.owns_live_claim(uid, operation):
-        _release_historical(historical_slots)
+        historical_projection.release(historical_slots)
         # Echoing the stale row as 200 made clients report "updated" with no new
         # summary; another writer still owns this conversation. Every released
         # client treats a non-200 reprocess answer as failure.
@@ -986,22 +986,6 @@ def reprocess_conversation(
         raise
     attention_db.finish(uid, operation, 'succeeded' if _reprocess_succeeded(result, app_id) else 'failed')
     return result
-
-
-def _admit_historical_reprocess(uid: str, conversation_id: str, row: dict) -> list:
-    """A historical row's reprocess (old builds' Summarize CTA) takes the open endpoint's gates and slots."""
-    if not historical_tier.is_historical(row):
-        return []
-    from utils.conversations import historical_summary
-
-    return historical_summary.admit(uid, conversation_id)
-
-
-def _release_historical(slots: list) -> None:
-    if slots:
-        from utils.conversations import historical_summary
-
-        historical_summary.release(slots)
 
 
 REPROCESS_IN_PROGRESS_ERROR_DETAIL = {
