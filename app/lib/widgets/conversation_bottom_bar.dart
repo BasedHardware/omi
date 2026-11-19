@@ -67,6 +67,7 @@ class ConversationBottomBar extends StatefulWidget {
   final ConversationTab selectedTab;
   final Function(ConversationTab) onTabSelected;
   final VoidCallback onStopPressed;
+  final VoidCallback? onLiveEnd;
   final bool hasSegments;
   final ServerConversation? conversation;
   final Function(Future<void> Function(double start, double end))? onSeekFunctionReady;
@@ -88,6 +89,7 @@ class ConversationBottomBar extends StatefulWidget {
     required this.selectedTab,
     required this.onTabSelected,
     required this.onStopPressed,
+    this.onLiveEnd,
     this.hasSegments = true,
     this.conversation,
     this.onSeekFunctionReady,
@@ -938,7 +940,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             _buildAskButton(context),
           ] else
             Expanded(child: _buildAskBar(context)),
-          LiveConversationEndButton(conversation: widget.conversation!),
+          LiveConversationEndButton(conversation: widget.conversation!, onEnd: widget.onLiveEnd),
         ]),
       );
     }

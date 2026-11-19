@@ -301,6 +301,7 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(liveSnapshot(LiveSummarySection(
         conversation: conversation,
+        open: 1,
         stream: (_) {
           opens++;
           return events.stream;

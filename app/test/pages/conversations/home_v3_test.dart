@@ -69,6 +69,7 @@ import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 
 import '../../helpers/sfpro_font_fixtures.dart';
 
@@ -307,12 +308,17 @@ class _Home {
   int detailReads = 0;
   ConversationTileState detailState = ConversationTileState.live;
 
-  ServerConversation? detailRead(String id) {
+  List<TranscriptSegment> detailSegments = _liveSoFar;
+  Completer<void>? detailBarrier;
+  bool detailFails = false;
+
+  Future<ServerConversation?> detailRead(String id) async {
     detailReads++;
-    if (id != 'live-1') return null;
+    await detailBarrier?.future;
+    if (id != 'live-1' || detailFails) return null;
     return _conversation('live-1', _now.subtract(const Duration(minutes: 20)), 'Launch checklist',
         lastSpeech: _now.subtract(const Duration(minutes: 9)),
-        segments: _liveSoFar,
+        segments: detailSegments,
         v3: ConversationV3Fields(kind: 'conversation', tileState: detailState));
   }
 
@@ -663,6 +669,189 @@ void main() {
     });
   });
 
+  final recapSpeech = [
+    TranscriptSegment(
+      id: 'eligible',
+      text: List.filled(300, 'speech').join(' '),
+      speaker: 'SPEAKER_00',
+      personId: null,
+      isUser: true,
+      start: 0,
+      end: 60,
+      translations: [],
+    ),
+  ];
+
+  Future<void> settleDetailTab(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.pump();
+  }
+
+  testWidgets('the first settled Summary tap can use its pending initial hydration once', (tester) async {
+    final home = await _pumpHome(tester, v3: true);
+    final hydrate = Completer<void>();
+    home.detailBarrier = hydrate;
+    home.detailSegments = recapSpeech;
+    var opens = 0;
+    LiveSummarySection.debugStream = (_) {
+      opens++;
+      return Stream.value(const SummaryFailed('synthetic'));
+    };
+    addTearDown(() => LiveSummarySection.debugStream = null);
+
+    await tester.tap(find.text('Launch checklist'));
+    await settleDetailTab(tester);
+    expect(opens, 0);
+    await tester.tap(find.text('Summary'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(opens, 0, reason: 'the tab has not settled');
+    await settleDetailTab(tester);
+    expect(opens, 0, reason: 'initial authoritative data has not arrived');
+    hydrate.complete();
+    await settleDetailTab(tester);
+    expect(opens, 1);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 15));
+    await settleDetailTab(tester);
+    expect(opens, 1, reason: 'resume and periodic refresh cannot spend');
+    await tester.tap(find.text('Transcript'));
+    await settleDetailTab(tester);
+    await tester.tap(find.text('Summary'));
+    await settleDetailTab(tester);
+    expect(opens, 1, reason: 'an attempted recap does not auto-retry');
+    await tester.tap(find.byKey(const Key('live_summary_catch_up')));
+    await settleDetailTab(tester);
+    expect(opens, 2, reason: 'explicit retry is allowed');
+    await _dispose(tester, home);
+  });
+
+  testWidgets('restoring directly to Summary does not generate a live recap', (tester) async {
+    final home = await _pumpHome(tester, v3: true);
+    home.detailSegments = recapSpeech;
+    final restored = (await home.detailRead('live-1'))!;
+    var opens = 0;
+    LiveSummarySection.debugStream = (_) {
+      opens++;
+      return Stream.value(const SummaryFailed('synthetic'));
+    };
+    addTearDown(() => LiveSummarySection.debugStream = null);
+
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+    unawaited(navigator.push(MaterialPageRoute<void>(
+      builder: (_) => ConversationDetailPage(conversation: restored, initialTab: ConversationTab.summary),
+    )));
+    await settleDetailTab(tester);
+    expect(find.byKey(const Key('live_summary_catch_up')).hitTestable(), findsOneWidget);
+    expect(opens, 0);
+    await tester.pump(const Duration(seconds: 15));
+    await settleDetailTab(tester);
+    expect(opens, 0, reason: 'the restored tab and its passive refresh are not deliberate selection');
+    await _dispose(tester, home);
+  });
+
+  testWidgets('End during pending first hydration cancels recap intent', (tester) async {
+    final home = await _pumpHome(tester, v3: true);
+    final hydrate = Completer<void>();
+    home.detailBarrier = hydrate;
+    home.detailSegments = recapSpeech;
+    var opens = 0;
+    LiveSummarySection.debugStream = (_) {
+      opens++;
+      return Stream.value(const SummaryFailed('synthetic'));
+    };
+    addTearDown(() => LiveSummarySection.debugStream = null);
+
+    await tester.tap(find.text('Launch checklist'));
+    await settleDetailTab(tester);
+    await tester.tap(find.text('Summary'));
+    await settleDetailTab(tester);
+    expect(opens, 0);
+    await tester.tap(find.byKey(const Key('live_conversation_end')));
+    expect(home.capture.endCalls, 1);
+    hydrate.complete();
+    await settleDetailTab(tester);
+    expect(opens, 0);
+    await _dispose(tester, home);
+  });
+
+  testWidgets('passive growth cannot upgrade a short Summary selection to a recap', (tester) async {
+    final home = await _pumpHome(tester, v3: true, size: const Size(393, 852));
+    var opens = 0;
+    LiveSummarySection.debugStream = (_) {
+      opens++;
+      return Stream.value(const SummaryFailed('synthetic'));
+    };
+    addTearDown(() => LiveSummarySection.debugStream = null);
+    await tester.tap(find.text('Launch checklist'));
+    await settleDetailTab(tester);
+    await tester.tap(find.text('Summary'));
+    await settleDetailTab(tester);
+    expect(opens, 0);
+    expect(find.byKey(const Key('live_summary_recent_transcript')), findsOneWidget);
+    home.detailSegments = recapSpeech;
+    await tester.pump(const Duration(seconds: 15));
+    await settleDetailTab(tester);
+    expect(opens, 0, reason: 'passive refresh is never intent');
+
+    await tester.tap(find.text('Transcript'));
+    await settleDetailTab(tester);
+    final tabs = find.byType(TabBarView);
+    final pageScrollable = find.descendant(of: tabs, matching: find.byType(Scrollable)).first;
+    final position = tester.state<ScrollableState>(pageScrollable).position;
+    final before = position.pixels;
+    final box = tester.getRect(tabs);
+    final gesture = await tester.startGesture(Offset(box.left + 72, box.top + 24));
+    await gesture.moveBy(const Offset(30, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(100, 0));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(position.pixels, lessThan(before), reason: 'the actual PageView is partway into a swipe');
+    expect(position.pixels, greaterThan(0));
+    expect(opens, 0, reason: 'a swipe in progress may prebuild Summary without permission');
+    await gesture.cancel();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await settleDetailTab(tester);
+    expect(position.pixels, closeTo(before, 1));
+    expect(opens, 0);
+
+    await tester.tap(find.text('Summary'));
+    await settleDetailTab(tester);
+    expect(opens, 1, reason: 'a later deliberate settled selection is eligible');
+    await _dispose(tester, home);
+  });
+
+  testWidgets('a failed initial detail read can recover without spending on hydration alone', (tester) async {
+    final home = await _pumpHome(tester, v3: true);
+    home.detailFails = true;
+    var opens = 0;
+    LiveSummarySection.debugStream = (_) {
+      opens++;
+      return Stream.value(const SummaryFailed('synthetic'));
+    };
+    addTearDown(() => LiveSummarySection.debugStream = null);
+    await tester.tap(find.text('Launch checklist'));
+    await settleDetailTab(tester);
+    await tester.tap(find.text('Summary'));
+    await settleDetailTab(tester);
+    expect(opens, 0);
+    expect(find.byKey(const Key('live_summary_detail_retry')), findsOneWidget);
+    home.detailFails = false;
+    home.detailSegments = recapSpeech;
+    await tester.tap(find.byKey(const Key('live_summary_detail_retry')));
+    await settleDetailTab(tester);
+    expect(opens, 0);
+    await tester.tap(find.text('Transcript'));
+    await settleDetailTab(tester);
+    await tester.tap(find.text('Summary'));
+    await settleDetailTab(tester);
+    expect(opens, 1);
+    await _dispose(tester, home);
+  });
+
   testWidgets('the live page opened on Transcript keeps re-reading until the summary is being written', (tester) async {
     await withClock(Clock.fixed(_now), () async {
       final home = await _pumpHome(tester, v3: true);
@@ -736,6 +925,45 @@ void main() {
         ),
       );
     }
+
+    testWidgets('visible Summary opens its first live recap', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final palette = OmiColors.active;
+        addTearDown(() {
+          OmiColors.active = palette;
+          debugDefaultTargetPlatformOverride = null;
+          LiveSummarySection.debugStream = null;
+        });
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        home.detailSegments = recapSpeech;
+        final events = StreamController<SummaryStreamEvent>();
+        var opens = 0;
+        LiveSummarySection.debugStream = (_) {
+          opens++;
+          return events.stream;
+        };
+        await tester.tap(find.text('Launch checklist'));
+        await settleDetailTab(tester);
+        expect(opens, 0);
+        await tester.tap(find.text('Summary'));
+        await settleDetailTab(tester);
+        expect(opens, 1);
+        await shoot(tester, '007-mobile-ios-v3-summary-opens-recap');
+        events.add(SummaryDone(
+          Structured('Launch checklist', 'The team confirmed Thursday’s launch. Sam will send the final checklist.'),
+          _now.subtract(const Duration(minutes: 9)),
+        ));
+        await settleDetailTab(tester);
+        expect(find.textContaining('The team confirmed Thursday’s launch.'), findsOneWidget);
+        expect(find.textContaining('Summary through'), findsOneWidget);
+        await shoot(tester, '008-mobile-ios-v3-summary-live-recap');
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+        unawaited(events.close());
+      });
+    });
 
     testWidgets('Home, and opening the conversation in progress', (tester) async {
       await withClock(Clock.fixed(_now), () async {

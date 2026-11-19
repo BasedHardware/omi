@@ -22,8 +22,8 @@ typedef SummaryStreamOpener = Stream<SummaryStreamEvent> Function(String convers
 
 /// The summary of a v3 conversation that is still going or still being written.
 ///
-/// Opening a live conversation only reads its stored state. Catch me up requests a summary
-/// explicitly. The detail page refreshes live speech and pending transcription; once
+/// The first deliberate, hydrated opening of Summary can request one live recap.
+/// A stored recap is shown without starting a stream. The detail page refreshes live speech and pending transcription; once
 /// the transcript is ready, keep the normal final-summary streaming handoff.
 class LiveSummarySection extends StatefulWidget {
   const LiveSummarySection({
@@ -32,6 +32,11 @@ class LiveSummarySection extends StatefulWidget {
     required this.refresh,
     required this.onActiveChanged,
     this.stream,
+    this.open = 0,
+    this.claimOpen,
+    this.detailHydrated = true,
+    this.detailReadFailed = false,
+    this.isSummaryVisible,
     this.pollInterval = const Duration(seconds: 2),
     this.pollFor = const Duration(seconds: 60),
   });
@@ -44,6 +49,11 @@ class LiveSummarySection extends StatefulWidget {
   /// True while this section stands in for the page's summary.
   final ValueChanged<bool> onActiveChanged;
   final SummaryStreamOpener? stream;
+  final int open;
+  final bool Function(int)? claimOpen;
+  final bool detailHydrated;
+  final bool detailReadFailed;
+  final bool Function()? isSummaryVisible;
 
   /// Test seam for the page-level section, which the summary tab builds without a [stream].
   @visibleForTesting
@@ -72,6 +82,8 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   Timer? _poll;
   bool _liveRequestFailed = false;
   int _requestEpoch = 0;
+  int _observedOpen = 0;
+  bool _attemptedLiveRecap = false;
   List<Object>? _requestSpeech;
   ({DateTime through, String markdown})? _liveResult;
   String? _openedId;
@@ -82,6 +94,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
     super.initState();
     _ownerUid = SharedPreferencesUtil().uid;
     _begin();
+    _observeSummaryOpen();
   }
 
   @override
@@ -91,6 +104,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
       _stop();
       _sections.clear();
       _ownerUid = SharedPreferencesUtil().uid;
+      _attemptedLiveRecap = false;
       _liveResult = null;
       _liveRequestFailed = false;
       _phase = _Phase.writing;
@@ -124,6 +138,17 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
       }
       if (_phase == _Phase.polling && _landed(widget.conversation)) _finish();
     }
+    _observeSummaryOpen();
+  }
+
+  void _observeSummaryOpen() {
+    final open = widget.open;
+    if (open == 0 || open == _observedOpen) return;
+    _observedOpen = open;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.open != open || !(widget.claimOpen?.call(open) ?? true)) return;
+      if (!_attemptedLiveRecap && _summary == null) _catchUp();
+    });
   }
 
   DateTime? _coveredAtOpen;
@@ -200,6 +225,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   void _catchUp() {
     if (!_currentLiveTarget || _phase != _Phase.live || !_canCatchUp) return;
     setState(() {
+      _attemptedLiveRecap = true;
       _sections.clear();
       _liveRequestFailed = false;
       _phase = _Phase.writing;
@@ -441,6 +467,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
       widget.conversation.id == _openedId &&
       _ownerUid == SharedPreferencesUtil().uid &&
       _isLive(widget.conversation) &&
+      (widget.isSummaryVisible?.call() ?? true) &&
       ModalRoute.isCurrentOf(context) != false;
 
   bool get _canShowLiveContent {
@@ -467,6 +494,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   bool get _canCatchUp {
     final c = widget.conversation;
     return _ownerUid.isNotEmpty &&
+        widget.detailHydrated &&
         _canShowLiveContent &&
         c.v3?.kind != 'media' &&
         c.v3?.kind != 'background' &&
@@ -516,8 +544,15 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
                 else if (_canCatchUp)
                   OmiButton.secondary(
                     key: const Key('live_summary_catch_up'),
-                    label: context.l10n.conversationCatchMeUp,
+                    label: _liveRequestFailed ? context.l10n.tryAgain : context.l10n.update,
                     onPressed: _catchUp,
+                    size: OmiButtonSize.compact,
+                  ),
+                if (widget.detailReadFailed && !widget.detailHydrated)
+                  OmiButton.secondary(
+                    key: const Key('live_summary_detail_retry'),
+                    label: context.l10n.tryAgain,
+                    onPressed: () => unawaited(widget.refresh()),
                     size: OmiButtonSize.compact,
                   ),
                 if (_liveRequestFailed) Text(context.l10n.somethingWentWrong, style: style),

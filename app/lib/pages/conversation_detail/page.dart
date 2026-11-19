@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:flutter_provider_utilities/flutter_provider_utilities.dart' hide NotificationListener;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
@@ -171,6 +171,15 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
 
   bool _didInitialSeek = false;
   bool _hasExplicitTabSelection = false;
+  bool _summaryOpenPending = false;
+  bool _summaryOpenCheckQueued = false;
+  bool _tabScrollInProgress = false;
+  bool _tabDragStartedOnTranscript = false;
+  bool _initialLiveHydrationFinished = false;
+  int _summaryOpen = 0;
+  int _claimedSummaryOpen = 0;
+  ServerConversation? _summaryOpenSnapshot;
+  bool _liveEndRequested = false;
   bool _resultViewedRecorded = false;
 
   /// When the summary of this conversation first showed; leaving after [ValueMomentPaywall.summaryDwell]
@@ -275,6 +284,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   /// Brings the Summary tab forward. A reprocess started elsewhere (the ⋯ menu on Transcript,
   /// a failed-transcript retry) shows its progress and, with the v2 gate, its failure card there.
   void _openSummaryTab() {
+    _summaryOpenPending = false;
     _hasExplicitTabSelection = true;
     setState(() => selectedTab = ConversationTab.summary);
     _controller?.animateTo(_summaryTabIndex);
@@ -285,7 +295,83 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     _controller!.addListener(_onTabChanged);
   }
 
+  bool _summaryTabIsVisible() {
+    final controller = _controller;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    return mounted &&
+        (lifecycle == null || lifecycle == AppLifecycleState.resumed) &&
+        controller != null &&
+        controller.index == _summaryTabIndex &&
+        !controller.indexIsChanging &&
+        controller.offset.abs() < 0.001 &&
+        !_tabScrollInProgress &&
+        !_liveEndRequested &&
+        ModalRoute.isCurrentOf(context) != false &&
+        SharedPreferencesUtil().uid == _routeUid &&
+        AnalyticsManager.identityEpoch == _routeIdentityEpoch;
+  }
+
+  bool _claimSummaryOpen(int open) {
+    if (open != _summaryOpen || open <= _claimedSummaryOpen) return false;
+    _claimedSummaryOpen = open;
+    final snapshot = _summaryOpenSnapshot;
+    _summaryOpenSnapshot = null;
+    return _summaryTabIsVisible() && identical(snapshot, _detailProvider.conversationOrNull);
+  }
+
+  void _onDetailTabTap(int index) {
+    _hasExplicitTabSelection = true;
+    _summaryOpenPending = index == _summaryTabIndex;
+    _scheduleSummaryOpen();
+  }
+
+  bool _onDetailTabScroll(ScrollNotification notification) {
+    if (notification.depth != 0 || notification.metrics is! PageMetrics) return false;
+    if (notification is ScrollStartNotification) {
+      _tabScrollInProgress = true;
+      if (notification.dragDetails != null) {
+        _summaryOpenPending = false;
+        _tabDragStartedOnTranscript = _controller?.index == _transcriptTabIndex;
+      }
+    } else if (notification is ScrollEndNotification) {
+      _tabScrollInProgress = false;
+      if (_tabDragStartedOnTranscript && _controller?.index == _summaryTabIndex) {
+        _hasExplicitTabSelection = true;
+        _summaryOpenPending = true;
+      }
+      _tabDragStartedOnTranscript = false;
+      _scheduleSummaryOpen();
+    }
+    return false;
+  }
+
+  void _scheduleSummaryOpen() {
+    if (!_summaryOpenPending || _summaryOpenCheckQueued || !_initialLiveHydrationFinished) return;
+    _summaryOpenCheckQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _summaryOpenCheckQueued = false;
+      if (!mounted || !_summaryOpenPending) return;
+      if (ModalRoute.isCurrentOf(context) == false) {
+        _summaryOpenPending = false;
+        return;
+      }
+      if (!_summaryTabIsVisible()) return;
+      _summaryOpenPending = false;
+      final current = _detailProvider.conversationOrNull;
+      if (current == null ||
+          !_detailProvider.hasHydratedDetail(current.id) ||
+          current.id != widget.conversation.id ||
+          !_isLiveV3(current)) return;
+      setState(() {
+        _summaryOpenSnapshot = current;
+        _summaryOpen++;
+      });
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
   void _onTabChanged() {
+    _scheduleSummaryOpen();
     final tab = _tabForIndex(_controller!.index);
     if (tab == selectedTab) return;
     setState(() {
@@ -357,8 +443,11 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         // Opened from a copy without its lines (a search hit, a locked-then-unlocked row): fetch the
         // full conversation and let the Transcript tab say it is loading, or offer Try Again.
         unawaited(
-          provider.refreshConversation(trackLoad: true).then((_) {
+          provider.refreshConversation(trackLoad: true).then((hydrated) {
             if (!mounted || identityEpoch != AnalyticsManager.identityEpoch) return;
+            _initialLiveHydrationFinished = true;
+            if (!hydrated) _summaryOpenPending = false;
+            _scheduleSummaryOpen();
             _selectInitialTabIfNeeded(provider.conversation);
             _recordResultViewed(provider, identityEpoch);
           }),
@@ -500,6 +589,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _summaryOpenPending = false;
+      _tabDragStartedOnTranscript = false;
+    }
     if (state == AppLifecycleState.paused) {
       _detailProvider.confirmSpeakerLabelingSession(conversationId: widget.conversation.id);
     } else if (state == AppLifecycleState.resumed) {
@@ -1402,63 +1495,70 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                     ConversationDetailHeader(onOpenRecordings: _openRecordings),
                     if (conversation.processingDeferred)
                       const Padding(padding: EdgeInsets.all(OmiSpacing.xs), child: ProcessingDeferredMarker()),
-                    ConversationDetailTabs(controller: _controller!, onTap: (_) => _hasExplicitTabSelection = true),
+                    ConversationDetailTabs(controller: _controller!, onTap: _onDetailTabTap),
                     ConversationActivityStrip(summaryTabVisible: selectedTab == ConversationTab.summary),
                     Expanded(
                       // Each tab owns the page's side margin, so a section can scroll edge to edge
                       // (the Summary tab's screenshot strip) instead of clipping at the margin.
-                      child: TabBarView(
-                        controller: _controller,
-                        children: [
-                          SummaryTab(
-                            onOpenSource: (id) {
-                              final segments = detailProvider.conversation.transcriptSegments;
-                              final segment = segments.where((segment) => segment.id == id).firstOrNull;
-                              if (segment == null) return;
-                              _hasExplicitTabSelection = true;
-                              setState(() => selectedTab = ConversationTab.transcript);
-                              _controller!.animateTo(_transcriptTabIndex);
-                              _playbackController.updateSegments(segments);
-                              _playbackController.seek(segment.start, strict: true);
-                            },
-                            reviewEnabled: !widget.isFromOnboarding &&
-                                widget.initialSeekStart == null &&
-                                selectedTab == ConversationTab.summary &&
-                                !_controller!.indexIsChanging &&
-                                !_isSearching &&
-                                !_isSharing &&
-                                !_isDownloadingAudio &&
-                                !_reviewInterrupted,
-                            searchQuery: _searchQuery,
-                            currentResultIndex: getCurrentResultIndexForHighlighting(),
-                            summarySearchResultOffset: _summaryContentSearchResults,
-                            onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                            onShowActionItemInTranscript: _showActionItemInTranscript,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                            child: TranscriptWidgets(
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: _onDetailTabScroll,
+                        child: TabBarView(
+                          controller: _controller,
+                          children: [
+                            SummaryTab(
+                              liveSummaryOpen: _summaryOpen,
+                              claimLiveSummaryOpen: _claimSummaryOpen,
+                              isLiveSummaryVisible: _summaryTabIsVisible,
+                              onOpenSource: (id) {
+                                final segments = detailProvider.conversation.transcriptSegments;
+                                final segment = segments.where((segment) => segment.id == id).firstOrNull;
+                                if (segment == null) return;
+                                _hasExplicitTabSelection = true;
+                                setState(() => selectedTab = ConversationTab.transcript);
+                                _controller!.animateTo(_transcriptTabIndex);
+                                _playbackController.updateSegments(segments);
+                                _playbackController.seek(segment.start, strict: true);
+                              },
+                              reviewEnabled: !widget.isFromOnboarding &&
+                                  widget.initialSeekStart == null &&
+                                  selectedTab == ConversationTab.summary &&
+                                  !_controller!.indexIsChanging &&
+                                  !_isSearching &&
+                                  !_isSharing &&
+                                  !_isDownloadingAudio &&
+                                  !_reviewInterrupted,
                               searchQuery: _searchQuery,
                               currentResultIndex: getCurrentResultIndexForHighlighting(),
+                              summarySearchResultOffset: _summaryContentSearchResults,
                               onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                              onSegmentTap: (segment) async {
-                                if (selectedTab != ConversationTab.transcript) {
-                                  setState(() {
-                                    selectedTab = ConversationTab.transcript;
-                                  });
-                                  _controller!.animateTo(_transcriptTabIndex);
-                                }
-
-                                // Seek to segment start; playback keeps running past the segment end.
-                                if (_seekToSegmentCallback != null) {
-                                  await _seekToSegmentCallback!(segment.start, segment.end);
-                                }
-                              },
-                              playbackController: _playbackController,
-                              livePreviewTail: (row, whenEmpty) => _livePreviewTail(row, capture, whenEmpty: whenEmpty),
+                              onShowActionItemInTranscript: _showActionItemInTranscript,
                             ),
-                          ),
-                        ],
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                              child: TranscriptWidgets(
+                                searchQuery: _searchQuery,
+                                currentResultIndex: getCurrentResultIndexForHighlighting(),
+                                onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                                onSegmentTap: (segment) async {
+                                  if (selectedTab != ConversationTab.transcript) {
+                                    setState(() {
+                                      selectedTab = ConversationTab.transcript;
+                                    });
+                                    _controller!.animateTo(_transcriptTabIndex);
+                                  }
+
+                                  // Seek to segment start; playback keeps running past the segment end.
+                                  if (_seekToSegmentCallback != null) {
+                                    await _seekToSegmentCallback!(segment.start, segment.end);
+                                  }
+                                },
+                                playbackController: _playbackController,
+                                livePreviewTail: (row, whenEmpty) =>
+                                    _livePreviewTail(row, capture, whenEmpty: whenEmpty),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -1501,9 +1601,15 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                       });
                     },
                     onTabSelected: (tab) {
-                      _hasExplicitTabSelection = true;
                       final index = _indexForTab(tab);
-                      if (index < _controller!.length) _controller!.animateTo(index);
+                      if (index < _controller!.length) {
+                        _onDetailTabTap(index);
+                        _controller!.animateTo(index);
+                      }
+                    },
+                    onLiveEnd: () {
+                      _liveEndRequested = true;
+                      _summaryOpenPending = false;
                     },
                     onStopPressed: () {
                       // Empty since we don't show the stop button in detail mode

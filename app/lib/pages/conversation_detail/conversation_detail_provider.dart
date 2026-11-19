@@ -717,6 +717,16 @@ class ConversationDetailProvider extends ChangeNotifier
   ConversationDetailLoad detailLoad = ConversationDetailLoad.idle;
   bool _detailAccessUnavailable = false;
   bool get detailAccessUnavailable => _detailAccessUnavailable;
+  ({String owner, ServerConversation row})? _hydratedDetail;
+
+  bool hasHydratedDetail(String id) {
+    final detail = _hydratedDetail;
+    return !_detailAccessUnavailable &&
+        detail != null &&
+        detail.owner == SharedPreferencesUtil().uid &&
+        detail.row.id == id &&
+        identical(detail.row, conversationOrNull);
+  }
 
   /// Whether the open conversation is being reprocessed right now.
   bool get isReprocessingOpenConversation =>
@@ -1284,6 +1294,7 @@ class ConversationDetailProvider extends ChangeNotifier
     }
     _cachedConversation = conversation;
     _cachedConversationId = conversation.id;
+    _hydratedDetail = null;
     _endedSpeakerLabelingSessionIds.remove(conversation.id);
     notifyListeners();
   }
@@ -1343,6 +1354,7 @@ class ConversationDetailProvider extends ChangeNotifier
         TranscriptionPendingConversations.observe(updatedConversation);
         conversationProvider?.updateConversation(updatedConversation);
         _cachedConversation = updatedConversation;
+        _hydratedDetail = (owner: ownerUid, row: conversationOrNull ?? updatedConversation);
         clearSettledSummaryFailure(updatedConversation);
         resetRecordingTranscript();
       }

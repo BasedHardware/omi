@@ -25,10 +25,11 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// button is still on screen meanwhile; later taps are ignored rather than starting a second
 /// finalize, as the pendant's double-tap gate does.
 class LiveConversationEndButton extends StatefulWidget {
-  const LiveConversationEndButton({super.key, required this.conversation, this.leadingGap = 10});
+  const LiveConversationEndButton({super.key, required this.conversation, this.leadingGap = 10, this.onEnd});
 
   final ServerConversation conversation;
   final double leadingGap;
+  final VoidCallback? onEnd;
 
   /// True when [conversation] holds any of this phone's captured segments.
   static bool ownsCapture(ServerConversation conversation, Iterable<String> capturedIds) {
@@ -76,6 +77,7 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 // Checked again at the tap: the capture may have moved on since the last build.
                 if (!LiveConversationEndButton.ownsCapture(conversation, capture.segments.map((s) => s.id))) return;
                 _ended = true;
+                widget.onEnd?.call();
                 capture.forceProcessingCurrentConversation();
               },
               // At most half the bar, so Ask Omi keeps its room; a long translation scales down on one

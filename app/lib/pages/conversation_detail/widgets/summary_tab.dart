@@ -34,6 +34,9 @@ import 'feedback_sheet.dart';
 
 class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
+  final int liveSummaryOpen;
+  final bool Function(int)? claimLiveSummaryOpen;
+  final bool Function()? isLiveSummaryVisible;
   final ValueChanged<String>? onOpenSource;
   final String searchQuery;
   final int currentResultIndex;
@@ -50,6 +53,9 @@ class SummaryTab extends StatefulWidget {
   const SummaryTab(
       {super.key,
       this.reviewEnabled = false,
+      this.liveSummaryOpen = 0,
+      this.claimLiveSummaryOpen,
+      this.isLiveSummaryVisible,
       this.onOpenSource,
       this.searchQuery = '',
       this.currentResultIndex = -1,
@@ -151,6 +157,11 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                           LiveSummarySection(
                             key: ValueKey('live-summary-${conversation.id}'),
                             conversation: conversation,
+                            open: widget.liveSummaryOpen,
+                            claimOpen: widget.claimLiveSummaryOpen,
+                            detailHydrated: provider.hasHydratedDetail(conversation.id),
+                            detailReadFailed: provider.detailLoad == ConversationDetailLoad.failed,
+                            isSummaryVisible: widget.isLiveSummaryVisible,
                             refresh: provider.refreshConversation,
                             onActiveChanged: (active) {
                               if (mounted && active != _liveSummaryActive) {
