@@ -1,0 +1,57 @@
+name: Backend Go Checks
+
+# Runs `make check` for backend-go: vet, the lint contract, the structural rules and the
+# tests with the race detector, including the queue's integration tests against Postgres 16.
+on:
+  pull_request:
+    paths:
+      - "backend-go/**"
+      - ".github/workflows/backend-go-checks.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend-go/**"
+      - ".github/workflows/backend-go-checks.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-go-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend-go
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: backend-go/go.mod
+          cache-dependency-path: backend-go/go.sum
+      - name: make check
+        env:
+          QUEUE_TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:5432/postgres?sslmode=disable
+        run: make check QUEUE_TEST_DATABASE_URL="$QUEUE_TEST_DATABASE_URL"
