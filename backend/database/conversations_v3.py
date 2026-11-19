@@ -32,8 +32,10 @@ LIMIT = 128
 # The live closure's derived rows. A pending recording's own claimants are all needed (a replan of the
 # recording must see every row that owns its lines), and one long recording can own hundreds of short
 # windows, so the bound is on rows and on their stored speech rather than a small row count.
-# Both are env-tunable without a roll; CONVERSATIONS_V3_CLOSURE_BY_CLAIMS=off restores the time query around
-# every loaded recording (the closure before claims-driven loading).
+# Both are env-tunable without a code change (an env edit rolls a new revision);
+# CONVERSATIONS_V3_CLOSURE_BY_CLAIMS=off restores the time query around every loaded recording (the closure
+# before claims-driven loading). Sources are bounded too: every commit batch rewrites each loaded source, and
+# a transaction writes at most 500 documents.
 def _env_int(name, default):
     try:
         value = int(os.getenv(name, ''))
@@ -44,6 +46,7 @@ def _env_int(name, default):
 
 DERIVED_LIMIT = _env_int('CONVERSATIONS_V3_DERIVED_LIMIT', 1024)
 DERIVED_BYTES = _env_int('CONVERSATIONS_V3_DERIVED_BYTES', 16 * 1024 * 1024)
+SOURCE_LIMIT = 400
 CLAIM_READ_CHUNK = 100
 
 
@@ -280,10 +283,13 @@ def load(uid, *, conversation_id=None, firestore_client=None):
     loaded_bytes = sum(_encoded_bytes(row.get('transcript_segments') or []) for row in existing.values())
 
     def add(row):
+        # Checked per document, so an overflowing closure stops reading and decoding at the bound.
         nonlocal loaded_bytes
         if row['id'] not in existing:
             loaded_bytes += _encoded_bytes(row.get('transcript_segments') or [])
         existing[row['id']] = row
+        if len(existing) > DERIVED_LIMIT or loaded_bytes > DERIVED_BYTES:
+            raise Conflict('v3_derived_budget')
 
     # Follow linked recordings until the closure converges. Each round adds at least one recording and
     # derived rows stay bounded by DERIVED_LIMIT; a fixed hop depth failed the same owner on every retry.
@@ -302,6 +308,8 @@ def load(uid, *, conversation_id=None, firestore_client=None):
                     unreadable[rid] = row
                 else:
                     recordings[rid] = row
+        if len(recordings) + len(unreadable) > SOURCE_LIMIT:
+            raise Conflict('v3_source_closure_budget')
         fresh = [r for rid, r in recordings.items() if rid not in queried and r and r.get('started_at')]
         if not fresh:
             break
@@ -324,8 +332,6 @@ def load(uid, *, conversation_id=None, firestore_client=None):
                     row = decode_row(uid, snapshot)
                     if row:
                         add(row)
-            if loaded_bytes > DERIVED_BYTES:
-                raise Conflict('v3_derived_budget')
         # Only a recording that can still be replanned needs its neighbours by time: a pending one (new
         # speech), one an open window holds, or one with speech and no claims. A settled recording's lines
         # all belong to the rows its claims name; a time query around it chained through the owner's whole
@@ -350,19 +356,19 @@ def load(uid, *, conversation_id=None, firestore_client=None):
             else:
                 intervals.append((left, right))
         for left, right in intervals:
-            snapshots = list(
+            snapshots = (
                 coll.where(filter=FieldFilter('v3_derived', '==', True))
                 .where(filter=FieldFilter('finished_at', '>=', left))
                 .where(filter=FieldFilter('started_at', '<=', right))
                 .limit(DERIVED_LIMIT + 1)
                 .stream()
             )
-            for doc in snapshots:
+            for count, doc in enumerate(snapshots, 1):
+                if count > DERIVED_LIMIT:
+                    raise Conflict('v3_derived_budget')
                 row = decode_row(uid, doc)
                 if row:
                     add(row)
-            if len(snapshots) > DERIVED_LIMIT or len(existing) > DERIVED_LIMIT or loaded_bytes > DERIVED_BYTES:
-                raise Conflict('v3_derived_budget')
         queried.update(row['id'] for row in fresh)
     else:
         raise Conflict('v3_source_closure_budget')

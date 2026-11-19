@@ -206,3 +206,28 @@ def test_the_closure_stays_bounded_by_stored_speech(monkeypatch):
         store.load('u', firestore_client=MemoryQuery(rows))
     monkeypatch.setattr(store, 'DERIVED_BYTES', per_row * 10)
     store.load('u', firestore_client=MemoryQuery(rows))
+
+
+def test_an_overflowing_closure_stops_decoding_at_the_bound(monkeypatch):
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 10)
+    decoded = []
+    monkeypatch.setattr(
+        store,
+        'decode_row',
+        lambda uid, snap: decoded.append(snap.id) or ({**snap.to_dict(), '_v3_revision': 1} if snap.exists else None),
+    )
+    rows = fragmented(30)
+    rows[C + 'r']['claims'] = []  # only the time query finds the 30 windows
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        store.load('u', firestore_client=MemoryQuery(rows))
+    assert len([cid for cid in decoded if cid.startswith('d')]) == 10
+
+
+def test_the_closure_bounds_its_sources(monkeypatch):
+    monkeypatch.setattr(store, 'SOURCE_LIMIT', 3)
+    rows = {C + 'p': source('p', claims=[claim('d', AT, 10)], v3_pending_since=AT)}
+    rows[C + 'd'] = derived('d', AT, 10, ['p', 'a', 'b', 'c'])
+    for rid in 'abc':
+        rows[C + rid] = source(rid, v3_pending=False, claims=[claim('d', AT, 10)])
+    with pytest.raises(Conflict, match='v3_source_closure_budget'):
+        store.load('u', firestore_client=MemoryQuery(rows))
