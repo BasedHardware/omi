@@ -378,6 +378,27 @@ void main() {
       unawaited(events.close());
     });
 
+    testWidgets('leaving the foreground immediately cancels an active live recap', (tester) async {
+      final events = StreamController<SummaryStreamEvent>();
+      await tester.pumpWidget(liveSnapshot(LiveSummarySection(
+        conversation: _conversation(state: ConversationTileState.live, speech: enoughSpeech),
+        liveInterval: _testRecapInterval,
+        open: 1,
+        stream: (_) => events.stream,
+        refresh: () async => false,
+        onActiveChanged: (_) {},
+      )));
+      await tester.pump();
+      expect(events.hasListener, isTrue);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      expect(events.hasListener, isFalse);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(events.hasListener, isFalse);
+      await tester.pumpWidget(const SizedBox());
+      await events.close();
+    });
+
     testWidgets('redacted live detail cannot render a legacy structured recap', (tester) async {
       final row = ServerConversation.fromJson({
         ..._conversation(state: ConversationTileState.live, speech: enoughSpeech).toJson(),
@@ -470,7 +491,7 @@ void main() {
             speaker: 'SPEAKER_00',
             personId: null,
             isUser: true,
-            start: 1201,
+            start: 1200,
             end: 1203,
             translations: []));
       });
@@ -489,6 +510,7 @@ void main() {
       expect(find.textContaining('Interim live private body.'), findsNothing);
       expect(find.byKey(const Key('live_summary_coverage')), findsNothing);
       expect(find.byKey(const Key('live_summary_catch_up')), findsNothing);
+      expect(find.byKey(const Key('live_summary_recent_transcript')), findsOneWidget);
       rebuild(() {
         conversation = ServerConversation.fromJson({
           ...conversation.toJson(),

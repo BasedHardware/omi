@@ -2335,6 +2335,17 @@ def test_live_recap_stays_out_of_lists_and_integrations(render_mod, locked):
         assert 'v3_live_summary' not in result
 
 
+def test_integration_hides_generated_live_sections_after_datetime_serialization(render_mod):
+    payload = {
+        'v3_derived': True,
+        'status': 'in_progress',
+        'summary_covers_through': '2026-11-19T12:00:00Z',
+        'structured': {'overview': 'Editable notes', 'sections': [{'body_markdown': 'Generated live recap'}]},
+    }
+    result = render_mod.redact_conversation_for_integration(payload)
+    assert result['structured'] == {'overview': 'Editable notes'}
+
+
 @pytest.mark.parametrize('coverage', ['unknown', 'incomplete', 'mapped', None])
 @pytest.mark.parametrize('locked', [False, True])
 def test_capture_coverage_stays_on_app_views_and_out_of_integrations(render_mod, projection_sink_fns, coverage, locked):

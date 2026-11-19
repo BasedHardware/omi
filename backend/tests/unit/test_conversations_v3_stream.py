@@ -661,13 +661,15 @@ async def test_live_catchup_concurrent_taps_reuse_input_and_same_clock_edits_ref
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('change', ['strict_append', 'equal_boundary', 'correction', 'removed', 'replaced', 'ended'])
+@pytest.mark.parametrize(
+    'change', ['strict_append', 'equal_boundary', 'overlap', 'correction', 'removed', 'replaced', 'ended']
+)
 async def test_live_catchup_publishes_only_to_the_still_eligible_covered_input(catchup, monkeypatch, change):
     def model(uid, row, emit):
         emit('Uncommitted preview fragment')
         catchup['_test_revision'] += 1
-        if change in {'strict_append', 'equal_boundary'}:
-            start = 11.0 if change == 'strict_append' else 10.0
+        if change in {'strict_append', 'equal_boundary', 'overlap'}:
+            start = {'strict_append': 11.0, 'equal_boundary': 10.0, 'overlap': 9.5}[change]
             catchup['transcript_segments'].append({'text': 'New tail', 'start': start, 'end': 20.0})
             catchup['finished_at'] = AT + timedelta(seconds=20)
         elif change == 'correction':
@@ -684,7 +686,7 @@ async def test_live_catchup_publishes_only_to_the_still_eligible_covered_input(c
     monkeypatch.setattr(summary, 'write', model)
     frames = await catchup_frames()
     assert all('Uncommitted' not in frame for frame in frames)
-    if change == 'strict_append':
+    if change in {'strict_append', 'equal_boundary'}:
         assert frames[-1].startswith('done:')
         preview = summary.writers.read_live_summary('synthetic', catchup)
         assert preview['summary_covers_through'] == AT + timedelta(seconds=10)

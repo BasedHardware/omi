@@ -96,7 +96,7 @@ class LiveSummarySection extends StatefulWidget {
 
 enum _Phase { live, writing, polling, written, failed, finished }
 
-class _LiveSummarySectionState extends State<LiveSummarySection> {
+class _LiveSummarySectionState extends State<LiveSummarySection> with WidgetsBindingObserver {
   _Phase _phase = _Phase.writing;
   final List<String> _sections = [];
   StreamSubscription<SummaryStreamEvent>? _subscription;
@@ -118,6 +118,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ownerUid = SharedPreferencesUtil().uid;
     _begin();
     _observeSummaryOpen();
@@ -451,7 +452,18 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed || _requestInterval == null) return;
+    _stopRequest();
+    setState(() {
+      _sections.clear();
+      _phase = _Phase.live;
+    });
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _stop();
     super.dispose();
   }
@@ -562,7 +574,8 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
           (segment) =>
               segment.start.isFinite &&
               segment.end.isFinite &&
-              segment.start > _requestBoundary &&
+              segment.start >= _requestBoundary &&
+              segment.end > _requestBoundary &&
               segment.end >= segment.start,
         );
   }
@@ -632,7 +645,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
                     size: OmiButtonSize.compact,
                   ),
                 if (_liveRequestFailed) Text(context.l10n.somethingWentWrong, style: style),
-                if (summary == null && !waiting && (!_enoughTranscript || _recapUnavailable))
+                if (summary == null && !waiting && (widget.detailHydrated || !_enoughTranscript))
                   if (transcript.isEmpty)
                     Text(context.l10n.conversationSummaryWhenItEnds, style: style)
                   else ...[

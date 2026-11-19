@@ -77,7 +77,10 @@ finished-summary checks on the serving revision. After a full five-minute
 window on that revision, record the joined provider counts and verify that a
 previously saved recap is unavailable when admission is disabled.
 
-Keep distinct request and foreground interval digests when grouping. Missing
+First filter provider-attempt timestamps to the trailing 300 seconds. Within
+that window, join shared viewer aliases and deduplicate gateway attempt IDs.
+Adjacent buckets intentionally overlap, so a shared alias alone cannot establish
+elapsed time. Keep distinct request and foreground interval digests when grouping. Missing
 or invalid diagnostics yield `join=unverified`. A `gateway_dispatch` records
 intent to send. Existing gateway accounting must be enabled and healthy for
 the readback interval. A `cache_hit` or `lease_conflict` with no dispatch

@@ -105,7 +105,8 @@ def _strict_live_append(frozen, current):
             or type(end) not in (int, float)
             or not math.isfinite(start)
             or not math.isfinite(end)
-            or not boundary < start <= end
+            or not boundary <= start <= end
+            or end <= boundary
         ):
             return False
     return True
