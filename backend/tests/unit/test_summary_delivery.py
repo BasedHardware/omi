@@ -245,13 +245,17 @@ def test_repair_gauge_is_declared_for_production_scraping(gauge):
     assert metric.name in inventory['declared_metrics']
 
 
-def test_repair_counter_is_declared_for_production_scraping():
+@pytest.mark.parametrize(
+    ('counter', 'labelnames'),
+    [(delivery.REPAIR, ('outcome',)), (delivery.REPAIR_DISCOVERY, ('phase', 'outcome'))],
+)
+def test_repair_counter_is_declared_for_production_scraping(counter, labelnames):
     import json
     from pathlib import Path
 
-    metric = next(iter(delivery.REPAIR.collect()))
+    metric = next(iter(counter.collect()))
     assert metric.type == 'counter'
-    assert delivery.REPAIR._labelnames == ('outcome',)
+    assert counter._labelnames == labelnames
     inventory = json.loads(
         (Path(__file__).resolve().parents[3] / 'backend/charts/monitoring/metric-inventory.prod.json').read_text()
     )

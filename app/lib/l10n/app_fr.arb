@@ -4726,5 +4726,7 @@
     "finishBackToHome": "Retour à l'accueil",
     "conversationSummaryWhenItEnds": "Résumé à la fin de cette conversation",
     "deviceUploadsWaitingOnServer": "Envois en attente sur le serveur",
-    "deviceUploadsWaitingOnServerSubtitle": "Votre audio est en sécurité sur votre appareil ou votre téléphone"
+    "deviceUploadsWaitingOnServerSubtitle": "Votre audio est en sécurité sur votre appareil ou votre téléphone",
+    "conversationSummaryThrough": "Résumé jusqu'à {time}",
+    "conversationRecentTranscript": "Transcription récente"
 }

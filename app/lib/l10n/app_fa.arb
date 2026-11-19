@@ -12248,5 +12248,7 @@
     "finishBackToHome": "بازگشت به صفحه اصلی",
     "conversationSummaryWhenItEnds": "خلاصه پس از پایان این گفتگو",
     "deviceUploadsWaitingOnServer": "بارگذاری‌های در انتظار در سرور",
-    "deviceUploadsWaitingOnServerSubtitle": "صدای شما روی دستگاه یا گوشی شما در امان است"
+    "deviceUploadsWaitingOnServerSubtitle": "صدای شما روی دستگاه یا گوشی شما در امان است",
+    "conversationSummaryThrough": "خلاصه تا {time}",
+    "conversationRecentTranscript": "رونویسی اخیر"
 }

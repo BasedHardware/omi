@@ -4691,5 +4691,7 @@
     "finishBackToHome": "होम पर वापस जाएं",
     "conversationSummaryWhenItEnds": "यह बातचीत खत्म होने पर सारांश",
     "deviceUploadsWaitingOnServer": "सर्वर पर प्रतीक्षारत अपलोड",
-    "deviceUploadsWaitingOnServerSubtitle": "आपका ऑडियो आपके डिवाइस या फ़ोन पर सुरक्षित है"
+    "deviceUploadsWaitingOnServerSubtitle": "आपका ऑडियो आपके डिवाइस या फ़ोन पर सुरक्षित है",
+    "conversationSummaryThrough": "{time} तक का सारांश",
+    "conversationRecentTranscript": "हालिया ट्रांसक्रिप्ट"
 }

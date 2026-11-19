@@ -12248,5 +12248,7 @@
     "finishBackToHome": "होमवर परत जा",
     "conversationSummaryWhenItEnds": "हे संभाषण संपल्यावर सारांश",
     "deviceUploadsWaitingOnServer": "सर्व्हरवर प्रतीक्षेत असलेले अपलोड",
-    "deviceUploadsWaitingOnServerSubtitle": "तुमचा ऑडिओ तुमच्या डिव्हाइसवर किंवा फोनवर सुरक्षित आहे"
+    "deviceUploadsWaitingOnServerSubtitle": "तुमचा ऑडिओ तुमच्या डिव्हाइसवर किंवा फोनवर सुरक्षित आहे",
+    "conversationSummaryThrough": "{time} पर्यंतचा सारांश",
+    "conversationRecentTranscript": "अलीकडील प्रतिलेख"
 }

@@ -4691,5 +4691,7 @@
     "finishBackToHome": "Terug naar Home",
     "conversationSummaryWhenItEnds": "Samenvatting wanneer dit gesprek eindigt",
     "deviceUploadsWaitingOnServer": "Uploads die op de server wachten",
-    "deviceUploadsWaitingOnServerSubtitle": "Je audio is veilig op je apparaat of telefoon"
+    "deviceUploadsWaitingOnServerSubtitle": "Je audio is veilig op je apparaat of telefoon",
+    "conversationSummaryThrough": "Samenvatting tot {time}",
+    "conversationRecentTranscript": "Recente transcriptie"
 }

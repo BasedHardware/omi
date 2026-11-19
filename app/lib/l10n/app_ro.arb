@@ -4691,5 +4691,7 @@
     "finishBackToHome": "Înapoi la pagina principală",
     "conversationSummaryWhenItEnds": "Rezumat când se încheie această conversație",
     "deviceUploadsWaitingOnServer": "Încărcări în așteptare pe server",
-    "deviceUploadsWaitingOnServerSubtitle": "Audioul tău este în siguranță pe dispozitiv sau pe telefon"
+    "deviceUploadsWaitingOnServerSubtitle": "Audioul tău este în siguranță pe dispozitiv sau pe telefon",
+    "conversationSummaryThrough": "Rezumat până la {time}",
+    "conversationRecentTranscript": "Transcriere recentă"
 }

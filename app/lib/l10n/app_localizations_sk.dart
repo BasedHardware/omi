@@ -15571,4 +15571,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Vaše zvukové nahrávky sú v bezpečí na zariadení alebo telefóne';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Zhrnutie do $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Najnovší prepis';
 }

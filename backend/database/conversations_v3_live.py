@@ -32,6 +32,8 @@ LIVE_FIELDS = [
     'home_hidden',
     'deleted',
     'discarded',
+    'is_locked',
+    'v3_recording_ids',
 ]
 # The index is ascending by finished_at, so the newest window comes last and a read cannot
 # stop early once it finds the open one; a reverse-order read would need a new descending

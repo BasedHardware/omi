@@ -9960,6 +9960,16 @@
             ],
             "title": "Language"
           },
+          "live_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveSummaryPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "manual_end": {
             "anyOf": [
               {
@@ -11534,6 +11544,16 @@
               }
             ],
             "title": "Language"
+          },
+          "live_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveSummaryPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "manual_end": {
             "anyOf": [
@@ -21861,6 +21881,24 @@
           "status"
         ],
         "title": "LiveConversation",
+        "type": "object"
+      },
+      "LiveSummaryPreview": {
+        "properties": {
+          "structured": {
+            "$ref": "#/components/schemas/Structured"
+          },
+          "summary_covers_through": {
+            "format": "date-time",
+            "title": "Summary Covers Through",
+            "type": "string"
+          }
+        },
+        "required": [
+          "structured",
+          "summary_covers_through"
+        ],
+        "title": "LiveSummaryPreview",
         "type": "object"
       },
       "LlmTotalCostResponse": {
@@ -56754,6 +56792,95 @@
           }
         ],
         "summary": "Patch Conversation Summary",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/summary/live-catchup/stream": {
+      "get": {
+        "operationId": "conversation_live_catchup_stream_v1_conversations__conversation_id__summary_live_catchup_stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Conversation Live Catchup Stream",
         "tags": [
           "conversations"
         ]

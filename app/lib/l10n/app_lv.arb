@@ -4691,5 +4691,7 @@
     "finishBackToHome": "Atpakaļ uz sākumu",
     "conversationSummaryWhenItEnds": "Kopsavilkums, kad šī saruna beigsies",
     "deviceUploadsWaitingOnServer": "Augšupielādes gaida serverī",
-    "deviceUploadsWaitingOnServerSubtitle": "Jūsu audio ir droši jūsu ierīcē vai tālrunī"
+    "deviceUploadsWaitingOnServerSubtitle": "Jūsu audio ir droši jūsu ierīcē vai tālrunī",
+    "conversationSummaryThrough": "Kopsavilkums līdz {time}",
+    "conversationRecentTranscript": "Jaunākā transkripcija"
 }

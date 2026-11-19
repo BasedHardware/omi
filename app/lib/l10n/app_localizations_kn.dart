@@ -15626,4 +15626,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'ನಿಮ್ಮ ಆಡಿಯೋ ನಿಮ್ಮ ಸಾಧನ ಅಥವಾ ಫೋನ್‌ನಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿದೆ';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time ವರೆಗಿನ ಸಾರಾಂಶ';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'ಇತ್ತೀಚಿನ ಪ್ರತಿಲಿಪಿ';
 }

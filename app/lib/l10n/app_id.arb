@@ -4726,5 +4726,7 @@
     "finishBackToHome": "Kembali ke Beranda",
     "conversationSummaryWhenItEnds": "Ringkasan saat percakapan ini berakhir",
     "deviceUploadsWaitingOnServer": "Unggahan menunggu di server",
-    "deviceUploadsWaitingOnServerSubtitle": "Audio Anda aman di perangkat atau ponsel Anda"
+    "deviceUploadsWaitingOnServerSubtitle": "Audio Anda aman di perangkat atau ponsel Anda",
+    "conversationSummaryThrough": "Ringkasan hingga {time}",
+    "conversationRecentTranscript": "Transkrip Terbaru"
 }

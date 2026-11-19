@@ -82,6 +82,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "backend-go-checks.yml/check": {
+      "budget_p50_minutes": 5,
+      "display_name": "check",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "New 2026-11-19: make check for backend-go (vet, lint, structural rules, race tests with Postgres 16 and the Firestore emulator); runs only when backend-go/ changes; 5-minute placeholder until observed",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "backend-hermetic-e2e.yml/hermetic-e2e": {
       "budget_p50_minutes": 3,
       "display_name": "Hermetic Backend E2E",
@@ -1988,6 +2006,25 @@
       },
       "runs_on": null
     },
+    "main_nightly_full.yml/backend-go-checks": {
+      "budget_p50_minutes": 5,
+      "display_name": "backend-go-checks",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu. Added 2026-11-19 with backend-go-checks.yml so the Go backend foundation is checked nightly against pinned main.",
+      "reusable": "./.github/workflows/backend-go-checks.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
     "main_nightly_full.yml/backend-hermetic-e2e": {
       "budget_p50_minutes": 5,
       "display_name": "backend-hermetic-e2e",
@@ -2249,6 +2286,7 @@
         "backend-checks",
         "backend-edge",
         "backend-emulator-proofs",
+        "backend-go-checks",
         "backend-hermetic-e2e",
         "backend-unit-tests",
         "desktop-backend-contracts",
@@ -2271,7 +2309,7 @@
         "windows-preflight-portability"
       ],
       "owner": "CI maintainers",
-      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu. Report also waits on sdk-dart so the Dart device SDK suite is reported nightly.",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu. Report also waits on sdk-dart so the Dart device SDK suite is reported nightly, and on backend-go-checks so the Go backend foundation is reported nightly.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3570,6 +3608,38 @@
             "firebase.json",
             "firestore.rules",
             ".github/workflows/backend-emulator-proofs.yml"
+          ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "backend-go-checks.yml": {
+      "name": "Backend Go Checks",
+      "owner": "CI maintainers",
+      "rationale": "Path-selected checks for the Go backend foundation (backend-go/)",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "backend-go/**",
+            ".github/workflows/backend-go-checks.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend-go/**",
+            ".github/workflows/backend-go-checks.yml"
           ]
         },
         "workflow_call": {

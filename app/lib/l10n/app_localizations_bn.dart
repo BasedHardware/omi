@@ -15570,4 +15570,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'আপনার অডিও আপনার ডিভাইস বা ফোনে নিরাপদ আছে';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time পর্যন্ত সারসংক্ষেপ';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'সাম্প্রতিক প্রতিলিপি';
 }

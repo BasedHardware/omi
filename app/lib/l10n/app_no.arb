@@ -4691,5 +4691,7 @@
     "finishBackToHome": "Tilbake til Hjem",
     "conversationSummaryWhenItEnds": "Sammendrag når denne samtalen avsluttes",
     "deviceUploadsWaitingOnServer": "Opplastinger som venter på serveren",
-    "deviceUploadsWaitingOnServerSubtitle": "Lyden din er trygg på enheten eller telefonen din"
+    "deviceUploadsWaitingOnServerSubtitle": "Lyden din er trygg på enheten eller telefonen din",
+    "conversationSummaryThrough": "Sammendrag til {time}",
+    "conversationRecentTranscript": "Siste transkripsjon"
 }

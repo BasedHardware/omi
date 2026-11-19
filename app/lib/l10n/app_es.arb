@@ -4691,5 +4691,7 @@
     "finishBackToHome": "Volver a Inicio",
     "conversationSummaryWhenItEnds": "Resumen cuando termine esta conversación",
     "deviceUploadsWaitingOnServer": "Subidas pendientes en el servidor",
-    "deviceUploadsWaitingOnServerSubtitle": "Tu audio está seguro en tu dispositivo o teléfono"
+    "deviceUploadsWaitingOnServerSubtitle": "Tu audio está seguro en tu dispositivo o teléfono",
+    "conversationSummaryThrough": "Resumen hasta las {time}",
+    "conversationRecentTranscript": "Transcripción reciente"
 }

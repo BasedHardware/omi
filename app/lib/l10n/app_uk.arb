@@ -4691,5 +4691,7 @@
     "finishBackToHome": "На головну",
     "conversationSummaryWhenItEnds": "Підсумок, коли ця розмова завершиться",
     "deviceUploadsWaitingOnServer": "Завантаження, що очікують на сервері",
-    "deviceUploadsWaitingOnServerSubtitle": "Ваше аудіо у безпеці на вашому пристрої або телефоні"
+    "deviceUploadsWaitingOnServerSubtitle": "Ваше аудіо у безпеці на вашому пристрої або телефоні",
+    "conversationSummaryThrough": "Підсумок станом на {time}",
+    "conversationRecentTranscript": "Останній транскрипт"
 }

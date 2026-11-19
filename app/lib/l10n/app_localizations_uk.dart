@@ -15609,4 +15609,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Ваше аудіо у безпеці на вашому пристрої або телефоні';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Підсумок станом на $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Останній транскрипт';
 }

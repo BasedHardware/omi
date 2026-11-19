@@ -15354,4 +15354,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => '오디오는 기기 또는 휴대전화에 안전하게 저장되어 있습니다';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time까지의 요약';
+  }
+
+  @override
+  String get conversationRecentTranscript => '최근 녹취록';
 }

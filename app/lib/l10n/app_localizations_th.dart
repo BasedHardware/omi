@@ -15501,4 +15501,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'เสียงของคุณปลอดภัยบนอุปกรณ์หรือโทรศัพท์ของคุณ';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'สรุปถึง $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'บทถอดความล่าสุด';
 }

@@ -1,6 +1,6 @@
 """Pure boundary and late-speech policy. No switch reads and no IO."""
 
-from utils.conversations.v3 import visibility
+from utils.conversations.v3 import policy, visibility
 from utils.conversations.v3.outline import SILENCE, playback_origin
 
 from collections.abc import Iterator
@@ -413,6 +413,8 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
                 }
                 if held:
                     claims[rid] = [{'start': a, 'end': b} for a, b in sorted(held)]
+    if window['finished']:
+        row.pop(policy.LIVE_SUMMARY_FIELD, None)
     row.pop('updated_at', None)
     return row
 
@@ -467,7 +469,7 @@ def preserve_finished_windows(planned, existing, recordings=None):
     published_partitions = set()
     fresh_metadata = {'_published': published, '_published_ids': published_ids}
     for window in planned:
-        gaps = []
+        gaps, pieces = [], []
         partition = window.get('_stretch_partition')
         for line in window['lines']:
             claims = claims_by_recording.get(line['conversation_id'])
@@ -481,7 +483,7 @@ def preserve_finished_windows(planned, existing, recordings=None):
                     published_partitions.add(partition)
             if owner:
                 if gaps and not window.get('_keep_unmatched_together'):
-                    fresh.append({**window, **fresh_metadata, 'lines': gaps, 'manual_end': False})
+                    pieces.append({**window, **fresh_metadata, 'lines': gaps, 'manual_end': False})
                     gaps = []
                 target = retained.setdefault(
                     owner['id'],
@@ -503,7 +505,7 @@ def preserve_finished_windows(planned, existing, recordings=None):
             else:
                 gaps.append(line)
         if gaps:
-            fresh.append(
+            pieces.append(
                 {
                     **window,
                     **fresh_metadata,
@@ -511,6 +513,12 @@ def preserve_finished_windows(planned, existing, recordings=None):
                     'manual_end': bool(window.get('manual_end') and gaps[-1] is window['lines'][-1]),
                 }
             )
+        # Published speech follows every fragment but the last, so only the last can be the open edge.
+        # Several open fragments never commit (multiple_open_conversations parks the owner), and the
+        # fragments, their lines and their time matching stay exactly as a finished window splits.
+        for piece in pieces[:-1]:
+            piece['finished'] = True
+        fresh.extend(pieces)
     # Even a separate fresh topic in the same stretch cannot qualify on published speech.
     for window in fresh:
         if window.get('_stretch_partition') in published_partitions:

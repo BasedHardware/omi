@@ -12248,5 +12248,7 @@
     "finishBackToHome": "Назад на почетну",
     "conversationSummaryWhenItEnds": "Резиме када се овај разговор заврши",
     "deviceUploadsWaitingOnServer": "Отпремања која чекају на серверу",
-    "deviceUploadsWaitingOnServerSubtitle": "Ваш звук је безбедан на вашем уређају или телефону"
+    "deviceUploadsWaitingOnServerSubtitle": "Ваш звук је безбедан на вашем уређају или телефону",
+    "conversationSummaryThrough": "Резиме до {time}",
+    "conversationRecentTranscript": "Недавни препис"
 }

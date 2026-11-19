@@ -15634,4 +15634,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'A hanganyagod biztonságban van az eszközödön vagy telefonodon';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Összefoglaló ekkorig: $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Legutóbbi átirat';
 }
