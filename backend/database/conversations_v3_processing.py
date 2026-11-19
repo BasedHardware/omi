@@ -2,6 +2,7 @@
 
 from database import conversations_v3_leases as leases
 from database.conversations_v3_fence import permits_native_source
+from utils.conversations import summary_delivery
 from utils.conversations.v3 import metrics
 
 import hashlib
@@ -74,6 +75,9 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
             patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
             patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
         settled = current.get('v3_derived') and current.get('status') != 'in_progress'
+        visibility_receipt = (
+            policy.native_manual_notes_receipt(current) if settled and summary_delivery.present(structured) else None
+        )
         # On-open notes are a notes write too: a row whose background notes failed and the user then
         # opened owes the same single created delivery once it is visible and completed.
         armed = bool(
@@ -98,6 +102,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
                     else {}
                 ),
                 **({'v3_notes_written': True} if settled else {}),
+                **({policy.NATIVE_MANUAL_NOTES_VISIBILITY: visibility_receipt} if visibility_receipt else {}),
                 **({'v3_created_pending': True} if armed else {}),
             },
         )
