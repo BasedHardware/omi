@@ -134,6 +134,7 @@ class _GoalFormSheetState extends State<GoalFormSheet> {
       _emoji != widget.initialEmoji;
 
   bool _saving = false;
+  bool _saveFailed = false;
 
   /// The sheet closes once the save succeeded. A failed save keeps it open with what the reader
   /// typed and says so, with Try Again (ux-contract §17.3).
@@ -142,7 +143,10 @@ class _GoalFormSheetState extends State<GoalFormSheet> {
     if (title.isEmpty || _saving) return;
     final current = double.tryParse(_currentController.text) ?? widget.goal?.currentValue ?? 0;
     final target = double.tryParse(_targetController.text) ?? widget.goal?.targetValue ?? 100;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveFailed = false;
+    });
     var saved = false;
     try {
       saved = await widget.onSave(title, current, target, _emoji);
@@ -150,12 +154,13 @@ class _GoalFormSheetState extends State<GoalFormSheet> {
       saved = false;
     }
     if (!mounted) return;
-    setState(() => _saving = false);
-    if (saved) {
-      Navigator.pop(context);
-      return;
-    }
-    OmiFeedback.error(context, context.l10n.goalSaveFailed, actionLabel: context.l10n.tryAgain, onAction: _save);
+    setState(() {
+      _saving = false;
+      _saveFailed = !saved;
+    });
+    if (saved) Navigator.pop(context);
+    // A failed save is said inside the sheet: a toast on the page's messenger sits under this modal
+    // route, where the reader cannot see it (ux-contract §17).
   }
 
   void _delete() {
@@ -256,6 +261,12 @@ class _GoalFormSheetState extends State<GoalFormSheet> {
                 Expanded(child: _field(l10n.target, _targetController, number: true)),
               ],
             ),
+            if (_saveFailed)
+              OmiPartialNotice(
+                key: const Key('goal_save_failed'),
+                message: l10n.goalSaveFailed,
+                onRetry: _save,
+              ),
             const SizedBox(height: OmiSpacing.xl),
             Row(
               children: [

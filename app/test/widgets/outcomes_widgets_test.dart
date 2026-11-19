@@ -172,6 +172,9 @@ void main() {
     expect(find.text('Edit Goal'), findsOneWidget, reason: 'the goal is not lost');
     expect(find.text('Read 12 books'), findsOneWidget);
     expect(find.text("Couldn't save your goal."), findsOneWidget);
+    expect(find.byKey(const Key('goal_save_failed')), findsOneWidget,
+        reason: 'said inside the sheet; a page toast would sit under the modal route');
+    expect(find.byType(SnackBar), findsNothing);
 
     ok = true;
     await tester.tap(find.byKey(const Key('goal_save_button')));
