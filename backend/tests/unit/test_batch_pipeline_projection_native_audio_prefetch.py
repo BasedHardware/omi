@@ -37,9 +37,21 @@ def native_prefetch_counts():
     }
 
 
+class DelayedManifestExecutor(InlineExecutor):
+    def __init__(self):
+        self.loads = []
+
+    def submit(self, fn, *args, **kwargs):
+        if fn is projection_prefetch._read_manifest:
+            future = Future()
+            self.loads.append((future, fn, args, kwargs))
+            return future
+        return super().submit(fn, *args, **kwargs)
+
+
 @pytest.mark.parametrize(
     'eager,fault',
-    [(False, None), (True, None), (False, 'staging'), (False, 'source'), (False, 'privacy')],
+    [(False, None), (True, None), (False, 'staging'), (False, 'source'), (False, 'privacy'), (False, 'delayed')],
 )
 def test_native_read_ahead_only_defers_with_full_assignment_verification(monkeypatch, eager, fault):
     if eager:
@@ -113,16 +125,32 @@ def test_native_read_ahead_only_defers_with_full_assignment_verification(monkeyp
     projector = projector_for(log, lambda item, uri: dict(SUCCESS_PAYLOAD))
     projector.clock = lambda: log.clock
     projector.fetch_audio = artifacts.fetch_audio
-    prefetch = projection_prefetch.ChainPrefetch(projector, owner_key(BURST), 1, executor=InlineExecutor())
+    delayed = DelayedManifestExecutor() if fault == 'delayed' else None
+    executor = delayed or InlineExecutor()
+    prefetch = projection_prefetch.ChainPrefetch(projector, owner_key(BURST), 1, executor=executor)
     before = native_prefetch_counts()
     prefetch.advance(None)
     assert gcs.downloads == (2 if eager else 0)
+    if delayed is not None:
+        original_wait = projection_prefetch.wait
+
+        def expire_pending_read(futures, *, timeout):
+            assert 0 < timeout <= 15
+            if futures[0].done():
+                return original_wait(futures, timeout=timeout)
+            return set(), set(futures)
+
+        monkeypatch.setattr(projection_prefetch, 'wait', expire_pending_read)
+        assert projector.drain_step(BURST, 15, prefetch=prefetch) == projection.Walk([], [], True, 'prefetch_wait')
+        assert gcs.downloads == 0
+        [(future, fn, args, kwargs)] = delayed.loads
+        future.set_result(fn(*args, **kwargs))
     walk = projector.drain_step(BURST, 15, prefetch=prefetch)
     prefetch.close()
     after = native_prefetch_counts()
     assert after == {**before, 'started': before['started'] + 1, 'consumed': before['consumed'] + 1}
     assert gcs.downloads == (1 if fault == 'staging' else 2)
-    if fault is None:
+    if fault in {None, 'delayed'}:
         assert checks == [0, 1, 2]
         assert walk.advanced == [segment]
         assert log.results[segment]['projection']['state'] == 'persisted'

@@ -2,7 +2,7 @@
 
 The owner-chain walker reads immutable jobs and results ahead of assignment. Native-record inputs can point to an encrypted staging manifest with references to many private-sync objects. Extracting the intake context through `ArtifactStore.fetch_audio` opens and decodes every referenced source. A speculative successor can go unused when the owner walk hits a blocked head, runs out of time, finds an erased row, or observes an already assigned receipt.
 
-Defer native-record audio materialization to the existing assignment path. Read-ahead can still load immutable jobs, bindings and result artifacts. Assignment retains the staging authentication, owner and conversation binding, generation and content checks, privacy fences, and scoped deletion checks. The authoritative result and receipt ordering stay with the owner walk.
+Defer native-record audio materialization until the existing assignment path requests it. Read-ahead can still load immutable jobs, bindings and result artifacts. The storage executor runs the materialization and the owner walk waits at most the remaining step budget. An unfinished read stays with the same turn across step boundaries, so the next step can consume its proof without another fetch. Assignment retains the staging authentication, owner and conversation binding, generation and content checks, privacy fences, and scoped deletion checks. The authoritative result and receipt ordering stay with the owner walk.
 
 The default-on switch is `BATCH_PIPELINE_DEFER_NATIVE_PROJECTION_AUDIO_PREFETCH_ENABLED`. Set it to `false` to restore native-record audio read-ahead.
 

@@ -15,7 +15,8 @@ from concurrent.futures import Future, wait
 from dataclasses import dataclass
 import logging
 import threading
-from typing import TYPE_CHECKING, Any, Literal
+import time
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
 from prometheus_client import Counter
 
@@ -42,7 +43,11 @@ for _outcome in ('started', 'consumed', 'abandoned'):
 
 
 class NativeAudioPrefetch:
-    def __init__(self) -> None:
+    """One candidate and its optional assignment-time load, owned by one step at a time."""
+
+    def __init__(self, executor=None) -> None:
+        self.executor = executor or storage_executor
+        self.manifest_read: Future[dict[str, Any]] | None = None
         self.settled = False
         NATIVE_AUDIO_PREFETCH.labels('started').inc()
 
@@ -50,6 +55,30 @@ class NativeAudioPrefetch:
         if not self.settled:
             self.settled = True
             NATIVE_AUDIO_PREFETCH.labels(outcome).inc()
+
+    def context(
+        self, fetch_audio: Callable[[WorkItem], bytes], item: WorkItem, deadline: float | None
+    ) -> dict[str, Any]:
+        timeout = PREFETCH_WAIT_SECONDS if deadline is None else deadline - time.monotonic()
+        if timeout <= 0:
+            raise NativeAudioPending()
+        if self.manifest_read is None:
+            self.manifest_read = self.executor.submit(_read_manifest, fetch_audio, item)
+        self.settle('consumed')
+        done, _ = wait([self.manifest_read], timeout=min(timeout, PREFETCH_WAIT_SECONDS))
+        if not done or (deadline is not None and time.monotonic() >= deadline):
+            raise NativeAudioPending()
+        return self.manifest_read.result(timeout=0)
+
+
+class NativeAudioPending(Exception):
+    """The assigned row still needs its verified context on a later step."""
+
+
+def _read_manifest(fetch_audio: Callable[[WorkItem], bytes], item: WorkItem) -> dict[str, Any]:
+    from utils.batch_pipeline.audio import read_context
+
+    return read_context(fetch_audio(item))
 
 
 @dataclass(frozen=True)
@@ -64,10 +93,15 @@ class Prefetched:
         if self.native_audio is not None:
             self.native_audio.settle(outcome)
 
+    def abandon_audio(self) -> None:
+        if self.native_audio is not None and self.native_audio.manifest_read is not None:
+            self.native_audio.manifest_read.cancel()
+        self.settle_audio('abandoned')
+
 
 def _abandon_future(future: Future) -> None:
     if not future.cancelled() and future.exception() is None:
-        future.result().settle_audio('abandoned')
+        future.result().abandon_audio()
 
 
 class ChainPrefetch:
@@ -145,6 +179,16 @@ class ChainPrefetch:
             if not future.cancel():
                 future.add_done_callback(_abandon_future)
 
+    def defer(self, segment_id: str, inputs: Prefetched) -> bool:
+        """Keep a claimed row's in-flight manifest read across step boundaries."""
+        with self.lock:
+            if self.closed or segment_id in self.rows:
+                return False
+            future = Future()
+            future.set_result(inputs)
+            self.rows[segment_id] = future
+            return True
+
     def _scout(self, cursor: str | None, count: int) -> None:
         try:
             for _ in range(count):
@@ -176,13 +220,11 @@ class ChainPrefetch:
             payload = self.projector.load_result(item, entry['result']['result_uri'])
             if outcome not in EMPTY_OUTCOMES and item.requires_compute_admission and self.projector.fetch_audio:
                 if binding.native_record:
-                    native_audio = NativeAudioPrefetch()
+                    native_audio = NativeAudioPrefetch(self.executor)
                     if kill_switch('BATCH_PIPELINE_DEFER_NATIVE_PROJECTION_AUDIO_PREFETCH_ENABLED', log=False):
                         return Prefetched(job, binding, payload, native_audio=native_audio)
-                from utils.batch_pipeline.audio import read_context
-
                 try:
-                    manifest = read_context(self.projector.fetch_audio(item))
+                    manifest = _read_manifest(self.projector.fetch_audio, item)
                 except Exception:
                     if native_audio is not None:
                         native_audio.settle('abandoned')
