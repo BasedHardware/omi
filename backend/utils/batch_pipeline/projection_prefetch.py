@@ -15,8 +15,11 @@ from concurrent.futures import Future, wait
 from dataclasses import dataclass
 import logging
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
+from prometheus_client import Counter
+
+from config.policy import kill_switch
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.executors import storage_executor
 
@@ -29,6 +32,24 @@ PREFETCH_WAIT_SECONDS = 30.0
 EMPTY_OUTCOMES = frozenset({'silence', 'no_recoverable_speech'})
 # ``take`` result for a row whose read-ahead is still loading at the step deadline.
 NOT_READY = object()
+NATIVE_AUDIO_PREFETCH = Counter(
+    'omi_batch_projection_native_audio_prefetch_total',
+    'Native audio read-ahead lifecycle, including candidates deferred until assignment',
+    ['outcome'],
+)
+for _outcome in ('started', 'consumed', 'abandoned'):
+    NATIVE_AUDIO_PREFETCH.labels(_outcome)
+
+
+class NativeAudioPrefetch:
+    def __init__(self) -> None:
+        self.settled = False
+        NATIVE_AUDIO_PREFETCH.labels('started').inc()
+
+    def settle(self, outcome: Literal['consumed', 'abandoned']) -> None:
+        if not self.settled:
+            self.settled = True
+            NATIVE_AUDIO_PREFETCH.labels(outcome).inc()
 
 
 @dataclass(frozen=True)
@@ -37,6 +58,16 @@ class Prefetched:
     binding: ProjectionBinding
     payload: dict[str, Any] | None = None
     manifest: dict[str, Any] | None = None
+    native_audio: NativeAudioPrefetch | None = None
+
+    def settle_audio(self, outcome: Literal['consumed', 'abandoned']) -> None:
+        if self.native_audio is not None:
+            self.native_audio.settle(outcome)
+
+
+def _abandon_future(future: Future) -> None:
+    if not future.cancelled() and future.exception() is None:
+        future.result().settle_audio('abandoned')
 
 
 class ChainPrefetch:
@@ -94,11 +125,12 @@ class ChainPrefetch:
             if not future.done():
                 return NOT_READY
             with self.lock:
-                self.rows.pop(segment_id, None)
+                # A removed future belongs either to the walker or to close().
+                if self.rows.get(segment_id) is not future:
+                    return None
+                del self.rows[segment_id]
             return future.result(timeout=0)
         except Exception as error:
-            with self.lock:
-                self.rows.pop(segment_id, None)
             logger.info(
                 'event=batch_projection_prefetch outcome=miss exception_type=%s',
                 type(error).__name__,
@@ -110,7 +142,8 @@ class ChainPrefetch:
             self.closed = True
             pending, self.rows = list(self.rows.values()), {}
         for future in pending:
-            future.cancel()
+            if not future.cancel():
+                future.add_done_callback(_abandon_future)
 
     def _scout(self, cursor: str | None, count: int) -> None:
         try:
@@ -138,10 +171,20 @@ class ChainPrefetch:
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         outcome = entry['result']['outcome']
         payload = manifest = None
+        native_audio = None
         if outcome != 'silence' and not entry.get('projection'):
             payload = self.projector.load_result(item, entry['result']['result_uri'])
             if outcome not in EMPTY_OUTCOMES and item.requires_compute_admission and self.projector.fetch_audio:
+                if binding.native_record:
+                    native_audio = NativeAudioPrefetch()
+                    if kill_switch('BATCH_PIPELINE_DEFER_NATIVE_PROJECTION_AUDIO_PREFETCH_ENABLED', log=False):
+                        return Prefetched(job, binding, payload, native_audio=native_audio)
                 from utils.batch_pipeline.audio import read_context
 
-                manifest = read_context(self.projector.fetch_audio(item))
-        return Prefetched(job, binding, payload, manifest)
+                try:
+                    manifest = read_context(self.projector.fetch_audio(item))
+                except Exception:
+                    if native_audio is not None:
+                        native_audio.settle('abandoned')
+                    raise
+        return Prefetched(job, binding, payload, manifest, native_audio)

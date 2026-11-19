@@ -4,7 +4,7 @@ The owner-chain walker reads immutable jobs and results ahead of assignment. Nat
 
 Defer native-record audio materialization to the existing assignment path. Read-ahead can still load immutable jobs, bindings and result artifacts. Assignment retains the staging authentication, owner and conversation binding, generation and content checks, privacy fences, and scoped deletion checks. The authoritative result and receipt ordering stay with the owner walk.
 
-The planned default-on switch is `BATCH_PIPELINE_DEFER_NATIVE_PROJECTION_AUDIO_PREFETCH_ENABLED`. Set it to `false` to restore native-record audio read-ahead.
+The default-on switch is `BATCH_PIPELINE_DEFER_NATIVE_PROJECTION_AUDIO_PREFETCH_ENABLED`. Set it to `false` to restore native-record audio read-ahead.
 
 ## Serving readback
 
@@ -15,6 +15,9 @@ sum(increase(omi_private_sync_object_get_total{service_name="backend-integration
 sum(increase(storage_googleapis_com:api_request_count{bucket_name="omi-private-cloud-sync",method="ReadObject"}[1h]))
 sum(increase(storage_googleapis_com:network_sent_bytes_count{bucket_name="omi-private-cloud-sync",method="ReadObject"}[1h]))
 sum(increase(omi_batch_pipeline_correctness_audio_seconds_total{service_name="backend-integration",event="projection_completed"}[1h])) / 3600
+sum by (outcome)(increase(omi_batch_projection_native_audio_prefetch_total{service_name="backend-integration"}[1h]))
 ```
 
-One unconsumed successor avoids one staging audio-artifact read and all private-sync source payload reads it would have attempted. Decoded storage references, retries and abandoned prefetch work determine the savings. A consumed assignment still verifies its sources. The Nov 2026 bucket-wide bytes-per-audio-hour proxy includes all readers and cannot size this path by itself.
+The native audio prefetch counter uses only `outcome`. `started` counts rows that reach the audio prefetch decision. `consumed` counts attempts where assignment needs the context, including an attempt that fails validation. `abandoned` counts candidates whose context went unused, including unused results and failed eager loads. The counter runs in both switch modes. Compare full windows because pending candidates can settle in a later window.
+
+One abandoned candidate in the default mode avoids the eager attempt to open its staging artifact and any private-sync sources it references. Use the abandoned count with the direct `batch_source` and native bucket counters to size the savings, since source objects per candidate vary. A consumed assignment still verifies its sources. The Nov 2026 bucket-wide bytes-per-audio-hour proxy includes all readers and cannot size this path by itself.

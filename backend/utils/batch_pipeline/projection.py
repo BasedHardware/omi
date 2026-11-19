@@ -1052,6 +1052,8 @@ class Projector:
 
                 with projection_phase('manifest', policy):
                     prefetched = hint.prefetched if hint is not None else None
+                    if prefetched is not None:
+                        prefetched.settle_audio('consumed')
                     if prefetched is not None and prefetched.manifest is not None:
                         manifest = prefetched.manifest
                     else:
@@ -1565,9 +1567,8 @@ class Projector:
                 # The predecessor check walks erased receipts; so does discovery.
                 previous = segment_id
                 continue
-            job = entry = binding = None
+            job = entry = binding = prefetched = None
             try:
-                prefetched = None
                 if prefetch is not None:
                     prefetched = drain_diagnostics.observe(
                         'prefetch_wait', prefetch.take, segment_id, timeout=deadline - time.monotonic()
@@ -1630,6 +1631,9 @@ class Projector:
                 previous = segment_id
                 advanced.append(segment_id)
                 continue
+            finally:
+                if isinstance(prefetched, Prefetched):
+                    prefetched.settle_audio('abandoned')
             try:
                 watermark = self.store.projection_watermark(key)
             except Exception as error:
