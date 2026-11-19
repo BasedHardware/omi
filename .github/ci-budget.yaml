@@ -5050,16 +5050,16 @@
               "required": "true",
               "type": "choice"
             },
+            "worker_dry_run": {
+              "default": "false",
+              "description": "Preserve-live only, under the shared lock; never writes, builds or pushes. Without a rollback receipt: forward admission plus a no-op prior-image admission (inverse not verified). With worker_rollback_receipt: server dry-run of the real inverse CAS",
+              "required": "false",
+              "type": "boolean"
+            },
             "worker_live_baseline": {
               "default": "",
               "description": "Preserve-live only: admitted JSON from worker_image_only.py inventory (target identity/spec hash and all shared-image consumer bindings)",
               "required": "false"
-            },
-            "worker_dry_run": {
-              "default": "false",
-              "description": "Preserve-live only: under the shared lock, server dry-run the image patch (forward and prior-image inverse) and record a receipt; never writes, builds or pushes",
-              "required": "false",
-              "type": "boolean"
             },
             "worker_rollback_receipt": {
               "default": "",
