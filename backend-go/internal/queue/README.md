@@ -10,7 +10,7 @@ own causes, and the queue supplies everything about when and whether work runs.
 | Declare the kind: name, formats, steps, causes | `Kind`, passed to `Open` |
 | Enqueue once per key | `Store.Enqueue`, or `Scope.Enqueue` inside `Store.Tenant` when admission must do more under the erasure barrier |
 | Bind a job to its subject before it can run | `NewJob.Initializing`, then `Scope.Activate` or `Scope.CancelInitialization`; `Scope.Subject` serializes admissions for one subject |
-| Run work with bounded concurrency | `Start` with a `Handler` per kind; `Workers.Stop` |
+| Run work with bounded concurrency | `Start` with a `Handler` per kind; `Workers.Drain` for graceful shutdown or `Workers.Stop` for immediate cancellation |
 | Report what happened in `Work` | one of the sealed outcomes: `Done`, `DoneWith`, `DoneAt`, `Retry`, `Fail`, `Yield`, `Hold`, `Fence`, `Activate`, `BlockForSecret`, `Abort` |
 | Report what had already happened in `Exhausted` | one of the sealed resolutions: `Resolved`, `ResolvedWith`, `Fenced`, `Park`, `Later`, `Dropped` |
 | Turn an error into an outcome | `FromError`, `LaterOnError`; adapters wrap with `Classify` |
@@ -38,6 +38,9 @@ against Postgres, each test in its own database (`internal/platform/pgtest`).
 | A replica claims only the kinds it has a handler for and the formats it declares; the rest stays untouched for a replica that can run it, and is reported | `candidate` in `claim.go`, `Store.Stranded` | `TestReplicaClaimsOnlyKindsAndFormatsItDeclares`, `TestWorkersLeaveKindsTheyHaveNoHandlerFor`, `TestStartRejectsWhatIsNotDeclared` |
 | One lease holder at a time; a takeover gets a larger token; a stale holder can neither save nor call out | `Store.lease`, `Run.transition`, `Run.Guard` | `TestSingleLeaseProperty`, `TestGuardReadsLeaseAfterWaitingForErase` |
 | The heartbeat keeps a long handler's lease while it saves progress | `Run.execute`, `Store.renewUntilDone` | `TestWorkersRenewTheLeaseWhileTheHandlerSavesProgress` |
+| Drain closes admission while existing handlers keep their leases through grace | `Workers.Drain` | `TestDrainKeepsHeartbeatAndClosesAdmission` |
+| At the deadline another replica can reclaim unfinished work with its attempt charged, or resume its recorded reconciliation | `Store.expireClaims` | `TestDrainTimeoutReturnsWorkAndReconciliation` |
+| A direct claim that commits during shutdown is refunded before drain completes | `Workers.submit`, `Run.unclaim` | `TestDrainRefundsResumeRacingCommit` |
 | A claim is charged when it is issued, so a worker that dies has spent it; a yield refunds it | `Store.lease`, `Run.wait` | `TestAttemptAccountingProperty` |
 | What follows a transient or deterministic failure | `rules.AfterRetry`, `rules.AfterFail` | `TestAfterRetry`, `TestAfterFail` |
 | Backoff doubles from the base and caps at 30 times | `rules.Backoff` | `TestBackoffDoublesFromBaseAndCapsAtThirtyTimes`, `TestBackoffNeverDecreasesAsAttemptsGrow` |
@@ -104,6 +107,11 @@ statement. Renewals use a separate small pool so a busy work pool cannot starve 
 - A lease renewal that was already waiting on a row lock when the lease expired can still extend
   it, as long as nobody took the job over in between. Once a takeover commits, the old token can
   never write. The fence is the token, not the clock.
+- For graceful shutdown, keep the `Start` context alive when SIGTERM arrives and call
+  `Workers.Drain` with a separate grace deadline. Reserve an additional three seconds for
+  database handback. A timeout returns the grace context error. Cleanup errors also reach the
+  caller, and a failed handback falls back to normal lease expiry. An external call still
+  inside a guard holds its job lock until it exits or its database session closes.
 - `Workers.Stop` waits for handlers. A handler that ignores its context delays shutdown, so every
   adapter call needs a deadline.
 - A resume scheduled for later keeps its secret in memory until then, on one replica. A restart

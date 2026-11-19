@@ -15,7 +15,18 @@ import (
 
 // InTx runs fn in a transaction. It commits when fn returns nil and rolls back otherwise,
 // including when fn panics. A rollback failure is joined to fn's error, never dropped.
-func InTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) (err error) {
+func InTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) error {
+	return inTx(ctx, pool, 0, fn)
+}
+
+// InTxWithBoundedCommit lets a successful callback commit under its own short deadline.
+// Use this when the caller needs the committed result to undo an acquisition if it was
+// canceled during commit. Beginning the transaction and the callback remain cancelable.
+func InTxWithBoundedCommit(ctx context.Context, pool *pgxpool.Pool, limit time.Duration, fn func(pgx.Tx) error) error {
+	return inTx(ctx, pool, limit, fn)
+}
+
+func inTx(ctx context.Context, pool *pgxpool.Pool, commitLimit time.Duration, fn func(pgx.Tx) error) (err error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
@@ -29,6 +40,11 @@ func InTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) (err e
 	}()
 	if err := fn(tx); err != nil {
 		return err
+	}
+	if commitLimit > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = Cleanup(ctx, commitLimit)
+		defer cancel()
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit: %w", err)
