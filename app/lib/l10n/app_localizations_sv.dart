@@ -14499,14 +14499,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Nyligen';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Frånkopplad i $duration';
-  }
-
-  @override
   String get deviceControls => 'Kontroller';
 
   @override
@@ -15586,4 +15578,18 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Sammanfattning när det här samtalet avslutas';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uppladdningar som väntar på servern';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ditt ljud är säkert på din enhet eller telefon';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Sammanfattning till $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Senaste transkription';
 }

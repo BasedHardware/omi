@@ -4448,8 +4448,6 @@
     "deviceLiveEpisode": "Episode langsung · {duration}",
     "deviceCatchingUp": "Mengejar ketinggalan",
     "deviceCatchingUpProgress": "{done} dari {total} mnt",
-    "deviceRecently": "Baru-baru ini",
-    "deviceDisconnectedFor": "Terputus selama {duration}",
     "deviceControls": "Kontrol",
     "homeBackgroundLine": "Juga: {items}",
     "deviceOnboardingPressButtonTitle": "Tekan tombol di Omi kamu",
@@ -4726,5 +4724,9 @@
     "finishNothingToProcess": "Belum ada yang perlu diproses.",
     "finishStillProcessing": "Masih diproses. Ini akan muncul di Beranda.",
     "finishBackToHome": "Kembali ke Beranda",
-    "conversationSummaryWhenItEnds": "Ringkasan saat percakapan ini berakhir"
+    "conversationSummaryWhenItEnds": "Ringkasan saat percakapan ini berakhir",
+    "deviceUploadsWaitingOnServer": "Unggahan menunggu di server",
+    "deviceUploadsWaitingOnServerSubtitle": "Audio Anda aman di perangkat atau ponsel Anda",
+    "conversationSummaryThrough": "Ringkasan hingga {time}",
+    "conversationRecentTranscript": "Transkrip Terbaru"
 }

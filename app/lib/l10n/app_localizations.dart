@@ -25665,18 +25665,6 @@ abstract class AppLocalizations {
   /// **'{done} of {total} min'**
   String deviceCatchingUpProgress(int done, int total);
 
-  /// Device page section: recent connection events.
-  ///
-  /// In en, this message translates to:
-  /// **'Recently'**
-  String get deviceRecently;
-
-  /// Device page event: the Omi was disconnected for this long (a compact duration such as 10m).
-  ///
-  /// In en, this message translates to:
-  /// **'Disconnected for {duration}'**
-  String deviceDisconnectedFor(String duration);
-
   /// Device page section: controls such as pausing recording.
   ///
   /// In en, this message translates to:
@@ -27338,6 +27326,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Summary when this conversation ends'**
   String get conversationSummaryWhenItEnds;
+
+  /// Device Settings row (tappable, opens upload details): some recordings were uploaded but the server has not accepted or processed them yet. Calm status, not an error.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads waiting on the server'**
+  String get deviceUploadsWaitingOnServer;
+
+  /// Subtitle under 'Uploads waiting on the server' in Device Settings: reassures that the recorded audio is still stored on the Omi device or the phone, so nothing is lost while the server catches up.
+  ///
+  /// In en, this message translates to:
+  /// **'Your audio is safe on your device or phone'**
+  String get deviceUploadsWaitingOnServerSubtitle;
+
+  /// Timestamp of the last speech included in the displayed conversation summary. The local time is formatted, e.g. 10:42 AM.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary through {time}'**
+  String conversationSummaryThrough(String time);
+
+  /// Heading for the latest spoken lines from the current conversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent transcript'**
+  String get conversationRecentTranscript;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

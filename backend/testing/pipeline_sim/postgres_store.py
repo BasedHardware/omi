@@ -113,6 +113,9 @@ class _Recording:
 
 
 class PgSimStore(SimStore):
+    def packing_candidates(self, owner_key: str) -> list[dict]:
+        return self.pg.packing_candidates(owner_key)
+
     def projection_finish_backfill_complete(self) -> bool:
         return self.pg.projection_finish_backfill_complete()
 

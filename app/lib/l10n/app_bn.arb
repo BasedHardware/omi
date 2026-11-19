@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "লাইভ পর্ব · {duration}",
     "deviceCatchingUp": "বাকি অংশ আনা হচ্ছে",
     "deviceCatchingUpProgress": "{done}/{total} মিনিট",
-    "deviceRecently": "সম্প্রতি",
-    "deviceDisconnectedFor": "{duration} ধরে সংযোগ বিচ্ছিন্ন",
     "deviceControls": "নিয়ন্ত্রণ",
     "homeBackgroundLine": "এছাড়াও: {items}",
     "deviceOnboardingPressButtonTitle": "আপনার Omi-র বোতাম টিপুন",
@@ -12248,5 +12246,9 @@
     "finishNothingToProcess": "এখনও প্রক্রিয়া করার কিছু নেই।",
     "finishStillProcessing": "এখনও প্রক্রিয়া চলছে। এটি হোমে দেখা যাবে।",
     "finishBackToHome": "হোমে ফিরে যান",
-    "conversationSummaryWhenItEnds": "এই কথোপকথন শেষ হলে সারাংশ"
+    "conversationSummaryWhenItEnds": "এই কথোপকথন শেষ হলে সারাংশ",
+    "deviceUploadsWaitingOnServer": "সার্ভারে অপেক্ষায় থাকা আপলোড",
+    "deviceUploadsWaitingOnServerSubtitle": "আপনার অডিও আপনার ডিভাইস বা ফোনে নিরাপদ আছে",
+    "conversationSummaryThrough": "{time} পর্যন্ত সারসংক্ষেপ",
+    "conversationRecentTranscript": "সাম্প্রতিক প্রতিলিপি"
 }

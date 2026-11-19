@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Otseepisood · {duration}",
     "deviceCatchingUp": "Järele jõudmas",
     "deviceCatchingUpProgress": "{done} / {total} min",
-    "deviceRecently": "Hiljuti",
-    "deviceDisconnectedFor": "Ühendus puudus {duration}",
     "deviceControls": "Juhtimine",
     "homeBackgroundLine": "Lisaks: {items}",
     "deviceOnboardingPressButtonTitle": "Vajuta Omi nuppu",
@@ -4691,5 +4689,9 @@
     "finishNothingToProcess": "Veel pole midagi töödelda.",
     "finishStillProcessing": "Veel töödeldakse. See ilmub avalehele.",
     "finishBackToHome": "Tagasi avalehele",
-    "conversationSummaryWhenItEnds": "Kokkuvõte, kui see vestlus lõpeb"
+    "conversationSummaryWhenItEnds": "Kokkuvõte, kui see vestlus lõpeb",
+    "deviceUploadsWaitingOnServer": "Üleslaadimised ootavad serveris",
+    "deviceUploadsWaitingOnServerSubtitle": "Teie audio on turvaliselt teie seadmes või telefonis",
+    "conversationSummaryThrough": "Kokkuvõte kuni {time}",
+    "conversationRecentTranscript": "Hiljutine transkriptsioon"
 }

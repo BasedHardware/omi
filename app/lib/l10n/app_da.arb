@@ -4455,8 +4455,6 @@
     "deviceLiveEpisode": "Live-episode · {duration}",
     "deviceCatchingUp": "Indhenter",
     "deviceCatchingUpProgress": "{done} af {total} min",
-    "deviceRecently": "For nylig",
-    "deviceDisconnectedFor": "Afbrudt i {duration}",
     "deviceControls": "Betjening",
     "homeBackgroundLine": "Også: {items}",
     "deviceOnboardingPressButtonTitle": "Tryk på knappen på din Omi",
@@ -4733,5 +4731,9 @@
     "finishNothingToProcess": "Intet at behandle endnu.",
     "finishStillProcessing": "Behandles stadig. Den vises på Hjem.",
     "finishBackToHome": "Tilbage til Hjem",
-    "conversationSummaryWhenItEnds": "Resumé, når denne samtale slutter"
+    "conversationSummaryWhenItEnds": "Resumé, når denne samtale slutter",
+    "deviceUploadsWaitingOnServer": "Uploads, der venter på serveren",
+    "deviceUploadsWaitingOnServerSubtitle": "Din lyd er i sikkerhed på din enhed eller telefon",
+    "conversationSummaryThrough": "Opsummering indtil {time}",
+    "conversationRecentTranscript": "Seneste udskrift"
 }

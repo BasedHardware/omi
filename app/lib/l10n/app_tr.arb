@@ -4448,8 +4448,6 @@
     "deviceLiveEpisode": "Canlı bölüm · {duration}",
     "deviceCatchingUp": "Yetişiyor",
     "deviceCatchingUpProgress": "{done}/{total} dk",
-    "deviceRecently": "Son zamanlarda",
-    "deviceDisconnectedFor": "{duration} bağlantı kesildi",
     "deviceControls": "Kontroller",
     "homeBackgroundLine": "Ayrıca: {items}",
     "deviceOnboardingPressButtonTitle": "Omi'nin düğmesine bas",
@@ -4726,5 +4724,9 @@
     "finishNothingToProcess": "Henüz işlenecek bir şey yok.",
     "finishStillProcessing": "Hâlâ işleniyor. Ana sayfada görünecek.",
     "finishBackToHome": "Ana Sayfaya Dön",
-    "conversationSummaryWhenItEnds": "Bu konuşma bittiğinde özet"
+    "conversationSummaryWhenItEnds": "Bu konuşma bittiğinde özet",
+    "deviceUploadsWaitingOnServer": "Sunucuda bekleyen yüklemeler",
+    "deviceUploadsWaitingOnServerSubtitle": "Sesiniz cihazınızda veya telefonunuzda güvende",
+    "conversationSummaryThrough": "{time} itibariyle özet",
+    "conversationRecentTranscript": "Son transkript"
 }

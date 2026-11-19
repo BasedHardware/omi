@@ -14285,14 +14285,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => '最近';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration 切断';
-  }
-
-  @override
   String get deviceControls => 'コントロール';
 
   @override
@@ -15350,4 +15342,18 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'この会話が終わると要約が表示されます';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'サーバーで待機中のアップロード';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => '音声はデバイスまたはスマートフォンに安全に保存されています';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$timeまでの要約';
+  }
+
+  @override
+  String get conversationRecentTranscript => '最近の文字起こし';
 }

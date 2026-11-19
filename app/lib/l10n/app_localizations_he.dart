@@ -14385,14 +14385,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'לאחרונה';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'מנותק למשך $duration';
-  }
-
-  @override
   String get deviceControls => 'פקדים';
 
   @override
@@ -15465,4 +15457,18 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'סיכום כשהשיחה הזו תסתיים';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'העלאות שממתינות בשרת';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'האודיו שלך נשמר בבטחה במכשיר או בטלפון שלך';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'סיכום עד $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'תמלול אחרון';
 }

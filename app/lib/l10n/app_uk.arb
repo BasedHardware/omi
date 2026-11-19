@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Епізод наживо · {duration}",
     "deviceCatchingUp": "Наздоганяє",
     "deviceCatchingUpProgress": "{done} з {total} хв",
-    "deviceRecently": "Нещодавно",
-    "deviceDisconnectedFor": "Відключено на {duration}",
     "deviceControls": "Керування",
     "homeBackgroundLine": "Також: {items}",
     "deviceOnboardingPressButtonTitle": "Натисніть кнопку на Omi",
@@ -4691,5 +4689,9 @@
     "finishNothingToProcess": "Поки що нічого обробляти.",
     "finishStillProcessing": "Ще обробляється. З'явиться на головній.",
     "finishBackToHome": "На головну",
-    "conversationSummaryWhenItEnds": "Підсумок, коли ця розмова завершиться"
+    "conversationSummaryWhenItEnds": "Підсумок, коли ця розмова завершиться",
+    "deviceUploadsWaitingOnServer": "Завантаження, що очікують на сервері",
+    "deviceUploadsWaitingOnServerSubtitle": "Ваше аудіо у безпеці на вашому пристрої або телефоні",
+    "conversationSummaryThrough": "Підсумок станом на {time}",
+    "conversationRecentTranscript": "Останній транскрипт"
 }

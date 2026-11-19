@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "ライブのエピソード · {duration}",
     "deviceCatchingUp": "追いつき中",
     "deviceCatchingUpProgress": "{done}/{total} 分",
-    "deviceRecently": "最近",
-    "deviceDisconnectedFor": "{duration} 切断",
     "deviceControls": "コントロール",
     "homeBackgroundLine": "その他: {items}",
     "deviceOnboardingPressButtonTitle": "Omi のボタンを押してください",
@@ -4691,5 +4689,9 @@
     "finishNothingToProcess": "まだ処理するものがありません。",
     "finishStillProcessing": "まだ処理中です。ホームに表示されます。",
     "finishBackToHome": "ホームに戻る",
-    "conversationSummaryWhenItEnds": "この会話が終わると要約が表示されます"
+    "conversationSummaryWhenItEnds": "この会話が終わると要約が表示されます",
+    "deviceUploadsWaitingOnServer": "サーバーで待機中のアップロード",
+    "deviceUploadsWaitingOnServerSubtitle": "音声はデバイスまたはスマートフォンに安全に保存されています",
+    "conversationSummaryThrough": "{time}までの要約",
+    "conversationRecentTranscript": "最近の文字起こし"
 }

@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Liveavsnitt · {duration}",
     "deviceCatchingUp": "Kommer ikapp",
     "deviceCatchingUpProgress": "{done} av {total} min",
-    "deviceRecently": "Nyligen",
-    "deviceDisconnectedFor": "Frånkopplad i {duration}",
     "deviceControls": "Kontroller",
     "homeBackgroundLine": "Även: {items}",
     "deviceOnboardingPressButtonTitle": "Tryck på knappen på din Omi",
@@ -4691,5 +4689,9 @@
     "finishNothingToProcess": "Inget att bearbeta än.",
     "finishStillProcessing": "Bearbetas fortfarande. Den visas på Hem.",
     "finishBackToHome": "Tillbaka till Hem",
-    "conversationSummaryWhenItEnds": "Sammanfattning när det här samtalet avslutas"
+    "conversationSummaryWhenItEnds": "Sammanfattning när det här samtalet avslutas",
+    "deviceUploadsWaitingOnServer": "Uppladdningar som väntar på servern",
+    "deviceUploadsWaitingOnServerSubtitle": "Ditt ljud är säkert på din enhet eller telefon",
+    "conversationSummaryThrough": "Sammanfattning till {time}",
+    "conversationRecentTranscript": "Senaste transkription"
 }

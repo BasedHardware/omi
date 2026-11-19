@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "Епизода во живо · {duration}",
     "deviceCatchingUp": "Надоместува",
     "deviceCatchingUpProgress": "{done} од {total} мин",
-    "deviceRecently": "Неодамна",
-    "deviceDisconnectedFor": "Исклучено {duration}",
     "deviceControls": "Контроли",
     "homeBackgroundLine": "Исто така: {items}",
     "deviceOnboardingPressButtonTitle": "Притиснете го копчето на Omi",
@@ -12248,5 +12246,9 @@
     "finishNothingToProcess": "Сè уште нема ништо за обработка.",
     "finishStillProcessing": "Сè уште се обработува. Ќе се појави на почетната.",
     "finishBackToHome": "Назад кон почетна",
-    "conversationSummaryWhenItEnds": "Резиме кога ќе заврши овој разговор"
+    "conversationSummaryWhenItEnds": "Резиме кога ќе заврши овој разговор",
+    "deviceUploadsWaitingOnServer": "Подигнувања што чекаат на серверот",
+    "deviceUploadsWaitingOnServerSubtitle": "Вашето аудио е безбедно на вашиот уред или телефон",
+    "conversationSummaryThrough": "Резиме до {time}",
+    "conversationRecentTranscript": "Скорешен транскрипт"
 }

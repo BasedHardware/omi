@@ -14535,14 +14535,6 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Ostatnio';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Rozłączono na $duration';
-  }
-
-  @override
   String get deviceControls => 'Sterowanie';
 
   @override
@@ -15622,4 +15614,18 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Podsumowanie po zakończeniu tej rozmowy';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Wysłane pliki oczekujące na serwerze';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Twoje nagrania są bezpieczne na urządzeniu lub telefonie';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Podsumowanie do $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Najnowsza transkrypcja';
 }

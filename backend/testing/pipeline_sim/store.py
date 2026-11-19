@@ -30,6 +30,7 @@ import hashlib
 from typing import Any, Callable, TypeVar
 
 from config.batch_pipeline import held_poll_skip_enabled, MERGE_POLL_TERMINAL_STATES
+from config import batch_pipeline_packing as batch_packing
 from database import batch_pipeline_projection_outbox as outbox
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from database.batch_pipeline_projection_followup_backfill import (
@@ -442,6 +443,17 @@ class SimStore:
         return True
 
     # -- Query helpers --------------------------------------------------
+    def packing_candidates(self, owner_key: str) -> list[dict]:
+        rows = sorted(
+            (self.rows[('jobs', segment_id)]['capture_at'], segment_id)
+            for segment_id in self._pending_by_owner.get(owner_key, ())
+        )
+        result = []
+        for _, segment_id in rows[: batch_packing.PAGE_ROWS]:
+            row = self.rows[('jobs', segment_id)]
+            result.append({field: deepcopy(row[field]) for field in batch_packing.JOB_FIELDS if field in row})
+        return result
+
     def pending_page(self, owner_key: str, limit: int) -> list[dict]:
         skip = held_poll_skip_enabled()
         rows = sorted(

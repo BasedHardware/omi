@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Live-jakso · {duration}",
     "deviceCatchingUp": "Kirii kiinni",
     "deviceCatchingUpProgress": "{done}/{total} min",
-    "deviceRecently": "Äskettäin",
-    "deviceDisconnectedFor": "Yhteys katkesi {duration} ajaksi",
     "deviceControls": "Säätimet",
     "homeBackgroundLine": "Lisäksi: {items}",
     "deviceOnboardingPressButtonTitle": "Paina Omin painiketta",
@@ -4691,5 +4689,9 @@
     "finishNothingToProcess": "Ei vielä mitään käsiteltävää.",
     "finishStillProcessing": "Käsitellään yhä. Se näkyy kotinäkymässä.",
     "finishBackToHome": "Takaisin kotiin",
-    "conversationSummaryWhenItEnds": "Yhteenveto, kun tämä keskustelu päättyy"
+    "conversationSummaryWhenItEnds": "Yhteenveto, kun tämä keskustelu päättyy",
+    "deviceUploadsWaitingOnServer": "Palvelimelle lähetetyt tiedostot odottavat",
+    "deviceUploadsWaitingOnServerSubtitle": "Äänityksesi ovat turvassa laitteella tai puhelimella",
+    "conversationSummaryThrough": "Yhteenveto klo {time} asti",
+    "conversationRecentTranscript": "Viimeisin litterointi"
 }
