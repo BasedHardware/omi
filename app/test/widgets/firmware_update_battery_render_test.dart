@@ -222,6 +222,42 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
+  // The inconclusive row tells the user to try again, so the page must offer a retry that reruns the
+  // lookup instead of forcing them to leave and reopen it once connectivity recovers.
+  testWidgets('retry after a failed firmware lookup reruns the check', (tester) async {
+    _lookupStatus = 503;
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80), expectOffer: false);
+    expect(find.text(en.firmwareUpdateCheckUnavailable), findsOneWidget);
+    final retry = find.byKey(const Key('firmware_update_check_retry'));
+    expect(retry, findsOneWidget);
+
+    _lookupStatus = 200;
+    await tester.ensureVisible(retry);
+    await tester.tap(retry);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text(en.firmwareUpdateCheckUnavailable), findsNothing);
+    expect(find.byKey(const Key('firmware_update_start')), findsOneWidget);
+    expect(find.byKey(const Key('firmware_update_check_retry')), findsNothing);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('retry after a failed stable lookup during rollback reruns the check', (tester) async {
+    _lookupStatus = 503;
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80), rollback: true, expectOffer: false);
+    expect(find.text(en.noStableFirmwareFound), findsOneWidget);
+
+    _lookupStatus = 200;
+    final retry = find.byKey(const Key('firmware_update_check_retry'));
+    await tester.ensureVisible(retry);
+    await tester.tap(retry);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text(en.noStableFirmwareFound), findsNothing);
+    expect(find.byKey(const Key('firmware_update_start')), findsOneWidget);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   for (final (name, body) in [
     ('draft release', <String, dynamic>{'draft': true}),
     ('missing minimum version', <String, dynamic>{'min_version': null}),
@@ -253,6 +289,7 @@ void main() {
     await pumpPage(tester, _DeviceProvider(batteryLevel: 80), firmwareVersion: '3.0.1', expectOffer: false);
     expect(find.text(en.yourDeviceIsUpToDate), findsOneWidget);
     expect(find.text(en.firmwareUpdateCheckUnavailable), findsNothing);
+    expect(find.byKey(const Key('firmware_update_check_retry')), findsNothing);
     await capture(tester, '002-mobile-ios-firmware-up-to-date.png');
     debugDefaultTargetPlatformOverride = null;
   });

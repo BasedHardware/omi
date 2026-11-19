@@ -43,52 +43,60 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
   @override
   void initState() {
-    var device = widget.device!;
-
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       Provider.of<DeviceProvider>(context, listen: false).setOnFirmwareUpdatePage(true);
-      setState(() {
-        isLoading = true;
-      });
-
-      if (widget.isRollback) {
-        await getStableVersion(deviceModelNumber: device.modelNumber);
-        final stableVersion = latestFirmwareDetails['version']?.toString();
-        final alreadyStable =
-            isKnownFirmwareVersion(device.firmwareRevision) && device.firmwareRevision.trim() == stableVersion?.trim();
-        if (mounted) {
-          setState(() {
-            shouldUpdate = isKnownFirmwareVersion(stableVersion) && !alreadyStable;
-            isConfirmedCurrent = alreadyStable;
-            updateMessage = alreadyStable
-                ? context.l10n.alreadyOnStableFirmware
-                : shouldUpdate
-                    ? ''
-                    : context.l10n.noStableFirmwareFound;
-            isLoading = false;
-          });
-        }
-      } else {
-        await getLatestVersion(
-          deviceModelNumber: device.modelNumber,
-          firmwareRevision: device.firmwareRevision,
-          hardwareRevision: device.hardwareRevision,
-          manufacturerName: device.manufacturerName,
-          serialNumber: device.serialNumber,
-        );
-        var result = await checkFirmwareUpdate(currentFirmware: widget.device!.firmwareRevision);
-        if (mounted) {
-          setState(() {
-            shouldUpdate = result.status == FirmwareUpdateCheck.updateAvailable;
-            isConfirmedCurrent = result.status == FirmwareUpdateCheck.upToDate;
-            isCurrentVersionUnknown = result.status == FirmwareUpdateCheck.currentVersionUnknown;
-            updateMessage = isCurrentVersionUnknown ? context.l10n.unableToDetermineFirmwareVersion : result.message;
-            isLoading = false;
-          });
-        }
-      }
+      await _checkForUpdate();
     });
     super.initState();
+  }
+
+  /// Looks up the latest (or, for rollback, stable) firmware and records whether the device needs it.
+  /// Also backs the retry action shown when a lookup could not confirm the result.
+  Future<void> _checkForUpdate() async {
+    final device = widget.device!;
+    if (!mounted) return;
+    setState(() {
+      isLoading = true;
+      isConfirmedCurrent = false;
+      isCurrentVersionUnknown = false;
+    });
+
+    if (widget.isRollback) {
+      await getStableVersion(deviceModelNumber: device.modelNumber);
+      final stableVersion = latestFirmwareDetails['version']?.toString();
+      final alreadyStable =
+          isKnownFirmwareVersion(device.firmwareRevision) && device.firmwareRevision.trim() == stableVersion?.trim();
+      if (mounted) {
+        setState(() {
+          shouldUpdate = isKnownFirmwareVersion(stableVersion) && !alreadyStable;
+          isConfirmedCurrent = alreadyStable;
+          updateMessage = alreadyStable
+              ? context.l10n.alreadyOnStableFirmware
+              : shouldUpdate
+                  ? ''
+                  : context.l10n.noStableFirmwareFound;
+          isLoading = false;
+        });
+      }
+    } else {
+      await getLatestVersion(
+        deviceModelNumber: device.modelNumber,
+        firmwareRevision: device.firmwareRevision,
+        hardwareRevision: device.hardwareRevision,
+        manufacturerName: device.manufacturerName,
+        serialNumber: device.serialNumber,
+      );
+      var result = await checkFirmwareUpdate(currentFirmware: widget.device!.firmwareRevision);
+      if (mounted) {
+        setState(() {
+          shouldUpdate = result.status == FirmwareUpdateCheck.updateAvailable;
+          isConfirmedCurrent = result.status == FirmwareUpdateCheck.upToDate;
+          isCurrentVersionUnknown = result.status == FirmwareUpdateCheck.currentVersionUnknown;
+          updateMessage = isCurrentVersionUnknown ? context.l10n.unableToDetermineFirmwareVersion : result.message;
+          isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -510,6 +518,18 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             leading: const FaIcon(FontAwesomeIcons.download),
             expand: true,
             onPressed: batteryWarning != null ? null : _startUpdate,
+          ),
+        ],
+
+        // Retry when the lookup could not confirm the result (the inconclusive row promises "try again")
+        if (!shouldUpdate && !isConfirmedCurrent) ...[
+          const SizedBox(height: OmiSpacing.sm),
+          OmiButton(
+            key: const Key('firmware_update_check_retry'),
+            label: context.l10n.tryAgain,
+            leading: const FaIcon(FontAwesomeIcons.arrowRotateRight),
+            expand: true,
+            onPressed: isLoading ? null : _checkForUpdate,
           ),
         ],
 
