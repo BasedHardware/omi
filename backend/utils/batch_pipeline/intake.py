@@ -74,6 +74,7 @@ from utils.observability.fallback import record_fallback
 from utils.sync.admission_responses import sync_content_in_progress_response
 from utils.sync.stage import current_stage
 from utils.sync.capture import chunk_identity
+from utils.sync.clock_run import capture_clock_run_from_path
 from utils.sync.deleted_conversation import (
     CONVERSATION_DELETED_REASON_CODE,
     confirm_only_user_deletions,
@@ -906,6 +907,8 @@ async def accept_upload(
         )
         items = []
         source_aliases = {}
+        # Units do not name their files, so one estimated file marks the whole upload.
+        clock_estimated = any(capture_clock_run_from_path(path) for path in paths)
 
         def unit_item(unit, index):
             return replace(
@@ -925,6 +928,7 @@ async def accept_upload(
                 timing_store='sync' if decode is None else None,
                 source_reuse_key=getattr(unit, 'source_reuse_key', None),
                 capture_time_trust='untrusted' if getattr(unit, 'recovery_id', None) else None,
+                capture_clock_estimated=clock_estimated,
             )
 
         from utils.stt.batch_language import resolve_language

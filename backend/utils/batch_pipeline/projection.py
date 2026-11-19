@@ -321,7 +321,9 @@ def build_incoming(
     )
     # An untrusted (clamped or estimated) capture clock proves no age: such rows keep full processing.
     historical = historical_ingest.applies_at_create(
-        started, trusted=item.capture_time_trust is None, now=datetime.now(timezone.utc)
+        started,
+        trusted=item.capture_time_trust is None and not item.capture_clock_estimated,
+        now=datetime.now(timezone.utc),
     )
     incoming = Conversation(
         id=chunk_identity(item.owner_id, binding.source, binding.client_device_id, binding.is_locked, item.capture_at),
@@ -1286,12 +1288,14 @@ class Projector:
                 if (receipt.get('speaker_scope') or '').startswith('final:batch:'):
                     for output in outputs:
                         prepare_voice_evidence(self, item, binding, output['conversation_id'])
-                if receipt.get('historical'):
-                    # Old backfill owes no automatic summary: settle its hold, then acknowledge.
-                    for output in outputs:
-                        historical_ingest.settle(binding.owner_id, output['conversation_id'], producer='batch')
-                    self.store.ready(item.segment_id, binding, self.clock(), part_index=index, policy=policy)
-                    return
+                # Old backfill owes no automatic summary: settle each output's hold. Any
+                # output that is not historical keeps the ordinary enrichment mark.
+                settled = bool(receipt.get('historical')) and all(
+                    [
+                        historical_ingest.settle(binding.owner_id, o['conversation_id'], producer='batch')
+                        for o in outputs
+                    ]
+                )
                 with projection_phase('enrichment', policy):
                     self.store.mark_enrichment(
                         item.segment_id,
@@ -1301,6 +1305,7 @@ class Projector:
                         receipt['language'],
                         part_index=index,
                         policy=policy,
+                        **({'historical_settled': True} if settled else {}),
                     )
                 return
         self.store.ready(item.segment_id, binding, self.clock(), part_index=index, policy=policy)

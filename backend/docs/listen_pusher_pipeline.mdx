@@ -1886,18 +1886,21 @@ coalesced and may run immediately on explicit demand. See the
 ## Historical processing tier (T1+)
 
 A new sync or batch row is created with `processing_tier: 'historical'` when its
-capture start is strictly older than `SYNC_HISTORICAL_TIER_MIN_AGE_SECONDS`
-(default 259200, clamped to 72 h..60 days) on a trusted clock. Shifted, clamped,
-estimated and batch `capture_time_trust='untrusted'` clocks always keep full
-processing. `SYNC_HISTORICAL_TIER_ENABLED` (default on) gates only new stamps.
+capture start is strictly older than the enrichment age gate
+(`ENRICHMENT_MAX_AGE_HOURS`; 0 means no tier) on a trusted clock. Sync and
+late-listen decide as of the latest possible wake (create plus
+`processing_hold.MAX_HOLD_SECONDS` plus one hour). Shifted, clamped, estimated,
+batch clock-run and batch `capture_time_trust='untrusted'` clocks always keep
+full processing. `SYNC_HISTORICAL_TIER_ENABLED` (default on) gates only new stamps.
 The marker is set once at create; appends never add or remove it.
 
-- **Stored at create:** a deterministic title with no `title_provenance`, plus
+- **Stored at create:** a deterministic title with `title_provenance: 'historical_minimum'`, plus
   `terminal_no_derived_effects: true` and `summary_blocked_reason: 'historical_on_open'`.
   The row has no `summary_due_at` and no `summary_title_provenance`.
 - **Ingest:** sync completes the processing hold with the content snapshot (no
-  outbox mark), and the batch projection receipt carries `historical: true` and
-  acknowledges with `ready`. Explicit Process now still runs (summary-only).
+  outbox mark; a failed settle keeps the mark), and the batch projection receipt
+  carries `historical: true` and acknowledges with `ready` inside
+  `mark_enrichment`'s guarded transaction, keeping the record-notes dispatch. Explicit Process now still runs (summary-only).
 - **Processing:** `process_conversation` stores the minimum, without a model call
   and before the funded-budget block, for every trigger outside
   `{historical_open, user_reprocess, merge, backlog_choice}`. Those owner triggers

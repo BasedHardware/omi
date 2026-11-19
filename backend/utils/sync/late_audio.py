@@ -6,11 +6,13 @@ WAL intake own the recording. Original audio custody remains with listen/WAL.
 """
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from uuid import NAMESPACE_URL, uuid5
 
+from config import historical_tier
 from models.conversation import CreateConversation
 from models.conversation_enums import ConversationStatus
-from utils.conversations import lifecycle
+from utils.conversations import historical_ingest, lifecycle
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.conversations.recorded_time import recorded_span
 from utils.enrichment import outbox
@@ -54,9 +56,18 @@ def ingest_late_transcript(uid: str, row: dict, segments: list[dict]) -> dict:
         segment.setdefault('speaker_id_scope', f'late-listen:{row["id"]}')
         segment.setdefault('is_user', False)
     minimum = CreateConversation(**incoming)
-    incoming['structured'] = build_deterministic_minimum_structured(minimum, uid=uid).model_dump()
+    # Listen timestamps are server-clocked: old late audio joins the historical tier like sync backfill.
+    historical = historical_ingest.applies_at_create(span[0], trusted=True, now=datetime.now(timezone.utc))
+    incoming['structured'] = build_deterministic_minimum_structured(
+        minimum, uid=uid, historical=historical
+    ).model_dump()
+    if historical:
+        historical_ingest.stamp(incoming, producer='late_listen')
     assigned, _, _ = lifecycle.ingest_sync_conversation(uid, incoming)
-    # Mark on retries too: a crash after assignment must not strand enrichment.
-    outbox.mark(uid, assigned['id'], assigned.get('language') or 'en', sync_hold=processing_hold.enabled())
+    # Mark (or settle) on retries too: a crash after assignment must not strand the hold.
+    if not historical_tier.is_historical(assigned) or not historical_ingest.settle(
+        uid, assigned['id'], producer='late_listen'
+    ):
+        outbox.mark(uid, assigned['id'], assigned.get('language') or 'en', sync_hold=processing_hold.enabled())
     schedule_synced_intake_attach(uid, assigned['id'], assigned)
     return assigned

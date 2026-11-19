@@ -78,6 +78,11 @@ def global_daily_limit() -> int:
     return max(value, 0)
 
 
+def epoch(value: Any) -> float | None:
+    """Seconds since the epoch for an aware/naive (UTC) datetime or a positive number; else None."""
+    return _epoch(value)
+
+
 def _epoch(value: Any) -> float | None:
     if isinstance(value, datetime):
         moment = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)

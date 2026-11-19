@@ -554,12 +554,15 @@ class ProjectionFollowups:
                         )
                 canonicals.append(canonical)
             canonical = canonicals[0]
-            if receipt['enrichment_required'] and receipt.get('historical'):
-                for output_id in canonicals:
-                    await run_blocking(
-                        db_executor, historical_ingest.settle, binding.owner_id, output_id, producer='batch'
+            if receipt['enrichment_required']:
+                settled = bool(receipt.get('historical'))
+                for output_id in canonicals if settled else ():
+                    settled = (
+                        await run_blocking(
+                            db_executor, historical_ingest.settle, binding.owner_id, output_id, producer='batch'
+                        )
+                        and settled
                     )
-            elif receipt['enrichment_required']:
                 await self.step(
                     policy,
                     'enrichment',
@@ -571,6 +574,7 @@ class ProjectionFollowups:
                     canonical,
                     receipt['language'],
                     part_index=index,
+                    **({'historical_settled': True} if settled else {}),
                 )
                 return
         await run_blocking(

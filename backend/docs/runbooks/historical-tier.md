@@ -15,11 +15,14 @@ and that run is summary-only. The contract is in
 | `HISTORICAL_SUMMARY_ON_OPEN_ENABLED` | `POST .../summary/open` answers 503 `historical_summary_disabled`, and `summary_on_open` is no longer advertised. | Unchanged; an existing summary still returns 200, and `/reprocess` stays summary-only |
 | `HISTORICAL_SUMMARY_VECTOR_ENABLED` | Open-time summaries are not indexed for search. | Unchanged |
 
-`SYNC_HISTORICAL_TIER_MIN_AGE_SECONDS` (default 259200, clamped 72 h..60 d)
-moves the boundary. Keep it equal to `ENRICHMENT_MAX_AGE_HOURS` × 3600, or
-rows between the two values lose either their automatic summary or their
-open-time one. `HISTORICAL_SUMMARY_GLOBAL_DAILY_LIMIT` (default 10000, 0 off)
-caps fleet-wide generations per rolling day. It fails open when Redis is down.
+The tier boundary is the enrichment age gate itself. `config.historical_tier.min_age_seconds()`
+parses `ENRICHMENT_MAX_AGE_HOURS` exactly as `utils/enrichment/age_gate.py` does, so
+the two cannot drift, and a gate of 0 means no tier. There is no separate age
+setting. Sync stamps a row when it will be past the gate by its latest possible
+wake (create time plus `processing_hold.MAX_HOLD_SECONDS` plus one hour), so no
+row is enrolled for full processing only to be parked.
+`HISTORICAL_SUMMARY_GLOBAL_DAILY_LIMIT` (default 10000, 0 off) caps fleet-wide
+generations per rolling day. It fails open when Redis is down.
 
 Rollback is the switches. Each is a runtime env change, with no code change.
 
@@ -40,28 +43,43 @@ Rows created before PR 2 carry the provisional title and an armed
 `summary_due_at`, but the 72 h age gate parked their enrichment. Home shows them
 as "Writing notes" forever. `backend/scripts/historical_tier_operator.py convert`
 turns them into historical rows for one owner at a time. It only touches
-completed rows on the backfill or batch lane that are older than the tier age,
-have no summary and no manual edits, and are not owned by a finalization job.
+completed rows on the backfill or batch lane that are past the age gate, have
+no summary and no manual edits, and are not owned by a finalization job.
 
 ```bash
 cd backend
-python scripts/historical_tier_operator.py convert --uid <uid> --limit 200          # dry run: counts only
-python scripts/historical_tier_operator.py convert --uid <uid> --limit 200 --apply \
-    --confirm-production-project based-hardware                                     # needs David's go
+python scripts/historical_tier_operator.py convert --uid <uid>                       # dry run: counts only
+python scripts/historical_tier_operator.py convert --uid <uid> --apply \
+    --approval-ref <where David's go is recorded> \
+    --confirm-production-project based-hardware --receipt-dir <private dir>           # needs David's go
 ```
 
-The script reads classifier fields only, never transcript or summary text. It
-fences each write on the row's update time and prints counts, never IDs. It
-removes the provisional title marker and the due time, and stamps the tier, the
-no-derived-effects marker and `summary_blocked_reason='historical_on_open'`. Each
-production apply needs David's explicit approval for the named owners, recorded
-with the run.
+The script pages the owner's rows by document ID (`--scan`, default 2000, max
+5000 rows read) and stops after `--limit` eligible rows (default 200, max 500),
+so rows it keeps never stall a run. It reads classifier fields and presence
+checks only, never transcript or summary text. It fences each write on the
+row's update time and prints counts, never IDs.
+
+A convert stamps the tier, the no-derived-effects marker,
+`summary_blocked_reason='historical_on_open'` and the `historical_minimum`
+title provenance, and removes the provisional-title marker and the due time.
+It also closes an open sync hold, and retires the row's parked, unleased
+enrichment wake the way a completed wake ends.
+
+`--apply` refuses to run without `--approval-ref`. Each apply writes a dated
+JSON receipt to `--receipt-dir`: mode, owner hash, approval reference, time,
+counts and the written row IDs. The receipt holds row IDs, so keep it with the
+private run record, never in Git. Each production apply needs David's explicit
+approval for the named owners.
 
 ## Clearing the marker
 
 `historical_tier_operator.py clear-marker --uid <uid>` (dry run first; apply has
-the same production confirmation) removes `processing_tier`, the
-no-derived-effects marker and `summary_blocked_reason` from an owner's
-historical rows that have no summary yet. The title stays final, so the row
+the same approval reference, confirmation and receipt) removes
+`processing_tier`, the no-derived-effects marker and `summary_blocked_reason`
+from an owner's historical rows that have no summary yet. With
+`--from-receipt <convert receipt>` it clears exactly the rows that convert
+wrote, which is how to undo one run. It is not an exact inverse: the title
+stays final, the cleared hold and retired wake are not restored, and the row
 owes no automatic summary. The owner's Reprocess then runs the full pipeline,
 with derived effects. Rows that already have an open-time summary are left alone.

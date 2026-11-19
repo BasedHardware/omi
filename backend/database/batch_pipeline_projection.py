@@ -448,8 +448,13 @@ class ProjectionStore:
         *,
         part_index=None,
         policy=None,
+        historical_settled: bool = False,
     ):
+        """Enroll the output's first summary; ``historical_settled`` acknowledges it instead.
 
+        T1+: when every output is a settled historical row, nothing is enqueued, but
+        the privacy guard and the record-notes dispatch below still run unchanged.
+        """
         if not reprocess.owns_runtime():
             raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
         policy = policy or self.policy(segment_id)
@@ -507,6 +512,9 @@ class ProjectionStore:
                 finished = len(remaining) <= 1
                 receipt.update(state='ready' if finished else 'persisted', record_notes_deferred=True)
                 return result, finished, session.write_receipt(transaction, receipt)
+            if historical_settled:
+                receipt.update(state='ready', conversation_id=canonical)
+                return None, True, session.write_receipt(transaction, receipt)
             # A merge-promoted row keeps its admission class for dispatch and fair-use.
             backfill = session.job.get('admitted_priority', session.job.get('priority')) != 0
             # The enrichment obligation and its exactly-once projection

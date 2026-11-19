@@ -11,6 +11,7 @@ and only new speech reopens the hold. The summary waits for the owner's open.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from prometheus_client import Counter
@@ -30,11 +31,22 @@ ROWS = Counter(
 )
 
 
+# The tier is decided at create, but the age gate judges the row when its enrichment
+# wake runs: after the sync hold (at most MAX_HOLD_SECONDS) plus queue delay. Decide
+# as of that later moment, so a row created just under the gate age is not enrolled
+# only to be parked behind it, stuck on "Writing notes".
+WAKE_LEAD_SECONDS = processing_hold.MAX_HOLD_SECONDS + 3600
+
+
 def applies_at_create(capture_start: Any, *, trusted: bool, now: Any) -> bool:
     """Whether a new row from this capture is historical; the kill switch keeps new rows full."""
     if not historical_tier.tier_enabled():
         return False
-    return historical_tier.applies(capture_start, None if trusted else historical_tier.UNTRUSTED, now)
+    current = historical_tier.epoch(now if now is not None else datetime.now(timezone.utc))
+    if current is None:
+        return False
+    trust = None if trusted else historical_tier.UNTRUSTED
+    return historical_tier.applies(capture_start, trust, current + WAKE_LEAD_SECONDS)
 
 
 def stamp(incoming: dict[str, Any], *, producer: str) -> None:

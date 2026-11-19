@@ -2115,6 +2115,7 @@ def _reprocess_merged_conversations(
     hold = processing_hold.scheduling_enabled()
     coalescing = (hold or coalesce_enabled() or demand_enabled(uid)) and not user_selected
     merged = response.pop('_merged', {})
+    recovered: set = set()
     if coalescing:
         # Partial-result IDs survive a crash after append/checkpoint but before
         # this outbox mark, even when lineage enrichment recovery is disabled.
@@ -2122,6 +2123,8 @@ def _reprocess_merged_conversations(
         # replays without depending on a transient per-attempt _merged map.
         recovered = set(response.get('new_memories') or []) | set(response.get('updated_memories') or [])
         recovered -= set(response.get(_RESPONSE_FENCED_CONVERSATION_IDS) or [])
+        # Only ids this attempt did not enroll itself lack their historical marker here.
+        recovered -= set(merged)
         for conversation_id in recovered:
             merged.setdefault(conversation_id, _LINEAGE_RETRY_LANGUAGE)
     if user_selected:
@@ -2143,7 +2146,13 @@ def _reprocess_merged_conversations(
             elif coalescing:
                 from utils.sync.reprocess import mark
 
-                mark(uid, conversation_id, language, sync_hold=hold)
+                # A crash-recovered id lost this attempt's historical set: settle it if the row is historical.
+                if not (
+                    not user_selected
+                    and conversation_id in recovered
+                    and historical_ingest.settle(uid, conversation_id, producer='sync')
+                ):
+                    mark(uid, conversation_id, language, sync_hold=hold)
             else:
                 processed = (
                     _reprocess_conversation_after_update(uid, conversation_id, language, user_selected=True)

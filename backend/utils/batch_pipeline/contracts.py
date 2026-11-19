@@ -88,6 +88,9 @@ class WorkItem:
     capture_time_trust: str | None = None
     # Privacy-only source authority; never an assignment target or ordering hint.
     capture_source_conversation_id: str | None = None
+    # The upload named an estimated device clock (``_clke<run>_``): its capture time
+    # proves no age, so the historical tier (T1+) never applies. Absent unless set.
+    capture_clock_estimated: bool = False
 
     # Server-derived exact original-file and decoded-range proof; never client supplied.
     source_reuse_key: str | None = None
@@ -105,6 +108,8 @@ class WorkItem:
             value.pop('capture_time_trust')
         if self.capture_source_conversation_id is None:
             value.pop('capture_source_conversation_id')
+        if not self.capture_clock_estimated:
+            value.pop('capture_clock_estimated')
         if self.source_reuse_key is None:
             value.pop('source_reuse_key')
         if self.source_alias_of is None:

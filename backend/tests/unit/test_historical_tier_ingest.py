@@ -30,10 +30,14 @@ def _tier_on(monkeypatch):
     monkeypatch.delenv('ENRICHMENT_MAX_AGE_HOURS', raising=False)
 
 
-def test_lane_boundary_is_strictly_older_than_72_hours_on_a_trusted_clock(monkeypatch):
-    exactly = NOW - timedelta(hours=72)
+def test_create_decides_as_of_the_wake_so_no_row_is_enrolled_only_to_be_parked(monkeypatch):
+    # The gate judges the row when its wake runs, up to the max hold plus queue delay after create.
+    exactly = NOW - timedelta(hours=72) + timedelta(seconds=historical_ingest.WAKE_LEAD_SECONDS)
+    assert historical_ingest.WAKE_LEAD_SECONDS >= hold.MAX_HOLD_SECONDS
     assert not historical_ingest.applies_at_create(exactly, trusted=True, now=NOW)
     assert historical_ingest.applies_at_create(exactly - timedelta(seconds=1), trusted=True, now=NOW)
+    # 71 h old at create is past the gate by the time a held wake can run.
+    assert historical_ingest.applies_at_create(NOW - timedelta(hours=71), trusted=True, now=NOW)
     assert not historical_ingest.applies_at_create(exactly - timedelta(days=9), trusted=False, now=NOW)
     monkeypatch.setenv(historical_tier.TIER_ENABLED_ENV, 'false')
     assert not historical_ingest.applies_at_create(exactly - timedelta(days=9), trusted=True, now=NOW)
@@ -54,7 +58,7 @@ def test_sync_old_backfill_is_created_historical_with_a_final_title(pipeline):
     assert row['processing_tier'] == 'historical'
     assert row['terminal_no_derived_effects'] is True
     assert row['summary_blocked_reason'] == 'historical_on_open'
-    assert row['structured']['title'] and row['structured'].get('title_provenance') is None
+    assert row['structured']['title'] and row['structured']['title_provenance'] == 'historical_minimum'
     assert response[HISTORICAL_RESPONSE_KEY] == {row['id']}
     # The write codec owes it no summary: no due time, no provisional provenance.
     write = dict(row)
@@ -214,3 +218,108 @@ def test_stamp_marks_the_row_terminal_and_blocked():
     }
     # Batch projection debt never re-arms a historical row.
     assert summary_delivery.stamp_projection_debt({**incoming, 'status': 'completed'}) is False
+
+
+def _intake(monkeypatch, assigned, *, repeat_only, completion_pending):
+    from utils.sync import intake_completion
+
+    monkeypatch.setattr(intake_completion, 'log_append_observations', lambda *_: None)
+    row = {
+        'id': 'recording',
+        'sync_relevance': 'keep',
+        '_sync_lineage_repeat_only': repeat_only,
+        '_sync_lineage_completion_pending': completion_pending,
+        **assigned,
+    }
+    response = {'new_memories': set(), 'updated_memories': set()}
+    intake_completion.complete_sync_intake(
+        uid='u',
+        assigned=row,
+        created=False,
+        survivors=[],
+        response=response,
+        lock=threading.Lock(),
+        language='en',
+        audio_enabled=False,
+        store_audio=lambda cid: None,
+        finish=lambda *a, **k: None,
+        mark_finalize=lambda: None,
+        acknowledge=lambda: None,
+    )
+    return response
+
+
+def test_an_exact_retry_that_owes_completion_still_settles_its_historical_row(monkeypatch):
+    response = _intake(monkeypatch, {'processing_tier': 'historical'}, repeat_only=True, completion_pending=True)
+    assert response['_merged'] == {'recording': 'en'}
+    assert response[HISTORICAL_RESPONSE_KEY] == {'recording'}
+
+
+def test_a_pristine_repeat_settles_nothing(monkeypatch):
+    response = _intake(monkeypatch, {'processing_tier': 'historical'}, repeat_only=True, completion_pending=False)
+    assert HISTORICAL_RESPONSE_KEY not in response and '_merged' not in response
+
+
+def _coalescing(module, monkeypatch):
+    monkeypatch.setattr(module.processing_hold, 'scheduling_enabled', lambda: True)
+    monkeypatch.setattr('config.sync_reprocess.coalesce_enabled', lambda: True)
+
+
+def test_a_crash_recovered_historical_id_settles_instead_of_parking(merged_pipeline, monkeypatch):
+    # The retry's response carries the id from the earlier attempt but not its historical set.
+    module = merged_pipeline
+    _coalescing(module, monkeypatch)
+    settle = MagicMock(side_effect=lambda uid, cid, producer: cid == 'old-recording')
+    monkeypatch.setattr(module.historical_ingest, 'settle', settle)
+    marks = []
+    monkeypatch.setattr('utils.sync.reprocess.mark', lambda uid, cid, *a, **k: marks.append(cid))
+    response = {'new_memories': {'old-recording', 'recent-recording'}, 'updated_memories': set()}
+    module._reprocess_merged_conversations('uid', response)
+    assert {call.args[1] for call in settle.call_args_list} == {'old-recording', 'recent-recording'}
+    assert marks == ['recent-recording']
+
+
+def test_ids_this_attempt_enrolled_are_not_probed_again(merged_pipeline, monkeypatch):
+    module = merged_pipeline
+    _coalescing(module, monkeypatch)
+    settle = MagicMock(side_effect=AssertionError('no extra read for an id this attempt enrolled'))
+    monkeypatch.setattr(module.historical_ingest, 'settle', settle)
+    marks = []
+    monkeypatch.setattr('utils.sync.reprocess.mark', lambda uid, cid, *a, **k: marks.append(cid))
+    response = {'new_memories': {'recent-recording'}, 'updated_memories': set(), '_merged': {'recent-recording': 'en'}}
+    module._reprocess_merged_conversations('uid', response)
+    assert marks == ['recent-recording']
+
+
+def _late(monkeypatch, age_hours, existing_tier=None):
+    from utils.sync import late_audio
+
+    started = datetime.now(timezone.utc) - timedelta(hours=age_hours)
+    captured = {}
+
+    def assign(uid, incoming):
+        captured['incoming'] = incoming
+        return {**incoming, **({'processing_tier': existing_tier} if existing_tier else {})}, True, []
+
+    monkeypatch.setattr(late_audio.lifecycle, 'ingest_sync_conversation', assign)
+    marks, settles = [], []
+    monkeypatch.setattr(late_audio.outbox, 'mark', lambda uid, cid, *a, **k: marks.append(cid))
+    monkeypatch.setattr(late_audio.historical_ingest, 'settle', lambda uid, cid, producer: settles.append(cid) or True)
+    monkeypatch.setattr('utils.episodes.finalize.schedule_synced_intake_attach', lambda *a: None)
+    row = {'id': 'live-row', 'started_at': started, 'source': 'omi', 'language': 'en'}
+    segments = [{'id': 's1', 'text': 'We planned the garden beds today', 'start': 0.0, 'end': 4.0}]
+    late_audio.ingest_late_transcript('u', row, segments)
+    return captured['incoming'], marks, settles
+
+
+def test_old_late_listen_audio_joins_the_historical_tier(monkeypatch):
+    incoming, marks, settles = _late(monkeypatch, 80)
+    assert incoming['processing_tier'] == 'historical'
+    assert incoming['structured']['title_provenance'] == 'historical_minimum'
+    assert settles == [incoming['id']] and marks == []
+
+
+def test_recent_late_listen_audio_keeps_full_processing(monkeypatch):
+    incoming, marks, settles = _late(monkeypatch, 1)
+    assert 'processing_tier' not in incoming
+    assert marks == [incoming['id']] and settles == []

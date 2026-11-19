@@ -257,10 +257,11 @@ def complete_sync_intake(
             response['new_memories' if created else 'updated_memories'].add(conversation_id)
             if assigned['sync_relevance'] == 'keep' or assigned.get('sync_bridge_pending'):
                 response.setdefault('_merged', {})[conversation_id] = language
-            if assigned.get('processing_tier') == 'historical':
-                response.setdefault(HISTORICAL_RESPONSE_KEY, set()).add(conversation_id)
         elif existing_completion:
             response.setdefault('_merged', {})[conversation_id] = language
+        if (not repeat_only or existing_completion) and assigned.get('processing_tier') == 'historical':
+            # An exact retry that still owes completion settles like the first upload did.
+            response.setdefault(HISTORICAL_RESPONSE_KEY, set()).add(conversation_id)
     if attach_episode is not None and (not repeat_only or existing_completion):
         # The row is visible in Home from this moment; fold it under the live
         # episode before audio storage or enrichment can stall behind it.
