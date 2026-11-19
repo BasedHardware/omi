@@ -255,13 +255,21 @@ func (w *Workers) idle(ctx context.Context, empty int, watcher bool) bool {
 			}
 			due = time.Time{}
 		}
-		floor := min(idleFloorMax, idleFloor<<empty)
-		wait = rules.IdleWait(w.store.clock.Now(), due, floor, idleLimit)
+		backoff := min(idleFloorMax, idleFloor<<empty)
+		wait = rules.IdleWait(w.store.clock.Now(), due, idleFloor, backoff, idleLimit)
+	}
+	// A schedule change wakes the watcher, which must recompute its sleep; available work
+	// wakes whichever dispatcher is listening.
+	var rescan <-chan struct{}
+	if watcher {
+		rescan = w.store.rescan
 	}
 	select {
 	case <-ctx.Done():
 		return false
 	case <-w.store.wake:
+		return true
+	case <-rescan:
 		return true
 	case <-w.store.clock.After(wait):
 		return false

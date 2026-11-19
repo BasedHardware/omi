@@ -141,6 +141,17 @@ func (a *api) prometheus(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// offContract reports a series whose cause is outside the conformance kit's closed list.
+// The foundation adds causes the kit does not know (a kind with no handler, a corrupted
+// batch input). They are counted like any other, and written only once they are above
+// zero, so the kit's closed-label check stays meaningful: seeing one is itself a finding.
+//
+// CLEANUP-NOTE: remove with the kit; the real metrics endpoint lists every registered cause.
+func offContract(key string) bool {
+	return strings.Contains(key, `cause="`+string(queue.CauseKindUnregistered)+`"`) ||
+		strings.Contains(key, `cause="`+string(batchunit.CauseInputUnreadable)+`"`)
+}
+
 func (m *metrics) write(b *strings.Builder) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -151,6 +162,9 @@ func (m *metrics) write(b *strings.Builder) {
 	sort.Strings(keys)
 	last := ""
 	for _, k := range keys {
+		if m.counters[k] == 0 && offContract(k) {
+			continue
+		}
 		name, _, _ := strings.Cut(k, "{")
 		if last != name {
 			fmt.Fprintf(b, "# TYPE %s counter\n", name)

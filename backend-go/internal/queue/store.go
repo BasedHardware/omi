@@ -38,7 +38,10 @@ type Store struct {
 	causes    map[Cause]struct{}
 	observer  Observer
 	clock     clock.Clock
-	wake      chan struct{}
+	// wake tells one idle dispatcher that work may be claimable now.
+	wake chan struct{}
+	// rescan tells the schedule watcher that a due time changed, so it must not sleep on.
+	rescan chan struct{}
 }
 
 // Open connects two bounded pools: one for work and a small one reserved for lease
@@ -70,7 +73,7 @@ func Open(ctx context.Context, url string, cfg Config, observer Observer, c cloc
 	}
 	store := &Store{
 		pool: pool, heartbeat: heartbeat, cfg: cfg, causes: causeSet(cfg), observer: observer,
-		clock: c, wake: make(chan struct{}, 1),
+		clock: c, wake: make(chan struct{}, 1), rescan: make(chan struct{}, 1),
 	}
 	if err := pool.Ping(ctx); err != nil {
 		store.Close()
@@ -229,10 +232,15 @@ func (s *Store) Parked(ctx context.Context, tenant string) ([]Job, error) {
 	return jobs, nil
 }
 
-// signal wakes one idle dispatcher on this replica. It never blocks.
+// signal tells this replica's dispatchers that the schedule changed: one idle dispatcher
+// wakes to claim, and the watcher recomputes when the next job is due. It never blocks.
 func (s *Store) signal() {
 	select {
 	case s.wake <- struct{}{}:
+	default:
+	}
+	select {
+	case s.rescan <- struct{}{}:
 	default:
 	}
 }

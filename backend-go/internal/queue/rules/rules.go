@@ -131,11 +131,20 @@ func OnClaim(c Claimed) Recovery {
 	}
 }
 
-// IdleWait is how long an idle dispatcher sleeps: until the next job is due, but never
-// longer than limit and never shorter than floor. due is zero when nothing is scheduled.
-func IdleWait(now, due time.Time, floor, limit time.Duration) time.Duration {
+// IdleWait is how long the schedule watcher sleeps after finding nothing to claim.
+//
+// With nothing scheduled it sleeps for limit. With a job due in the future it sleeps until
+// then, so a timer fires on time, but at least floor and at most limit. With a job that is
+// already due yet could not be claimed (its tenant is deferred, or a lock is busy) it sleeps
+// for backoff, which the caller grows with each consecutive empty claim so that unclaimable
+// work is not polled at the floor.
+func IdleWait(now, due time.Time, floor, backoff, limit time.Duration) time.Duration {
 	if due.IsZero() {
 		return limit
 	}
-	return min(limit, max(floor, due.Sub(now)))
+	until := due.Sub(now)
+	if until <= 0 {
+		return min(limit, max(floor, backoff))
+	}
+	return min(limit, max(floor, until))
 }

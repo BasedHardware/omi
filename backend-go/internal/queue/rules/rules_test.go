@@ -115,17 +115,20 @@ func TestIdleWaitSleepsUntilDueWithinBounds(t *testing.T) {
 	now := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
 	floor, limit := 50*time.Millisecond, 2*time.Second
 	cases := map[string]struct {
-		due  time.Time
-		want time.Duration
+		due     time.Time
+		backoff time.Duration
+		want    time.Duration
 	}{
-		"nothing scheduled":    {time.Time{}, limit},
-		"due soon":             {now.Add(300 * time.Millisecond), 300 * time.Millisecond},
-		"due far away":         {now.Add(time.Hour), limit},
-		"already due":          {now.Add(-time.Second), floor},
-		"due inside the floor": {now.Add(time.Millisecond), floor},
+		"nothing scheduled":                        {time.Time{}, time.Second, limit},
+		"due soon fires on time despite backoff":   {now.Add(300 * time.Millisecond), time.Second, 300 * time.Millisecond},
+		"due far away":                             {now.Add(time.Hour), floor, limit},
+		"due inside the floor":                     {now.Add(time.Millisecond), time.Second, floor},
+		"already due, first empty claim":           {now.Add(-time.Second), floor, floor},
+		"already due, unclaimable for a while":     {now.Add(-time.Second), 800 * time.Millisecond, 800 * time.Millisecond},
+		"already due, backoff never exceeds limit": {now.Add(-time.Second), time.Hour, limit},
 	}
 	for name, tc := range cases {
-		if got := rules.IdleWait(now, tc.due, floor, limit); got != tc.want {
+		if got := rules.IdleWait(now, tc.due, floor, tc.backoff, limit); got != tc.want {
 			t.Errorf("%s: got %v, want %v", name, got, tc.want)
 		}
 	}
