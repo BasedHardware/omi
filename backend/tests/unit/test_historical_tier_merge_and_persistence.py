@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import utils.conversations.merge_conversations as merge
+import utils.notifications
 from database import conversations as db
 from tests.unit.test_merge_audio_chunk_copy_failure import _FakeBucket, _install
 from tests.unit.test_summary_persistence import writer  # noqa: F401  (fixture)
@@ -39,9 +40,7 @@ def _merged(monkeypatch, sources):
     monkeypatch.setattr(merge, 'is_audio_merge_dispatch_enabled', lambda: False)
     monkeypatch.setattr(merge.lifecycle_service, 'complete', lambda *_a, **_k: None)
     monkeypatch.setattr(merge, '_delete_conversation_and_related_data', lambda *_a, **_k: None)
-    import utils.notifications as notifications
-
-    monkeypatch.setattr(notifications, 'send_merge_completed_message', lambda *_a, **_k: None)
+    monkeypatch.setattr(utils.notifications, 'send_merge_completed_message', lambda *_a, **_k: None)
     created = {}
     monkeypatch.setattr(
         merge.lifecycle_service, 'create_processing_conversation', lambda uid, data: created.update(data=data)
