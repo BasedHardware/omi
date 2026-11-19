@@ -127,6 +127,13 @@
       "why": "reviewed safe: read-only successor-link scout; nothing is written, and a lost scout only means the walk reads its own successor"
     },
     {
+      "path": "utils/batch_pipeline/projection_prefetch.py",
+      "function": "NativeAudioPrefetch.context",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "Read-only staging and source verification. The owner turn keeps the future across step deadlines, and close cancels queued reads. Process loss leaves the durable result and assignment obligation pending for replay. An unfinished read cannot publish a receipt, change custody, or authorize cleanup."
+    },
+    {
       "path": "utils/batch_pipeline/serving.py",
       "function": "start_serving_from_env",
       "kind": "start_background_task",

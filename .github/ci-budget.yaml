@@ -85,14 +85,33 @@
     "backend-go-checks.yml/check": {
       "budget_p50_minutes": 5,
       "display_name": "check",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 6,
+      "if": "${{ !cancelled() && (github.event_name != 'push' || inputs.nightly_main_sha != '' || needs.port-tasks.outputs.go_changed == 'true') }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "port-tasks",
+      "owner": "CI maintainers",
+      "rationale": "SCA-3180: retain a 5-minute Go-check budget, account for the existing pinned nightly, and allow one extra PR run from the port script path. Main pushes select Go checks only when Go paths or the workflow change. Forecast three additional daily PR runs for replay reference changes from 21 first-parent changes to the selected Python sources over seven days.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-go-checks.yml/port-tasks": {
+      "budget_p50_minutes": 5,
+      "display_name": "port-tasks",
       "expected_runs_class": "unsampled-pr-sentinel",
       "expected_runs_per_day": 4,
-      "if": null,
+      "if": "inputs.nightly_main_sha == ''",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Five-minute budget retained for Go checks and replay. Forecast four runs/day from one Go sentinel plus three additional runs/day estimated from 21 first-parent changes to selected Python sources over seven days.",
+      "rationale": "SCA-3180: one forecast PR run per day for a checkout and focused Python tests. Main pushes also inspect merge metadata with read-only access. The job stays off the pinned nightly. Forecast three additional daily PR runs for replay reference changes from 21 first-parent changes to the selected Python sources over seven days.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1239,17 +1258,38 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_backend_auto_dev.yml/admit_source": {
+      "budget_p50_minutes": 5,
+      "display_name": "admit_source",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": "(needs.scope.outputs.applies == 'true' || needs.scope.outputs.workerd == 'true') && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "scope",
+      "owner": "CI maintainers",
+      "rationale": "SCA-3174 splits GitHub-only source admission from Firestore and dev registry authentication. Conservative five-minute placeholder for the non-PR job.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "gcp_backend_auto_dev.yml/deploy": {
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
+      "expected_runs_per_day": 1,
+      "if": "needs.scope.outputs.applies == 'true'",
       "matrix": {},
       "matrix_size": 1,
-      "needs": "firestore_readiness",
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "needs": [
+        "scope",
+        "firestore_readiness"
+      ],
+      "owner": "Omi backend maintainers",
+      "rationale": "2026-11-19 backend-go image publishing adds a separate path; this job now requires both backend scope and admitted source readiness and remains skipped for workerd-only changes. Forecast one eligible daily release run (previously unbudgeted); 5-minute p50 is unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1261,13 +1301,37 @@
       "budget_p50_minutes": 5,
       "display_name": "firestore_readiness",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "needs.scope.outputs.applies == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository",
+      "expected_runs_per_day": 1,
+      "if": "needs.scope.outputs.applies == 'true'",
       "matrix": {},
       "matrix_size": 1,
-      "needs": "scope",
+      "needs": [
+        "scope",
+        "admit_source"
+      ],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-11-01 keyless index check: the gate now mints an OIDC token through the dev deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. No trigger, matrix, or runner change; auth cost is one STS exchange, so the budget is unchanged.",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-11-01 keyless index check: the gate now mints an OIDC token through the dev deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. SCA-3174 keeps the gate on backend service deployments after shared GitHub-only SHA admission. Forecast one eligible daily release run.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend_auto_dev.yml/publish_workerd": {
+      "budget_p50_minutes": 5,
+      "display_name": "Build and publish workerd development image",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": "needs.scope.outputs.workerd == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "scope",
+        "admit_source"
+      ],
+      "owner": "Omi backend maintainers",
+      "rationale": "2026-11-19 SCA-3174: publish an amd64 workerd image from the admitted source SHA to the dev registry using dev Workload Identity; no service deployment. Conservative 5-minute p50 placeholder; workflow_run is non-PR, so PR frequency is zero.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1277,15 +1341,15 @@
     },
     "gcp_backend_auto_dev.yml/scope": {
       "budget_p50_minutes": 5,
-      "display_name": "Decide backend deployment scope",
+      "display_name": "Decide backend build and deployment scope",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "owner": "Omi backend maintainers",
+      "rationale": "2026-11-19 SCA-3174: added a backend-go/ diff output for a separately admitted workerd image publish; backend deployment scope remains independent. Existing 5-minute p50 and non-PR event frequency are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3603,7 +3667,7 @@
     "backend-go-checks.yml": {
       "name": "Backend Go Checks",
       "owner": "CI maintainers",
-      "rationale": "Run Go checks and replay on Go changes, the Python replay driver and its direct finalization and storage entry points.",
+      "rationale": "SCA-3180: path-selected PR validation and read-only port task drafts on main pushes. Replay coverage includes the Python driver and direct finalization and storage entry points.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -3614,22 +3678,14 @@
             "backend/utils/conversations/lifecycle.py",
             "backend/database/conversation_finalization_jobs.py",
             "backend/database/conversations.py",
+            ".github/scripts/go_port_tasks.py",
+            ".github/scripts/test_go_port_tasks.py",
             ".github/workflows/backend-go-checks.yml"
           ]
         },
         "push": {
           "branches": [
             "main"
-          ],
-          "paths": [
-            "backend-go/**",
-            "backend/testing/finalization_replay/**",
-            "backend/utils/conversations/finalizer.py",
-            "backend/utils/conversations/process_conversation.py",
-            "backend/utils/conversations/lifecycle.py",
-            "backend/database/conversation_finalization_jobs.py",
-            "backend/database/conversations.py",
-            ".github/workflows/backend-go-checks.yml"
           ]
         },
         "workflow_call": {
