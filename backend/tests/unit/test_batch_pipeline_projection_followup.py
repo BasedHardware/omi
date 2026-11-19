@@ -1036,13 +1036,14 @@ def ready_followup(followup, monkeypatch):
         'different_page',
         'invalidation',
         'distinct_input',
+        'distinct_output',
         'kill',
         'targeted',
         'expired',
         'expired_during_read',
     ],
 )
-async def test_early_followup_checks_fresh_privacy_version_and_covered_inputs(ready_followup, monkeypatch, case):
+async def test_early_followup_checks_fresh_privacy_version_and_covered_conversations(ready_followup, monkeypatch, case):
     f, authority = ready_followup
     store = f.projector.store
     assert await f.run('head') == 'completed'
@@ -1056,6 +1057,9 @@ async def test_early_followup_checks_fresh_privacy_version_and_covered_inputs(re
     elif case == 'distinct_input':
         store.client.rows[store.ref('jobs', 'later').path]['capture_at'] = 1001
         store.client.rows[store.ref('results', 'later').path]['capture_at'] = 1001
+    elif case == 'distinct_output':
+        store.client.rows[store.ref('jobs', 'later').path]['conversation_ids'] = ['unverified-output']
+        store.client.rows[store.ref('results', 'later').path]['projection']['conversation_id'] = 'unverified-output'
     elif case == 'kill':
         monkeypatch.setenv('BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED', 'false')
     elif case == 'targeted':
