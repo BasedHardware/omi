@@ -14552,14 +14552,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'ఇటీవల';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration డిస్‌కనెక్ట్';
-  }
-
-  @override
   String get deviceControls => 'నియంత్రణలు';
 
   @override
@@ -15632,4 +15624,10 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'హోమ్‌కు తిరిగి వెళ్లండి';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
 }

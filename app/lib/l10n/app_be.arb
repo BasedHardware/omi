@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "Жывы эпізод · {duration}",
     "deviceCatchingUp": "Даганяе",
     "deviceCatchingUpProgress": "{done} з {total} хв",
-    "deviceRecently": "Нядаўна",
-    "deviceDisconnectedFor": "Адключаны на {duration}",
     "deviceControls": "Кіраванне",
     "homeBackgroundLine": "Таксама: {items}",
     "deviceOnboardingPressButtonTitle": "Націсніце кнопку на Omi",
@@ -12246,5 +12244,7 @@
     "onTheWayServerWork": "Праца паводле сервера",
     "finishNothingToProcess": "Пакуль няма чаго апрацоўваць.",
     "finishStillProcessing": "Яшчэ апрацоўваецца. З'явіцца на галоўнай.",
-    "finishBackToHome": "На галоўную"
+    "finishBackToHome": "На галоўную",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

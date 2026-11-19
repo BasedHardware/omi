@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Епізод наживо · {duration}",
     "deviceCatchingUp": "Наздоганяє",
     "deviceCatchingUpProgress": "{done} з {total} хв",
-    "deviceRecently": "Нещодавно",
-    "deviceDisconnectedFor": "Відключено на {duration}",
     "deviceControls": "Керування",
     "homeBackgroundLine": "Також: {items}",
     "deviceOnboardingPressButtonTitle": "Натисніть кнопку на Omi",
@@ -4689,5 +4687,7 @@
     "onTheWayServerWork": "Робота за даними сервера",
     "finishNothingToProcess": "Поки що нічого обробляти.",
     "finishStillProcessing": "Ще обробляється. З'явиться на головній.",
-    "finishBackToHome": "На головну"
+    "finishBackToHome": "На головну",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

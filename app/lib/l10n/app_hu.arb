@@ -4509,8 +4509,6 @@
     "deviceLiveEpisode": "Élő epizód · {duration}",
     "deviceCatchingUp": "Felzárkózás",
     "deviceCatchingUpProgress": "{done}/{total} perc",
-    "deviceRecently": "Nemrég",
-    "deviceDisconnectedFor": "{duration} szétkapcsolva",
     "deviceControls": "Vezérlők",
     "homeBackgroundLine": "Továbbá: {items}",
     "deviceOnboardingPressButtonTitle": "Nyomd meg az Omi gombját",
@@ -4785,5 +4783,7 @@
     "onTheWayServerWork": "A szerver által jelzett munka",
     "finishNothingToProcess": "Még nincs mit feldolgozni.",
     "finishStillProcessing": "Még feldolgozás alatt. Megjelenik a Kezdőlapon.",
-    "finishBackToHome": "Vissza a Kezdőlapra"
+    "finishBackToHome": "Vissza a Kezdőlapra",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

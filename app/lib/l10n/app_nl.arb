@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Live-episode · {duration}",
     "deviceCatchingUp": "Inhalen",
     "deviceCatchingUpProgress": "{done} van {total} min",
-    "deviceRecently": "Recent",
-    "deviceDisconnectedFor": "{duration} niet verbonden",
     "deviceControls": "Bediening",
     "homeBackgroundLine": "Ook: {items}",
     "deviceOnboardingPressButtonTitle": "Druk op de knop van je Omi",
@@ -4689,5 +4687,7 @@
     "onTheWayServerWork": "Door de server gemeld werk",
     "finishNothingToProcess": "Nog niets om te verwerken.",
     "finishStillProcessing": "Wordt nog verwerkt. Het verschijnt op Home.",
-    "finishBackToHome": "Terug naar Home"
+    "finishBackToHome": "Terug naar Home",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

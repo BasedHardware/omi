@@ -14539,14 +14539,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Недавно';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Отключено на $duration';
-  }
-
-  @override
   String get deviceControls => 'Управление';
 
   @override
@@ -15619,4 +15611,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'На главную';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
 }

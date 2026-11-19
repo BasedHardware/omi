@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Živá epizoda · {duration}",
     "deviceCatchingUp": "Dohání",
     "deviceCatchingUpProgress": "{done} z {total} min",
-    "deviceRecently": "Nedávno",
-    "deviceDisconnectedFor": "Odpojeno na {duration}",
     "deviceControls": "Ovládání",
     "homeBackgroundLine": "Také: {items}",
     "deviceOnboardingPressButtonTitle": "Stiskněte tlačítko na Omi",
@@ -4689,5 +4687,7 @@
     "onTheWayServerWork": "Práce hlášená serverem",
     "finishNothingToProcess": "Zatím není co zpracovat.",
     "finishStillProcessing": "Stále se zpracovává. Objeví se na domovské stránce.",
-    "finishBackToHome": "Zpět domů"
+    "finishBackToHome": "Zpět domů",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

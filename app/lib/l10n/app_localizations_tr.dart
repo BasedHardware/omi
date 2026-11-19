@@ -14503,14 +14503,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Son zamanlarda';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration bağlantı kesildi';
-  }
-
-  @override
   String get deviceControls => 'Kontroller';
 
   @override
@@ -15580,4 +15572,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Ana Sayfaya Dön';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
 }

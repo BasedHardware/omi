@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "లైవ్ ఎపిసోడ్ · {duration}",
     "deviceCatchingUp": "వెనుకబడినది సరిచేస్తోంది",
     "deviceCatchingUpProgress": "{done}/{total} నిమి.",
-    "deviceRecently": "ఇటీవల",
-    "deviceDisconnectedFor": "{duration} డిస్‌కనెక్ట్",
     "deviceControls": "నియంత్రణలు",
     "homeBackgroundLine": "అలాగే: {items}",
     "deviceOnboardingPressButtonTitle": "మీ Omi బటన్ నొక్కండి",
@@ -12246,5 +12244,7 @@
     "onTheWayServerWork": "సర్వర్ నివేదించిన పని",
     "finishNothingToProcess": "ఇంకా ప్రాసెస్ చేయడానికి ఏమీ లేదు.",
     "finishStillProcessing": "ఇంకా ప్రాసెస్ అవుతోంది. ఇది హోమ్‌లో కనిపిస్తుంది.",
-    "finishBackToHome": "హోమ్‌కు తిరిగి వెళ్లండి"
+    "finishBackToHome": "హోమ్‌కు తిరిగి వెళ్లండి",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

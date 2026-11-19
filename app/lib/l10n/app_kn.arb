@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "ಲೈವ್ ಸಂಚಿಕೆ · {duration}",
     "deviceCatchingUp": "ಬಾಕಿ ಹಿಡಿಯುತ್ತಿದೆ",
     "deviceCatchingUpProgress": "{done}/{total} ನಿಮಿಷ",
-    "deviceRecently": "ಇತ್ತೀಚೆಗೆ",
-    "deviceDisconnectedFor": "{duration} ಸಂಪರ್ಕ ಕಡಿತ",
     "deviceControls": "ನಿಯಂತ್ರಣಗಳು",
     "homeBackgroundLine": "ಜೊತೆಗೆ: {items}",
     "deviceOnboardingPressButtonTitle": "உங்கள் Omi பொத்தானை அழுத்துங்கள்",
@@ -12246,5 +12244,7 @@
     "onTheWayServerWork": "ಸರ್ವರ್ ವರದಿ ಮಾಡಿದ ಕೆಲಸ",
     "finishNothingToProcess": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಏನೂ ಇಲ್ಲ.",
     "finishStillProcessing": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತಿದೆ. ಇದು ಹೋಮ್‌ನಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.",
-    "finishBackToHome": "ಹೋಮ್‌ಗೆ ಹಿಂತಿರುಗಿ"
+    "finishBackToHome": "ಹೋಮ್‌ಗೆ ಹಿಂತಿರುಗಿ",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

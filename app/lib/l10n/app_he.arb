@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "פרק חי · {duration}",
     "deviceCatchingUp": "משלים פערים",
     "deviceCatchingUpProgress": "{done} מתוך {total} דק׳",
-    "deviceRecently": "לאחרונה",
-    "deviceDisconnectedFor": "מנותק למשך {duration}",
     "deviceControls": "פקדים",
     "homeBackgroundLine": "גם: {items}",
     "deviceOnboardingPressButtonTitle": "לחץ על הכפתור ב‑Omi",
@@ -12246,5 +12244,7 @@
     "onTheWayServerWork": "עבודה שדווחה מהשרת",
     "finishNothingToProcess": "עדיין אין מה לעבד.",
     "finishStillProcessing": "עדיין בעיבוד. זה יופיע במסך הבית.",
-    "finishBackToHome": "חזרה למסך הבית"
+    "finishBackToHome": "חזרה למסך הבית",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

@@ -14524,14 +14524,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Nesen';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Atvienots $duration';
-  }
-
-  @override
   String get deviceControls => 'Vadīklas';
 
   @override
@@ -15604,4 +15596,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Atpakaļ uz sākumu';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
 }

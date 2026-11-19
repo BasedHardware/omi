@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "حلقة مباشرة · {duration}",
     "deviceCatchingUp": "جارٍ اللحاق",
     "deviceCatchingUpProgress": "{done} من {total} د",
-    "deviceRecently": "مؤخرًا",
-    "deviceDisconnectedFor": "انقطع الاتصال لمدة {duration}",
     "deviceControls": "عناصر التحكم",
     "homeBackgroundLine": "أيضًا: {items}",
     "deviceOnboardingPressButtonTitle": "اضغط زر Omi",
@@ -4689,5 +4687,7 @@
     "onTheWayServerWork": "عمل أبلغ عنه الخادم",
     "finishNothingToProcess": "لا يوجد شيء لمعالجته بعد.",
     "finishStillProcessing": "لا تزال المعالجة جارية. ستظهر على الشاشة الرئيسية.",
-    "finishBackToHome": "العودة إلى الرئيسية"
+    "finishBackToHome": "العودة إلى الرئيسية",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

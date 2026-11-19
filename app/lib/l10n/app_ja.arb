@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "ライブのエピソード · {duration}",
     "deviceCatchingUp": "追いつき中",
     "deviceCatchingUpProgress": "{done}/{total} 分",
-    "deviceRecently": "最近",
-    "deviceDisconnectedFor": "{duration} 切断",
     "deviceControls": "コントロール",
     "homeBackgroundLine": "その他: {items}",
     "deviceOnboardingPressButtonTitle": "Omi のボタンを押してください",
@@ -4689,5 +4687,7 @@
     "onTheWayServerWork": "サーバーが報告した処理",
     "finishNothingToProcess": "まだ処理するものがありません。",
     "finishStillProcessing": "まだ処理中です。ホームに表示されます。",
-    "finishBackToHome": "ホームに戻る"
+    "finishBackToHome": "ホームに戻る",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

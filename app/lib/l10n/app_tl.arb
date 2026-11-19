@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "Live na episode · {duration}",
     "deviceCatchingUp": "Humahabol",
     "deviceCatchingUpProgress": "{done} sa {total} min",
-    "deviceRecently": "Kamakailan",
-    "deviceDisconnectedFor": "Nadiskonekta nang {duration}",
     "deviceControls": "Mga Kontrol",
     "homeBackgroundLine": "Gayundin: {items}",
     "deviceOnboardingPressButtonTitle": "Pindutin ang button sa iyong Omi",
@@ -12246,5 +12244,7 @@
     "onTheWayServerWork": "Trabahong iniulat ng server",
     "finishNothingToProcess": "Wala pang ipoproseso.",
     "finishStillProcessing": "Pinoproseso pa. Lalabas ito sa Home.",
-    "finishBackToHome": "Bumalik sa Home"
+    "finishBackToHome": "Bumalik sa Home",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

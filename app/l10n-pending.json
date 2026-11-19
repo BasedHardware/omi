@@ -1,0 +1,6 @@
+{"strings": [
+  {"key": "deviceUploadsWaitingOnServer", "en": "Uploads waiting on the server",
+   "description": "Device Settings row (tappable, opens upload details): some recordings were uploaded but the server has not accepted or processed them yet. Calm status, not an error."},
+  {"key": "deviceUploadsWaitingOnServerSubtitle", "en": "Your audio is safe on your device or phone",
+   "description": "Subtitle under 'Uploads waiting on the server' in Device Settings: reassures that the recorded audio is still stored on the Omi device or the phone, so nothing is lost while the server catches up."}
+]}

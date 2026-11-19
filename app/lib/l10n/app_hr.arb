@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "Epizoda uživo · {duration}",
     "deviceCatchingUp": "Sustiže",
     "deviceCatchingUpProgress": "{done} od {total} min",
-    "deviceRecently": "Nedavno",
-    "deviceDisconnectedFor": "Bez veze {duration}",
     "deviceControls": "Kontrole",
     "homeBackgroundLine": "Također: {items}",
     "deviceOnboardingPressButtonTitle": "Pritisnite gumb na Omiju",
@@ -12246,5 +12244,7 @@
     "onTheWayServerWork": "Rad koji je prijavio poslužitelj",
     "finishNothingToProcess": "Još nema ničega za obradu.",
     "finishStillProcessing": "Još se obrađuje. Pojavit će se na početnoj.",
-    "finishBackToHome": "Natrag na početnu"
+    "finishBackToHome": "Natrag na početnu",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

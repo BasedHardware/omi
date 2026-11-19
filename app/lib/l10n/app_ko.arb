@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "라이브 에피소드 · {duration}",
     "deviceCatchingUp": "따라잡는 중",
     "deviceCatchingUpProgress": "{done}/{total}분",
-    "deviceRecently": "최근",
-    "deviceDisconnectedFor": "{duration} 동안 연결 끊김",
     "deviceControls": "제어",
     "homeBackgroundLine": "그 외: {items}",
     "deviceOnboardingPressButtonTitle": "Omi 버튼을 누르세요",
@@ -4689,5 +4687,7 @@
     "onTheWayServerWork": "서버에서 보고한 작업",
     "finishNothingToProcess": "아직 처리할 내용이 없어요.",
     "finishStillProcessing": "아직 처리 중이에요. 홈에 표시될 거예요.",
-    "finishBackToHome": "홈으로 돌아가기"
+    "finishBackToHome": "홈으로 돌아가기",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

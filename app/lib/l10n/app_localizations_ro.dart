@@ -14554,14 +14554,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Recent';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Deconectat timp de $duration';
-  }
-
-  @override
   String get deviceControls => 'Comenzi';
 
   @override
@@ -15634,4 +15626,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Înapoi la pagina principală';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
 }

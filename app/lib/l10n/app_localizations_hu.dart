@@ -14549,14 +14549,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Nemrég';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration szétkapcsolva';
-  }
-
-  @override
   String get deviceControls => 'Vezérlők';
 
   @override
@@ -15628,4 +15620,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Vissza a Kezdőlapra';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
 }

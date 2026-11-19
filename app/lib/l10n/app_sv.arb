@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Liveavsnitt · {duration}",
     "deviceCatchingUp": "Kommer ikapp",
     "deviceCatchingUpProgress": "{done} av {total} min",
-    "deviceRecently": "Nyligen",
-    "deviceDisconnectedFor": "Frånkopplad i {duration}",
     "deviceControls": "Kontroller",
     "homeBackgroundLine": "Även: {items}",
     "deviceOnboardingPressButtonTitle": "Tryck på knappen på din Omi",
@@ -4689,5 +4687,7 @@
     "onTheWayServerWork": "Arbete rapporterat av servern",
     "finishNothingToProcess": "Inget att bearbeta än.",
     "finishStillProcessing": "Bearbetas fortfarande. Den visas på Hem.",
-    "finishBackToHome": "Tillbaka till Hem"
+    "finishBackToHome": "Tillbaka till Hem",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

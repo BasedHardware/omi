@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "بخش زنده · {duration}",
     "deviceCatchingUp": "در حال همگام شدن",
     "deviceCatchingUpProgress": "{done} از {total} دقیقه",
-    "deviceRecently": "اخیراً",
-    "deviceDisconnectedFor": "قطع اتصال به مدت {duration}",
     "deviceControls": "کنترل‌ها",
     "homeBackgroundLine": "همچنین: {items}",
     "deviceOnboardingPressButtonTitle": "دکمه Omi را فشار دهید",
@@ -12246,5 +12244,7 @@
     "onTheWayServerWork": "کار گزارش‌شده توسط سرور",
     "finishNothingToProcess": "هنوز چیزی برای پردازش نیست.",
     "finishStillProcessing": "هنوز در حال پردازش است. در صفحه اصلی نمایش داده می‌شود.",
-    "finishBackToHome": "بازگشت به صفحه اصلی"
+    "finishBackToHome": "بازگشت به صفحه اصلی",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

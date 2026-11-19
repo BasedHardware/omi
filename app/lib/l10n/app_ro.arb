@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Episod live · {duration}",
     "deviceCatchingUp": "Recuperare",
     "deviceCatchingUpProgress": "{done} din {total} min",
-    "deviceRecently": "Recent",
-    "deviceDisconnectedFor": "Deconectat timp de {duration}",
     "deviceControls": "Comenzi",
     "homeBackgroundLine": "De asemenea: {items}",
     "deviceOnboardingPressButtonTitle": "Apasă butonul de pe Omi",
@@ -4689,5 +4687,7 @@
     "onTheWayServerWork": "Activitate raportată de server",
     "finishNothingToProcess": "Încă nu este nimic de procesat.",
     "finishStillProcessing": "Încă se procesează. Va apărea pe pagina principală.",
-    "finishBackToHome": "Înapoi la pagina principală"
+    "finishBackToHome": "Înapoi la pagina principală",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

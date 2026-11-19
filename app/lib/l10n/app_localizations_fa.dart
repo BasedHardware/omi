@@ -14485,14 +14485,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'اخیراً';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'قطع اتصال به مدت $duration';
-  }
-
-  @override
   String get deviceControls => 'کنترل‌ها';
 
   @override
@@ -15562,4 +15554,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'بازگشت به صفحه اصلی';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
 }

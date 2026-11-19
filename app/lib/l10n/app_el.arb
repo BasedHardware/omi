@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Ζωντανό επεισόδιο · {duration}",
     "deviceCatchingUp": "Συγχρονισμός εκκρεμοτήτων",
     "deviceCatchingUpProgress": "{done} από {total} λεπ.",
-    "deviceRecently": "Πρόσφατα",
-    "deviceDisconnectedFor": "Αποσυνδεδεμένο για {duration}",
     "deviceControls": "Χειριστήρια",
     "homeBackgroundLine": "Επίσης: {items}",
     "deviceOnboardingPressButtonTitle": "Πάτησε το κουμπί στο Omi",
@@ -4689,5 +4687,7 @@
     "onTheWayServerWork": "Εργασία που αναφέρει ο διακομιστής",
     "finishNothingToProcess": "Δεν υπάρχει ακόμα κάτι για επεξεργασία.",
     "finishStillProcessing": "Ακόμα σε επεξεργασία. Θα εμφανιστεί στην Αρχική.",
-    "finishBackToHome": "Πίσω στην Αρχική"
+    "finishBackToHome": "Πίσω στην Αρχική",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

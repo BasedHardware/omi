@@ -4448,8 +4448,6 @@
     "deviceLiveEpisode": "Эпизод в эфире · {duration}",
     "deviceCatchingUp": "Догоняет",
     "deviceCatchingUpProgress": "{done} из {total} мин",
-    "deviceRecently": "Недавно",
-    "deviceDisconnectedFor": "Отключено на {duration}",
     "deviceControls": "Управление",
     "homeBackgroundLine": "Также: {items}",
     "deviceOnboardingPressButtonTitle": "Нажмите кнопку на Omi",
@@ -4724,5 +4722,7 @@
     "onTheWayServerWork": "Работа по данным сервера",
     "finishNothingToProcess": "Пока нечего обрабатывать.",
     "finishStillProcessing": "Ещё обрабатывается. Появится на главной.",
-    "finishBackToHome": "На главную"
+    "finishBackToHome": "На главную",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

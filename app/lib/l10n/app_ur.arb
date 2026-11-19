@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "لائیو قسط · {duration}",
     "deviceCatchingUp": "پیچھے رہ جانے والا شامل ہو رہا ہے",
     "deviceCatchingUpProgress": "{done}/{total} منٹ",
-    "deviceRecently": "حال ہی میں",
-    "deviceDisconnectedFor": "{duration} تک منقطع",
     "deviceControls": "کنٹرولز",
     "homeBackgroundLine": "نیز: {items}",
     "deviceOnboardingPressButtonTitle": "اپنے Omi کا بٹن دبائیں",
@@ -12246,5 +12244,7 @@
     "onTheWayServerWork": "سرور کی بتائی ہوئی کارروائی",
     "finishNothingToProcess": "ابھی پروسیس کرنے کے لیے کچھ نہیں ہے۔",
     "finishStillProcessing": "ابھی پروسیس ہو رہا ہے۔ یہ ہوم پر نظر آئے گا۔",
-    "finishBackToHome": "ہوم پر واپس جائیں"
+    "finishBackToHome": "ہوم پر واپس جائیں",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

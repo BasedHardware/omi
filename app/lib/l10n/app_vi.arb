@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Tập trực tiếp · {duration}",
     "deviceCatchingUp": "Đang bắt kịp",
     "deviceCatchingUpProgress": "{done}/{total} phút",
-    "deviceRecently": "Gần đây",
-    "deviceDisconnectedFor": "Mất kết nối {duration}",
     "deviceControls": "Điều khiển",
     "homeBackgroundLine": "Ngoài ra: {items}",
     "deviceOnboardingPressButtonTitle": "Nhấn nút trên Omi của bạn",
@@ -4689,5 +4687,7 @@
     "onTheWayServerWork": "Công việc do máy chủ báo cáo",
     "finishNothingToProcess": "Chưa có gì để xử lý.",
     "finishStillProcessing": "Vẫn đang xử lý. Nó sẽ xuất hiện ở Trang chủ.",
-    "finishBackToHome": "Về Trang chủ"
+    "finishBackToHome": "Về Trang chủ",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

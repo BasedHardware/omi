@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "நேரலை அத்தியாயம் · {duration}",
     "deviceCatchingUp": "பின்தங்கியதைச் சேர்க்கிறது",
     "deviceCatchingUpProgress": "{done}/{total} நிமி.",
-    "deviceRecently": "சமீபத்தில்",
-    "deviceDisconnectedFor": "{duration} இணைப்பு துண்டிக்கப்பட்டது",
     "deviceControls": "கட்டுப்பாடுகள்",
     "homeBackgroundLine": "மேலும்: {items}",
     "deviceOnboardingPressButtonTitle": "உங்கள் Omi பொத்தானை அழுத்துங்கள்",
@@ -12246,5 +12244,7 @@
     "onTheWayServerWork": "சேவையகம் தெரிவித்த பணி",
     "finishNothingToProcess": "இன்னும் செயலாக்க எதுவும் இல்லை.",
     "finishStillProcessing": "இன்னும் செயலாக்கப்படுகிறது. இது முகப்பில் தோன்றும்.",
-    "finishBackToHome": "முகப்புக்குத் திரும்பு"
+    "finishBackToHome": "முகப்புக்குத் திரும்பு",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

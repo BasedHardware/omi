@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Episodio dal vivo · {duration}",
     "deviceCatchingUp": "Recupero in corso",
     "deviceCatchingUpProgress": "{done} di {total} min",
-    "deviceRecently": "Di recente",
-    "deviceDisconnectedFor": "Disconnesso per {duration}",
     "deviceControls": "Controlli",
     "homeBackgroundLine": "Inoltre: {items}",
     "deviceOnboardingPressButtonTitle": "Premi il pulsante del tuo Omi",
@@ -4689,5 +4687,7 @@
     "onTheWayServerWork": "Lavoro segnalato dal server",
     "finishNothingToProcess": "Ancora niente da elaborare.",
     "finishStillProcessing": "Ancora in elaborazione. Apparirà nella Home.",
-    "finishBackToHome": "Torna alla Home"
+    "finishBackToHome": "Torna alla Home",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

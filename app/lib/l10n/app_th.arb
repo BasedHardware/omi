@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "ตอนสด · {duration}",
     "deviceCatchingUp": "กำลังตามให้ทัน",
     "deviceCatchingUpProgress": "{done} จาก {total} นาที",
-    "deviceRecently": "ล่าสุด",
-    "deviceDisconnectedFor": "ตัดการเชื่อมต่อ {duration}",
     "deviceControls": "การควบคุม",
     "homeBackgroundLine": "นอกจากนี้: {items}",
     "deviceOnboardingPressButtonTitle": "กดปุ่มบน Omi ของคุณ",
@@ -4689,5 +4687,7 @@
     "onTheWayServerWork": "งานที่เซิร์ฟเวอร์รายงาน",
     "finishNothingToProcess": "ยังไม่มีอะไรให้ประมวลผล",
     "finishStillProcessing": "ยังประมวลผลอยู่ จะแสดงที่หน้าหลัก",
-    "finishBackToHome": "กลับไปหน้าหลัก"
+    "finishBackToHome": "กลับไปหน้าหลัก",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

@@ -14491,14 +14491,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Gần đây';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Mất kết nối $duration';
-  }
-
-  @override
   String get deviceControls => 'Điều khiển';
 
   @override
@@ -15570,4 +15562,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Về Trang chủ';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
 }

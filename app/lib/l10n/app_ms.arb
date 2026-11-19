@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Episod langsung · {duration}",
     "deviceCatchingUp": "Mengejar",
     "deviceCatchingUpProgress": "{done} daripada {total} min",
-    "deviceRecently": "Baru-baru ini",
-    "deviceDisconnectedFor": "Terputus selama {duration}",
     "deviceControls": "Kawalan",
     "homeBackgroundLine": "Juga: {items}",
     "deviceOnboardingPressButtonTitle": "Tekan butang pada Omi anda",
@@ -4689,5 +4687,7 @@
     "onTheWayServerWork": "Kerja yang dilaporkan pelayan",
     "finishNothingToProcess": "Belum ada apa-apa untuk diproses.",
     "finishStillProcessing": "Masih diproses. Ia akan muncul di Laman Utama.",
-    "finishBackToHome": "Kembali ke Laman Utama"
+    "finishBackToHome": "Kembali ke Laman Utama",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }

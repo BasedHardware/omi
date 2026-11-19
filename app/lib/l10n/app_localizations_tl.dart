@@ -14605,14 +14605,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Kamakailan';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Nadiskonekta nang $duration';
-  }
-
-  @override
   String get deviceControls => 'Mga Kontrol';
 
   @override
@@ -15692,4 +15684,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Bumalik sa Home';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
 }

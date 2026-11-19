@@ -14504,14 +14504,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'حال ہی میں';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration تک منقطع';
-  }
-
-  @override
   String get deviceControls => 'کنٹرولز';
 
   @override
@@ -15581,4 +15573,10 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'ہوم پر واپس جائیں';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
 }

@@ -4448,8 +4448,6 @@
     "deviceLiveEpisode": "Canlı bölüm · {duration}",
     "deviceCatchingUp": "Yetişiyor",
     "deviceCatchingUpProgress": "{done}/{total} dk",
-    "deviceRecently": "Son zamanlarda",
-    "deviceDisconnectedFor": "{duration} bağlantı kesildi",
     "deviceControls": "Kontroller",
     "homeBackgroundLine": "Ayrıca: {items}",
     "deviceOnboardingPressButtonTitle": "Omi'nin düğmesine bas",
@@ -4724,5 +4722,7 @@
     "onTheWayServerWork": "Sunucunun bildirdiği işler",
     "finishNothingToProcess": "Henüz işlenecek bir şey yok.",
     "finishStillProcessing": "Hâlâ işleniyor. Ana sayfada görünecek.",
-    "finishBackToHome": "Ana Sayfaya Dön"
+    "finishBackToHome": "Ana Sayfaya Dön",
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone"
 }
