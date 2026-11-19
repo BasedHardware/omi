@@ -2,7 +2,6 @@
 
 from collections.abc import Awaitable, Callable
 import json
-import os
 from typing import Any, ParamSpec, TypeVar
 from uuid import UUID
 
@@ -10,6 +9,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import Counter
 
+from config.refactor_modes import default_on
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.credentials import CredentialContext
 from llm_gateway.gateway.idempotency_store import IdempotencyError, Operation, Store, StoredResponse
@@ -27,7 +27,7 @@ T = TypeVar('T')
 
 
 def _key(value: str) -> str:
-    if os.getenv('LLM_GATEWAY_IDEMPOTENCY_ENABLED', 'on').strip().lower() in {'off', 'false', '0', 'no'}:
+    if not default_on('LLM_GATEWAY_IDEMPOTENCY_ENABLED'):
         raise IdempotencyError(503, 'idempotency_disabled')
     try:
         if len(value) == 36 and str(UUID(value)) == value:
