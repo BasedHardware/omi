@@ -42,15 +42,22 @@ type Workers struct {
 	stop   context.CancelFunc
 	done   <-chan struct{}
 	// spawn hands work to the supervisor, the one goroutine that holds the workers' context.
-	spawn chan func(context.Context)
+	spawn          chan func(context.Context)
+	schedule       chan func(context.Context)
+	stopClaims     context.CancelFunc
+	admissionsDone <-chan struct{}
+	finished       <-chan struct{}
+	running        sync.WaitGroup
+	active         map[lease]struct{}
 
-	mu       sync.Mutex
-	stopping bool
-	pending  map[string]struct{}
-	wg       sync.WaitGroup
+	mu          sync.Mutex
+	stopping    bool
+	handbackErr error
+	pending     map[string]struct{}
+	wg          sync.WaitGroup
 }
 
-// Start launches the dispatchers. They run until ctx is cancelled or Stop is called.
+// Start launches the dispatchers. Cancellation, Stop or Drain closes admission.
 // handlers maps a declared kind's name to its handler; a replica may run a subset of the
 // declared kinds. report receives errors that are not part of normal operation; it must
 // not block.
@@ -67,40 +74,70 @@ func Start(ctx context.Context, store *Store, handlers map[string]Handler, repor
 	}
 	slices.Sort(names)
 	ctx, cancel := context.WithCancel(ctx)
+	claimCtx, stopClaims := context.WithCancel(ctx)
+	admissionsDone, finished := make(chan struct{}), make(chan struct{})
 	w := &Workers{
 		// The map is copied: the caller cannot change the registry after start.
 		store: store, handlers: maps.Clone(handlers), can: store.kinds.pairs(names), report: report,
-		slots: make(chan struct{}, store.cfg.Workers), stop: cancel, done: ctx.Done(),
+		slots: make(chan struct{}, store.cfg.Workers), stop: cancel, done: claimCtx.Done(),
+		stopClaims: stopClaims, admissionsDone: admissionsDone, finished: finished,
+		schedule: make(chan func(context.Context)), active: make(map[lease]struct{}),
 		spawn: make(chan func(context.Context)), pending: make(map[string]struct{}),
 	}
-	w.wg.Go(func() { w.supervise(ctx) })
+	w.wg.Go(func() { w.supervise(claimCtx, ctx) })
 	for i := range min(dispatchers, store.cfg.Workers) {
-		w.wg.Go(func() { w.dispatch(ctx, i == 0) })
+		w.wg.Go(func() { w.dispatch(claimCtx, i == 0) })
 	}
+	go func() {
+		w.wg.Wait()
+		close(admissionsDone)
+		w.running.Wait()
+		close(finished)
+	}()
 	return w, nil
 }
 
 // supervise starts every goroutine that must outlive the request that asked for it, so each
 // one runs under the workers' context and is cancelled by Stop.
-func (w *Workers) supervise(ctx context.Context) {
+func (w *Workers) supervise(claimCtx, workCtx context.Context) {
 	for {
 		select {
-		case <-ctx.Done():
+		case <-claimCtx.Done():
 			return
 		case fn := <-w.spawn:
-			w.wg.Go(func() { fn(ctx) })
+			fn(workCtx)
+		case fn := <-w.schedule:
+			fn(claimCtx)
 		}
 	}
 }
 
-// start asks the supervisor to run fn. It reports false when the workers are stopping.
-func (w *Workers) start(fn func(context.Context)) bool {
+// submit serializes admission with shutdown. The supervisor always acknowledges a
+// received request, including one it received just as the admission context ended.
+func (w *Workers) submit(target chan func(context.Context), start func(context.Context)) bool {
+	accepted := make(chan bool, 1)
 	select {
-	case w.spawn <- fn:
-		return true
+	case target <- func(ctx context.Context) {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		select {
+		case <-w.done:
+			accepted <- false
+		default:
+			start(ctx)
+			accepted <- true
+		}
+	}:
+		return <-accepted
 	case <-w.done:
 		return false
 	}
+}
+
+func (w *Workers) scheduleClaim(fn func(context.Context)) bool {
+	return w.submit(w.schedule, func(ctx context.Context) {
+		w.wg.Go(func() { fn(ctx) })
+	})
 }
 
 // Stop cancels running handlers and waits for them to return. A handler that ignores its
@@ -111,6 +148,7 @@ func (w *Workers) Stop() {
 	w.stop()
 	w.mu.Unlock()
 	w.wg.Wait()
+	w.running.Wait()
 }
 
 // take reserves a run slot. It returns ErrStopped when the workers are shutting down and
@@ -140,9 +178,17 @@ func (w *Workers) release() { <-w.slots }
 func (w *Workers) launch(r *Run) bool {
 	// The claim selected only kinds this replica has a handler for.
 	handler := w.handlers[r.job.Kind]
-	return w.start(func(ctx context.Context) {
-		defer w.release()
-		r.execute(ctx, handler, w.report)
+	return w.submit(w.spawn, func(ctx context.Context) {
+		w.active[r.lease] = struct{}{}
+		w.running.Go(func() {
+			defer w.release()
+			defer func() {
+				w.mu.Lock()
+				delete(w.active, r.lease)
+				w.mu.Unlock()
+			}()
+			r.execute(ctx, handler, w.report)
+		})
 	})
 }
 
@@ -154,12 +200,33 @@ func (w *Workers) Resume(ctx context.Context, key, secret string) error {
 	if secret == "" {
 		return ErrState
 	}
+	// The claim belongs to both the caller and the admission lifecycle. A drain
+	// interrupts a direct SELECT waiting on a row lock and joins its handback.
+	result := make(chan error, 1)
+	if !w.scheduleClaim(func(claimCtx context.Context) {
+		reqCtx, cancel := context.WithCancel(ctx)
+		stop := context.AfterFunc(claimCtx, cancel)
+		defer cancel()
+		defer stop()
+		result <- w.resume(reqCtx, key, secret)
+	}) {
+		return ErrStopped
+	}
+	return <-result
+}
+
+func (w *Workers) resume(ctx context.Context, key, secret string) error {
 	if err := w.take(ctx); err != nil {
 		return err
 	}
 	r, err := w.store.claim(ctx, claimRequest{key: key, secret: secret, can: w.can})
 	if err != nil {
 		w.release()
+		select {
+		case <-w.done:
+			return errors.Join(ErrStopped, err)
+		default:
+		}
 		if later, ok := errors.AsType[*notDueError](err); ok {
 			return w.resumeAt(key, secret, later.at)
 		}
@@ -169,7 +236,7 @@ func (w *Workers) Resume(ctx context.Context, key, secret string) error {
 		w.release()
 		// Stop began between the claim and the launch: hand the claim back, so the caller
 		// is not told "stopped" about a job that was in fact leased and charged.
-		return errors.Join(ErrStopped, r.unclaim(ctx))
+		return errors.Join(ErrStopped, w.refund(ctx, r))
 	}
 	return nil
 }
@@ -178,7 +245,7 @@ func (w *Workers) resumeAt(key, secret string, due time.Time) error {
 	if err := w.reserve(key); err != nil {
 		return err
 	}
-	started := w.start(func(ctx context.Context) {
+	started := w.scheduleClaim(func(ctx context.Context) {
 		defer w.forget(key)
 		select {
 		case <-w.store.clock.After(due.Sub(w.store.clock.Now())):
@@ -224,9 +291,21 @@ func (w *Workers) forget(key string) {
 // handBack returns a claim whose launch lost to Stop, so the job is not left leased with an
 // attempt spent on work that never started.
 func (w *Workers) handBack(ctx context.Context, r *Run) {
-	if err := r.unclaim(ctx); err != nil && !errors.Is(err, ErrLease) {
+	if err := w.refund(ctx, r); err != nil {
 		w.report(err)
 	}
+}
+
+// refund records a failed handback for Drain as well as the immediate caller.
+func (w *Workers) refund(ctx context.Context, r *Run) error {
+	err := r.unclaim(ctx)
+	if err == nil || errors.Is(err, ErrLease) {
+		return nil
+	}
+	w.mu.Lock()
+	w.handbackErr = errors.Join(w.handbackErr, err)
+	w.mu.Unlock()
+	return err
 }
 
 // resumeNow claims a scheduled resume when its time comes. A busy lock puts the claim off,

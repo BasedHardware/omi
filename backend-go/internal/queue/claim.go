@@ -122,7 +122,9 @@ func (s *Store) claim(ctx context.Context, req claimRequest) (*Run, error) {
 		run   *Run
 		after verdict
 	)
-	err := pg.InTx(ctx, s.pool, func(tx pgx.Tx) error {
+	// Once the token is issued, collect the commit acknowledgement even if admission
+	// stops. The launcher then knows exactly which claim to refund.
+	err := pg.InTxWithBoundedCommit(ctx, s.pool, 3*time.Second, func(tx pgx.Tx) error {
 		var err error
 		run, after, err = s.claimTx(ctx, tx, req)
 		return err
