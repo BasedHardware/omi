@@ -24,7 +24,12 @@ from config.policy.kill_switches import kill_switch
 from database import conversation_batch_purge_jobs as jobs
 from database import legal_holds, rpc_deadline
 from database._client import get_firestore_client, run_transactional
-from database.batch_pipeline_conversation_purge import PurgeCheckpointed, PurgeIntentMissing, purge_conversations
+from database.batch_pipeline_conversation_purge import (
+    ArtifactUploadPending,
+    PurgeCheckpointed,
+    PurgeIntentMissing,
+    purge_conversations,
+)
 from database.batch_pipeline_purge import NAMESPACES
 from utils.observability.fallback import record_fallback
 
@@ -454,6 +459,7 @@ class ScanProgress(jobs.RunProgress):
                 'held': jobs.HOLD_RECHECK_SECONDS,
                 'failed': jobs.REDRIVE_SECONDS,
                 'busy': jobs.BUSY_RETRY_SECONDS,
+                'artifact_pending': jobs.ARTIFACT_RETRY_SECONDS,
                 'checkpointed': 0,
             }[outcome]
             # Only the leader becomes dispatchable. Followers retain ordinary,
@@ -468,7 +474,7 @@ class ScanProgress(jobs.RunProgress):
                     'lease_until': None,
                     'due_at': _now() + timedelta(seconds=wait),
                     'last_outcome': outcome,
-                    **({'attempts': 0} if outcome in {'checkpointed', 'busy'} else {}),
+                    **({'attempts': 0} if outcome in {'checkpointed', 'busy', 'artifact_pending'} else {}),
                 },
             )
             return False
@@ -541,6 +547,8 @@ def run_job(
             return 'superseded'
         except legal_holds.LegalHoldActive:
             return hand_off('held')
+        except ArtifactUploadPending:
+            return hand_off('artifact_pending')
         except PurgeCheckpointed:
             return hand_off('checkpointed')
         except BaseException as error:
