@@ -15,3 +15,5 @@ With the matching collector revision serving, compare `sum by (outcome) (increas
 ## Custody
 
 Assignment still runs authenticated staging reads, source generation and digest checks, frame and range validation, owner and conversation binding, and live authorization, privacy and deletion checks. The [projection replay contract](../../listen_pusher_pipeline.mdx#batch-projection-contention-and-replay) still governs retries. A speculative result grants no custody or deletion authority.
+
+The [focused assignment tests](../../../tests/unit/test_batch_pipeline_projection_native_audio_prefetch.py) cover full verification, staging and source tampering, mid-read privacy revocation and eager rollback. The [readback runbook](../../runbooks/private-sync-retained-projection-prefetch.md) records the production checks.
