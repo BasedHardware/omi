@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import unittest
 
-from utils.conversations.v3 import outline, planner
+from utils.conversations.v3 import outline, planner, service
 
 
 class FragmentationRepro(unittest.TestCase):
@@ -165,6 +165,16 @@ class FragmentationRepro(unittest.TestCase):
         def segment(start, end):
             return {'id': str(start), 'start': start, 'end': end, 'text': f'synthetic speech {start}'}
 
+        def plan(recordings, existing, now):
+            groups = outline.stretches(list(recordings.values()), origin + timedelta(seconds=now))
+            windows = planner.preserve_finished_windows(planner.windows(groups, [[entry]]), existing, recordings)
+            return groups, windows
+
+        def claim(recording, row):
+            recording['claims'].extend(
+                {'conversation_id': row['id'], **span} for span in row['_v3_claims'][recording['id']]
+            )
+
         live = {
             'id': 'live',
             'started_at': origin,
@@ -172,15 +182,24 @@ class FragmentationRepro(unittest.TestCase):
             'audio_files': [{'id': 'live-file', 'duration': 400}],
             'transcript_segments': [segment(60, 70), segment(90, 100)],
         }
-        groups = outline.stretches([live], origin + timedelta(seconds=400))
-        published = planner.build('synthetic', planner.windows(groups, [[entry]])[0], {'live': live}, None)
+        _, windows = plan({'live': live}, {}, 400)
+        published = planner.build('synthetic', windows[0], {'live': live}, None)
         assert published['status'] == 'processing'
         published['status'] = 'completed'
-        live['claims'] = [{'conversation_id': published['id'], **span} for span in published['_v3_claims']['live']]
+        claim(live, published)
+        held = list(published['_v3_claims']['live'])
 
-        # Speech of a second capture arrives late around and inside the published row, and the live
-        # recording keeps going, so the stretch is open again.
+        # The live recording keeps going: one open row after the published one.
         live['transcript_segments'].append(segment(370, 380))
+        existing = {published['id']: published}
+        _, windows = plan({'live': live}, existing, 385)
+        assert [(w.get('existing_id'), w['finished']) for w in windows] == [(published['id'], True), (None, False)]
+        open_row = planner.build('synthetic', windows[1], {'live': live}, None)
+        assert open_row['status'] == 'in_progress'
+        claim(live, open_row)
+        existing[open_row['id']] = open_row
+
+        # Speech of a second capture arrives late, around and inside the published row.
         synced = {
             'id': 'synced',
             'started_at': origin,
@@ -188,43 +207,37 @@ class FragmentationRepro(unittest.TestCase):
             'transcript_segments': [segment(0, 10), segment(75, 85), segment(200, 210)],
         }
         recordings = {'live': live, 'synced': synced}
-        groups = outline.stretches(list(recordings.values()), origin + timedelta(seconds=390))
+        groups, windows = plan(recordings, existing, 390)
         assert [group['finished'] for group in groups] == [False]
-        existing = {published['id']: published}
-        windows = planner.preserve_finished_windows(planner.windows(groups, [[entry]]), existing, recordings)
-        assert [(window.get('existing_id'), window['finished']) for window in windows] == [
-            (None, False),
+        assert [(w.get('existing_id'), w['finished']) for w in windows] == [
+            (None, True),
             (published['id'], True),
+            (None, True),
+            (None, False),
         ]
-        # No speech is lost or moved: the open window holds every line the published row does not.
-        assert sorted(line['start'] for window in windows for line in window['lines']) == sorted(
+        # No speech is lost or moved, and the open edge holds the stretch's latest line.
+        assert sorted(line['start'] for w in windows for line in w['lines']) == sorted(
             line['start'] for line in groups[0]['lines']
         )
-        assert [line['start'] - origin for line in windows[1]['lines']] == [
-            timedelta(seconds=60),
-            timedelta(seconds=90),
-        ]
-        rows = [
-            planner.build('synthetic', window, recordings, existing.get(window.get('existing_id')))
-            for window in windows
-        ]
-        # commit_projection refuses more than one in-progress row.
-        assert [row['status'] for row in rows] == ['in_progress', 'processing']
-        # The open window claims only unpublished audio of the live recording: no duplicate playback.
-        assert rows[0]['_v3_claims']['live'] == [
+        assert windows[-1]['lines'][-1] is groups[0]['lines'][-1]
+
+        rows, used = [], {published['id']}
+        for window in windows:
+            prior = existing.get(window.get('existing_id')) or service._match(window, existing, used)
+            if prior:
+                used.add(prior['id'])
+            rows.append(planner.build('synthetic', window, recordings, prior))
+        # commit_projection refuses more than one in-progress row; the stored open row keeps its id.
+        assert [row['status'] == 'in_progress' for row in rows] == [False, False, False, True]
+        assert rows[-1]['id'] == open_row['id']
+        assert len({row['id'] for row in rows}) == 4
+        # The retained row keeps its claims and audio; the open edge claims only unpublished audio.
+        assert rows[1]['_v3_claims']['live'] == held
+        assert rows[1]['recording_pieces'] == published['recording_pieces']
+        assert rows[-1]['_v3_claims']['live'] == [
             {'start': origin + timedelta(seconds=370), 'end': origin + timedelta(seconds=380)}
         ]
-        assert [(piece['start'], piece['end']) for piece in rows[0]['recording_pieces']] == [(370, 380)]
-
-        # Once the stretch goes quiet, the finished window splits around the published row as before.
-        groups = outline.stretches(list(recordings.values()), origin + timedelta(seconds=700))
-        finished = planner.preserve_finished_windows(planner.windows(groups, [[entry]]), existing, recordings)
-        assert [(window.get('existing_id'), window['finished']) for window in finished] == [
-            (None, True),
-            (published['id'], True),
-            (None, True),
-            (None, True),
-        ]
+        assert [(piece['start'], piece['end']) for piece in rows[-1]['recording_pieces']] == [(370, 380)]
 
     def test_only_the_last_stretch_stays_open(self):
         # Production shapes (2026-11-19): a backlog page's continuation marker held every stretch that
