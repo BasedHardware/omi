@@ -158,3 +158,43 @@ def test_seed_plan_uses_production_ids_namespaces_and_skips_dead_rows():
         index.query(vector=FakeEmbedder(32).embed(['Order seeds'])[0], top_k=1, namespace='ns4')['matches'][0]['id']
         == f'{UID}-ai-t1'
     )
+
+
+class _Status(Exception):
+    def __init__(self, status):
+        super().__init__(f'http {status}')
+        self.response = type('R', (), {'status_code': status})()
+
+
+class _PoisonEmbedder(FakeEmbedder):
+    """Fails with ``status`` whenever the batch contains ``poison`` (a real day saw one such batch)."""
+
+    def __init__(self, poison, status=502):
+        super().__init__(dimension=16)
+        self.poison = poison
+        self.status = status
+
+    def embed(self, texts):
+        if self.poison in texts:
+            raise _Status(self.status)
+        return super().embed(texts)
+
+
+def test_cached_embedder_bisects_a_provider_failure_to_the_bad_text(tmp_path):
+    inner = _PoisonEmbedder('bad text')
+    embedder = CachedEmbedder(inner, tmp_path)
+    texts = ['alpha', 'beta', 'bad text', 'gamma', 'delta']
+    vectors = embedder.embed(texts)
+    assert len(vectors) == 5 and embedder.failed == 1
+    assert vectors[0] == FakeEmbedder(16).embed(['alpha'])[0]
+    # the placeholder is a deterministic unit vector, not cached, near-orthogonal to real ones
+    assert abs(sum(v * v for v in vectors[2]) - 1.0) < 1e-9
+    assert vectors[2] == CachedEmbedder(_PoisonEmbedder('bad text'), tmp_path).embed(['bad text'])[0]
+    assert not any(p.name.startswith(input_hash(embedder.model, 'bad text')) for p in tmp_path.rglob('*.json'))
+
+
+def test_cached_embedder_never_swallows_a_spend_cap_or_client_error(tmp_path):
+    for status in (402, 400):
+        embedder = CachedEmbedder(_PoisonEmbedder('x', status=status), tmp_path)
+        with pytest.raises(_Status):
+            embedder.embed(['a', 'x'])

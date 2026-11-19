@@ -20,6 +20,7 @@ from __future__ import annotations
 from contextlib import ExitStack
 import hashlib
 import json
+import logging
 import math
 import os
 from pathlib import Path
@@ -28,6 +29,7 @@ import threading
 from typing import Any, Protocol, Sequence
 
 _TOKEN = re.compile(r'[a-z0-9]+')
+logger = logging.getLogger(__name__)
 
 
 class Embedder(Protocol):
@@ -86,6 +88,33 @@ class ProductEmbedder:
         return [list(map(float, row)) for row in self._client.embed_documents(list(texts))]
 
 
+def _provider_side_failure(error: BaseException) -> bool:
+    """True for an upstream 5xx or a transport failure; False for a cap stop (402) or a 4xx."""
+    response = getattr(error, 'response', None)
+    status = getattr(response, 'status_code', None)
+    if isinstance(status, int):
+        return status >= 500
+    return isinstance(error, (OSError, TimeoutError)) or type(error).__name__ in {
+        'ConnectError',
+        'ReadTimeout',
+        'RemoteProtocolError',
+    }
+
+
+def placeholder_vector(key: str, dimension: int) -> list[float]:
+    """A deterministic unit vector from ``key``: near-orthogonal to real embeddings in high
+    dimension, so a text without a real vector neither surfaces in nor distorts retrieval."""
+    values: list[float] = []
+    counter = 0
+    while len(values) < dimension:
+        digest = hashlib.sha256(f'{key}:{counter}'.encode()).digest()
+        values.extend((byte - 127.5) for byte in digest)
+        counter += 1
+    values = values[:dimension]
+    norm = math.sqrt(sum(v * v for v in values)) or 1.0
+    return [v / norm for v in values]
+
+
 def input_hash(model: str, text: str) -> str:
     return hashlib.sha256(json.dumps([model, text], ensure_ascii=False).encode('utf-8')).hexdigest()
 
@@ -102,6 +131,7 @@ class CachedEmbedder:
         self._lock = threading.Lock()
         self.hits = 0
         self.misses = 0
+        self.failed = 0  # texts the provider refused even alone; they got a placeholder vector
 
     def _path(self, key: str) -> Path | None:
         if self.cache_dir is None:
@@ -140,15 +170,39 @@ class CachedEmbedder:
             self.hits += len(texts) - len(missing)
             self.misses += len(missing)
         if missing:
-            fresh = self.inner.embed([texts[i] for i in missing])
+            fresh = self._embed_resilient([texts[i] for i in missing])
             if len(fresh) != len(missing):
                 raise RuntimeError('embedder returned the wrong number of vectors')
             for i, values in zip(missing, fresh):
+                if values is None:  # provider refused this one text every time: placeholder, not cached
+                    result[i] = placeholder_vector(keys[i], self.dimension)
+                    continue
                 if len(values) != self.dimension:
                     raise RuntimeError(f'embedder returned dimension {len(values)}, expected {self.dimension}')
                 self._put(keys[i], values)
                 result[i] = values
         return [list(row) for row in result if row is not None]
+
+    def _embed_resilient(self, texts: list[str]) -> list[list[float] | None]:
+        """Embed ``texts``; on a provider-side failure, bisect to isolate the texts that fail.
+
+        A real day hit an OpenAI 5xx that repeated on one batch while every other batch
+        succeeded. Halving keeps the good texts' real vectors; a single text that still fails
+        gets ``None`` and is counted in ``failed``. Spend-cap stops and client errors are
+        re-raised untouched (only server-side failures are bisected).
+        """
+        try:
+            return list(self.inner.embed(texts))
+        except Exception as error:
+            if not _provider_side_failure(error):
+                raise
+            if len(texts) == 1:
+                with self._lock:
+                    self.failed += 1
+                logger.warning('pipeline_lab_embedding_failed items=1 error=%s', type(error).__name__)
+                return [None]
+        mid = len(texts) // 2
+        return self._embed_resilient(texts[:mid]) + self._embed_resilient(texts[mid:])
 
 
 class LangchainEmbeddingsAdapter:

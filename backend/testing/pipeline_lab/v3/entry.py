@@ -91,6 +91,11 @@ def run(root: Path, run_id: str, engine: str) -> dict[str, Any]:
             **options,
         )
         result = asyncio.run(replay_v3(spec))
+        failed = getattr(embedder, 'failed', 0)
+        if failed:
+            result.setdefault('warnings', []).append(
+                f'embeddings: {failed} text(s) refused by the provider even alone; placeholder vectors used'
+            )
     else:
         raise ValueError(f'unknown v3 engine {engine!r}')
     view = build_baseline(run_dir, store.baseline_dir(day.day_id), conversations_file=V3_BASELINE)
