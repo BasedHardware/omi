@@ -2666,6 +2666,9 @@ def test_go_queue_erase_gates_data_wipe_after_billing(monkeypatch, workerd_down,
         monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', lambda *args, **kwargs: True)
     monkeypatch.setattr(account_deletion, 'renew_job_run_lock', lambda _key, _token, *_ttl: True)
     monkeypatch.setattr(account_deletion, 'assert_destructive_gate_still_ours', MagicMock())
+    mark_remote = MagicMock()
+    monkeypatch.setattr(account_deletion, 'mark_remote_erasure', mark_remote)
+    monkeypatch.setattr(account_deletion.deletion_marker_db, 'account_deletion_firestore_client', lambda: object())
     monkeypatch.setattr(
         account_deletion, '_cancel_subscription_for_account_deletion', lambda uid: seen.append('billing')
     )
@@ -2676,7 +2679,8 @@ def test_go_queue_erase_gates_data_wipe_after_billing(monkeypatch, workerd_down,
         owns_claim()
         seen.append('erase')
         if workerd_down:
-            raise RuntimeError('unavailable')
+            remote_inflight(True)
+            raise RuntimeError('unknown remote outcome')
 
     monkeypatch.setattr(account_deletion, 'require_committed_erase', barrier)
     result = account_deletion.background_wipe_user_data(
@@ -2685,6 +2689,9 @@ def test_go_queue_erase_gates_data_wipe_after_billing(monkeypatch, workerd_down,
     assert result is (not workerd_down)
     assert seen == (['billing', 'erase'] if workerd_down else ['billing', 'erase', 'agent_vm'])
     if workerd_down:
+        assert mark_remote.call_args is not None
+        assert mark_remote.call_args.kwargs['inflight'] is True
+        account_deletion.finish_destructive_operation.assert_not_called()
         account_deletion.auth.delete_account.assert_not_called()
         account_deletion.users_db.delete_user_data.assert_not_called()
         account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()

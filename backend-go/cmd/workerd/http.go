@@ -113,5 +113,5 @@ func listenErase(server *http.Server, cfg eraseConfig, ended chan<- error) {
 		ended <- nil
 		return
 	}
-	ended <- errors.New("queue erase TLS listener failed")
+	ended <- fmt.Errorf("queue erase TLS listener failed: %w", err)
 }

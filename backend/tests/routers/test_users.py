@@ -162,6 +162,7 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
         if fn is users_router.try_acquire_job_run_lock:
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
+            assert kwargs == {'expected_job_id': 'job-1'}
             return 'claimed'
         if fn is users_router.release_job_run_lock:
             return None

@@ -14,13 +14,15 @@ receivers continue to fence late writes after a queue database session disappear
 
 1. Ship with `GO_QUEUE_ERASE_REQUIRED=false` (the default in every environment). Existing
    deletion paths still run without contacting Go. Configure the private HTTPS listener
-   and give it the authoritative marker project and normal queue access.
+   and give it the authoritative marker project and normal queue access. Omit
+   `ERASE_PORT` when the listener is disabled. An explicitly empty port is invalid.
 2. Lane B owns the queue migration and the separately applied recovery access migration.
    David must approve the new recovery role before any access change. After approval,
    provision the environment-specific login or IAM binding for the EXECUTE-only role,
    supply `GO_QUEUE_ERASE_RECOVERY_DATABASE_URL` via an approved secret binding and set
    `GO_QUEUE_ERASE_RECOVERY_SCHEMA` to the schema used by workerd. An absent recovery URL
-   disables recovery. Verify both paths target the same queue using a synthetic tenant.
+   disables recovery. Both Lane B dependencies must reach main before merging this
+   barrier. Verify both paths target the same queue using a synthetic tenant.
 3. Wire aggregate readback and paging in the environment as described below. Exercise both
    erase paths and a workerd outage with synthetic tenants. Confirm the armed receipt and
    wipe-start timestamp ordering. The queue and Firestore fences must both be active.
@@ -43,10 +45,12 @@ arming and before the first data wipe step, and the overdue pending count. The c
 the trailing seven days, excluding the 15-minute grace for measurement. Empty cohorts
 publish a null ratio. Pending and failed generations count as misses once mature.
 
-Page the deletion owner on `go_queue_erase_readback` with positive `overdue_pending` or
-`met < eligible`, on
-`go_queue_erase_page` for an authorization or generation failure, and when scheduled
-readback goes missing. Acceptance is a 100% ratio with a visible numerator and denominator.
+Page the deletion owner for positive `overdue_pending`, `met < eligible`, a missing
+scheduled readback, or `go_queue_erase_page` on a rejected attempt. For a rejection,
+correct the listener TLS or workload identity, database permissions, or marker authority
+reported by the failing component, then replay the same current generation through the
+deletion reconciler. A rejection on a retry cannot settle the outcome of an earlier
+attempt. Keep its legal-hold gate fenced until the same operation has a committed receipt. Acceptance is a 100% ratio with a visible numerator and denominator.
 A shared Postgres outage keeps the wipe pending. Restore or fail over the queue store,
 preserve or reapply erasure tombstones before restoring worker traffic, and replay the
 same barrier. Neither time nor a workerd restart is an erase receipt.
