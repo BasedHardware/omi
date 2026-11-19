@@ -46,11 +46,11 @@ def test_gap_and_lock_deadlines_are_independent():
     assert ready['outline_ready'] and not ready['finished']
 
 
-def _locked_pair():
+def _locked_pair(at=AT):
     from utils.conversations.v3 import planner
 
-    left, right = AT, AT + timedelta(seconds=30)
-    middle, end = AT + timedelta(seconds=10), AT + timedelta(seconds=20)
+    left, right = at, at + timedelta(seconds=30)
+    middle, end = at + timedelta(seconds=10), at + timedelta(seconds=20)
     segments = [
         {'id': 'a', 'start': 0, 'end': 20, 'text': 'first synthetic segment'},
         {'id': 'b', 'start': 10, 'end': 30, 'text': 'second synthetic segment'},

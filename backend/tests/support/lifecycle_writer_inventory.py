@@ -131,7 +131,23 @@ FIELD_SITES = {
                 'v3_process_fingerprint',
                 'v3_rewrites',
             ),
-        )
+        ),
+        # The claim transfer transaction redirects settled donors and clears legacy notes debt.
+        (
+            'commit_projection.commit',
+            'summary_due_at',
+            'None',
+            (
+                'deleted',
+                'discarded',
+                'home_hidden',
+                'summary_due_at',
+                'sync_content_revision',
+                'sync_merged_into',
+                'v3_claims_transferred_to',
+                'v3_refined',
+            ),
+        ),
     ],
     # Reviewed backfill run ledger: run and partition status, not a conversation lifecycle field.
     'database/conversations_v3_backfill_runs.py': [
@@ -217,6 +233,8 @@ FIELD_SITES = {
         )
     ],
     'utils/conversations/v3/service.py': [
+        # Older provisional cards leave the single live slot without acquiring notes debt.
+        ('reconcile.plan', 'status', "'processing'", ('status',)),
         ('reconcile.plan', 'status', "prior['status']", ('status',)),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
     ],

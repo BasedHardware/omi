@@ -922,7 +922,7 @@ async def test_configured_reconcile_refines_locked_cards_without_new_notes(build
     from tests.unit.test_conversations_v3_lock_timing import _locked_pair
 
     committed, _ = builder
-    _window, existing, recordings = _locked_pair()
+    _window, existing, recordings = _locked_pair(datetime.now(timezone.utc) - timedelta(hours=2))
     monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
     recordings['r'].update(recording=True, status='completed', v3_pending=True)
     monkeypatch.setattr(store, 'load', lambda *a, **kw: (recordings, existing, []))
