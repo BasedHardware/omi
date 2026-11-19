@@ -1458,6 +1458,8 @@ class ListenSessionRuntime:
                 note_ws_close(self.state, 'server', self.state.close_code)
             except Exception:
                 pass
+        if not owner_persistence_blocked and hasattr(getattr(self, 'conversations', None), 'drain_rotations'):
+            await self.conversations.drain_rotations()  # per-row errors are contained; leftovers keep their quiet check
         conversation_id = self.state.current_conversation_id
         if conversation_id and not owner_persistence_blocked:
             try:

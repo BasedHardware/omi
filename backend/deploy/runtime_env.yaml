@@ -21,6 +21,9 @@ environments:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
+          CONVERSATIONS_V3_RECORDING_ROTATION: {value: 'off', category: rollout}
+          CONVERSATIONS_V3_ROTATION_MIN_SECONDS: {value: '180', category: rollout}
+          CONVERSATIONS_V3_ROTATION_MAX_SECONDS: {value: '300', category: rollout}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
             value: 'true'
             category: ops_kill
@@ -2910,6 +2913,9 @@ environments:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
+          CONVERSATIONS_V3_RECORDING_ROTATION: {value: 'off', category: rollout}
+          CONVERSATIONS_V3_ROTATION_MIN_SECONDS: {value: '180', category: rollout}
+          CONVERSATIONS_V3_ROTATION_MAX_SECONDS: {value: '300', category: rollout}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
             value: 'true'
             category: ops_kill
@@ -2924,7 +2930,7 @@ environments:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
@@ -3268,6 +3274,30 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          OMI_DEPLOYMENT:
+            value: prod
+            category: config
+          FIRESTORE_DATABASE_ID:
+            value: (default)
+            category: config
+          JOBSTORE_PG_HOST:
+            value: 172.25.29.2
+            category: config
+          JOBSTORE_PG_DATABASE:
+            value: jobstore_prod
+            category: config
+          JOBSTORE_PG_USER:
+            value: backend-listen-runtime@based-hardware.iam
+            category: config
+          JOBSTORE_SHADOW_NAMESPACES:
+            value: batch_pipeline_prod
+            category: config
+          JOBSTORE_PRODUCTION_MIRROR:
+            value: 'off'
+            category: config
+          BATCH_JOBSTORE_MODE:
+            value: firestore
+            category: config
           MEDIA_NOISE_MODE: {value: shadow, category: rollout}
           MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
           NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
@@ -4080,7 +4110,7 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             LADDER_V1_PLUS_MONTH_PRICE_ID:
               env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
@@ -4354,6 +4384,30 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            OMI_DEPLOYMENT:
+              value: prod
+              category: config
+            FIRESTORE_DATABASE_ID:
+              value: (default)
+              category: config
+            JOBSTORE_PG_HOST:
+              value: 172.25.29.2
+              category: config
+            JOBSTORE_PG_DATABASE:
+              value: jobstore_prod
+              category: config
+            JOBSTORE_PG_USER:
+              value: backend-runtime@based-hardware.iam
+              category: config
+            JOBSTORE_SHADOW_NAMESPACES:
+              value: batch_pipeline_prod
+              category: config
+            JOBSTORE_PRODUCTION_MIRROR:
+              value: 'off'
+              category: config
+            BATCH_JOBSTORE_MODE:
+              value: firestore
+              category: config
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -4649,7 +4703,7 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
@@ -4840,7 +4894,7 @@ environments:
             ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
-              value: '2592000'
+              value: '5184000'
               category: rollout
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'true'}
             SYNC_FRESH_MAX_AGE_SECONDS:
@@ -4914,6 +4968,30 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            OMI_DEPLOYMENT:
+              value: prod
+              category: config
+            FIRESTORE_DATABASE_ID:
+              value: (default)
+              category: config
+            JOBSTORE_PG_HOST:
+              value: 172.25.29.2
+              category: config
+            JOBSTORE_PG_DATABASE:
+              value: jobstore_prod
+              category: config
+            JOBSTORE_PG_USER:
+              value: backend-runtime@based-hardware.iam
+              category: config
+            JOBSTORE_SHADOW_NAMESPACES:
+              value: batch_pipeline_prod
+              category: config
+            JOBSTORE_PRODUCTION_MIRROR:
+              value: 'off'
+              category: config
+            BATCH_JOBSTORE_MODE:
+              value: firestore
+              category: config
             CONVERSATIONS_V3_BACKFILL:
               value: 'on'
               category: ops_kill
@@ -5215,7 +5293,7 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED:
               value: 'on'
@@ -5409,7 +5487,7 @@ environments:
             ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
-              value: '2592000'
+              value: '5184000'
               category: rollout
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'true'}
             SYNC_FRESH_MAX_AGE_SECONDS:
@@ -5466,6 +5544,30 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            OMI_DEPLOYMENT:
+              value: prod
+              category: config
+            FIRESTORE_DATABASE_ID:
+              value: (default)
+              category: config
+            JOBSTORE_PG_HOST:
+              value: 172.25.29.2
+              category: config
+            JOBSTORE_PG_DATABASE:
+              value: jobstore_prod
+              category: config
+            JOBSTORE_PG_USER:
+              value: backend-runtime@based-hardware.iam
+              category: config
+            JOBSTORE_SHADOW_NAMESPACES:
+              value: batch_pipeline_prod
+              category: config
+            JOBSTORE_PRODUCTION_MIRROR:
+              value: 'off'
+              category: config
+            BATCH_JOBSTORE_MODE:
+              value: firestore
+              category: config
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -5750,7 +5852,7 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
@@ -5960,6 +6062,33 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            OMI_DEPLOYMENT:
+              value: prod
+              category: config
+            FIRESTORE_DATABASE_ID:
+              value: (default)
+              category: config
+            JOBSTORE_PG_HOST:
+              value: 172.25.29.2
+              category: config
+            JOBSTORE_PG_DATABASE:
+              value: jobstore_prod
+              category: config
+            JOBSTORE_PG_USER:
+              value: backend-runtime@based-hardware.iam
+              category: config
+            JOBSTORE_SHADOW_NAMESPACES:
+              value: batch_pipeline_prod
+              category: config
+            JOBSTORE_PRODUCTION_MIRROR:
+              value: 'off'
+              category: config
+            BATCH_JOBSTORE_MODE:
+              value: firestore
+              category: config
+            JOBSTORE_RETIREMENT_ENABLED:
+              value: 'off'
+              category: ops_kill
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}

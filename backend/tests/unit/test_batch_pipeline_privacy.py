@@ -25,7 +25,7 @@ def test_pending_privacy_artifact_repairs_identity_only_after_object_erasure(mon
         assert owner == 'synthetic-owner' and uri == data['uri']
         reference.update.assert_not_called()
 
-    purge._erase_artifact('synthetic-owner', 'batch_pipeline_prod', snapshot, data, erase)
+    assert purge._erase_artifact('synthetic-owner', 'batch_pipeline_prod', snapshot, data, erase) is True
     update = reference.update.call_args.args[0]
     assert update['owner_id'] == 'synthetic-owner'
     assert update['owner_key'] == privacy_owner_key('synthetic-owner')

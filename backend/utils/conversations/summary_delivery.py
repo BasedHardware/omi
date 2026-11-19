@@ -171,9 +171,9 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
         data.setdefault('summary_lane', lane(data))
 
 
-def projection_debt_enabled() -> bool:
+def projection_debt_enabled(*, environ: Mapping[str, str] | None = None) -> bool:
     """Default on; false restores the pre-fix behavior for batch projections."""
-    return default_on(PROJECTION_DEBT_ENV)
+    return default_on(PROJECTION_DEBT_ENV, environ=environ)
 
 
 def _past_age_gate(created_at: Any, *, now: float) -> bool:
@@ -215,7 +215,7 @@ def _past_age_gate(created_at: Any, *, now: float) -> bool:
     )
 
 
-def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
+def stamp_projection_debt(write: Row, *, now: float | None = None, allow_existing_title: bool = False) -> bool:
     """Stamp first-summary debt when a batch projection lands a transcript on an untitled row.
 
     A batch row that completes with no title never passes through the
@@ -225,6 +225,9 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     intake minimum would have. Rows that already carry armed debt or a summary,
     curated rows, discards, below-floor clips, blocked rows and local-only rows
     are untouched.
+
+    The bounded Home repair can allow an existing generated title after
+    checking the stored card and confirming its summary body is missing.
 
     The stamp records the row-level ``summary_title_provenance`` only. It does
     not write ``structured.title_provenance``: ``is_server_minimum`` gates
@@ -269,9 +272,7 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     elif not isinstance(structured, dict):
         # Preserve non-dict structured data; only a dict can carry provenance.
         return False
-    # A deterministic placeholder is not a title: a row that carries only one
-    # has no notes and still owes its first summary.
-    if valid_title(structured.get('title')) or present(structured):
+    if present(structured) or (not allow_existing_title and valid_title(structured.get('title'))):
         return False
     current = time.time() if now is None else now
     # Evaluate the exact eligibility the repair will use, with the provenance

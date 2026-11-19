@@ -15595,4 +15595,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Servera ziņotais darbs';
+
+  @override
+  String get finishNothingToProcess => 'Pagaidām nav ko apstrādāt.';
+
+  @override
+  String get finishStillProcessing => 'Joprojām tiek apstrādāts. Tas parādīsies sākumlapā.';
+
+  @override
+  String get finishBackToHome => 'Atpakaļ uz sākumu';
 }

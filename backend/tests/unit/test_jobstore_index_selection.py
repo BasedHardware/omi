@@ -136,9 +136,10 @@ def test_private_worker_registry_keeps_other_modes_separate(configured, monkeypa
     if mode == 'shadow':
         assert dual_store.SHADOW_PARITY_TOTAL in collectors
     else:
+        from database.batch_pipeline_retirement_metrics import RETIREMENT_COLLECTORS
         from database.batch_pipeline_recovery_metrics import RECOVERY_COLLECTORS
 
-        assert collectors == RECOVERY_COLLECTORS
+        assert collectors == (*RECOVERY_COLLECTORS, *RETIREMENT_COLLECTORS)
 
 
 def test_index_answers_preserve_optional_async_serving_parity(configured, monkeypatch):

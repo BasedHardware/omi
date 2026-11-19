@@ -36,7 +36,7 @@ It requires all of the following, with exact values and no inferred defaults:
 | `OMI_ENV_STAGE` | `prod` |
 | `GOOGLE_CLOUD_PROJECT` | `based-hardware` |
 | `OMI_CUSTOMER_DATA_PROJECT` | `based-hardware` |
-| `OMI_FIRESTORE_DATA_PLANE_PROJECT` | `based-hardware` |
+| `OMI_FIRESTORE_DATA_PLANE_PROJECT` | `based-hardware` when present; may be unset |
 | `FIRESTORE_DATABASE_ID` | `(default)` |
 | `JOBSTORE_SHADOW_NAMESPACES` | Exact entry `batch_pipeline_prod`; no wildcard |
 | `JOBSTORE_PG_HOST`, `JOBSTORE_PG_DATABASE`, `JOBSTORE_PG_USER` | All explicitly nonempty |
@@ -111,8 +111,68 @@ safety reads and rotating census remain necessary.
 
 ## Bounded backfill and copy retirement
 
-`python -m database.jobstore reconcile-page` runs one bounded primary-source
-backfill page or copy-source retirement page. The old `backfill` command remains
+The ordinary `main.py` image hosts rotation in `Serving._maintain`, reached
+only by the supervised periodic reconcile on Cloud Run **backend-integration**
+(`BATCH_PIPELINE_SERVING_ENABLED=true`). The GPU `batch-pipeline-worker` chart
+runs `diarizer.batch_pipeline_runtime` / `Pump`, not `Serving`; its target is
+prepared for mirror writes, not a second rotation loop. Metrics scrapes, manual
+reconcile, owner wakes and projection-pump-only hosts never schedule rotation.
+Critical maintenance finishes before the retirement tick. The advisory 60s
+maintenance lease selects the leader; it fails open, so it is not a cursor fence.
+
+Migration **0010_retirement_cursor.sql** adds `jobstore_retirement_cursor`, keyed
+by namespace, source, table, apply/dry-run mode and a hash of host/database/IAM
+principal. Each page inserts/locks its row with `SELECT ... FOR UPDATE`, rereads
+the cursor, and advances it with a version-and-cursor compare-and-set **inside
+the page transaction**. Version increments also fence cursor reset/ABA. A
+nonterminal decoded key must advance strictly; encoded cursor ordering is not
+key ordering. Page/cursor failure rolls both back. Cursor/key text is sensitive
+and never logged or exported. There is no schema creation or `migrate()` at boot:
+a missing table skips work and increments `page_errors_total{reason="schema_missing"}`.
+Apply the expand-only migration and runtime DML grants through the separately
+authorized schema train before expecting rotation; source env wiring alone does
+not initialize the database. The parked operator's 0001..0008 vector stays frozen.
+
+`JOBSTORE_RETIREMENT_ENABLED` defaults on only with a complete target and valid
+namespace/data-plane context; `0/false/off/no` is the kill switch. Retirement is
+independent of mirror/sample/writer kills. In mode `firestore` or with mirror
+writes off, fresh cohort exclusion can retire all retained copies during a
+rotation; disabling copying does not erase them synchronously. Primary-source
+backfill is scheduled only with complete production mirror configuration.
+One table/source runs per tick, round-robin across all 11 tables; failed tables
+rotate too. No full-table key sets or extra normal pool are created.
+
+| Budget | Default / bound |
+| --- | --- |
+| `JOBSTORE_RETIREMENT_MAX_ROWS` | 10 / 1..1000 |
+| `JOBSTORE_RETIREMENT_MAX_PRIMARY_READS` | 20 / 2..2000 (includes discovery and fresh rereads) |
+| `JOBSTORE_RETIREMENT_MAX_STATEMENTS` | 500 / 24..20000 (includes cursor SQL and timeout controls; a one-row page needs about 18) |
+| `JOBSTORE_RETIREMENT_PAGE_SECONDS` | 3 / positive, at most 3s |
+| `JOBSTORE_RETIREMENT_INTERVAL_SECONDS` | 20 / 20..3600s per process |
+| Total tick | 10s absolute budget; pool warmup outside the page budget |
+
+Cold normal-copy-pool IAM setup has a 5s deadline (bounded credential HTTP and libpq
+dial), followed by warm-only page borrowing. Warmup SQL/socket waits and page
+SQL/lock/socket/primary RPC waits are bounded. No timeout thread survives a
+tick. All phases consume the total tick allowance; invalid budgets refuse work.
+The existing two-normal-plus-one-erasure pool ceiling is unchanged.
+
+The default serving Prometheus registry exports
+`omi_jobstore_retirement_rows_total`, `omi_jobstore_retirement_page_errors_total`,
+`omi_jobstore_retirement_rotation_completed_timestamp_seconds`, and
+`omi_jobstore_retirement_rotation_lag_seconds`. The import-light collectors also
+register in GPU private registries even in Firestore mode. Labels contain only
+namespace, source, table and closed error reasons. Rotation completion comes
+from the committed cursor row (zero before its first pass). **Rotation lag** is
+current wall time minus that row's last completed pass, or its creation timestamp
+before the first pass. It grows between ticks, including failures, with no SQL
+on scrape and no copy-table scan. It is not oldest-row age, a global completion
+certificate or proof that every replica has observed the latest pass. A missing
+series, stale scrape or future database clock remains UNKNOWN; use serving
+identity and per-table/source completion timestamps to assess rotations.
+
+The CLI `python -m database.jobstore reconcile-page` remains a fallback for one
+bounded primary-source backfill page or copy-source retirement page. The old `backfill` command remains
 staging-only; its unbounded key-set census is never a production shortcut.
 
 The operator supplies explicit row, primary-document-read, SQL-statement and
@@ -128,13 +188,13 @@ therefore remain authoritative; no new TTL or deletion rule is introduced.
 No Firestore document is mutated by these commands.
 
 The one-page transaction uses a warm-only pool, SQL/lock and transport deadlines.
-Cold IAM auth/connection startup is a separate phase; the supervising operator
-job must impose a hard whole-process deadline as well. Failure rolls back the
+Cold IAM auth/connection startup is a separate phase; the fallback CLI
+operator must impose a hard whole-process deadline as well. Failure rolls back the
 page and does not advance its checkpoint. Successful retries are idempotent.
 An end-of-pass observation while writers are active is not a snapshot or proof
 of complete coverage; the release owner schedules repeated rotations.
 
-Checkpoint files are private operator state, bound to target, namespace, source,
+The fallback CLI keeps its own checkpoint files as private operator state, bound to target, namespace, source,
 table and apply/dry-run mode. Their opaque base64 cursors are not encryption;
 never publish them. Counts-only reports omit cursor, target, payloads and keys.
 Use separate state files for each source/table/mode. Atomic replacement advances
@@ -158,7 +218,7 @@ namespace allowlist and write kills. Turning mirroring off does not erase copies
 or turn off retirement. Keep every deletion executor's target/reachability until
 all retained obligations have retired.
 
-Before copying real rows, the release owner must configure the supervised
+Before copying real rows, the release owner must verify the worker-hosted
 rotation, maximum accepted retirement lag, per-pass budgets and failure alert,
 and measure a complete rotation within that bound. Confirm the target's backup
 retention against the owning deletion contract. Source tests do not establish
@@ -190,6 +250,32 @@ Existing deletion seams to preserve and exercise are:
   plus shared scheduler/pull-claim/GPU state under the purge barrier. Its
   second scan covers only an old copier that finishes within its bounded
   settle window. It does not prove arbitrary old binaries cannot recreate data.
+
+### Deletion executor and deployment inventory
+
+Production target bindings are prepared with mirror `off` and mode `firestore`:
+
+| Executor / caller | Deploy surface / IAM database user |
+| --- | --- |
+| Account wipe: `services/users/account_deletion.py` → `database/users.py::delete_user_data` → `user_data_deletion.py` → `purge_batch_owner` | OIDC `/v1/users/account-deletion-wipes/run`, normally backend-sync; all four Cloud Run `main.py` services receive target/context in `deploy/runtime_env/prod.overlay.yaml`; user `backend-runtime@based-hardware.iam` |
+| Resumable conversation erasure: `conversation_batch_purge_jobs.run_job` → `batch_pipeline_conversation_purge` shadow phase → `purge_jobstore_owner` | OIDC `/v1/conversations/deletion-batch-purges/run`, same account-deletion handler origin; backend-sync binding, plus all four Cloud Run services |
+| Synchronous conversation deletion: `routers/conversations.py`, `routers/developer.py` → `conversation_tombstones.record_deletion` → `purge_batch_owner`; merge cleanup in `utils/conversations/merge_conversations.py` also records deletions | Cloud Run backend, backend-sync, backend-sync-backfill, backend-integration; `backend/charts/backend-listen/prod_omi_backend_listen_values.yaml` and runtime overlay; listen user `backend-listen-runtime@based-hardware.iam` |
+| Data-protection/migration changes: `database/users.py::set_data_protection_level`, `set_migration_status` → `purge_batch_owner` | Shared users routers on those same API/listen surfaces |
+| GPU mirror writer (no direct purge caller) | Optional `jobstoreEnv` in `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml`; user `batch-pipeline-worker@based-hardware.iam` |
+
+The four Cloud Run services are `backend`, `backend-sync`,
+`backend-sync-backfill`, and `backend-integration`. Listen has its own Workload
+Identity principal; do not substitute the GPU worker's DB username. Staging's
+post-render remains the sole source of its worker target; the generic chart's
+`jobstoreEnv` is empty. The staging isolation fence includes the production
+private PG endpoint. Desktop's separate entrypoint does not mount these purge
+routes; the sync-backfill pilot runtime does not mount wipe handlers.
+
+This is a source inventory, not evidence of deployed handlers, SQL users/grants
+or routing. Release must verify `ACCOUNT_DELETION_HANDLER_URL` (also used for
+conversation erasure), every executing revision's identity/target, listen's DB
+user/DML grants including the cursor table, and mode-off erasure before copying.
+No IAM change or production data access is part of this PR.
 
 `tests/integration/test_jobstore_purge_postgres.py` exercises account and
 conversation cold-copy erasure, dropped refreshes, shared rows and copy/purge
@@ -232,7 +318,8 @@ obligations still apply.
    If initialization is already complete, verify that receipt and the current
    catalog instead of applying it again. Never use this sequence to authorize
    another startup, IAM change or schema application implicitly.
-   This source tree additionally contains expand-only `0009_protected_share.sql`
+   This source tree additionally contains expand-only `0010_retirement_cursor.sql`
+   for serving-hosted rotation and `0009_protected_share.sql`
    for a separately reviewed PostgreSQL-primary worker roll; its presence is
    not permission to apply it during operator readiness. No fence,
    journal or authoritative-store migrations from frozen PR #25215 are
@@ -256,6 +343,8 @@ obligations still apply.
    pass. Expand only on those measurements and the owning approval; `10000`
    requires an explicit complete-population release decision. No arbitrary
    elapsed interval substitutes for these prerequisites.
+
+A retirement scope whose page fails every pass (`omi_jobstore_retirement_page_errors_total{reason="operation_failed"}` rising for one source/table while its rotation lag grows) usually has a corrupt or regressed cursor. Remediation: as the table owner, delete that scope's `jobstore_retirement_cursor` row (namespace, source, tbl, mode, target_identity). The next tick re-creates it and restarts that scope from the first key. Pages are idempotent, so a restart only repeats work.
 
 Rollback new work with `JOBSTORE_SHADOW_WRITES=off`,
 `JOBSTORE_PRODUCTION_MIRROR=off`, or `BATCH_JOBSTORE_MODE=firestore` through the

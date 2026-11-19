@@ -54,7 +54,7 @@ class Conn:
 def configured(monkeypatch):
     connector = Connector()
     monkeypatch.setattr(copy_connections, '_pools', None)
-    monkeypatch.setattr(connection, 'iam_connector', lambda *_args: connector)
+    monkeypatch.setattr(connection, 'iam_connector', lambda *_args, **_kwargs: connector)
     monkeypatch.setattr(connection, 'configure', lambda conn: conn)
     monkeypatch.setattr(dual_store, '_SHADOWED', {})
     monkeypatch.setattr(dual_store, 'PURGE_SETTLE_S', 0)

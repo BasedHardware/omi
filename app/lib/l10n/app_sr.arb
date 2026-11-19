@@ -12243,5 +12243,8 @@
     "downloadNow": "Преузми сада",
     "onWifiLater": "Касније на Wi-Fi",
     "conversationWritingSummary": "Пишемо ваш сажетак…",
-    "onTheWayServerWork": "Рад који је пријавио сервер"
+    "onTheWayServerWork": "Рад који је пријавио сервер",
+    "finishNothingToProcess": "Још нема ничега за обраду.",
+    "finishStillProcessing": "Још се обрађује. Појавиће се на почетној.",
+    "finishBackToHome": "Назад на почетну"
 }

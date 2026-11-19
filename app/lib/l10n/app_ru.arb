@@ -4721,5 +4721,8 @@
     "downloadNow": "Скачать сейчас",
     "onWifiLater": "Позже по Wi-Fi",
     "conversationWritingSummary": "Пишем ваше резюме…",
-    "onTheWayServerWork": "Работа по данным сервера"
+    "onTheWayServerWork": "Работа по данным сервера",
+    "finishNothingToProcess": "Пока нечего обрабатывать.",
+    "finishStillProcessing": "Ещё обрабатывается. Появится на главной.",
+    "finishBackToHome": "На главную"
 }
