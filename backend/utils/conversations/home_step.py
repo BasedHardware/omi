@@ -88,6 +88,16 @@ def classify(row: Mapping[str, Any], *, show_held: bool = False) -> str | None:
     status = _value(row.get('status'))
     structured = row.get('structured') or {}
     title = str(structured.get('title') or '').strip()
+    # V3 keeps a single in_progress slot. Other unlocked cards with an outline
+    # are individually ready to view while their notes deadline is pending.
+    if (
+        status == 'processing'
+        and row.get('v3_derived')
+        and row.get('v3_unlocked')
+        and row.get('tile_state') == 'live'
+        and title
+    ):
+        return READY
     if status in ('processing', 'merging'):
         seconds = home_processing_max_age_seconds()
         if seconds is None:
