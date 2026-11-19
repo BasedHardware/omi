@@ -7,6 +7,7 @@ audio stay exactly where they are, and it is never written. The projection commi
 database/conversations_v3.py (commit_projection's ``retire``). Runbook: docs/runbooks/conversations-v3.md.
 """
 
+import hashlib
 import json
 from datetime import datetime, timezone
 
@@ -14,6 +15,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database import conversations_v3 as store
+from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from utils.conversations.v3 import Conflict, policy
@@ -253,17 +255,74 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
     return recordings, existing, cache, counts
 
 
-def owner_changed(row, raw):
-    """The owner acted on a row the run wrote (or created) after the run: undo must not erase that."""
-    if row.get('sync_merged_into'):
-        # Retired by the run: hidden everywhere, nothing the owner can edit.
-        return False
-    raw = raw or {}
+# What the owner can change on a conversation (edits, sharing, lock, folder, summary text, app results)
+# and what a merge or deletion changes. Undo refuses when any of it moved after the run.
+OWNER_SURFACE_FIELDS = (
+    *OWNER_EDIT_FIELDS,
+    'visibility',
+    'is_locked',
+    'deleted',
+    'discarded',
+    'sync_merged_into',
+    'folder_id',
+    'apps_results',
+)
+
+
+def owner_surface(row):
+    """A digest of the owner-changeable surface of a stored row (never content in the ledger)."""
+    structured = row.get('structured') if isinstance(row.get('structured'), dict) else {}
+    surface = {field: row.get(field) for field in OWNER_SURFACE_FIELDS}
+    surface['structured'] = {k: structured.get(k) for k in ('title', 'overview')}
+    return hashlib.sha256(json.dumps(surface, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def owner_changed(row, entry):
+    """The owner (or a merge) acted on a row the run wrote, created or retired, after the run.
+
+    Once the run's partition settled its notes, the row's owner surface is compared with the digest
+    recorded then (``baseline``). Before that, the fields the run itself never sets are compared with
+    the prior document, and a retired row must still be the run's bridge to its survivor.
+    """
+    if entry.get('baseline'):
+        return owner_surface(row) != entry['baseline']
+    raw = entry.get('raw') or {}
+    if entry.get('retired_into'):
+        return row.get('sync_merged_into') != entry['retired_into'] or not row.get('deleted')
+    if row.get('sync_merged_into') or row.get('deleted'):
+        return True
     if any(row.get(field) and row.get(field) != raw.get(field) for field in OWNER_EDIT_FIELDS):
         return True
     if row.get('visibility') not in (None, 'private') and row.get('visibility') != raw.get('visibility'):
         return True
     return bool(row.get('is_locked')) and not raw.get('is_locked')
+
+
+def record_baselines(uid, run_id, *, firestore_client=None):
+    """After a partition settles its notes, digest the owner surface of every row the run stamped."""
+    client = firestore_client or store.get_firestore_client()
+    coll = store.user_conversations(client, uid)
+    pending = [e for e in runs.list_priors(uid, run_id, firestore_client=client) if not e.get('baseline')]
+    recorded = 0
+    for start in range(0, len(pending), runs.PRIORS_PAGE_DOCS):
+        page = pending[start : start + runs.PRIORS_PAGE_DOCS]
+
+        @firestore.transactional
+        def record(tx, page=page):
+            rows = {e['id']: coll.document(e['id']).get(transaction=tx) for e in page}
+            count = 0
+            for entry in page:
+                snapshot = rows[entry['id']]
+                row = (snapshot.to_dict() or {}) if snapshot.exists else {}
+                if row.get('v3_rederive_live_run') != run_id:
+                    continue
+                ref = runs.run_ref(client, uid, run_id).collection(runs.PRIORS).document(entry['id'])
+                tx.update(ref, {'baseline': owner_surface(row)})
+                count += 1
+            return count
+
+        recorded += record(client.transaction())
+    return recorded
 
 
 def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
@@ -280,7 +339,7 @@ def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
         stamp = row.get('v3_rederive_live_run')
         if stamp not in (None, run_id):
             return 'undo_newer_run_first'
-        if stamp == run_id and owner_changed(row, entry.get('raw')):
+        if stamp == run_id and owner_changed(row, entry):
             return 'owner_edited_rebuilt_row'
     return None
 
@@ -314,8 +373,8 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
         if any(row and row.get('v3_rederive_live_run') not in (None, run_id) for row in current.values()):
             raise Conflict('undo_newer_run_first')
         ours = {cid for cid, row in current.items() if row and row.get('v3_rederive_live_run') == run_id}
-        raws = {e['id']: e.get('raw') for e in entries}
-        if any(owner_changed(current[cid] or {}, raws[cid]) for cid in ours):
+        by_id = {e['id']: e for e in entries}
+        if any(owner_changed(current[cid] or {}, by_id[cid]) for cid in ours):
             raise Conflict('owner_edited_rebuilt_row')
         rids = {c['recording_id'] for e in entries if e['id'] in ours for c in e.get('claims') or []}
         rids.update(rid for cid in ours for rid in (current[cid] or {}).get('v3_recording_ids') or [])

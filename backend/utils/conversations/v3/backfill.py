@@ -392,6 +392,10 @@ async def run_step(uid, run_id, index, phase):
         await run_blocking(db_executor, enqueue_step, uid, run_id, index, 'drain', seq, gen)
         return {'outcome': 'draining', 'remaining': drained['remaining']}
     last = index + 1 >= len(partitions)
+    if run.get('mode') == LIVE_MODE:
+        # The partition's notes are settled: anything that changes these rows from here on is not the
+        # run's, and undo refuses to overwrite it.
+        await run_blocking(db_executor, rederive_store.record_baselines, uid, run_id)
     if await run_blocking(
         db_executor,
         runs.update_run,

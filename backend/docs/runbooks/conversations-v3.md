@@ -294,8 +294,10 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     `undo --run` takes both builder leases, waits for in-flight notes, then restores each group of
     rows that share a source in one transaction: stored documents back exactly, created rows removed,
     each source's claim list back in its original order. It refuses (`undo.reason`) after the owner
-    deleted a rebuilt row (`owner_deleted_rebuilt_row`) or while a newer live run restamped one
-    (`undo_newer_run_first`: undo that one first). A later live speech append to a rebuilt row is
+    deleted a rebuilt row (`owner_deleted_rebuilt_row`), after the owner edited, shared, locked,
+    merged or retitled a row the run wrote, created or retired (`owner_edited_rebuilt_row`; compared
+    against the owner-surface digest each settled partition records), or while a newer live run
+    restamped one (`undo_newer_run_first`: undo that one first). A later live speech append to a rebuilt row is
     replaced by the restored document. Not undone: outline cache entries and gateway spend.
 
 Rollout owner: lead2. Step 0: set CONVERSATIONS_V3_FIRST_APP_BUILD through the shared runtime source

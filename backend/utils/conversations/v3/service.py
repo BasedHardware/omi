@@ -14,6 +14,7 @@ from database import conversations_v3_rederive as rederive_store
 
 import asyncio
 import hashlib
+import json
 import logging
 import re
 import time
@@ -633,6 +634,11 @@ def _survivor(original, planned):
     return best
 
 
+def _stored_bytes(value):
+    """Mirrors rederive_store.stored_bytes, kept here so the async reconcile path stays pure."""
+    return len(json.dumps(value, default=str).encode())
+
+
 def _retire_patch(survivor, run_id):
     """A retired live row becomes a sync bridge to the window that absorbed it.
 
@@ -704,7 +710,7 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
         ]
         claims += [{'conversation_id': row['id'], **span} for row in write for span in row['_v3_claims'].get(rid) or []]
         stored = recording.get('_v3_stored_bytes', 0)
-        after = stored - recording.get('_v3_stored_claims_bytes', 0) + rederive_store.stored_bytes(claims)
+        after = stored - recording.get('_v3_stored_claims_bytes', 0) + _stored_bytes(claims)
         if after > stored and after > rederive_store.SOURCE_MAX_BYTES:
             # Growing a source past the document limit fails every retry; block before any write.
             raise Conflict('document_too_large')
@@ -729,6 +735,11 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
             entry['created'] = True
         else:
             entry['raw'] = prior['_v3_raw']
+        if cid in retire:
+            entry['retired_into'] = retire[cid]['sync_merged_into']
+        if _stored_bytes(entry) > rederive_store.SOURCE_MAX_BYTES:
+            # The prior holds the whole stored row; one that cannot be written leaves no exact undo.
+            raise Conflict('document_too_large')
         priors.append(entry)
     counts = {
         'windows_after': len(planned),

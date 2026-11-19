@@ -432,6 +432,8 @@ async def test_undo_restores_every_row_and_claim_exactly(owner, strict, ledger):
     assert changed != before and any(row.get('sync_merged_into') for row in changed.values())
     assert not any('r9' in (row.get('v3_recording_ids') or []) for row in before.values())
     assert any(row.get('v3_recording_ids') == ['r9'] for row in changed.values())
+    # The partition settled: baselines recorded, and nothing the owner did since, so undo proceeds.
+    assert rederive_store.record_baselines(UID, RUN) == len(priors(strict))
     result = backfill.undo_run(UID, RUN)
     assert result['outcome'] == 'undone' and result['rows_removed'] == 1
     # The created row leaves through the conversation deletion helper (children included).
@@ -469,6 +471,57 @@ async def test_undo_refuses_after_the_owner_edited_a_rebuilt_or_created_row(owne
         assert conversations(strict) == after and not ledger.erased
         for key in edit:
             strict.rows[path(cid)].pop(key)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'structured': {'title': 'Lunch with the team', 'overview': 'Rewritten by the owner'}},
+        {'deleted': True, 'discarded': True, 'sync_merged_into': 'merged-elsewhere'},
+    ],
+)
+async def test_undo_refuses_after_a_summary_edit_or_merge_once_baselines_exist(owner, strict, ledger, change):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    await rederive()
+    rederive_store.record_baselines(UID, RUN)
+    strict.rows[path('c0')].update(change)
+    after = conversations(strict)
+    assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': 'owner_edited_rebuilt_row'}
+    assert conversations(strict) == after
+
+
+@pytest.mark.asyncio
+async def test_a_merge_of_a_rebuilt_row_before_baselines_also_refuses_undo(owner, strict, ledger):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    await rederive()
+    strict.rows[path('c0')].update(deleted=True, discarded=True, sync_merged_into='merged-elsewhere')
+    assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': 'owner_edited_rebuilt_row'}
+
+
+@pytest.mark.asyncio
+async def test_a_window_crossing_until_blocks_and_writes_nothing(owner, strict):
+    sources, rows = lunch(count=3)
+    # Unclaimed speech that runs past until: its rebuilt window would cross the run's edge.
+    crossing = source('r9', UNTIL - timedelta(seconds=60), seconds=120, words=400)
+    owner(*sources, *rows, crossing)
+    before = conversations(strict)
+    outcome, report = await rederive()
+    assert outcome == 'blocked' and report['blocked_reason'] == 'rederive_live_boundary'
+    assert conversations(strict) == before and not priors(strict)
+
+
+@pytest.mark.asyncio
+async def test_a_prior_too_large_to_record_blocks_before_any_write(owner, strict):
+    sources, rows = lunch(count=3)
+    rows[1]['padding'] = 'x' * rederive_store.SOURCE_MAX_BYTES
+    owner(*sources, *rows)
+    before = conversations(strict)
+    outcome, report = await rederive()
+    assert outcome == 'blocked' and report['blocked_reason'] == 'document_too_large'
+    assert conversations(strict) == before and not priors(strict)
 
 
 @pytest.mark.asyncio
@@ -550,6 +603,8 @@ async def test_a_commit_that_fails_midway_resumes_and_undoes_exactly(owner, stri
     assert outcome == 'blocked' and report['blocked_reason'] == 'document_too_large'
     partial = conversations(strict)
     assert partial != before and partial['c0']['v3_rederive_live_run'] == RUN
+    # Retirement happens only in the final batch, which failed: the absorbed rows are untouched so far.
+    assert all(partial[f'c{i}'] == before[f'c{i}'] for i in range(1, 6))
     # Undo from the partial state is exact.
     assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
     assert conversations(strict) == before
@@ -653,11 +708,15 @@ async def test_a_live_run_step_replans_with_the_live_loader(monkeypatch):
     monkeypatch.setattr(runs, 'get_run', lambda *a, **kw: deepcopy(run))
     monkeypatch.setattr(runs, 'update_run', lambda *a, **kw: run)
     monkeypatch.setattr(service, 'reconcile', reconcile)
+    baselines = []
+    monkeypatch.setattr(backfill.rederive_store, 'record_baselines', lambda uid, run_id: baselines.append(run_id))
     monkeypatch.setattr(
         service, 'drain_backfill', lambda *a, **kw: _done({'processed': 0, 'failed': 0, 'remaining': 0})
     )
     await backfill.run_step(UID, RUN, 0, 'derive')
     assert calls[0]['live'] is True and calls[0]['derive'] is True and calls[0]['rederive'] is False
+    # The settled partition records the owner-surface baselines undo compares against.
+    assert baselines == [RUN]
 
 
 async def _done(value):
