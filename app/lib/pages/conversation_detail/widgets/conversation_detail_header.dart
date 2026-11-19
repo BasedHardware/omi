@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_meta.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -17,6 +18,7 @@ import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.d
 import 'package:omi/pages/conversation_detail/widgets/conversation_entity_chips.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
@@ -129,8 +131,24 @@ class ConversationDetailHeader extends StatelessWidget {
   }
 
   /// "Today 12:40 PM · 14m": when it started and how long it ran, the list row's length rule. A
-  /// linked calendar event shows its logo and opens the event.
+  /// linked calendar event shows its logo and opens the event. A v3 conversation still in progress
+  /// shows "● Live · 11m" instead: the speech so far, the same length its Home row shows.
   Widget _whenChip(BuildContext context, ServerConversation conversation) {
+    final live = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false) &&
+        conversation.v3?.tileState == ConversationTileState.live;
+    if (live) {
+      final duration = conversationDurationLabel(conversation, context.l10n);
+      final label = [context.l10n.live, if (duration.isNotEmpty) duration].join(' · ');
+      return Semantics(
+        label: label,
+        excludeSemantics: true,
+        child: ConversationDetailChip(
+          key: const Key('conversation_when_live'),
+          icon: const OmiBreathingDot(),
+          label: label,
+        ),
+      );
+    }
     final dates = OmiDateFormat.of(context);
     final start = conversation.startedAt ?? conversation.createdAt;
     final duration = conversationDurationLabel(conversation, context.l10n);

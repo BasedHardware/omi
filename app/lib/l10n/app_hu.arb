@@ -4785,5 +4785,6 @@
     "onTheWayServerWork": "A szerver által jelzett munka",
     "finishNothingToProcess": "Még nincs mit feldolgozni.",
     "finishStillProcessing": "Még feldolgozás alatt. Megjelenik a Kezdőlapon.",
-    "finishBackToHome": "Vissza a Kezdőlapra"
+    "finishBackToHome": "Vissza a Kezdőlapra",
+    "conversationSummaryWhenItEnds": "Összefoglaló, amikor ez a beszélgetés véget ér"
 }

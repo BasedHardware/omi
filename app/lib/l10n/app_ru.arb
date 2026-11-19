@@ -4724,5 +4724,6 @@
     "onTheWayServerWork": "Работа по данным сервера",
     "finishNothingToProcess": "Пока нечего обрабатывать.",
     "finishStillProcessing": "Ещё обрабатывается. Появится на главной.",
-    "finishBackToHome": "На главную"
+    "finishBackToHome": "На главную",
+    "conversationSummaryWhenItEnds": "Сводка появится, когда разговор закончится"
 }

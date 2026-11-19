@@ -15619,4 +15619,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'На главную';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Сводка появится, когда разговор закончится';
 }

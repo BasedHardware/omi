@@ -15341,4 +15341,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'ホームに戻る';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'この会話が終わると要約が表示されます';
 }

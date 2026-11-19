@@ -15609,4 +15609,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Terug naar Home';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Samenvatting wanneer dit gesprek eindigt';
 }

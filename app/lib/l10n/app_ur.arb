@@ -12246,5 +12246,6 @@
     "onTheWayServerWork": "سرور کی بتائی ہوئی کارروائی",
     "finishNothingToProcess": "ابھی پروسیس کرنے کے لیے کچھ نہیں ہے۔",
     "finishStillProcessing": "ابھی پروسیس ہو رہا ہے۔ یہ ہوم پر نظر آئے گا۔",
-    "finishBackToHome": "ہوم پر واپس جائیں"
+    "finishBackToHome": "ہوم پر واپس جائیں",
+    "conversationSummaryWhenItEnds": "یہ گفتگو ختم ہونے پر خلاصہ"
 }

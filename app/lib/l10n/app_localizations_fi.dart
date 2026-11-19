@@ -15574,4 +15574,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Takaisin kotiin';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Yhteenveto, kun tämä keskustelu päättyy';
 }

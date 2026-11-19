@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "Serveri teatatud töö",
     "finishNothingToProcess": "Veel pole midagi töödelda.",
     "finishStillProcessing": "Veel töödeldakse. See ilmub avalehele.",
-    "finishBackToHome": "Tagasi avalehele"
+    "finishBackToHome": "Tagasi avalehele",
+    "conversationSummaryWhenItEnds": "Kokkuvõte, kui see vestlus lõpeb"
 }

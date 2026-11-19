@@ -15614,4 +15614,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Wróć do ekranu głównego';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Podsumowanie po zakończeniu tej rozmowy';
 }
