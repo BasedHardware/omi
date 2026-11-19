@@ -596,13 +596,16 @@ def test_full_builder_prunes_stale_provisional_lease_ids(strict):
     assert strict.rows[live]['v3_unlocked']
 
 
-def test_on_open_summary_commit_finalizes_provisional_snapshot(strict):
+@pytest.mark.parametrize('already_open_locked', [False, True])
+def test_on_open_summary_commit_finalizes_provisional_snapshot(strict, already_open_locked):
     card = R[:-1] + ('card',)
     strict.rows[card] = {
         'id': 'card',
         'v3_derived': True,
-        'v3_unlocked': True,
-        'status': 'in_progress',
+        'v3_unlocked': not already_open_locked,
+        'v3_open_locked': already_open_locked,
+        'v3_process_pending': already_open_locked,
+        'status': 'processing' if already_open_locked else 'in_progress',
         'finished_at': AT,
     }
     token = leases.acquire('synthetic', 'summary-card', firestore_client=strict)

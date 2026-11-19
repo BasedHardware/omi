@@ -296,3 +296,13 @@ def test_locked_refinement_preserves_user_managed_cards(flag):
     window, existing, recordings = _locked_pair()
     existing['late'][flag] = True
     assert refinement.candidate([window], existing, recordings) is None
+
+
+@pytest.mark.parametrize('card', ['early', 'late'])
+def test_locked_refinement_does_not_move_note_claim_targets(card):
+    from utils.conversations.v3 import refinement
+
+    window, existing, recordings = _locked_pair()
+    existing[card]['structured']['note_claims'] = [{'target': '/sections/0/body_markdown'}]
+
+    assert refinement.candidate([window], existing, recordings) is None

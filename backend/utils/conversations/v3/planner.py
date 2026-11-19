@@ -450,6 +450,27 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
     return row
 
 
+def unavailable_preview(row, recordings):
+    """Settle an unprojectable preview without releasing any of its old audio claims."""
+    return {
+        **row,
+        'status': 'completed',
+        'tile_state': 'done',
+        'home_hidden': True,
+        'home_hidden_reason': 'source_unavailable',
+        'v3_unlocked': False,
+        'v3_process_pending': False,
+        '_v3_claims': {
+            rid: [
+                {'start': claim['start'], 'end': claim['end']}
+                for claim in recordings.get(rid, {}).get('claims') or ()
+                if claim['conversation_id'] == row['id']
+            ]
+            for rid in row.get('v3_recording_ids') or ()
+        },
+    }
+
+
 def _contains_line(row, line, spans):
     inside_window = row['started_at'] <= line['start'] and line['end'] <= row['finished_at']
     if not inside_window:

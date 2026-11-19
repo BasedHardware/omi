@@ -23,6 +23,7 @@ def _eligible(row):
         and row.get('visibility', 'private') == 'private'
         and not row.get('home_hidden')
         and not user_managed(row)
+        and not (row.get('structured') or {}).get('note_claims')
         and row.get('finalization_status') != 'dead_letter'
         and not any(
             row.get(key)
@@ -139,7 +140,7 @@ def _merged_row(rows, claims):
         sections.extend(row_sections)
         if row is winner:
             continue
-        for field in ('action_items', 'events', 'participants', 'insights', 'note_claims'):
+        for field in ('action_items', 'events', 'participants', 'insights'):
             current = list(merged['structured'].get(field) or ())
             for item in structured.get(field) or ():
                 if item not in current:

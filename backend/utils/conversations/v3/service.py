@@ -353,6 +353,16 @@ async def reconcile(
             and not any(row.get('v3_pending') and row.get('v3_manual_end') for row in eligible)
         )
 
+        eligible_ids = {row['id'] for row in eligible}
+        unavailable = {
+            row['id']: row
+            for row in existing.values()
+            if not (derive or on_open)
+            and row.get('v3_unlocked')
+            and not row.get('deleted')
+            and not eligible_ids.intersection(row.get('v3_recording_ids') or ())
+        }
+
         async def plan():
             proposed = planner.windows(
                 groups, outlines, cohesion=cohesion, silence_gap=silence_gap, defer_topic_lock=custom_timing
@@ -380,7 +390,11 @@ async def reconcile(
             # rows with one id each re-add the source's held claims, doubling them every pass until the
             # recording outgrows Firestore's 1 MiB document limit (document_too_large).
             rows = []
-            used = reserved | {window['existing_id'] for window in windows if window.get('existing_id')}
+            used = (
+                reserved
+                | unavailable.keys()
+                | {window['existing_id'] for window in windows if window.get('existing_id')}
+            )
             used.update(
                 row['id'] for row in existing.values() if row.get('v3_refined') and row.get('v3_claims_transferred_to')
             )
@@ -536,6 +550,7 @@ async def reconcile(
                     allocated.setdefault(rid, []).extend((claim['start'], claim['end']) for claim in claims)
             if merge is not None:
                 rows.append(merge[1])
+            rows.extend(planner.unavailable_preview(row, recordings) for row in unavailable.values())
             return rows
 
         rows = await plan()

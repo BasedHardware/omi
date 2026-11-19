@@ -1222,3 +1222,29 @@ def test_indexed_preview_with_unreadable_source_keeps_its_wake(monkeypatch):
     monkeypatch.setattr(store, 'decode_row', decode)
     with pytest.raises(store.Conflict, match='recording_decode_unavailable'):
         store.load('synthetic', firestore_client=MemoryQuery(rows))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'terminal', [{'deleted': True}, {'sync_merged_into': 'successor'}, {'data_protection_level': 'private'}]
+)
+async def test_builder_settles_preview_without_eligible_sources(builder, monkeypatch, terminal):
+    committed, messages = builder
+    start, end = AT, AT + timedelta(seconds=10)
+    raw = source(claims=[{'conversation_id': 'preview', 'start': start, 'end': end}], **terminal)
+    preview = {
+        'id': 'preview',
+        'status': 'in_progress',
+        'v3_unlocked': True,
+        'started_at': start,
+        'finished_at': end,
+        'v3_recording_ids': ['r'],
+    }
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': raw}, {'preview': preview}, []))
+
+    assert await service.reconcile('synthetic') == 'committed'
+    (retired,) = committed[-1][4]
+    assert retired['id'] == 'preview' and retired['status'] == 'completed'
+    assert retired['home_hidden'] and not retired['v3_unlocked'] and not retired['v3_process_pending']
+    assert retired['_v3_claims'] == {'r': [{'start': start, 'end': end}]}
+    assert not messages

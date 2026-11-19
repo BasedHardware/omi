@@ -236,7 +236,21 @@ FIELD_SITES = {
                 'v3_derived',
                 'v3_recording_ids',
             ),
-        )
+        ),
+        (
+            'unavailable_preview',
+            'status',
+            "'completed'",
+            (
+                '_v3_claims',
+                'home_hidden',
+                'home_hidden_reason',
+                'status',
+                'tile_state',
+                'v3_process_pending',
+                'v3_unlocked',
+            ),
+        ),
     ],
     'utils/conversations/v3/service.py': [
         ('reconcile.plan', 'status', "prior['status']", ('status',)),

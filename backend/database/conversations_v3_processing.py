@@ -167,10 +167,18 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
             patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
             patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
         # The scoped reconcile may time out while its outline is still running.
-        # Explicit Open can still finish this exact snapshot in the existing notes commit.
+        # A successful scoped reconcile can also have locked the card before notes are written.
+        # Finish either explicit Open path here while retaining any other owed processing.
+        was_unlocked = current.get('v3_unlocked')
         open_lock = (
-            {'status': 'completed', 'v3_unlocked': False, 'v3_open_locked': True, 'v3_process_pending': True}
-            if current.get('v3_derived') and current.get('v3_unlocked')
+            {
+                'status': 'completed',
+                'v3_unlocked': False,
+                'v3_open_locked': True,
+                'v3_process_pending': bool(was_unlocked or current.get('v3_process_pending')),
+            }
+            if current.get('v3_derived')
+            and (was_unlocked or (current.get('v3_open_locked') and current.get('status') == 'processing'))
             else {}
         )
         settled = current.get('v3_derived') and (bool(open_lock) or current.get('status') != 'in_progress')
