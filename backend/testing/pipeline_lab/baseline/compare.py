@@ -8,7 +8,8 @@ grouped by ``conversation_id``, so both sides have one shape.
 **Matching.** Id first (M1 replays production's own capture ids). The rest pair by
 time overlap: greedy on intersection-over-union of ``[started_at, finished_at]``,
 highest first, above ``min_iou`` (default 0.3). Unpaired replay = ``new``, unpaired
-production = ``missing``.
+production = ``missing``, or ``merged`` (with ``merged_into``) when a v3 replay conversation
+lists it in ``baseline_ids`` (it shares recordings with that replay conversation).
 
 **Boundary** differs when either edge moved more than ``BOUNDARY_TOLERANCE_S`` or the pair
 was matched by overlap rather than id. **Transcript** compares normalized text.
@@ -230,6 +231,12 @@ def baseline_view(
     """``runs/<run_id>/baseline.json``: one row per matched/unmatched conversation, plus counts."""
     replay_by_id = {str(r['id']): r for r in replay}
     prod_by_id = {str(p['id']): p for p in production}
+    # v3: a replay conversation lists every production conversation sharing its recordings. A production
+    # row that pairs with nothing else but is listed there was merged into that replay, not lost.
+    listed_by: dict[str, str] = {}
+    for r in replay:
+        for bid in r.get('baseline_ids') or []:
+            listed_by.setdefault(str(bid), str(r['id']))
     rows = []
     for match in match_conversations(replay, production, min_iou=min_iou):
         r = replay_by_id.get(match.replay_id) if match.replay_id else None
@@ -244,6 +251,8 @@ def baseline_view(
                 **compare_pair(r, p, method=match.method),
             }
         )
+        if r is None and match.baseline_id in listed_by:
+            rows[-1].update(status='merged', merged_into=listed_by[match.baseline_id])
     rows.sort(key=lambda row: (row.get('started_at') or '', row.get('replay_id') or row.get('baseline_id') or ''))
     counts: dict[str, int] = {}
     for row in rows:

@@ -18,6 +18,7 @@ Outputs in the run directory: ``conversations/<v3 id>.json`` (contract rows with
 from __future__ import annotations
 
 from contextlib import ExitStack
+import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -127,8 +128,15 @@ def replayed_rows(
     return out
 
 
-def recording_fate(recordings: Sequence[Mapping[str, Any]], derived: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """Where each replayed recording's speech went (claims and the conversations listing it)."""
+def recording_fate(
+    recordings: Sequence[Mapping[str, Any]],
+    derived: Sequence[Mapping[str, Any]],
+    words: Mapping[str, int] | None = None,
+) -> dict[str, Any]:
+    """Where each replayed recording's speech went (claims and the conversations listing it).
+
+    ``words``: the fed word count per recording (the plan's), else counted from the stored row.
+    """
     listed: dict[str, list[str]] = {}
     for row in derived:
         for rid in row.get('v3_recording_ids') or []:
@@ -145,18 +153,22 @@ def recording_fate(recordings: Sequence[Mapping[str, Any]], derived: Sequence[Ma
                 'pending': bool(rec.get('v3_pending')),
                 'conversations': sorted(set(listed.get(rid, []))),
                 'claims': len(rec.get('claims') or []),
+                'words': (words or {}).get(
+                    rid, sum(len(str(s.get('text') or '').split()) for s in rec.get('transcript_segments') or [])
+                ),
             }
         )
     return {
         'recordings': len(rows),
         'unclaimed': sum(1 for r in rows if not r['conversations']),
+        'unclaimed_without_speech': sum(1 for r in rows if not r['conversations'] and not r['words']),
         'still_pending': sum(1 for r in rows if r['pending']),
         'rows': rows,
     }
 
 
 async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
-    from testing.pipeline_lab.seed.writer import ProductSeedWriter, reset_lab_user, seed_start_state
+    from testing.pipeline_lab.seed.writer import ProductSeedWriter, reset_lab_state, seed_start_state
     from testing.pipeline_lab.vector import install_vector_index
     from testing.pipeline_lab.vector.embed import install_embeddings
     from testing.pipeline_lab.vector.seed import apply_with_product, plan_vectors
@@ -167,7 +179,16 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
     run_dir = Path(spec.run_dir)
     clock = LabClock(spec.day_start)
     plan = plan_arrivals(spec.recordings, lag=spec.arrival_lag, mode=spec.arrival_mode)
-    result: dict[str, Any] = {'plan': plan.summary()}
+    result: dict[str, Any] = {'plan': plan.summary(), 'warnings': []}
+    timings: dict[str, float] = {}
+    result['timings'] = timings
+    mark = [time.perf_counter()]
+
+    def phase(name: str) -> None:
+        now = time.perf_counter()
+        timings[name] = round(now - mark[0], 3)
+        mark[0] = now
+
     with lab_environment(
         config, lab_overlay(spec.overlay), run_dir=run_dir, preimport=PRODUCT_MODULES + V3_MODULES
     ) as env, ExitStack() as stack:
@@ -184,10 +205,15 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
         result['tasks_bound'] = tasks.install(stack)
         install_attribution(stack)
         stack.enter_context(installed_clock(clock))
+        if any(d.get('name') == 'typesense_unavailable' for d in env.decisions.rows):
+            result['warnings'].append('typesense not listening: conversation index writes off for this run')
+        phase('environment')
         if spec.start_state is not None:
             writer = ProductSeedWriter(env.firestore)
-            reset = (lambda: reset_lab_user(env.firestore, config.uid)) if spec.reset_user else None
+            reset = (lambda: reset_lab_state(env.firestore, env.redis, config.uid)) if spec.reset_user else None
             result['seed'] = seed_start_state(spec.start_state, writer, reset=reset)
+            result['warnings'].extend(result['seed'].get('warnings') or [])
+            phase('seed')
             records, vector_report = plan_vectors(
                 config.uid,
                 conversations=spec.start_state.conversations,
@@ -195,6 +221,7 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
                 action_items=spec.start_state.action_items,
             )
             result['vectors'] = apply_with_product(records, config.uid, vector_report).as_dict()
+            phase('seed_vectors')
         admission = admit(config.uid)
         env.decisions.record('conversations_v3_admission', admission['admitted'], 'lab_admission_markers')
         result['admission'] = admission
@@ -211,6 +238,7 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
             sweeps=spec.sweeps,
         )
         report = await driver.run(plan.arrivals)
+        phase('driver')
         write_json(
             run_dir / 'v3_driver.json',
             {
@@ -237,7 +265,13 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
         exported = export_conversations(
             run_dir, uid=config.uid, derived=derived, production=spec.production, store=ProductChainStore(), sinks=sinks
         )
-        fate = recording_fate(recordings, derived)
+        # Only the day's replayed recordings: earlier days' recordings are start state, claimed by earlier rows.
+        replayed = {a.recording_id for a in plan.arrivals}
+        fate = recording_fate(
+            [r for r in recordings if str(r.get('id')) in replayed],
+            derived,
+            words={a.recording_id: a.words for a in plan.arrivals},
+        )
         write_json(run_dir / 'v3_recordings.json', fate)
         write_json(
             run_dir / 'chain.json',
@@ -265,6 +299,7 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
             'visible': sum(1 for c in exported if c['v3']['visible']),
             'unclaimed_recordings': fate['unclaimed'],
         }
+        phase('export')
         if spec.day is not None:
             from testing.pipeline_lab.day.run import run_day
 
@@ -286,6 +321,7 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
                 'recap': day_payload.get('recap'),
                 'chat_index_ready': day_payload['chat_index'].get('ready'),
             }
+            phase('day')
         clear_admission(config.uid)
         result['notifications'] = len(sinks.notifications)
         result['network_refusals'] = list(env.network.refusals)

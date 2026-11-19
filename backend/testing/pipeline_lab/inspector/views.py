@@ -188,14 +188,26 @@ def run_overview(reader: Reader, run_id: str) -> dict[str, Any]:
         for twin in row['baseline']:
             if twin and twin.get('id'):
                 status_of_baseline.setdefault(twin['id'], row['status'])
+    # v3: production rows that share recordings with a replay conversation but are not its pair
+    # (baseline.json's pairing). A paired production row takes its pair's status.
+    paired = {
+        str(row['baseline']['id']): row['status'] for row in pairing['rows'] if (row.get('baseline') or {}).get('id')
+    }
+    merged = {bid for bid in status_of_baseline if bid not in paired} if pipeline_of(run) == 'v3' else set()
+    status_of_baseline.update(paired)
     production = [
-        {**(_brief(b) or {}), 'status': status_of_baseline.get(b.get('id'), 'missing')}
+        {
+            **(_brief(b) or {}),
+            'status': 'merged' if b.get('id') in merged else status_of_baseline.get(b.get('id'), 'missing'),
+        }
         for b in reader.baseline_conversations(run['day_id'], pipeline_of(run))
     ]
     coverage = day.get('coverage') or {}
     statuses: dict[str, int] = {}
     for row in rows:
         statuses[row['status']] = statuses.get(row['status'], 0) + 1
+    if merged:
+        statuses['merged'] = sum(1 for b in production if b['status'] == 'merged')
     return {
         'run': {**run_summary(reader, run), 'overlay': run.get('overlay') or {}, 'warnings': run.get('warnings') or []},
         'run_detail': {k: run.get(k) for k in ('timings', 'stages')},

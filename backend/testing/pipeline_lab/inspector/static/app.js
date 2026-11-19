@@ -283,7 +283,7 @@
 
   // ---------------------------------------------------------------- day page
 
-  const STATUS_CLASS = { same: 'st-same', changed: 'st-changed', new: 'st-new', missing: 'st-missing', 'discard flipped': 'st-flipped' };
+  const STATUS_CLASS = { same: 'st-same', changed: 'st-changed', new: 'st-new', missing: 'st-missing', merged: 'st-merged', 'discard flipped': 'st-flipped' };
   function statusChip(status, withVs) {
     return h('span', { class: 'chip ' + (STATUS_CLASS[status] || '') }, status, withVs && status !== 'same' && status !== 'new' ? h('span', { class: 'vsprod' }, ' vs production') : null);
   }
@@ -461,6 +461,7 @@
       append(statEl, [
         h('b', null, replayed), ' replayed', ' · ', h('b', null, st.changed || 0), ' changed', ' · ', h('b', null, st.new || 0), ' new', ' · ',
         h('b', null, st.missing || 0), ' missing', ' · ', h('b', null, st['discard flipped'] || 0), ' discard flipped', ' · ', h('b', null, st.same || 0), ' same',
+        st.merged ? [' · ', h('b', null, st.merged), ' merged into a replay conversation'] : null,
         rows.length !== ov.conversations.length ? h('span', null, '  — showing ' + rows.length) : null]);
       listEl.replaceChildren(...(rows.length ? rows.map((r) => convRow(r, runId)) : [h('li', { class: 'empty' }, 'No conversations match.')]));
       const sel = state.selected.get(runId);

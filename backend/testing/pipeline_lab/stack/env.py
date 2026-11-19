@@ -34,6 +34,21 @@ from testing.pipeline_lab.stack.patching import replace_everywhere
 
 INHERITED_ENV = ('PATH', 'TMPDIR', 'HOME', 'SYSTEMROOT', 'LANG', 'LC_ALL')
 
+# When the local Typesense is not listening, every product index write waits out the client's
+# retries (seconds per conversation). The product's own kill switch turns the dual-write off;
+# search reads fail open as they would in an outage. Recorded as decision ``typesense_unavailable``.
+TYPESENSE_DOWN_ENV = {'TYPESENSE_CONVERSATION_INDEX_WRITES': 'off', 'TYPESENSE_CONNECTION_TIMEOUT_SECONDS': '1'}
+
+
+def peer_listening(peer: tuple[str, int], *, timeout: float = 0.5) -> bool:
+    import socket
+
+    try:
+        with socket.create_connection(peer, timeout=timeout):
+            return True
+    except OSError:
+        return False
+
 
 @dataclass
 class LabEnvironment:
@@ -136,6 +151,9 @@ def lab_environment(
     overlay = overlay or Overlay()
     settings = compose_settings(config, overlay)
     decisions = DecisionLog(run_dir / 'decisions.jsonl' if run_dir is not None else None)
+    typesense_up = peer_listening(config.typesense) if install_product else True
+    if not typesense_up:
+        settings.update(TYPESENSE_DOWN_ENV)
     policy = network_policy or NetworkPolicy.for_stack(
         config, on_refusal=lambda row: decisions.record('network_refused', row['kind'], 'network', once=False, **row)
     )
@@ -153,6 +171,13 @@ def lab_environment(
             settings=settings,
         )
         decisions.record('overlay', overlay.digest(), 'overlay', overlay_name=overlay.name)
+        if not typesense_up:
+            decisions.record(
+                'typesense_unavailable',
+                'conversation_index_writes_off',
+                'lab_peer_probe',
+                port=config.typesense[1],
+            )
         if install_product:
             import importlib
 

@@ -278,3 +278,21 @@ def test_live_env_adds_ops_and_live_only_values(runtime_env):
     assert 'SYNC_TASKS_QUEUE' not in overlay['env']  # still lab-owned
     assert report['live']['added'] == 3 and report['live']['overridden'] == 1
     assert report['live_names']['overridden'] == ['OMI_SHAPED_AGENT_MODE']
+
+
+def test_stage_keys_carry_the_selected_pipeline(tmp_path):
+    from types import SimpleNamespace
+
+    from testing.pipeline_lab import keys
+    from testing.pipeline_lab.orchestrator import run_pipeline_kind
+
+    store = SimpleNamespace(day_dir=lambda day_id: tmp_path / day_id)
+    v3_on = {'env': {'CONVERSATIONS_V3': 'on'}}
+    assert run_pipeline_kind(store, v3_on, 'd1') == 'classic'  # no recordings on the day
+    (tmp_path / 'd1' / 'v3').mkdir(parents=True)
+    (tmp_path / 'd1' / 'v3' / 'recordings.jsonl').write_text('')
+    assert run_pipeline_kind(store, v3_on, 'd1') == 'v3'
+    assert run_pipeline_kind(store, {**v3_on, 'model_config': {'pipeline': 'classic'}}, 'd1') == 'classic'
+    assert run_pipeline_kind(store, {'model_config': {'pipeline': 'v3'}}, 'd2') == 'refused'
+    key = lambda pipeline: keys.stage_key('discard', backend_tree='t', inputs={'pipeline': pipeline})
+    assert key('v3') != key('classic')

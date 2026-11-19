@@ -195,6 +195,17 @@ def _stage_inputs(day: CorpusDay, upstream: Mapping[str, Mapping[str, Any]]) -> 
     return inputs
 
 
+def run_pipeline_kind(store: Store, overlay: Mapping[str, Any], day_id: str) -> str:
+    """``classic`` or ``v3``, as the chain stages will select it (``v3/select.py``); part of every stage key."""
+    from testing.pipeline_lab.v3.corpus import day_has_v3
+    from testing.pipeline_lab.v3.select import PipelineRefused, select_pipeline
+
+    try:
+        return select_pipeline(overlay or {}, day_has_v3=day_has_v3(store, day_id))[0]
+    except PipelineRefused:
+        return 'refused'  # the chain stage raises the real error when it runs
+
+
 def run_pipeline(
     store: Store,
     request: RunRequest,
@@ -220,6 +231,7 @@ def run_pipeline(
             raise worktrees.WorktreeError('run needs a repo to pin the ref from')
         worktree = worktrees.ensure_worktree(repo, request.ref)
     tree = worktree.backend_tree if worktree is not None else str(backend_tree)
+    pipeline = run_pipeline_kind(store, request.overlay, day.day_id)
 
     run_id = request.run_id or new_run_id(day.day_id, request.ref)
     run = RunRecord(
@@ -308,6 +320,7 @@ def run_pipeline(
             started = time.monotonic()
             try:
                 inputs = _stage_inputs(day, upstream)
+                inputs['pipeline'] = pipeline  # a classic entry is never served to a v3 run, or back
                 extra_inputs = getattr(driver, 'inputs', None)
                 if extra_inputs is not None:
                     inputs.update({f'driver:{k}': v for k, v in extra_inputs(ctx).items()})

@@ -106,6 +106,9 @@ def run(root: Path, run_id: str, engine: str) -> dict[str, Any]:
         'notifications': result.get('notifications'),
         'network_refusals': len(result.get('network_refusals') or []),
         'baseline_counts': view.get('counts'),
+        'timings': result.get('timings'),
+        'seed': {k: (result.get('seed') or {}).get(k) for k in ('written', 'skipped', 'cleared', 'timings')},
+        'warnings': result.get('warnings') or [],
     }
     atomic_write_json(run_dir / 'chain_entry.json', summary)
     return summary

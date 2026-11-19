@@ -98,6 +98,26 @@ Not replayed: on-open (foreground) notes and Retry, which need a user opening th
 in-progress passes (the batch lane has no transcript until a recording seals); production's builder lease
 state at the day start (`open_id`, outline cache).
 
+Comparison: a replay conversation lists every production conversation that shares its recordings
+(`baseline_ids`). A production row that pairs with no replay conversation but is listed there has status
+`merged` (`merged_into` the replay id), not `missing`; the inspector shows it as merged on the timeline.
+
+**Seeding.** The start state is written once per run before the first arrival. Conversations are
+history, so each row is encoded with the product's harness seam (`encode_conversation_for_write`, the
+stored shape) and written in batches of 200, not through the per-row processing upsert. Memories go
+through the product's ledger commit, 200 per chunk, halved until a chunk fits Firestore's 1 MiB entity
+limit. A focused goal is created in the background, then focused with `focus_goal`. A row that still
+cannot be written is counted per kind and reason in the run warnings, never dropped silently; a blob
+still sealed under the production key (`open_loop_extractions`) is cleared and counted (the product reads
+an undecodable one as absent). The reset is a `recursive_delete` of the lab user. `chain_entry.json`
+and the discard stage report phase timings (`environment`, `seed`, `seed_vectors`, `driver`, `export`,
+`day`) and the seed's own per-kind timings.
+
+**Typesense.** If the local Typesense is not listening, the run sets the product's kill switch
+`TYPESENSE_CONVERSATION_INDEX_WRITES=off` (and a 1 s client timeout), records decision
+`typesense_unavailable` and a run warning; otherwise every conversation write waits out the search
+client's retries.
+
 Segment `start`/`end` are seconds from the conversation's `started_at`. A verdict's
 `conversation_id` is the production id when the item's conversation has one (the replay
 id is kept as `replay_conversation_id`), so marks follow an item across runs.
@@ -113,7 +133,8 @@ or memory still matches after a re-run that produces the same text.
 `keys.stage_key(stage, backend_tree=, inputs=, overlay=, model_config=, schema_version=)`
 hashes exactly those fields. The **tree** hash of `backend/` (not the commit)
 means refs with an identical backend share cache entries. The orchestrator feeds
-each stage the corpus day hash and every earlier stage's output hash, so a change
+each stage the corpus day hash, the selected pipeline (`classic` or `v3`) and every
+earlier stage's output hash, so a change
 upstream invalidates exactly the stages whose inputs changed. The commit sha,
 run id, paths and wall clock are not inputs. Per-item keys inside a stage come
 from `StageContext.item_key(item, inputs)`.

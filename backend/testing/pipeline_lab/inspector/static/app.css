@@ -210,6 +210,7 @@ main { max-width: 1440px; margin: 0 auto; padding: 16px 16px 64px; outline: none
 .st-changed { color: var(--changed); background: var(--changed-bg); }
 .st-new, .st-added { color: var(--new); background: var(--new-bg); }
 .st-missing, .st-removed { color: var(--missing); background: var(--missing-bg); }
+.st-merged { color: var(--muted, inherit); background: transparent; border: 1px dashed currentColor; }
 .st-flipped { color: var(--flipped); background: var(--flipped-bg); }
 .badge-warn { color: var(--changed); background: var(--changed-bg); }
 .vsprod { font-size: 11px; color: var(--faint); font-weight: 450; white-space: nowrap; }

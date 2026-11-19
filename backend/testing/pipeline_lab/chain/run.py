@@ -86,7 +86,7 @@ async def replay_chain(spec: ChainRunSpec) -> dict[str, Any]:
     from testing.pipeline_lab.vector import install_vector_index
     from testing.pipeline_lab.vector.embed import install_embeddings
     from testing.pipeline_lab.vector.seed import apply_with_product, plan_vectors
-    from testing.pipeline_lab.seed.writer import ProductSeedWriter, reset_lab_user, seed_start_state
+    from testing.pipeline_lab.seed.writer import ProductSeedWriter, reset_lab_state, seed_start_state
 
     if spec.vector_index is None:
         raise ValueError('a vector index is required (DESIGN L7); refusing to run with an empty Pinecone stub')
@@ -111,7 +111,7 @@ async def replay_chain(spec: ChainRunSpec) -> dict[str, Any]:
         stack.enter_context(installed_clock(clock))
         if spec.start_state is not None:
             writer = ProductSeedWriter(env.firestore)
-            reset = (lambda: reset_lab_user(env.firestore, config.uid)) if spec.reset_user else None
+            reset = (lambda: reset_lab_state(env.firestore, env.redis, config.uid)) if spec.reset_user else None
             result['seed'] = seed_start_state(spec.start_state, writer, reset=reset)
             records, vector_report = plan_vectors(
                 config.uid,

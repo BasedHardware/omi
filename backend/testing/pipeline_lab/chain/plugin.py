@@ -58,6 +58,9 @@ def stage_summary(stage: str, run_dir: Path) -> tuple[dict[str, Any], list[str]]
             'pipeline': entry.get('pipeline', 'classic'),
             'transcripts': entry.get('transcripts'),
         }
+        if entry.get('timings'):
+            out['timings'] = entry['timings']
+        warnings.extend(str(w) for w in entry.get('warnings') or [])
         if entry.get('pipeline') == 'v3':
             out['v3'] = {
                 'visible': sum(1 for c in conversations if (c.get('v3') or {}).get('visible')),

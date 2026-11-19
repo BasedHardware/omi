@@ -105,7 +105,10 @@ def test_v3_day_runs_by_default_when_the_overlay_turns_v3_on(lab, capsys):
     assert driver['plan']['arrivals'] == 3 and driver['plan']['skipped'] == {'deleted': 1, 'in_progress_no_speech': 1}
     baseline = json.loads((run_dir / 'baseline.json').read_text())
     assert {e['baseline_id'] for e in baseline['conversations'] if e['baseline_id']} >= {'v3-festival'}
-    assert sum(1 for e in baseline['conversations'] if e['status'] == 'missing') == 1  # production split one
+    # Production split rec-a/rec-b in two; the second production row shares recordings with the replay.
+    merged = [e for e in baseline['conversations'] if e['status'] == 'merged']
+    assert len(merged) == 1 and merged[0]['merged_into'] == seeds['id']
+    assert not any(e['status'] == 'missing' for e in baseline['conversations'])
 
     srv = server.make_server(lab['root'], lab['verdicts'])
     stop = server.serve_in_thread(srv)
