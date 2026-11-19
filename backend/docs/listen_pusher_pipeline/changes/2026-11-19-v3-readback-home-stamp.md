@@ -26,7 +26,7 @@ product owner rewrote the same 151 documents about every 70 seconds. The rewrite
 
 ## What changed
 
-- `home_feed_writer.COMMIT_STAMPED_FIELDS` names the fields the hook stamps. Both readbacks ignore
+- `database.home_feed_fields.COMMIT_STAMPED_FIELDS` (moved out of `home_feed_writer` by #25739) names the fields the hook stamps. Both readbacks ignore
   them. Any other change between batches still conflicts.
 - Speech appended to a recording is still treated as moved, not as a conflict.
 - A readback conflict now logs `v3 projection readback changed kind=<derived_row|recording> batch=<i>
