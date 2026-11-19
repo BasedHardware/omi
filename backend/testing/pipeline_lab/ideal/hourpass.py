@@ -393,6 +393,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument('--window-minutes', type=float, default=60)
     parser.add_argument('--budget-usd', type=float, default=2.0)
     parser.add_argument('--label', default='luna')
+    parser.add_argument(
+        '--repeat',
+        type=int,
+        default=0,
+        help='N > 0 marks a repeat run so the proxy cache cannot replay an earlier answer',
+    )
     args = parser.parse_args(argv)
 
     packet = Path(args.packet)
@@ -421,7 +427,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         cards, logs = run_day(
             lines,
-            spec=Path(args.spec).read_text(encoding='utf-8'),
+            spec=Path(args.spec).read_text(encoding='utf-8') + (f'\n\n(Run {args.repeat}.)' if args.repeat else ''),
             context=context,
             ask=ask,
             window=timedelta(minutes=args.window_minutes),
