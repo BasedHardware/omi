@@ -1245,7 +1245,7 @@ class ProjectionStore:
                 and target
                 and upload_revision is not None
                 and set(new + updated) == {target}
-                and completion_accounting['seconds'] > 0
+                and seconds > 0
             ):
                 ready_patch = _native_manual_ready_patch(
                     conversation_rows.get(target) or {}, upload_revision, sealed_at, now

@@ -1527,6 +1527,7 @@ def persist_processing_result_with_lifecycle(
     existing row onto ``completed``. It must not raise; the persist outcome is
     independent of observers.
     """
+    from database.conversations_v3_fence import permits, wake_repairs
     from database.recurring_voice_privacy import filter_processing_write
 
     conversation_data.pop('updated_at', None)
@@ -1548,10 +1549,12 @@ def persist_processing_result_with_lifecycle(
     ledger_stages: tuple[str, ...] = ()
     source_revision = 0
     family_enabled = _terminal_family_serving(uid)
+    repairs = []
 
     @firestore.transactional
     def _persist(transaction) -> bool:
         nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal, ledger_stages, source_revision
+        repairs.clear()
         terminal_refusal = None
         summary_changed = False
         summary_receipt = None
@@ -1564,8 +1567,6 @@ def persist_processing_result_with_lifecycle(
         evidence_refresh = write_data.pop('_notes_evidence_reprocess', False)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
-        from database.conversations_v3_fence import permits
-
         existing_snapshot = conversation_ref.get(transaction=transaction)
         source_revision = pipeline_ledger.source_revision(existing_snapshot)
         if not getattr(existing_snapshot, 'exists', False):
@@ -1576,7 +1577,7 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
-        if not permits(transaction, db, uid, conversation_data['id'], existing):
+        if not permits(transaction, db, uid, conversation_data['id'], existing, repairs=repairs):
             return False
         if existing.get('arrival_at'):
             write_data['arrival_at'] = existing['arrival_at']
@@ -1814,6 +1815,9 @@ def persist_processing_result_with_lifecycle(
     try:
         persisted = run_preloaded_transactional(db, _persist)
     except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        return False
+    if repairs:
+        wake_repairs(uid, repairs)
         return False
     if persisted and ledger_stages:
         # After the real commit, in the ledger's own fenced transaction.

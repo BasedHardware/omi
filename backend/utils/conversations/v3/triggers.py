@@ -76,7 +76,7 @@ def task_base():
     return base
 
 
-def enqueue(uid, *, at=None, manual_end_id=None, native_manual_ready=None):
+def enqueue(uid, *, at=None, manual_end_id=None, native_manual_ready=None, native_rearm=False):
     # A fractional silence deadline must have elapsed when reconcile runs.
     # Truncating can wake it early and defer a finished group for another minute.
     scheduled = math.ceil(at.timestamp()) if at is not None else int(datetime.now(timezone.utc).timestamp())
@@ -87,7 +87,8 @@ def enqueue(uid, *, at=None, manual_end_id=None, native_manual_ready=None):
     if native_manual_ready is not None:
         cid, upload_revision = native_manual_ready
         recording_key = hashlib.sha256(cid.encode()).hexdigest()[:32]
-        task_id = f'{prefix}-native-ready-{recording_key}-{upload_revision}'
+        wake = 'native-rearm' if native_rearm else 'native-ready'
+        task_id = f'{prefix}-{wake}-{recording_key}-{upload_revision}'
         payload['trigger'] = 'native_manual_ready'
     elif manual_end_id:
         # A live task may already have completed in this minute. Its retained
@@ -103,10 +104,10 @@ def enqueue(uid, *, at=None, manual_end_id=None, native_manual_ready=None):
     )
 
 
-def wake_native_manual_ready(uid: str, cid: str, upload_revision: int) -> None:
+def wake_native_manual_ready(uid: str, cid: str, upload_revision: int, *, rearm: bool = False) -> None:
     """Dispatch only after the existing v3 outbox marker commits."""
     try:
-        enqueue(uid, native_manual_ready=(cid, upload_revision))
+        enqueue(uid, native_manual_ready=(cid, upload_revision), **({'native_rearm': True} if rearm else {}))
     except Exception as error:
         metrics.RECONCILES.labels('dispatch_error').inc()
         logger.warning('v3 native manual dispatch deferred exception_type=%s', type(error).__name__)

@@ -109,7 +109,9 @@ def stretches(members, now):
     lines.sort(key=lambda line: (line['start'], line['conversation_id']))
     groups = []
     native_cuts = {
-        row['id']: utc(binding['finished_at']) for row in members if (binding := policy.native_manual_binding(row))
+        row['id']: cut
+        for row in members
+        if (binding := policy.native_manual_binding(row)) and isinstance(cut := utc(binding['finished_at']), datetime)
     }
     recording_starts = {row['id']: utc(row.get('started_at')) for row in members} if native_cuts else {}
     native_tails = {line['conversation_id']: line for line in lines if line['conversation_id'] in native_cuts}
@@ -130,7 +132,7 @@ def stretches(members, now):
             native_cut = bool(
                 prior_line is native_tails.get(prior_source)
                 and line['conversation_id'] != prior_source
-                and next_start
+                and isinstance(next_start, datetime)
                 and next_start >= native_cuts[prior_source]
                 and groups[-1]['end'] <= line['start']
             )

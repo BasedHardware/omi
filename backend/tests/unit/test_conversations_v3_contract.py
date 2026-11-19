@@ -74,9 +74,12 @@ def test_native_ready_name_survives_live_tombstone_and_retains_same_revision(mon
     triggers.enqueue('owner', at=start, native_manual_ready=('recording', 7))
     triggers.enqueue('owner', at=start + timedelta(minutes=1), native_manual_ready=('recording', 7))
     triggers.enqueue('owner', at=start, native_manual_ready=('recording', 8))
-    assert len(fake.tasks) == 3
+    triggers.enqueue('owner', at=start, native_manual_ready=('recording', 7), native_rearm=True)
+    triggers.enqueue('owner', at=start + timedelta(minutes=1), native_manual_ready=('recording', 7), native_rearm=True)
+    assert len(fake.tasks) == 4
+    assert sum('-native-rearm-' in name for name in fake.tasks) == 1
     ready = [task for task in fake.tasks.values() if b'native_manual_ready' in task.http_request.body]
-    assert len(ready) == 2
+    assert len(ready) == 3
 
 
 @pytest.mark.asyncio
