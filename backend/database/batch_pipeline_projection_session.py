@@ -32,6 +32,7 @@ from database.batch_pipeline_projection_finish import projection_finish_state_fi
 from database.sync_ledger import sync_content_ledger_ref, LEDGER_RETENTION_DAYS
 from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
 from utils.batch_pipeline.contracts import ProjectionBinding
+from utils.batch_pipeline.projection_delivery import assert_delivery_claim
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.capture import chunk_identity
 
@@ -288,6 +289,7 @@ class ProjectionSession:
         self._privacy_fence_ids = set()
         self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
         self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
+        assert_delivery_claim(self.segment_id, self.entry)
         owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
         self.ledger = self.ledger_ref.get(transaction=transaction).to_dict() or {}
         if (

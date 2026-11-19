@@ -23,6 +23,7 @@ from uuid import uuid4
 from google.cloud import firestore
 
 from database.batch_pipeline_projection_protocol import normalized_binding
+from database.batch_pipeline_projection_outbox import arm as arm_projection
 from database.batch_pipeline_projection_finish import projection_finish_state_fields
 from database.batch_pipeline_projection import assignment_held_without_recovery, OPERATOR_INTENTS
 from database.batch_pipeline_shadow_hook import mirror_refresh
@@ -295,6 +296,7 @@ class ProjectionReleaseStore:
                             {
                                 'projection_state': 'ready',
                                 'ghost_settled_cohort': cohort,
+                                **arm_projection(entry, now),
                                 **projection_finish_state_fields(
                                     'ready',
                                     now,
@@ -358,6 +360,7 @@ class ProjectionReleaseStore:
                 'projection': {},
                 'projection_blocked_since': None,
                 'projection_block_type': None,
+                **arm_projection(entry, now),
             }
             if 'held_deadline_at' in entry and (expired or batch_held_dead_letter_enabled()):
                 reset['held_deadline_at'] = None
