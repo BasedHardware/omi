@@ -46,7 +46,7 @@ def _env_int(name, default):
 
 DERIVED_LIMIT = _env_int('CONVERSATIONS_V3_DERIVED_LIMIT', 1024)
 DERIVED_BYTES = _env_int('CONVERSATIONS_V3_DERIVED_BYTES', 16 * 1024 * 1024)
-SOURCE_LIMIT = 400
+SOURCE_LIMIT = _env_int('CONVERSATIONS_V3_SOURCE_LIMIT', 400)
 CLAIM_READ_CHUNK = 100
 
 
@@ -285,12 +285,15 @@ def load(uid, *, conversation_id=None, firestore_client=None):
     def add(row):
         # Checked per document, so an overflowing closure stops reading and decoding at the bound.
         nonlocal loaded_bytes
-        if row['id'] not in existing:
-            loaded_bytes += _encoded_bytes(row.get('transcript_segments') or [])
+        previous = existing.get(row['id'])
+        loaded_bytes += _encoded_bytes(row.get('transcript_segments') or [])
+        if previous is not None:
+            loaded_bytes -= _encoded_bytes(previous.get('transcript_segments') or [])
         existing[row['id']] = row
         if len(existing) > DERIVED_LIMIT or loaded_bytes > DERIVED_BYTES:
             raise Conflict('v3_derived_budget')
 
+    missing = set()
     # Follow linked recordings until the closure converges. Each round adds at least one recording and
     # derived rows stay bounded by DERIVED_LIMIT; a fixed hop depth failed the same owner on every retry.
     for _round in range(LIMIT + 1):
@@ -301,15 +304,18 @@ def load(uid, *, conversation_id=None, firestore_client=None):
             for p in row.get('recording_pieces') or []
             if p['recording_id'] != row['id']
         )
-        for rid in ids - recordings.keys():
-            row = recording_input(uid, coll.document(rid).get())
-            if row:
-                if row.get('_v3_unreadable'):
-                    unreadable[rid] = row
-                else:
-                    recordings[rid] = row
-        if len(recordings) + len(unreadable) > SOURCE_LIMIT:
+        unseen = ids - recordings.keys() - unreadable.keys() - missing
+        # Every source read counts, missing ones included, and the bound is checked before reading.
+        if len(recordings) + len(unreadable) + len(missing) + len(unseen) > SOURCE_LIMIT:
             raise Conflict('v3_source_closure_budget')
+        for rid in unseen:
+            row = recording_input(uid, coll.document(rid).get())
+            if not row:
+                missing.add(rid)
+            elif row.get('_v3_unreadable'):
+                unreadable[rid] = row
+            else:
+                recordings[rid] = row
         fresh = [r for rid, r in recordings.items() if rid not in queried and r and r.get('started_at')]
         if not fresh:
             break
@@ -700,7 +706,8 @@ def commit_projection(
         return observed
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
-    max_rows = max(1, BATCH_MAX_WRITES - len(recordings) - 1)
+    # The final batch also deletes a re-derive's retired copies.
+    max_rows = max(1, BATCH_MAX_WRITES - len(recordings) - len(remove) - 1)
     batches, current, size = [], [], 0
     for raw, encoded in zip(rows, prepared):
         amount = len(json.dumps(encoded, default=str).encode())

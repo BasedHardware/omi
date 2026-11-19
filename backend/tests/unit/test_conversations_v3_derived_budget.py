@@ -115,7 +115,8 @@ def test_claimants_are_read_in_chunks(monkeypatch):
     assert len(existing) == 20 and reads == [7, 7, 6]
 
 
-def test_commit_batches_stay_under_the_write_cap(strict, monkeypatch):
+@pytest.mark.parametrize('remove, expected', [((), [3, 3, 2]), (('old0', 'old1'), [1] * 8)])
+def test_commit_batches_stay_under_the_write_cap(strict, monkeypatch, remove, expected):
     strict.rows[path('r')] = {'id': 'r', 'recording': True, 'v3_pending': True, 'status': 'completed'}
     token = leases.acquire(UID, 'builder', firestore_client=strict)
     commits = []
@@ -131,8 +132,10 @@ def test_commit_batches_stay_under_the_write_cap(strict, monkeypatch):
         return run
 
     monkeypatch.setattr(store.firestore, 'transactional', transactional)
-    # One source update and the lease leave three rows per transaction.
+    # One source update and the lease leave three rows per transaction; a re-derive's two deletes leave one.
     monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 5)
+    for cid in remove:
+        strict.rows[path(cid)] = {'id': cid, 'v3_derived': True, 'backfilled': True}
     rows = [
         {
             'id': f'c{i}',
@@ -144,10 +147,18 @@ def test_commit_batches_stay_under_the_write_cap(strict, monkeypatch):
         }
         for i in range(8)
     ]
+    existing = {cid: {**strict.rows[path(cid)], '_v3_revision': 1} for cid in remove}
     store.commit_projection(
-        UID, token, {'r': {**strict.rows[path('r')], '_v3_revision': 1}}, {}, rows, [], firestore_client=strict
+        UID,
+        token,
+        {'r': {**strict.rows[path('r')], '_v3_revision': 1}},
+        existing,
+        rows,
+        [],
+        remove=list(remove),
+        firestore_client=strict,
     )
-    assert commits == [3, 3, 2]
+    assert commits == expected
 
 
 def test_every_claimant_of_a_loaded_recording_is_loaded_by_id():
@@ -231,3 +242,15 @@ def test_the_closure_bounds_its_sources(monkeypatch):
         rows[C + rid] = source(rid, v3_pending=False, claims=[claim('d', AT, 10)])
     with pytest.raises(Conflict, match='v3_source_closure_budget'):
         store.load('u', firestore_client=MemoryQuery(rows))
+
+
+def test_missing_sources_count_and_the_source_bound_holds_before_reading(monkeypatch):
+    monkeypatch.setattr(store, 'SOURCE_LIMIT', 3)
+    reads = []
+    real = store.recording_input
+    monkeypatch.setattr(store, 'recording_input', lambda uid, snap: reads.append(snap.id) or real(uid, snap))
+    rows = {C + 'p': source('p', claims=[claim('d', AT, 10)], v3_pending_since=AT)}
+    rows[C + 'd'] = derived('d', AT, 10, ['p', 'gone1', 'gone2', 'gone3'])
+    with pytest.raises(Conflict, match='v3_source_closure_budget'):
+        store.load('u', firestore_client=MemoryQuery(rows))
+    assert not any(rid.startswith('gone') for rid in reads)
