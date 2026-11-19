@@ -246,3 +246,29 @@ def read_v3_rows(uid: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             out[name].append(plain(row))
     derived = [r for r in out['v3_derived'] if r.get('recording') is not True]
     return derived, out['recording']
+
+
+EMULATOR_ENTITY_TOO_LARGE = 'maximum entity size is'
+
+
+def install_emulator_size_errors(stack: ExitStack) -> None:
+    """The Firestore emulator words a document over 1 MiB differently from production.
+
+    Production says "exceeds the maximum allowed size"; the emulator says "maximum entity size is
+    1048576 bytes". Without this, ``size_error`` misses it in the lab and the product never logs which
+    staged document was too large (``log_largest_write``: kind and bytes, no ids or content).
+    """
+    from unittest.mock import patch
+
+    try:
+        from database import conversations_v3 as store
+    except ImportError:
+        return
+    original = getattr(store, 'size_error', None)
+    if original is None:
+        return
+
+    def size_error(error: Any) -> Any:
+        return original(error) or ('document' if EMULATOR_ENTITY_TOO_LARGE in str(error) else None)
+
+    stack.enter_context(patch.object(store, 'size_error', size_error))

@@ -25,6 +25,7 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import logging
 import time
 import traceback
 from typing import Any, Callable, Optional, Protocol, Sequence
@@ -33,6 +34,18 @@ from testing.pipeline_lab.v3.feed import Arrival
 from testing.pipeline_lab.v3.tasks import RECONCILE_PATH, LoopbackTasks
 
 SWEEP_EVERY = timedelta(minutes=5)
+
+
+class _SizeNotes(logging.Handler):
+    """Keep the product's own size warning (kind and byte counts; it never logs ids or content)."""
+
+    def __init__(self) -> None:
+        super().__init__(logging.WARNING)
+        self.lines: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if str(record.msg).startswith('v3 projection write too large'):
+            self.lines.append(record.getMessage())
 
 
 class V3Ops(Protocol):
@@ -137,6 +150,8 @@ class V3Driver:
 
     async def _run(self, event: V3Event, work: Callable[[], Any]) -> None:
         started = time.monotonic()
+        notes = _SizeNotes()
+        logging.getLogger().addHandler(notes)
         try:
             result = await work()
             if isinstance(result, dict):
@@ -161,6 +176,10 @@ class V3Driver:
                 import re
 
                 event.detail['reason'] = re.sub(r'"[^"]*"|\'[^\']*\'', '…', str(getattr(error, 'message', '')))[:200]
+            if notes.lines:
+                event.detail['too_large'] = notes.lines[-3:]
+        finally:
+            logging.getLogger().removeHandler(notes)
         event.seconds = round(time.monotonic() - started, 3)
 
     async def run(self, arrivals: Sequence[Arrival]) -> V3Report:

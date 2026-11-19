@@ -42,6 +42,7 @@ from testing.pipeline_lab.v3.product import (
     admit,
     clear_admission,
     install_attribution,
+    install_emulator_size_errors,
     read_v3_rows,
 )
 from testing.pipeline_lab.v3.tasks import LoopbackTasks
@@ -217,6 +218,7 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
         tasks = LoopbackTasks(clock.now, log=lambda row: append_jsonl(run_dir / 'v3_tasks.jsonl', row))
         result['tasks_bound'] = tasks.install(stack)
         install_attribution(stack)
+        install_emulator_size_errors(stack)
         stack.enter_context(installed_clock(clock))
         if any(d.get('name') == 'typesense_unavailable' for d in env.decisions.rows):
             result['warnings'].append('typesense not listening: conversation index writes off for this run')

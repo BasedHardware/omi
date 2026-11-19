@@ -105,6 +105,8 @@ for index, group in enumerate(groups):
 win_kw = {'cohesion': cohesion}
 if 'sitdown' in inspect.signature(planner.windows).parameters:
     win_kw['sitdown'] = sitdown
+if 'silence_gap' in inspect.signature(planner.windows).parameters and 'silence_gap' in kwargs:
+    win_kw['silence_gap'] = kwargs['silence_gap']
 windows = planner.windows(groups, outlines, **win_kw)
 out = []
 for w in windows:
