@@ -1,0 +1,110 @@
+"""Durable, generation-bound receipts for the account wipe's Go queue barrier."""
+
+from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+from typing import Literal
+
+from google.cloud import firestore
+from google.cloud.firestore_v1 import transactional
+from google.cloud.firestore_v1.base_query import FieldFilter
+
+from database.account_deletion_marker import (
+    account_deletion_collection,
+    account_deletion_document,
+    account_deletion_firestore_client,
+)
+
+from database.legal_holds import assert_destructive_operation_transaction
+
+ERASE_DEADLINE = timedelta(minutes=15)
+ARMED_AT = 'go_queue_erase_armed_at'
+RECEIPT_AT = 'go_queue_erase_receipt_at'
+WIPE_AT = 'go_queue_erase_wipe_started_at'
+CLAIM = 'go_queue_erase_claim'
+PATH = 'go_queue_erase_path'
+Step = Literal['arm', 'verify', 'receipt', 'wipe']
+
+
+def claim_fingerprint(token: str) -> str:
+    return sha256(token.encode()).hexdigest()
+
+
+@transactional
+def _record(transaction, client, ref, uid: str, job_id: str, claim: str, step: Step, path: str | None):
+    assert_destructive_operation_transaction(
+        transaction, client, uid=uid, kind='account_deletion', token=f'account-deletion:{uid}'
+    )
+    snapshot = ref.get(transaction=transaction)
+    marker = snapshot.to_dict() or {}
+    due = marker.get('wipe_due_at')
+    if (
+        marker.get('wipe_job_id') != job_id
+        or marker.get('wipe_status') != 'running'
+        or (
+            due is not None
+            and (not isinstance(due, datetime) or due.tzinfo is None or due > datetime.now(timezone.utc))
+        )
+    ):
+        raise RuntimeError('Go queue erase requires the active due wipe generation')
+    if step == 'arm':
+        fields = {CLAIM: claim}
+        if marker.get(ARMED_AT) is None:
+            fields.update({ARMED_AT: firestore.SERVER_TIMESTAMP, RECEIPT_AT: None})
+        transaction.update(ref, fields)
+    elif marker.get(CLAIM) != claim or not isinstance(marker.get(ARMED_AT), datetime):
+        raise RuntimeError('Go queue erase claim changed')
+    elif step == 'receipt' and marker.get(RECEIPT_AT) is None:
+        transaction.update(ref, {RECEIPT_AT: firestore.SERVER_TIMESTAMP, PATH: path})
+    elif step == 'wipe':
+        if not isinstance(marker.get(RECEIPT_AT), datetime):
+            raise RuntimeError('Go queue erase receipt missing')
+        if marker.get(WIPE_AT) is None:
+            transaction.update(ref, {WIPE_AT: firestore.SERVER_TIMESTAMP})
+    return marker
+
+
+def record(uid: str, job_id: str, claim: str, step: Step, path: str | None = None):
+    client = account_deletion_firestore_client()
+    ref = account_deletion_document(uid, firestore_client=client)
+    return _record(client.transaction(), client, ref, uid, job_id, claim, step, path)
+
+
+def summarize(now: datetime, markers) -> dict[str, int]:
+    """Count matured cohorts by arming time, including those with no receipt."""
+    cutoff = now - ERASE_DEADLINE
+    start = now - timedelta(days=7)
+    good = total = overdue = 0
+    for marker in markers:
+        armed = marker.get(ARMED_AT)
+        if not isinstance(armed, datetime) or armed > cutoff:
+            continue
+        ack = marker.get(RECEIPT_AT)
+        wipe = marker.get(WIPE_AT)
+        if ack is None:
+            overdue += 1
+        if armed < start:
+            continue
+        total += 1
+        if isinstance(ack, datetime) and armed <= ack <= armed + ERASE_DEADLINE and (wipe is None or ack <= wipe):
+            good += 1
+    return {'met': good, 'eligible': total, 'overdue_pending': overdue}
+
+
+def readback(now: datetime) -> dict[str, int]:
+    """Read aggregate evidence from the authoritative marker collection."""
+    collection = account_deletion_collection()
+    cutoff = now - ERASE_DEADLINE
+    recent = (
+        collection.where(filter=FieldFilter(ARMED_AT, '>=', now - timedelta(days=7)))
+        .where(filter=FieldFilter(ARMED_AT, '<=', cutoff))
+        .select([ARMED_AT, RECEIPT_AT, WIPE_AT])
+    )
+    result = summarize(now, (snapshot.to_dict() or {} for snapshot in recent.stream()))
+    # Only armed, unresolved markers explicitly store a null receipt. Filter
+    # the old ones in memory to avoid a cross-field composite index.
+    pending = collection.where(filter=FieldFilter(RECEIPT_AT, '==', None)).select([ARMED_AT])
+    for snapshot in pending.stream():
+        armed = (snapshot.to_dict() or {}).get(ARMED_AT)
+        if isinstance(armed, datetime) and armed < now - timedelta(days=7):
+            result['overdue_pending'] += 1
+    return result

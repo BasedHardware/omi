@@ -13,7 +13,7 @@ from config.firestore_read_levers import lever_enabled
 import uuid
 from database.fsr_read_cache import cache_writer, cached_read, memo, plane_id, ttl, user_snapshot, writing
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Optional, TypedDict
+from typing import NotRequired, Any, Literal, Optional, TypedDict
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
@@ -84,6 +84,7 @@ ONBOARDING_ADMISSION_TTL = timedelta(minutes=20)
 class DeletionWipeTaskResolution(TypedDict):
     outcome: Literal['resolved', 'missing', 'ambiguous', 'completed', 'not_actionable']
     uid: str | None
+    go_queue_erase_armed: NotRequired[bool]
 
 
 class DeletionWipeIntent(TypedDict):
@@ -677,11 +678,14 @@ def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution
         return {'outcome': 'ambiguous', 'uid': None}
 
     doc = docs[0]
-    status = (doc.to_dict() or {}).get('wipe_status')
+    marker = doc.to_dict() or {}
+    status = marker.get('wipe_status')
     if status == 'completed':
         return {'outcome': 'completed', 'uid': None}
     if status in _DELETION_WIPE_TERMINAL_STATUSES:
         return {'outcome': 'not_actionable', 'uid': None}
+    if marker.get('go_queue_erase_armed_at') is not None:
+        return {'outcome': 'resolved', 'uid': doc.id, 'go_queue_erase_armed': True}
     return {'outcome': 'resolved', 'uid': doc.id}
 
 
@@ -692,7 +696,11 @@ def _mark_user_deletion_billing_failed_txn(
     snapshot = doc_ref.get(transaction=transaction)
     if snapshot.exists:
         data = snapshot.to_dict() or {}
-        if data.get('wipe_status') in ('cancelled', 'completed') or data.get('wipe_auth_deleted_at'):
+        if (
+            data.get('wipe_status') in ('cancelled', 'completed')
+            or data.get('wipe_auth_deleted_at')
+            or data.get('go_queue_erase_armed_at') is not None
+        ):
             return False
 
     write_account_authority(

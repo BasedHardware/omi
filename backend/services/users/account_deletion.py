@@ -20,6 +20,7 @@ from database import _client as database_client
 from database.legal_holds import (
     acquire_destructive_operation,
     assert_account_deletion_permitted,
+    assert_destructive_gate_still_ours,
     finish_destructive_operation,
 )
 from database.dev_api_key import delete_dev_key, get_dev_keys_for_user
@@ -62,6 +63,7 @@ from utils.retrieval.frame_request_storage import (
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 from utils.integration_telemetry import emit_posthog_event
 from services.users.agent_vm_account_cleanup import delete_agent_vm_for_account
+from services.users.go_queue_erase import go_queue_erase_required, require_committed_erase
 from config.account_deletion_grace import (
     account_deletion_grace_enabled,
     account_deletion_grace_window,
@@ -349,7 +351,9 @@ async def _renew_deletion_wipe_lease(uid: str, token: str, stop: asyncio.Event, 
             pass
 
 
-async def run_deletion_wipe_with_lease(uid: str, retry_count: int, terminal: bool, token: str) -> bool:
+async def run_deletion_wipe_with_lease(
+    uid: str, retry_count: int, terminal: bool, token: str, wipe_job_id: str | None = None
+) -> bool:
     """Own renewal until the cleanup thread finishes, even if HTTP is cancelled."""
 
     async def run() -> bool:
@@ -359,7 +363,12 @@ async def run_deletion_wipe_with_lease(uid: str, retry_count: int, terminal: boo
             _renew_deletion_wipe_lease(uid, token, stop, lost), name='account-deletion-lease'
         )
         try:
-            return await run_blocking(cleanup_executor, background_wipe_user_data, uid, retry_count, terminal, lost)
+            arguments = (uid, retry_count, terminal, lost)
+            if wipe_job_id is not None:
+                return await run_blocking(
+                    cleanup_executor, background_wipe_user_data, *arguments, erase_claim=(wipe_job_id, token)
+                )
+            return await run_blocking(cleanup_executor, background_wipe_user_data, *arguments)
         finally:
             stop.set()
             await heartbeat
@@ -369,7 +378,12 @@ async def run_deletion_wipe_with_lease(uid: str, retry_count: int, terminal: boo
 
 
 def background_wipe_user_data(
-    uid: str, retry_count: int = 0, terminal: bool = False, lease_lost: Event | None = None
+    uid: str,
+    retry_count: int = 0,
+    terminal: bool = False,
+    lease_lost: Event | None = None,
+    *,
+    erase_claim: tuple[str, str] | None = None,
 ) -> bool:
     started_at = time.monotonic()
     current_operation = 'wipe_running_marker'
@@ -408,6 +422,19 @@ def background_wipe_user_data(
         # grace admission check. Re-read Stripe at the irreversible boundary,
         # even when admission recorded an earlier successful cancellation.
         _cancel_subscription_for_account_deletion(uid)
+        if erase_claim is not None or go_queue_erase_required():
+            current_operation = 'go_queue_erase'
+            if erase_claim is None:
+                raise RuntimeError('Go queue erase requires an authenticated wipe claim')
+            job_id, token = erase_claim
+
+            def owns_erase_claim() -> None:
+                heartbeat()
+                assert_destructive_gate_still_ours(uid, 'account_deletion', token=deletion_gate_token)
+                if not renew_job_run_lock(deletion_gate_token, token):
+                    raise RuntimeError('Go queue erase wipe claim lost')
+
+            require_committed_erase(uid, job_id, token, owns_erase_claim)
         current_operation = 'agent_vm'
         heartbeat()
         delete_agent_vm_for_account(uid)
@@ -465,6 +492,14 @@ def background_wipe_user_data(
         destroy_owner_lake_keys(uid)
         logger.info('delete_account background wipe complete')
     except Exception as e:
+        if erase_claim is not None:
+            try:
+                if not renew_job_run_lock(deletion_gate_token, erase_claim[1]):
+                    logger.warning('delete_account failure ignored after losing the run lock')
+                    return False
+            except Exception:
+                logger.error('delete_account could not confirm ownership to record wipe failure')
+                return False
         logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
         if deletion_gate_acquired:
             try:
