@@ -15332,4 +15332,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'サーバーが報告した処理';
+
+  @override
+  String get finishNothingToProcess => 'まだ処理するものがありません。';
+
+  @override
+  String get finishStillProcessing => 'まだ処理中です。ホームに表示されます。';
+
+  @override
+  String get finishBackToHome => 'ホームに戻る';
 }

@@ -42,7 +42,7 @@ from config.episodes import (
 from utils.conversations import transcribing_hold
 from utils.conversations import home_latency, legacy_empty_wire
 from utils.conversations import empty_capture
-from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
+from utils.conversations.fragment_visibility import held_for_notes, is_completed_below_floor, is_user_curated
 from utils.conversations.home_titles import summary_owed, untitled_pending
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
 
@@ -74,11 +74,12 @@ def _value(value: Any) -> Any:
     return getattr(value, 'value', value)
 
 
-def classify(row: Mapping[str, Any]) -> str | None:
+def classify(row: Mapping[str, Any], *, show_held: bool = False) -> str | None:
     """The row's Home step, or None for live rows and when the projection is off.
 
     Call on the stored read copy, before ``transcribing_hold.project`` rewrites
-    status and title for the wire.
+    status and title for the wire. ``show_held`` is the legacy Home list's
+    opt-in for sync pieces held for notes (``held_for_notes``).
     """
     if not home_step_projection_enabled():
         return None
@@ -142,7 +143,7 @@ def classify(row: Mapping[str, Any]) -> str | None:
     if is_completed_below_floor(row) or empty_output or legacy_empty_wire.terminal_noise(row):
         return NOISE
     if provisional:
-        if summary_owed(row):
+        if summary_owed(row) or (show_held and held_for_notes(row)):
             return WRITING_NOTES
         if row.get('summary_output_present') or row.get('summary_completed_at'):
             # A real summary landed; read projections may still re-stamp an echo title.
@@ -176,9 +177,9 @@ def _older_than(moment: Any, seconds: float) -> bool:
     return (datetime.now(timezone.utc) - moment).total_seconds() >= seconds
 
 
-def project(row: dict[str, Any]) -> dict[str, Any]:
+def project(row: dict[str, Any], *, show_held: bool = False) -> dict[str, Any]:
     """Return a wire copy carrying ``home_step`` (unchanged when there is none)."""
-    step = classify(row)
+    step = classify(row, show_held=True) if show_held else classify(row)
     if step == READY:
         home_latency.observe(row)
     wire = row if step is None else {**row, 'home_step': step}

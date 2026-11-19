@@ -4721,5 +4721,8 @@
     "downloadNow": "Şimdi İndir",
     "onWifiLater": "Sonra Wi-Fi'da",
     "conversationWritingSummary": "Özetiniz yazılıyor…",
-    "onTheWayServerWork": "Sunucunun bildirdiği işler"
+    "onTheWayServerWork": "Sunucunun bildirdiği işler",
+    "finishNothingToProcess": "Henüz işlenecek bir şey yok.",
+    "finishStillProcessing": "Hâlâ işleniyor. Ana sayfada görünecek.",
+    "finishBackToHome": "Ana Sayfaya Dön"
 }

@@ -800,17 +800,16 @@ local-send phase/exception attribution and the listen-train acceptance checks.
 ### unlimited_v2 backfill/import daily transcribed-hours cap
 
 `UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED` (default `false`) and
-`UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS` (default `24`) are a separate, default-off
+`UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS` (default `24`; prod on at 24 since 2026-11-18) are a separate
 admission cap for the `unlimited_v2` plan. It counts the `transcription_seconds`
 already recorded on `users/{uid}/hourly_usage` for the current UTC user-day — the
-same basis `unit_cost_user_day.tx_sec` uses — and refuses managed **backfill/import**
-transcription once that day reached the cap level. Only the sync `backfill` lane
-and the batch `backfill` lane pass the backfill marker; live listen and fresh
-sync/batch capture never do, so live capture is untouched even on a user-day above
-the cap. The meter is the total day seconds (it cannot separate backfill from live
+same basis `unit_cost_user_day.tx_sec` uses — and defers sync **backfill** uploads once that day reached the cap level. It is
+enforced only at sync upload admission; live listen, fresh capture, sync segments
+and batch units never consult it. The meter is the total day seconds (it cannot separate backfill from live
 seconds); the admission lane is the exact separation for the work being admitted.
-Above the cap the answer is identical to an exhausted allowance: offline segments
-are durably held. Free, Plus and the deprecated paid tiers are unchanged in both
+Above the cap the upload gets the retryable 503 `backfill_capacity` with
+`Retry-After` to the next UTC day, before any audio is consumed; no server hold is
+created. Free, Plus and the deprecated paid tiers are unchanged in both
 modes, and an unreadable plan or meter read admits transcription. Deployment,
 readback and activation: [runbook](runbooks/unlimited-v2-backfill-hours-cap.md);
 rollout note:

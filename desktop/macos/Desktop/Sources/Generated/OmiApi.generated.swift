@@ -9929,7 +9929,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getConversationsV1ConversationsGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, statuses: String? = nil, includeDiscarded: Bool? = nil, sources: String? = nil, startDate: String? = nil, endDate: String? = nil, folderId: String? = nil, starred: Bool? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [Conversation] {
+  public static func getConversationsV1ConversationsGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, statuses: String? = nil, includeDiscarded: Bool? = nil, sources: String? = nil, startDate: String? = nil, endDate: String? = nil, folderId: String? = nil, starred: Bool? = nil, cursor: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [Conversation] {
     let _path = "/v1/conversations"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -9961,6 +9961,9 @@ public enum OmiAPI {
     }
     if let starred {
       queryItems.append(URLQueryItem(name: "starred", value: String(starred)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }

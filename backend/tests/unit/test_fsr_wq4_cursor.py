@@ -312,13 +312,15 @@ def test_visibility_flip_during_page_fills_without_duplication_or_skips(monkeypa
 
 
 def test_hidden_skip_cap_advances_empty_page(monkeypatch, enable):
+    monkeypatch.setattr(db, '_HIDDEN_ROW_PAGE_SKIP_CAP', 64)
     data = rows(100)
     first, _ = fetch(monkeypatch, data, limit=2, page_envelope=True)
     for row in data[2:80]:
         row['deleted'] = True
     result, counts = fetch(monkeypatch, data, limit=2, cursor=first['next_cursor'], page_envelope=True)
     assert result['conversations'] == []
-    assert counts['reads'] == db._RULE_DISCARD_PAGE_SKIP_CAP + 1
+    # Only hidden rows count against the cap; the scan stops on the cap-th one.
+    assert counts['reads'] == 64
     assert result['next_cursor']
     next_page, _ = fetch(monkeypatch, data, limit=2, cursor=result['next_cursor'], page_envelope=True)
     assert [row['id'] for row in next_page['conversations']] == ['020', '019']

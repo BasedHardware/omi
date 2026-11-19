@@ -12243,5 +12243,8 @@
     "downloadNow": "ابھی ڈاؤن لوڈ کریں",
     "onWifiLater": "بعد میں Wi-Fi پر",
     "conversationWritingSummary": "آپ کا خلاصہ لکھا جا رہا ہے…",
-    "onTheWayServerWork": "سرور کی بتائی ہوئی کارروائی"
+    "onTheWayServerWork": "سرور کی بتائی ہوئی کارروائی",
+    "finishNothingToProcess": "ابھی پروسیس کرنے کے لیے کچھ نہیں ہے۔",
+    "finishStillProcessing": "ابھی پروسیس ہو رہا ہے۔ یہ ہوم پر نظر آئے گا۔",
+    "finishBackToHome": "ہوم پر واپس جائیں"
 }

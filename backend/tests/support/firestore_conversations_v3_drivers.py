@@ -1,8 +1,9 @@
 """Execute recording-builder and sweeper query shapes without external effects."""
 
+from datetime import timedelta
 from unittest.mock import patch
 
-from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID, FROZEN_NOW, FROZEN_LATER
+from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID, FROZEN_NOW, FROZEN_LATER, ref_collection
 from utils.other.list_budget import ListReadBudget
 
 
@@ -25,6 +26,10 @@ def _pending_source(client, combo, trial):
     )
 
 
+def _pick_none(rows, now):
+    return None
+
+
 def _decode(client):
     return patch('database.conversations_v3.decode_row', side_effect=lambda uid, snapshot: snapshot.to_dict())
 
@@ -44,6 +49,21 @@ def entries():
             patchers=(_decode,),
         ),
         DriverEntry(
+            'database.conversations_v3._mark_successor_pending',
+            base={
+                'coll': ref_collection(f'users/{SHAPE_UID}/conversations'),
+                'recordings': {
+                    'source': {
+                        'id': 'source',
+                        'started_at': FROZEN_NOW,
+                        'finished_at': FROZEN_NOW,
+                        'transcript_segments': [{'text': 'shape', 'start': 0, 'end': 1}],
+                        'v3_rotation_cap_seconds': 300.0,
+                    }
+                },
+            },
+        ),
+        DriverEntry(
             'database.conversations_v3.load_derive',
             base={'uid': SHAPE_UID, 'since': FROZEN_NOW, 'until': FROZEN_LATER, 'run_id': 'shape-run'},
             domains={'rederive': [False, True]},
@@ -51,6 +71,17 @@ def entries():
         DriverEntry(
             'database.conversations_v3.backfill_window_metadata',
             base={'uid': SHAPE_UID, 'since': FROZEN_NOW, 'until': FROZEN_LATER},
+        ),
+        DriverEntry(
+            'database.conversations_v3_live.recent_windows',
+            base={'uid': SHAPE_UID, 'now': FROZEN_NOW, 'max_idle': timedelta(hours=2)},
+            domains={'finished_before': [None, FROZEN_NOW]},
+            neutrals={'max_rows': (200, 'read bound only')},
+        ),
+        DriverEntry(
+            'database.conversations_v3_live.live_window',
+            base={'uid': SHAPE_UID, 'now': FROZEN_NOW, 'max_idle': timedelta(hours=2)},
+            neutrals={'pick': (_pick_none, 'row selection only; no window is live, so both bands read')},
         ),
         DriverEntry('database.conversations_v3.pending_backfill_processing', base={'uid': SHAPE_UID}),
         DriverEntry('database.conversations_v3.backfill_run_documents', base={'uid': SHAPE_UID, 'run_id': 'shape-run'}),
