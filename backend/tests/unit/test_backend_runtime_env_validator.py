@@ -4191,6 +4191,13 @@ def test_control_sync_routing_validates_deployed_values_without_changing_manifes
 
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    # Exercise each validation against the same parsed input without reparsing
+    # the full fleet manifest on every call.
+    monkeypatch.setattr(
+        manifest_validation,
+        '_load_yaml',
+        lambda path: manifest if path == validator.DEFAULT_MANIFEST else validator._load_yaml(path),
+    )
     config = validator._get_env_config(manifest, 'prod')
     original = copy.deepcopy(config)
     overlay = tmp_path / 'routing.env'
