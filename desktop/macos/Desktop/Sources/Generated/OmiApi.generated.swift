@@ -1874,6 +1874,7 @@ public enum OmiAPI {
     public let processingDeferred: Bool?
     public let processingMemoryId: String?
     public let processingState: ConversationProcessingState?
+    public let processingTier: String?
     public let recordAudioPartial: RecordAudioPartial?
     public let recordedEnd: String?
     public let recordedStart: String?
@@ -1888,6 +1889,7 @@ public enum OmiAPI {
     public let structured: Structured
     public let suggestedSummarizationApps: [String]?
     public let summaryCoversThrough: String?
+    public let summaryOnOpen: Bool?
     public let summaryRetryable: Bool?
     public let syncContentRevision: Int?
     public let syncRelevance: String?
@@ -1954,6 +1956,7 @@ public enum OmiAPI {
       case processingDeferred = "processing_deferred"
       case processingMemoryId = "processing_memory_id"
       case processingState = "processing_state"
+      case processingTier = "processing_tier"
       case recordAudioPartial = "record_audio_partial"
       case recordedEnd = "recorded_end"
       case recordedStart = "recorded_start"
@@ -1968,6 +1971,7 @@ public enum OmiAPI {
       case structured
       case suggestedSummarizationApps = "suggested_summarization_apps"
       case summaryCoversThrough = "summary_covers_through"
+      case summaryOnOpen = "summary_on_open"
       case summaryRetryable = "summary_retryable"
       case syncContentRevision = "sync_content_revision"
       case syncRelevance = "sync_relevance"
@@ -2036,6 +2040,7 @@ public enum OmiAPI {
       processingDeferred = try c.decodeIfPresent(Bool.self, forKey: .processingDeferred)
       processingMemoryId = try c.decodeIfPresent(String.self, forKey: .processingMemoryId)
       processingState = try c.decodeIfPresent(ConversationProcessingState.self, forKey: .processingState)
+      processingTier = try c.decodeIfPresent(String.self, forKey: .processingTier)
       recordAudioPartial = try c.decodeIfPresent(RecordAudioPartial.self, forKey: .recordAudioPartial)
       recordedEnd = try c.decodeIfPresent(String.self, forKey: .recordedEnd)
       recordedStart = try c.decodeIfPresent(String.self, forKey: .recordedStart)
@@ -2050,6 +2055,7 @@ public enum OmiAPI {
       structured = try c.decode(Structured.self, forKey: .structured)
       suggestedSummarizationApps = try c.decodeIfPresent([String].self, forKey: .suggestedSummarizationApps)
       summaryCoversThrough = try c.decodeIfPresent(String.self, forKey: .summaryCoversThrough)
+      summaryOnOpen = try c.decodeIfPresent(Bool.self, forKey: .summaryOnOpen)
       summaryRetryable = try c.decodeIfPresent(Bool.self, forKey: .summaryRetryable)
       syncContentRevision = try c.decodeIfPresent(Int.self, forKey: .syncContentRevision)
       syncRelevance = try c.decodeIfPresent(String.self, forKey: .syncRelevance)
@@ -2064,7 +2070,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, appsResults: [AppResult]? = nil, arrivalAt: String? = nil, audioFiles: [AudioFile]? = nil, audioTimeline: AudioTimelineProvenance? = nil, calendarEvent: CalendarEventLink? = nil, calendarEventId: String? = nil, callId: String? = nil, callPlatform: String? = nil, captureCoverage: String? = nil, captureGroup: CaptureGroup? = nil, captureTimeTrust: String? = nil, captureTimezone: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, clock: RecordedClock? = nil, contentKind: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, episodeId: String? = nil, excludedSpeakers: [Int]? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, geolocationScope: String? = nil, homeHidden: Bool? = nil, homeHiddenReason: String? = nil, id: String, imported: Bool? = nil, isCall: Bool? = nil, isLocked: Bool? = nil, kind: String? = nil, language: String? = nil, liveSummary: LiveSummaryPreview? = nil, manualEnd: Bool? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, otherParticipantsLocation: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingDeferred: Bool? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, recordAudioPartial: RecordAudioPartial? = nil, recordedEnd: String? = nil, recordedStart: String? = nil, recording: Bool? = nil, recordingPieces: [RecordingPiece]? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, speakerResolution: ConversationSpeakers? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, summaryCoversThrough: String? = nil, summaryRetryable: Bool? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, tileState: String? = nil, titleLocked: Bool? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, userCorrections: [[String: OmiAnyCodable]]? = nil, userOverview: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, arrivalAt: String? = nil, audioFiles: [AudioFile]? = nil, audioTimeline: AudioTimelineProvenance? = nil, calendarEvent: CalendarEventLink? = nil, calendarEventId: String? = nil, callId: String? = nil, callPlatform: String? = nil, captureCoverage: String? = nil, captureGroup: CaptureGroup? = nil, captureTimeTrust: String? = nil, captureTimezone: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, clock: RecordedClock? = nil, contentKind: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, episodeId: String? = nil, excludedSpeakers: [Int]? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, geolocationScope: String? = nil, homeHidden: Bool? = nil, homeHiddenReason: String? = nil, id: String, imported: Bool? = nil, isCall: Bool? = nil, isLocked: Bool? = nil, kind: String? = nil, language: String? = nil, liveSummary: LiveSummaryPreview? = nil, manualEnd: Bool? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, otherParticipantsLocation: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingDeferred: Bool? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, processingTier: String? = nil, recordAudioPartial: RecordAudioPartial? = nil, recordedEnd: String? = nil, recordedStart: String? = nil, recording: Bool? = nil, recordingPieces: [RecordingPiece]? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, speakerResolution: ConversationSpeakers? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, summaryCoversThrough: String? = nil, summaryOnOpen: Bool? = nil, summaryRetryable: Bool? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, tileState: String? = nil, titleLocked: Bool? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, userCorrections: [[String: OmiAnyCodable]]? = nil, userOverview: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.arrivalAt = arrivalAt
@@ -2117,6 +2123,7 @@ public enum OmiAPI {
       self.processingDeferred = processingDeferred
       self.processingMemoryId = processingMemoryId
       self.processingState = processingState
+      self.processingTier = processingTier
       self.recordAudioPartial = recordAudioPartial
       self.recordedEnd = recordedEnd
       self.recordedStart = recordedStart
@@ -2131,6 +2138,7 @@ public enum OmiAPI {
       self.structured = structured
       self.suggestedSummarizationApps = suggestedSummarizationApps
       self.summaryCoversThrough = summaryCoversThrough
+      self.summaryOnOpen = summaryOnOpen
       self.summaryRetryable = summaryRetryable
       self.syncContentRevision = syncContentRevision
       self.syncRelevance = syncRelevance
@@ -11326,6 +11334,30 @@ public enum OmiAPI {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func openHistoricalSummaryV1ConversationsConversationIdSummaryOpenPost(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Conversation {
+    let _path = "/v1/conversations/\(conversationId)/summary/open"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(Conversation.self, from: data)
   }
 
   public static func testPromptV1ConversationsConversationIdTestPromptPost(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
@@ -21859,5 +21891,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 556 Swift client methods generated.
+  // Total: 557 Swift client methods generated.
 }

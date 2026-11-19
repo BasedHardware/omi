@@ -4661,7 +4661,7 @@
     "monthlySwitchDoneTitle": "Je betaalt nu maandelijks",
     "monthlySwitchDoneBody": "{price} vandaag betaald. Verlengt maandelijks.",
     "processingDeleteScopeChanged": "De verwerkingslijst is gewijzigd. Controleer de lijst en probeer het opnieuw.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Je hebt de {minutes} minuten van deze maand gebruikt",
     "freeCapBody": "Omi neemt nog steeds op. Kies hoe je verder wilt transcriberen.",
     "omiProPlanName": "Omi Pro",

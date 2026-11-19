@@ -3,6 +3,8 @@
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from config.historical_tier import STAND_IN_TITLE_PROVENANCES
+
 from utils.conversations.recovery import structured_is_rich
 from utils.llm.output_language import normalize_language
 from utils.observability.fallback import record_fallback
@@ -18,7 +20,7 @@ def has_existing_notes(conversation: Any) -> bool:
     title = _field(structured, 'title') or ''
     provenance = _field(structured, 'title_provenance')
     return structured_is_rich(structured) or (
-        (bool(str(title).strip()) or bool(provenance)) and provenance != 'server_minimum'
+        (bool(str(title).strip()) or bool(provenance)) and provenance not in STAND_IN_TITLE_PROVENANCES
     )
 
 

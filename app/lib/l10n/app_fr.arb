@@ -4696,7 +4696,7 @@
     "monthlySwitchDoneTitle": "Vous êtes passé au mensuel",
     "monthlySwitchDoneBody": "{price} payés aujourd'hui. Renouvellement mensuel.",
     "processingDeleteScopeChanged": "La liste en cours de traitement a changé. Vérifiez-la et réessayez.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Vous avez utilisé les {minutes} minutes de ce mois-ci",
     "freeCapBody": "Omi enregistre toujours. Choisissez comment continuer la transcription.",
     "omiProPlanName": "Omi Pro",

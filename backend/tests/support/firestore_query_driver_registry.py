@@ -158,7 +158,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
-    'database.batch_pipeline_conversation_purge_scans._claim': '8bd1a47728de848c4fd6bee2490705b21465536f0b431315a5f0f14bb5851b81',
+    'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
@@ -3307,7 +3307,7 @@ _add(
     DriverEntry(
         'database.monthly_usage_totals.read_monthly_totals',
         base={'uid': UID, 'date': T0},
-        domains={'start_date': [None, T0]},
+        domains={'start_date': [None, T0], 'ready_only': [False, True]},
         setup=_monthly_total_user,
         patchers=(
             _stub('database.monthly_usage_totals.lever_enabled', True),

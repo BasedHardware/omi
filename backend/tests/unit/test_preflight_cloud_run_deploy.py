@@ -127,6 +127,34 @@ def test_missing_secret_stops_binding_migration_and_traffic_repair(monkeypatch, 
     repair.assert_not_called()
 
 
+def test_traffic_preflight_passes_the_floor_checker_to_repair(monkeypatch):
+    preflight = load_preflight()
+    repair_module = preflight.repair_cloud_run_traffic
+    repair = Mock(return_value=[repair_module.RepairResult('backend-sync', 'failed', 'backend-sync-old', 'candidate')])
+    monkeypatch.setattr(repair_module, 'repair_live', repair)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            str(SCRIPT),
+            '--env=prod',
+            '--project=based-hardware',
+            '--service=backend-sync',
+            '--repair-traffic',
+            '--release-floor-check=floor.py',
+        ],
+    )
+
+    assert preflight.main() == 1
+    repair.assert_called_once_with(
+        project='based-hardware',
+        region='us-central1',
+        services=('backend-sync',),
+        repair=True,
+        release_floor_check='floor.py',
+    )
+
+
 def test_check_rendered_secrets_passes_when_secrets_exist(monkeypatch: pytest.MonkeyPatch) -> None:
     preflight = load_preflight()
     monkeypatch.setattr(preflight, '_secret_exists', lambda **kwargs: True)

@@ -1155,6 +1155,7 @@ class GeneratedConversation {
   final bool processingDeferred;
   final String? processingMemoryId;
   final String? processingState;
+  final String? processingTier;
   final GeneratedRecordAudioPartial? recordAudioPartial;
   final DateTime? recordedEnd;
   final DateTime? recordedStart;
@@ -1169,6 +1170,7 @@ class GeneratedConversation {
   final GeneratedStructured structured;
   final List<String> suggestedSummarizationApps;
   final DateTime? summaryCoversThrough;
+  final bool? summaryOnOpen;
   final bool? summaryRetryable;
   final int? syncContentRevision;
   final String? syncRelevance;
@@ -1235,6 +1237,7 @@ class GeneratedConversation {
     this.processingDeferred = false,
     this.processingMemoryId,
     this.processingState,
+    this.processingTier,
     this.recordAudioPartial,
     this.recordedEnd,
     this.recordedStart,
@@ -1249,6 +1252,7 @@ class GeneratedConversation {
     required this.structured,
     this.suggestedSummarizationApps = const [],
     this.summaryCoversThrough,
+    this.summaryOnOpen,
     this.summaryRetryable,
     this.syncContentRevision,
     this.syncRelevance,
@@ -1317,6 +1321,7 @@ class GeneratedConversation {
       processingDeferred: _required(_readFieldValue<bool>(_readField(json, const ["processing_deferred"]), "processing_deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "processing_deferred"),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
+      processingTier: _readFieldValue<String>(_readField(json, const ["processing_tier"]), "processing_tier", _readString, requiredField: false, nullable: true),
       recordAudioPartial: _readFieldValue<GeneratedRecordAudioPartial>(_readField(json, const ["record_audio_partial"]), "record_audio_partial", (value) => _readObject(value, GeneratedRecordAudioPartial.fromJson), requiredField: false, nullable: true),
       recordedEnd: _readFieldValue<DateTime>(_readField(json, const ["recorded_end"]), "recorded_end", _readDateTime, requiredField: false, nullable: true),
       recordedStart: _readFieldValue<DateTime>(_readField(json, const ["recorded_start"]), "recorded_start", _readDateTime, requiredField: false, nullable: true),
@@ -1331,6 +1336,7 @@ class GeneratedConversation {
       structured: _required(_readFieldValue<GeneratedStructured>(_readField(json, const ["structured"]), "structured", (value) => _readObject(value, GeneratedStructured.fromJson), requiredField: true, nullable: false), "structured"),
       suggestedSummarizationApps: _required(_readFieldValue<List<String>>(_readField(json, const ["suggested_summarization_apps"]), "suggested_summarization_apps", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "suggested_summarization_apps"),
       summaryCoversThrough: _readFieldValue<DateTime>(_readField(json, const ["summary_covers_through"]), "summary_covers_through", _readDateTime, requiredField: false, nullable: true),
+      summaryOnOpen: _readFieldValue<bool>(_readField(json, const ["summary_on_open"]), "summary_on_open", _readBool, requiredField: false, nullable: true),
       summaryRetryable: _readFieldValue<bool>(_readField(json, const ["summary_retryable"]), "summary_retryable", _readBool, requiredField: false, nullable: true),
       syncContentRevision: _readFieldValue<int>(_readField(json, const ["sync_content_revision"]), "sync_content_revision", _readInt, requiredField: false, nullable: true),
       syncRelevance: _readFieldValue<String>(_readField(json, const ["sync_relevance"]), "sync_relevance", _readString, requiredField: false, nullable: true),
@@ -1400,6 +1406,7 @@ class GeneratedConversation {
       'processing_deferred': processingDeferred,
       'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
+      'processing_tier': processingTier,
       'record_audio_partial': recordAudioPartial?.toJson(),
       'recorded_end': recordedEnd?.toUtc().toIso8601String(),
       'recorded_start': recordedStart?.toUtc().toIso8601String(),
@@ -1414,6 +1421,7 @@ class GeneratedConversation {
       'structured': structured.toJson(),
       'suggested_summarization_apps': suggestedSummarizationApps,
       'summary_covers_through': summaryCoversThrough?.toUtc().toIso8601String(),
+      'summary_on_open': summaryOnOpen,
       'summary_retryable': summaryRetryable,
       'sync_content_revision': syncContentRevision,
       'sync_relevance': syncRelevance,
@@ -1828,6 +1836,7 @@ class GeneratedConversationSearchItem {
   final bool processingDeferred;
   final String? processingMemoryId;
   final String? processingState;
+  final String? processingTier;
   final GeneratedRecordAudioPartial? recordAudioPartial;
   final DateTime? recordedEnd;
   final DateTime? recordedStart;
@@ -1842,6 +1851,7 @@ class GeneratedConversationSearchItem {
   final GeneratedStructured structured;
   final List<String> suggestedSummarizationApps;
   final DateTime? summaryCoversThrough;
+  final bool? summaryOnOpen;
   final bool? summaryRetryable;
   final int? syncContentRevision;
   final String? syncRelevance;
@@ -1909,6 +1919,7 @@ class GeneratedConversationSearchItem {
     this.processingDeferred = false,
     this.processingMemoryId,
     this.processingState,
+    this.processingTier,
     this.recordAudioPartial,
     this.recordedEnd,
     this.recordedStart,
@@ -1923,6 +1934,7 @@ class GeneratedConversationSearchItem {
     required this.structured,
     this.suggestedSummarizationApps = const [],
     this.summaryCoversThrough,
+    this.summaryOnOpen,
     this.summaryRetryable,
     this.syncContentRevision,
     this.syncRelevance,
@@ -1992,6 +2004,7 @@ class GeneratedConversationSearchItem {
       processingDeferred: _required(_readFieldValue<bool>(_readField(json, const ["processing_deferred"]), "processing_deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "processing_deferred"),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
+      processingTier: _readFieldValue<String>(_readField(json, const ["processing_tier"]), "processing_tier", _readString, requiredField: false, nullable: true),
       recordAudioPartial: _readFieldValue<GeneratedRecordAudioPartial>(_readField(json, const ["record_audio_partial"]), "record_audio_partial", (value) => _readObject(value, GeneratedRecordAudioPartial.fromJson), requiredField: false, nullable: true),
       recordedEnd: _readFieldValue<DateTime>(_readField(json, const ["recorded_end"]), "recorded_end", _readDateTime, requiredField: false, nullable: true),
       recordedStart: _readFieldValue<DateTime>(_readField(json, const ["recorded_start"]), "recorded_start", _readDateTime, requiredField: false, nullable: true),
@@ -2006,6 +2019,7 @@ class GeneratedConversationSearchItem {
       structured: _required(_readFieldValue<GeneratedStructured>(_readField(json, const ["structured"]), "structured", (value) => _readObject(value, GeneratedStructured.fromJson), requiredField: true, nullable: false), "structured"),
       suggestedSummarizationApps: _required(_readFieldValue<List<String>>(_readField(json, const ["suggested_summarization_apps"]), "suggested_summarization_apps", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "suggested_summarization_apps"),
       summaryCoversThrough: _readFieldValue<DateTime>(_readField(json, const ["summary_covers_through"]), "summary_covers_through", _readDateTime, requiredField: false, nullable: true),
+      summaryOnOpen: _readFieldValue<bool>(_readField(json, const ["summary_on_open"]), "summary_on_open", _readBool, requiredField: false, nullable: true),
       summaryRetryable: _readFieldValue<bool>(_readField(json, const ["summary_retryable"]), "summary_retryable", _readBool, requiredField: false, nullable: true),
       syncContentRevision: _readFieldValue<int>(_readField(json, const ["sync_content_revision"]), "sync_content_revision", _readInt, requiredField: false, nullable: true),
       syncRelevance: _readFieldValue<String>(_readField(json, const ["sync_relevance"]), "sync_relevance", _readString, requiredField: false, nullable: true),
@@ -2076,6 +2090,7 @@ class GeneratedConversationSearchItem {
       'processing_deferred': processingDeferred,
       'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
+      'processing_tier': processingTier,
       'record_audio_partial': recordAudioPartial?.toJson(),
       'recorded_end': recordedEnd?.toUtc().toIso8601String(),
       'recorded_start': recordedStart?.toUtc().toIso8601String(),
@@ -2090,6 +2105,7 @@ class GeneratedConversationSearchItem {
       'structured': structured.toJson(),
       'suggested_summarization_apps': suggestedSummarizationApps,
       'summary_covers_through': summaryCoversThrough?.toUtc().toIso8601String(),
+      'summary_on_open': summaryOnOpen,
       'summary_retryable': summaryRetryable,
       'sync_content_revision': syncContentRevision,
       'sync_relevance': syncRelevance,
