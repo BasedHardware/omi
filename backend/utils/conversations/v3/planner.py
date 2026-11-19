@@ -467,7 +467,7 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
         if not is_unlocked(row)
         and row.get('started_at')
         and row.get('finished_at')
-        and not row.get('v3_claims_transferred_to')
+        and not (row.get('v3_refined') and row.get('v3_claims_transferred_to'))
     ]
     # When an updated outline joins multiple provisional owners, retain their
     # custody independently until lock and ordinary merge-only refinement.

@@ -669,6 +669,7 @@ def commit_projection(
                     'summary_due_at': None,
                     'sync_merged_into': survivor,
                     'v3_claims_transferred_to': survivor,
+                    'v3_refined': True,
                     'sync_content_revision': int(existing[cid].get('sync_content_revision') or 0) + 1,
                 },
             )

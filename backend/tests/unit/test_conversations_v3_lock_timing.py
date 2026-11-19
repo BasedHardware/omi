@@ -110,7 +110,10 @@ def test_locked_refinement_keeps_earliest_id_notes_and_single_copy_of_audio():
 
     recorded_claims = [{'conversation_id': 'early', **claim} for claim in merged['_v3_claims']['r']]
     recordings['r']['claims'] = recorded_claims
-    existing = {'early': merged, 'late': {**existing['late'], 'deleted': True, 'v3_claims_transferred_to': 'early'}}
+    existing = {
+        'early': merged,
+        'late': {**existing['late'], 'deleted': True, 'v3_refined': True, 'v3_claims_transferred_to': 'early'},
+    }
     split = [{**window, 'lines': [line]} for line in window['lines']]
     retained = planner.preserve_finished_windows(split, existing, recordings)
     assert [piece['existing_id'] for piece in retained] == ['early']
@@ -152,3 +155,20 @@ def test_joining_provisional_cards_preserves_their_claims_until_lock():
             for claim in recordings['r']['claims']
             if claim['conversation_id'] == row['id']
         ]
+
+
+def test_locked_refinement_preserves_an_opened_survivor():
+    from utils.conversations.v3 import refinement
+
+    window, existing, recordings = _locked_pair()
+    existing['early']['v3_open_locked'] = True
+    _, merged = refinement.candidate([window], existing, recordings)
+    assert merged['id'] == 'early' and merged['v3_open_locked']
+
+
+def test_locked_refinement_refuses_a_downgrade_after_source_protection_changes():
+    from utils.conversations.v3 import refinement
+
+    window, existing, recordings = _locked_pair()
+    recordings['r']['data_protection_level'] = 'enhanced'
+    assert refinement.candidate([window], existing, recordings) is None

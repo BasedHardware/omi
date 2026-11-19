@@ -3,6 +3,7 @@
 from copy import deepcopy
 from datetime import timedelta
 import json
+from typing import Any
 
 from utils.conversations.v3 import planner
 
@@ -74,6 +75,10 @@ def _owned_claims(rows, recordings):
             recording = recordings.get(rid)
             if not recording or recording.get('deleted') or recording.get('sync_merged_into'):
                 return None
+            if recording.get('is_locked') or (
+                recording.get('data_protection_level') == 'enhanced' and row.get('data_protection_level') != 'enhanced'
+            ):
+                return None
             if not any(claim['conversation_id'] == row['id'] for claim in recording.get('claims') or ()):
                 return None
             claims[rid] = [claim for claim in recording.get('claims') or () if claim['conversation_id'] in owners]
@@ -99,7 +104,7 @@ def _union_claims(claims):
 def _merged_row(rows, claims):
     winner, *donors = rows
     merged = deepcopy(winner)
-    sections = list(merged['structured'].get('sections') or ())
+    sections: list[dict[str, Any]] = list(merged['structured'].get('sections') or ())
     segments = {}
     files = {}
     pieces = []
@@ -165,7 +170,7 @@ def candidate(windows, existing, recordings):
             if left <= row['started_at'] and row['finished_at'] <= right and row['kind'] == window['kind']
         ]
         # Bound one atomic refinement per pass. Additional candidates stay intact.
-        if not 2 <= len(rows) <= 8 or any(row.get('v3_open_locked') for row in rows):
+        if not 2 <= len(rows) <= 8 or any(row.get('v3_open_locked') for row in rows[1:]):
             continue
         members = {row['id'] for row in rows}
         if any(

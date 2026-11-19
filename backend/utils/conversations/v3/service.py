@@ -300,18 +300,18 @@ async def reconcile(
                 if custom_timing and not (derive or on_open)
                 else None
             )
-            absorbed = set()
+            reserved = set()
+            candidates = proposed
             if merge is not None:
                 index, merged = merge
-                absorbed = {merged['id'], *merged['_v3_absorbed']}
-                remaining = proposed[:index] + proposed[index + 1 :]
-                windows = planner.preserve_finished_windows(
-                    remaining, existing, recordings, protect_provisional=custom_timing
-                )
-                if absorbed.intersection(window.get('existing_id') for window in windows):
-                    merge = None
-                    absorbed.clear()
-            if merge is None:
+                reserved = {merged['id'], *merged['_v3_absorbed']}
+                candidates = proposed[:index] + proposed[index + 1 :]
+            windows = planner.preserve_finished_windows(
+                candidates, existing, recordings, protect_provisional=custom_timing
+            )
+            if reserved.intersection(window.get('existing_id') for window in windows):
+                merge = None
+                reserved.clear()
                 windows = planner.preserve_finished_windows(
                     proposed, existing, recordings, protect_provisional=custom_timing
                 )
@@ -320,8 +320,10 @@ async def reconcile(
             # rows with one id each re-add the source's held claims, doubling them every pass until the
             # recording outgrows Firestore's 1 MiB document limit (document_too_large).
             rows = []
-            used = absorbed | {window['existing_id'] for window in windows if window.get('existing_id')}
-            used.update(row['id'] for row in existing.values() if row.get('v3_claims_transferred_to'))
+            used = reserved | {window['existing_id'] for window in windows if window.get('existing_id')}
+            used.update(
+                row['id'] for row in existing.values() if row.get('v3_refined') and row.get('v3_claims_transferred_to')
+            )
             taken = set()
             allocated = {}
             await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
@@ -382,6 +384,10 @@ async def reconcile(
                         and row['kind'] == 'conversation'
                     )
                 )
+                if promoted and custom_timing and prior:
+                    covers = prior.get('summary_covers_through')
+                    if covers and covers >= row['finished_at']:
+                        promoted = False
                 if promoted:
                     row['summary_covers_through'] = None
                 rewrite = bool(
