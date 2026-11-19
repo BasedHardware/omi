@@ -872,7 +872,8 @@ def undo_backfill_group(uid, token, donor_ids, row_ids, *, run_id=None, firestor
     v3 whole. It stays when the owner deleted any copy in it (a tombstone for a copy id, or a donor
     deleted span added after the run); its copies' owed backfill notes move to the live marker so
     they are still written. The tombstones are read inside the transaction, so a deletion racing undo
-    either lands first (the group stays) or retries after the copies are gone. Returns
+    either lands first (the group stays) or retries after the copies are gone. A group whose copy
+    also holds a recording outside the group (a live pass extended it) stays too: 'kept_live'. Returns
     (outcome, donors restored or kept, rows removed). With ``run_id``, the run ledger's undo progress
     (totals and removed copy ids) is written in the same transaction, so a crash never loses it.
     """
@@ -909,7 +910,16 @@ def undo_backfill_group(uid, token, donor_ids, row_ids, *, run_id=None, firestor
             and not (snapshot.to_dict() or {}).get('v3_derived')
             and (snapshot.to_dict() or {}).get('v3_backfill_run')
         ]
-        if any(deleted) or any(deleted_after_backfill(row) for _, row in converted):
+        group = set(donor_ids)
+        # A live pass after the run carries the run tag onto a window that also holds live recordings
+        # (service.reconcile): deleting that copy would delete live capture, so the group stays v3.
+        live = any(
+            rid not in group
+            for _, snapshot in rows
+            if snapshot.exists
+            for rid in (snapshot.to_dict() or {}).get('v3_recording_ids') or []
+        )
+        if live or any(deleted) or any(deleted_after_backfill(row) for _, row in converted):
             for (cid, snapshot), gone in zip(rows, deleted):
                 if snapshot.exists and (snapshot.to_dict() or {}).get('v3_backfill_process_pending'):
                     # A copy the owner deleted never goes to the notes model; the others still get notes.
@@ -918,7 +928,7 @@ def undo_backfill_group(uid, token, donor_ids, row_ids, *, run_id=None, firestor
                 elif snapshot.exists and gone and (snapshot.to_dict() or {}).get('v3_process_pending'):
                     tx.update(coll.document(cid), {'v3_process_pending': False})
             # The third value is the number of converted donors kept (still hidden as v3 sources).
-            return 'kept', len(converted), 0
+            return ('kept_live' if live and not any(deleted) else 'kept'), len(converted), 0
         for cid, row in converted:
             prior = row.get('v3_backfill_prior')
             if not isinstance(prior, dict):

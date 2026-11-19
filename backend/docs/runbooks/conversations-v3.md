@@ -224,7 +224,9 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --m
   writes its tombstone), the legacy row is visible again: undo lists those copy ids as
   `deleted_during_undo_ids` (every attempt's removals are checked), so delete the matching legacy
   rows by hand. A run with kept groups or a raced delete ends `undone_partial`, never `undone`, and
-  the operator exits 1. The ledger
+  the operator exits 1. A group whose copy a live builder pass extended with recordings captured
+  after the run (the copy then holds live capture as well as donor lines) also stays as v3, counted
+  as `groups_kept_live`/`donors_kept_live`, so undo never deletes live capture. The ledger
   records `groups_kept_deleted` and `donors_kept_deleted`; `undo --dry-run` prints the group count
   and `donors_deleted_by_owner_min`, a lower bound (it sees deleted spans, not tombstone-only
   deletes). A group whose reads (two, plus one per donor and three per copy) would exceed 500 is

@@ -498,7 +498,7 @@ def undo_run(uid, run_id, *, firestore_client=None):
         derived = [d['id'] for d in docs if d.get('v3_derived')]
         if any(leases.held(uid, 'summary-' + cid, firestore_client=firestore_client) for cid in derived):
             return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client, run.get('undo'))
-        kept = {'groups_kept_deleted': 0, 'donors_kept_deleted': 0}
+        kept = {'groups_kept_deleted': 0, 'donors_kept_deleted': 0, 'groups_kept_live': 0, 'donors_kept_live': 0}
 
         def totals():
             # Restored/removed totals and removed copy ids are written in each group's own transaction
@@ -536,6 +536,9 @@ def undo_run(uid, run_id, *, firestore_client=None):
             if outcome == 'kept':
                 kept['groups_kept_deleted'] += 1
                 kept['donors_kept_deleted'] += donors_touched
+            elif outcome == 'kept_live':
+                kept['groups_kept_live'] += 1
+                kept['donors_kept_live'] += donors_touched
             for key, held_token in held:
                 leases.renew(uid, key, held_token, firestore_client=firestore_client)
         progress, result = totals()
@@ -548,7 +551,8 @@ def undo_run(uid, run_id, *, firestore_client=None):
         for key, held_token in held:
             leases.release(uid, key, held_token, firestore_client=firestore_client)
     # Kept groups or a raced delete mean undo did not return everything to legacy: never call that done.
-    status = 'undone_partial' if result['groups_kept_deleted'] or result['deleted_during_undo'] else 'undone'
+    partial = result['groups_kept_deleted'] or result['groups_kept_live'] or result['deleted_during_undo']
+    status = 'undone_partial' if partial else 'undone'
     runs.update_run(
         uid,
         run_id,

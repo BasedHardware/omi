@@ -868,6 +868,8 @@ def test_undo_works_one_group_per_call_and_refuses_while_notes_are_in_flight(mon
         'rows_removed': 1,
         'groups_kept_deleted': 0,
         'donors_kept_deleted': 0,
+        'groups_kept_live': 0,
+        'donors_kept_live': 0,
         'deleted_during_undo': 0,
         'deleted_during_undo_ids': [],
     }
@@ -969,6 +971,19 @@ def test_a_deletion_racing_undo_keeps_the_group_and_hands_owed_notes_to_live(str
         strict.rows[sibling]['v3_backfill_process_pending'] is False
         and strict.rows[sibling]['v3_process_pending'] is True
     )
+
+
+def test_undo_keeps_a_copy_a_live_pass_extended_with_live_capture(strict, monkeypatch):
+    token = convert(strict)
+    # A live pass after the run merged a new recording into the run-tagged copy.
+    strict.rows[COPY] = {**strict.rows[COPY], 'v3_recording_ids': ['r', 'live-rec']}
+    assert store.undo_backfill_group('synthetic', token, ['r'], ['c0'], firestore_client=strict) == ('kept_live', 1, 0)
+    assert COPY in strict.rows and strict.rows[R]['recording'] is True
+    store.leases.release('synthetic', store.BACKFILL_LEASE, token, firestore_client=strict)
+    _strict_undo(strict, monkeypatch)
+    result = backfill.undo_run('synthetic', RUN, firestore_client=strict)
+    assert result['outcome'] == 'undone_partial'
+    assert result['groups_kept_live'] == 1 and result['donors_kept_live'] == 1 and result['groups_kept_deleted'] == 0
 
 
 def test_an_interrupted_conversion_with_no_claim_is_restored(strict):
