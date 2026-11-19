@@ -420,9 +420,10 @@ def dry_run(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
             require(inverse_restores_before, "inverse of the forward patch does not restore the live identity")
             # The rollback writer's sibling gates run against the prior image; siblings never move, so
             # a gate that the forward passes only on the candidate (active T4, companion) blocks the inverse.
+            workloads = run("get", RESOURCES, "-o", "json")["items"]
             try:
                 require_companion_serves(obj, actual, live_image)
-                require_t4_serves(run("get", RESOURCES, "-o", "json")["items"], live_image)
+                require_t4_serves(workloads, live_image)
             except ValueError as exc:
                 raise ValueError(f"inverse would refuse after the forward roll: {exc}") from None
             result["forward"] = {"admitted": True, "after": identity, "patch": patch, "would_write_receipt": receipt,

@@ -1164,13 +1164,30 @@ class WorkflowTests(unittest.TestCase):
         for run in ("gcloud container clusters resize c --num-nodes 0", "gcloud run deploy x", "gcloud iam roles update r"):
             self.assertTrue(self.writes(run), run)
 
+    def unreviewed_uses(self, workflow):
+        """uses: entries, in any job, that can run in dry-run mode without being on the reviewed list."""
+        found = []
+        for job_name, job in workflow["jobs"].items():
+            if self.excludes_dry_run(job.get("if")):
+                continue
+            if "uses" in job:  # a job-level reusable workflow is unreviewed code
+                found.append((job_name, job["uses"]))
+            for step in job.get("steps", []):
+                if "uses" in step:
+                    if step["uses"] not in self.READ_ONLY_ACTIONS and not self.excludes_dry_run(step.get("if")):
+                        found.append((job_name, step["uses"]))
+                elif "run" not in step:
+                    found.append((job_name, step))
+        return found
+
     def test_every_uses_step_is_reviewed_or_excluded_from_dry_run_mode(self):
-        for step in self.steps:
-            if "uses" in step:
-                with self.subTest(uses=step["uses"]):
-                    self.assertTrue(step["uses"] in self.READ_ONLY_ACTIONS or self.excludes_dry_run(step.get("if")))
-            else:
-                self.assertIn("run", step)
+        self.assertEqual(self.unreviewed_uses(self.workflow), [])
+
+    def test_uses_check_covers_every_job(self):
+        for extra in ({"steps": [{"uses": "example/mutating-action@v1"}]}, {"uses": "example/.github/workflows/w.yml@v1"}):
+            workflow = copy.deepcopy(self.workflow)
+            workflow["jobs"]["extra"] = extra
+            self.assertTrue(self.unreviewed_uses(workflow), extra)
 
     def test_every_write_step_is_excluded_from_dry_run_mode(self):
         writers = [s for s in self.steps if self.writes(s.get("run", ""))]
