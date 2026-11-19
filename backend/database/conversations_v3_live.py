@@ -72,7 +72,9 @@ def recent_windows(
     )
     if finished_before is not None:
         query = query.where(filter=FieldFilter('finished_at', '<', finished_before))
-    query = query.select(LIVE_FIELDS)
+    # Explicit, so pages run oldest to newest whatever the implicit order of the two range
+    # fields; the v3 window index (finished_at ASC, started_at ASC) serves it.
+    query = query.order_by('finished_at').select(LIVE_FIELDS)
     rows: List[Dict[str, Any]] = []
     read = 0
     last: Optional[Any] = None

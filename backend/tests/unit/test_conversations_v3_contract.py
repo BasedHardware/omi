@@ -505,6 +505,10 @@ class _WindowQuery:
     def select(self, fields):
         return self._clone(fields=list(fields))
 
+    def order_by(self, field):
+        assert field == 'finished_at'
+        return self
+
     def limit(self, size):
         return self._clone(size=size)
 
