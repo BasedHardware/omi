@@ -118,6 +118,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # the worst case below the :create ceiling while allowing real exploration.
     "conversations:reprocess": (10, 3600),
     "conversations:merge": (5, 3600),
+    # Quick Summary: one small nano call per finished conversation, plus reopens before notes land.
+    "conversations:interim-summary": (60, 3600),
     # Episodes: "Wrap up now" and Undo on a captured item; no model call.
     "episodes:write": (60, 3600),
     "home:prepare": (12, 60),  # account-scoped idle preparation; three-call bursts

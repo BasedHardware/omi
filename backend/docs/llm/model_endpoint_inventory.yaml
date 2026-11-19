@@ -71,6 +71,7 @@ model_config_features:
     - chat_graph
     - persona_chat
     - persona_chat_premium
+    - interim_summary
     tool_calling:
     - chat_agent
     - memory_l2
@@ -139,6 +140,7 @@ surfaces:
   - utils/sync/minimal_redrive.py::feature:sync_redrive_title
   - utils/episodes/incremental.py::feature:episode_incremental
   - utils/episodes/composer.py::feature:episode_composer
+  - routers/interim_summary.py::feature:interim_summary
   - utils/llm/conversation_processing.py::feature:conv_structure
   - utils/llm/conversation_processing.py::feature:conv_app_result
   - utils/llm/conversation_processing.py::feature:conv_app_select

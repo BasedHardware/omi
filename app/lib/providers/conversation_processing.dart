@@ -29,6 +29,7 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
     final existingIndex = processingConversations.indexWhere((item) => item.id == conversation.id);
     if (existingIndex == -1) {
       processingConversations.add(conversation);
+      _restartProcessingReconcileWindow();
     } else {
       // A replayed processing-start event can arrive while reconciliation is
       // waiting. Replace the old snapshot so the UI cannot render a stale
@@ -100,15 +101,36 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
     _processingPlaceholderTimeout = null;
   }
 
+  /// Polls while any row is processing: every 15 s, or with Quick Summary every 3 s for the first
+  /// ~90 s after a row appears. A round still waiting on the server skips the next one.
   void _syncProcessingReconcileTimer() {
     if (processingConversations.isEmpty) {
       _processingReconcileTimer?.cancel();
       _processingReconcileTimer = null;
+      _processingReconcileTicks = 0;
       return;
     }
-    _processingReconcileTimer ??= Timer.periodic(const Duration(seconds: 15), (_) {
+    if (_processingReconcileTimer != null) return;
+    final fast =
+        QuickSummaryGate.isEnabled && _processingReconcileTicks < ConversationProvider._processingFastReconcileTicks;
+    final interval = fast
+        ? ConversationProvider._processingFastReconcileInterval
+        : ConversationProvider._processingSlowReconcileInterval;
+    _processingReconcileTimer = Timer(interval, () {
+      _processingReconcileTimer = null;
+      _processingReconcileTicks++;
+      if (_processingProbesInFlight > 0) {
+        _syncProcessingReconcileTimer();
+        return;
+      }
       unawaited(_refreshProcessingRows());
     });
+  }
+
+  void _restartProcessingReconcileWindow() {
+    _processingReconcileTimer?.cancel();
+    _processingReconcileTimer = null;
+    _processingReconcileTicks = 0;
   }
 
   Future<void> _refreshProcessingRows() async {
@@ -172,10 +194,13 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
         if (deadlineExpired || nextIndex >= ids.length) return;
         final id = ids[nextIndex++];
         ({ServerConversation? item, bool ok}) lifecycleResult;
+        _processingProbesInFlight++;
         try {
           lifecycleResult = await _conversationLifecycleFetcher(id);
         } catch (_) {
           lifecycleResult = (item: null, ok: false);
+        } finally {
+          _processingProbesInFlight--;
         }
         // A timed-out worker may still complete later. Do not mutate the map
         // after the caller has received the fail-soft result.

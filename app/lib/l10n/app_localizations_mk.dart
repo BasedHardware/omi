@@ -15634,4 +15634,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Назад кон почетна';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Се пишува целосното резиме…';
 }

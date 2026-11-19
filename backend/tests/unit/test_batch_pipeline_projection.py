@@ -1166,3 +1166,37 @@ def test_committed_transcript_signals_episode_before_playback_or_enrichment(bind
     projector.finish_part = lambda *a, **kw: events.append('finish')
     projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding)
     assert events == ['commit', 'signal', 'finish']
+
+
+@pytest.mark.parametrize(
+    'wake_token, asked',
+    [
+        # A new or reopened obligation gets a token, but its wake is the settle deadline: still worth asking.
+        ('token', [('synthetic-owner', 'c')]),
+        (None, [('synthetic-owner', 'c')]),
+    ],
+)
+def test_projection_asks_the_end_proof_whenever_it_extends_an_obligation(binding, monkeypatch, wake_token, asked):
+    from database import batch_pipeline_projection as module
+    from database.outbox import EnqueueResult
+
+    client = StrictFirestore()
+    store = ProjectionStore(Mock(client=client))
+    session = Mock(job={'priority': 0})
+    session.receipt.return_value = {'state': 'persisted'}
+    session.write_receipt.return_value = False
+    outbox = Mock()
+    outbox.enqueue.return_value = EnqueueResult(row_id='row', coalesced=wake_token is None, wake_token=wake_token)
+    calls = []
+    monkeypatch.setattr(store, 'session', lambda *a, **k: session)
+    monkeypatch.setattr(store, 'run', lambda operation, **kwargs: operation(client.transaction()))
+    monkeypatch.setattr(store, '_mirror', lambda binding: None)
+    monkeypatch.setattr(module.reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(module, 'FirestoreEnrichmentOutbox', lambda client: outbox)
+    monkeypatch.setattr(
+        module.capture_end_db,
+        'expedite_if_proven',
+        lambda uid, cid, *, now, firestore_client: calls.append((uid, cid)),
+    )
+    store.mark_enrichment('segment', binding, 0, 'c', 'en', policy=ProjectionPolicy())
+    assert calls == asked

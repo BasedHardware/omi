@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "Trabajo indicado por el servidor",
     "finishNothingToProcess": "Todavía no hay nada que procesar.",
     "finishStillProcessing": "Todavía se está procesando. Aparecerá en Inicio.",
-    "finishBackToHome": "Volver a Inicio"
+    "finishBackToHome": "Volver a Inicio",
+    "quickSummaryWritingFullSummary": "Escribiendo el resumen completo…"
 }

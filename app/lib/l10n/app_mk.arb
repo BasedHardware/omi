@@ -12246,5 +12246,6 @@
     "onTheWayServerWork": "Работа пријавена од серверот",
     "finishNothingToProcess": "Сè уште нема ништо за обработка.",
     "finishStillProcessing": "Сè уште се обработува. Ќе се појави на почетната.",
-    "finishBackToHome": "Назад кон почетна"
+    "finishBackToHome": "Назад кон почетна",
+    "quickSummaryWritingFullSummary": "Се пишува целосното резиме…"
 }

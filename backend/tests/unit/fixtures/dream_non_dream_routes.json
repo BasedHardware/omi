@@ -34,6 +34,7 @@
   "route.gemini-embeddings.embeddings.001": "3bb2de6a1f64b0809e2ec82855c0ea786e84858e33939323b29dce2f940d2772",
   "route.goals.model_config.001": "610cc1e49ef996c32d00945c653ecda57f44885c239d49bfc1aa436cf38644e9",
   "route.goals_advice.model_config.001": "69180aa017547375f3cd2e77941b034d404bcdf4f16a7cdddb0085bcca423aa8",
+  "route.interim_summary.model_config.001": "22a2bfb028b3343db55af0ad632842bdc98d7679ace3e623d65aa9fc86ada7e2",
   "route.jev-decisions.systemone.001": "6e110251de9de52deec720f281ac0d8ae77d42d5e4089cddcb4fd20147cf211e",
   "route.knowledge_graph.model_config.001": "2c9859fc57f66186428806470ac2e7f1bb2535de99bd6ca1ad7492bc4970131c",
   "route.learnings.model_config.001": "25efe9be236e47bc92af799cfb98a103380612a04ae1d6f1fa06bec8800d3683",

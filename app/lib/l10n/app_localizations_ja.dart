@@ -15341,4 +15341,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'ホームに戻る';
+
+  @override
+  String get quickSummaryWritingFullSummary => '完全な要約を作成中…';
 }

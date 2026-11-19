@@ -156,3 +156,39 @@ def proven(uid: str, conversation_data: Mapping[str, Any], *, firestore_client: 
     result = policy.proof(conversation_data, marker)
     policy.record_proof(result)
     return result == 'proven'
+
+
+# The conversation fields ``proven`` reads: clocks and the session id, never content.
+_PROOF_FIELDS = ['finished_at', 'external_data', policy.HOLD_FIELD]
+
+
+def expedite_if_proven(uid: str, conversation_id: str, *, now: float, firestore_client: Any = None) -> bool:
+    """Wake the conversation's waiting summary obligation now when ``proven`` holds.
+
+    Asked as soon as the proof can change, instead of only when the quiet wait expires. Fail-open: any
+    failure or unproven answer leaves the wait as it was.
+    """
+    if not policy.enabled() or not conversation_id:
+        return False
+    try:
+        client = _client(firestore_client)
+        snapshot = (
+            client.collection('users')
+            .document(uid)
+            .collection('conversations')
+            .document(conversation_id)
+            .get(field_paths=_PROOF_FIELDS)
+        )
+        if not getattr(snapshot, 'exists', False):
+            return False
+        if not proven(uid, snapshot.to_dict() or {}, firestore_client=client):
+            return False
+        from database.outbox_firestore import FirestoreEnrichmentOutbox
+        from utils.enrichment import outbox as reprocess
+
+        expedited = FirestoreEnrichmentOutbox(client).expedite_now(reprocess.key(uid, conversation_id), now=now)
+    except Exception as error:
+        logger.warning('event=capture_end_expedite outcome=error exception_type=%s', type(error).__name__)
+        return False
+    logger.info('event=capture_end_expedite outcome=%s', 'expedited' if expedited else 'not_waiting')
+    return expedited

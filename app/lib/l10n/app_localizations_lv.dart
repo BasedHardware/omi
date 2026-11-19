@@ -15604,4 +15604,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Atpakaļ uz sākumu';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Tiek rakstīts pilnais kopsavilkums…';
 }

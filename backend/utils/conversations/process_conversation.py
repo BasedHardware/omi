@@ -226,6 +226,7 @@ from utils.llm.conversation_processing import (
 )
 from utils.conversations.notes_task_context import fetch_dedup_candidates_for_query as _fetch_dedup_candidates_for_query
 from utils.llm.conversation_prompt_context import ConversationPromptPrefix, build_conversation_prompt_prefix
+from utils.llm.segment_aliases import alias_transcript
 from utils.llm.known_spellings import conversation_known_spellings, spelling_context_run
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.llm.conversation_folder import assign_conversation_to_folder
@@ -714,18 +715,20 @@ def _get_structured(
                 if isinstance(meeting_context_override, str)
                 else v3_context.summary(uid, conversation, user_language, tz_str)
             ) + corrections_block
+        # The prompt shows seg1..segN instead of segment UUIDs; citations are restored below, before validation.
+        notes_transcript, segment_aliases = alias_transcript(action_items_transcript, transcript_segment_ids)
         prefix = build_conversation_prompt_prefix(
             known_spellings=conversation_known_spellings(uid),
             uid=uid,
             conversation_id=prompt_conversation_id,
-            transcript=action_items_transcript,
+            transcript=notes_transcript,
             started_at=conv_started_at,
             timezone_name=tz_str,
             language_code=language_code,
             calendar_context=calendar_context,
             photos=main_conv.photos,
-            speaker_map=speaker_map,
-            transcript_segment_ids=transcript_segment_ids,
+            speaker_map=segment_aliases.speaker_map(speaker_map),
+            transcript_segment_ids=segment_aliases.prompt_ids(transcript_segment_ids),
             roster=roster,
             desktop_meeting_capture=desktop_capture,
         )
@@ -754,6 +757,7 @@ def _get_structured(
                 open_loop_out=open_loop_out,
                 **notes_agent_inputs(main_conv, desktop_capture),
             )
+        segment_aliases.restore_structured(structured)
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
     except (ConversationAbsorbed, SyncConversationPersistenceFenced, member_notes.LiveMemberNotesDeferred):

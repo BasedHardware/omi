@@ -12246,5 +12246,6 @@
     "onTheWayServerWork": "సర్వర్ నివేదించిన పని",
     "finishNothingToProcess": "ఇంకా ప్రాసెస్ చేయడానికి ఏమీ లేదు.",
     "finishStillProcessing": "ఇంకా ప్రాసెస్ అవుతోంది. ఇది హోమ్‌లో కనిపిస్తుంది.",
-    "finishBackToHome": "హోమ్‌కు తిరిగి వెళ్లండి"
+    "finishBackToHome": "హోమ్‌కు తిరిగి వెళ్లండి",
+    "quickSummaryWritingFullSummary": "పూర్తి సారాంశం రాస్తోంది…"
 }

@@ -15560,4 +15560,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Tilbage til Hjem';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Skriver det fulde resumé…';
 }

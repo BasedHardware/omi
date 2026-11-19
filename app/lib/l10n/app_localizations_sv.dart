@@ -15578,4 +15578,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Tillbaka till Hem';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Skriver hela sammanfattningen…';
 }

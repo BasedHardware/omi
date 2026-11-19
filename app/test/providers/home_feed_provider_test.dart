@@ -250,10 +250,15 @@ void main() {
     await p.start();
     expect(p.unsupported, true);
     expect(calls, 0);
-    for (var i = 0; i < 5; i++) {
+    // Three calls 5 s apart (the minimum spacing), then the 30 s idle pause.
+    for (var i = 0; i < 12; i++) {
       await tester.pump(const Duration(seconds: 1));
     }
     expect(calls, 3);
+    for (var i = 0; i < 25; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(calls, 3, reason: 'the fourth call waits out the 30 s pause');
     p.dispose();
   });
   testWidgets('filter/account change cancels preparation', (tester) async {
@@ -362,6 +367,122 @@ void main() {
     await tester.pump();
     expect(p.items.map((c) => c.id), ['conversation:2']);
     expect(p.problem, null);
+    p.dispose();
+  });
+  testWidgets('every preparation round starts at once, with no inherited 30 s pause', (tester) async {
+    var dirty = false, prepares = 0;
+    final redactedAtPrepare = <bool>[];
+    late final HomeFeedProvider p;
+    p = HomeFeedProvider(
+        owner: () => 'a',
+        cache: MemoryCache(),
+        fetch: ({cursor}) async => dirty
+            ? const ApiFailure(
+                ApiProblem(ApiProblemKind.rejected, statusCode: 409, detail: 'home_feed_preparation_required'))
+            : page([card(1)]),
+        prepare: () async {
+          prepares++;
+          redactedAtPrepare.add(p.preparing && p.items.single.title.isEmpty);
+          dirty = false;
+          return const ApiSuccess(HomeFeedPreparation(ready: true, processed: 1, hasMore: false));
+        });
+    await p.start();
+    await tester.pump();
+    // Each conversation write re-dirties the feed; round 4 used to wait 30 s. Writes here are 5 s apart,
+    // the minimum spacing between prepare calls.
+    for (var round = 1; round <= 4; round++) {
+      if (round > 1) await tester.pump(const Duration(seconds: 5));
+      dirty = true;
+      unawaited(p.reconcileLoadedWindow());
+      // 100 ms in all: the old schedule waited at least 1 s before a round's first call.
+      for (var tick = 0; tick < 10; tick++) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      expect(prepares, round, reason: 'round $round prepares at once');
+      expect(redactedAtPrepare.last, true, reason: 'cards stay redacted until the feed is prepared');
+      expect(p.preparing, false);
+      expect(p.preparationStalled, false);
+      expect(p.items.single.title, 'Title 1');
+    }
+    p.dispose();
+  });
+  testWidgets('preparation that keeps failing is reported as stalled', (tester) async {
+    final p = HomeFeedProvider(
+        owner: () => 'a',
+        cache: MemoryCache(),
+        fetch: ({cursor}) async => const ApiFailure(
+            ApiProblem(ApiProblemKind.rejected, statusCode: 409, detail: 'home_feed_preparation_required')),
+        prepare: () async => const ApiFailure(ApiProblem(ApiProblemKind.server, statusCode: 503)));
+    await p.start();
+    expect(p.preparationStalled, false, reason: 'a required preparation is routine at first');
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(p.preparationStalled, true);
+    p.dispose();
+  });
+  testWidgets('back-to-back rounds keep prepare calls 5 s apart (home:prepare allows 12 a minute)', (tester) async {
+    var dirty = false, prepares = 0;
+    final p = HomeFeedProvider(
+        owner: () => 'a',
+        cache: MemoryCache(),
+        fetch: ({cursor}) async => dirty
+            ? const ApiFailure(
+                ApiProblem(ApiProblemKind.rejected, statusCode: 409, detail: 'home_feed_preparation_required'))
+            : page([card(1)]),
+        prepare: () async {
+          prepares++;
+          dirty = false;
+          return const ApiSuccess(HomeFeedPreparation(ready: true, processed: 1, hasMore: false));
+        });
+    await p.start();
+    await tester.pump();
+    Future<void> write() async {
+      dirty = true;
+      unawaited(p.reconcileLoadedWindow());
+      for (var tick = 0; tick < 10; tick++) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+    }
+
+    await write();
+    expect(prepares, 1);
+    await write();
+    expect(prepares, 1, reason: 'a write right after a prepare call waits out the gap');
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+    expect(prepares, 2);
+    p.dispose();
+  });
+  testWidgets('retry restarts a stalled preparation', (tester) async {
+    var failing = true, prepares = 0;
+    final p = HomeFeedProvider(
+        owner: () => 'a',
+        cache: MemoryCache(),
+        fetch: ({cursor}) async => failing
+            ? const ApiFailure(
+                ApiProblem(ApiProblemKind.rejected, statusCode: 409, detail: 'home_feed_preparation_required'))
+            : page([card(1)]),
+        prepare: () async {
+          prepares++;
+          return failing
+              ? const ApiFailure(ApiProblem(ApiProblemKind.server, statusCode: 503))
+              : const ApiSuccess(HomeFeedPreparation(ready: true, processed: 1, hasMore: false));
+        });
+    await p.start();
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(p.preparationStalled, true);
+    final stalledAt = prepares;
+    failing = false;
+    await p.retry();
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(prepares, greaterThan(stalledAt), reason: 'retry starts a new round');
+    expect(p.preparationStalled, false);
+    expect(p.preparing, false);
     p.dispose();
   });
 }

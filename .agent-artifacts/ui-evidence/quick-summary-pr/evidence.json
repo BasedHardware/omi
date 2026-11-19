@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-quick-summary-after-finish.png",
+      "platform": "mobile-android",
+      "description": "11 s after Finish: the Quick Summary title in the header and its sections in the notes layout, with \"Writing the full summary\" below",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-android-full-summary-with-stored-title.png",
+      "platform": "mobile-android",
+      "description": "39 s after Finish: the full summary has replaced the Quick Summary and the stored title fills the header",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

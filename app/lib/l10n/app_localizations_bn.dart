@@ -15564,4 +15564,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'হোমে ফিরে যান';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'পূর্ণ সারাংশ লেখা হচ্ছে…';
 }

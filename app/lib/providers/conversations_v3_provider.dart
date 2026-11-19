@@ -66,6 +66,17 @@ class ConversationsV3Provider extends ChangeNotifier {
   @visibleForTesting
   bool get polling => _poll != null;
 
+  /// The remembered answer for the signed-in account is "not v3": today's flows run. False until the
+  /// server has answered once, so a caller gated on it stays off for a v3 or not-yet-known account.
+  static bool rememberedLegacy() {
+    try {
+      final uid = SharedPreferencesUtil().uid;
+      return uid.isNotEmpty && _readCached() == '$uid:0';
+    } catch (_) {
+      return false;
+    }
+  }
+
   static String _readCached() {
     try {
       return SharedPreferencesUtil().getString(_prefKey);

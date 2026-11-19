@@ -715,3 +715,21 @@ def test_repair_reservation_error_reuses_filtered_output_without_spending(enable
     output = dedupe.notes('u', enabled, 'unchanged', generate, {})
     assert output.overview == 'Approval Friday.'
     generate.assert_not_called()
+
+
+def test_declared_compatible_routing_reuses_notes_but_never_masks_another_route(enabled, monkeypatch):
+    """A route edit that leaves notes routes unchanged keeps stored notes; any other edit still invalidates."""
+    from config.llm_input_versions import COMPATIBLE_ROUTING_DIGESTS
+
+    inputs = {'text': 'unchanged'}
+    dependencies = '|'.join(f'{name}:{version}' for name, version in dedupe.INSTALLED_DEPENDENCY_VERSIONS)
+    current, earlier = 'route-after-unrelated-lane', 'route-before-unrelated-lane'
+    stored = dedupe._fingerprint('notes', inputs, f'notes-7:{earlier}:{dependencies}')
+    monkeypatch.setattr(dedupe, 'routing_digest', lambda: current)
+    monkeypatch.setattr(dedupe, 'COMPATIBLE_ROUTING_DIGESTS', {current: (earlier,)})
+    assert dedupe._matches(stored, 'notes', inputs, dedupe.fingerprint('notes', inputs))
+    # The claim is keyed by the exact current digest: a later route edit drops it.
+    monkeypatch.setattr(dedupe, 'routing_digest', lambda: 'route-after-a-notes-route-change')
+    assert not dedupe._matches(stored, 'notes', inputs, dedupe.fingerprint('notes', inputs))
+    # Every declaration names today's real digest, so it cannot outlive the next route edit unnoticed.
+    assert all(len(key) == 64 and len(set(value)) == len(value) for key, value in COMPATIBLE_ROUTING_DIGESTS.items())

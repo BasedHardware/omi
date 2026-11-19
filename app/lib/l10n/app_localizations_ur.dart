@@ -15581,4 +15581,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'ہوم پر واپس جائیں';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'مکمل خلاصہ لکھا جا رہا ہے…';
 }

@@ -15684,4 +15684,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Zur Startseite';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Vollständige Zusammenfassung wird geschrieben…';
 }

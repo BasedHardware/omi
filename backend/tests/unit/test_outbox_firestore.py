@@ -357,3 +357,33 @@ def test_expedite_makes_an_open_obligation_due_now_under_a_new_token():
     assert {k: v for k, v in new.items() if k not in {'due_at', 'task_due_at', 'task_token', 'version'}} == {
         'lease_until': 0
     }
+
+
+def test_expedite_brings_a_waiting_row_forward_without_new_content(rows):
+    """The phone's end proof ends the quiet wait early: same version, fresh wake at now."""
+    state_rows, tasks = rows
+    _enqueue(600.0)
+    state_rows[KEY]['summary_seen'] = True
+    _enqueue(900.0, coalesce='max', now=300.0)
+    before = dict(state_rows[KEY])
+    assert outbox.expedite_now(KEY, now=320.0)
+    row = state_rows[KEY]
+    assert row['due_at'] == 320.0 and row['task_due_at'] == 320.0
+    assert row['version'] == before['version'] + 1, 'expedite_update re-versions the moved wake'
+    assert row['task_token'] != before['task_token'] and tasks[-1]['task_token'] == row['task_token']
+    assert isinstance(outbox.claim_key(KEY, row['task_token'], 120, now=321.0), Claim)
+
+
+def test_expedite_leaves_due_leased_and_settled_rows_alone(rows):
+    state_rows, tasks = rows
+    _enqueue(1.0)
+    woken = len(tasks)
+    assert not outbox.expedite_now(KEY, now=10.0), 'already due: its wake is pending'
+    claim = _claim(rows, now=10.0)
+    state_rows[KEY]['due_at'] = 900.0
+    assert not outbox.expedite_now(KEY, now=20.0), 'a live claim settles and re-arms the row itself'
+    assert outbox.record_summary(claim) and outbox.ack(claim, 'processed', now=21.0)
+    assert state_rows[KEY]['dormant']
+    assert not outbox.expedite_now(KEY, now=30.0), 'a settled receipt is not reopened'
+    assert not outbox.expedite_now(reprocess.key('u', 'missing'), now=30.0)
+    assert len(tasks) == woken

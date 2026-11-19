@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/experiments/quick_summary_gate.dart';
 import 'package:omi/services/live_preview/live_preview_engine.dart';
 import 'package:omi/services/live_preview/live_preview_notes.dart';
 import 'package:omi/services/live_preview/live_preview_word_budget.dart';
@@ -116,6 +117,12 @@ class LivePreviewController extends ChangeNotifier {
   final List<LivePreviewLine> _lines = [];
   late final UnmodifiableListView<LivePreviewLine> _linesView = UnmodifiableListView(_lines);
   List<LivePreviewLine> get lines => _linesView;
+
+  /// Every line of the current conversation, untrimmed by [maxLines], kept only with Quick Summary
+  /// on (it summarizes a pendant session from these). Cleared with [lines]; capped at [maxSessionLines].
+  final Map<String, LivePreviewLine> _sessionLines = {};
+  static const int maxSessionLines = 20000;
+  List<LivePreviewLine> get sessionLines => List.unmodifiable(_sessionLines.values);
 
   /// The newest non-empty preview line, for the home capture card's last-line slot.
   String? get latestLine {
@@ -410,6 +417,7 @@ class LivePreviewController extends ChangeNotifier {
     final index = _lines.indexWhere((line) => line.id == result.segmentId);
     if (text.isEmpty) {
       if (index >= 0 && !_lines[index].isFinal) _lines.removeAt(index);
+      if (!(_sessionLines[result.segmentId]?.isFinal ?? true)) _sessionLines.remove(result.segmentId);
       if (result.isFinal) _finalWordCounts.remove(result.segmentId);
     } else {
       final previousWords = _lineWordHighWater[result.segmentId] ?? 0;
@@ -426,6 +434,10 @@ class LivePreviewController extends ChangeNotifier {
           endedAt: result.endedAt,
           firstSeenAt: index >= 0 ? (_lines[index].firstSeenAt ?? now) : now,
           spans: result.spans);
+      if (QuickSummaryGate.isEnabled &&
+          (_sessionLines.containsKey(line.id) || _sessionLines.length < maxSessionLines)) {
+        _sessionLines[line.id] = line;
+      }
       if (index >= 0) {
         _lines[index] = line;
       } else {
@@ -448,6 +460,7 @@ class LivePreviewController extends ChangeNotifier {
     _totalWordsSeen = 0;
     _lineWordHighWater.clear();
     _lines.clear();
+    _sessionLines.clear();
   }
 
   void _noteFirstWord(DateTime now) {

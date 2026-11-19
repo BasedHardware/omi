@@ -15553,4 +15553,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Back to Home';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Writing the full summary…';
 }

@@ -15673,4 +15673,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'முகப்புக்குத் திரும்பு';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'முழு சுருக்கம் எழுதப்படுகிறது…';
 }

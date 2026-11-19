@@ -60,8 +60,10 @@ MAX_COMPLETION_TOKENS = 6000
 MAX_ARGUMENT_BYTES = 65536
 REJECTION_HEADROOM_SECONDS = 30.0
 EVIDENCE = 'evidence'
-# One send-back per failure class: a format slip cannot spend the evidence retry.
-SEND_BACKS = {FORMAT: 1, 'content': 1, EVIDENCE: 1}
+NAMING = 'naming'
+# A send-back re-emits the whole note, so only what no static repair can fix earns one: a format slip, or a
+# server-bound speaker name left out. Content and evidence findings are accepted and repaired statically.
+SEND_BACKS = {FORMAT: 1, 'content': 0, EVIDENCE: 0, NAMING: 1}
 
 RUNS = PromCounter('omi_notes_agent_runs_total', 'Agentic notes runs by how they ended', ['stop'])
 FORCED_RUNS = PromCounter(
@@ -510,11 +512,13 @@ def _review_submission(
         for person in arguments.get('participants') or []
         if isinstance(person, dict) and str(person.get('name') or '').strip() and not person.get('is_ai_agent')
     ]
-    if naming_leads and not named:
+    # Only a name the identity repair would keep is worth a rewrite.
+    bound_leads = [lead for lead in naming_leads if identity is None or identity.supported(lead)]
+    if bound_leads and not named:
         check.add(
-            EVIDENCE,
+            NAMING,
             'No other speaker is named, but the evidence names possible participants: '
-            + ', '.join(naming_leads)
+            + ', '.join(bound_leads)
             + '. Check them against the transcript; name the one who spoke in participants (with speaker key and '
             'evidence), the title and the notes, or keep the role description only if none of them fits.',
         )

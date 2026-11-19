@@ -70,6 +70,7 @@ from routers import (
     storefront,
     integration,
     conversations,
+    interim_summary,
     conversation_tasks,
     conversations_v3_tasks,
     recording_speakers,
@@ -198,6 +199,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(omni_relay, roles=API_REALTIME),  # websockets
     Mount(auto_model),
     Mount(conversations),
+    Mount(interim_summary),
     Mount(conversation_tasks),
     Mount(conversations_v3_tasks, roles=API_WORKERS),
     Mount(recording_speakers),

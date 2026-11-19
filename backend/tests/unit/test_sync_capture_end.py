@@ -521,3 +521,92 @@ def test_a_held_units_stamp_is_proof_with_no_ledger_read(monkeypatch):
     )
     monkeypatch.setenv('SYNC_UPLOAD_WATERMARK_ENABLED', 'false')
     assert store.proven('u', conversation) is False
+
+
+class _Snapshot:
+    def __init__(self, data):
+        self.exists = data is not None
+        self._data = data
+
+    def to_dict(self):
+        return dict(self._data or {})
+
+
+class _ConversationClient:
+    """users/{uid}/conversations/{id}.get(field_paths=...) only; records the fields asked for."""
+
+    def __init__(self, data):
+        self.data, self.asked = data, []
+
+    def collection(self, _name):
+        return self
+
+    def document(self, _name):
+        return self
+
+    def get(self, field_paths=None):
+        self.asked.append(field_paths)
+        return _Snapshot(self.data)
+
+
+@pytest.fixture
+def expedite(monkeypatch):
+    calls = []
+
+    class _Outbox:
+        def __init__(self, client):
+            self.client = client
+
+        def expedite_now(self, row_id, *, now):
+            calls.append((row_id, now))
+            return True
+
+    import database.outbox_firestore as outbox_module
+
+    monkeypatch.setattr(outbox_module, 'FirestoreEnrichmentOutbox', _Outbox)
+    return calls
+
+
+_SESSION_ROW = {'finished_at': 999.0, 'external_data': {'recording_session_id': 's'}}
+
+
+def test_a_proven_end_brings_the_summary_forward_reading_only_clocks(monkeypatch, expedite):
+    monkeypatch.setattr(store, 'load', Mock(return_value=marker()))
+    client = _ConversationClient(_SESSION_ROW)
+    assert store.expedite_if_proven('u', 'c', now=1234.0, firestore_client=client) is True
+    from utils.enrichment import outbox as reprocess
+
+    assert expedite == [(reprocess.key('u', 'c'), 1234.0)]
+    assert client.asked == [['finished_at', 'external_data', 'sync_processing_hold']], 'never reads content'
+
+
+@pytest.mark.parametrize(
+    'stored, row, why',
+    [
+        (marker(pending_wals=2), _SESSION_ROW, 'the phone still has files to upload'),
+        (marker(), {**_SESSION_ROW, 'finished_at': 990.0}, 'the transcript has not reached the last speech'),
+        (marker(), {**_SESSION_ROW, 'finished_at': 1100.0}, 'the recording resumed after this end'),
+        (marker(last_speech_at=None), _SESSION_ROW, 'a stop with no speech clock proves nothing'),
+        (None, _SESSION_ROW, 'no end marker yet'),
+        (marker(), {'finished_at': 999.0}, 'no recording session to read a marker from'),
+        (marker(), None, 'the conversation is gone'),
+    ],
+)
+def test_anything_short_of_proof_keeps_the_quiet_wait(monkeypatch, expedite, stored, row, why):
+    monkeypatch.setattr(store, 'load', Mock(return_value=stored))
+    assert store.expedite_if_proven('u', 'c', now=1234.0, firestore_client=_ConversationClient(row)) is False, why
+    assert expedite == [], why
+
+
+def test_expedite_is_fail_open_and_respects_the_kill_switch(monkeypatch, expedite):
+    monkeypatch.setattr(store, 'load', Mock(return_value=marker()))
+
+    class _Broken(_ConversationClient):
+        def get(self, field_paths=None):
+            raise OSError('synthetic')
+
+    assert store.expedite_if_proven('u', 'c', now=1.0, firestore_client=_Broken(_SESSION_ROW)) is False
+    monkeypatch.setenv('SYNC_UPLOAD_WATERMARK_ENABLED', 'off')
+    assert store.expedite_if_proven('u', 'c', now=1.0, firestore_client=_ConversationClient(_SESSION_ROW)) is False
+    assert store.expedite_if_proven('u', '', now=1.0) is False
+    assert expedite == []

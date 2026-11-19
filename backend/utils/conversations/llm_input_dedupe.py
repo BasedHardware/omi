@@ -7,7 +7,12 @@ objects fail closed instead of silently stringifying two distinct inputs alike.
 from __future__ import annotations
 
 from config.refactor_modes import serving_for
-from config.llm_input_versions import NOTES_UNSCALED_PREVIOUS_VERSION, NOTES_REUSABLE_PREVIOUS_VERSIONS, prompt_version
+from config.llm_input_versions import (
+    COMPATIBLE_ROUTING_DIGESTS,
+    NOTES_UNSCALED_PREVIOUS_VERSION,
+    NOTES_REUSABLE_PREVIOUS_VERSIONS,
+    prompt_version,
+)
 from config.memory_l1_admission import noise_skip_enabled
 from config.llm_input_legacy import (
     LEGACY_DEPENDENCY_VERSIONS,
@@ -174,6 +179,12 @@ def fingerprint(feature: str, inputs: Any) -> str:
     return _fingerprint(feature, inputs, implementation_digest(feature))
 
 
+def _routings() -> tuple[str, ...]:
+    """Today's routing digest, then earlier ones declared to leave notes and L1 routes unchanged."""
+    current = routing_digest()
+    return (current, *COMPATIBLE_ROUTING_DIGESTS.get(current, ()))
+
+
 def _matches(saved: str | None, feature: str, inputs: Any, digest: str) -> bool:
     if saved == digest:
         return True
@@ -182,32 +193,36 @@ def _matches(saved: str | None, feature: str, inputs: Any, digest: str) -> bool:
     # and compatible prompt sources/dependencies; exact inputs + output validation
     # still apply. A dependency bump deliberately recomputes once per input.
     implementations = {stable_implementation(feature), _legacy_implementation_digest(feature)}
+    dependencies = '|'.join(f'{name}:{version}' for name, version in INSTALLED_DEPENDENCY_VERSIONS)
+    routings = _routings()
+    # The stable key's routing/dependency suffix under today's routing and each compatible earlier one.
+    suffixes = [f'{routing}:{dependencies}' for routing in routings]
+    implementations.update(f'{prompt_version(feature)}:{suffix}' for suffix in suffixes)
     unscaled_notes = feature == 'notes' and isinstance(inputs, dict) and 'scaled_detail' not in inputs
     compatibility_version = NOTES_UNSCALED_PREVIOUS_VERSION if unscaled_notes else prompt_version(feature)
     if unscaled_notes:
         # Exact unchanged short/flag-off packets reuse notes-3 output, then are
         # restamped with the current digest. This never schedules any work.
-        suffix = stable_implementation(feature).split(':', 1)[1]
-        implementations.add(f'{NOTES_UNSCALED_PREVIOUS_VERSION}:{suffix}')
+        implementations.update(f'{NOTES_UNSCALED_PREVIOUS_VERSION}:{suffix}' for suffix in suffixes)
     if (
         INSTALLED_DEPENDENCY_VERSIONS == LEGACY_DEPENDENCY_VERSIONS
-        and routing_digest() == LEGACY_ROUTING
+        and LEGACY_ROUTING in routings
         and compatibility_version in LEGACY_PROMPT_VERSIONS[feature]
     ):
         implementations.update(LEGACY_IMPLEMENTATIONS[feature])
-        implementations.update(f'{version}:{routing_digest()}' for version in LEGACY_PROMPT_VERSIONS[feature])
-        dependencies = '|'.join(f'{name}:{version}' for name, version in INSTALLED_DEPENDENCY_VERSIONS)
-        implementations.update(
-            f'{version}:{routing_digest()}:{dependencies}' for version in LEGACY_PROMPT_VERSIONS[feature]
-        )
+        for routing in routings:
+            implementations.update(f'{version}:{routing}' for version in LEGACY_PROMPT_VERSIONS[feature])
+            implementations.update(
+                f'{version}:{routing}:{dependencies}' for version in LEGACY_PROMPT_VERSIONS[feature]
+            )
     if saved and feature == 'notes':
         for version in NOTES_REUSABLE_PREVIOUS_VERSIONS:
             old_inputs = deepcopy(inputs)
             if isinstance(old_inputs, dict) and 'scaled_detail' in old_inputs:
                 old_inputs['scaled_detail']['version'] = version
-            old_implementation = version + ':' + stable_implementation(feature).split(':', 1)[1]
-            if saved == _fingerprint(feature, old_inputs, old_implementation):
-                return True
+            for suffix in suffixes:
+                if saved == _fingerprint(feature, old_inputs, f'{version}:{suffix}'):
+                    return True
     return bool(saved) and any(saved == _fingerprint(feature, inputs, item) for item in implementations)
 
 

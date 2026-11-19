@@ -573,6 +573,13 @@ class FirestoreEnrichmentOutbox:
             self._rearmed(rearmed)
         return rearmed is not None
 
+    def expedite_now(self, row_id: str, *, now: float) -> bool:
+        """``expedite`` as its own write for a caller outside a transaction; the moved row is woken at once."""
+        row = self._mutate(row_id, _outbox().expedite_update(now))
+        if row is not None and self._can_wake(row):
+            self._rearmed(row)
+        return row is not None
+
     def sweep(self, *, now: float, limit: int = 100) -> SweepCounts:
         # Share legacy's bounded inspection progress; per-row CAS still owns custody.
         counts = _outbox().sweep(

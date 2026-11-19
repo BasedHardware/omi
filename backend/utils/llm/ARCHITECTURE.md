@@ -84,9 +84,10 @@ Every agent on the harness gets these from shared code, not per-agent prompt tex
    `ExtractedSection` maps `body` to `body_markdown`). `normalize_output` / `validate_output`
    apply them recursively before validation; add an alias there, never ad-hoc code.
 4. **Send-back budgets per failure class.** Output checks return `Problem(kind, message)`;
-   `SendBackBudget` holds one budget per class (notes: format, content, evidence). Format
-   problems go back alone, each class is charged only for its own send-backs, and once a class
-   is spent the output is repaired and accepted instead.
+   `SendBackBudget` holds one budget per class (notes: one each for format and naming; none for
+   content and evidence, which static repairs fix). Format problems go back alone, each class is
+   charged only for its own send-backs, and once a class is spent the output is repaired and
+   accepted instead.
 
 Tests: `tests/unit/test_agent_tool_rules.py`.
 
@@ -110,10 +111,12 @@ resolves the account preference, then the conversation language, then English.
 
 `notes_output.py` is the internal parser/tool schema. `notes_output_contract.py`
 validates title, length, participants, tasks and citations and applies the same
-static repairs to every arm. A coverage floor violation is sent back within the
-agent's existing budget; a depleted budget preserves grounded short notes rather
-than fabricating padding. Repaired agent submissions survive a later deadline or
-malformed turn, so salvage does not buy a second full-transcript writer.
+static repairs to every arm. The agent accepts a coverage floor violation without
+a send-back and keeps grounded short notes rather than fabricating padding.
+Repaired agent submissions survive a later deadline or malformed turn, so salvage
+does not buy a second full-transcript writer. `segment_aliases.py` shows the
+notes prompt `seg1..segN` turn headers instead of segment UUIDs; `_get_structured`
+restores cited ids to stored ids before validation, so aliases are never stored.
 
 Open-loop extraction (delegations, others' commitments, one observed issue or
 blocker) rides `conversation_processing.py` behind `OPEN_LOOPS_ENABLED`

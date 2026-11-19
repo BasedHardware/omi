@@ -20,6 +20,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/experiments/quick_summary_gate.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
@@ -85,11 +86,14 @@ class _Preview extends ChangeNotifier implements LivePreviewController {
   int get sessionGeneration => 1;
 
   @override
+  List<LivePreviewLine> get sessionLines => lines;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _Capture extends CaptureProvider {
-  _Capture({this.preview, this.closed, this.answer, this.answerDelay})
+  _Capture({this.preview, this.closed, this.answer, this.answerDelay, this.recordingId})
       : super(
           walService: _Wal(),
           connectivity: CaptureConnectivityBoundary(
@@ -106,7 +110,11 @@ class _Capture extends CaptureProvider {
   final ({String id, DateTime at, int previewWords, int previewSession})? closed;
   CreateConversationResponse? answer;
   final Future<void>? answerDelay;
+  final String? recordingId;
   var finishes = 0;
+
+  @override
+  String? get activeRecordingId => recordingId;
 
   /// The page renders the preview; this fake only answers what Finish reads, so it is handed over
   /// at the tap.
@@ -179,13 +187,21 @@ ServerConversation _recordingDoc(String id, {bool notProcessed = false}) => _con
 
 const _line = LivePreviewLine(id: 'l1', text: 'We closed the round', isFinal: true);
 
+/// Records route replacements, so a test sees what Finish opened without building that page.
+class _Replacements extends NavigatorObserver {
+  final replaced = <Route<dynamic>?>[];
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) => replaced.add(newRoute);
+}
+
 class _Harness {
   _Harness(this.home, this.capture);
   final HomeProvider home;
   final _Capture capture;
 }
 
-Future<_Harness> _pump(WidgetTester tester, _Capture capture) async {
+Future<_Harness> _pump(WidgetTester tester, _Capture capture, {List<NavigatorObserver> observers = const []}) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
@@ -210,6 +226,7 @@ Future<_Harness> _pump(WidgetTester tester, _Capture capture) async {
         ChangeNotifierProvider<UsageProvider>.value(value: usage),
       ],
       child: MaterialApp(
+        navigatorObservers: observers,
         theme: ThemeData.dark(),
         locale: const Locale('en'),
         localizationsDelegates: const [
@@ -568,6 +585,73 @@ void main() {
       final readsWhenOpened = reads;
       await tester.pump(const Duration(seconds: 15));
       expect(reads, readsWhenOpened, reason: 'polling stops once it opened');
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
+
+  group('Quick Summary', () {
+    tearDown(() => QuickSummaryGate.debugOverride = null);
+
+    test('Finish opens the conversation being processed, with what was heard so far', () {
+      final page = quickSummaryFinishPage(conversationId: 'live-1', segments: const [], previewLines: const [_line])!;
+      expect(page.conversation.id, 'live-1');
+      expect(page.conversation.status, ConversationStatus.processing);
+      expect(page.conversation.transcriptSegments.single.text, 'We closed the round');
+      expect(quickSummaryFinishPage(conversationId: null, segments: const [], previewLines: const [_line]), isNull);
+    });
+
+    testWidgets('Finish leaves for the conversation before Process Now answers', (tester) async {
+      QuickSummaryGate.debugOverride = true;
+      final observer = _Replacements();
+      final answer = Completer<void>();
+      final harness = await _pump(
+        tester,
+        _Capture(
+          preview: _Preview(const [_line], 4),
+          recordingId: 'live-1',
+          answer: CreateConversationResponse(messages: const [], conversation: _conversation('live-1')),
+          answerDelay: answer.future,
+        ),
+        observers: [observer],
+      );
+      final dynamic state = tester.state(find.byType(LiveEpisodePage));
+      harness.capture.tapped = true;
+      final finishing = state.debugStopConversation(harness.capture) as Future<void>;
+      await tester.binding.delayed(Duration.zero);
+
+      expect(observer.replaced, hasLength(1), reason: 'the conversation opened before the answer');
+      expect(harness.capture.finishes, 1);
+      expect(harness.home.selectedIndex, HomeProvider.homeTab);
+      answer.complete();
+      await tester.binding.delayed(Duration.zero);
+      await finishing;
+      expect(observer.replaced, hasLength(1), reason: 'the answer opens nothing more');
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('off, Finish waits for the answer as before', (tester) async {
+      QuickSummaryGate.debugOverride = false;
+      final observer = _Replacements();
+      final answer = Completer<void>();
+      final harness = await _pump(
+        tester,
+        _Capture(
+          preview: _Preview(const [_line], 4),
+          recordingId: 'live-1',
+          answer: CreateConversationResponse(messages: const [], conversation: _recordingDoc('rec-1')),
+          answerDelay: answer.future,
+        ),
+        observers: [observer],
+      );
+      final dynamic state = tester.state(find.byType(LiveEpisodePage));
+      harness.capture.tapped = true;
+      final finishing = state.debugStopConversation(harness.capture) as Future<void>;
+      await tester.binding.delayed(Duration.zero);
+      expect(observer.replaced, isEmpty, reason: 'nothing opens before the answer');
+      answer.complete();
+      await tester.binding.delayed(Duration.zero);
+      await finishing;
+      expect(observer.replaced, hasLength(1));
       await tester.pumpWidget(const SizedBox());
     });
   });

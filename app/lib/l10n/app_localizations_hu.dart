@@ -15628,4 +15628,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Vissza a Kezdőlapra';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'A teljes összefoglaló készül…';
 }

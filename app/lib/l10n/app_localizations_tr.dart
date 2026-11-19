@@ -15580,4 +15580,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Ana Sayfaya Dön';
+
+  @override
+  String get quickSummaryWritingFullSummary => 'Tam özet yazılıyor…';
 }

@@ -18,7 +18,10 @@ construction): those must not re-buy anything.
 
 from __future__ import annotations
 
-NOTES_PROMPT_VERSION = 'notes-7'
+NOTES_PROMPT_VERSION = 'notes-8'
+# notes-8 makes the notes agent's first submission final and cites seg1..segN aliases that are
+# restored to segment ids before validation (notes-agent-v10). Wording can differ for the same
+# input; a stored notes-7 summary is still a valid summary of it, so notes-7 stays reusable.
 # notes-7 only defaults a missing participants[].source when stored rows are read back
 # (models/structured.py); prompt, schema and output are unchanged, so notes-6 checkpoints
 # stay reusable and nothing is re-bought.
@@ -27,9 +30,20 @@ NOTES_PROMPT_VERSION = 'notes-7'
 # for every non-v3 conversation is unchanged, so notes-5 checkpoints stay reusable.
 # Unchanged notes-4 checkpoints are filtered locally, not invalidated by the
 # quality prompt. Retain the earlier unscaled notes-3 alias.
-NOTES_REUSABLE_PREVIOUS_VERSIONS = ('notes-6', 'notes-5', 'notes-4')
+NOTES_REUSABLE_PREVIOUS_VERSIONS = ('notes-7', 'notes-6', 'notes-5', 'notes-4')
 NOTES_UNSCALED_PREVIOUS_VERSION = 'notes-3'
 L1_PROMPT_VERSION = 'l1-1'
+
+# Route-source digests (``llm_input_dedupe.routing_digest``) declared to leave every notes and L1
+# route unchanged: {today's digest: earlier digests it is compatible with}. Stored work keyed under a
+# listed earlier digest is reused, not bought again. The claim holds only for the exact digest it is
+# keyed by, so any later route edit drops it until someone re-declares it for the new digest.
+COMPATIBLE_ROUTING_DIGESTS: dict[str, tuple[str, ...]] = {
+    # Adds only the interim_summary (Quick Summary) lane to utils/llm/model_config.py.
+    'b0fee83d05d68e0d5f23dd07cbe732bf7ceaab0ec9b02632c4c8b26f99528fe6': (
+        'f2b6c4c57af68c1e606b96e001a69919a5e34fb642126273209dff3d39ecb7b6',
+    ),
+}
 
 PROMPT_VERSIONS: dict[str, str] = {
     'notes': NOTES_PROMPT_VERSION,

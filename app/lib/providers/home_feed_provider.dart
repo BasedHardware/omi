@@ -2,6 +2,7 @@
 // Account generations fence cached shells, mutations and late network responses.
 import 'dart:async';
 import 'dart:io';
+import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/home_feed_cache.dart';
 import 'package:omi/backend/http/api/home_feed.dart';
@@ -35,6 +36,11 @@ class HomeFeedProvider extends ChangeNotifier {
   int _prepareCalls = 0, _prepareFailures = 0;
   DateTime? _prepareUntil;
   bool preparationReady = false;
+
+  /// Preparation gave up (failures, call cap or deadline) while still required. Until then it is routine.
+  bool preparationStalled = false;
+  static const _prepareGap = Duration(seconds: 5);
+  DateTime? _lastPrepareAt;
   String? _serverGeneration;
   bool _reconcileRequested = false;
   int _reconcileRestarts = 0;
@@ -57,8 +63,14 @@ class HomeFeedProvider extends ChangeNotifier {
   ApiProblem? problem;
   bool get hasMore => _hasMore;
   bool get partial => truncated || problem != null;
-  Future<void> retry() =>
-      _reconcileRequested ? reconcileLoadedWindow() : (_needsRefresh || _cursor == null ? refresh() : loadMore());
+  Future<void> retry() {
+    // Retry on a stalled preparation starts a fresh preparation round rather than re-reading a dirty feed.
+    if (preparing && preparationStalled) {
+      continuePreparation();
+      return Future.value();
+    }
+    return _reconcileRequested ? reconcileLoadedWindow() : (_needsRefresh || _cursor == null ? refresh() : loadMore());
+  }
 
   /// True while the account runs recordings and conversations (v3): Home reads the plain
   /// conversation list, so the feed stays inactive and makes no calls.
@@ -90,6 +102,7 @@ class HomeFeedProvider extends ChangeNotifier {
       _prepareUntil = null;
       _prepareFailures = 0;
       preparationReady = false;
+      preparationStalled = false;
       truncated = false;
       _prepareCalls = 0;
       preparing = false;
@@ -387,13 +400,28 @@ class HomeFeedProvider extends ChangeNotifier {
         _prepareFailures >= 3 ||
         DateTime.now().isAfter(_prepareUntil!) ||
         !_current(generation, uid)) {
+      if (_current(generation, uid) && !preparationStalled) {
+        preparationStalled = true;
+        if (!_disposed) notifyListeners();
+      }
       return;
     }
+    preparationStalled = false;
     _prepareTimer?.cancel();
-    _prepareTimer =
-        Timer(Duration(seconds: _prepareCalls > 0 && _prepareCalls % 3 == 0 ? 30 : (1 << _prepareFailures)), () async {
+    // A round starts at once (the cards are redacted until it lands); later calls back off. Calls stay at
+    // least _prepareGap apart across rounds: `home:prepare` allows 12 calls a minute per account.
+    var delay = _prepareCalls == 0 && _prepareFailures == 0
+        ? Duration.zero
+        : Duration(seconds: _prepareCalls > 0 && _prepareCalls % 3 == 0 ? 30 : (1 << _prepareFailures));
+    final last = _lastPrepareAt;
+    if (last != null) {
+      final gap = _prepareGap - clock.now().difference(last);
+      if (gap > delay) delay = gap;
+    }
+    _prepareTimer = Timer(delay, () async {
       if (!_current(generation, uid)) return;
       _prepareCalls++;
+      _lastPrepareAt = clock.now();
       ApiResult<HomeFeedPreparation> result;
       try {
         result = await _prepare();
@@ -418,6 +446,9 @@ class HomeFeedProvider extends ChangeNotifier {
           // Keep the compatible history/scroll position for this opening. The next explicit refresh adopts cards.
           preparing = false;
           preparationReady = true;
+          // Every conversation write re-dirties the feed; the next round gets a fresh budget.
+          _prepareCalls = 0;
+          _prepareUntil = null;
           if (!unsupported) {
             _reconcileRestarts = 0;
             if (_flight == null) {

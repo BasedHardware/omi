@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "Activitate raportată de server",
     "finishNothingToProcess": "Încă nu este nimic de procesat.",
     "finishStillProcessing": "Încă se procesează. Va apărea pe pagina principală.",
-    "finishBackToHome": "Înapoi la pagina principală"
+    "finishBackToHome": "Înapoi la pagina principală",
+    "quickSummaryWritingFullSummary": "Se scrie rezumatul complet…"
 }

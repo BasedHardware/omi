@@ -14,8 +14,10 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
 import 'package:omi/pages/conversation_detail/widgets/note_sections_sliver.dart';
+import 'package:omi/pages/conversation_detail/widgets/quick_summary_card.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/summary_generation.dart';
+import 'package:omi/services/experiments/quick_summary_gate.dart';
 import 'package:omi/services/experiments/summary_generation_gate.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -515,9 +517,11 @@ class GetAppsWidgets extends StatelessWidget {
       builder: (context, _) => Consumer<ConversationDetailProvider>(
         builder: (context, provider, child) {
           final redesign = SummaryGenerationV2Gate.isEnabled;
+          final quickSummary = QuickSummaryGate.isEnabled;
           // One progress surface: while a summary is being written, the tab shows that, never the
           // summary it is about to replace (and never a second "Generate Summary").
           if (provider.isReprocessingOpenConversation) {
+            if (quickSummary) return QuickSummarySliver(conversation: provider.conversation);
             return const SliverToBoxAdapter(child: SummaryGeneratingState());
           }
           final failure = redesign ? provider.summaryFailure : null;
@@ -528,6 +532,13 @@ class GetAppsWidgets extends StatelessWidget {
             // A failed processing pass can be retried the same way as a failed summary.
             if (summaryRetrySlotApplies(conversation)) {
               return const SliverToBoxAdapter(child: SummaryRetryWidget());
+            }
+            // In progress counts too: right after Finish the server has not closed it yet, and a
+            // "Generate summary" button then would start a second summary.
+            final pendingSummary = conversation.status == ConversationStatus.processing ||
+                conversation.status == ConversationStatus.in_progress;
+            if (quickSummary && pendingSummary) {
+              return QuickSummarySliver(conversation: conversation, onPoll: () => provider.refreshConversation());
             }
             if (conversation.status == ConversationStatus.processing) {
               return SliverToBoxAdapter(
@@ -541,7 +552,7 @@ class GetAppsWidgets extends StatelessWidget {
             return SliverToBoxAdapter(child: child!);
           }
 
-          return SliverMainAxisGroup(
+          final summary = SliverMainAxisGroup(
             slivers: [
               if (failure != null) SliverToBoxAdapter(child: SummaryFailureCard(failure: failure)),
               if (redesign && !provider.conversation.discarded)
@@ -563,6 +574,8 @@ class GetAppsWidgets extends StatelessWidget {
               const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.xs)),
             ],
           );
+          if (!quickSummary) return summary;
+          return QuickSummaryHandoff(conversationId: provider.conversation.id, sliver: summary);
         },
         child: _SummaryCallToAction(
           message: context.l10n.noSummaryForConversation,

@@ -75,12 +75,12 @@ def in_cohort(uid: Optional[str], conversation_id: Optional[str]) -> bool:
 
 
 def budget_for_words(words: int) -> NotesAgentBudget:
-    """Value-proportional: longer meetings must investigate more, never past ~15 tools or ~2 cents."""
+    """Value-proportional caps, never past ~15 tools or ~2 cents; no lookup minimum, the packet is prefetched."""
     if words >= 5000:
-        return NotesAgentBudget(max_turns=9, max_tool_calls=15, min_tool_calls=5)
+        return NotesAgentBudget(max_turns=9, max_tool_calls=15)
     if words >= AGENT_MIN_WORDS:
-        return NotesAgentBudget(max_turns=7, max_tool_calls=10, min_tool_calls=4)
-    return NotesAgentBudget(max_turns=5, max_tool_calls=6, min_tool_calls=2)
+        return NotesAgentBudget(max_turns=7, max_tool_calls=10)
+    return NotesAgentBudget(max_turns=5, max_tool_calls=6)
 
 
 def plan_notes_agent(
