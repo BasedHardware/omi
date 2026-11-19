@@ -15,6 +15,7 @@ from models.note_claims import current_note_claims
 from models.transcript_segment import TranscriptSegment, strip_grouping_internal_fields
 from utils.conversations.summary_selection import select_primary_summary
 from utils.conversations.owner_attribution import speaker_role_projection
+from utils.conversations.v3.policy import live_summary_target
 from models.conversation_photo import ConversationPhoto
 from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 from utils.model_text import (
@@ -162,11 +163,36 @@ def _strip_match_scores(conv: Dict[str, Any]) -> Dict[str, Any]:
     return conv
 
 
+def redact_legacy_live_recap_sections(conv: Dict[str, Any]) -> None:
+    """Hide verifiably generated legacy LIVE sections without changing its owner-editable overview."""
+    if (
+        not live_summary_target(conv)
+        or not isinstance(conv.get('summary_covers_through'), datetime)
+        or conv.get('v3_notes_written') is True
+        or conv.get('notes_written_at')
+    ):
+        return
+    structured = conv.get('structured')
+    if not isinstance(structured, dict):
+        return
+    sections = structured.get('sections')
+    if not isinstance(sections, list) or not any(
+        isinstance(section, dict) and section.get('body_markdown') for section in sections
+    ):
+        return
+    # The old on-open writer persisted these sections while the window was
+    # still open. User overview edits delete that sections projection.
+    conv['structured'] = dict(structured)
+    conv['structured'].pop('sections', None)
+    conv['structured'].pop('note_claims', None)
+
+
 def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
     # The authenticated detail route owns the live preview and its encrypted cache receipt.
     conv.pop('live_summary', None)
     conv.pop('v3_live_summary', None)
+    redact_legacy_live_recap_sections(conv)
     _strip_match_scores(conv)
     if not conv.get('is_locked', False):
         return _omit_list_note_claims(conv)

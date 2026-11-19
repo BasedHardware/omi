@@ -194,9 +194,17 @@ async def test_summary_renews_lease_until_model_finishes(monkeypatch):
     monkeypatch.setattr(service, 'run_blocking', blocking)
     monkeypatch.setattr(renewal, 'run_blocking', blocking)
     monkeypatch.setattr(leases, 'LEASE_SECONDS', 0.003)
-    monkeypatch.setattr(service.leases, 'renew', lambda *a: calls.append(a))
-    worker = asyncio.create_task(asyncio.sleep(0.015))
+    finish = asyncio.Event()
+
+    def renew(*args):
+        calls.append(args)
+        if len(calls) == 2:
+            finish.set()
+
+    monkeypatch.setattr(service.leases, 'renew', renew)
+    worker = asyncio.create_task(asyncio.wait_for(finish.wait(), timeout=2))
     await service.renew_until_done('u', 'summary-c', 'token', worker)
+    assert await worker
     assert len(calls) >= 2
     assert all(call == ('u', 'summary-c', 'token') for call in calls)
 
@@ -220,46 +228,72 @@ async def test_summary_route_returns_409_before_streaming_response(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_on_open_reconcile_timeout_streams_stored_row(monkeypatch):
-    import asyncio
-    from utils.conversations.v3 import service
+@pytest.mark.parametrize(
+    'config, detail',
+    [('uid:someone-else', 'live_recap_unavailable'), ('uid:u', 'use_live_recap_stream')],
+)
+async def test_legacy_summary_does_not_generate_from_live_v3_rows(monkeypatch, config, detail):
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    row = {
+        'id': 'c',
+        'v3_derived': True,
+        'status': 'in_progress',
+        'started_at': AT,
+        'finished_at': AT + timedelta(seconds=1),
+    }
+    monkeypatch.setenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', config)
+    monkeypatch.setattr(routes, 'run_blocking', blocking)
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: row)
+    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: pytest.fail('legacy live touched quota'))
+    monkeypatch.setattr(service, 'reconcile', lambda *a, **kw: pytest.fail('legacy live used the outline'))
+    monkeypatch.setattr(summary, 'prepare', lambda *a: pytest.fail('legacy live prepared notes'))
+    with pytest.raises(HTTPException) as error:
+        await routes.conversation_summary_stream('c', 'u')
+    assert (error.value.status_code, error.value.detail) == (404, detail)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('becomes_live', [False, True])
+async def test_legacy_summary_reconciles_other_v3_rows_and_rechecks_live_admission(monkeypatch, becomes_live):
+    row = {
+        'id': 'c',
+        'v3_derived': True,
+        'status': 'in_progress',
+        'started_at': AT,
+        'finished_at': AT + timedelta(seconds=1),
+        'home_hidden': True,
+    }
+    reconciles = []
+    prepares = []
 
     async def blocking(pool, fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
-    row = {'id': 'c', 'v3_derived': True, 'status': 'in_progress', 'structured': {'title': 'Stored'}}
-    monkeypatch.setattr(routes, 'run_blocking', blocking)
-    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: row)
-    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
-
-    released, finished = asyncio.Event(), asyncio.Event()
-
-    async def reconcile(*a, **kw):
-        try:
-            await released.wait()
-        finally:
-            finished.set()
-
-    original_wait = asyncio.wait_for
-
-    async def bounded(awaitable, timeout):
-        assert timeout == 8
-        return await original_wait(awaitable, 0.001)
+    async def reconcile(uid, **kwargs):
+        reconciles.append((uid, kwargs))
+        if becomes_live:
+            row['home_hidden'] = False
 
     async def prepare(uid, stored):
-        assert stored is row
-        return None
+        prepares.append((uid, stored))
 
+    monkeypatch.delenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', raising=False)
+    monkeypatch.setattr(routes, 'run_blocking', blocking)
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: deepcopy(row))
+    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
     monkeypatch.setattr(service, 'reconcile', reconcile)
-    monkeypatch.setattr(routes.asyncio, 'wait_for', bounded)
     monkeypatch.setattr(summary, 'prepare', prepare)
-    try:
-        response = await routes.conversation_summary_stream('c', 'u')
-        assert response.status_code == 200 and response.media_type == 'text/event-stream'
-        assert not finished.is_set(), 'timeout cancelled the lease holder'
-    finally:
-        released.set()
-        await original_wait(finished.wait(), 1)
+    if becomes_live:
+        with pytest.raises(HTTPException) as error:
+            await routes.conversation_summary_stream('c', 'u')
+        assert (error.value.status_code, error.value.detail) == (404, 'live_recap_unavailable')
+        assert not prepares
+    else:
+        assert (await routes.conversation_summary_stream('c', 'u')).status_code == 200
+        assert prepares == [('u', row)]
+    assert reconciles == [('u', {'on_open': True, 'conversation_id': 'c'})]
 
 
 @pytest.mark.parametrize('locked', [True, False])
@@ -433,30 +467,6 @@ def test_product_retry_uses_own_window_and_settles_tile(monkeypatch, outcome):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('error', ['source_changed', 'lease_lost', 'storage_unavailable'])
-async def test_on_open_reconcile_errors_stream_stored_row(monkeypatch, error):
-    from utils.conversations.v3 import service
-
-    async def blocking(pool, fn, *a, **kw):
-        return fn(*a, **kw)
-
-    async def reconcile(*a, **kw):
-        raise RuntimeError(error)
-
-    row = {'id': 'c', 'v3_derived': True, 'status': 'in_progress'}
-    monkeypatch.setattr(routes, 'run_blocking', blocking)
-    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: row)
-    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
-    monkeypatch.setattr(service, 'reconcile', reconcile)
-
-    async def prepare(uid, stored):
-        assert stored is row
-
-    monkeypatch.setattr(summary, 'prepare', prepare)
-    assert (await routes.conversation_summary_stream('c', 'u')).status_code == 200
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize('reason', ['fresh', 'ineligible'])
 async def test_early_stream_exit_releases_preacquired_summary_token(monkeypatch, reason):
     async def blocking(pool, fn, *a, **kw):
@@ -580,6 +590,7 @@ _LIVE_PATH = ('users', 'synthetic', 'conversations', 'live')
 
 @pytest.fixture
 def catchup(strict, monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', 'uid:synthetic')
     row = {
         'id': 'live',
         'status': 'in_progress',
@@ -737,3 +748,111 @@ async def test_live_catchup_does_not_start_notes_after_target_closes_before_stre
     (frame,) = [event async for event in response.body_iterator]
     assert frame.startswith('error:')
     assert leases.acquire('synthetic', 'summary-live')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'config',
+    [None, '', 'uid:someone-else', 'uid:synthetic,garbage', 'all', 'pct:100', 'uid:synthetic,uid:*'],
+)
+async def test_live_recap_cohort_refusal_never_loads_cache_or_admits_paid_work(catchup, monkeypatch, config):
+    if config is None:
+        monkeypatch.delenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT')
+    else:
+        monkeypatch.setenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', config)
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: pytest.fail('denied request read a row'))
+    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: pytest.fail('denied request read quota'))
+    monkeypatch.setattr(summary, 'prepare', lambda *a, **kw: pytest.fail('denied request prepared notes'))
+    with pytest.raises(HTTPException) as error:
+        await routes.conversation_live_catchup_stream('live', 'synthetic')
+    assert (error.value.status_code, error.value.detail) == (404, 'live_recap_unavailable')
+
+
+@pytest.mark.asyncio
+async def test_live_recap_cohort_rollback_hides_saved_preview_preserving_transcript_and_finished_notes(
+    catchup, monkeypatch
+):
+    monkeypatch.setattr(summary, 'write', lambda *a: {'title': 'Preview', 'overview': 'Saved preview'})
+    assert (await catchup_frames())[-1].startswith('done:')
+    before = routes.get_conversation_by_id(
+        'live', source=None, include_discarded=None, uid='synthetic', include_translations=False
+    )
+    assert before['live_summary']['structured']['overview'] == 'Saved preview'
+
+    monkeypatch.delenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT')
+    monkeypatch.setattr(summary.writers, 'read_live_summary', lambda *a, **kw: pytest.fail('rollback read preview'))
+    monkeypatch.setattr(leases, 'acquire', lambda *a: pytest.fail('rollback acquired a lease'))
+    monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('rollback ran the model'))
+    hidden = routes.get_conversation_by_id(
+        'live', source=None, include_discarded=None, uid='synthetic', include_translations=False
+    )
+    assert 'live_summary' not in hidden and 'v3_live_summary' not in hidden
+    assert hidden['transcript_segments'] == before['transcript_segments']
+    listing = {**catchup, 'live_summary': before['live_summary']}
+    routes.redact_conversations_for_list([listing])
+    assert 'live_summary' not in listing and 'v3_live_summary' not in listing
+
+    catchup.update(
+        status='completed',
+        structured={'title': 'Finished', 'overview': 'Final summary'},
+        summary_covers_through=catchup['finished_at'],
+    )
+    finished = await routes.conversation_summary_stream('live', 'synthetic')
+    (frame,) = [event async for event in finished.body_iterator]
+    assert frame.startswith('done:')
+    assert json.loads(base64.b64decode(frame[6:].strip()))['structured']['overview'] == 'Final summary'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cached', [False, True])
+async def test_live_recap_cohort_revoked_after_headers_yields_no_saved_or_generated_notes(catchup, monkeypatch, cached):
+    if cached:
+        monkeypatch.setattr(summary, 'write', lambda *a: {'title': 'Preview', 'overview': 'Cached notes'})
+        assert (await catchup_frames())[-1].startswith('done:')
+    response = await routes.conversation_live_catchup_stream('live', 'synthetic')
+    await_before_rollback = leases.acquire('synthetic', 'summary-live')
+    assert (await_before_rollback is not None) is cached
+    if await_before_rollback:
+        leases.release('synthetic', 'summary-live', await_before_rollback)
+
+    monkeypatch.delenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT')
+    monkeypatch.setattr(
+        summary.writers, 'read_live_summary', lambda *a, **kw: pytest.fail('revoked request read cache')
+    )
+    monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('revoked request ran the model'))
+    (frame,) = [frame async for frame in response.body_iterator]
+    assert frame == 'error: {"detail":"live_recap_unavailable"}\n\n'
+    released = leases.acquire('synthetic', 'summary-live')
+    assert released
+    leases.release('synthetic', 'summary-live', released)
+
+
+@pytest.mark.parametrize('proven_final', [False, True])
+def test_legacy_generated_live_sections_are_read_redacted_with_owner_overview_preserved(
+    catchup, monkeypatch, proven_final
+):
+    legacy = {
+        'overview': 'Preserve editable overview',
+        'sections': [{'heading': 'Generated heading', 'body_markdown': 'Generated body'}],
+    }
+    catchup.update(
+        structured=deepcopy(legacy),
+        summary_covers_through=catchup['finished_at'],
+        v3_notes_written=proven_final,
+    )
+
+    def read_detail():
+        return routes.get_conversation_by_id(
+            'live', source=None, include_discarded=None, uid='synthetic', include_translations=False
+        )
+
+    assert read_detail()['structured'] == legacy
+    monkeypatch.delenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT')
+    detail = read_detail()
+    listed = deepcopy(catchup)
+    routes.redact_conversations_for_list([listed])
+    for row in [detail, listed]:
+        assert row['structured']['overview'] == legacy['overview']
+        assert ('sections' in row['structured']) is proven_final
+        assert row['transcript_segments'] == catchup['transcript_segments']
+    assert catchup['structured'] == legacy
