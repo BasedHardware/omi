@@ -236,10 +236,13 @@ def _observe_claim_transitions(monkeypatch, fake_firestore, test_uid: str) -> li
     production_claim = users_router.claim_deletion_wipe_for_task
     claimed_markers: list[dict[str, Any]] = []
 
-    def observe_claim(uid: str) -> str:
-        outcome = production_claim(uid)
+    def observe_claim(uid: str, *, expected_job_id: str) -> str:
+        assert uid == test_uid
+        outcome = production_claim(uid, expected_job_id=expected_job_id)
         if outcome == "claimed":
-            claimed_markers.append(_read_marker(fake_firestore, test_uid))
+            marker = _read_marker(fake_firestore, uid)
+            assert marker["wipe_job_id"] == expected_job_id
+            claimed_markers.append(marker)
         return outcome
 
     monkeypatch.setattr(users_router, "claim_deletion_wipe_for_task", observe_claim)
