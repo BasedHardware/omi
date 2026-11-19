@@ -124,6 +124,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   /// on-device preview and the server may defer the cloud stream.
   bool localPreview;
 
+  ConversationSessionEvent? _liveRecording;
+  ConversationSessionEvent? get liveRecording => _liveRecording;
+
   /// Reports foreground / live-transcript visibility to the server while connected.
   VoidCallback? _clientStateListener;
   Timer? _clientStateHeartbeat;
@@ -332,6 +335,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
   @override
   void onClosed([int? closeCode]) {
+    _liveRecording = null;
     _detachClientState();
     _listeners.forEach((k, v) {
       v.onClosed(closeCode);
@@ -377,6 +381,14 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     // Message event
     if (jsonEvent.containsKey("type")) {
       var event = MessageEvent.fromJson(jsonEvent);
+      if (event is ConversationSessionEvent) {
+        if (event.inProgress) {
+          _liveRecording = event;
+        } else if (_liveRecording?.recordingId == event.recordingId &&
+            _liveRecording?.clientSessionId == event.clientSessionId) {
+          _liveRecording = null;
+        }
+      }
       _listeners.forEach((k, v) {
         v.onMessageEventReceived(event);
       });

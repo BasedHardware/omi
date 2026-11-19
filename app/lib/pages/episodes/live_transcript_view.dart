@@ -1000,10 +1000,20 @@ class LivePreviewDivider extends StatelessWidget {
 /// cover — the recognizer's still-volatile newest words in lighter text. The
 /// preview carries audio timestamps; only full interval coverage replaces a line.
 class LivePreviewTail extends StatefulWidget {
-  const LivePreviewTail({super.key, required this.preview, required this.coverage, this.catchUp});
+  const LivePreviewTail(
+      {super.key,
+      required this.preview,
+      required this.coverage,
+      this.catchUp,
+      this.lines,
+      this.whenEmpty,
+      this.includeBottomInset = true});
 
   final LivePreviewController preview;
   final LivePreviewCoverage coverage;
+  final List<LivePreviewLine> Function()? lines;
+  final Widget? whenEmpty;
+  final bool includeBottomInset;
 
   /// What sits between the final transcript and the preview, rebuilt with the preview's ticks.
   final WidgetBuilder? catchUp;
@@ -1044,10 +1054,10 @@ class _LivePreviewTailState extends State<LivePreviewTail> {
     return ListenableBuilder(
       listenable: widget.preview,
       builder: (context, _) {
-        final lines = widget.coverage.excludeCovered(widget.preview.lines);
+        final lines = widget.coverage.excludeCovered(widget.lines?.call() ?? widget.preview.lines);
         final ids = lines.map((line) => line.id).toSet();
         _rows.removeWhere((id, _) => !ids.contains(id));
-        if (lines.isEmpty && widget.catchUp == null) return const SizedBox.shrink();
+        if (lines.isEmpty && widget.catchUp == null) return widget.whenEmpty ?? const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -1055,7 +1065,7 @@ class _LivePreviewTailState extends State<LivePreviewTail> {
             if (widget.catchUp case final catchUp?) catchUp(context),
             if (lines.isNotEmpty) const LivePreviewDivider(),
             for (var i = 0; i < lines.length; i++) _line(lines[i], i == 0),
-            SizedBox(height: MediaQuery.paddingOf(context).bottom + 84),
+            if (widget.includeBottomInset) SizedBox(height: MediaQuery.paddingOf(context).bottom + 84),
           ],
         );
       },

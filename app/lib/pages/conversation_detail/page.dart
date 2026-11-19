@@ -17,6 +17,10 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/pages/episodes/live_transcript_view.dart' show LivePreviewTail;
+import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_preview_coverage.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
@@ -156,6 +160,13 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
   bool _providerInitialized = false;
+  late final String _routeUid;
+  late final int _routeIdentityEpoch;
+
+  void _onRouteIdentityChanged() {
+    if (mounted) setState(() {});
+  }
+
   bool _didInitialSeek = false;
   bool _hasExplicitTabSelection = false;
   bool _resultViewedRecorded = false;
@@ -288,6 +299,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   @override
   void initState() {
     super.initState();
+    _routeUid = SharedPreferencesUtil().uid;
+    _routeIdentityEpoch = AnalyticsManager.identityEpoch;
+    AnalyticsManager.identityChanges.addListener(_onRouteIdentityChanged);
     _detailProvider = context.read<ConversationDetailProvider>();
     WidgetsBinding.instance.addObserver(this);
     unawaited(
@@ -332,7 +346,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
 
       await provider.initConversation();
       _recordResultViewed(provider, identityEpoch);
-      if (_awaitsTranscript(provider.conversation)) {
+      if (_awaitsTranscript(provider.conversation) || _isLiveV3(provider.conversation)) {
         // Opened from a copy without its lines (a search hit, a locked-then-unlocked row): fetch the
         // full conversation and let the Transcript tab say it is loading, or offer Try Again.
         unawaited(
@@ -483,13 +497,15 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       _detailProvider.confirmSpeakerLabelingSession(conversationId: widget.conversation.id);
     } else if (state == AppLifecycleState.resumed) {
       // The list refresh on resume does not carry the transcript; re-read what is on screen.
-      unawaited(_detailProvider.refreshConversation());
+      final open = _detailProvider.conversationOrNull;
+      unawaited(_detailProvider.refreshConversation(trackLoad: open != null && _isLiveV3(open)));
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    AnalyticsManager.identityChanges.removeListener(_onRouteIdentityChanged);
     final summaryShownAt = _summaryShownAt;
     if (summaryShownAt != null && DateTime.now().difference(summaryShownAt) >= ValueMomentPaywall.summaryDwell) {
       ValueMomentPaywall.offer(PaywallMoment.ahaFirstSummary,
@@ -1120,6 +1136,55 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       (context.read<ConversationsV3Provider?>()?.v3 ?? false) &&
       conversation.v3?.tileState == ConversationTileState.live;
 
+  Widget? _livePreviewTail(ServerConversation conversation, CaptureProvider? capture, {Widget? whenEmpty}) {
+    final preview = capture?.livePreview;
+    final startedAt = conversation.startedAt;
+    if (capture == null || preview == null || startedAt == null) return null;
+
+    bool isVerified() {
+      if (!mounted ||
+          _routeUid.isEmpty ||
+          _routeUid != SharedPreferencesUtil().uid ||
+          _routeIdentityEpoch != AnalyticsManager.identityEpoch ||
+          !identical(capture.livePreview, preview) ||
+          !capture.localPreviewAdmitted ||
+          !preview.admitted ||
+          !capture.pendantCaptureVerified) {
+        return false;
+      }
+      final current = _providerInitialized ? _detailProvider.conversationOrNull : widget.conversation;
+      if (current == null ||
+          (_providerInitialized && _detailProvider.detailLoad == ConversationDetailLoad.failed) ||
+          current.startedAt != startedAt ||
+          current.id != conversation.id ||
+          current.id != widget.conversation.id ||
+          current.isLocked ||
+          current.isHiddenFromDefaultList ||
+          current.status != ConversationStatus.in_progress ||
+          !_isLiveV3(current)) {
+        return false;
+      }
+      final recordingId = capture.verifiedLiveServerRecordingId;
+      return recordingId != null && (current.v3?.recordingIds.contains(recordingId) ?? false);
+    }
+
+    if (!isVerified()) return null;
+    return LivePreviewTail(
+      preview: preview,
+      coverage: LivePreviewCoverage.forFinals(conversation.transcriptSegments, startedAt),
+      includeBottomInset: false,
+      whenEmpty: whenEmpty,
+      lines: () {
+        if (!isVerified()) return const [];
+        return [
+          for (final line in preview.lines)
+            if (line.startedAt case final lineStart?)
+              if (!lineStart.isBefore(startedAt)) line,
+        ];
+      },
+    );
+  }
+
   /// Header actions: Star and Share as 44pt icon buttons, then one overflow holding the summary
   /// template, Rename, Move to Folder, Recordings and the rest, Delete last. Ask Omi is the bottom bar.
   /// While the conversation is still going, Share is hidden until it ends.
@@ -1209,6 +1274,27 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     // post-frame); after init, an unresolved conversation pops the route.
     final detailProvider = context.watch<ConversationDetailProvider>();
     final conversation = detailProvider.conversationOrNull;
+    context.select<CaptureProvider?, (LivePreviewController?, bool, bool, String?)>((capture) => (
+          capture?.livePreview,
+          capture?.localPreviewAdmitted ?? false,
+          capture?.pendantCaptureVerified ?? false,
+          capture?.verifiedLiveServerRecordingId,
+        ));
+    final capture = context.read<CaptureProvider?>();
+    context.select<ConversationsV3Provider?, bool>((provider) => provider?.v3 ?? false);
+    if (!_providerInitialized) {
+      final preview = selectedTab == ConversationTab.transcript ? _livePreviewTail(widget.conversation, capture) : null;
+      return Scaffold(
+        body: preview == null
+            ? null
+            : SafeArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                  child: preview,
+                ),
+              ),
+      );
+    }
     if (conversation == null) {
       if (_providerInitialized) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1360,6 +1446,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                                 }
                               },
                               playbackController: _playbackController,
+                              livePreviewTail: (row, whenEmpty) => _livePreviewTail(row, capture, whenEmpty: whenEmpty),
                             ),
                           ),
                         ],

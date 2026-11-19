@@ -170,7 +170,7 @@ from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
 from utils.conversations.v3 import live as v3_live
-from database import conversations_v3_live
+from database import conversations_v3_live, conversations_v3_processing
 from utils.conversations import list_page_headers
 
 router = APIRouter()
@@ -200,6 +200,13 @@ def get_live_conversation(
     )
     if compact is not None:
         compact['finished_at'] = row.get('finished_at')
+        if row.get('is_locked'):
+            compact['is_locked'] = True
+        elif isinstance(row.get('v3_recording_ids'), list):
+            # Identifiers only, from the authenticated owner's existing live-window read.
+            compact['v3_recording_ids'] = [
+                rid for rid in row['v3_recording_ids'][-8:] if isinstance(rid, str) and rid and '/' not in rid
+            ]
     if compact and 'structured' in compact:
         compact['structured'] = {
             key: compact['structured'][key] for key in ('title', 'emoji') if key in compact['structured']
@@ -1352,6 +1359,10 @@ def get_conversation_by_id(
             response.headers['X-Translation-Status'] = translation_status
             if next_cursor is not None:
                 response.headers['X-Translation-Cursor'] = next_cursor
+    if conversation.get('id') == conversation_id:
+        preview = conversations_v3_processing.read_live_summary(uid, conversation)
+        if preview:
+            conversation = {**conversation, 'live_summary': preview}
     return transcribing_hold.project(conversation)
 
 
@@ -2914,6 +2925,25 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
     token = await v3_summary.prepare(uid, conversation)
     return StreamingResponse(
         v3_summary.stream(uid, conversation, token=token),
+        media_type='text/event-stream',
+        headers={'Cache-Control': 'no-cache'},
+    )
+
+
+@router.get(
+    '/v1/conversations/{conversation_id}/summary/live-catchup/stream',
+    tags=['conversations'],
+    response_class=StreamingResponse,
+    responses={200: {'content': {'text/event-stream': {'schema': {'type': 'string'}}}}},
+)
+async def conversation_live_catchup_stream(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    row = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
+    if row.get('id') != conversation_id or not conversations_v3_processing.live_summary_target(row):
+        raise HTTPException(status_code=404, detail='Live conversation not available')
+    await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
+    token = await v3_summary.prepare(uid, row, live=True)
+    return StreamingResponse(
+        v3_summary.stream(uid, row, token=token, live=True),
         media_type='text/event-stream',
         headers={'Cache-Control': 'no-cache'},
     )
