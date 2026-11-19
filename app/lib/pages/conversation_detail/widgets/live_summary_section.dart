@@ -13,6 +13,7 @@ import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
+import 'package:omi/pages/conversation_detail/live_conversation_refresher.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -22,7 +23,8 @@ typedef SummaryStreamOpener = Stream<SummaryStreamEvent> Function(String convers
 /// The summary of a v3 conversation that is still going or still being written.
 ///
 /// Opening a live conversation only reads its stored state. Catch me up requests a summary
-/// explicitly. Once the conversation ends, keep the normal final-summary streaming handoff.
+/// explicitly. The detail page refreshes live speech and pending transcription; once
+/// the transcript is ready, keep the normal final-summary streaming handoff.
 class LiveSummarySection extends StatefulWidget {
   const LiveSummarySection({
     super.key,
@@ -32,7 +34,6 @@ class LiveSummarySection extends StatefulWidget {
     this.stream,
     this.pollInterval = const Duration(seconds: 2),
     this.pollFor = const Duration(seconds: 60),
-    this.liveRefreshEvery = const Duration(seconds: 15),
   });
 
   final ServerConversation conversation;
@@ -49,12 +50,12 @@ class LiveSummarySection extends StatefulWidget {
   static SummaryStreamOpener? debugStream;
   final Duration pollInterval;
   final Duration pollFor;
-  final Duration liveRefreshEvery;
 
-  /// A v3 conversation in progress, or one whose summary is being written.
+  /// A v3 conversation in progress, ended with its transcript still arriving, or one whose summary is
+  /// being written.
   static bool wants(ServerConversation? conversation) {
     final state = conversation?.v3?.tileState;
-    return state == ConversationTileState.live || state == ConversationTileState.writing;
+    return LiveConversationRefresher.awaitsSummary(conversation) || state == ConversationTileState.writing;
   }
 
   @override
@@ -69,8 +70,6 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   StreamSubscription<SummaryStreamEvent>? _subscription;
   Completer<void>? _cancel;
   Timer? _poll;
-  Timer? _liveRefresh;
-  bool _refreshingLive = false;
   bool _liveRequestFailed = false;
   int _requestEpoch = 0;
   List<Object>? _requestSpeech;
@@ -96,12 +95,20 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
       _liveRequestFailed = false;
       _phase = _Phase.writing;
       _begin();
-    } else if (_isLive(oldWidget.conversation) && !_isLive(widget.conversation)) {
-      // The conversation ended while the page was open: write its summary now.
+    } else if (_awaitsSummary(oldWidget.conversation) != _awaitsSummary(widget.conversation)) {
       _stop();
       _sections.clear();
+      _liveResult = null;
+      _liveRequestFailed = false;
       _phase = _Phase.writing;
       _begin();
+    } else if (_isLive(oldWidget.conversation) != _isLive(widget.conversation)) {
+      // A live request can no longer apply once Finish leaves the transcript pending.
+      _stopRequest();
+      _sections.clear();
+      _liveResult = null;
+      _liveRequestFailed = false;
+      _phase = _Phase.live;
     } else {
       if (_isLive(widget.conversation) && !identical(oldWidget.conversation, widget.conversation)) {
         // A new detail snapshot supersedes optimistic SSE. It exposes stored preview coverage only
@@ -137,25 +144,17 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
     return c.v3?.tileState == ConversationTileState.done;
   }
 
+  static bool _awaitsSummary(ServerConversation c) => LiveConversationRefresher.awaitsSummary(c);
+
   static bool _isLive(ServerConversation c) => c.v3?.tileState == ConversationTileState.live;
 
   void _begin() {
     _openedId = widget.conversation.id;
     _coveredAtOpen = widget.conversation.v3?.summaryCoversThrough;
     _active(true);
-    if (_isLive(widget.conversation)) {
+    if (_awaitsSummary(widget.conversation)) {
+      // The page keeps the conversation current; didUpdateWidget starts the write when it moves on.
       _phase = _Phase.live;
-      _liveRefresh = Timer.periodic(widget.liveRefreshEvery, (_) async {
-        if (!_currentLiveTarget || _phase != _Phase.live || _refreshingLive) return;
-        _refreshingLive = true;
-        try {
-          await widget.refresh();
-        } catch (_) {
-          // The next foreground refresh can recover a failed read.
-        } finally {
-          _refreshingLive = false;
-        }
-      });
       return;
     }
     _startStream();
@@ -329,8 +328,6 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   }
 
   void _stop() {
-    _liveRefresh?.cancel();
-    _liveRefresh = null;
     _stopRequest();
   }
 
@@ -354,6 +351,17 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   @override
   Widget build(BuildContext context) {
     if (_isLive(widget.conversation)) return _buildLive(context);
+    if (_awaitsSummary(widget.conversation)) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 12),
+          child: Semantics(
+            liveRegion: true,
+            child: Text(context.l10n.transcribing, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+          ),
+        ),
+      );
+    }
     if (_phase == _Phase.finished) return const SliverToBoxAdapter(child: SizedBox.shrink());
     if (_phase == _Phase.failed) {
       return SliverToBoxAdapter(

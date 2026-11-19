@@ -52,6 +52,7 @@ import 'conversation_summary_selection.dart';
 import 'widgets.dart' show summaryRetrySlotApplies;
 import 'share.dart';
 import 'test_prompts.dart';
+import 'live_conversation_refresher.dart';
 import 'widgets/audio_download_progress_sheet.dart';
 import 'capture_group_separation.dart';
 import 'widgets/calendar_event_sheets.dart';
@@ -155,6 +156,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
 
   /// Held for dispose, when the page can no longer look the provider up.
   late final ConversationDetailProvider _detailProvider;
+  late final LiveConversationRefresher _liveRefresher;
   bool _isSharing = false;
   bool _reviewInterrupted = false;
   bool _isTogglingStarred = false;
@@ -303,6 +305,11 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     _routeIdentityEpoch = AnalyticsManager.identityEpoch;
     AnalyticsManager.identityChanges.addListener(_onRouteIdentityChanged);
     _detailProvider = context.read<ConversationDetailProvider>();
+    _liveRefresher = LiveConversationRefresher(
+        read: () => _detailProvider.conversationOrNull,
+        refresh: _detailProvider.refreshConversation,
+        inFront: () => mounted && ModalRoute.of(context)?.isCurrent != false)
+      ..start();
     WidgetsBinding.instance.addObserver(this);
     unawaited(
       SiriIntegration.instance.setCurrentScreen("/conversation/${widget.conversation.id}", widget.conversation.id),
@@ -515,6 +522,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     _detailProvider.leaveSpeakerLabelingSession(widget.conversation.id);
     unawaited(SiriIntegration.instance.setCurrentScreen("", null));
     _cancelOwnedTimers();
+    _liveRefresher.dispose();
     _separation.dispose();
     _controller?.dispose();
     focusTitleField.dispose();

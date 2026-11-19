@@ -20,6 +20,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/conversation_detail/live_conversation_refresher.dart';
 import 'package:omi/pages/conversation_detail/widgets/live_summary_section.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
@@ -431,7 +432,7 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('still going: no summary write, one line that it comes when it ends, kept current', (tester) async {
+    testWidgets('still going, then transcribing: no summary write until it is being written', (tester) async {
       var opens = 0;
       var refreshes = 0;
       var conversation = _conversation(state: ConversationTileState.live);
@@ -462,19 +463,22 @@ void main() {
 
       expect(find.byKey(const Key('live_summary_open_transcript')), findsNothing);
 
-      // The open page re-reads the conversation so its transcript stays current and its end is seen.
-      await tester.pump(const Duration(seconds: 15));
-      await tester.pump(const Duration(seconds: 15));
-      expect(refreshes, 2);
+      // The page keeps the conversation current (LiveConversationRefresher); the section reads nothing.
+      await tester.pump(const Duration(seconds: 30));
+      expect(refreshes, 0);
 
-      // It ended while the page was open: the summary is written now.
+      // It ended, but its transcript is still arriving: still no summary write.
+      rebuild(() => conversation = _conversation(state: ConversationTileState.transcribing));
+      await tester.pump();
+      expect(find.text('Transcribing…'), findsOneWidget);
+      expect(find.text('Summary when this conversation ends'), findsNothing);
+      expect(opens, 0, reason: 'the summary waits for the whole transcript');
+
+      // Its summary is being written now.
       rebuild(() => conversation = _conversation(state: ConversationTileState.writing));
       await tester.pump();
       expect(opens, 1);
       expect(find.text('Writing your summary…'), findsOneWidget);
-      // The live re-read stops once it has ended.
-      await tester.pump(const Duration(seconds: 15));
-      expect(refreshes, 2);
       unawaited(events.close());
     });
 
@@ -615,5 +619,45 @@ void main() {
       expect(find.text('Writing your summary…'), findsNothing);
       expect(active, [true, false]);
     });
+  });
+
+  testWidgets('LiveConversationRefresher: one read at a time, in front, until the summary is being written',
+      (tester) async {
+    var state = ConversationTileState.live;
+    var inFront = true;
+    var reads = 0;
+    Completer<bool>? pending;
+    final refresher = LiveConversationRefresher(
+      read: () => _conversation(state: state),
+      inFront: () => inFront,
+      refresh: () {
+        reads++;
+        pending = Completer<bool>();
+        return pending!.future;
+      },
+    )..start();
+    await tester.pump(const Duration(seconds: 15));
+    expect(reads, 1);
+    await tester.pump(const Duration(seconds: 15));
+    expect(reads, 1, reason: 'the first read is still in flight');
+    pending!.complete(true);
+    await tester.pump(const Duration(seconds: 15));
+    expect(reads, 2);
+    pending!.complete(true);
+
+    inFront = false;
+    await tester.pump(const Duration(seconds: 15));
+    expect(reads, 2, reason: 'another route covers the page');
+    inFront = true;
+
+    state = ConversationTileState.transcribing;
+    await tester.pump(const Duration(seconds: 15));
+    expect(reads, 3, reason: 'ended, transcript still arriving');
+    pending!.complete(true);
+
+    state = ConversationTileState.writing;
+    await tester.pump(const Duration(seconds: 15));
+    expect(reads, 3, reason: 'the summary is being written; the section takes it from here');
+    refresher.dispose();
   });
 }
