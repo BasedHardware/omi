@@ -167,9 +167,12 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     Widget? opens;
     var nothing = false;
     if (hadContent) {
+      final previousFinish = provider.lastClientFinish;
       provider.noteClientFinish();
       // Ending the capture fires the shared finalize hook, which closes the episode.
       final result = await _finish(provider);
+      // No answer (offline, a server error): nothing was processed, so a retry must still send it.
+      if (result == null) provider.lastClientFinish = previousFinish;
       if (!mounted) return;
       switchHomeToConversationsTab(context);
       nothing = processRefusedNothing(result?.conversation);
