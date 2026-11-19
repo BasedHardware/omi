@@ -1,2 +1,4 @@
 bin/
 .verify/
+/archcheck
+/jobd
