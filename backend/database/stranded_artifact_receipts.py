@@ -43,13 +43,14 @@ def signature(snapshot, now):
         not isinstance(uid, str)
         or not uid
         or '/' in uid
-        or data.get('owner_key') != privacy_owner_key(uid)
         or not ids
         or any(not isinstance(cid, str) or not cid or '/' in cid for cid in ids)
         or len(set(ids)) != 1
     ):
         return 'ambiguous', None
     try:
+        if data.get('owner_key') != privacy_owner_key(uid):
+            return 'ambiguous', None
         uris = row_references(data)
         if len(uris) > 1:
             return 'ambiguous', None

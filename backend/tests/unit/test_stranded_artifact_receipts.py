@@ -143,3 +143,60 @@ def test_storage_error_rolls_back_without_receipt_delete(monkeypatch):
         repair.erase(db, row, NOW, Mock())
     db._firestore_api.commit.assert_not_called()
     db._firestore_api.rollback.assert_called_once()
+
+
+def test_overlong_owner_id_is_ambiguous():
+    assert repair.signature(receipt(owner_id='x' * 257), NOW) == ('ambiguous', None)
+
+
+def test_storage_delete_precedes_receipt_commit(monkeypatch):
+    row = receipt(uri='gs://test/object')
+    db = MagicMock()
+    row.reference.get.return_value = row
+    row.reference._document_path = 'test/path'
+    events = []
+    monkeypatch.setattr(repair, 'signature', lambda *args: ('eligible', ('test-owner', 'test-conversation')))
+    monkeypatch.setattr(repair, 'proof', lambda *args, **kwargs: (True, NOW))
+    monkeypatch.setattr(repair, 'delete_batch_object', lambda *args, **kwargs: events.append('storage'))
+    db._firestore_api.commit.side_effect = lambda **kwargs: events.append('receipt')
+    assert repair.erase(db, row, NOW, Mock())
+    assert events == ['storage', 'receipt']
+    assert db._firestore_api.commit.call_args.kwargs['request']['writes'] == [{'delete': 'test/path'}]
+    db._firestore_api.rollback.assert_not_called()
+
+
+def test_apply_resumes_after_cap_and_obeys_read_limit(monkeypatch):
+    db = MagicMock()
+    collection = db.collection.return_value
+    query = collection.where.return_value.order_by.return_value
+    first, second = receipt(), receipt()
+    first.id, second.id = 'first', 'second'
+    query.limit.return_value.get.return_value = [first]
+    query.start_after.return_value.limit.return_value.get.return_value = [second]
+    monkeypatch.setattr('scripts.sweep_stranded_artifact_receipts.proof', lambda *args: (True, NOW))
+    monkeypatch.setattr('scripts.sweep_stranded_artifact_receipts.time.sleep', lambda _: None)
+    eraser = Mock(return_value=True)
+    monkeypatch.setattr('scripts.sweep_stranded_artifact_receipts.erase', eraser)
+    cursor = {}
+    checkpoint = Mock()
+    args = SimpleNamespace(max_reads=8, max_erasures=1, rows_per_second=10, apply=True)
+
+    def run():
+        report = {'namespaces': {}, 'reads': 0, 'erasures': 0}
+        status = sweep(db, None, args, cursor, checkpoint, report)
+        assert report['reads'] <= args.max_reads
+        return status
+
+    assert run() == 'erasure_limit'
+    assert cursor['batch_pipeline_prod'] == first.id
+    assert run() == 'erasure_limit'
+    collection.document.assert_called_once_with(first.id)
+    assert cursor['batch_pipeline_prod'] == second.id
+    assert [call.args[1] for call in eraser.call_args_list] == [first, second]
+    third = receipt()
+    third.id = 'third'
+    query.start_after.return_value.limit.return_value.get.return_value = [third]
+    args.max_erasures = 2
+    assert run() == 'read_limit'
+    assert cursor['batch_pipeline_prod'] == third.id
+    assert [call.args[1] for call in eraser.call_args_list] == [first, second, third]
