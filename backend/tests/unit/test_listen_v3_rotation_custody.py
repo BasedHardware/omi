@@ -302,7 +302,7 @@ def _failed_create_store(monkeypatch, stray_updates=None):
     return db, stray
 
 
-def _failing_rotation_host(db, stray, *, archive=None):
+def _failing_rotation_host(db, stray, *, archive=None, during_create=None):
     from fastapi import WebSocketException
 
     h = archive_host()
@@ -326,8 +326,8 @@ def _failing_rotation_host(db, stray, *, archive=None):
         h.recording_session_id = 'session-2'
         h.recording_session_ids_by_conversation['stray'] = 'session-2'
         db.documents[_key('stray')] = stray
-        for _ in range(5):
-            await asyncio.sleep(0)
+        if during_create is not None:
+            await during_create()
         raise RuntimeError('arm failed')
 
     controller.create_new_in_progress_conversation = create
@@ -380,22 +380,22 @@ async def test_frames_during_a_failed_create_never_bind_to_its_successor(remote,
         'note_server_batch_audio_received',
         lambda uid, cid, **kw: server_batch_audio.note_server_batch_audio_received(uid, cid, firestore_client=db, **kw),
     )
-    controller, h = _failing_rotation_host(db, stray)
-    archive = h.receiver.raw_archive
     labels = []
 
-    async def produce():
-        for index in range(40):
-            # The receiver binds audio by current_conversation_id; the session label may already
-            # name the stray's recording session while its create is in flight.
-            labels.append(h.recording_session_id)
-            packet = struct.pack('<160h', *[index] * 160)
-            await archive.append(packet, h.state.current_conversation_id, 1000 + index * 0.01, 160, decoded=packet)
-            await asyncio.sleep(0)
+    async def append_frame(index):
+        labels.append(h.recording_session_id)
+        packet = struct.pack('<160h', *[index] * 160)
+        await archive.append(packet, h.state.current_conversation_id, 1000 + index * 0.01, 160, decoded=packet)
 
-    await asyncio.gather(produce(), controller._rotate_v3_recording('current'))
+    # Deliver a frame while the successor labels the socket but before its create fails.
+    controller, h = _failing_rotation_host(db, stray, during_create=lambda: append_frame(1))
+    archive = h.receiver.raw_archive
+    await append_frame(0)
+    await controller._rotate_v3_recording('current')
+    for index in range(2, 40):
+        await append_frame(index)
     await archive.close()
-    assert 'session-2' in labels  # the residual window the comment describes was exercised
+    assert labels == ['session-1', 'session-2'] + ['session-1'] * 38
     assert _key('stray') not in db.documents
     current = db.documents[_key('current')]
     assert current['server_batch_audio_start'] == 1000 and current['server_batch_audio_end'] >= 1000.39
