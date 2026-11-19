@@ -10342,7 +10342,7 @@
     "noRecordingsYet": "अद्याप कोणतीही रेकॉर्डिंग नाही",
     "syncInProgress": "सिंक सुरू आहे",
     "deleteWhileProcessingTitle": "अद्याप प्रक्रिया सुरू",
-    "deleteWhileProcessingMessage": "ही रेकॉर्डिंग अपलोड झाली आहे पण Omi अद्याप संभाषण तयार करत आहे. आता हटवल्यास आणि प्रक्रिया अयशस्वी झाल्यास ती परत मिळवता येणार नाही. तरीही हटवायचे?",
+    "deleteWhileProcessingMessage": "हे रेकॉर्डिंग आधीच अपलोड झाले आहे आणि Omi त्यावर प्रक्रिया करत आहे. येथे हटवल्यास फोनवरील प्रत हटेल. प्रक्रिया अयशस्वी झाल्यास, Omi या फोनवरून पुन्हा प्रयत्न करू शकणार नाही.",
     "syncCardAllBackedUp": "सर्व रेकॉर्डिंग सिंक झाली",
     "syncCardReadyCount": "{count, plural, one{1 रेकॉर्डिंग सिंकसाठी तयार} other{{count} रेकॉर्डिंग सिंकसाठी तयार}}",
     "syncCardProcessing": "Omi वर प्रक्रिया सुरू…",
@@ -12207,6 +12207,7 @@
     "hasLinkedTasksLabel": "जोडलेली कार्ये आहेत",
     "hasTasksFilter": "कार्ये असलेले",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "अपडेट इंस्टॉल झाले नाही. तुमचे पेंडंट सध्याच्या फर्मवेअरवर ({version}) काम करत आहे. अपडेट पुन्हा करून पाहण्याऐवजी कृपया सपोर्टशी संपर्क साधा.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -12246,5 +12247,6 @@
     "onTheWayServerWork": "सर्व्हरने नोंदवलेले काम",
     "finishNothingToProcess": "अजून प्रक्रिया करण्यासाठी काहीही नाही.",
     "finishStillProcessing": "अजून प्रक्रिया सुरू आहे. हे होमवर दिसेल.",
-    "finishBackToHome": "होमवर परत जा"
+    "finishBackToHome": "होमवर परत जा",
+    "conversationSummaryWhenItEnds": "हे संभाषण संपल्यावर सारांश"
 }

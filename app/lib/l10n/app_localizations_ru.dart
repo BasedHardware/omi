@@ -9114,7 +9114,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Эта запись загружена, но Omi ещё создаёт разговор. Если удалить её сейчас и обработка не удастся, восстановить будет невозможно. Всё равно удалить?';
+      'Эта запись уже загружена, и Omi её обрабатывает. Удаление здесь убирает копию на телефоне. Если обработка не удастся, Omi не сможет повторить попытку с этого телефона.';
 
   @override
   String get syncCardAllBackedUp => 'Все записи синхронизированы';
@@ -15485,6 +15485,11 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Обновление не установилось. Ваш кулон продолжает работать на текущей прошивке ($version). Пожалуйста, обратитесь в поддержку, а не повторяйте обновление.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15619,4 +15624,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'На главную';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Сводка появится, когда разговор закончится';
 }

@@ -2956,7 +2956,7 @@
     "noRecordingsYet": "Ingen optagelser endnu",
     "syncInProgress": "Synkronisering i gang",
     "deleteWhileProcessingTitle": "Behandles stadig",
-    "deleteWhileProcessingMessage": "Denne optagelse er uploadet, men Omi opretter stadig samtalen. Hvis du sletter den nu, og behandlingen mislykkes, kan den ikke gendannes. Slet alligevel?",
+    "deleteWhileProcessingMessage": "Denne optagelse er allerede uploadet, og Omi behandler den. Sletning her fjerner telefonens kopi. Hvis behandlingen mislykkes, kan Omi ikke prøve igen fra denne telefon.",
     "syncCardAllBackedUp": "Alle optagelser synkroniseret",
     "syncCardReadyCount": "{count, plural, one{1 optagelse klar til synkronisering} other{{count} optagelser klar til synkronisering}}",
     "syncCardProcessing": "Behandler i Omi…",
@@ -4692,6 +4692,7 @@
     "hasLinkedTasksLabel": "Har tilknyttede opgaver",
     "hasTasksFilter": "Med opgaver",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "Opdateringen blev ikke installeret. Dit vedhæng virker stadig på den nuværende firmware ({version}). Kontakt support i stedet for at prøve opdateringen igen.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4731,5 +4732,6 @@
     "onTheWayServerWork": "Arbejde rapporteret af serveren",
     "finishNothingToProcess": "Intet at behandle endnu.",
     "finishStillProcessing": "Behandles stadig. Den vises på Hjem.",
-    "finishBackToHome": "Tilbage til Hjem"
+    "finishBackToHome": "Tilbage til Hjem",
+    "conversationSummaryWhenItEnds": "Resumé, når denne samtale slutter"
 }

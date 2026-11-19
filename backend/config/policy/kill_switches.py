@@ -8,6 +8,7 @@ import logging
 import os
 
 KILL_SWITCHES = {
+    'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED': True,
     'BATCH_RESULT_PROTOCOL_GUARD_ENABLED': True,
     'BATCH_ALLOWANCE_PARK_ENABLED': True,
     'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED': True,
@@ -34,6 +35,7 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED': True,
     'BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED': True,
+    'BATCH_PROJECTION_OUTBOX': True,
     'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED': False,
     'BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED': True,
     'BATCH_PIPELINE_OWNER_DRAIN_ENABLED': True,
@@ -103,7 +105,9 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
     elif name in {
         'CONVERSATION_TERMINAL_FAMILY_MODE',
         'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
+        'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
         'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
+        'BATCH_PROJECTION_OUTBOX',
     }:
         enabled = value not in {'false', '0', 'off', 'no'}
     elif name == 'CONVERSATION_BATCH_PURGE_COALESCING_ENABLED':
@@ -117,6 +121,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
     # Preserve the explicit off-only controls and true-only pump selector
     # in every parser mode.
     if name not in {
+        'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
         'CONVERSATION_BATCH_PURGE_COALESCING_ENABLED',
         'BATCH_ALLOWANCE_PARK_ENABLED',
         'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED',

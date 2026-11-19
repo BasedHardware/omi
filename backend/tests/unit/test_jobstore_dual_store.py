@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import pytest
 
 import database.batch_pipeline_store as batch_store
+from database import batch_pipeline_projection_outbox as projection_outbox
 from database.jobstore import dual_store
 from database.jobstore.dual_store import SHADOW_PARITY_TOTAL, DualStore, ShadowParityOutcome, compare
 from testing.pipeline_sim.store import CustomerData, SimStore
@@ -101,6 +102,27 @@ def test_writes_mirror_after_commit_and_reads_match(stores):
     assert store.drain(5)
     assert count('queues', 'write', 'mirrored') == before[0] + 1
     assert count('queues', 'read', 'match') == before[1] + 1
+
+
+def test_projection_outbox_metadata_patches_refresh_the_result_mirror(stores):
+    primary, shadow, store = stores
+    key = projection_outbox.Obligation('synthetic', 1)
+    address = ('results', key.segment_id)
+    row = {
+        'log_sequence': key.revision,
+        'projection_state': 'pending',
+        projection_outbox.KIND_FIELD: projection_outbox.KIND,
+        **projection_outbox.metadata(10.0, None, None),
+    }
+    primary.apply(address, row)
+    shadow.rows[address] = row.copy()
+    token = projection_outbox.claim(store, key, lambda: 10.0)
+    assert token is not None and store.drain(5)
+    assert shadow.rows[address][projection_outbox.TOKEN_FIELD] == token
+    assert projection_outbox.settle(store, key, token, lambda: 11.0, 'incomplete') == 'incomplete'
+    assert store.drain(5)
+    assert shadow.rows[address] == primary.rows[address]
+    assert shadow.rows[address][projection_outbox.DUE_FIELD] == 71.0
 
 
 def test_repair_lineage_stays_firestore_only_and_reads_still_match(stores):

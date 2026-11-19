@@ -2923,7 +2923,7 @@
     "noRecordingsYet": "ยังไม่มีการบันทึก",
     "syncInProgress": "กำลังซิงค์",
     "deleteWhileProcessingTitle": "ยังประมวลผลอยู่",
-    "deleteWhileProcessingMessage": "การบันทึกนี้อัปโหลดแล้วแต่ Omi ยังสร้างบทสนทนาอยู่ หากลบตอนนี้และการประมวลผลล้มเหลว จะกู้คืนไม่ได้ ลบต่อไปหรือไม่?",
+    "deleteWhileProcessingMessage": "การบันทึกนี้อัปโหลดแล้วและ Omi กำลังประมวลผลอยู่ การลบที่นี่จะลบสำเนาบนโทรศัพท์ หากการประมวลผลล้มเหลว Omi จะลองใหม่จากโทรศัพท์เครื่องนี้ไม่ได้",
     "syncCardAllBackedUp": "ซิงค์การบันทึกทั้งหมดแล้ว",
     "syncCardReadyCount": "{count, plural, other{การบันทึก {count} รายการพร้อมซิงค์}}",
     "syncCardProcessing": "กำลังประมวลผลบน Omi…",
@@ -4650,6 +4650,7 @@
     "hasLinkedTasksLabel": "มีงานที่เชื่อมโยง",
     "hasTasksFilter": "มีงาน",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "ติดตั้งอัปเดตไม่สำเร็จ จี้ของคุณยังใช้งานได้ด้วยเฟิร์มแวร์ปัจจุบัน ({version}) โปรดติดต่อฝ่ายสนับสนุนแทนการลองอัปเดตซ้ำ",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4689,5 +4690,6 @@
     "onTheWayServerWork": "งานที่เซิร์ฟเวอร์รายงาน",
     "finishNothingToProcess": "ยังไม่มีอะไรให้ประมวลผล",
     "finishStillProcessing": "ยังประมวลผลอยู่ จะแสดงที่หน้าหลัก",
-    "finishBackToHome": "กลับไปหน้าหลัก"
+    "finishBackToHome": "กลับไปหน้าหลัก",
+    "conversationSummaryWhenItEnds": "สรุปเมื่อการสนทนานี้จบลง"
 }

@@ -9135,7 +9135,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Questa registrazione è stata caricata ma Omi sta ancora creando la conversazione. Se la elimini ora e l\'elaborazione non riesce, non potrà essere recuperata. Eliminare comunque?';
+      'Questa registrazione è già stata caricata e Omi la sta elaborando. Eliminarla qui rimuove la copia sul telefono. Se l\'elaborazione non riesce, Omi non potrà riprovare da questo telefono.';
 
   @override
   String get syncCardAllBackedUp => 'Tutte le registrazioni sincronizzate';
@@ -15513,6 +15513,11 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'L\'aggiornamento non è stato installato. Il ciondolo continua a funzionare con il firmware attuale ($version). Contatta l\'assistenza invece di riprovare l\'aggiornamento.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15647,4 +15652,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Torna alla Home';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Riepilogo al termine di questa conversazione';
 }

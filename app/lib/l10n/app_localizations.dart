@@ -16923,10 +16923,10 @@ abstract class AppLocalizations {
   /// **'Still Processing'**
   String get deleteWhileProcessingTitle;
 
-  /// No description provided for @deleteWhileProcessingMessage.
+  /// Delete confirmation for a recording already uploaded whose server job has not finished. Deleting removes the phone copy; the server keeps processing, but if that job fails the app has no local file to re-upload from.
   ///
   /// In en, this message translates to:
-  /// **'This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can\'t be recovered. Delete anyway?'**
+  /// **'This recording is already uploaded and Omi is processing it. Deleting it here removes the phone\'s copy. If processing fails, Omi can\'t retry from this phone.'**
   String get deleteWhileProcessingMessage;
 
   /// No description provided for @syncCardAllBackedUp.
@@ -27087,6 +27087,12 @@ abstract class AppLocalizations {
   /// **'The update didn\'t install. Your pendant is still on {version}. Please try again.'**
   String firmwareUpdateNotInstalledMessage(String version);
 
+  /// CV1 pendant: firmware update finished transferring but the pendant reconnected on its old version. Retrying is discouraged on affected units, so point to support.
+  ///
+  /// In en, this message translates to:
+  /// **'The update didn\'t install. Your pendant still works on its current firmware ({version}). Please contact support rather than retrying the update.'**
+  String firmwareUpdateNotInstalledCv1Message(String version);
+
   /// No description provided for @firmwareUpdateUnconfirmedMessage.
   ///
   /// In en, this message translates to:
@@ -27326,6 +27332,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Back to Home'**
   String get finishBackToHome;
+
+  /// On the detail page of a conversation still in progress (v3): the summary is written once it ends.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary when this conversation ends'**
+  String get conversationSummaryWhenItEnds;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -9012,7 +9012,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'ההקלטה הזו הועלתה אך Omi עדיין יוצר את השיחה. אם תמחק אותה עכשיו והעיבוד ייכשל, לא יהיה ניתן לשחזר אותה. למחוק בכל זאת?';
+      'ההקלטה הזו כבר הועלתה ו-Omi מעבד אותה. מחיקה כאן מסירה את העותק שבטלפון. אם העיבוד ייכשל, Omi לא יוכל לנסות שוב מהטלפון הזה.';
 
   @override
   String get syncCardAllBackedUp => 'כל ההקלטות סונכרנו';
@@ -15323,6 +15323,11 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'העדכון לא הותקן. התליון שלך ממשיך לעבוד עם הקושחה הנוכחית ($version). במקום לנסות שוב את העדכון, פנה לתמיכה.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15457,4 +15462,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'חזרה למסך הבית';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'סיכום כשהשיחה הזו תסתיים';
 }

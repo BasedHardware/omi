@@ -764,6 +764,10 @@ def serving_projection_sweep_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP')
 
 
+def projection_outbox_enabled() -> bool:
+    return kill_switch('BATCH_PROJECTION_OUTBOX', log=False)
+
+
 def _pump_bound(raw: str, default: int, maximum: int, minimum: int = 1) -> int:
     try:
         return max(minimum, min(int(raw), maximum))

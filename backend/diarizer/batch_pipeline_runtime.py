@@ -24,6 +24,7 @@ from prometheus_client.parser import text_string_to_metric_families
 from prometheus_client.registry import Collector
 
 from config.stt_cap_dispatch import execution_admission_configured as cap_dispatch_enabled, offline_enforcement_enabled
+from utils.other.private_sync_get_metrics import OBJECT_GETS
 from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
 from utils.observability.firestore_probe_export import register_probe_collectors
 from utils.stt.allowance_metrics import COLLECTORS as ALLOWANCE_WATCH_COLLECTORS
@@ -149,6 +150,7 @@ def health_server(
 ) -> ThreadingHTTPServer:
     register_runtime_percent(registry)
     register_probe_collectors(registry)  # Every child exports before the pod's merge_metrics.
+    registry.register(OBJECT_GETS)
     registry.register(LANGUAGE_ROUTES)
     registry.register(RESULT_PROTOCOL_REFUSED)
     for collector in WORKER_IO_COLLECTORS:
