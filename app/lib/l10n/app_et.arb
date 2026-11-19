@@ -4691,7 +4691,6 @@
     "finishStillProcessing": "Veel töödeldakse. See ilmub avalehele.",
     "finishBackToHome": "Tagasi avalehele",
     "conversationSummaryWhenItEnds": "Kokkuvõte, kui see vestlus lõpeb",
-    "conversationCatchMeUp": "Tee mulle kokkuvõte",
     "conversationSummaryThrough": "Kokkuvõte kuni {time}",
     "conversationRecentTranscript": "Hiljutine transkriptsioon"
 }

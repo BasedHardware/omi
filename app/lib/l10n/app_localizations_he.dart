@@ -15462,9 +15462,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'סיכום כשהשיחה הזו תסתיים';
 
   @override
-  String get conversationCatchMeUp => 'עדכן אותי';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'סיכום עד $time';
   }

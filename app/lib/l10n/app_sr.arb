@@ -12248,7 +12248,6 @@
     "finishStillProcessing": "Још се обрађује. Појавиће се на почетној.",
     "finishBackToHome": "Назад на почетну",
     "conversationSummaryWhenItEnds": "Резиме када се овај разговор заврши",
-    "conversationCatchMeUp": "Кажи ми укратко",
     "conversationSummaryThrough": "Резиме до {time}",
     "conversationRecentTranscript": "Недавни препис"
 }

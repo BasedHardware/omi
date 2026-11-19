@@ -12248,7 +12248,6 @@
     "finishStillProcessing": "Še v obdelavi. Prikazalo se bo na začetni strani.",
     "finishBackToHome": "Nazaj na začetno",
     "conversationSummaryWhenItEnds": "Povzetek, ko se ta pogovor konča",
-    "conversationCatchMeUp": "Daj mi povzetek",
     "conversationSummaryThrough": "Povzetek do {time}",
     "conversationRecentTranscript": "Nedavni prepis"
 }

@@ -4726,7 +4726,6 @@
     "finishStillProcessing": "Hâlâ işleniyor. Ana sayfada görünecek.",
     "finishBackToHome": "Ana Sayfaya Dön",
     "conversationSummaryWhenItEnds": "Bu konuşma bittiğinde özet",
-    "conversationCatchMeUp": "Özet geç",
     "conversationSummaryThrough": "{time} itibariyle özet",
     "conversationRecentTranscript": "Son transkript"
 }

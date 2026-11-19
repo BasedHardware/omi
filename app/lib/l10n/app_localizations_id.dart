@@ -15589,9 +15589,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Ringkasan saat percakapan ini berakhir';
 
   @override
-  String get conversationCatchMeUp => 'Beri saya ringkasan';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Ringkasan hingga $time';
   }

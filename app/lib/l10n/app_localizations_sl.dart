@@ -15603,9 +15603,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Povzetek, ko se ta pogovor konča';
 
   @override
-  String get conversationCatchMeUp => 'Daj mi povzetek';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Povzetek do $time';
   }

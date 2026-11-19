@@ -4787,7 +4787,6 @@
     "finishStillProcessing": "Még feldolgozás alatt. Megjelenik a Kezdőlapon.",
     "finishBackToHome": "Vissza a Kezdőlapra",
     "conversationSummaryWhenItEnds": "Összefoglaló, amikor ez a beszélgetés véget ér",
-    "conversationCatchMeUp": "Foglalj össze nekem",
     "conversationSummaryThrough": "Összefoglaló ekkorig: {time}",
     "conversationRecentTranscript": "Legutóbbi átirat"
 }

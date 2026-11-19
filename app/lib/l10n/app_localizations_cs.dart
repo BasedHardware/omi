@@ -15574,9 +15574,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Shrnutí po skončení tohoto rozhovoru';
 
   @override
-  String get conversationCatchMeUp => 'Shrň mi to';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Shrnutí do $time';
   }

@@ -4726,7 +4726,6 @@
     "finishStillProcessing": "Ещё обрабатывается. Появится на главной.",
     "finishBackToHome": "На главную",
     "conversationSummaryWhenItEnds": "Сводка появится, когда разговор закончится",
-    "conversationCatchMeUp": "Кратко о главном",
     "conversationSummaryThrough": "Сводка до {time}",
     "conversationRecentTranscript": "Последняя расшифровка"
 }

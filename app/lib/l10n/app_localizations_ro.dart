@@ -15639,9 +15639,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Rezumat când se încheie această conversație';
 
   @override
-  String get conversationCatchMeUp => 'Pune-mă la curent';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Rezumat până la $time';
   }

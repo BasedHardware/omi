@@ -15346,9 +15346,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'この会話が終わると要約が表示されます';
 
   @override
-  String get conversationCatchMeUp => 'ここまでのまとめ';
-
-  @override
   String conversationSummaryThrough(String time) {
     return '$timeまでの要約';
   }

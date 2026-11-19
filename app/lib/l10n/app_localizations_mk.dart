@@ -15639,9 +15639,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Резиме кога ќе заврши овој разговор';
 
   @override
-  String get conversationCatchMeUp => 'Ажурирај ме';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Резиме до $time';
   }

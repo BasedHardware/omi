@@ -4691,7 +4691,6 @@
     "finishStillProcessing": "Ακόμα σε επεξεργασία. Θα εμφανιστεί στην Αρχική.",
     "finishBackToHome": "Πίσω στην Αρχική",
     "conversationSummaryWhenItEnds": "Σύνοψη όταν τελειώσει αυτή η συζήτηση",
-    "conversationCatchMeUp": "Ενημερώστε με",
     "conversationSummaryThrough": "Σύνοψη έως {time}",
     "conversationRecentTranscript": "Πρόσφατη απομαγνητοφώνηση"
 }

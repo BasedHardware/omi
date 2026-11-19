@@ -4691,7 +4691,6 @@
     "finishStillProcessing": "Ancora in elaborazione. Apparirà nella Home.",
     "finishBackToHome": "Torna alla Home",
     "conversationSummaryWhenItEnds": "Riepilogo al termine di questa conversazione",
-    "conversationCatchMeUp": "Aggiornami",
     "conversationSummaryThrough": "Riepilogo fino alle {time}",
     "conversationRecentTranscript": "Trascrizione recente"
 }

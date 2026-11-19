@@ -4691,7 +4691,6 @@
     "finishStillProcessing": "Encara s'està processant. Apareixerà a l'inici.",
     "finishBackToHome": "Torna a l'inici",
     "conversationSummaryWhenItEnds": "Resum quan acabi aquesta conversa",
-    "conversationCatchMeUp": "Posa'm al dia",
     "conversationSummaryThrough": "Resum fins a {time}",
     "conversationRecentTranscript": "Transcripció recent"
 }

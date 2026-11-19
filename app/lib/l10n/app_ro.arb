@@ -4691,7 +4691,6 @@
     "finishStillProcessing": "Încă se procesează. Va apărea pe pagina principală.",
     "finishBackToHome": "Înapoi la pagina principală",
     "conversationSummaryWhenItEnds": "Rezumat când se încheie această conversație",
-    "conversationCatchMeUp": "Pune-mă la curent",
     "conversationSummaryThrough": "Rezumat până la {time}",
     "conversationRecentTranscript": "Transcriere recentă"
 }

@@ -4691,7 +4691,6 @@
     "finishStillProcessing": "Behandles fortsatt. Den vises på Hjem.",
     "finishBackToHome": "Tilbake til Hjem",
     "conversationSummaryWhenItEnds": "Sammendrag når denne samtalen avsluttes",
-    "conversationCatchMeUp": "Oppdater meg",
     "conversationSummaryThrough": "Sammendrag til {time}",
     "conversationRecentTranscript": "Siste transkripsjon"
 }

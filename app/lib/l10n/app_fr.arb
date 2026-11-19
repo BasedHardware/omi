@@ -4726,7 +4726,6 @@
     "finishStillProcessing": "Traitement en cours. Elle apparaîtra sur l'accueil.",
     "finishBackToHome": "Retour à l'accueil",
     "conversationSummaryWhenItEnds": "Résumé à la fin de cette conversation",
-    "conversationCatchMeUp": "Résume-moi",
     "conversationSummaryThrough": "Résumé jusqu'à {time}",
     "conversationRecentTranscript": "Transcription récente"
 }

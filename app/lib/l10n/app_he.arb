@@ -12248,7 +12248,6 @@
     "finishStillProcessing": "עדיין בעיבוד. זה יופיע במסך הבית.",
     "finishBackToHome": "חזרה למסך הבית",
     "conversationSummaryWhenItEnds": "סיכום כשהשיחה הזו תסתיים",
-    "conversationCatchMeUp": "עדכן אותי",
     "conversationSummaryThrough": "סיכום עד {time}",
     "conversationRecentTranscript": "תמלול אחרון"
 }

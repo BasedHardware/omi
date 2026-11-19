@@ -4691,7 +4691,6 @@
     "finishStillProcessing": "Wird noch verarbeitet. Es erscheint auf der Startseite.",
     "finishBackToHome": "Zur Startseite",
     "conversationSummaryWhenItEnds": "Zusammenfassung, wenn dieses Gespräch endet",
-    "conversationCatchMeUp": "Hol mich auf den neusten Stand",
     "conversationSummaryThrough": "Zusammenfassung bis {time}",
     "conversationRecentTranscript": "Neuestes Transkript"
 }

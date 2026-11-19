@@ -12248,7 +12248,6 @@
     "finishStillProcessing": "ఇంకా ప్రాసెస్ అవుతోంది. ఇది హోమ్‌లో కనిపిస్తుంది.",
     "finishBackToHome": "హోమ్‌కు తిరిగి వెళ్లండి",
     "conversationSummaryWhenItEnds": "ఈ సంభాషణ ముగిసినప్పుడు సారాంశం",
-    "conversationCatchMeUp": "ఇప్పటి వరకు జరిగింది చెప్పండి",
     "conversationSummaryThrough": "{time} వరకు సారాంశం",
     "conversationRecentTranscript": "ఇటీవలి ట్రాన్‌స్క్రిప్ట్"
 }

@@ -12248,7 +12248,6 @@
     "finishStillProcessing": "এখনও প্রক্রিয়া চলছে। এটি হোমে দেখা যাবে।",
     "finishBackToHome": "হোমে ফিরে যান",
     "conversationSummaryWhenItEnds": "এই কথোপকথন শেষ হলে সারাংশ",
-    "conversationCatchMeUp": "আমাকে আপডেট করুন",
     "conversationSummaryThrough": "{time} পর্যন্ত সারসংক্ষেপ",
     "conversationRecentTranscript": "সাম্প্রতিক প্রতিলিপি"
 }

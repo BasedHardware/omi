@@ -15486,9 +15486,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'الملخص عند انتهاء هذه المحادثة';
 
   @override
-  String get conversationCatchMeUp => 'لخّص لي';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'الملخص حتى $time';
   }

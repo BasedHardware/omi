@@ -4691,7 +4691,6 @@
     "finishStillProcessing": "Все още се обработва. Ще се появи на началния екран.",
     "finishBackToHome": "Към началото",
     "conversationSummaryWhenItEnds": "Обобщение, когато този разговор приключи",
-    "conversationCatchMeUp": "Какво пропуснах?",
     "conversationSummaryThrough": "Обобщение до {time}",
     "conversationRecentTranscript": "Скорошен транскрипт"
 }

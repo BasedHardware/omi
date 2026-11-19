@@ -15637,9 +15637,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'ఈ సంభాషణ ముగిసినప్పుడు సారాంశం';
 
   @override
-  String get conversationCatchMeUp => 'ఇప్పటి వరకు జరిగింది చెప్పండి';
-
-  @override
   String conversationSummaryThrough(String time) {
     return '$time వరకు సారాంశం';
   }

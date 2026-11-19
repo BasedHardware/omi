@@ -15633,9 +15633,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Összefoglaló, amikor ez a beszélgetés véget ér';
 
   @override
-  String get conversationCatchMeUp => 'Foglalj össze nekem';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Összefoglaló ekkorig: $time';
   }

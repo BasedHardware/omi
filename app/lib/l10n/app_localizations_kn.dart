@@ -15625,9 +15625,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'ಈ ಸಂಭಾಷಣೆ ಮುಗಿದಾಗ ಸಾರಾಂಶ';
 
   @override
-  String get conversationCatchMeUp => 'ನನ್ನನ್ನು ಅಪ್‌ಡೇಟ್ ಮಾಡಿ';
-
-  @override
   String conversationSummaryThrough(String time) {
     return '$time ವರೆಗಿನ ಸಾರಾಂಶ';
   }

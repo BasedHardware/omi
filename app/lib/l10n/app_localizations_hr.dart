@@ -15611,9 +15611,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Sažetak kada ovaj razgovor završi';
 
   @override
-  String get conversationCatchMeUp => 'Ukratko mi prepričaj';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Sažetak do $time';
   }

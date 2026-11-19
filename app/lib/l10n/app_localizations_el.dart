@@ -15676,9 +15676,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Σύνοψη όταν τελειώσει αυτή η συζήτηση';
 
   @override
-  String get conversationCatchMeUp => 'Ενημερώστε με';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Σύνοψη έως $time';
   }

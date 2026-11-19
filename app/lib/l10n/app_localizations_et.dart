@@ -15567,9 +15567,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Kokkuvõte, kui see vestlus lõpeb';
 
   @override
-  String get conversationCatchMeUp => 'Tee mulle kokkuvõte';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Kokkuvõte kuni $time';
   }

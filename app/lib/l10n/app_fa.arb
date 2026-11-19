@@ -12248,7 +12248,6 @@
     "finishStillProcessing": "هنوز در حال پردازش است. در صفحه اصلی نمایش داده می‌شود.",
     "finishBackToHome": "بازگشت به صفحه اصلی",
     "conversationSummaryWhenItEnds": "خلاصه پس از پایان این گفتگو",
-    "conversationCatchMeUp": "من را به‌روز کن",
     "conversationSummaryThrough": "خلاصه تا {time}",
     "conversationRecentTranscript": "رونویسی اخیر"
 }

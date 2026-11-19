@@ -4726,7 +4726,6 @@
     "finishStillProcessing": "Ainda a processar. Vai aparecer no Início.",
     "finishBackToHome": "Voltar ao Início",
     "conversationSummaryWhenItEnds": "Resumo quando esta conversa terminar",
-    "conversationCatchMeUp": "Me atualize",
     "conversationSummaryThrough": "Resumo até {time}",
     "conversationRecentTranscript": "Transcrição recente"
 }

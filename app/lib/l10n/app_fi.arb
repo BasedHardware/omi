@@ -4691,7 +4691,6 @@
     "finishStillProcessing": "Käsitellään yhä. Se näkyy kotinäkymässä.",
     "finishBackToHome": "Takaisin kotiin",
     "conversationSummaryWhenItEnds": "Yhteenveto, kun tämä keskustelu päättyy",
-    "conversationCatchMeUp": "Tiivistä minulle",
     "conversationSummaryThrough": "Yhteenveto klo {time} asti",
     "conversationRecentTranscript": "Viimeisin litterointi"
 }

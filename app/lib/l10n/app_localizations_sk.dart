@@ -15570,9 +15570,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Zhrnutie po skončení tohto rozhovoru';
 
   @override
-  String get conversationCatchMeUp => 'Daj mi prehľad';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Zhrnutie do $time';
   }

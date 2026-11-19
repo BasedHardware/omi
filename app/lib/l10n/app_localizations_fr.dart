@@ -15702,9 +15702,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Résumé à la fin de cette conversation';
 
   @override
-  String get conversationCatchMeUp => 'Résume-moi';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Résumé jusqu\'à $time';
   }

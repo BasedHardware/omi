@@ -4691,7 +4691,6 @@
     "finishStillProcessing": "Stále se zpracovává. Objeví se na domovské stránce.",
     "finishBackToHome": "Zpět domů",
     "conversationSummaryWhenItEnds": "Shrnutí po skončení tohoto rozhovoru",
-    "conversationCatchMeUp": "Shrň mi to",
     "conversationSummaryThrough": "Shrnutí do {time}",
     "conversationRecentTranscript": "Nejnovější přepis"
 }

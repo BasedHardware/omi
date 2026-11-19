@@ -15614,9 +15614,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Samenvatting wanneer dit gesprek eindigt';
 
   @override
-  String get conversationCatchMeUp => 'Werk me bij';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Samenvatting tot $time';
   }

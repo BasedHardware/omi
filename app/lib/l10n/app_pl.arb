@@ -4726,7 +4726,6 @@
     "finishStillProcessing": "Nadal trwa przetwarzanie. Pojawi się na ekranie głównym.",
     "finishBackToHome": "Wróć do ekranu głównego",
     "conversationSummaryWhenItEnds": "Podsumowanie po zakończeniu tej rozmowy",
-    "conversationCatchMeUp": "Daj mi skrót",
     "conversationSummaryThrough": "Podsumowanie do {time}",
     "conversationRecentTranscript": "Najnowsza transkrypcja"
 }

@@ -15609,9 +15609,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Kopsavilkums, kad šī saruna beigsies';
 
   @override
-  String get conversationCatchMeUp => 'Atjauniniet mani';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Kopsavilkums līdz $time';
   }

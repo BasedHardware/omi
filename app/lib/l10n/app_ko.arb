@@ -4691,7 +4691,6 @@
     "finishStillProcessing": "아직 처리 중이에요. 홈에 표시될 거예요.",
     "finishBackToHome": "홈으로 돌아가기",
     "conversationSummaryWhenItEnds": "이 대화가 끝나면 요약이 표시됩니다",
-    "conversationCatchMeUp": "지금까지 요약",
     "conversationSummaryThrough": "{time}까지의 요약",
     "conversationRecentTranscript": "최근 녹취록"
 }

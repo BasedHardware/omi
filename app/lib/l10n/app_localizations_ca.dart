@@ -15651,9 +15651,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get conversationSummaryWhenItEnds => 'Resum quan acabi aquesta conversa';
 
   @override
-  String get conversationCatchMeUp => 'Posa\'m al dia';
-
-  @override
   String conversationSummaryThrough(String time) {
     return 'Resum fins a $time';
   }
