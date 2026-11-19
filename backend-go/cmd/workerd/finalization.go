@@ -1,0 +1,63 @@
+package main
+
+import (
+	"context"
+	"errors"
+
+	"github.com/BasedHardware/omi/backend-go/internal/adapters/conversations"
+	"github.com/BasedHardware/omi/backend-go/internal/adapters/finalizationdocs"
+	"github.com/BasedHardware/omi/backend-go/internal/finalization"
+	"github.com/BasedHardware/omi/backend-go/internal/finalization/rules"
+	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
+	"github.com/BasedHardware/omi/backend-go/internal/queue"
+)
+
+// wireFinalizationDocuments connects the ordinary family to the merged
+// conversation port and the finalization lifecycle store. Registration still
+// requires the serving gateway and the remaining effect ports.
+func wireFinalizationDocuments(service *finalization.Service, store finalizationdocs.Store) {
+	service.Outbox = store
+	service.Lifecycle = store
+	service.Replay = store
+	service.Documents = finalizationDocuments{store: conversations.Store{Docs: store.Docs, Codec: store.Codec}}
+}
+
+type finalizationDocuments struct{ store conversations.Store }
+
+func (f finalizationDocuments) Load(ctx context.Context, g queue.Guarded, ref finalization.Ref) (finalization.Conversation, error) {
+	row, err := f.store.Load(ctx, g, conversations.Ref{Owner: ref.Owner, ID: ref.ID})
+	if errors.Is(err, docstore.ErrMissing) || errors.Is(err, conversations.ErrRestricted) {
+		return finalization.Conversation{}, finalization.ErrStale
+	}
+	return finalization.Conversation{
+		Comparison: row.Revision, Status: rules.Status(row.Status), JobID: row.FinalizationJobID,
+		Revision: row.FinalizationRevision, SyncRevision: row.SyncContentRevision,
+		Transcript: row.Transcript, Discarded: row.Discarded, Notes: finalization.Notes{Title: row.Title, Overview: row.Overview},
+	}, err
+}
+
+func (f finalizationDocuments) ApplyFinalization(ctx context.Context, g queue.Guarded, _ finalization.Claim, before finalization.Conversation, notes *finalization.Notes, _, _ string) error {
+	revision, ok := before.Comparison.(conversations.Revision)
+	if !ok {
+		return finalization.ErrInvalid
+	}
+	status := conversations.Completed
+	patch := conversations.Finalization{Status: &status}
+	// The lane 2 port supports title and overview. Dedupe stays off until
+	// the document adapter exposes a guarded hash and section patch.
+	if notes != nil {
+		if len(notes.Sections) != 0 {
+			return finalization.ErrInvalid
+		}
+		patch.Title, patch.Overview = &notes.Title, &notes.Overview
+	}
+	err := f.store.ApplyFinalization(ctx, g, revision, patch)
+	switch {
+	case errors.Is(err, conversations.ErrChanged):
+		return finalization.ErrSourceChanged
+	case errors.Is(err, docstore.ErrMissing), errors.Is(err, conversations.ErrRestricted), errors.Is(err, conversations.ErrLifecycleRefused):
+		return finalization.ErrStale
+	default:
+		return err
+	}
+}

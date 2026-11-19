@@ -15,6 +15,7 @@ type Service struct {
 	Outbox       Outbox
 	Documents    Documents
 	Lifecycle    Lifecycle
+	Replay       ReplayStore
 	Meeting      MeetingEvidence
 	Batch        BatchCustody
 	Gateway      Gateway
@@ -88,7 +89,7 @@ func (s *Service) Work(ctx context.Context, run *queue.Run) queue.Outcome {
 	if err != nil {
 		return queue.Fail(CauseInvalid)
 	}
-	claim := Claim{Intent: in, Epoch: run.Job().Token, LiveBYOK: run.Secret() != ""}
+	claim := Claim{Intent: in, Epoch: run.Job().Token, BudgetRequeues: run.Job().BudgetRequeues, LiveBYOK: run.Secret() != ""}
 	if beginErr := s.begin(ctx, run, claim); beginErr != nil {
 		return s.workError(ctx, run, claim, beginErr)
 	}
@@ -191,7 +192,7 @@ func (s *Service) Exhausted(ctx context.Context, run *queue.Reconcile) queue.Res
 	if err != nil {
 		return queue.Park()
 	}
-	claim := Claim{Intent: in, Epoch: run.Job().Token, LiveBYOK: run.Secret() != "", Reconcile: true}
+	claim := Claim{Intent: in, Epoch: run.Job().Token, BudgetRequeues: run.Job().BudgetRequeues, LiveBYOK: run.Secret() != "", Reconcile: true}
 	beginErr := s.begin(ctx, run, claim)
 	if beginErr != nil && !errors.Is(beginErr, ErrStale) {
 		return queue.LaterOnError(beginErr, CauseStore)

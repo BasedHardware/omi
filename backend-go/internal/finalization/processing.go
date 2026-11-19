@@ -110,9 +110,10 @@ func (s *Service) completeNotes(ctx context.Context, g queue.Guarded, req Comple
 }
 
 func (s *Service) persist(ctx context.Context, run *queue.Run, claim Claim, before Conversation, notes *Notes, inputHash, outputHash string) error {
-	return run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
+	err := run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
 		return s.Documents.ApplyFinalization(ctx, g, claim, before, notes, inputHash, outputHash)
 	})
+	return s.persistError(ctx, run, claim, before.SyncRevision, err)
 }
 
 type notesInput struct {

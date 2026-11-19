@@ -1,8 +1,7 @@
-package finalizationintegration_test
+package main
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -12,46 +11,10 @@ import (
 	"github.com/BasedHardware/omi/backend-go/internal/finalization"
 	"github.com/BasedHardware/omi/backend-go/internal/finalization/rules"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
-	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore/docstoretest"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 	"github.com/BasedHardware/omi/backend-go/internal/queue/queuetest"
 )
-
-// This composition belongs with the runtime wiring once its remaining ports
-// are available. The test calls the merged lane 2 port with its own opaque
-// revision and exercises the lane 6 admission, claim and terminal transactions.
-type conversationFixture struct{ store conversations.Store }
-
-func (f conversationFixture) Load(ctx context.Context, g queue.Guarded, ref finalization.Ref) (finalization.Conversation, error) {
-	row, err := f.store.Load(ctx, g, conversations.Ref{Owner: ref.Owner, ID: ref.ID})
-	if errors.Is(err, docstore.ErrMissing) {
-		return finalization.Conversation{}, finalization.ErrStale
-	}
-	return finalization.Conversation{
-		Comparison: row.Revision, Status: rules.Status(row.Status), JobID: row.FinalizationJobID,
-		Revision: row.FinalizationRevision, SyncRevision: row.SyncContentRevision,
-		Transcript: row.Transcript, Discarded: row.Discarded,
-	}, err
-}
-
-func (f conversationFixture) ApplyFinalization(ctx context.Context, g queue.Guarded, _ finalization.Claim, before finalization.Conversation, notes *finalization.Notes, _, _ string) error {
-	revision, ok := before.Comparison.(conversations.Revision)
-	if !ok {
-		return finalization.ErrInvalid
-	}
-	status := conversations.Completed
-	patch := conversations.Finalization{Status: &status}
-	// The merged field patch accepts the fixture's title and overview. The notes
-	// sections and dedupe hashes still need a write surface in the real adapter.
-	if notes != nil {
-		if len(notes.Sections) != 0 {
-			return finalization.ErrInvalid
-		}
-		patch.Title, patch.Overview = &notes.Title, &notes.Overview
-	}
-	return f.store.ApplyFinalization(ctx, g, revision, patch)
-}
 
 type syntheticEffects struct{}
 
@@ -112,10 +75,9 @@ func TestF09MergedDocumentAdapterFencesNewerInputAndUpdatesHome(t *testing.T) {
 	causes := append(finalizationdocs.Causes(), conversations.Causes()...)
 	h := queuetest.Open(t, queuetest.Policy(), finalization.Declaration(causes...))
 	lifecycle := finalizationdocs.Store{Docs: bench.Store, Clock: clock.System{}}
-	processor := conversationFixture{store: conversations.Store{Docs: bench.Store}}
 	effects := syntheticEffects{}
 	s := &finalization.Service{
-		Queue: h.Store, Outbox: lifecycle, Lifecycle: lifecycle, Documents: processor,
+		Queue:   h.Store,
 		Meeting: effects, Effects: effects, Targets: effects,
 		Gateway: &syntheticGateway{beforeFirstCompletion: func(ctx context.Context) error {
 			current, err := bench.Raw.Doc(path).Get(ctx)
@@ -129,6 +91,7 @@ func TestF09MergedDocumentAdapterFencesNewerInputAndUpdatesHome(t *testing.T) {
 			return err
 		}},
 	}
+	wireFinalizationDocuments(s, lifecycle)
 	intent, err := s.Admit(t.Context(), finalization.AdmissionRequest{
 		Ref: finalization.Ref{Owner: "replay-owner", ID: "replay-conversation"}, Trigger: rules.CaptureEnd,
 	})
@@ -136,8 +99,14 @@ func TestF09MergedDocumentAdapterFencesNewerInputAndUpdatesHome(t *testing.T) {
 		t.Fatalf("admit: %+v %v", intent, err)
 	}
 	h.Start(map[string]queue.Handler{finalization.Kind: s})
+	waiting := h.Until(intent.JobID, "sync revision quiet wait", func(job queue.Job) bool {
+		return job.State == queue.StateWaiting && job.Reason != nil && *job.Reason == finalization.CauseChanged
+	})
+	if waiting.Attempts != 0 {
+		t.Fatalf("sync yield spent an attempt: %+v", waiting)
+	}
 	job := h.Settled(intent.JobID)
-	if job.Outcome == nil || *job.Outcome != queue.TerminalSuccess || job.Attempts != 2 {
+	if job.Outcome == nil || *job.Outcome != queue.TerminalSuccess || job.Attempts != 1 {
 		t.Fatalf("job: %+v; reports %v", job, h.Reports())
 	}
 	conv, err := bench.Raw.Doc(path).Get(t.Context())

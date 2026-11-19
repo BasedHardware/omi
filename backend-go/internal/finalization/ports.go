@@ -21,10 +21,11 @@ type Outbox interface {
 // A lifecycle write must check the token and its authoritative document state
 // in the same transaction as the write.
 type Claim struct {
-	Intent    Intent
-	Epoch     int64
-	LiveBYOK  bool
-	Reconcile bool
+	Intent         Intent
+	Epoch          int64
+	BudgetRequeues int
+	LiveBYOK       bool
+	Reconcile      bool
 }
 
 // Conversation is the guarded document snapshot used by ordinary finalization.

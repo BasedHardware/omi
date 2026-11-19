@@ -22,12 +22,15 @@ var (
 )
 
 // Begin mirrors a SQL claim in Firestore. A job attached from the Python outbox
-// must be in generation one and must not have a live foreign lease. Deployments
+// must be in generation one or a successor recorded by Go, with no live foreign lease. Deployments
 // must cut over dispatch ownership before using this adapter.
 func (s Store) Begin(ctx context.Context, g queue.Guarded, claim finalization.Claim) error {
 	return s.withJob(ctx, g, claim, func(tx *docstore.Tx, ref docstore.Ref, job document, now time.Time) error {
 		if terminal(job) != finalization.TerminalPending {
 			return nil
+		}
+		if stop, err := waitForSync(tx, ref, job, claim, now); stop || err != nil {
+			return err
 		}
 		return begin(tx, ref, job, claim, now)
 	})
@@ -59,12 +62,18 @@ func begin(tx *docstore.Tx, ref docstore.Ref, job document, claim finalization.C
 	}
 	lease, _, _, _ := finalization.Defaults()
 	claims := field[int64](job, "worker_claim_count")
+	attempts, taskRetries := field[int64](job, "attempt_count"), field[int64](job, "task_retry_count")
+	grants := field[int64](job, "budget_requeue_count")
+	if current := int64(claim.BudgetRequeues); current > grants {
+		grants, claims, attempts, taskRetries = current, 0, 0, 0
+	}
 	if !claim.Reconcile {
 		claims++
 	}
 	return tx.Update(ref, document{
 		"status": leased, queueEpochField: claim.Epoch, "lease_epoch": epoch + 1, wireEpochField: epoch + 1,
-		"worker_claim_count":          claims,
+		"worker_claim_count": claims, "attempt_count": attempts, "task_retry_count": taskRetries,
+		"budget_requeue_count": grants, "sync_revision_waiting": false,
 		"lease_counts_worker_attempt": !claim.Reconcile, "leased_at": now, "lease_expires_at": now.Add(lease),
 		"updated_at": now, "reconcile_after_at": now.Add(lease),
 	})
@@ -91,7 +100,7 @@ func (s Store) withJob(ctx context.Context, g queue.Guarded, claim finalization.
 		if readErr != nil || intent != claim.Intent {
 			return queue.ErrLease
 		}
-		if field[int64](job, "dispatch_generation") > 1 {
+		if gen := dispatchGeneration(job); gen > 1 && field[int64](job, goGeneration) != gen {
 			return queue.Classify(errForeignGeneration, queue.Fence(CauseForeignLease))
 		}
 		return fn(tx, ref, job, now)

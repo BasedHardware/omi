@@ -24,13 +24,21 @@ of each intent.
 | F15, F38. Fanout recovery takes precedence over dead letter. Racing terminal writes increment the success shard once. | `TestF15AndF38CommitWinsAndTerminalProjectionIsExactlyOnce`, `TestF38UnstampedLegacyTerminalDoesNotChangeTheProjection` |
 | F17. Failure closes the still-bound processing row with its speech intact and writes one attention item. | `TestF17DeadLetterClosesBindingPreservesSpeechAndWritesAttention` |
 
-The queue claim token maps to a separate Firestore wire lease epoch. Each write
-checks both. Begin recognizes the first dispatch generation, so replay generation
-changes and BYOK abandonment still need an entry point. This adapter is not a
+The queue claim token maps to a separate Firestore wire lease epoch. Each write checks both. Begin admits generation one and successors reserved by the Go adapter. BYOK abandonment still needs an entry point. This adapter is not a
 coexistence protocol for dispatching the same job from Python and Go. The
 failure transaction covers ordinary inline speech. Terminal title selection,
 document-limit fallback, and compressed/described-photo retry eligibility remain
 open.
+
+F35 records a generation and bounded sync wait before yielding the SQL attempt.
+The next claim enforces the durable deadline, including after a crash before
+the yield. Operator redrive prepares the still-bound Firestore job before
+resetting SQL and retains the lifetime grant count.
+
+| F35 behavior | Emulator test |
+| --- | --- |
+| Thirty-second boundary, three redispatches, old epoch and the 600-second cap | `TestF35SyncRevisionQuietBoundaryAndRedispatchLimit`, `TestF35SyncRevisionWaitRetiresAtAgeBound` |
+| Manual counter reset preserves the grant, duplicate preparation and prior epoch are inert | `TestF35ManualRedrivePreservesGrantAndRejectsPriorEpoch` |
 
 The compatibility test `TestF09MergedDocumentAdapterFencesNewerInputAndUpdatesHome`
 runs a real PostgreSQL worker against these transactions and the merged

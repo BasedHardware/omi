@@ -33,7 +33,7 @@ The Firestore implementation and cross-adapter test are described in
 | F27 | Nonblank overview or section bodies establish summary presence. `TestF27OverviewOrSectionMakesASummary` |
 | F32 | A missing conversation fences before paid work or integration delivery. `TestF32MissingConversationFencesBeforePaidWork` |
 | F34 | Distinct enrichment-envelope parsing, including mixed envelope rejection. `TestF34EnrichmentIsASeparateEnvelope` |
-| F35 | Lease, BYOK inactivity, budget delay and deterministic cap values. `TestF35OrdinaryPolicyDefaults` |
+| F35 | Reconcile staleness and budget-delay defaults. The durable sync wait and redrive tests are in the job-adapter README. `TestF35OrdinaryPolicyDefaults` |
 
 Unlisted rules and the rest of the listed rules remain open. This includes the HTTP
 dispatch and replay protocols, smart and explicit merge, quiet checks, episodes, summary
