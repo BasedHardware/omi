@@ -22,7 +22,7 @@ from database.account_deletion_marker import account_deletion_blocks_user_work, 
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.encryption import encrypt, decrypt
 from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
-from utils.conversations.v3 import Conflict, policy
+from utils.conversations.v3 import Conflict, policy, preview_wakes
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 
 logger = logging.getLogger(__name__)
@@ -315,10 +315,19 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         unlocked_ids = set(state.get('unlocked_ids') or ()) - existing.keys()
         if len(unlocked_ids) > DERIVED_LIMIT:
             raise Conflict('v3_derived_budget')
-        if unlocked_ids:
-            for snapshot in client.get_all([coll.document(cid) for cid in sorted(unlocked_ids)]):
-                row = decode_row(uid, snapshot)
-                if row and row.get('v3_unlocked') and not row.get('deleted'):
+        ordered_unlocked = sorted(unlocked_ids)
+        for start in range(0, len(ordered_unlocked), CLAIM_READ_CHUNK):
+            ids = ordered_unlocked[start : start + CLAIM_READ_CHUNK]
+            for snapshot in client.get_all([coll.document(cid) for cid in ids]):
+                raw = snapshot.to_dict() or {} if snapshot.exists else {}
+                if not raw.get('v3_unlocked') or raw.get('deleted'):
+                    continue
+                try:
+                    row = decode_row(uid, snapshot)
+                except (TranscriptBlobAbsent, TranscriptShredded) as error:
+                    # Keep the published owner in place when its transcript is unavailable.
+                    raise Conflict('recording_decode_unavailable') from error
+                if row:
                     add(row)
 
     missing = set()
@@ -575,6 +584,7 @@ def commit_projection(
     if len(open_ids) > 1:
         raise Conflict('multiple_open_conversations')
     planned_unlocked = {r['id'] for r in rows if r.get('v3_unlocked') and not r.get('deleted')}
+    deferred_wakes = preview_wakes(rows, recordings) if key == 'builder' and clear_pending else {}
     # One merge per pass, with all donor redirects in the survivor's batch.
     all_absorbed = [cid for row in rows for cid in row.get('_v3_absorbed', ())]
     if all_absorbed:
@@ -733,12 +743,12 @@ def commit_projection(
                 # final batch commits, it keeps a durable obligation so an interrupted run is rebuilt
                 # by the ordinary builder (backfill's loader skips recordings).
                 'v3_pending': (
-                    False
+                    rid in deferred_wakes
                     if final and clear_pending
                     else bool(recording.get('v3_pending') or (recording.get('_v3_derive') and not final))
                 ),
                 'v3_pending_since': (
-                    None
+                    deferred_wakes.get(rid)
                     if final and clear_pending
                     else recording.get('v3_pending_since')
                     or (datetime.now(timezone.utc) if recording.get('_v3_derive') and not final else None)

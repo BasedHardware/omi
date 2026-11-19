@@ -100,7 +100,11 @@ def entries():
         DriverEntry('database.conversations_v3_backfill_runs.list_runs', base={'uid': SHAPE_UID}),
         DriverEntry('database.conversations_v3_backfill_runs.pending_starts', base={'limit': 20}),
         DriverEntry('database.conversations_v3_processing.pending_created', base={'uid': SHAPE_UID}),
-        DriverEntry('utils.conversations.v3.service.has_pending', base={'uid': SHAPE_UID}),
+        DriverEntry(
+            'utils.conversations.v3.service.has_pending',
+            base={'uid': SHAPE_UID},
+            domains={'deferred': [(), ('preview-source',)]},
+        ),
         DriverEntry('utils.conversations.v3.service.pending_processing', base={'uid': SHAPE_UID}),
         DriverEntry('utils.conversations.v3.service.sweep'),
         DriverEntry('utils.conversations.v3.service.measure_legacy_users'),

@@ -641,3 +641,35 @@ async def test_open_notes_failure_keeps_an_older_preview_live(strict, monkeypatc
     frames = [frame async for frame in summary.stream('synthetic', row, token=token)]
     assert frames[-1].startswith('error: ')
     assert strict.rows[card]['tile_state'] == 'live'
+
+
+def test_preview_deadline_keeps_a_durable_sweep_obligation_until_lock(strict):
+    strict.rows[R] = {'recording': True, 'v3_pending': True, 'v3_pending_since': AT}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    raw = {'id': 'r', **strict.rows[R], '_v3_revision': 1}
+    preview = {
+        'id': 'preview',
+        'status': 'in_progress',
+        'v3_unlocked': True,
+        'started_at': AT,
+        'finished_at': AT,
+        'v3_recording_ids': ['r'],
+        '_v3_preview_due_at': AT + timedelta(minutes=30),
+    }
+    store.commit_projection('synthetic', token, {'r': raw}, {}, [preview], [], firestore_client=strict)
+    assert strict.rows[R]['v3_pending'] is True
+    assert strict.rows[R]['v3_pending_since'] == AT + timedelta(minutes=30)
+
+    prior = {**strict.rows[R[:-1] + ('preview',)], '_v3_revision': 1}
+    settled = {**prior, 'status': 'processing', 'v3_unlocked': False, 'v3_process_pending': True}
+    store.commit_projection(
+        'synthetic',
+        token,
+        {'r': {**strict.rows[R], '_v3_revision': 1}},
+        {'preview': prior},
+        [settled],
+        [],
+        firestore_client=strict,
+    )
+    assert strict.rows[R]['v3_pending'] is False
+    assert strict.rows[R]['v3_pending_since'] is None

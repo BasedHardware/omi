@@ -889,6 +889,7 @@ async def test_configured_lock_is_bypassed_by_open_and_manual_end(builder, monke
     assert not row.get('v3_unlocked')
     assert row['v3_process_pending']
     assert row['manual_end'] is not on_open
+    assert bool(row.get('v3_open_locked')) is on_open
 
 
 @pytest.mark.asyncio
@@ -1137,3 +1138,31 @@ def test_merge_donor_task_guard_is_scoped_and_bounded():
     assert store.merge_donors_have_tasks('synthetic', ['other', 'donor'], firestore_client=client)
     assert not store.merge_donors_have_tasks('synthetic', ['other'], firestore_client=client)
     assert all(limit == 1 for _filters, limit, _after in client.calls)
+
+
+def test_builder_followup_distinguishes_deferred_preview_from_new_work(monkeypatch):
+    prefix = '/users/synthetic/conversations/'
+    rows = {prefix + 'preview': {'v3_pending': True}}
+    client = MemoryQuery(rows)
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
+
+    assert not service.has_pending('synthetic', {'preview'})
+    rows[prefix + 'incoming'] = {'v3_pending': True}
+    assert service.has_pending('synthetic', {'preview'})
+    assert all(limit == 2 for _filters, limit, _after in client.calls)
+
+
+def test_indexed_preview_with_unreadable_transcript_keeps_its_custody(monkeypatch):
+    prefix = '/users/synthetic/'
+    rows = {
+        prefix + 'conversation_v3_leases/builder': {'unlocked_ids': ['preview']},
+        prefix + 'conversations/preview': {'v3_unlocked': True, 'status': 'processing'},
+    }
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
+
+    def decode(*args):
+        raise store.TranscriptBlobAbsent('synthetic unavailable blob')
+
+    monkeypatch.setattr(store, 'decode_row', decode)
+    with pytest.raises(store.Conflict, match='recording_decode_unavailable'):
+        store.load('synthetic', firestore_client=MemoryQuery(rows))

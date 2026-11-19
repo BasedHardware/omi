@@ -9,6 +9,7 @@ from database import conversations_v3_leases as leases
 from database import conversations_v3_processing as writers
 
 import asyncio
+from collections.abc import Collection
 import hashlib
 import logging
 import re
@@ -25,7 +26,17 @@ from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
-from utils.conversations.v3 import Conflict, outline, planner, models, metrics, policy, visibility, context, refinement
+from utils.conversations.v3 import (
+    Conflict,
+    outline,
+    planner,
+    models,
+    metrics,
+    policy,
+    visibility,
+    context,
+)
+from utils.conversations.v3 import refinement, preview_wakes
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
 
@@ -181,6 +192,7 @@ async def reconcile(
     key = store.BACKFILL_LEASE if derive else 'builder'
     blocked = None
     moved = set()
+    deferred: dict[str, datetime] = {}
     # Live passes call the outline-cache writers exactly as before; only a backfill names its lease.
     keyed = {'key': key} if derive else {}
     if not on_open and not derive:
@@ -391,6 +403,7 @@ async def reconcile(
                 row.pop('v3_unlocked', None)
                 if custom_timing and not window['finished']:
                     row['v3_unlocked'] = True
+                    row['_v3_preview_due_at'] = max(row['finished_at'] + lock_delay, now + RACE_RETRY)
                 published_ids = window.get('_published_ids', ())
                 if not prior and (row['id'] in excluded | taken or row['id'] in published_ids):
                     first = window['lines'][0]['conversation_id']
@@ -581,6 +594,7 @@ async def reconcile(
             if row['id'] not in existing:
                 metrics.VISIBLE_LATENCY.observe(max(0, (now - row['started_at']).total_seconds()))
         metrics.RECONCILES.labels('committed').inc()
+        deferred = preview_wakes(rows, recordings)
     except Conflict as error:
         reason = str(error)
         if reason in RACES and not derive:
@@ -632,7 +646,12 @@ async def reconcile(
     await drain_processing(uid)
     if moved:
         return 'committed'
-    if not derive and await run_blocking(db_executor, has_pending, uid):
+    pending = (
+        await run_blocking(db_executor, has_pending, uid, deferred)
+        if deferred
+        else await run_blocking(db_executor, has_pending, uid)
+    )
+    if pending:
         if _pass < 2:
             return await reconcile(uid, _pass=_pass + 1)
         else:
@@ -944,16 +963,12 @@ async def measure_legacy_users():
     return {'active_legacy_users': count, 'measured_at': datetime.now(timezone.utc).isoformat()}
 
 
-def has_pending(uid):
-    return (
-        next(
-            iter(
-                store.user_conversations(store.get_firestore_client(), uid)
-                .where(filter=FieldFilter('v3_pending', '==', True))
-                .limit(1)
-                .stream()
-            ),
-            None,
-        )
-        is not None
+def has_pending(uid: str, deferred: Collection[str] = ()) -> bool:
+    # One beyond the deferred sources is enough to find any newly owed work.
+    pending = (
+        store.user_conversations(store.get_firestore_client(), uid)
+        .where(filter=FieldFilter('v3_pending', '==', True))
+        .limit(len(deferred) + 1)
+        .stream()
     )
+    return any(doc.id not in deferred for doc in pending)
