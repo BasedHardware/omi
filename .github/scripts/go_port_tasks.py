@@ -26,10 +26,13 @@ def load_port_map(path):
     return families
 
 
-def changed_paths(files):
+def changed_paths(files, expected_count=None):
     if not isinstance(files, list):
         raise ValueError("expected a JSON array of GitHub PR file records")
+    if expected_count is not None and len(files) != expected_count:
+        raise ValueError(f"expected {expected_count} PR files, received {len(files)}")
     paths = set()
+    filenames = set()
     for file in files:
         if not isinstance(file, dict):
             raise ValueError("each PR file record must be an object")
@@ -40,6 +43,9 @@ def changed_paths(files):
             if not isinstance(path, str) or not path:
                 raise ValueError(f"{field} must be a nonempty string")
             paths.add(path)
+        filenames.add(file["filename"])
+    if expected_count is not None and len(filenames) != expected_count:
+        raise ValueError(f"expected {expected_count} distinct PR filenames, received {len(filenames)}")
     return paths
 
 
@@ -69,12 +75,15 @@ def port_tasks(pr_number, families, paths):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pr", required=True, type=int, help="Merged BasedHardware/omi PR number")
+    parser.add_argument("--changed-files", type=int, help="Expected file count from the GitHub PR metadata")
     args = parser.parse_args()
     if args.pr < 1:
         parser.error("--pr must be positive")
+    if args.changed_files is not None and args.changed_files < 0:
+        parser.error("--changed-files must be nonnegative")
     try:
         families = load_port_map(PORT_MAP)
-        paths = changed_paths(json.load(sys.stdin))
+        paths = changed_paths(json.load(sys.stdin), args.changed_files)
     except (OSError, ValueError, yaml.YAMLError) as error:
         parser.exit(2, f"{parser.prog}: {error}\n")
     print(json.dumps(port_tasks(args.pr, families, paths), indent=2))

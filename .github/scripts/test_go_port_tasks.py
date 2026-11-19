@@ -17,6 +17,13 @@ class PortTaskTests(unittest.TestCase):
     def setUp(self):
         self.families = load_port_map(PORT_MAP)
 
+    def test_every_mapped_python_path_exists(self):
+        root = PORT_MAP.parents[2]
+        for family, paths in self.families.items():
+            for path in paths:
+                with self.subTest(family=family, path=path):
+                    self.assertTrue((root / path).is_file(), f"missing mapped Python file: {path}")
+
     def test_unmapped_paths_produce_no_tasks(self):
         paths = changed_paths(
             [
@@ -58,7 +65,7 @@ class PortTaskTests(unittest.TestCase):
                 load_port_map(path)
 
     def test_cli_emits_a_linked_task_with_one_paragraph(self):
-        result = self.run_cli(json.dumps([{"filename": FINALIZER}]))
+        result = self.run_cli(json.dumps([{"filename": FINALIZER}]), "--changed-files", "1")
         self.assertEqual(result.returncode, 0, result.stderr)
         (task,) = json.loads(result.stdout)
         self.assertEqual(task["title"], "Port Python PR #42 to Go finalization")
@@ -75,9 +82,17 @@ class PortTaskTests(unittest.TestCase):
                 self.assertEqual(result.stdout, "")
                 self.assertTrue(result.stderr)
 
-    def run_cli(self, payload):
+    def test_cli_rejects_incomplete_or_duplicated_pr_file_pages(self):
+        for files in ([{"filename": FINALIZER}], [{"filename": FINALIZER}] * 2):
+            with self.subTest(files=files):
+                result = self.run_cli(json.dumps(files), "--changed-files", "2")
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.stdout, "")
+                self.assertIn("expected 2", result.stderr)
+
+    def run_cli(self, payload, *args):
         return subprocess.run(
-            [sys.executable, str(Path(__file__).with_name("go_port_tasks.py")), "--pr", "42"],
+            [sys.executable, str(Path(__file__).with_name("go_port_tasks.py")), "--pr", "42", *args],
             input=payload,
             capture_output=True,
             text=True,
