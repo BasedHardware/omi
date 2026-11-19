@@ -403,7 +403,7 @@ class ProjectionFollowups:
                 outcome = await self._run(segment)
                 # Hint persistence shares the attempt's original deadline. A
                 # slow DB must not pin a follow-up slot after useful work ended.
-                if outcome == 'incomplete' and segment in self.due_clock.entries:
+                if track_backoff and outcome == 'incomplete' and segment in self.due_clock.entries:
                     deferred = await run_blocking(
                         db_executor, self.due_clock.settle, segment, outcome, projection_followup_backoff_seconds()
                     )

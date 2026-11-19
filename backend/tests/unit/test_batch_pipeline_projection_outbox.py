@@ -2,27 +2,31 @@
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from database import batch_pipeline_projection_outbox as rows
 from database.batch_pipeline_leader import LeaseLost
+from database.batch_pipeline_projection_followup_clock import DUE_FIELD as FOLLOWUP_DUE_FIELD
 from testing.pipeline_sim.store import CustomerData, SimStore
+from utils.batch_pipeline.leader import PROJECTION_OUTBOX_SCAN, TABLE
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 from utils.batch_pipeline.projection_outbox import ProjectionOutbox
 from utils.batch_pipeline.serving import Serving
 
 
-def pending(store, sid, *, stamped=True, at=1.0):
-    row = {'segment_id': sid, 'projection_state': 'pending', 'committed_at': at, 'log_sequence': 1}
+def pending(store, sid, *, stamped=True, at=1.0, **fields):
+    row = {'segment_id': sid, 'projection_state': 'pending', 'committed_at': at, 'log_sequence': 1, **fields}
     if stamped:
         row.update(rows.arm(row, at))
     store.apply(('results', sid), row)
 
 
 def coordinator(store, clock):
-    projector = SimpleNamespace(store=SimpleNamespace(store=store))
+    projector = SimpleNamespace(
+        store=SimpleNamespace(store=store), owes_drains=False, owes_followups=False, owes_index=False
+    )
     return ProjectionOutbox(store, projector, clock=clock)
 
 
@@ -99,6 +103,79 @@ def test_projection_outbox_rechecks_leadership_after_page_query(monkeypatch):
         first.scan(10)
     assert [row.key.segment_id for row in claimed] == ['lost-wake']
     assert first.scan(10) == []
+
+
+def test_coverage_witness_refreshes_only_when_needed_and_clears_on_stale_debt():
+    store = SimStore(CustomerData())
+    now = [100.0]
+    outbox = coordinator(store, lambda: now[0])
+    pending(store, 'healthy', at=98.0)
+    updates = []
+
+    def watch(key, old, new):
+        if key == (TABLE, PROJECTION_OUTBOX_SCAN):
+            updates.append(new.get('projection_scan_ready_until'))
+
+    store.observers.append(watch)
+    outbox.scan(10)
+    assert updates[-1] == 130.0 and outbox.has_coverage()
+    now[0] = 105.0
+    updates.clear()
+    outbox.scan(10)
+    assert updates == [] and outbox.has_coverage()
+
+    now[0] = 126.0
+    outbox.scan(10)
+    assert updates[-1] == 156.0 and outbox.has_coverage()
+    pending(store, 'stale')
+    now[0] = 128.0
+    outbox.scan(10)
+    assert updates[-1] == 0.0
+    now[0] = 131.0  # A follower can cache the previous witness for one scan interval.
+    assert not outbox.has_coverage()
+
+    store.apply(('results', 'stale'), {})
+    now[0] = 136.0
+    outbox.scan(10)
+    assert updates[-1] == 166.0 and outbox.has_coverage()
+
+
+@pytest.mark.asyncio
+async def test_outbox_uses_followup_due_and_owns_retry_settlement(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS', '240')
+    store = SimStore(CustomerData())
+    now = [10.0]
+    outbox = coordinator(store, lambda: now[0])
+    key = rows.Obligation('ready', 1)
+    pending(store, key.segment_id, projection_state='ready', **{FOLLOWUP_DUE_FIELD: 45.0})
+    assign = Mock(return_value='followup')
+    monkeypatch.setattr(outbox, '_assign_or_project', assign)
+    runner = outbox.followups
+    finish = AsyncMock(return_value='incomplete')
+    monkeypatch.setattr(runner, '_run', finish)
+    runner.due_clock.entries[key.segment_id] = {'projection_state': 'ready'}
+    legacy_settle = Mock()
+    monkeypatch.setattr(runner.due_clock, 'settle', legacy_settle)
+
+    await outbox.deliver(key)
+    assign.assert_not_called()
+    row = store.run(lambda tx: tx.get('results', key.segment_id))
+    assert row[rows.DUE_FIELD] == row[FOLLOWUP_DUE_FIELD] == 45.0
+    assert row[rows.TOKEN_FIELD] is None
+
+    now[0] = 45.0
+    await outbox.deliver(key)
+    finish.assert_awaited_once_with(key.segment_id)
+    legacy_settle.assert_not_called()
+    assert not runner.due_clock.entries
+    row = store.run(lambda tx: tx.get('results', key.segment_id))
+    assert row[rows.DUE_FIELD] == 285.0 and row[FOLLOWUP_DUE_FIELD] == 45.0
+    assert row[rows.TOKEN_FIELD] is None and row[rows.REASON_FIELD] == 'incomplete'
+
+    now[0] += 60.0
+    await outbox.deliver(key)
+    finish.assert_awaited_once()
+    assert store.run(lambda tx: tx.get('results', key.segment_id)) == row
 
 
 def test_projection_outbox_skip_keeps_raw_page_cursor_and_observer(monkeypatch):

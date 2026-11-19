@@ -554,14 +554,18 @@ class Projector:
                 raise ProjectionBlocked('projection assignment claim busy')
             return self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
 
-    async def start_followups(self, priority=(), *, discover=True):
+    async def start_followups(self, priority=(), *, discover=True, include_walk=False):
         # Imported lazily: the synchronous worker seam remains lightweight.
         from utils.batch_pipeline.projection_followup import ProjectionFollowups
 
         if self.followups is None:
             self.followups = ProjectionFollowups(self)
         with self.handoff:
-            tail, self.chain_followups = (self.chain_followups, []) if discover else ((), self.chain_followups)
+            tail, self.chain_followups = (
+                (self.chain_followups, []) if discover or include_walk else ((), self.chain_followups)
+            )
+        if not discover and include_walk:
+            priority, tail = (*priority, *tail), ()
         await self.followups.schedule(priority, tail=tail, discover=discover)
 
     def project(self, segment_id: str) -> dict | None:

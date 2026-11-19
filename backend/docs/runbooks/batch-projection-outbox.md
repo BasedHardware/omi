@@ -14,9 +14,10 @@ through the same index that recovers lost serving hints. The `ef42ee8` GPU
 image and earlier backend writers produce unstamped results. All legacy
 assignment, finish and follow-up readers still cover them.
 
-The dedicated projection pump and normal serving supervisor share one strict
-`projection_outbox_scan` lease per namespace. A holder confirms its token after
-reading a bounded `kind, due_at, document ID` page. Loss of the token discards
+The outbox supervisor starts whenever its switch is on, including when the
+dedicated pump and legacy serving sweep are both disabled. All scanners share
+one strict `projection_outbox_scan` lease per namespace. A holder confirms its
+token after reading a bounded `kind, due_at, document ID` page. Loss of the token discards
 the page. Already-admitted delivery has its own 180-second claim and can finish
 through a leadership change. A crashed worker leaves retryable debt at claim
 expiry. Claims and settlements modify only scheduling fields on an existing
@@ -24,11 +25,15 @@ result. The existing assignment, privacy, ledger, enrichment and accounting
 fences apply separately on every attempt. Legacy and outbox follow-up workers
 share the existing process-wide follow-up slot budget.
 
-The consumer defers predecessor or claim contention for 10 seconds and other
-unfinished work for up to 60 seconds. A pending predecessor also uses the existing
-owner replay path, which can find unstamped commits from older writers. A ready
-multipart receipt can still owe work for siblings. Only canonical completion settles it as completed. A
-durable quarantine parks the obligation for the existing held/release owner.
+The consumer defers predecessor or claim contention for 10 seconds and retries
+unfinished assignment after 60 seconds. For persisted or ready receipts, it
+honors a future `projection_followup_due_at` and uses the configured follow-up
+backoff for unsuccessful finish, with a 60-second retry when that setting is
+zero. The outbox settlement owns this retry clock and skips the legacy durable
+deferral. A pending predecessor also uses the existing owner replay path, which
+can find unstamped commits from older writers. A ready multipart receipt can
+still owe work for siblings. Only canonical completion settles it as completed.
+A durable quarantine parks the obligation for the existing held/release owner.
 An expired claim on a completed result settles from the result state without
 replaying publication or accounting. Privacy purges retain their existing
 ordering-edge or deletion behavior and scheduling fields follow result retention.

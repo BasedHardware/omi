@@ -521,9 +521,11 @@ async def _supervise_fresh_guard(stop):
 
 
 def start_serving_from_env():
-    """Separate drain switch stays on when BATCH_PIPELINE_ENABLED rolls back."""
+    """Discovery and drain switches are independent of batch admission."""
     pump_enabled = projection_pump_enabled()
-    if not pump_enabled and os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() != 'true':
+    serving_enabled = os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() == 'true'
+    outbox_enabled = projection_outbox_enabled()
+    if not (pump_enabled or serving_enabled or outbox_enabled):
         return None
     stop = asyncio.Event()
 
@@ -586,12 +588,11 @@ def start_serving_from_env():
     async def supervise_projection_outbox():
         while not stop.is_set():
             try:
-                if projection_outbox_enabled() and (pump_enabled or serving_projection_sweep_enabled()):
-                    service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                    outbox = getattr(service, 'outbox', None)
-                    if outbox is not None:
-                        await outbox.run(stop)
-                        return
+                service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+                outbox = getattr(service, 'outbox', None)
+                if outbox is not None:
+                    await outbox.run(stop)
+                    return
             except Exception as error:
                 logging.getLogger(__name__).warning(
                     'event=batch_projection_outbox outcome=supervise_retry exception_type=%s', type(error).__name__
@@ -676,26 +677,32 @@ def start_serving_from_env():
 
         # Owner drains hold live-target owners passively only while this loop
         # will sweep them again.
-        set_recurring_sweep('pump' if pump_enabled else 'serving')
+        set_recurring_sweep('pump' if pump_enabled else 'serving' if serving_enabled else None)
         try:
+            loops = []
             if pump_enabled:
-                await asyncio.gather(projection_pump(), drain_upload_holds(), supervise_projection_outbox())
-            else:
-                await asyncio.gather(
-                    supervise(),
-                    supervise_projection_outbox(),
-                    drain(),
-                    dispatch_recovery(),
-                    drain_upload_holds(),
-                    _supervise_fresh_guard(stop),
-                    _supervise_backlog_heartbeat(stop),
+                loops.extend((projection_pump(), drain_upload_holds()))
+            elif serving_enabled:
+                loops.extend(
+                    (
+                        supervise(),
+                        drain(),
+                        dispatch_recovery(),
+                        drain_upload_holds(),
+                        _supervise_fresh_guard(stop),
+                        _supervise_backlog_heartbeat(stop),
+                    )
                 )
+            if outbox_enabled:
+                loops.append(supervise_projection_outbox())
+            await asyncio.gather(*loops)
         finally:
             set_recurring_sweep(None)
 
-    return stop, start_background_task(
-        run(), name='batch_projection_pump' if pump_enabled else 'batch_pipeline_serving'
-    )
+    name = 'batch_projection_pump' if pump_enabled else 'batch_pipeline_serving'
+    if not (pump_enabled or serving_enabled):
+        name = 'batch_projection_outbox'
+    return stop, start_background_task(run(), name=name)
 
 
 async def stop_serving(runtime):

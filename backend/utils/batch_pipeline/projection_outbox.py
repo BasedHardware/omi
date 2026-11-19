@@ -152,6 +152,14 @@ class ProjectionOutbox:
             key = await self.queue.get()
             try:
                 await self.deliver(key)
+                # The outbox also runs without a legacy sweep to launch work
+                # owed by predecessor replay. Handoff after the claim context exits.
+                if self.projector.owes_drains:
+                    self.projector.start_drains()
+                if self.projector.owes_followups:
+                    await self.projector.start_followups(discover=False, include_walk=True)
+                if self.projector.owes_index:
+                    self.projector.schedule_index_flush()
             except Exception as error:
                 # A possibly committed claim is left to expire. Do not retry a
                 # settlement without the same revision and token.

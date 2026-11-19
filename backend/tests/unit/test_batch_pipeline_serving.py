@@ -7,7 +7,7 @@ from dataclasses import asdict
 import json
 import logging
 import threading
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 from prometheus_client import CollectorRegistry
 import time
@@ -86,10 +86,12 @@ def test_flag_off_drains_pull_heartbeat_and_idempotent_complete(api):
     assert not client.post('/v2/batch-pipeline/complete', json=body).json()['accepted']
 
 
-def test_default_off_serving_startup_does_not_construct_store_or_task(monkeypatch):
+def test_disabled_serving_and_outbox_do_not_construct_store_or_task(monkeypatch):
     from utils.batch_pipeline import serving
 
     monkeypatch.delenv('BATCH_PIPELINE_SERVING_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', raising=False)
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'off')
 
     def forbidden(*args, **kwargs):
         raise AssertionError('disabled serving touched runtime')
@@ -97,6 +99,42 @@ def test_default_off_serving_startup_does_not_construct_store_or_task(monkeypatc
     monkeypatch.setattr(serving, 'serving_for_stage', forbidden)
     monkeypatch.setattr(serving, 'start_background_task', forbidden)
     assert serving.start_serving_from_env() is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('serving_enabled', ['false', 'true'])
+async def test_outbox_recovers_without_legacy_projection_discovery(monkeypatch, serving_enabled):
+    from utils.batch_pipeline import serving
+    from utils.batch_pipeline.projection_drain import recurring_sweep_active
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', serving_enabled)
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP', 'off')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'on')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    started = asyncio.Event()
+    reconciled = asyncio.Event()
+
+    async def run_outbox(stop):
+        assert not recurring_sweep_active()
+        started.set()
+        await stop.wait()
+
+    reconcile = AsyncMock(side_effect=lambda **_: reconciled.set())
+    service = SimpleNamespace(store=MemoryStore(), outbox=SimpleNamespace(run=run_outbox), reconcile_async=reconcile)
+    monkeypatch.setattr(serving, 'serving_for_stage', lambda _: service)
+    monkeypatch.setattr(serving, 'drain_recordings', AsyncMock(return_value=False))
+    monkeypatch.setattr(serving, 'recovery_dispatch_interval_seconds', lambda: 0)
+    monkeypatch.setattr(serving, '_supervise_fresh_guard', AsyncMock())
+    monkeypatch.setattr(serving, '_supervise_backlog_heartbeat', AsyncMock())
+    runtime = serving.start_serving_from_env()
+    try:
+        await asyncio.wait_for(started.wait(), timeout=5)
+        if serving_enabled == 'true':
+            await asyncio.wait_for(reconciled.wait(), timeout=5)
+    finally:
+        await serving.stop_serving(runtime)
+    assert reconcile.await_count == int(serving_enabled == 'true')
 
 
 def test_rollback_reconcile_runs_cleanup_and_projection_without_cohort_check(monkeypatch):

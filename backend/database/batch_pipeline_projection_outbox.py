@@ -9,7 +9,9 @@ import math
 import uuid
 from typing import Any
 
-from config.batch_pipeline import projection_outbox_enabled
+from config.batch_pipeline import projection_followup_backoff_seconds, projection_outbox_enabled
+from database.batch_pipeline_projection_followup_clock import DUE_FIELD as FOLLOWUP_DUE_FIELD
+from database.batch_pipeline_projection_followup_clock import STATES as FOLLOWUP_STATES
 
 KIND_FIELD = 'projection_outbox_kind'
 DUE_FIELD = 'projection_outbox_due_at'
@@ -93,6 +95,13 @@ def disposition(row: dict) -> str | None:
     return state if state in {'completed', 'erased'} else 'legacy'
 
 
+def followup_due_at(row: dict, now: float) -> float:
+    due = row.get(FOLLOWUP_DUE_FIELD) if row.get('projection_state') in FOLLOWUP_STATES else None
+    if isinstance(due, (int, float)) and not isinstance(due, bool) and math.isfinite(due):
+        return max(now, due)
+    return now
+
+
 def claim(store, key: Obligation, clock) -> str | None:
     token = uuid.uuid4().hex
 
@@ -105,6 +114,10 @@ def claim(store, key: Obligation, clock) -> str | None:
         reason = disposition(row)
         if reason is not None:
             tx.patch('results', key.segment_id, metadata(None, None, reason))
+            return None
+        followup_due = followup_due_at(row, now)
+        if followup_due > now:
+            tx.patch('results', key.segment_id, metadata(followup_due, None, 'followup_due'))
             return None
         tx.patch('results', key.segment_id, metadata(now + CLAIM_SECONDS, token, 'claimed'))
         return token
@@ -123,7 +136,10 @@ def settle(store, key: Obligation, token: str, clock, outcome: str) -> str | Non
             tx.patch('results', key.segment_id, metadata(None, None, reason))
             return reason
         reason = outcome if outcome in RETRY_DELAYS else 'incomplete'
-        tx.patch('results', key.segment_id, metadata(now + RETRY_DELAYS[reason], None, reason))
+        delay = RETRY_DELAYS[reason]
+        if row.get('projection_state') in FOLLOWUP_STATES and reason in {'incomplete', 'blocked', 'retry'}:
+            delay = projection_followup_backoff_seconds() or delay
+        tx.patch('results', key.segment_id, metadata(max(now + delay, followup_due_at(row, now)), None, reason))
         return reason
 
     return store.run(finish)
