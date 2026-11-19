@@ -91,31 +91,31 @@ func (s *Service) Work(ctx context.Context, run *queue.Run) queue.Outcome {
 	claim := Claim{Intent: in, Epoch: run.Job().Token}
 	state, err := s.completion(ctx, run, claim)
 	if err != nil {
-		return workError(err)
+		return s.workError(ctx, run, claim, err)
 	}
 	if outcome := completionOutcome(state); outcome != nil {
 		return outcome
 	}
 	snapshot, err := s.load(ctx, run, claim)
 	if err != nil {
-		return workError(err)
+		return s.workError(ctx, run, claim, err)
 	}
 	finished, err := s.prepareBatch(ctx, run, claim, snapshot)
 	if err != nil {
-		return workError(err)
+		return s.workError(ctx, run, claim, err)
 	}
 	if finished {
 		return queue.Done()
 	}
 	if processErr := s.process(ctx, run, claim, snapshot); processErr != nil {
-		return workError(processErr)
+		return s.workError(ctx, run, claim, processErr)
 	}
 	if fanoutErr := s.fanout(ctx, run, claim); fanoutErr != nil {
-		return workError(fanoutErr)
+		return s.workError(ctx, run, claim, fanoutErr)
 	}
 	state, err = s.completion(ctx, run, claim)
 	if err != nil {
-		return workError(err)
+		return s.workError(ctx, run, claim, err)
 	}
 	if outcome := completionOutcome(state); outcome != nil {
 		return outcome
@@ -151,11 +151,28 @@ func (s *Service) completion(ctx context.Context, run guardedRun, claim Claim) (
 	return state, err
 }
 
-func workError(err error) queue.Outcome {
-	if errors.Is(err, ErrStale) {
-		return queue.Fence(CauseStale)
+func (s *Service) workError(ctx context.Context, run *queue.Run, claim Claim, err error) queue.Outcome {
+	if !errors.Is(err, ErrStale) {
+		return queue.FromError(err, CauseStore)
 	}
-	return queue.FromError(err, CauseStore)
+	state, fenceErr := s.fence(ctx, run, claim)
+	if fenceErr != nil {
+		return queue.FromError(fenceErr, CauseStore)
+	}
+	if outcome := completionOutcome(state); outcome != nil {
+		return outcome
+	}
+	return queue.Retry(CauseStore, 0)
+}
+
+func (s *Service) fence(ctx context.Context, run guardedRun, claim Claim) (TerminalState, error) {
+	var state TerminalState
+	err := run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
+		var fenceErr error
+		state, fenceErr = s.Lifecycle.Fence(ctx, g, claim)
+		return fenceErr
+	})
+	return state, err
 }
 
 // Exhausted reconciles a fanout commit before resolving failure. The queue owns
@@ -175,7 +192,7 @@ func (s *Service) Exhausted(ctx context.Context, run *queue.Reconcile) queue.Res
 		})
 	}
 	if errors.Is(err, ErrStale) {
-		return queue.Fenced(CauseStale)
+		state, err = s.fence(ctx, run, claim)
 	}
 	if err != nil {
 		return queue.LaterOnError(err, CauseStore)

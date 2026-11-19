@@ -11,6 +11,7 @@ import (
 )
 
 type fakePorts struct {
+	fenced                                                                   bool
 	integrationTransient                                                     bool
 	closedSuccess                                                            int
 	custodyReserved                                                          bool
@@ -157,6 +158,13 @@ func (p *fakePorts) ReconcileCompletion(_ context.Context, g queue.Guarded, _ Cl
 	default:
 		return TerminalPending, g.Err()
 	}
+}
+
+func (p *fakePorts) Fence(_ context.Context, g queue.Guarded, _ Claim) (TerminalState, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.fenced = true
+	return TerminalStale, g.Err()
 }
 
 func (p *fakePorts) DeadLetter(_ context.Context, g queue.Guarded, _ Claim, _ queue.Cause, _ bool) (TerminalState, error) {

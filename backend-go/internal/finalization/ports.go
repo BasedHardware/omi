@@ -95,11 +95,13 @@ const (
 // ReconcileCompletion checks for a committed fanout and closes its job
 // idempotently. It returns pending without mutating a job that has no commit.
 // DeadLetter closes the still-bound processing row and job together, preserving
-// transcript and prior output. It rechecks the fanout journal before closing.
+// transcript and prior output. Fence closes a stale job without mutating a
+// replacement conversation. Both recheck the fanout journal before closing.
 type Lifecycle interface {
 	ClaimFanout(ctx context.Context, g queue.Guarded, claim Claim) (Fanout, error)
 	CompleteFanout(ctx context.Context, g queue.Guarded, claim Claim, dropped bool) error
 	ReconcileCompletion(ctx context.Context, g queue.Guarded, claim Claim) (TerminalState, error)
+	Fence(ctx context.Context, g queue.Guarded, claim Claim) (TerminalState, error)
 	DeadLetter(ctx context.Context, g queue.Guarded, claim Claim, cause queue.Cause, transient bool) (TerminalState, error)
 }
 

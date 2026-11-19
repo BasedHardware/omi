@@ -241,8 +241,8 @@ func TestF32MissingConversationFencesBeforePaidWork(t *testing.T) {
 	settled(t, h, intent, queue.TerminalFenced)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.gatewayCalls != 0 || p.deliveries != 0 {
-		t.Fatal("missing conversation reached a provider or integration")
+	if !p.fenced || p.gatewayCalls != 0 || p.deliveries != 0 {
+		t.Fatal("missing conversation was not durably fenced or reached a provider")
 	}
 }
 
