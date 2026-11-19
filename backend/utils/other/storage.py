@@ -1149,8 +1149,6 @@ def _resolve_generation_for_delete(
         return True, None
     gen = generations_by_path.get((bucket_name, path))
     if gen is None:
-        gen = generations_by_path.get(path)
-    if gen is None:
         return False, None
     return True, gen
 

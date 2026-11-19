@@ -799,7 +799,6 @@ def _copy_audio_chunks_for_merge(
             source_generation = chunk.get("generation")
             if source_generation is not None and out_generations is not None:
                 out_generations[(name, chunk["path"])] = source_generation
-                out_generations[chunk["path"]] = source_generation
             if not skip_existing:
                 _copy_chunk_with_backoff(uid, target, source_blob, new_path, source_generation=source_generation)
             else:
