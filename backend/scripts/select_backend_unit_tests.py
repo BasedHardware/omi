@@ -307,6 +307,25 @@ LIFECYCLE_SOURCE_REGRESSION_TESTS = {
 }
 
 AREA_TESTS = (
+    # Isolated-router tests stub google.cloud.firestore_v1 as a non-package and load routers.conversations
+    # fresh, so an import added anywhere on that chain (conversations_v3 -> home_feed_*) can break them
+    # without the import graph selecting them (main red after #25734, fixed by #25739).
+    (
+        (
+            'backend/database/conversations_v3.py',
+            'backend/database/conversations_v3_processing.py',
+            'backend/database/home_feed_writer.py',
+            'backend/database/home_feed_fields.py',
+        ),
+        (),
+        (
+            'tests/unit/test_conversations_date_range_validation.py',
+            'tests/unit/test_conversations_merge_duplicate_guard.py',
+            'tests/unit/test_dev_api_lock_bypass.py',
+            'tests/unit/test_lock_bypass_fixes.py',
+            'tests/unit/test_recovery_rule_skip.py',
+        ),
+    ),
     (
         ('backend/scripts/jobstore_operator/',),
         (),

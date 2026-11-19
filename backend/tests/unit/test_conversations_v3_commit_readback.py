@@ -16,6 +16,7 @@ import pytest
 from google.cloud.firestore_v1.types import Document, DocumentMask, Value, Write
 
 from database import conversations_v3 as store, home_feed_writer
+from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from tests.unit.fixtures import strict_firestore_transaction as fixture
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
@@ -169,7 +170,7 @@ def test_commit_stamped_fields_match_what_the_home_hook_adds():
         update_mask=DocumentMask(field_paths=['transcript_segments', 'status']),
     )
     augmented = home_feed_writer.augment_home_writes([source])
-    assert set(augmented[0].update.fields) - set(source.update.fields) == home_feed_writer.COMMIT_STAMPED_FIELDS
+    assert set(augmented[0].update.fields) - set(source.update.fields) == COMMIT_STAMPED_FIELDS
     metadata = Write(
         update=Document(name=f'{owner}/conversations/c', fields={'status': Value(string_value='completed')}),
         update_mask=DocumentMask(field_paths=['status']),
