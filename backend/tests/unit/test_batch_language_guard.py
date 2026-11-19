@@ -139,10 +139,12 @@ def test_gauntlet_worker_uses_real_frozen_language_adapter(monkeypatch, proof):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     'language,single,escapes',
-    [(None, False, False), ('und', True, False), ('vi', True, True), ('en', False, False), ('en', True, False)],
+    [(None, False, False), ('und', True, False), ('vi', True, False), ('en', False, False), ('en', True, False)],
 )
 async def test_new_batch_intake_routes_by_effective_sync_language(monkeypatch, language, single, escapes):
-    # Per-unit guard behavior on the pre-exclusion admission path.
+    # Per-unit guard behavior on the pre-exclusion admission path. Legacy sync is
+    # deleted (always dark), so no language escapes intake: unsupported speech goes
+    # to the batch provider-STT stage (C8) instead of the former legacy fallback.
     monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
     from utils.batch_pipeline import intake
     from utils.batch_pipeline.artifacts import ProtectionContext

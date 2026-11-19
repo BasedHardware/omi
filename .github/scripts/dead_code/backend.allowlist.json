@@ -55,6 +55,14 @@
     {
       "path": "backend/database/pipeline_ledger.py",
       "reason": "C1a-core ships the in-flight ledger contract dormant (no live transition hooks by design) so the reviewed CAS/idempotency/revision/read contract can merge under the 500-line cap. C1a2 adds the seal/notes/upload-failure callers and removes this entry. Contract behavior is exercised by backend/tests/unit/test_pipeline_ledger.py and backend/tests/integration/test_pipeline_ledger_firestore.py."
+    },
+    {
+      "path": "backend/utils/batch_pipeline/shadow_intake.py",
+      "reason": "Its only production caller, the legacy sync upload's batch shadow offer, was deleted with legacy sync (plan C C9-C11, 2026-11-17). Kept one step for its covered helpers (tests/unit/test_batch_pipeline_shadow_runtime.py); delete with the C11 cap-hold rehome follow-up."
+    },
+    {
+      "path": "backend/utils/sync/empty_recovery_intent.py",
+      "reason": "Its only caller, utils/sync/pipeline.py, was deleted with legacy sync (plan C C9-C11, 2026-11-17). It stays while FC-empty-asr-without-evidenced-disposition names its test as a guard artifact; delete it with that registry transition and the empty_recovery family (C11)."
     }
   ]
 }

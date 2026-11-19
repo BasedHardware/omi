@@ -26,92 +26,27 @@ COMPLETED = {'failed_segments': 0, 'total_segments': 3, 'errors': [], 'outcome':
 DRAINING, DARK, ON = LegacySyncMode.DRAINING, LegacySyncMode.DARK, LegacySyncMode.ON
 
 
-@pytest.fixture
-def runtime_mode(monkeypatch):
-    """Drive the (f) reader; lane 6 implements it behind the same name."""
-    state = {'value': 'on'}
+@pytest.mark.parametrize('raw', ['on', 'draining', RuntimeError('firestore'), None])
+def test_served_mode_is_always_dark_after_deletion(monkeypatch, raw):
+    """Legacy transcription is deleted: neither the ramp document nor a read failure selects it."""
 
     def legacy_sync_mode(uid=None):
-        value = state['value']
-        if isinstance(value, BaseException):
-            raise value
-        return value
+        if isinstance(raw, BaseException):
+            raise raw
+        return raw
 
     monkeypatch.setattr(runtime_percent, 'legacy_sync_mode', legacy_sync_mode)
-    return state
-
-
-def test_missing_reader_module_serves_on(monkeypatch):
-    monkeypatch.setitem(sys.modules, 'utils.rollout', None)
-    assert legacy_dark.current_mode() is ON
-
-
-def test_stale_window_matches_ledger():
-    assert legacy_dark.CLAIM_STALE_SECONDS == sync_ledger.CLAIM_STALE_SECONDS
-
-
-def test_unimplemented_stub_serves_on_without_error_log(runtime_mode, caplog):
-    runtime_mode['value'] = NotImplementedError('legacy_sync_mode: lane 6')
-    counter = legacy_dark.OMI_LEGACY_SYNC_MODE_READ_TOTAL.labels(source='absent')
-    before = counter._value.get()
-    assert legacy_dark.current_mode() is ON
-    assert counter._value.get() == before + 1
-    assert 'outcome=error' not in caplog.text
-    assert legacy_dark.legacy_admission_allowed()
-    assert legacy_dark.sequencer_registration_allowed()
-    assert legacy_dark.sequencer_dispatch_allowed()
-
-
-@pytest.mark.parametrize('raw', [RuntimeError('firestore'), 'off', None, 'DARK'])
-def test_mode_failures_serve_on(runtime_mode, raw):
-    runtime_mode['value'] = raw
-    assert legacy_dark.current_mode() is ON
-
-
-def test_mode_switches(runtime_mode):
-    runtime_mode['value'] = 'draining'
-    assert legacy_dark.current_mode() is DRAINING
+    assert legacy_dark.current_mode() is DARK
+    assert legacy_dark.current_mode('synthetic-uid') is DARK
     assert not legacy_dark.legacy_admission_allowed()
     assert not legacy_dark.sequencer_registration_allowed()
-    assert legacy_dark.sequencer_dispatch_allowed()
-    runtime_mode['value'] = 'dark'
     assert not legacy_dark.sequencer_dispatch_allowed()
-    runtime_mode['value'] = 'on'
-    assert legacy_dark.legacy_admission_allowed()
-
-
-def test_mode_gauge_marks_one_mode(runtime_mode):
-    runtime_mode['value'] = 'dark'
-    legacy_dark.current_mode()
     values = {m.value: legacy_dark.OMI_LEGACY_SYNC_MODE.labels(mode=m.value)._value.get() for m in LegacySyncMode}
     assert values == {'on': 0, 'draining': 0, 'dark': 1}
 
 
-def test_partial_dark_checks_the_owner_before_any_sequencer_claim(monkeypatch):
-    from unittest.mock import Mock
-    from utils.sync import uid_sequencer
-
-    seen = []
-
-    def mode(uid=None):
-        seen.append(uid)
-        return DARK if uid == 'test-uid' else ON
-
-    monkeypatch.setattr(legacy_dark, 'current_mode', mode)
-    monkeypatch.setattr(uid_sequencer.registry, 'production_stage', lambda: True)
-    sample = Mock(side_effect=RuntimeError('outside cohort reached existing sequencer'))
-    monkeypatch.setattr(uid_sequencer.registry, 'waiting_sample', sample)
-    deferred = Mock()
-    monkeypatch.setattr(uid_sequencer.registry, 'defer_owner', deferred)
-    assert not legacy_dark.sequencer_registration_allowed(uid='test-uid')
-    assert legacy_dark.sequencer_dispatch_allowed()  # the partial sweep must still run
-    assert uid_sequencer.kick('test-uid') is False
-    assert uid_sequencer.reconcile_uid('test-uid', {}) == 'legacy_dark'
-    deferred.assert_called_once()
-    sample.assert_not_called()
-    with pytest.raises(RuntimeError, match='outside cohort'):
-        uid_sequencer.reconcile_uid('synthetic-owner', {})
-    assert seen[-1] == 'synthetic-owner'
+def test_stale_window_matches_ledger():
+    assert legacy_dark.CLAIM_STALE_SECONDS == sync_ledger.CLAIM_STALE_SECONDS
 
 
 @pytest.mark.parametrize(
@@ -202,7 +137,11 @@ def test_stranded_and_capped_never_503(mode):
         response = fence_response(decision, total_files=1, lane='backfill')
         assert response.status_code == 409
         assert int(response.headers['retry-after']) >= 1
-        assert json.loads(response.body)['reason'] == 'dependency_warming'
+        body = json.loads(response.body)
+        assert body['reason'] == 'dependency_warming'
+        assert body['code'] == 'sync_content_in_progress'
+        assert body['job_id'] is None  # no expired owner handle for clients to follow
+        assert body['poll_after_ms'] == int(response.headers['retry-after']) * 1000
     capped = fence_decision(LEGACY_ROWS[3], mode, now=NOW)
     assert capped.retry_after_seconds == 3601
 
@@ -235,6 +174,11 @@ def test_admission_counter_bounds_labels_and_flags_violations(caplog):
 def test_refusal_and_sequencer_responses_are_not_5xx():
     refused = legacy_dark.admission_refused_response()
     assert refused.status_code == 409 and 'retry-after' in refused.headers
+    body = json.loads(refused.body)
+    assert body['code'] == 'sync_content_in_progress'
+    assert body['job_id'] is None
+    assert int(refused.headers['retry-after']) == legacy_dark.DARK_RETRY_AFTER_SECONDS
+    assert body['poll_after_ms'] == legacy_dark.DARK_RETRY_AFTER_SECONDS * 1000
     swept = legacy_dark.sequencer_dark_response()
     assert swept.status_code == 200 and json.loads(swept.body)['status'] == 'legacy_dark'
 
@@ -296,21 +240,6 @@ def test_queue_spec_round_trips_to_gcloud_flags():
     assert legacy_queues._queue_name('prod', 'sync-jobs') == 'sync-jobs'
     assert legacy_queues._queue_name('staging', 'sync-jobs') == 'staging-sync-jobs'
     assert set(legacy_queues.QUEUES) == set(legacy_dark.LEGACY_QUEUES)
-
-
-def test_sequencer_kick_and_sweep_are_inert_in_dark(monkeypatch):
-    from unittest.mock import MagicMock
-
-    from utils.sync import uid_sequencer
-
-    monkeypatch.setattr(uid_sequencer.registry, 'production_stage', lambda: True)
-    claim = MagicMock()
-    monkeypatch.setattr(uid_sequencer, '_claim_next', claim)
-    monkeypatch.setattr(uid_sequencer.registry, 'due_owners', claim)
-    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: DARK)
-    assert uid_sequencer.kick('test-uid') is False
-    assert uid_sequencer.sweep() == {'legacy_dark': 1}
-    claim.assert_not_called()
 
 
 # --- M1 review (Grok) fixes ---

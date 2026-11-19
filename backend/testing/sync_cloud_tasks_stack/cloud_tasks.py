@@ -92,7 +92,7 @@ class CloudTasksRecorder:
             return self._capture_reprocess_task(parent, task, body)
         task_id = body.get('job_id')
         if (
-            not sync_job_payload_keys_valid(body, allow_sequenced=False)
+            not sync_job_payload_keys_valid(body)
             or not isinstance(task_id, str)
             or not task_id
             or not isinstance(body.get('raw_blob_paths'), list)

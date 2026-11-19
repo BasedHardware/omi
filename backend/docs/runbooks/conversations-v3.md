@@ -17,14 +17,13 @@ with a v3 app on one device and a pre-v3 app on another gets that card on the ol
 
 Provision the dedicated queue on dev/prod before enabling admission; the prod
 ops manifest declares its bounded concurrency/retry policy. The same stage must reach backend/API, backend-listen (including realtime role),
-backend-sync, backend-sync-backfill, sync-backfill-worker, backend-integration,
+backend-sync, backend-sync-backfill, backend-integration,
 and pusher wherever their deployed image can create or finalize pendant rows.
 The desktop backend must use the same value for capability/episode responses;
 its desktop creates remain one-to-one. Refresh the runtime image/service census
 before rollout. `backend/deploy/runtime_env/_base.yaml` is the shared stage
 source; composition binds Cloud Run services/jobs and desktop directly, and
-backend-listen/pusher through the generated shared ConfigMap. The uninstalled
-sync-backfill-worker pilot references that ConfigMap. STT-only parakeet workers
+backend-listen/pusher through the generated shared ConfigMap. STT-only parakeet workers
 do not create/finalize/read conversation documents. A stage edit must be composed
 and deployed to every relevant role; no runtime source was changed outside this
 worktree. Leave `CONVERSATIONS_V3_FIRST_APP_BUILD` unset in source. At rollout,

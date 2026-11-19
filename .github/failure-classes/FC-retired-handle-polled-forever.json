@@ -10,7 +10,7 @@
   "scope_hints": [
     "backend/utils/sync/retired_handle_ack.py",
     "backend/routers/sync.py",
-    "backend/database/sync_backfill_sequencer.py",
+    "backend/utils/sync/legacy_dark.py",
     "app/lib/services/wals/sync_job_poller.dart"
   ],
   "status": "open"

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from utils.sync import pipeline
+from utils.sync import legacy_segment_core as pipeline
 
 
 @pytest.fixture(autouse=True)
@@ -23,7 +23,7 @@ def test_build_person_embeddings_cache_missing_id():
     ]
     with patch('database.users.get_user_speaker_embedding', return_value=None), patch(
         'database.users.get_people', return_value=people
-    ), patch('utils.sync.pipeline.usable_person_voiceprint', return_value=[0.1] * 192):
+    ), patch('utils.sync.legacy_segment_core.usable_person_voiceprint', return_value=[0.1] * 192):
         cache = pipeline.build_person_embeddings_cache(uid)
         # Should not crash with KeyError: 'id', and invalid person skipped
         assert len(cache) == 0
@@ -38,7 +38,7 @@ def test_build_person_embeddings_cache_missing_or_none_name():
     ]
     with patch('database.users.get_user_speaker_embedding', return_value=None), patch(
         'database.users.get_people', return_value=people
-    ), patch('utils.sync.pipeline.usable_person_voiceprint', side_effect=lambda p: [0.1] * 192):
+    ), patch('utils.sync.legacy_segment_core.usable_person_voiceprint', side_effect=lambda p: [0.1] * 192):
         cache = pipeline.build_person_embeddings_cache(uid)
         assert 'p1' in cache
         assert cache['p1']['name'] == 'Unknown'
@@ -58,10 +58,10 @@ def test_identify_speakers_for_segments_person_missing_name_or_id():
     # Person found by name has id but missing name key
     person_doc = {'id': 'person-bob'}
 
-    with patch('utils.sync.pipeline.detect_speaker_from_text', return_value='Bob'), patch(
+    with patch('utils.sync.legacy_segment_core.detect_speaker_from_text', return_value='Bob'), patch(
         'database.users.get_person_by_name', return_value=person_doc
-    ), patch('utils.sync.pipeline.build_person_embeddings_cache', return_value={}), patch(
-        'utils.sync.pipeline.process_speaker_assigned_segments'
+    ), patch('utils.sync.legacy_segment_core.build_person_embeddings_cache', return_value={}), patch(
+        'utils.sync.legacy_segment_core.process_speaker_assigned_segments'
     ) as mock_process:
         pipeline.identify_speakers_for_segments(
             transcript_segments,

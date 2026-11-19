@@ -150,7 +150,7 @@ def _run_sync_reprocess(monkeypatch, row, conversation, processed):
             'sync_v2 behavioral harness shares the process), so the sync '
             'journey counters cannot be observed'
         )
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_args, **_kwargs: row)
     monkeypatch.setattr(pipeline, 'deserialize_conversation', lambda _data: conversation)

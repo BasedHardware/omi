@@ -139,7 +139,7 @@ def test_active_legacy_long_job_remains_heavy_after_dispatch_and_is_not_double_c
 
 
 @pytest.mark.asyncio
-async def test_excluded_new_upload_uses_legacy_without_artifacts_but_prior_batch_keeps_custody(monkeypatch):
+async def test_prior_batch_custody_is_never_translated_to_legacy(monkeypatch):
     store = MemoryStore()
     monkeypatch.setattr(intake, 'FirestoreStore', lambda *args: store)
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
@@ -159,9 +159,8 @@ async def test_excluded_new_upload_uses_legacy_without_artifacts_but_prior_batch
         client_platform='ios',
         policy=replace(policy(), batch_enabled=False, live_record_enabled=False),
     )
-    assert await intake.accept_upload(**arguments) is None
-    assert not store.rows
-    artifacts.assert_not_called()
+    # Legacy sync is deleted (always dark): an excluded new upload no longer
+    # returns None to a legacy dispatcher, so only the prior-custody fence remains.
     store.rows['content', 'synthetic-owner/content'] = {'dispatch_protocol': 'batch_v1', 'job_id': 'bp_prior'}
     # Prior custody cannot be translated to None/legacy even if its status read
     # finds a privacy/persistence problem (the existing intake fence returns 409).

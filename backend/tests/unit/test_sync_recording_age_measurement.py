@@ -17,9 +17,9 @@ def test_refused_age_is_observed_before_return_without_storage_or_jobs(client, m
     age = router.OMI_SYNC_RECORDING_AGE_SECONDS.labels(lane='backfill')
     before = age._sum.get()
     archive = Mock(side_effect=AssertionError('refused audio must not be archived'))
-    job = Mock(side_effect=AssertionError('refused audio must not create a job'))
+    job = Mock(side_effect=AssertionError('refused audio must not be admitted'))
     monkeypatch.setattr(router, 'archive_mobile_batch_raw_files', archive)
-    monkeypatch.setattr(router, 'create_sync_job', job)
+    monkeypatch.setattr(router, 'accept_batch_upload', job)
     response = _post_sync(client, _filename(-days * 86400))
     assert response.status_code == 422, response.text
     assert response.json()['code'] == 'backfill_lookback_exceeded'

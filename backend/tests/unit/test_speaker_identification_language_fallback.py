@@ -1,6 +1,3 @@
-from utils.sync import pipeline
-from routers.listen import transcripts
-
 """Speaker-sample verification must not silently default to English (#12899).
 
 extract_speaker_samples() runs while the conversation is still live, before
@@ -23,6 +20,7 @@ import asyncio  # noqa: E402
 import numpy as np  # noqa: E402
 
 import utils.speaker_identification as speaker_identification_mod  # noqa: E402
+import utils.sync.legacy_segment_core  # noqa: E402,F401  (imported at collection: the core's import graph is setup)
 
 SAMPLE_RATE = 16000
 
@@ -112,7 +110,7 @@ def test_uses_conversation_language_without_consulting_user_preference(monkeypat
 
 
 def test_sync_name_detection_receives_selected_language(monkeypatch, paid_sync_entitlement):
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
     from models.transcript_segment import TranscriptSegment
 
     seen = []
@@ -130,7 +128,7 @@ def test_sync_name_detection_receives_selected_language(monkeypatch, paid_sync_e
 def test_sync_name_detection_log_omits_transcript_identity(monkeypatch, caplog, paid_sync_entitlement):
     import logging
     from models.transcript_segment import TranscriptSegment
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     monkeypatch.setattr(pipeline, 'detect_speaker_from_text', lambda *_args, **_kwargs: 'Sensitive Name')
     monkeypatch.setattr(
@@ -141,7 +139,7 @@ def test_sync_name_detection_log_omits_transcript_identity(monkeypatch, caplog, 
     segment = TranscriptSegment(
         id='synthetic', text='my name is Sensitive Name', start=0, end=2, speaker_id=1, is_user=False
     )
-    with caplog.at_level(logging.INFO, logger='utils.sync.pipeline'):
+    with caplog.at_level(logging.INFO, logger='utils.sync.legacy_segment_core'):
         pipeline.identify_speakers_for_segments([segment], None, {}, 'sensitive-uid')
     assert segment.person_id == 'sensitive-person-id'
     assert 'source=text accepted=True' in caplog.text

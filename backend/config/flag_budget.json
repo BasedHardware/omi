@@ -24,7 +24,7 @@
     "config/batch_language_recovery.py": "planscost"
   },
   "seed_review_by": "2026-11-15",
-  "budget": 161,
+  "budget": 153,
   "names": {
     "BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED": {
       "owner": "Goal: Margin / Sol",
@@ -1101,30 +1101,8 @@
     "SYNC_BACKFILL_MAX_AGE_SECONDS": {
       "seeded": "2026-10-25"
     },
-    "SYNC_BACKFILL_ORDER": {
-      "seeded": "2026-10-25"
-    },
-    "SYNC_BACKFILL_ORDER_PERCENT": {
-      "seeded": "2026-10-25"
-    },
-    "SYNC_BACKFILL_ORDER_UID_ALLOWLIST": {
-      "seeded": "2026-10-25"
-    },
-    "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM": {
-      "seeded": "2026-10-25"
-    },
     "SYNC_BACKFILL_USER_DAILY_HOURS": {
       "seeded": "2026-10-25"
-    },
-    "SYNC_BACKFILL_WORKER_API_URL": {
-      "owner": "infracost / syncsplit",
-      "review_by": "2026-11-23",
-      "reason": "2026-11-10 renewed by flagrulings: review_by expiry failed every backend unit shard; owner to confirm keep or delete"
-    },
-    "SYNC_BACKFILL_WORKER_AUDIENCE": {
-      "owner": "infracost / syncsplit",
-      "review_by": "2026-11-23",
-      "reason": "2026-11-10 renewed by flagrulings: review_by expiry failed every backend unit shard; owner to confirm keep or delete"
     },
     "SYNC_CAPTURE_END_SILENCE_SECONDS": {
       "owner": "lifecycle-owner (SCA-1766)",
@@ -1137,9 +1115,6 @@
       "seeded": "2026-10-25"
     },
     "SYNC_CONTENT_ID_SECRET": {
-      "seeded": "2026-10-25"
-    },
-    "SYNC_DURABLE_REDRIVE_GUARD": {
       "seeded": "2026-10-25"
     },
     "SYNC_DURABLE_STATUS_RECONCILIATION": {
@@ -1164,19 +1139,10 @@
       "review_by": "2026-11-22",
       "reason": "2026-11-16 renewed: review_by expiry failed the flag-budget guard for every branch; enabling waits on the product decision how recovered future-dated recordings appear on Home; quality lead keeps or deletes by 2026-11-22"
     },
-    "SYNC_INLINE_BACKFILL_CONCURRENCY": {
-      "seeded": "2026-10-25"
-    },
-    "SYNC_LEGACY_COMPLETION_CONVERGENCE": {
-      "seeded": "2026-10-25"
-    },
     "SYNC_LIVE_OVERLAP_ENABLED": {
       "seeded": "2026-10-25"
     },
     "SYNC_MAX_VAD_SEGMENT_SECONDS": {
-      "seeded": "2026-10-25"
-    },
-    "SYNC_MINIMAL_REDRIVE_ENABLED": {
       "seeded": "2026-10-25"
     },
     "SYNC_OPUS_RAW_FRAME_WRITES": {
@@ -1266,23 +1232,15 @@
   },
   "retired_history": "docs/history/retired-pipeline-flags.json",
   "retired": {
+    "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {
+      "on": "2026-11-16",
+      "replaced_by": null
+    },
     "BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY": {
       "on": "2026-11-09",
       "replaced_by": null
     },
     "BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED": {
-      "on": "2026-11-09",
-      "replaced_by": null
-    },
-    "PARAKEET_WINDOW_DEADLINE_CUT_ENABLED": {
-      "on": "2026-11-09",
-      "replaced_by": null
-    },
-    "STT_MULTI_LANGUAGE_HINTS": {
-      "on": "2026-11-09",
-      "replaced_by": null
-    },
-    "SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED": {
       "on": "2026-11-09",
       "replaced_by": null
     },
@@ -1298,8 +1256,56 @@
       "on": "2026-10-26",
       "replaced_by": null
     },
-    "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {
-      "on": "2026-11-16",
+    "PARAKEET_WINDOW_DEADLINE_CUT_ENABLED": {
+      "on": "2026-11-09",
+      "replaced_by": null
+    },
+    "STT_MULTI_LANGUAGE_HINTS": {
+      "on": "2026-11-09",
+      "replaced_by": null
+    },
+    "SYNC_BACKFILL_ORDER": {
+      "on": "2026-11-17",
+      "replaced_by": null
+    },
+    "SYNC_BACKFILL_ORDER_PERCENT": {
+      "on": "2026-11-17",
+      "replaced_by": null
+    },
+    "SYNC_BACKFILL_ORDER_UID_ALLOWLIST": {
+      "on": "2026-11-17",
+      "replaced_by": null
+    },
+    "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM": {
+      "on": "2026-11-17",
+      "replaced_by": null
+    },
+    "SYNC_BACKFILL_WORKER_API_URL": {
+      "on": "2026-11-17",
+      "replaced_by": null
+    },
+    "SYNC_BACKFILL_WORKER_AUDIENCE": {
+      "on": "2026-11-17",
+      "replaced_by": null
+    },
+    "SYNC_DURABLE_REDRIVE_GUARD": {
+      "on": "2026-11-17",
+      "replaced_by": null
+    },
+    "SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED": {
+      "on": "2026-11-09",
+      "replaced_by": null
+    },
+    "SYNC_INLINE_BACKFILL_CONCURRENCY": {
+      "on": "2026-11-17",
+      "replaced_by": null
+    },
+    "SYNC_LEGACY_COMPLETION_CONVERGENCE": {
+      "on": "2026-11-17",
+      "replaced_by": null
+    },
+    "SYNC_MINIMAL_REDRIVE_ENABLED": {
+      "on": "2026-11-17",
       "replaced_by": null
     }
   }

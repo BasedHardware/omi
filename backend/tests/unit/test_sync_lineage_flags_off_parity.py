@@ -20,7 +20,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from tests.unit import test_sync_lineage_dedupe_replay as helpers
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_lineage_overlap import overlap_rows, straddling_rows
 from tests.unit.test_sync_recording_lineage import ORIGIN, spans, sync_chunk
 from utils.sync import assignment, recording_lineage
@@ -185,7 +184,7 @@ def off(monkeypatch, request):
 
 @pytest.fixture
 def frozen(monkeypatch):
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     assert callable(pipeline.process_segment)
     return (
@@ -305,13 +304,28 @@ def test_process_segment_saved_rows_results_finish_and_log_bytes_match_main(
 ):
 
     from utils import capture_evidence, metrics
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     old_assignment, _ = frozen
-    module = _load('frozen_main_process', _source('process_segment'), monkeypatch, pipeline.__dict__)
+    # The frozen source predates the minimal-redrive deletion (plan C C11); its
+    # default (non-minimal) path is a passthrough, which the shim reproduces.
+    minimal_redrive = types.SimpleNamespace(
+        MINIMAL='minimal',
+        ProviderUnavailable=type('ProviderUnavailable', (Exception,), {}),
+        select_service=lambda _mode, language, _dispatch, select: select(language),
+        segment_target=lambda _mode, target, *_args: target,
+    )
+    module = _load(
+        'frozen_main_process',
+        _source('process_segment'),
+        monkeypatch,
+        {**pipeline.__dict__, 'minimal_redrive': minimal_redrive},
+    )
     for name in ('bounded_envelope', 'merge_track_receipts', 'sync_segment_receipt', 'unknown_envelope'):
         module.__dict__[name] = getattr(capture_evidence, name)
     module.OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL = metrics.OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
+    # The frozen source predates graduation of this switch. Its shipped ON
+    # value is already pinned in _load; the production config API is retired.
     original = module.process_segment
 
     def old_process(*args, lineage_binding=None, **kwargs):

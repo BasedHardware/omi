@@ -14,7 +14,7 @@ from tests.unit.test_sync_capture_time_skew import client, _default_skew, _filen
 from routers import sync as router
 from utils import backfill_hours_cap as day_cap
 from utils.batch_pipeline import admission
-from utils.sync import pipeline
+from utils.sync import legacy_segment_core as pipeline  # process_segment moved out of the deleted pipeline.py
 from utils.transcription_allowance import TranscriptionAllowance
 
 DAY = 86400
@@ -22,7 +22,7 @@ UNLIMITED = TranscriptionAllowance('managed', None, 'plan_unlimited', limit_seco
 
 
 @pytest.fixture
-def cap(monkeypatch):
+def cap(monkeypatch, client):
     """Cap on, an unlimited_v2 owner, and a settable transcribed-seconds total for the UTC day."""
     day_cap._READ_CACHE.clear()
     monkeypatch.setenv(day_cap.ENABLED_ENV, 'true')
@@ -41,9 +41,9 @@ def cap(monkeypatch):
     monkeypatch.setattr(day_cap, '_plan_for', plan_for)
     monkeypatch.setattr(day_cap, 'transcribed_seconds_for_day', lambda *_a, **_k: state['seconds'])
     archive = Mock(return_value=[])
-    job = Mock()
+    # Batch is the only admission since C9-C11; the client fixture records it here.
+    job = router.accept_batch_upload.calls
     monkeypatch.setattr(router, 'archive_mobile_batch_raw_files', archive)
-    monkeypatch.setattr(router, 'create_sync_job', job)
     state.update(archive=archive, job=job)
     yield state
     day_cap._READ_CACHE.clear()

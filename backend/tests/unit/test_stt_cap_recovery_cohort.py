@@ -16,7 +16,7 @@ from models.users import ProcessingBacklog
 from routers import users as route
 from utils import funded_processing, processing_backlog as backlog, processing_backlog_worker as worker
 from utils.observability import stt_cap_dispatch as metrics
-from utils.sync import cap_hold_recovery as recovery, cap_hold_redrive as redrive, pipeline
+from utils.sync import cap_hold_recovery as recovery, cap_hold_redrive as redrive, legacy_segment_core as pipeline
 
 
 @pytest.fixture(

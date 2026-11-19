@@ -243,7 +243,8 @@ async def test_real_sync_job_route_scopes_reprocess_deliveries(world, monkeypatc
     routes = sync_routes
     db, reads = world
     enable(monkeypatch)
-    monkeypatch.setattr(routes.uid_sequencer, 'production_fence_mode', lambda: SyncLedgerFenceMode.LEGACY)
+    monkeypatch.setattr(routes.sync_stage, 'production_stage', lambda: True)
+    monkeypatch.setattr(routes, 'get_sync_ledger_fence_mode', lambda: SyncLedgerFenceMode.LEGACY)
     monkeypatch.setattr(routes, 'warm_rollout_cohorts', AsyncMock())
 
     async def enrich(payload):

@@ -125,27 +125,6 @@ def test_retry_cap_serves_without_capture_coverage_cohort(monkeypatch, switch, s
     assert (decision is not None) is serving
 
 
-@pytest.mark.parametrize('switch', ['true', None, 'false'])
-@pytest.mark.parametrize('coverage', ['off', 'shadow'])
-def test_class_1_never_changes_the_sync_dispatch_cap(monkeypatch, switch, coverage):
-    """Class 2 and the sync budget-deferral chain are not in core: main's sync cap is unchanged.
-
-    The sync dispatch cap keeps the CAPTURE_COVERAGE_MODE cohort decision with
-    class 1 on or off: never served outside the cohort, never on with coverage off.
-    """
-    from utils.sync import retry_hygiene
-
-    if switch is not None:
-        monkeypatch.setenv(sm.RETRY_CAP_SWITCH, switch)
-    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', coverage)
-    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '2')
-    decision = retry_hygiene.dispatch_cap(uuid4().hex, {'dispatch_attempt': 5})
-    if coverage == 'off':
-        assert decision is None
-    else:
-        assert decision.reached and not decision.serving
-
-
 # 6. Held re-drive counter (BATCH_HELD_REDRIVE_COUNTER_ENABLED, default ON) ----------
 
 

@@ -88,7 +88,7 @@ try:
     sync_pkg = types.ModuleType('utils.sync')
     sync_pkg.__path__ = [os.path.join(backend_dir, 'utils', 'sync')]
     sys.modules['utils.sync'] = sync_pkg
-    from utils.sync import pipeline as mod
+    from utils.sync import legacy_segment_core as mod
 finally:
     sys.meta_path.remove(_f)
     for n in list(sys.modules):
