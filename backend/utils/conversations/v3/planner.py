@@ -1,7 +1,7 @@
 """Pure boundary and late-speech policy. No switch reads and no IO."""
 
 from utils.conversations.v3 import policy, visibility
-from utils.conversations.v3.outline import SILENCE, playback_origin
+from utils.conversations.v3.outline import SILENCE, playback_origin, sitdown as is_sitdown
 
 from collections.abc import Iterator
 from copy import deepcopy
@@ -97,7 +97,42 @@ def _fold_short_topics(lines: list, entries: list[dict[str, Any]]) -> list[dict[
     return result
 
 
-def _cohesive_groups(groups, outlines) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
+def _join_sitdown(lines: list, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One sit-down is one conversation: neighbouring conversation entries of a stretch join.
+
+    Under a long silence gap a stretch already ends where the sit-down does, so talk inside it with the
+    same kind is one card; topics become sections. Short dictation between two conversation entries
+    (under the Home word minimum) joins as a section too; media, background and longer dictation stay
+    their own cards.
+    """
+    starts = [entry['first_line'] - 1 for entry in entries]
+    counts = {start + 1: word_count(lines[start:end]) for start, end in zip(starts, starts[1:] + [len(lines)])}
+    runs: list[list[dict[str, Any]]] = []
+    for index, entry in enumerate(entries):
+        joinable = entry['kind'] == 'conversation' or (
+            entry['kind'] == 'voice_work'
+            and counts[entry['first_line']] < visibility.MIN_HOME_WORDS
+            and 0 < index < len(entries) - 1
+            and entries[index - 1]['kind'] == 'conversation'
+            and entries[index + 1]['kind'] == 'conversation'
+        )
+        if joinable and runs and runs[-1][-1].get('_sitdown_joinable'):
+            runs[-1].append({**entry, '_sitdown_joinable': True})
+        else:
+            runs.append([{**entry, '_sitdown_joinable': joinable}])
+    result = []
+    for run in runs:
+        run = [{k: v for k, v in entry.items() if k != '_sitdown_joinable'} for entry in run]
+        conversations = [entry for entry in run if entry['kind'] == 'conversation']
+        if len(run) == 1 or not conversations:
+            result.extend(run)
+            continue
+        primary = max(conversations, key=lambda entry: counts[entry['first_line']])
+        result.append(_as_sections(run, primary=primary)[0])
+    return result
+
+
+def _cohesive_groups(groups, outlines, sitdown=False) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
     for group, entries in zip(groups, outlines):
         if not entries:
             continue
@@ -137,13 +172,17 @@ def _cohesive_groups(groups, outlines) -> Iterator[tuple[dict[str, Any], list[di
                 'locked': group.get('locked', group['finished']) or not last,
                 '_stretch_words': word_count(part),
             }
-            yield bounded, _as_sections(topics) if manual else _fold_short_topics(part, topics)
+            if manual:
+                yield bounded, _as_sections(topics)
+            else:
+                yield bounded, _fold_short_topics(part, _join_sitdown(part, topics) if sitdown else topics)
             start = end
 
 
 def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topic_lock=False):
     result = []
-    pairs = _cohesive_groups(groups, outlines) if cohesion else zip(groups, outlines)
+    sitdown = is_sitdown(silence_gap)
+    pairs = _cohesive_groups(groups, outlines, sitdown) if cohesion else zip(groups, outlines)
     for group, entries in pairs:
         first_result = len(result)
         if len(entries) > 1 and (group.get('manual_end') or group.get('after_manual_end')):
@@ -174,7 +213,9 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                     candidate['_defer_lock'] = True
                     candidate['_lock_end'] = group['end']
                 if cohesion:
-                    candidate['_stretch_words'] = group['_stretch_words']
+                    # A sit-down stretch can span two hours of separate cards, so each card meets the Home
+                    # word minimum on its own words; a five-minute stretch is judged whole (#25786).
+                    candidate['_stretch_words'] = word_count(part) if sitdown else group['_stretch_words']
                     candidate['_stretch_partition'] = first_result
                 # A model can undo a topic split, never a recorded silence boundary.
                 prior = result[-1] if result else None
@@ -193,6 +234,8 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                     if cohesion:
                         prior['sections'] = _as_sections([prior, candidate], primary=prior)[0]['sections']
                     prior['lines'].extend(part)
+                    if cohesion and sitdown:
+                        prior['_stretch_words'] = word_count(prior['lines'])
                     prior['finished'] = candidate['finished']
                     prior['manual_end'] = candidate['manual_end']
                     if defer_topic_lock:
