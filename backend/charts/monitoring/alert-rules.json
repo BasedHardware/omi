@@ -38796,5 +38796,650 @@
       "repeat_interval": "4h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-recording-outcome-fast",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Recording outcome",
+    "title": "Recordings - transcript or summary share collapsed (last 30 min cohort)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "label_replace(max(omi_batch_pipeline_recording_outcome_transcribed_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"} / (omi_batch_pipeline_recording_outcome_finished_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"} >= 50)) < bool 0.6, \"outcome\", \"transcript\", \"\", \"\") or label_replace(max(omi_batch_pipeline_recording_outcome_summarized_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"} / (omi_batch_pipeline_recording_outcome_finished_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"} >= 50)) < bool 0.1, \"outcome\", \"summary\", \"\", \"\") or on() (0 * max(omi_batch_pipeline_recording_outcome_finished_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"}))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-17T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "30m",
+    "missingSeriesEvalsToResolve": 2,
+    "annotations": {
+      "summary": "Recordings that finished 45 to 15 minutes ago are missing their transcript or summary far more often than normal.",
+      "user_impact": "Users finish a recording and see no transcript or no summary on Home for many minutes or hours. This is the 2026-11-16 class: 21 hours of missing summaries with nothing paged.",
+      "scope": "Batch-live recordings (record_lane_owner=batch_live_v1, status=completed) finished 45 to 15 minutes before the sample, counted by the serving maintenance leader on backend-integration with three Firestore count aggregations. The denominator is every finished recording, so a stall in any stage lowers the share. The outcome label says which share breached. NoData means the sampler is blind (not deployed, index missing, leader lost, kill switch off) and also pages.",
+      "threshold": "transcript share < 0.6 or summary share < 0.1, with >= 50 finished recordings in the cohort, for 10m. Measured 2026-11-17 by replaying the gauge every 60 s from 192,484 batch-live rows (ro-prod, finished 11-09 18Z to 11-17 16Z): in the only healthy stretch (11-15 10Z to 11-16 13Z, 1,620 samples) the transcript share never fell below 0.67 (median 0.79) and the summary share never below 0.17 (median 0.42); the 30-minute cohort never held fewer than 171 recordings, so the volume floor guards outages of the sampler's input, not the overnight trough.",
+      "verification": "Read the Core Features first-screen tiles \"Transcript within 15 min\" and \"Summary within 15 min\". Then follow the runbook: deployed build per service (all four Cloud Run services and the GKE batch-pipeline worker image), omi_batch_projection_walk_stops_total{stop=\"blocked\"} and the fresh-unprojected ratio. Backtest: replay fires 11-16 15:21Z on the summary leg (finish-to-summary median had grown from 18 to 123 minutes since 13Z) and 20:07Z on the transcript leg; zero starts in the healthy stretch; the 7 days before were degraded (47-87% of summaries more than 3 h after finish on 11-09..11-14) and the rule would have been firing 129 of those 168 hours.",
+      "safe_next_action": "Find the stalled stage before acting. For a refused projection head after a co-deploy, roll every merger host (Cloud Run and the GKE batch worker) to the same build; BATCH_SOURCE_REUSE_ENABLED=false on the sync intake services stops new marker-protocol uploads (rollback: unset). Never delete results, audio or leases by hand. Silence only a broken sample.",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "runbook": "backend/docs/runbooks/recording-outcome.md"
+    },
+    "labels": {
+      "alert_identity": "omi-recording-outcome-fast",
+      "component": "batch-pipeline",
+      "impact": "user-experience",
+      "instatus_component": "speech-processing",
+      "severity": "critical",
+      "tier": "page",
+      "audience": "human",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-recording-outcome-slow",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Recording outcome",
+    "title": "Recordings - transcript or summary share degraded over 6 hours",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 21600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "label_replace((sum(sum_over_time(omi_batch_pipeline_recording_outcome_transcribed_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"}[6h])) / sum(sum_over_time(omi_batch_pipeline_recording_outcome_finished_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"}[6h])) and on() (sum(sum_over_time(omi_batch_pipeline_recording_outcome_finished_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"}[6h])) / sum(count_over_time(omi_batch_pipeline_recording_outcome_finished_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"}[6h])) >= 50)) < bool 0.7, \"outcome\", \"transcript\", \"\", \"\") or label_replace((sum(sum_over_time(omi_batch_pipeline_recording_outcome_summarized_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"}[6h])) / sum(sum_over_time(omi_batch_pipeline_recording_outcome_finished_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"}[6h])) and on() (sum(sum_over_time(omi_batch_pipeline_recording_outcome_finished_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"}[6h])) / sum(count_over_time(omi_batch_pipeline_recording_outcome_finished_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"}[6h])) >= 50)) < bool 0.25, \"outcome\", \"summary\", \"\", \"\")",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-17T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "missingSeriesEvalsToResolve": 2,
+    "annotations": {
+      "summary": "Over the last 6 hours, recordings are getting a transcript or summary noticeably less often than normal.",
+      "user_impact": "A slow decay the fast rule cannot see: a growing minority of recordings stay without a transcript or summary.",
+      "scope": "The same batch-live recording-outcome gauges as omi-recording-outcome-fast, pooled over 6h (sum of numerators over sum of denominators, so a lease handoff between instances does not split the window). NoData is OK here because the fast rule owns blindness.",
+      "threshold": "pooled 6h transcript share < 0.7 or summary share < 0.25, with an average cohort >= 50, for 30m. Same replay: pooled 6 h shares in the healthy stretch stayed near 0.79 transcript and 0.42 summary.",
+      "verification": "Read the Core Features trend lines under the two recording tiles for the last 24h and compare with the 7-day level. Backtest: replay fires 11-16 16:27Z (summary) and 21:58Z (transcript); in the 7 days before it was firing through the measured degradation (11-10 01Z to 11-15 15Z).",
+      "safe_next_action": "Follow backend/docs/runbooks/recording-outcome.md; a slow decay is usually one cohort (language, client build, owner chain) rather than a fleet stall.",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "runbook": "backend/docs/runbooks/recording-outcome.md"
+    },
+    "labels": {
+      "alert_identity": "omi-recording-outcome-slow",
+      "component": "batch-pipeline",
+      "impact": "user-experience",
+      "instatus_component": "speech-processing",
+      "severity": "warning",
+      "tier": "page",
+      "audience": "human",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-batch-fresh-unprojected-share",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Recording outcome",
+    "title": "Batch - fresh results committed but not projected (10-20 min)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "(max(omi_batch_pipeline_fresh_unprojected_ratio{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"}) > bool 0.1) * (max(omi_batch_pipeline_fresh_committed_window_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=\"backend-integration\"}) >= bool 500)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-17T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "missingSeriesEvalsToResolve": 2,
+    "annotations": {
+      "summary": "A large share of fresh transcripts committed 10 to 20 minutes ago are still waiting to be projected onto the conversation.",
+      "user_impact": "The transcript exists but the user cannot see it, and the summary cannot start. Cause-level early warning for the recording-outcome page.",
+      "scope": "omi_batch_pipeline_fresh_unprojected_ratio from the fresh-delivery guard on backend-integration: of results with fresh_capture=true committed 20 to 10 minutes ago, the share still projection_state=pending. Scoped to fresh commits, so the 30-day held stock behind omi_batch_projection_obligation_oldest_age_seconds cannot mask it.",
+      "threshold": "ratio > 0.1 with >= 500 fresh commits in the window, for 10m. GMP history of the gauge since it shipped (11-14 04Z): outside 11-14 06Z the 15-minute sustained ratio stayed under 0.095; it rose to 0.15 at 19:35Z and 0.26 at 20:00Z on 11-16.",
+      "verification": "Check omi_batch_projection_walk_stops_total by stop class and the blocked_* stop tokens in the backend-integration owner_drain turn log. Backtest: fires 11-16 19:33Z; before that two episodes of under 20 minutes at 11-14 06Z, inside the measured 11-14 transcript backlog.",
+      "safe_next_action": "Identify the refusal (stop token) before redriving. A refused head after a co-deploy clears when every merger host serves the same build; the owner drain retries it, no data repair is needed. Never edit result rows by hand.",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "runbook": "backend/docs/runbooks/recording-outcome.md"
+    },
+    "labels": {
+      "alert_identity": "omi-batch-fresh-unprojected-share",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "instatus_component": "speech-processing",
+      "severity": "critical",
+      "tier": "page",
+      "audience": "human",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-batch-projection-heads-blocked",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Recording outcome",
+    "title": "Batch - owner projection chains blocked behind a refused head",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(increase(omi_batch_projection_walk_stops_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",stop=\"blocked\",progress=\"none\"}[10m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 50",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-17T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "missingSeriesEvalsToResolve": 2,
+    "annotations": {
+      "summary": "Owner-drain turns keep stopping at a refused (non-privacy) head without advancing.",
+      "user_impact": "Projection is strictly ordered per owner, so every later recording for an affected owner, live recordings included, waits behind the refused row and gets no transcript or summary.",
+      "scope": "omi_batch_projection_walk_stops_total{stop=\"blocked\",progress=\"none\"} on the Cloud Run sync services: owner-drain turns ending on a ProjectionBlocked refusal other than a privacy disposition, which made zero progress. Privacy holds (blocked_privacy, privacy_blocked) are a separate, chronic class and are excluded.",
+      "threshold": ">= 50 zero-progress blocked turns in 10m, for 5m. Cloud Logging owner_drain turn lines: zero non-privacy zero-progress blocked turns from 11-09 18Z to 11-16 18:56Z; 11, 31, 24, 68 and 189 per minute from 18:57Z.",
+      "verification": "Read the stop token in the backend-integration log line \"event=batch_projection action=owner_drain outcome=turn ... stop=blocked_<token>\" (the counter folds the token; the log keeps it). Backtest: counter is new in this change, so the backtest uses its log line: the threshold is crossed by 18:59Z and the rule fires about 19:04Z; zero fires in the 7 days before.",
+      "safe_next_action": "blocked_immutable_result_binding_mismatch after a deploy means a merger host is on an older build: roll the GKE batch-pipeline worker and every Cloud Run service to one build (#25597 reads the job marker for unmarked rows). Do not quarantine or delete heads by hand.",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "runbook": "backend/docs/runbooks/recording-outcome.md"
+    },
+    "labels": {
+      "alert_identity": "omi-batch-projection-heads-blocked",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "instatus_component": "speech-processing",
+      "severity": "critical",
+      "tier": "page",
+      "audience": "human",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-batch-result-marker-skew",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Recording outcome",
+    "title": "Batch - result rows committed without the source marker their job carries",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 2700,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(increase(omi_fallback_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",component=\"sync_dispatch\",from_mode=\"row_source_marker\",to_mode=\"job_source_marker\"}[30m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-17T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "missingSeriesEvalsToResolve": 2,
+    "annotations": {
+      "summary": "A merger committed protocol-2 results without the source marker the job carries: two hosts are running different builds of the result protocol.",
+      "user_impact": "None while the reader fallback holds; this is the deploy-skew that caused the 2026-11-16 21-hour summary outage before the fallback existed. The next protocol change can repeat it.",
+      "scope": "omi_fallback_total{component=\"sync_dispatch\",from_mode=\"row_source_marker\",to_mode=\"job_source_marker\"} on the Cloud Run sync services, recorded by source_reader_marked (#25597) when it inherits the marker from the job.",
+      "threshold": "any increase in 30m, for 5m. The fallback is the reader-side recovery added in #25597; any increase means a merger host lags the protocol.",
+      "verification": "Compare OMI_BACKEND_RELEASE_SHA on each Cloud Run revision receiving traffic with the GKE batch-pipeline worker image tag. Backtest: counter not serving during the incident (#25597 merged 11-17 11:38Z). Proxy: the refused rows it replaces (blocked_immutable_result_binding_mismatch) first appear 18:57Z, so it would fire about 19:05Z; zero in the 7 days before.",
+      "safe_next_action": "Roll the lagging merger host (usually the GKE batch-pipeline worker) to the serving Cloud Run build. No data repair is needed.",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "runbook": "backend/docs/runbooks/recording-outcome.md"
+    },
+    "labels": {
+      "alert_identity": "omi-batch-result-marker-skew",
+      "component": "batch-pipeline",
+      "impact": "infrastructure",
+      "instatus_component": "speech-processing",
+      "severity": "warning",
+      "tier": "page",
+      "audience": "human",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
   }
 ]

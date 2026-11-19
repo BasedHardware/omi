@@ -74,6 +74,10 @@ def entries():
             neutrals={'now': (2000000000.0, 'fixed cohort clock; no shape change')},
         ),
         DriverEntry(
+            'database.batch_pipeline_recording_outcome.recording_outcome_counts',
+            neutrals={'now': (2000000000.0, 'fixed cohort clock; no shape change')},
+        ),
+        DriverEntry(
             'database.batch_pipeline_coalescing.due',
             domains={
                 'namespace': namespaces,

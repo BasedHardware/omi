@@ -12,6 +12,7 @@ KILL_SWITCHES = {
     'BATCH_ALLOWANCE_PARK_ENABLED': True,
     'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED': True,
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED': True,
+    'BATCH_PIPELINE_RECORDING_OUTCOME_ENABLED': True,
     'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED': False,
     'BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED': False,
@@ -102,6 +103,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
     elif name in {
         'CONVERSATION_TERMINAL_FAMILY_MODE',
         'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
+        'BATCH_PIPELINE_RECORDING_OUTCOME_ENABLED',
         'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
     }:
         enabled = value not in {'false', '0', 'off', 'no'}

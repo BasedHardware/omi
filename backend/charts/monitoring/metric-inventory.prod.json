@@ -2483,17 +2483,23 @@
         "omi_firestore_billed_reads_by_caller_total",
         "omi_firestore_caller_label_overflow_total",
         "omi_sync_queue_wait_seconds_bucket",
-        "firestore_googleapis_com:document_read_count"
+        "firestore_googleapis_com:document_read_count",
+        "omi_batch_pipeline_fresh_committed_window_total",
+        "omi_batch_pipeline_fresh_unprojected_ratio"
       ],
-      "evidence": "GMP/Cloud Monitoring read-only series list 2026-11-12: the caller-overflow alert reads both families on this datasource; omi_firestore_caller_label_overflow_total carries service_name and omi_firestore_billed_reads_by_caller_total carries caller/collection/kind/service_name. The in-cluster Cloud Run bridge keeps only documents_per_operation and read_operations_total, so neither family is imported there. GMP instant and query_range reads on 2026-11-12T06:51Z: firestore_googleapis_com:document_read_count has 3 series (type=LOOKUP|QUERY|NOT_FOUND, monitored_resource=firestore_instance, project_id=based-hardware) and sums to ~1.18M per 60s (~1.70B/day), matching the native document/read_count. The in-cluster snapshot does not contain this family; omi_sync_queue_wait_seconds_bucket was the earlier scoped entry.",
+      "evidence": "GMP/Cloud Monitoring read-only series list 2026-11-12: the caller-overflow alert reads both families on this datasource; omi_firestore_caller_label_overflow_total carries service_name and omi_firestore_billed_reads_by_caller_total carries caller/collection/kind/service_name. The in-cluster Cloud Run bridge keeps only documents_per_operation and read_operations_total, so neither family is imported there. GMP instant and query_range reads on 2026-11-12T06:51Z: firestore_googleapis_com:document_read_count has 3 series (type=LOOKUP|QUERY|NOT_FOUND, monitored_resource=firestore_instance, project_id=based-hardware) and sums to ~1.18M per 60s (~1.70B/day), matching the native document/read_count. The in-cluster snapshot does not contain this family; omi_sync_queue_wait_seconds_bucket was the earlier scoped entry. GMP query_range reads on 2026-11-17 (ro-prod): omi_batch_pipeline_fresh_unprojected_ratio and omi_batch_pipeline_fresh_committed_window_total have one series each on namespace=backend-integration since 2026-11-14T03:57Z (the fresh-delivery guard); neither family is imported by the in-cluster Cloud Run bridge.",
       "declared_metrics": [
         "logging_googleapis_com:user_omi_pipeline_upload_admission_503",
         "logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted",
         "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_count",
         "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_sum",
-        "logging_googleapis_com:user_omi_pipeline_owner_drain_claim_busy"
+        "logging_googleapis_com:user_omi_pipeline_owner_drain_claim_busy",
+        "omi_batch_pipeline_recording_outcome_finished_window_total",
+        "omi_batch_pipeline_recording_outcome_transcribed_window_total",
+        "omi_batch_pipeline_recording_outcome_summarized_window_total",
+        "omi_batch_projection_walk_stops_total"
       ],
-      "declaration_evidence": "backend/charts/monitoring/batch-projection/log-metrics.json; source declarations only, not observed production series."
+      "declaration_evidence": "backend/charts/monitoring/batch-projection/log-metrics.json; source declarations only, not observed production series. backend/utils/batch_pipeline/recording_outcome.py and the omi_batch_projection_walk_stops_total counter in backend/utils/batch_pipeline/metrics.py (backend/deploy/cloud_run_gmp_sync.yaml keeps both); source declarations only until the backend-integration deploy."
     }
   }
 }

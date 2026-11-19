@@ -53,6 +53,7 @@ from utils.batch_pipeline.metrics import (
     PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS,
     PROJECTION_DRAIN_PRIVACY_ROW_CHANGED,
     record_privacy_stop,
+    record_walk_stop,
 )
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline import projection_drain_diagnostics as diagnostics
@@ -434,6 +435,8 @@ class OwnerDrains:
             self.stops[owner] = stop
         else:
             self.live_target_attempts.pop(owner, None)
+        # INFO turn lines are sampled at the log sink; the counter is the unsampled rate.
+        record_walk_stop(stop, advanced)
         logger.info(
             'event=batch_projection action=owner_drain outcome=turn steps=%d advanced=%d more=%s stop=%s elapsed_ms=%d',
             steps,

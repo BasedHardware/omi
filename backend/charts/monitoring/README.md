@@ -473,7 +473,7 @@ Most are bundled with kube-prometheus-stack and auto-provisioned. Custom dashboa
 | Kubernetes / Scheduler | `2e6b6a3b4bddf1427b3a55aa1311c656` | `kubernetes-mixin` | Bundled |
 | Node Exporter / AIX | `7e0a61e486f727d763fb1d86fdd629c2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / MacOS | `629701ea43bf69291922ea45f4a87d37` | `node-exporter-mixin` | Bundled |
-| Omi Core Features | `omi-core-features` | — | **Custom** — glance board. First screen: eight outcome tiles each with a trend, what is stuck, who stayed; everything else is in collapsed rows. User-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey), conversation shape (length p10/p50/p90 and <2min share by source), rolling one-hour relevance discard share by Cloud Run service and trigger, and conversation search freshness (summary-vector writes and retrieval degradation). Sync-service series appear after the metrics-egress workflow applies the sync exporter values; the collapsed row retains its Cloud Logging `omi_sync_intake` panel. The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
+| Omi Core Features | `omi-core-features` | — | **Custom** — glance board. First screen: ten outcome tiles each with a trend (the last two, transcript and summary within 15 min, read the recording-outcome gauges on `gmp-cloud-run`), what is stuck (including blocked projection heads and the fresh-unprojected share), who stayed; everything else is in collapsed rows. User-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey), conversation shape (length p10/p50/p90 and <2min share by source), rolling one-hour relevance discard share by Cloud Run service and trigger, and conversation search freshness (summary-vector writes and retrieval degradation). Sync-service series appear after the metrics-egress workflow applies the sync exporter values; the collapsed row retains its Cloud Logging `omi_sync_intake` panel. The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
 | Node Exporter / Nodes | `7d57716318ee0dddbac5a7f451fb7753` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Cluster | `3e97d1d02672cdd0861f4c97c64f89b2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Node | `fac67cfbe174d3ef53eb473d73d9212f` | `node-exporter-mixin` | Bundled |
@@ -939,6 +939,19 @@ specifically for failures that stay green on every other signal, and are documen
 | `omi-llm-gateway-lane-failure-ratio` | A lane failing more than a quarter of its real requests over an hour. |
 | `omi-llm-gateway-lane-zero-success` | A lane with attempts but no successful request in six hours. The `or ... * 0` zero-fill is required: a lane that has never succeeded has no `outcome="success"` series, so a plain ratio produces no series and no alert. |
 | `omi-journey-signal-dead` | A journey counter that stopped reporting while the platform is demonstrably serving traffic. Every real-traffic journey rule assumes its counter is scraped; when that breaks, the rule goes quiet rather than failing loudly. |
+
+### Recording-outcome pages
+
+`alerts/recording-outcome.json` pages on the user result itself: of batch-live
+recordings that finished 45 to 15 minutes ago, the share with a transcript and the
+share with a summary. The denominator is the finished recordings, never a stage's
+own throughput, so a stall lowers the share instead of leaving the cohort. Cause
+pages cover the 2026-11-16 mechanism: fresh results left unprojected, owner chains
+stopped at a refused head, and result rows missing the marker their job carries. The
+rules read `gmp-cloud-run` because these Cloud Run families are not imported into
+the in-cluster Prometheus. That gap is also why `omi-batch-delivered-share-language`
+could not have fired. Thresholds, backtests and activation order:
+[`recording-outcome.md`](../../docs/runbooks/recording-outcome.md).
 
 Thresholds on these rules are set from measured production distributions, not intuition, and the
 measurement belongs in the rule's `threshold` annotation and in the runbook.

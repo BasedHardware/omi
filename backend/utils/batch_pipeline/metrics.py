@@ -31,7 +31,9 @@ from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reaso
 from utils.lifecycle_metrics import PhaseMetrics
 from utils.batch_pipeline import vendor_route_metrics as vendor_metrics, record_wal_metrics
 from utils.batch_pipeline.fresh_guard import FreshGuard
+from utils.batch_pipeline.recording_outcome import RecordingOutcome
 from utils.batch_pipeline.delivered_share import DeliveredShare
+from utils.batch_pipeline.projection_walk_stop import walk_stop_class
 
 PROJECTION_FINISH_READS = Counter(
     'omi_batch_projection_finish_reads_total',
@@ -84,6 +86,24 @@ PROJECTION_PRIVACY_FALLTHROUGHS = Counter(
 PROJECTION_PRIVACY_STILL_REFUSED = Counter(
     'omi_batch_projection_privacy_still_refused_total', 'Applicable privacy refusals held, including unchanged holds'
 )
+
+
+# One increment per owner-drain turn. A refused head is a zero-progress
+# ``blocked`` turn that repeats every drain wake for its owner, so a sustained
+# rate means owners whose whole chain waits behind it (2026-11-16 incident).
+PROJECTION_DRAIN_WALK_STOPS = Counter(
+    'omi_batch_projection_walk_stops_total',
+    'Owner-drain turns by closed stop class and whether the turn advanced a row',
+    ['stop', 'progress'],
+)
+# The alert reads these children; a zero must be scraped before the first event.
+for _stop in ('blocked', 'blocked_privacy'):
+    for _progress in ('none', 'advanced'):
+        PROJECTION_DRAIN_WALK_STOPS.labels(stop=_stop, progress=_progress)
+
+
+def record_walk_stop(stop: str | None, advanced: int) -> None:
+    PROJECTION_DRAIN_WALK_STOPS.labels(stop=walk_stop_class(stop), progress='advanced' if advanced else 'none').inc()
 
 
 RECORD_SEAL_ORPHAN_PARKED = Counter(
@@ -149,6 +169,7 @@ class QueueMetrics:
     ):
         self.timeliness_leader = timeliness_leader
         self.fresh_guard = FreshGuard(registry)
+        self.recording_outcome = RecordingOutcome(registry)
         self.delivered_share = DeliveredShare(registry)
         self._timeliness_lock = threading.Lock()
         self._timeliness_all_time_visible = False

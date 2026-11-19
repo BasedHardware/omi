@@ -345,6 +345,11 @@
     "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED": {
       "seeded": "2026-10-25"
     },
+    "BATCH_PIPELINE_RECORDING_OUTCOME_ENABLED": {
+      "owner": "Goal: Pipeline",
+      "review_by": "2026-12-17",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_PIPELINE_RECORD_PROTOCOL_READY": {
       "owner": "two-lane lead",
       "review_by": "2026-12-14"

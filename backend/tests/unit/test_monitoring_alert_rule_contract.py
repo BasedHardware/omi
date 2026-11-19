@@ -1432,6 +1432,14 @@ def _declared_backend_metric_names() -> set[str]:
         ):
             # These helpers construct/reuse registered Gauge objects with fixed names.
             names |= set(re.findall(r"_gauge\(\s*['\"]([a-zA-Z0-9_:]+)['\"]", path.read_text(encoding='utf-8')))
+        if path in (
+            REPO / 'backend/utils/batch_pipeline/fresh_guard.py',
+            REPO / 'backend/utils/batch_pipeline/recording_outcome.py',
+        ):
+            # Custom collectors publish PREFIX + each METRICS key as a GaugeMetricFamily.
+            prefix = re.search(r"^PREFIX = '([a-z0-9_]+)'$", source, re.M).group(1)
+            block = re.search(r"^METRICS = \{(.*?)^\}", source, re.M | re.S).group(1)
+            names |= {prefix + key for key in re.findall(r"^    '([a-z0-9_]+)':", block, re.M)}
     return names
 
 
