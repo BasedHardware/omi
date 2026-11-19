@@ -73,6 +73,8 @@ class ConversationV3Fields {
     this.recordingPieces = const [],
     this.summaryCoversThrough,
     this.recording = false,
+    this.derived = false,
+    this.recordingIds = const [],
   });
 
   /// `conversation`, `voice_work`, `media` or `background`.
@@ -91,6 +93,14 @@ class ConversationV3Fields {
   /// delivers them by recording id for released builds; a v3 Home never shows one as a row.
   final bool recording;
 
+  /// The server's proof that this transcript was derived from recordings.
+  final bool derived;
+
+  /// The sources of a wire row explicitly marked completed, including sources without playable audio.
+  ///
+  /// A missing or unfamiliar status otherwise normalizes to completed in the app and cache.
+  final List<String> recordingIds;
+
   static const _keys = [
     'kind',
     'home_hidden',
@@ -99,6 +109,8 @@ class ConversationV3Fields {
     'recording_pieces',
     'summary_covers_through',
     'recording',
+    'v3_derived',
+    'v3_recording_ids',
   ];
 
   /// Null when the JSON carries none of the v3 fields.
@@ -106,6 +118,7 @@ class ConversationV3Fields {
     if (!_keys.any(json.containsKey)) return null;
     final pieces = json['recording_pieces'];
     final covers = json['summary_covers_through'];
+    final recordingIds = json['v3_recording_ids'];
     return ConversationV3Fields(
       kind: json['kind'] is String ? json['kind'] as String : null,
       homeHidden: json['home_hidden'] == true,
@@ -115,6 +128,10 @@ class ConversationV3Fields {
           pieces is List ? pieces.map(RecordingPiece.fromJson).whereType<RecordingPiece>().toList() : const [],
       summaryCoversThrough: covers is String ? DateTime.tryParse(covers) : null,
       recording: json['recording'] == true,
+      derived: json['v3_derived'] == true,
+      recordingIds: json['status'] == 'completed' && recordingIds is List
+          ? recordingIds.whereType<String>().where((id) => id.isNotEmpty).toList()
+          : const [],
     );
   }
 
@@ -126,5 +143,7 @@ class ConversationV3Fields {
         'recording_pieces': recordingPieces.map((p) => p.toJson()).toList(),
         if (summaryCoversThrough != null) 'summary_covers_through': summaryCoversThrough!.toUtc().toIso8601String(),
         if (recording) 'recording': true,
+        if (recordingIds.isNotEmpty) 'v3_recording_ids': recordingIds,
+        if (derived) 'v3_derived': true,
       };
 }

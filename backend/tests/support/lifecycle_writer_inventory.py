@@ -217,6 +217,7 @@ FIELD_SITES = {
         )
     ],
     'utils/conversations/v3/service.py': [
+        ('reconcile.plan', 'status', "'in_progress'", ('status',)),
         ('reconcile.plan', 'status', "prior['status']", ('status',)),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
     ],

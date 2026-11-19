@@ -13,6 +13,9 @@ from utils.conversations.v3 import summary
 from utils.conversations import process_conversation as process
 from models.structured import Structured
 from routers import conversations as routes
+from tests.unit.test_conversations_v3_engine import native_ready_fields
+from tests.unit.test_conversations_v3_transactions import strict  # noqa: F401
+from utils.conversations.v3 import policy
 
 AT = datetime(2026, 11, 16, tzinfo=timezone.utc)
 
@@ -569,3 +572,44 @@ async def test_cancelled_builder_keeps_lease_until_paid_outline_exits(monkeypatc
         release.set()
         await asyncio.gather(task, return_exceptions=True)
     assert not held
+
+
+@pytest.mark.asyncio
+async def test_stale_native_foreground_rearms_without_starting_paid_notes(strict, monkeypatch):
+    end = datetime.now(timezone.utc)
+    timestamp = end - timedelta(minutes=2)
+    source = {'id': 'raw', 'recording': True, 'started_at': timestamp, **native_ready_fields(end)}
+    binding = policy.native_manual_binding(source)
+    assert binding
+    derived = {
+        'id': 'derived',
+        'status': 'processing',
+        'v3_derived': True,
+        'v3_recording_ids': ['raw'],
+        'manual_end': True,
+        'v3_native_manual_binding': binding,
+        'finished_at': end,
+    }
+    raw_path = ('users', 'synthetic', 'conversations', 'raw')
+    strict.rows[raw_path] = {
+        **source,
+        'record_audio_closed': False,
+        'record_upload_revision': 8,
+        'v3_pending_since': timestamp,
+        'v3_pending': False,
+    }
+    strict.rows[('users', 'synthetic', 'conversations', 'derived')] = derived
+    token = leases.acquire('synthetic', 'summary-derived', firestore_client=strict)
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(summary.store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(summary.store, 'decode_row', lambda uid, snapshot: snapshot.to_dict())
+    monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('stale native source invoked foreground notes'))
+    frames = [frame async for frame in summary.stream('synthetic', derived, token=token)]
+    assert len(frames) == 1 and frames[0].startswith('error:')
+    assert strict.rows[raw_path]['v3_pending'] is True
+    assert strict.rows[raw_path]['v3_pending_since'] == timestamp
+    assert leases.acquire('synthetic', 'summary-derived', firestore_client=strict)

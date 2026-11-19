@@ -1,6 +1,6 @@
 """Pure boundary and late-speech policy. No switch reads and no IO."""
 
-from utils.conversations.v3 import visibility
+from utils.conversations.v3 import policy, visibility
 from utils.conversations.v3.outline import SILENCE, playback_origin
 
 from copy import deepcopy
@@ -37,9 +37,27 @@ def _capped(lines, sections):
     return _capped(lines[:cut], []) + _capped(lines[cut:], [])
 
 
+def _apply_native_manual_end(window):
+    # The stop belongs to one exact transcript line, including after the model,
+    # cap, or preserved-window pass divides the group.
+    tail = window.get('_native_manual_tail')
+    legacy = window.get('_legacy_manual_end', window.get('manual_end', False) and not window.get('native_manual_end'))
+    native = not legacy and tail is not None and any(line is tail for line in window['lines'])
+    window['native_manual_end'] = native
+    window['manual_end'] = legacy or native
+    return window
+
+
 def windows(groups, outlines):
     result = []
     for group, entries in zip(groups, outlines):
+        legacy_manual_end = group.get(
+            'legacy_manual_end', group.get('manual_end', False) and not group.get('native_manual_end')
+        )
+        tail = group['lines'][-1]
+        native_tail = (
+            tail if group.get('native_manual_source') == tail['conversation_id'] and not legacy_manual_end else None
+        )
         for index, entry in enumerate(entries):
             begin = entry['first_line'] - 1
             end = entries[index + 1]['first_line'] - 1 if index + 1 < len(entries) else len(group['lines'])
@@ -49,12 +67,15 @@ def windows(groups, outlines):
             ]
             capped = _capped(lines, sections)
             for part_index, part in enumerate(capped):
-                candidate = {
-                    **entry,
-                    'lines': part,
-                    'manual_end': group.get('manual_end', False),
-                    'finished': group['finished'] or end < len(group['lines']) or part_index < len(capped) - 1,
-                }
+                candidate = _apply_native_manual_end(
+                    {
+                        **entry,
+                        'lines': part,
+                        '_legacy_manual_end': legacy_manual_end,
+                        '_native_manual_tail': native_tail,
+                        'finished': group['finished'] or end < len(group['lines']) or part_index < len(capped) - 1,
+                    }
+                )
                 # A model can undo a topic split, never a recorded silence boundary.
                 prior = result[-1] if result else None
                 if (
@@ -70,6 +91,9 @@ def windows(groups, outlines):
                 ):
                     prior['lines'].extend(part)
                     prior['finished'] = candidate['finished']
+                    if candidate['native_manual_end']:
+                        prior['_native_manual_tail'] = native_tail
+                        _apply_native_manual_end(prior)
                 else:
                     result.append(candidate)
     return result
@@ -142,21 +166,46 @@ def build(uid, window, recordings, existing=None):
     title = (
         (existing or {}).get('structured', {}).get('title') if (existing or {}).get('title_locked') else window['title']
     )
-    manual_end = bool(window.get('manual_end') or (existing or {}).get('manual_end'))
+    native_tail = window.get('_native_manual_tail') if window.get('native_manual_end') else None
+    native_binding = policy.native_manual_binding(recordings[native_tail['conversation_id']]) if native_tail else None
+    legacy_manual_end = (window.get('manual_end') and not window.get('native_manual_end')) or (
+        (existing or {}).get('manual_end') and not (existing or {}).get(policy.NATIVE_MANUAL_BINDING)
+    )
+    # A real legacy marker keeps its precedence. An existing native marker is
+    # retained only through the newly validated owner of the exact tail.
+    manual_end = bool(legacy_manual_end or native_binding)
+    recording_ids = list(dict.fromkeys(line['conversation_id'] for line in lines))
+    visibility_receipt = (existing or {}).get(policy.NATIVE_MANUAL_NOTES_VISIBILITY)
+    keeps_native_visibility = isinstance(visibility_receipt, dict) and visibility_receipt == (
+        policy.native_manual_notes_window(
+            {'id': cid, 'started_at': start, 'finished_at': end, 'v3_recording_ids': recording_ids},
+            visibility_receipt.get('recording_id'),
+        )
+    )
     outline_kind = window.get('outline_kind', window['kind'])
     kind, hidden, reason = visibility.project(
         outline_kind,
         recordings,
-        {line['conversation_id'] for line in lines},
+        recording_ids,
         words=sum(len(s.get('text', '').split()) for s in segments),
         finished=window['finished'],
-        manual_end=manual_end,
+        manual_end=manual_end or keeps_native_visibility,
     )
     row: dict[str, Any] = {
         **(existing or {}),
         'id': cid,
         'v3_derived': True,
         'manual_end': manual_end,
+        **(
+            {policy.NATIVE_MANUAL_BINDING: None if legacy_manual_end else native_binding}
+            if native_binding or policy.NATIVE_MANUAL_BINDING in (existing or {})
+            else {}
+        ),
+        **(
+            {policy.NATIVE_MANUAL_NOTES_VISIBILITY: visibility_receipt if keeps_native_visibility else None}
+            if policy.NATIVE_MANUAL_NOTES_VISIBILITY in (existing or {})
+            else {}
+        ),
         'created_at': start,
         'started_at': start,
         'finished_at': end,
@@ -208,7 +257,7 @@ def build(uid, window, recordings, existing=None):
             or (title and (not hidden or not window['finished']) and kind not in {'media', 'background'})
         ),
         'tile_state': 'writing' if window['finished'] else 'live',
-        'v3_recording_ids': list(dict.fromkeys(l['conversation_id'] for l in lines)),
+        'v3_recording_ids': recording_ids,
         'transcript_segments': segments,
         'recording_pieces': pieces,
         'audio_files': files,
@@ -230,7 +279,10 @@ def build(uid, window, recordings, existing=None):
         row['structured']['participants'] = [
             {'name': name, 'source': 'transcript'} for name in window.get('people') or []
         ]
-    if existing and segments != existing.get('transcript_segments'):
+    if existing and (
+        segments != existing.get('transcript_segments')
+        or row.get(policy.NATIVE_MANUAL_BINDING) != existing.get(policy.NATIVE_MANUAL_BINDING)
+    ):
         row['sync_content_revision'] = int(existing.get('sync_content_revision') or 0) + 1
     elif not existing:
         row['sync_content_revision'] = 1
@@ -300,8 +352,13 @@ def preserve_finished_windows(planned, existing, recordings=None):
                     },
                 )
                 target['lines'].append(line)
+                if line is window.get('_native_manual_tail'):
+                    target['_native_manual_tail'] = line
             else:
                 gaps.append(line)
         if gaps:
             fresh.append({**window, 'lines': gaps})
-    return sorted([*retained.values(), *fresh], key=lambda w: w['lines'][0]['start'])
+    return sorted(
+        (_apply_native_manual_end(window) for window in [*retained.values(), *fresh]),
+        key=lambda window: window['lines'][0]['start'],
+    )

@@ -110,7 +110,10 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
             queue.put_nowait(text)
 
     def emit(text):
-        loop.call_soon_threadsafe(deliver, text)
+        # A bound upload can reopen while the model runs. Publish its sections
+        # only after store_summary transactionally accepts the source.
+        if row.get(policy.NATIVE_MANUAL_BINDING) is None:
+            loop.call_soon_threadsafe(deliver, text)
 
     worker = None
     try:
@@ -127,6 +130,11 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
         row = decoded
         if row.get('recording') or row.get('is_locked'):
             yield 'error: {"detail":"Conversation not available"}\n\n'
+            return
+        if row.get(policy.NATIVE_MANUAL_BINDING) is not None and not await run_blocking(
+            db_executor, writers.admit_native_summary, uid, cid, token, snapshot.update_time
+        ):
+            yield 'error: {"detail":"Summary unavailable; poll conversation detail"}\n\n'
             return
         # run_blocking is awaited by a tracked task and never holds a DB worker
         # while waiting on a model. Request cancellation cannot authorize a write.

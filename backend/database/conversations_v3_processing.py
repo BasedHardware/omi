@@ -1,6 +1,8 @@
 """Conversation summary persistence and content-scoped retry fences."""
 
 from database import conversations_v3_leases as leases
+from database.conversations_v3_fence import permits_native_source, wake_repairs
+from utils.conversations import summary_delivery
 from utils.conversations.v3 import metrics
 
 import hashlib
@@ -13,6 +15,37 @@ from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.conversations.v3 import Conflict, policy
 
+_STALE_NATIVE_SOURCE = object()
+
+
+def admit_native_summary(uid, cid, token, revision, *, firestore_client=None):
+    """Check a foreground native source before paid work; persist any stale rearm."""
+    client = firestore_client or store.get_firestore_client()
+    ref = store.user_conversations(client, uid).document(cid)
+    held = leases.lease_ref(client, uid, 'summary-' + cid)
+
+    repairs = []
+
+    @firestore.transactional
+    def admit(tx):
+        repairs.clear()
+        snapshot = ref.get(transaction=tx)
+        lease = held.get(transaction=tx).to_dict() or {}
+        row = snapshot.to_dict() or {}
+        return bool(
+            snapshot.exists
+            and snapshot.update_time == revision
+            and lease.get('token') == token
+            and lease.get('until')
+            and lease['until'] > datetime.now(timezone.utc)
+            and row.get(policy.NATIVE_MANUAL_BINDING)
+            and permits_native_source(tx, client, uid, row, repairs=repairs)
+        )
+
+    result = admit(client.transaction())
+    wake_repairs(uid, repairs)
+    return result
+
 
 def store_summary(uid, cid, token, revision, structured, covers, *, firestore_client=None):
     client = firestore_client or store.get_firestore_client()
@@ -21,8 +54,11 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
         {'structured': structured}, uid, 'enhanced', allow_offload=False
     )
 
+    repairs = []
+
     @firestore.transactional
     def persist(tx):
+        repairs.clear()
         snapshot = ref.get(transaction=tx)
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
@@ -41,10 +77,15 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
             or lease['until'] <= datetime.now(timezone.utc)
         ):
             raise Conflict('summary_source_changed')
+        if not permits_native_source(tx, client, uid, current, repairs=repairs):
+            return _STALE_NATIVE_SOURCE
         if current.get('title_locked'):
             patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
             patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
         settled = current.get('v3_derived') and current.get('status') != 'in_progress'
+        visibility_receipt = (
+            policy.native_manual_notes_receipt(current) if settled and summary_delivery.present(structured) else None
+        )
         # On-open notes are a notes write too: a row whose background notes failed and the user then
         # opened owes the same single created delivery once it is visible and completed.
         armed = bool(
@@ -69,12 +110,17 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
                     else {}
                 ),
                 **({'v3_notes_written': True} if settled else {}),
+                **({policy.NATIVE_MANUAL_NOTES_VISIBILITY: visibility_receipt} if visibility_receipt else {}),
                 **({'v3_created_pending': True} if armed else {}),
             },
         )
         return armed
 
-    return persist(client.transaction())
+    result = persist(client.transaction())
+    wake_repairs(uid, repairs)
+    if result is _STALE_NATIVE_SOURCE:
+        raise Conflict('summary_source_changed')
+    return result
 
 
 def settle_processing(
@@ -88,8 +134,11 @@ def settle_processing(
     ref = store.user_conversations(client, uid).document(cid)
     held = leases.lease_ref(client, uid, 'summary-' + cid)
 
+    repairs = []
+
     @firestore.transactional
     def settle(tx):
+        repairs.clear()
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
         lease = held.get(transaction=tx).to_dict() or {}
@@ -97,6 +146,8 @@ def settle_processing(
             raise Conflict('processing_source_changed')
         if not row:
             return False
+        if not skipped and not row.get('deleted') and not permits_native_source(tx, client, uid, row, repairs=repairs):
+            return _STALE_NATIVE_SOURCE
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
             decoded = store.decode_row(uid, snapshot)
             if not content_hash or processing_hash(decoded) != content_hash:
@@ -125,7 +176,11 @@ def settle_processing(
         )
         return armed
 
-    return settle(client.transaction())
+    result = settle(client.transaction())
+    wake_repairs(uid, repairs)
+    if result is _STALE_NATIVE_SOURCE:
+        raise Conflict('processing_source_changed')
+    return result
 
 
 CREATED_CLAIM = timedelta(minutes=5)
@@ -217,6 +272,11 @@ def processing_hash(row):
                 'segments': (row or {}).get('transcript_segments') or [],
                 'manual_end': bool((row or {}).get('manual_end')),
                 'kind': (row or {}).get('kind') or 'conversation',
+                **(
+                    {policy.NATIVE_MANUAL_BINDING: row[policy.NATIVE_MANUAL_BINDING]}
+                    if row and row.get(policy.NATIVE_MANUAL_BINDING)
+                    else {}
+                ),
             },
             sort_keys=True,
             default=str,
@@ -230,8 +290,11 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
     held = leases.lease_ref(client, uid, 'summary-' + row['id'])
     fingerprint = processing_hash(row)
 
+    repairs = []
+
     @firestore.transactional
     def begin(tx):
+        repairs.clear()
         current = ref.get(transaction=tx).to_dict() or {}
         lease = held.get(transaction=tx).to_dict() or {}
         if lease.get('token') != token or lease.get('until', datetime.min.replace(tzinfo=timezone.utc)) <= datetime.now(
@@ -239,6 +302,12 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
         ):
             raise Conflict('lease_lost')
         if not current or current.get('deleted') or current.get('is_locked'):
+            return False
+        if (
+            policy.NATIVE_MANUAL_BINDING in row
+            and row.get(policy.NATIVE_MANUAL_BINDING) != current.get(policy.NATIVE_MANUAL_BINDING)
+            or not permits_native_source(tx, client, uid, current, repairs=repairs)
+        ):
             return False
         attempts = (
             current.get('v3_process_attempts', 0)
@@ -264,6 +333,7 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
         return True
 
     result = begin(client.transaction())
+    wake_repairs(uid, repairs)
     if result == 'failed':
         metrics.terminal_failure('attempts_exhausted')
     return result is True
@@ -285,8 +355,11 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
     ref = store.user_conversations(client, uid).document(cid)
     held = leases.lease_ref(client, uid, 'summary-' + cid)
 
+    repairs = []
+
     @firestore.transactional
     def fail(tx):
+        repairs.clear()
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
         lease = held.get(transaction=tx).to_dict() or {}
@@ -297,6 +370,8 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
         if row.get('is_locked'):
             tx.update(ref, {'v3_process_pending': False, 'tile_state': 'done', 'v3_process_failed': False})
             return False
+        if not permits_native_source(tx, client, uid, row, repairs=repairs):
+            return _STALE_NATIVE_SOURCE
         if row.get('sync_content_revision') != revision:
             if not content_hash or processing_hash(store.decode_row(uid, snapshot)) != content_hash:
                 raise Conflict('processing_source_changed')
@@ -304,6 +379,9 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
         return not row.get('v3_process_failed')
 
     changed = fail(client.transaction())
+    wake_repairs(uid, repairs)
+    if changed is _STALE_NATIVE_SOURCE:
+        raise Conflict('processing_source_changed')
     if changed:
         metrics.terminal_failure('processing')
     return changed

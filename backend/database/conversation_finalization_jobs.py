@@ -60,6 +60,7 @@ from utils.conversations.backfill_stats import same_timestamp_revision
 from utils.account_cutover.fence import background_job_should_skip_account
 from utils.conversations.terminal_relevance import stamp_terminal_decision
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, is_recovery_trigger
+from utils.conversations.v3.policy import NATIVE_MANUAL_STOP
 from utils.conversations.lifecycle_clocks import speech_clock
 from utils.conversations.recovery import (
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
@@ -1141,10 +1142,21 @@ def _complete_server_batch_capture_txn(
 
     terminal = {**current, 'status': 'completed'}
     stamp_terminal_decision(terminal, path='lifecycle_terminal')
+    # Persist intent without exposing a manual cut before the full native transcript.
+    manual_stop = (
+        {NATIVE_MANUAL_STOP: {'job_id': job_ref.id, 'revision': revision, 'finished_at': current['finished_at']}}
+        if (
+            current.get('recording') is True
+            and job.get('processing_trigger') == ProcessingTrigger.CLIENT_FINALIZE.value
+            and current.get('finished_at') is not None
+        )
+        else {}
+    )
     transaction.update(
         conversation_ref,
         {
             'status': 'completed',
+            **manual_stop,
             'relevance_decision': terminal['relevance_decision'],
             'home_transcription_pending_at': now,
             'home_transcription_deadline_at': now + timedelta(seconds=home_transcription_deadline_seconds()),
