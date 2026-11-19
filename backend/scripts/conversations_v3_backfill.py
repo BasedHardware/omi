@@ -229,7 +229,7 @@ def cmd_undo(args) -> int:
                 'donors': sum(1 for d in docs if not d.get('v3_derived')),
                 'derived_rows': sum(1 for d in docs if d.get('v3_derived')),
                 'groups': len(backfill.undo_groups(docs)),
-                # A lower bound: undo also keeps a group whose copy has only a deletion tombstone so far.
+                # A lower bound: it misses a delete whose claim release has not run yet (tombstone only).
                 'donors_deleted_by_owner_min': sum(
                     1 for d in docs if not d.get('v3_derived') and store.deleted_after_backfill(d)
                 ),

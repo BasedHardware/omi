@@ -907,7 +907,19 @@ def test_undo_groups_link_donors_and_copies_including_deleted_copies():
         {'id': 'c2', 'v3_derived': True, 'v3_recording_ids': ['d3']},
     ]
     groups = sorted(backfill.undo_groups(docs))
-    assert groups == [(['d1', 'd2'], ['c1', 'gone']), (['d3'], ['c2'])]
+    # 'gone' links d1's group but is not read: d1's post-run span already keeps the group.
+    assert groups == [(['d1', 'd2'], ['c1']), (['d3'], ['c2'])]
+
+
+def test_deleted_copy_ids_never_count_against_the_group_read_bound():
+    many = [{'conversation_id': f'gone{i}'} for i in range(400)]
+    docs = [
+        {'id': 'd1', 'claims': [{'conversation_id': 'c1'}], 'deleted_spans': many},
+        {'id': 'd2', 'v3_backfill_deleted_copies': ['gone0']},
+        {'id': 'c1', 'v3_derived': True, 'v3_recording_ids': ['d1']},
+    ]
+    # d2 joins d1 through a shared deleted copy; only the existing copy is read.
+    assert backfill.undo_groups(docs) == [(['d1', 'd2'], ['c1'])]
 
 
 def test_only_a_post_run_deleted_span_counts_as_the_owners_deletion():
@@ -971,6 +983,23 @@ def test_a_deletion_racing_undo_keeps_the_group_and_hands_owed_notes_to_live(str
         strict.rows[sibling]['v3_backfill_process_pending'] is False
         and strict.rows[sibling]['v3_process_pending'] is True
     )
+
+
+def test_a_kept_group_clears_the_live_notes_marker_of_a_deleted_copy(strict):
+    token = convert(strict)
+    strict.rows[('users', 'synthetic', 'deleted_conversations', 'c0')] = {'conversation_id': 'c0'}
+    strict.rows[COPY] = {**strict.rows[COPY], 'v3_backfill_process_pending': False, 'v3_process_pending': True}
+    assert store.undo_backfill_group('synthetic', token, ['r'], ['c0'], firestore_client=strict) == ('kept', 1, 0)
+    assert strict.rows[COPY]['v3_process_pending'] is False
+
+
+def test_undoing_an_undone_run_reports_the_record_and_changes_nothing(monkeypatch):
+    ledger = _undo_ledger(monkeypatch)
+    events = _undo_leases(monkeypatch)
+    ledger.run.update(status='undone_partial', undo={'groups_kept_deleted': 1, 'at': 'then'})
+    result = backfill.undo_run('u', RUN)
+    assert result == {'groups_kept_deleted': 1, 'outcome': 'undone_partial'}
+    assert ledger.run['status'] == 'undone_partial' and not events
 
 
 def test_undo_keeps_a_copy_a_live_pass_extended_with_live_capture(strict, monkeypatch):
@@ -1375,8 +1404,9 @@ def test_a_deleted_copy_fully_covered_by_another_claim_still_keeps_its_group(str
     store.release_claims('synthetic', {**strict.rows[COPY]}, firestore_client=strict)
     assert strict.rows[R]['v3_backfill_deleted_copies'] == ['c0']
     assert store.deleted_after_backfill(strict.rows[R])
+    # The donor's recorded deleted copy keeps the group; c0 itself is not read again.
     groups = backfill.undo_groups([{**strict.rows[R], 'id': 'r'}])
-    assert any('c0' in rows for _donors, rows in groups)
+    assert groups == [(['r'], ['c9'])]
 
 
 def test_an_owner_skipped_for_an_active_run_fails_the_exit_code(tmp_path, monkeypatch):

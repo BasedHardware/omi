@@ -228,8 +228,10 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --m
   after the run (the copy then holds live capture as well as donor lines) also stays as v3, counted
   as `groups_kept_live`/`donors_kept_live`, so undo never deletes live capture. The ledger
   records `groups_kept_deleted` and `donors_kept_deleted`; `undo --dry-run` prints the group count
-  and `donors_deleted_by_owner_min`, a lower bound (it sees deleted spans, not tombstone-only
-  deletes). A group whose reads (two, plus one per donor and three per copy) would exceed 500 is
+  and `donors_deleted_by_owner_min`, a lower bound (it counts deleted spans and deleted copies
+  recorded on donors, and misses only a delete whose claim release has not run yet). Undoing a run
+  already `undone` or `undone_partial` reports its recorded result and changes nothing. A group
+  that is both live-extended and owner-deleted counts as kept-deleted. A group whose reads (two, plus one per donor and three per copy) would exceed 500 is
   refused (`undo_group_too_large`); partitions keep groups far below that. Undo a re-derive by undoing the original run;
   `undo` on a re-derive run id says so and exits 1. Not undone: outline cache entries, speaker-resolution and media-boundary
   evidence that the notes path wrote, and gateway spend.

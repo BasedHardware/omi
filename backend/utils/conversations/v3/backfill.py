@@ -435,8 +435,10 @@ def _undo_refused(uid, run_id, reason, firestore_client, earlier=None):
 def undo_groups(docs):
     """Split a run's documents into connected groups: donors and copies linked by claims.
 
-    Copy ids a donor still names (claims, post-run deleted spans) join the group even when the copy
-    document is gone, so its deletion tombstone is checked with the group.
+    A claimed copy id joins the group even when the copy document is gone, so its deletion tombstone
+    is checked with the group. A copy a donor names only by a post-run deleted span or a recorded
+    deleted copy still links the group's donors, but is not read: that donor already keeps the group
+    (deleted_after_backfill), so such ids never count against the group's read bound.
     """
     parent = {}
 
@@ -460,12 +462,13 @@ def undo_groups(docs):
         else:
             donors.add(doc['id'])
             prior = {s.get('conversation_id') for s in (doc.get('v3_backfill_prior') or {}).get('deleted_spans') or []}
-            linked = {c.get('conversation_id') for c in doc.get('claims') or []}
-            linked |= {s.get('conversation_id') for s in doc.get('deleted_spans') or []} - prior
-            linked |= set(doc.get('v3_backfill_deleted_copies') or [])
-            for cid in linked - {None}:
-                rows.add(cid)
+            claimed = {c.get('conversation_id') for c in doc.get('claims') or []} - {None}
+            deleted = {s.get('conversation_id') for s in doc.get('deleted_spans') or []} - prior
+            deleted |= set(doc.get('v3_backfill_deleted_copies') or [])
+            rows |= claimed
+            for cid in (claimed | deleted) - {None}:
                 union(doc['id'], cid)
+    rows |= {doc['id'] for doc in docs if doc.get('v3_derived')}
     groups = {}
     for node in donors | rows:
         group = groups.setdefault(find(node), ([], []))
@@ -488,6 +491,9 @@ def undo_run(uid, run_id, *, firestore_client=None):
     if run.get('mode') == 'rederive':
         # A re-derive keeps each row's original run stamp; undo that run to remove its rows.
         return {'outcome': 'undo_the_original_run'}
+    if run.get('status') in ('undone', 'undone_partial'):
+        # Already undone: report the recorded result instead of re-reading old removals as new races.
+        return {**{k: v for k, v in (run.get('undo') or {}).items() if k != 'at'}, 'outcome': run['status']}
     # 'undoing' is written first so in-flight drains stop (keep_going); a refusal records why.
     runs.update_run(uid, run_id, status='undoing', firestore_client=firestore_client)
     held = []

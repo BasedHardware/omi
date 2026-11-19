@@ -913,6 +913,8 @@ def undo_backfill_group(uid, token, donor_ids, row_ids, *, run_id=None, firestor
         group = set(donor_ids)
         # A live pass after the run carries the run tag onto a window that also holds live recordings
         # (service.reconcile): deleting that copy would delete live capture, so the group stays v3.
+        # Any recording outside the group counts, a donor of another run included. A group that is
+        # also an owner deletion is reported as 'kept' (the deletion reason wins).
         live = any(
             rid not in group
             for _, snapshot in rows
