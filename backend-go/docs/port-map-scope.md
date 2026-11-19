@@ -1,7 +1,8 @@
 # Port map scope
 
 The map covers runtime Python sources that can change the Go port's behavior.
-It includes the runtime sources cited by the finalization and batch contracts,
+It includes the runtime Python sources cited by the
+[finalization](contracts/finalization.md) and [batch](contracts/batch.md) contracts,
 the family policy and implementation those entry points import, and selected
 cross-family boundaries such as record custody during finalization. A file can
 appear in both families. A match asks for a parity review, which can conclude
@@ -26,6 +27,7 @@ reasons.
 | `backend/utils/other/{audio_opus,local_storage,raw_audio,storage}.py` | Shared codec and storage implementations. Batch and finalization's custody, source validation, and deletion decisions are mapped. |
 | `backend/utils/sync/{files,legacy_dark,merge_audio,playback,playback_build}.py` | Legacy sync, file serving, and playback internals. Sync's batch-facing upload limits, status, custody, and recovery decisions are mapped. |
 | `backend/testing/` and `backend/tests/` | Replay harnesses and tests exercise runtime policy. Their edits do not by themselves change that policy. |
+| `backend/charts/batch-pipeline-worker/values.yaml` | The batch contract cites the deployed default for shard spread. This map follows Python runtime sources, including the corresponding default in `backend/config/batch_pipeline.py`. |
 
 Update the map when moving a covered module or extracting family behavior into
 a new file. A new path belongs in every family whose port needs to review it.

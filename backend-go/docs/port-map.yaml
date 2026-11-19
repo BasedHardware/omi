@@ -198,6 +198,7 @@ batch:
   - backend/config/batch_pipeline.py
   - backend/config/policy/__init__.py
   - backend/config/policy/batch.py
+  - backend/config/policy/kill_switches.py
   - backend/config/server_batch.py
   - backend/database/batch_pipeline_allowance_hold.py
   - backend/database/batch_pipeline_artifact_missing.py

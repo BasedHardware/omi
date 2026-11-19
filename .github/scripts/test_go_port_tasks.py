@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,13 @@ class PortTaskTests(unittest.TestCase):
             for path in paths:
                 with self.subTest(family=family, path=path):
                     self.assertTrue((root / path).is_file(), f"missing mapped Python file: {path}")
+
+    def test_batch_map_covers_contract_runtime_sources(self):
+        contract = PORT_MAP.with_name("contracts") / "batch.md"
+        citations = re.findall(r"backend/[\w./-]+\.py", contract.read_text(encoding="utf-8"))
+        runtime_paths = {path for path in citations if not path.startswith(("backend/tests/", "backend/testing/"))}
+        self.assertTrue(runtime_paths, "no runtime Python sources found in the batch contract")
+        self.assertEqual(sorted(runtime_paths.difference(self.families["batch"])), [])
 
     def test_unmapped_paths_produce_no_tasks(self):
         paths = changed_paths(
