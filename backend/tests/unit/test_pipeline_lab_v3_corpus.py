@@ -131,7 +131,9 @@ def test_baseline_view_compares_home_visibility_and_kind():
     )
     view = baseline_view([rep], [prod])
     entry = view['conversations'][0]
-    assert entry['match'] == 'id' and {'hidden', 'kind'} <= set(entry['changed_fields'])
+    # v3 visibility is the ``home`` field (the outline kind shows up as the hidden reason when both are hidden)
+    assert entry['match'] == 'id' and 'home' in entry['substantive_fields']
+    assert 'home_added' in view['groups'][0]['tags']
     classic = {'id': 'c', 'started_at': '2026-03-14T09:00:00+00:00', 'finished_at': '2026-03-14T09:10:00+00:00'}
     assert baseline_view([dict(classic)], [dict(classic)])['conversations'][0]['status'] == 'same'
 

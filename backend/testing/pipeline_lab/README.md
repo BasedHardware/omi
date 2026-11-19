@@ -58,7 +58,7 @@ stt_records/<record_id>/                          record-stt ledger.json, vendor
 runs/<run_id>/run.json                            RunRecord (ref, commit, backend_tree, overlay, stages, extra.stt)
 runs/<run_id>/conversations/<id>.json             ConversationRecord (+ replay block)
 runs/<run_id>/day.json                            RunDay: daily_summary, goals, memory_delta, notifications, chat_index, recap
-runs/<run_id>/baseline.json                       pairs, status chips and changed fields (chain baseline/)
+runs/<run_id>/baseline.json                       version 2: pairs, groups, field classes, digest (baseline/compare.py)
 runs/<run_id>/baseline/conversations/<id>.json    production twin in the replay's shape
 runs/<run_id>/chain.json, chain_entry.json        per-conversation chain status; the chain process summary
 runs/<run_id>/ingest/<id>.json, index.json        replayed transcripts (transcribe stage)
@@ -100,7 +100,8 @@ state at the day start (`open_id`, outline cache).
 
 Comparison: a replay conversation lists every production conversation that shares its recordings
 (`baseline_ids`). A production row that pairs with no replay conversation but is listed there has status
-`merged` (`merged_into` the replay id), not `missing`; the inspector shows it as merged on the timeline.
+`merged` (`merged_into` the replay id), not `missing`. The inspector shows pairing groups (`baseline/compare.py`
+`strong_links`): a merge, split or regroup renders as one row group.
 
 **Seeding.** The start state is written once per run before the first arrival. Conversations are
 history, so each row is encoded with the product's harness seam (`encode_conversation_for_write`, the
