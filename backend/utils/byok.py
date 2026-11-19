@@ -276,13 +276,13 @@ def _validated_byok_keys(uid: str, request_keys: Dict[str, str]) -> tuple[Dict[s
 
     import database.users as users_db
 
-    state = get_cached_byok_state(uid)
+    raw_state: Any = get_cached_byok_state(uid)
 
     # Replicate is_byok_active logic on the already-fetched state to avoid a
     # second Firestore read.
     is_active = False
-    if isinstance(state, dict) and state.get('active'):
-        last_seen = _coerce_utc_datetime(state.get('last_seen_at'))
+    if isinstance(raw_state, dict) and raw_state.get('active'):
+        last_seen = _coerce_utc_datetime(raw_state.get('last_seen_at'))
         if last_seen:
             age = (datetime.now(timezone.utc) - last_seen).total_seconds()
             is_active = age <= users_db.BYOK_HEARTBEAT_TTL_SECONDS
@@ -294,7 +294,7 @@ def _validated_byok_keys(uid: str, request_keys: Dict[str, str]) -> tuple[Dict[s
 
     # BYOK-active user with headers present — validate every enrolled
     # provider fingerprint.
-    stored_fingerprints = state.get('fingerprints') if isinstance(state, dict) else {}
+    stored_fingerprints = raw_state.get('fingerprints') if isinstance(raw_state, dict) else {}
     if not isinstance(stored_fingerprints, dict):
         stored_fingerprints = {}
 

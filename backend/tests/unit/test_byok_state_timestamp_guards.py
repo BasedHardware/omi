@@ -112,7 +112,9 @@ def test_validated_byok_keys_guards_none_and_timestamps():
         },
     }
 
-    with patch.object(byok_util, 'get_cached_byok_state', return_value=state_payload), patch.object(byok_util.logger, 'warning') as mock_warn:
+    with patch.object(byok_util, 'get_cached_byok_state', return_value=state_payload), patch.object(
+        byok_util.logger, 'warning'
+    ) as mock_warn:
         validated, err = byok_util._validated_byok_keys('u1', {'anthropic': key_val})
         assert err is None
         assert validated == {'anthropic': key_val}
