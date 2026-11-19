@@ -1,6 +1,7 @@
 """The deletion barrier retries the same receipt and counts unresolved generations."""
 
 from datetime import datetime, timedelta, timezone
+import errno
 import pytest
 
 from database import go_queue_erase as receipts
@@ -84,7 +85,8 @@ def test_older_receipt_is_reused_under_new_claim(monkeypatch):
 @pytest.mark.parametrize(
     ('failure', 'during_tls', 'expected'),
     [
-        (ConnectionRefusedError(), False, erase.EraseUnavailable),
+        (ConnectionRefusedError(errno.ECONNREFUSED, 'refused'), False, erase.EraseUnavailable),
+        (PermissionError(errno.EACCES, 'forbidden'), False, erase.EraseRejected),
         (erase.ssl.SSLCertVerificationError('bad certificate'), True, erase.EraseRejected),
         (TimeoutError(), True, erase.EraseRejected),
     ],
@@ -138,3 +140,35 @@ async def test_recovery_closes_connection_before_cancelling_stalled_sql(monkeypa
 
     assert started.is_set()
     connection.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_recovery_never_issues_commit_after_expiry(monkeypatch):
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+
+    import psycopg
+
+    connection = MagicMock()
+    connection.set_isolation_level = AsyncMock()
+    connection.close = AsyncMock()
+    connection.commit = AsyncMock()
+    loop = asyncio.get_running_loop()
+    start = loop.time()
+
+    async def finish_after_deadline(*args):
+        monkeypatch.setattr(loop, 'time', lambda: start + 15)
+
+    connection.execute = finish_after_deadline
+    monkeypatch.setattr(psycopg.AsyncConnection, 'connect', AsyncMock(return_value=connection))
+
+    try:
+        with pytest.raises(erase.EraseUnavailable):
+            await erase._recover_erase(
+                'test-only', 'queue', 'tenant', datetime.now(timezone.utc) + timedelta(seconds=10)
+            )
+    finally:
+        monkeypatch.undo()
+
+    connection.commit.assert_not_awaited()
+    connection.close.assert_awaited_once()

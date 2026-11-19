@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Callable
+import errno
 import http.client
 import json
 import socket
@@ -10,6 +11,7 @@ from datetime import datetime, timezone
 import logging
 import os
 from functools import partial
+from typing import NoReturn
 from urllib.parse import urlsplit
 
 from database import go_queue_erase as receipt
@@ -43,6 +45,27 @@ def _oidc_token(audience: str) -> str:
     return token
 
 
+# Only availability failures may select the separate recovery credential.
+_NETWORK_AVAILABILITY_ERRORS = {
+    errno.ECONNABORTED,
+    errno.ECONNREFUSED,
+    errno.ECONNRESET,
+    errno.EHOSTDOWN,
+    errno.EHOSTUNREACH,
+    errno.ENETDOWN,
+    errno.ENETRESET,
+    errno.ENETUNREACH,
+    errno.EPIPE,
+    errno.ETIMEDOUT,
+}
+
+
+def _raise_transport_error(error: OSError) -> NoReturn:
+    if isinstance(error, TimeoutError) or error.errno in _NETWORK_AVAILABILITY_ERRORS:
+        raise EraseUnavailable('Go queue erase network unavailable') from None
+    raise EraseRejected('Go queue erase network operation rejected') from None
+
+
 def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
     endpoint = os.getenv('GO_QUEUE_ERASE_URL', '')
     parsed = urlsplit(endpoint)
@@ -69,8 +92,8 @@ def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
         if error.errno != socket.EAI_AGAIN:
             raise EraseRejected('invalid Go queue erase host') from None
         raise EraseUnavailable('Go queue erase host temporarily unavailable') from None
-    except OSError:
-        raise EraseUnavailable('Go queue erase TCP connection unavailable') from None
+    except OSError as error:
+        _raise_transport_error(error)
     with raw:
         try:
             secured = ssl.create_default_context().wrap_socket(raw, server_hostname=parsed.hostname)
@@ -92,8 +115,8 @@ def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
                     body = response.read(2049) if status == 200 else b''
             except ssl.SSLError:
                 raise EraseRejected('Go queue erase TLS session failed') from None
-            except OSError:
-                raise EraseUnavailable('Go queue erase HTTPS request unavailable') from None
+            except OSError as error:
+                _raise_transport_error(error)
             except http.client.HTTPException:
                 raise EraseRejected('invalid Go queue erase HTTP response') from None
             finally:
@@ -131,12 +154,14 @@ async def _recover_erase(dsn: str, schema: str, uid: str, expires: datetime) -> 
         async def commit_erase() -> None:
             await connection.set_isolation_level(psycopg.IsolationLevel.READ_COMMITTED)
             await connection.execute(sql.SQL('SELECT {}.queue_erase_tenant(%s)').format(sql.Identifier(schema)), (uid,))
+            if loop.time() >= deadline:
+                raise TimeoutError
             await connection.commit()
 
         operation = asyncio.create_task(commit_erase())
         try:
             done, _ = await asyncio.wait({operation}, timeout=max(0, deadline - loop.time()))
-            if not done:
+            if not done or loop.time() >= deadline:
                 raise TimeoutError
             operation.result()
         finally:
