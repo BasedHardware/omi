@@ -9079,7 +9079,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'See salvestis on üles laaditud, kuid Omi loob veel vestlust. Kui kustutad selle nüüd ja töötlemine ebaõnnestub, ei saa seda taastada. Kas kustutada ikkagi?';
+      'See salvestis on juba üles laaditud ja Omi töötleb seda. Siin kustutamine eemaldab telefoni koopia. Kui töötlemine ebaõnnestub, ei saa Omi sellest telefonist uuesti proovida.';
 
   @override
   String get syncCardAllBackedUp => 'Kõik salvestused sünkroonitud';
@@ -15428,6 +15428,11 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Värskendust ei paigaldatud. Sinu ripats töötab edasi praeguse püsivaraga ($version). Võta värskenduse kordamise asemel ühendust toega.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15562,4 +15567,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Tagasi avalehele';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Kokkuvõte, kui see vestlus lõpeb';
 }

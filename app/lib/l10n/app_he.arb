@@ -10342,7 +10342,7 @@
     "noRecordingsYet": "אין הקלטות עדיין",
     "syncInProgress": "מתבצע סנכרון",
     "deleteWhileProcessingTitle": "עדיין בעיבוד",
-    "deleteWhileProcessingMessage": "ההקלטה הזו הועלתה אך Omi עדיין יוצר את השיחה. אם תמחק אותה עכשיו והעיבוד ייכשל, לא יהיה ניתן לשחזר אותה. למחוק בכל זאת?",
+    "deleteWhileProcessingMessage": "ההקלטה הזו כבר הועלתה ו-Omi מעבד אותה. מחיקה כאן מסירה את העותק שבטלפון. אם העיבוד ייכשל, Omi לא יוכל לנסות שוב מהטלפון הזה.",
     "syncCardAllBackedUp": "כל ההקלטות סונכרנו",
     "syncCardReadyCount": "{count, plural, one{הקלטה אחת מוכנה לסנכרון} two{2 הקלטות מוכנות לסנכרון} many{{count} הקלטות מוכנות לסנכרון} other{{count} הקלטות מוכנות לסנכרון}}",
     "syncCardProcessing": "בעיבוד ב-Omi…",
@@ -12207,6 +12207,7 @@
     "hasLinkedTasksLabel": "כולל משימות מקושרות",
     "hasTasksFilter": "עם משימות",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "העדכון לא הותקן. התליון שלך ממשיך לעבוד עם הקושחה הנוכחית ({version}). במקום לנסות שוב את העדכון, פנה לתמיכה.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -12246,5 +12247,6 @@
     "onTheWayServerWork": "עבודה שדווחה מהשרת",
     "finishNothingToProcess": "עדיין אין מה לעבד.",
     "finishStillProcessing": "עדיין בעיבוד. זה יופיע במסך הבית.",
-    "finishBackToHome": "חזרה למסך הבית"
+    "finishBackToHome": "חזרה למסך הבית",
+    "conversationSummaryWhenItEnds": "סיכום כשהשיחה הזו תסתיים"
 }

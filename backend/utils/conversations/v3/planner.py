@@ -37,9 +37,33 @@ def _capped(lines, sections):
     return _capped(lines[:cut], []) + _capped(lines[cut:], [])
 
 
+def _as_sections(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    first = entries[0]
+    # Participating speech determines the card when it shares a stretch with passive audio.
+    priority = {'conversation': 0, 'voice_work': 1}
+    primary = min(entries, key=lambda entry: priority.get(entry['kind'], 2))
+    sections = []
+    for entry in entries:
+        if entry is not first or entry is not primary:
+            sections.append({'first_line': entry['first_line'], 'title': entry['title']})
+        sections.extend(entry.get('sections') or [])
+    return [
+        {
+            **primary,
+            'first_line': first['first_line'],
+            'line': primary.get('line') or next((entry['line'] for entry in entries if entry.get('line')), ''),
+            'resumes_previous': first.get('resumes_previous', False),
+            'people': list(dict.fromkeys(name for entry in entries for name in entry.get('people') or [])),
+            'sections': sections,
+        }
+    ]
+
+
 def windows(groups, outlines):
     result = []
     for group, entries in zip(groups, outlines):
+        if len(entries) > 1 and (group.get('manual_end') or group.get('after_manual_end')):
+            entries = _as_sections(entries)
         for index, entry in enumerate(entries):
             begin = entry['first_line'] - 1
             end = entries[index + 1]['first_line'] - 1 if index + 1 < len(entries) else len(group['lines'])
@@ -52,7 +76,10 @@ def windows(groups, outlines):
                 candidate = {
                     **entry,
                     'lines': part,
-                    'manual_end': group.get('manual_end', False),
+                    'manual_end': bool(
+                        group.get('manual_end') and end == len(group['lines']) and part_index == len(capped) - 1
+                    ),
+                    '_keep_unmatched_together': bool(group.get('manual_end') or group.get('after_manual_end')),
                     'finished': group['finished'] or end < len(group['lines']) or part_index < len(capped) - 1,
                 }
                 # A model can undo a topic split, never a recorded silence boundary.
@@ -70,12 +97,27 @@ def windows(groups, outlines):
                 ):
                     prior['lines'].extend(part)
                     prior['finished'] = candidate['finished']
+                    prior['manual_end'] = candidate['manual_end']
                 else:
                     result.append(candidate)
     return result
 
 
-def build(uid, window, recordings, existing=None):
+def _unowned_spans(start, end, occupied):
+    cursor = start
+    for left, right in sorted(occupied):
+        if left >= end:
+            break
+        if right <= cursor:
+            continue
+        if cursor < left:
+            yield cursor, left
+        cursor = max(cursor, right)
+    if cursor < end:
+        yield cursor, end
+
+
+def build(uid, window, recordings, existing=None, *, allocated=None):
     lines = window['lines']
     start, end = lines[0]['start'], max(line['end'] for line in lines)
     if existing and existing.get('status') != 'in_progress':
@@ -87,17 +129,36 @@ def build(uid, window, recordings, existing=None):
         segment = deepcopy(line['segment'])
         segment.update(start=(line['start'] - start).total_seconds(), end=(line['end'] - start).total_seconds())
         segments.append(segment)
-    pieces, files = [], []
+    pieces, files, claims = [], [], {}
+    published = window.get('_published', {})
+    retained = existing and existing.get('status') != 'in_progress'
     for rid in dict.fromkeys(line['conversation_id'] for line in lines):
         recording = recordings[rid]
         owned = [line for line in lines if line['conversation_id'] == rid]
         left, right = min(l['start'] for l in owned), max(l['end'] for l in owned)
+        occupied = published.get(rid, {})
+        held = [(c['start'], c['end']) for c in recording.get('claims') or [] if c['conversation_id'] == cid]
+        if retained and held:
+            spans = sorted(set(held))
+        else:
+            blocked_claims = [*occupied.get('claims', ()), *(allocated or {}).get(rid, ())]
+            spans = list(_unowned_spans(left, right, blocked_claims))
+            if left == right and not any(a <= left < b for a, b in blocked_claims):
+                spans = [(left, right)]
+        claims[rid] = [{'start': a, 'end': b} for a, b in spans]
         for af in recording.get('audio_files') or []:
             origin = playback_origin(af, recording)
             duration = float(af.get('duration') or 0)
-            a, b = max(0.0, (left - origin).total_seconds()), min(duration, (right - origin).total_seconds())
-            if b > a:
-                pieces.append({'recording_id': rid, 'audio_file_id': af['id'], 'start': a, 'end': b})
+            blocked = occupied.get('files', {}).get(af['id'], ())
+            file_pieces = []
+            for start_at, end_at in spans:
+                a = max(0.0, (max(left, start_at) - origin).total_seconds())
+                b = min(duration, (min(right, end_at) - origin).total_seconds())
+                file_pieces.extend(_unowned_spans(a, b, blocked))
+            if file_pieces:
+                pieces.extend(
+                    {'recording_id': rid, 'audio_file_id': af['id'], 'start': a, 'end': b} for a, b in file_pieces
+                )
                 files.append(
                     {
                         **af,
@@ -106,7 +167,7 @@ def build(uid, window, recordings, existing=None):
                         'recording_file_id': af['id'],
                     }
                 )
-    if existing and existing.get('status') != 'in_progress':
+    if existing is not None and retained:
         # Finished copies own user edits and mixed-source merge speech. Append
         # new recorded lines rather than rebuilding away those edits/windows.
         old_segments = deepcopy(existing.get('transcript_segments') or [])
@@ -237,22 +298,39 @@ def build(uid, window, recordings, existing=None):
     row['v3_recording_ids'] = list(
         dict.fromkeys([*(existing or {}).get('v3_recording_ids', []), *row['v3_recording_ids']])
     )
-    row['_v3_claims'] = {}
-    for rid in row['v3_recording_ids']:
-        held = [c for c in recordings.get(rid, {}).get('claims') or [] if c['conversation_id'] == cid]
-        if existing and existing.get('status') != 'in_progress' and held:
-            # Identical spans are one claim; copies left by an earlier duplicate plan collapse here.
-            row['_v3_claims'][rid] = list(
-                {(c['start'], c['end']): {'start': c['start'], 'end': c['end']} for c in held}.values()
-            )
-        else:
-            owned = [line for line in lines if line['conversation_id'] == rid]
-            if owned:
-                row['_v3_claims'][rid] = [
-                    {'start': min(l['start'] for l in owned), 'end': max(l['end'] for l in owned)}
-                ]
+    row['_v3_claims'] = claims
+    if retained:
+        for rid in row['v3_recording_ids']:
+            if rid not in claims:
+                held = {
+                    (c['start'], c['end'])
+                    for c in recordings.get(rid, {}).get('claims') or []
+                    if c['conversation_id'] == cid
+                }
+                if held:
+                    claims[rid] = [{'start': a, 'end': b} for a, b in sorted(held)]
     row.pop('updated_at', None)
     return row
+
+
+def _contains_line(row, line, spans):
+    inside_window = row['started_at'] <= line['start'] and line['end'] <= row['finished_at']
+    if not inside_window:
+        return False
+    if spans is None or any(a <= line['start'] and line['end'] <= b for a, b in spans):
+        return True
+    # A previous pass may have published this segment with a clipped audio claim.
+    # Its original timing and id still identify the segment on retry.
+    segment_id = line['segment'].get('id')
+    if not any(a < line['end'] and line['start'] < b for a, b in spans):
+        return False
+    start = (line['start'] - row['started_at']).total_seconds()
+    end = (line['end'] - row['started_at']).total_seconds()
+    return any(
+        (s.get('id'), s.get('start'), s.get('end')) == (segment_id, start, end)
+        and (segment_id is not None or s.get('text') == line['segment'].get('text'))
+        for s in row.get('transcript_segments') or []
+    )
 
 
 def preserve_finished_windows(planned, existing, recordings=None):
@@ -262,30 +340,38 @@ def preserve_finished_windows(planned, existing, recordings=None):
         for r in existing.values()
         if r.get('status') != 'in_progress' and r.get('started_at') and r.get('finished_at')
     ]
+    protected = {r['id'] for r in finished}
+    published_ids = set()
+    claims_by_recording = {}
+    published = {}
+    for rid, recording in (recordings or {}).items():
+        if recording.get('claims') is None:
+            continue
+        indexed = claims_by_recording.setdefault(rid, {})
+        for claim in recording['claims']:
+            if claim['conversation_id'] in protected:
+                span = (claim['start'], claim['end'])
+                indexed.setdefault(claim['conversation_id'], []).append(span)
+                published.setdefault(rid, {}).setdefault('claims', []).append(span)
+                published_ids.add(claim['conversation_id'])
+    for row in finished:
+        for p in row.get('recording_pieces') or []:
+            published_ids.add(row['id'])
+            files = published.setdefault(p['recording_id'], {}).setdefault('files', {})
+            files.setdefault(p['audio_file_id'], []).append((p['start'], p['end']))
     retained, fresh = {}, []
+    fresh_metadata = {'_published': published, '_published_ids': published_ids}
     for window in planned:
         gaps = []
         for line in window['lines']:
-            claims = (recordings or {}).get(line['conversation_id'], {}).get('claims')
+            claims = claims_by_recording.get(line['conversation_id'])
             owner = next(
-                (
-                    r
-                    for r in finished
-                    if r['started_at'] <= line['start']
-                    and line['end'] <= r['finished_at']
-                    and (
-                        claims is None
-                        or any(
-                            c['conversation_id'] == r['id'] and c['start'] <= line['start'] and line['end'] <= c['end']
-                            for c in claims
-                        )
-                    )
-                ),
+                (r for r in finished if _contains_line(r, line, None if claims is None else claims.get(r['id'], ()))),
                 None,
             )
             if owner:
-                if gaps:
-                    fresh.append({**window, 'lines': gaps})
+                if gaps and not window.get('_keep_unmatched_together'):
+                    fresh.append({**window, **fresh_metadata, 'lines': gaps, 'manual_end': False})
                     gaps = []
                 target = retained.setdefault(
                     owner['id'],
@@ -293,6 +379,7 @@ def preserve_finished_windows(planned, existing, recordings=None):
                         **window,
                         'lines': [],
                         'finished': True,
+                        'manual_end': False,
                         'title': owner.get('structured', {}).get('title', ''),
                         'kind': owner.get('outline_kind') or owner.get('kind', 'conversation'),
                         'emoji': owner.get('structured', {}).get('emoji', '💬'),
@@ -300,8 +387,17 @@ def preserve_finished_windows(planned, existing, recordings=None):
                     },
                 )
                 target['lines'].append(line)
+                if line is window['lines'][-1] and window.get('manual_end'):
+                    target['manual_end'] = True
             else:
                 gaps.append(line)
         if gaps:
-            fresh.append({**window, 'lines': gaps})
+            fresh.append(
+                {
+                    **window,
+                    **fresh_metadata,
+                    'lines': gaps,
+                    'manual_end': bool(window.get('manual_end') and gaps[-1] is window['lines'][-1]),
+                }
+            )
     return sorted([*retained.values(), *fresh], key=lambda w: w['lines'][0]['start'])

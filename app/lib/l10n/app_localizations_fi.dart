@@ -9085,7 +9085,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Tämä tallenne on ladattu, mutta Omi luo yhä keskustelua. Jos poistat sen nyt ja käsittely epäonnistuu, sitä ei voi palauttaa. Poistetaanko silti?';
+      'Tämä tallenne on jo lähetetty, ja Omi käsittelee sitä. Poistaminen tässä poistaa puhelimen kopion. Jos käsittely epäonnistuu, Omi ei voi yrittää uudelleen tästä puhelimesta.';
 
   @override
   String get syncCardAllBackedUp => 'Kaikki tallenteet synkronoitu';
@@ -15440,6 +15440,11 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Päivitys ei asentunut. Riipuksesi toimii edelleen nykyisellä laiteohjelmistolla ($version). Ota yhteyttä tukeen sen sijaan, että yrität päivitystä uudelleen.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15574,4 +15579,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Takaisin kotiin';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Yhteenveto, kun tämä keskustelu päättyy';
 }

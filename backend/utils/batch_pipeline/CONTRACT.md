@@ -196,7 +196,7 @@ maintenance (`utils/batch_pipeline/serving.py:start_serving_from_env.run`).
 | `batch:ready` | `J:Scheduler.enqueue_in_transaction`, `J:Scheduler.requeue_quarantined_in_transaction` | `J:Scheduler._pull_shard.commit` | none | T | T | No held-specific switch | Existing queue/ownership fences |
 | `batch:leased` | `J:Scheduler._pull_shard.commit` | `J:Scheduler.complete`, `J:Scheduler.recover` | `lease_until` | T | T | No held-specific switch | Token-fenced lease expiry |
 | `batch:retry` | `utils/batch_pipeline/scheduler.py:_defer`, `J:Scheduler.defer` | `J:Scheduler.recover`, then `J:Scheduler._pull_shard.commit` | `available_at` retry schedule; no total dwell deadline | T | T | No held-specific switch | Retain attempts and custody |
-| `batch:allowance_held` | `database/batch_pipeline_allowance_hold.py:park` via scheduler/migration | `utils/batch_pipeline/allowance_hold.py:AllowanceHolds.tick`, then normal admission | none; no expiry of held recording or obligation | `omi_batch_allowance_held_units` | Separate policy stock, never a late-work alarm | `BATCH_ALLOWANCE_PARK_ENABLED` | Off returns retained rows to legacy retry gradually; keep a new controller until drained. Effective plan/grant or usage-period changes trigger owner release. |
+| `batch:allowance_held` | `database/batch_pipeline_allowance_hold.py:park` via sync intake, scheduler or migration | `utils/batch_pipeline/allowance_hold.py:AllowanceHolds.tick`, then normal admission | none; no expiry of held recording or obligation | `omi_batch_allowance_held_units` | Separate policy stock, never a late-work alarm | `BATCH_ALLOWANCE_PARK_ENABLED`, with `BATCH_ALLOWANCE_INTAKE_PARK_ENABLED` controlling new intake holds | Intake off keeps worker parking and release active. Parking off returns retained rows to legacy retry gradually. Keep a parking-aware controller until drained. Effective plan/grant or usage-period changes trigger owner release. |
 | `batch:result_ready` | `J:Scheduler.complete`, `R:RecoveryStore.settle`, `V:ProviderSttStore.settle` | `M:OrderedMerge.commit_next` | none | T | T | No held-specific switch | Retain result, ordered merge |
 | `batch:vendor_held` | `V:ProviderSttStore.hold` | `V:ProviderSttStore.redrive` via `V:ProviderSttStage._held` | `vendor_hold.redrive_at` retry schedule | T; `omi_batch_pipeline_vendor_held_oldest_age_seconds` | T | `BATCH_VENDOR_HELD_REDRIVE_ENABLED` | False parks holds; rollback past vendor failover requires route-table removal and drain (see provider module); never put provider work on GPU ring |
 | `batch:quarantined` | `Q:quarantine_job`; provider `V:ProviderSttStore.settle`, `V:ProviderSttStore.terminal` | `R:RecoveryStore.prepare/start/settle`; dormant GPU expiry `R:expire_held_in_transaction` via `H:HeldDeadLetter.tick` | `held_deadline_at` for enabled GPU path; provider entry paths remain unstamped | T | T | `BATCH_HELD_DEAD_LETTER_ENABLED` | False stops new stamps/automatic GPU maintenance; manual requeue survives |
@@ -225,9 +225,9 @@ repeatable disagreement rather than one transient read, and raises the typed
 `R:RecoveryStore.hold_retained_digest_changed` (the shared
 `_hold_unrecoverable_input` privacy/content fence: prepared intent, matching
 token and audio_uri, no result, no artifact write or delete, no paid work).
-It then emits the existing reason-labeled
-`omi_fallback_total{component=stt_selection, from_mode=batch, to_mode=none,
-reason=retained_digest_changed, outcome=degraded}` once, which also produces
+It then emits the existing omi_fallback_total counter once with
+`component=stt_selection`, `from_mode=batch`, `to_mode=none`,
+`reason=retained_digest_changed`, and `outcome=degraded`, which also produces
 the matching content-free warning. The exception carries no ref, URI or bytes;
 a generic `ValueError` with the same message keeps its retryable 500 path.
 Rollback: `BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED=false` restores the
@@ -247,7 +247,7 @@ shared `retained_digest_changed_held` predicate. `held_requeue_eligible`, the
 expiry window, retention and the reviewed operator redrive
 (`requeue_quarantined` without `dead_before`, `redrive_dead`,
 `expected_job` repair) are unchanged and still work in every flag mode.
-`omi_fallback_total` counts the hold transition through its reason label; the
+The fallback counter counts the hold transition through its reason label; the
 T5 `batch_quality_gate` separately counts durable `failed_held` units. No new
 metric.
 

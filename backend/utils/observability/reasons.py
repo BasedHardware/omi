@@ -932,6 +932,28 @@ def reason_label(family: ReasonFamily, value: object, enum: type[StrEnum]) -> st
     return _reason_label(family, value, enum)
 
 
+class HistoricalSummaryOpenOutcome(StrEnum):
+    """``omi_historical_summary_open_total{outcome}``: one per summary-on-open request (T1+)."""
+
+    UNKNOWN = 'unknown'
+    EXISTING = 'existing'
+    GENERATED = 'generated'
+    NOT_FOUND = 'not_found'
+    LOCKED = 'locked'
+    DISCARDED = 'discarded'
+    NOT_HISTORICAL = 'not_historical'
+    DISABLED = 'disabled'
+    RATE_LIMITED = 'rate_limited'
+    GLOBAL_LIMITED = 'global_limited'
+    BYOK_REQUIRED = 'byok_keys_required'
+    BUDGET = 'budget'
+    ATTEMPTS_EXHAUSTED = 'attempts_exhausted'
+    BUSY = 'busy'
+    EMPTY = 'empty'
+    TRANSIENT = 'transient'
+    FENCED = 'fenced'
+
+
 class RecurringProfileOutcome(StrEnum):
     UNKNOWN = 'unknown'
     CREATED = 'created'

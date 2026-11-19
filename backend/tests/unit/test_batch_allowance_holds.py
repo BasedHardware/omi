@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from utils.batch_pipeline.allowance_hold import generation
-from database.batch_pipeline_allowance_hold import enabled
+from database.batch_pipeline_allowance_hold import IntakeRefusal, enabled
 from utils.batch_pipeline import allowance_hold
 from utils import backfill_hours_cap, stt_cap_dispatch
 
@@ -23,6 +23,17 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 
 def stamp(value):
     return datetime.fromisoformat(value).replace(tzinfo=timezone.utc).timestamp()
+
+
+def test_intake_refusal_cannot_cross_a_period_or_an_owner_release_claim():
+    now = stamp('2026-11-30T23:59:58')
+    owner = {'generation': 'november', 'cutoff': now - 300}
+    refusal = IntakeRefusal(now, ('november', now - 300))
+    assert refusal.current(owner, now + 1)
+    assert not refusal.current(owner, now + 2)
+    assert not refusal.current({**owner, 'token': 'claim'}, now + 1)
+    assert not refusal.current({**owner, 'cutoff': now}, now + 1)
+    assert not refusal.current({**owner, 'draining': True}, now + 1)
 
 
 def test_usage_counter_changes_do_not_reoffer_a_generation_but_plan_and_month_do():

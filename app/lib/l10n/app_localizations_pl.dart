@@ -9106,7 +9106,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'To nagranie zostało przesłane, ale Omi nadal tworzy rozmowę. Jeśli usuniesz je teraz, a przetwarzanie się nie powiedzie, nie będzie można go odzyskać. Usunąć mimo to?';
+      'To nagranie jest już przesłane i Omi je przetwarza. Usunięcie go tutaj usuwa kopię z telefonu. Jeśli przetwarzanie się nie powiedzie, Omi nie będzie mógł ponowić próby z tego telefonu.';
 
   @override
   String get syncCardAllBackedUp => 'Wszystkie nagrania zsynchronizowane';
@@ -15480,6 +15480,11 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Aktualizacja się nie zainstalowała. Twój wisiorek nadal działa na obecnym oprogramowaniu ($version). Zamiast ponawiać aktualizację, skontaktuj się z pomocą techniczną.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15614,4 +15619,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Wróć do ekranu głównego';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Podsumowanie po zakończeniu tej rozmowy';
 }

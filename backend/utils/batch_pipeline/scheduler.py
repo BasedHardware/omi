@@ -362,7 +362,9 @@ class Scheduler:
         return self.store.run(lambda tx: self.enqueue_in_transaction(tx, item, now))
 
     @staticmethod
-    def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float, *, policy=None) -> bool:
+    def enqueue_in_transaction(
+        tx: Transaction, item: WorkItem, now: float, *, policy=None, park_allowance: bool = False
+    ) -> bool:
         if getattr(item, 'source_alias_of', None):
             raise ValueError('source aliases cannot enter paid queues')
         if item.shadow:
@@ -390,7 +392,6 @@ class Scheduler:
         key = owner_key(item.owner_id)
         owner = tx.get('owners', key)
         watermark = owner.get('watermark')
-        control = read_control(tx, scheduler_control_key(key))
         job = {
             # Unstamped work keeps the legacy document shape; readers default to None.
             **{key: value for key, value in immutable.items() if key != 'timing_store' or value is not None},
@@ -415,8 +416,18 @@ class Scheduler:
             # Merge class only: fresh rows commit ahead of the owner's catch-up backlog.
             'fresh_capture': now - item.capture_at - item.duration_seconds <= FRESH_CAPTURE_LAG_SECONDS,
         }
-        _append(tx, control, job)
-        tx.put('jobs', item.segment_id, job)
+        parked = (
+            park_allowance
+            and not previous
+            and item.requires_compute_admission
+            and policy.stt_route == 'parakeet'
+            and policy.provider_reason != 'byok'
+            and allowance_hold.park(tx, job, now, at_intake=True)
+        )
+        if not parked:
+            control = read_control(tx, scheduler_control_key(key))
+            _append(tx, control, job)
+            tx.put('jobs', item.segment_id, job)
         # Admission and merge serialize through this fence even for different classes.
         owner['revision'] = owner.get('revision', 0) + 1
         tx.put('owners', key, owner)

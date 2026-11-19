@@ -44,7 +44,9 @@ def customer_funded(provider):
 _UNRESOLVED = object()
 
 
-def _funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED, lane=None):
+def _funded_allowance(
+    uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED, lane=None, ready_usage_only=False
+):
     # Streaming imports this module even with enforcement off. Load billing
     # policy only at the admission boundary, not during provider-module import.
     from utils.subscription import resolve_transcription_allowance, TranscriptionAllowance
@@ -80,12 +82,16 @@ def _funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRES
     kwargs = {'usage_cache': usage_cache} if usage_cache is not None else {}
     if offline_enforcement_enabled(lane):
         kwargs['provision_subscription'] = False
+    if ready_usage_only:
+        kwargs.update(provision_subscription=False, ready_usage_only=True)
     if subscription is not _UNRESOLVED:
         kwargs['subscription'] = subscription
     return resolve_transcription_allowance(uid, source=source, byok_active=False, omi_funded=True, **kwargs)
 
 
-def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED, lane=None, backfill=False):
+def funded_allowance(
+    uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED, lane=None, backfill=False, ready_usage_only=False
+):
     """The funded-STT allowance, then the default-off unlimited_v2 backfill day cap.
 
     ``backfill`` marks an admission as historical/import work (the sync and batch
@@ -94,7 +100,10 @@ def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESO
     every managed backfill answer, independent of the legacy dispatch scope, so
     the same refusal reaches sync and batch admission.
     """
-    allowance = _funded_allowance(uid, source=source, usage_cache=usage_cache, subscription=subscription, lane=lane)
+    kwargs = {'ready_usage_only': True} if ready_usage_only else {}
+    allowance = _funded_allowance(
+        uid, source=source, usage_cache=usage_cache, subscription=subscription, lane=lane, **kwargs
+    )
     if not backfill:
         return allowance
     return backfill_hours_cap.refuse(uid, allowance, plane=lane or 'sync')

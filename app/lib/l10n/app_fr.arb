@@ -2958,7 +2958,7 @@
     "noRecordingsYet": "Aucun enregistrement pour l'instant",
     "syncInProgress": "Synchronisation en cours",
     "deleteWhileProcessingTitle": "Traitement en cours",
-    "deleteWhileProcessingMessage": "Cet enregistrement a été envoyé mais Omi crée encore la conversation. Si vous le supprimez maintenant et que le traitement échoue, il sera irrécupérable. Supprimer quand même ?",
+    "deleteWhileProcessingMessage": "Cet enregistrement est déjà envoyé et Omi le traite. Le supprimer ici retire la copie du téléphone. Si le traitement échoue, Omi ne pourra pas réessayer depuis ce téléphone.",
     "syncCardAllBackedUp": "Tous les enregistrements synchronisés",
     "syncCardReadyCount": "{count, plural, one{1 enregistrement prêt à synchroniser} other{{count} enregistrements prêts à synchroniser}}",
     "syncCardProcessing": "Traitement sur Omi…",
@@ -4685,6 +4685,7 @@
     "hasLinkedTasksLabel": "Contient des tâches liées",
     "hasTasksFilter": "Avec des tâches",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "La mise à jour ne s'est pas installée. Votre pendentif fonctionne toujours avec son firmware actuel ({version}). Contactez l'assistance plutôt que de relancer la mise à jour.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4724,5 +4725,6 @@
     "onTheWayServerWork": "Traitement signalé par le serveur",
     "finishNothingToProcess": "Rien à traiter pour l'instant.",
     "finishStillProcessing": "Traitement en cours. Elle apparaîtra sur l'accueil.",
-    "finishBackToHome": "Retour à l'accueil"
+    "finishBackToHome": "Retour à l'accueil",
+    "conversationSummaryWhenItEnds": "Résumé à la fin de cette conversation"
 }
