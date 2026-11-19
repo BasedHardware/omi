@@ -1225,6 +1225,7 @@
     "enterYourName": "మీ పేరు నమోదు చేయండి",
     "nameCannotBeEmpty": "పేరు ఖాళీగా ఉండకూడదు",
     "nameUpdatedSuccessfully": "పేరు విజయవంతంగా నవీకరించబడింది!",
+    "calendarReadSelectionHelp": "ఎంచుకున్న క్యాలెండర్‌లను చదవండి. కొత్త ఈవెంట్‌లు {calendar}ను ఉపయోగిస్తాయి.",
     "calendarSettings": "క్యాలెండర్ సెట్టింగ్‌లు",
     "calendarProviders": "క్యాలెండర్ ప్రదాతలు",
     "macOsCalendar": "macOS క్యాలెండర్",
@@ -12243,5 +12244,8 @@
     "downloadNow": "ఇప్పుడే డౌన్‌లోడ్ చేయండి",
     "onWifiLater": "తర్వాత Wi-Fiలో",
     "conversationWritingSummary": "మీ సారాంశం రాస్తున్నాం…",
-    "onTheWayServerWork": "సర్వర్ నివేదించిన పని"
+    "onTheWayServerWork": "సర్వర్ నివేదించిన పని",
+    "finishNothingToProcess": "ఇంకా ప్రాసెస్ చేయడానికి ఏమీ లేదు.",
+    "finishStillProcessing": "ఇంకా ప్రాసెస్ అవుతోంది. ఇది హోమ్‌లో కనిపిస్తుంది.",
+    "finishBackToHome": "హోమ్‌కు తిరిగి వెళ్లండి"
 }

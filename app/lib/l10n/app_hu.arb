@@ -352,6 +352,7 @@
     "enterYourName": "Adja meg a nevét",
     "nameCannotBeEmpty": "A név nem lehet üres",
     "nameUpdatedSuccessfully": "Név sikeresen frissítve!",
+    "calendarReadSelectionHelp": "Kijelölt naptárak olvasása. Az új események naptára: {calendar}.",
     "calendarSettings": "Naptár beállítások",
     "calendarProviders": "Naptár szolgáltatók",
     "macOsCalendar": "macOS naptár",
@@ -4782,5 +4783,8 @@
     "downloadNow": "Letöltés most",
     "onWifiLater": "Később Wi-Fin",
     "conversationWritingSummary": "Összefoglaló írása…",
-    "onTheWayServerWork": "A szerver által jelzett munka"
+    "onTheWayServerWork": "A szerver által jelzett munka",
+    "finishNothingToProcess": "Még nincs mit feldolgozni.",
+    "finishStillProcessing": "Még feldolgozás alatt. Megjelenik a Kezdőlapon.",
+    "finishBackToHome": "Vissza a Kezdőlapra"
 }

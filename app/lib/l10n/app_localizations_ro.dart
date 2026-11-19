@@ -1129,6 +1129,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nume actualizat cu succes!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Citește calendarele selectate. Evenimentele noi folosesc $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Setări calendar';
 
   @override
@@ -15625,4 +15630,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Activitate raportată de server';
+
+  @override
+  String get finishNothingToProcess => 'Încă nu este nimic de procesat.';
+
+  @override
+  String get finishStillProcessing => 'Încă se procesează. Va apărea pe pagina principală.';
+
+  @override
+  String get finishBackToHome => 'Înapoi la pagina principală';
 }

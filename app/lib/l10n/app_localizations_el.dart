@@ -1131,6 +1131,11 @@ class AppLocalizationsEl extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Το όνομα ενημερώθηκε επιτυχώς!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Ανάγνωση επιλεγμένων ημερολογίων. Τα νέα συμβάντα χρησιμοποιούν το $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Ρυθμίσεις ημερολογίου';
 
   @override
@@ -15662,4 +15667,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Εργασία που αναφέρει ο διακομιστής';
+
+  @override
+  String get finishNothingToProcess => 'Δεν υπάρχει ακόμα κάτι για επεξεργασία.';
+
+  @override
+  String get finishStillProcessing => 'Ακόμα σε επεξεργασία. Θα εμφανιστεί στην Αρχική.';
+
+  @override
+  String get finishBackToHome => 'Πίσω στην Αρχική';
 }

@@ -2301,6 +2301,12 @@ abstract class AppLocalizations {
   /// **'Name updated successfully!'**
   String get nameUpdatedSuccessfully;
 
+  /// Explains that read/import choices do not change the primary calendar used for new events
+  ///
+  /// In en, this message translates to:
+  /// **'Read selected calendars. New events use {calendar}.'**
+  String calendarReadSelectionHelp(String calendar);
+
   /// No description provided for @calendarSettings.
   ///
   /// In en, this message translates to:
@@ -27308,6 +27314,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Server-reported work'**
   String get onTheWayServerWork;
+
+  /// Brief notice after tapping Finish on the live capture page when nothing was heard since the last conversation, so no conversation is made.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to process yet.'**
+  String get finishNothingToProcess;
+
+  /// Shown on the page Finish opens when the conversation has not arrived after a long wait; it will show up on Home by itself.
+  ///
+  /// In en, this message translates to:
+  /// **'Still processing. It will appear on Home.'**
+  String get finishStillProcessing;
+
+  /// Button that leaves the processing page for the Home conversation list.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to Home'**
+  String get finishBackToHome;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

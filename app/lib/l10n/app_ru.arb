@@ -352,6 +352,7 @@
     "enterYourName": "Введите ваше имя",
     "nameCannotBeEmpty": "Имя не может быть пустым",
     "nameUpdatedSuccessfully": "Имя успешно обновлено!",
+    "calendarReadSelectionHelp": "Читать выбранные календари. Новые события используют {calendar}.",
     "calendarSettings": "Настройки календаря",
     "calendarProviders": "Провайдеры календаря",
     "macOsCalendar": "Календарь macOS",
@@ -4721,5 +4722,8 @@
     "downloadNow": "Скачать сейчас",
     "onWifiLater": "Позже по Wi-Fi",
     "conversationWritingSummary": "Пишем ваше резюме…",
-    "onTheWayServerWork": "Работа по данным сервера"
+    "onTheWayServerWork": "Работа по данным сервера",
+    "finishNothingToProcess": "Пока нечего обрабатывать.",
+    "finishStillProcessing": "Ещё обрабатывается. Появится на главной.",
+    "finishBackToHome": "На главную"
 }

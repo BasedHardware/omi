@@ -1122,6 +1122,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nimi päivitetty onnistuneesti!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Lue valitut kalenterit. Uudet tapahtumat käyttävät kalenteria $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalenteriasetukset';
 
   @override
@@ -15565,4 +15570,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Palvelimen ilmoittama työ';
+
+  @override
+  String get finishNothingToProcess => 'Ei vielä mitään käsiteltävää.';
+
+  @override
+  String get finishStillProcessing => 'Käsitellään yhä. Se näkyy kotinäkymässä.';
+
+  @override
+  String get finishBackToHome => 'Takaisin kotiin';
 }

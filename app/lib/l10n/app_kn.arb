@@ -1225,6 +1225,7 @@
     "enterYourName": "ನಿಮ್ಮ ಹೆಸರನ್ನು ನಮೂದಿಸಿ",
     "nameCannotBeEmpty": "ಹೆಸರು ಖಾಲಿ ಇರುವಿಕೆ ಸಾಧ್ಯವಿಲ್ಲ",
     "nameUpdatedSuccessfully": "ಹೆಸರನ್ನು ಯಶಸ್ವಿಯಾಗಿ ನವೀಕರಣ ಮಾಡಲಾಗಿದೆ!",
+    "calendarReadSelectionHelp": "ಆಯ್ಕೆಮಾಡಿದ ಕ್ಯಾಲೆಂಡರ್‌ಗಳನ್ನು ಓದಿ. ಹೊಸ ಈವೆಂಟ್‌ಗಳು {calendar} ಅನ್ನು ಬಳಸುತ್ತವೆ.",
     "calendarSettings": "ಕ್ಯಾಲೆಂಡರ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
     "calendarProviders": "ಕ್ಯಾಲೆಂಡರ್ ಪ್ರದಾನಕಾರಕಗಳು",
     "macOsCalendar": "macOS ಕ್ಯಾಲೆಂಡರ್",
@@ -12243,5 +12244,8 @@
     "downloadNow": "ಈಗ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ",
     "onWifiLater": "ನಂತರ Wi-Fi ನಲ್ಲಿ",
     "conversationWritingSummary": "ನಿಮ್ಮ ಸಾರಾಂಶವನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…",
-    "onTheWayServerWork": "ಸರ್ವರ್ ವರದಿ ಮಾಡಿದ ಕೆಲಸ"
+    "onTheWayServerWork": "ಸರ್ವರ್ ವರದಿ ಮಾಡಿದ ಕೆಲಸ",
+    "finishNothingToProcess": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಏನೂ ಇಲ್ಲ.",
+    "finishStillProcessing": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತಿದೆ. ಇದು ಹೋಮ್‌ನಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.",
+    "finishBackToHome": "ಹೋಮ್‌ಗೆ ಹಿಂತಿರುಗಿ"
 }

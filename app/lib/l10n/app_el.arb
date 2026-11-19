@@ -352,6 +352,7 @@
     "enterYourName": "Εισάγετε το όνομά σας",
     "nameCannotBeEmpty": "Το όνομα δεν μπορεί να είναι κενό",
     "nameUpdatedSuccessfully": "Το όνομα ενημερώθηκε επιτυχώς!",
+    "calendarReadSelectionHelp": "Ανάγνωση επιλεγμένων ημερολογίων. Τα νέα συμβάντα χρησιμοποιούν το {calendar}.",
     "calendarSettings": "Ρυθμίσεις ημερολογίου",
     "calendarProviders": "Πάροχοι Ημερολογίου",
     "macOsCalendar": "Ημερολόγιο macOS",
@@ -4686,5 +4687,8 @@
     "downloadNow": "Λήψη τώρα",
     "onWifiLater": "Αργότερα μέσω Wi-Fi",
     "conversationWritingSummary": "Γράφεται η σύνοψή σας…",
-    "onTheWayServerWork": "Εργασία που αναφέρει ο διακομιστής"
+    "onTheWayServerWork": "Εργασία που αναφέρει ο διακομιστής",
+    "finishNothingToProcess": "Δεν υπάρχει ακόμα κάτι για επεξεργασία.",
+    "finishStillProcessing": "Ακόμα σε επεξεργασία. Θα εμφανιστεί στην Αρχική.",
+    "finishBackToHome": "Πίσω στην Αρχική"
 }

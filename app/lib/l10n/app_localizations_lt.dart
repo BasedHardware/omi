@@ -1123,6 +1123,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Vardas sėkmingai atnaujintas!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Skaityti pasirinktus kalendorius. Naujiems įvykiams naudojamas $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalendoriaus nustatymai';
 
   @override
@@ -15584,4 +15589,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Serverio praneštas darbas';
+
+  @override
+  String get finishNothingToProcess => 'Kol kas nėra ką apdoroti.';
+
+  @override
+  String get finishStillProcessing => 'Vis dar apdorojama. Tai atsiras pagrindiniame puslapyje.';
+
+  @override
+  String get finishBackToHome => 'Grįžti į pagrindinį';
 }

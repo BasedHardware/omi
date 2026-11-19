@@ -315,6 +315,7 @@
     "calculatingETA": "Skaičiuojama…",
     "calendarIntegration": "Kalendoriaus Integracija",
     "calendarProviders": "Kalendoriaus teikėjai",
+    "calendarReadSelectionHelp": "Skaityti pasirinktus kalendorius. Naujiems įvykiams naudojamas {calendar}.",
     "calendarSettings": "Kalendoriaus nustatymai",
     "cancel": "Atšaukti",
     "cancelAtPeriodEnd": "Jūsų planas bus atšauktas {date}.",
@@ -4686,5 +4687,8 @@
     "downloadNow": "Atsisiųsti dabar",
     "onWifiLater": "Vėliau per Wi-Fi",
     "conversationWritingSummary": "Rašoma jūsų santrauka…",
-    "onTheWayServerWork": "Serverio praneštas darbas"
+    "onTheWayServerWork": "Serverio praneštas darbas",
+    "finishNothingToProcess": "Kol kas nėra ką apdoroti.",
+    "finishStillProcessing": "Vis dar apdorojama. Tai atsiras pagrindiniame puslapyje.",
+    "finishBackToHome": "Grįžti į pagrindinį"
 }

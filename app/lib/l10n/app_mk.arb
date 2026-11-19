@@ -1225,6 +1225,7 @@
     "enterYourName": "Внесете ваше име",
     "nameCannotBeEmpty": "Името не може да биде празно",
     "nameUpdatedSuccessfully": "Името е успешно ажурирано!",
+    "calendarReadSelectionHelp": "Читај ги избраните календари. Новите настани користат {calendar}.",
     "calendarSettings": "Поставки на календар",
     "calendarProviders": "Добавувачи на календар",
     "macOsCalendar": "macOS Календар",
@@ -12243,5 +12244,8 @@
     "downloadNow": "Преземи сега",
     "onWifiLater": "Подоцна на Wi-Fi",
     "conversationWritingSummary": "Го пишуваме вашето резиме…",
-    "onTheWayServerWork": "Работа пријавена од серверот"
+    "onTheWayServerWork": "Работа пријавена од серверот",
+    "finishNothingToProcess": "Сè уште нема ништо за обработка.",
+    "finishStillProcessing": "Сè уште се обработува. Ќе се појави на почетната.",
+    "finishBackToHome": "Назад кон почетна"
 }

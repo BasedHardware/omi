@@ -1125,6 +1125,11 @@ class AppLocalizationsPl extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Imię zaktualizowane pomyślnie!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Odczytuj wybrane kalendarze. Nowe wydarzenia korzystają z $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Ustawienia kalendarza';
 
   @override
@@ -15605,4 +15610,13 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Praca zgłoszona przez serwer';
+
+  @override
+  String get finishNothingToProcess => 'Na razie nie ma czego przetworzyć.';
+
+  @override
+  String get finishStillProcessing => 'Nadal trwa przetwarzanie. Pojawi się na ekranie głównym.';
+
+  @override
+  String get finishBackToHome => 'Wróć do ekranu głównego';
 }

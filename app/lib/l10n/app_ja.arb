@@ -352,6 +352,7 @@
     "enterYourName": "お名前を入力",
     "nameCannotBeEmpty": "名前を空にすることはできません",
     "nameUpdatedSuccessfully": "名前が正常に更新されました！",
+    "calendarReadSelectionHelp": "選択したカレンダーを読み込みます。新しい予定には {calendar} を使用します。",
     "calendarSettings": "カレンダー設定",
     "calendarProviders": "カレンダープロバイダー",
     "macOsCalendar": "macOSカレンダー",
@@ -4686,5 +4687,8 @@
     "downloadNow": "今すぐダウンロード",
     "onWifiLater": "後で Wi-Fi で",
     "conversationWritingSummary": "要約を作成しています…",
-    "onTheWayServerWork": "サーバーが報告した処理"
+    "onTheWayServerWork": "サーバーが報告した処理",
+    "finishNothingToProcess": "まだ処理するものがありません。",
+    "finishStillProcessing": "まだ処理中です。ホームに表示されます。",
+    "finishBackToHome": "ホームに戻る"
 }

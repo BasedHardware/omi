@@ -1127,6 +1127,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Đã cập nhật tên thành công!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Đọc các lịch đã chọn. Sự kiện mới sử dụng $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Cài đặt lịch';
 
   @override
@@ -15561,4 +15566,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Công việc do máy chủ báo cáo';
+
+  @override
+  String get finishNothingToProcess => 'Chưa có gì để xử lý.';
+
+  @override
+  String get finishStillProcessing => 'Vẫn đang xử lý. Nó sẽ xuất hiện ở Trang chủ.';
+
+  @override
+  String get finishBackToHome => 'Về Trang chủ';
 }

@@ -1120,6 +1120,11 @@ class AppLocalizationsHi extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'नाम सफलतापूर्वक अपडेट किया गया!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'चुने गए कैलेंडर पढ़ें। नए इवेंट $calendar में बनेंगे।';
+  }
+
+  @override
   String get calendarSettings => 'कैलेंडर सेटिंग्स';
 
   @override
@@ -15543,4 +15548,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'सर्वर द्वारा बताया गया काम';
+
+  @override
+  String get finishNothingToProcess => 'अभी प्रोसेस करने के लिए कुछ नहीं है।';
+
+  @override
+  String get finishStillProcessing => 'अभी प्रोसेस हो रहा है। यह होम पर दिखेगा।';
+
+  @override
+  String get finishBackToHome => 'होम पर वापस जाएं';
 }

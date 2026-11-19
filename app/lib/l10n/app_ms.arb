@@ -352,6 +352,7 @@
     "enterYourName": "Masukkan nama anda",
     "nameCannotBeEmpty": "Nama tidak boleh kosong",
     "nameUpdatedSuccessfully": "Nama berjaya dikemas kini!",
+    "calendarReadSelectionHelp": "Baca kalendar yang dipilih. Acara baharu menggunakan {calendar}.",
     "calendarSettings": "Tetapan kalendar",
     "calendarProviders": "Penyedia Kalendar",
     "macOsCalendar": "Kalendar macOS",
@@ -4686,5 +4687,8 @@
     "downloadNow": "Muat Turun Sekarang",
     "onWifiLater": "Kemudian melalui Wi-Fi",
     "conversationWritingSummary": "Menulis ringkasan anda…",
-    "onTheWayServerWork": "Kerja yang dilaporkan pelayan"
+    "onTheWayServerWork": "Kerja yang dilaporkan pelayan",
+    "finishNothingToProcess": "Belum ada apa-apa untuk diproses.",
+    "finishStillProcessing": "Masih diproses. Ia akan muncul di Laman Utama.",
+    "finishBackToHome": "Kembali ke Laman Utama"
 }

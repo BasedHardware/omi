@@ -1225,6 +1225,7 @@
     "enterYourName": "உங்கள் பெயரை உள்ளிடவும்",
     "nameCannotBeEmpty": "பெயர் வெற்றிடமாக இருக்க முடியாது",
     "nameUpdatedSuccessfully": "பெயர் வெற்றிகரமாக புதுப்பிக்கப்பட்டது!",
+    "calendarReadSelectionHelp": "தேர்ந்தெடுத்த நாட்காட்டிகளைப் படிக்கவும். புதிய நிகழ்வுகள் {calendar} ஐப் பயன்படுத்தும்.",
     "calendarSettings": "நாட்காட்டி அமைப்புகள்",
     "calendarProviders": "நாட்காட்டி வழங்குநர்கள்",
     "macOsCalendar": "macOS நாட்காட்டி",
@@ -12243,5 +12244,8 @@
     "downloadNow": "இப்போது பதிவிறக்கு",
     "onWifiLater": "பின்னர் Wi-Fi இல்",
     "conversationWritingSummary": "உங்கள் சுருக்கம் எழுதப்படுகிறது…",
-    "onTheWayServerWork": "சேவையகம் தெரிவித்த பணி"
+    "onTheWayServerWork": "சேவையகம் தெரிவித்த பணி",
+    "finishNothingToProcess": "இன்னும் செயலாக்க எதுவும் இல்லை.",
+    "finishStillProcessing": "இன்னும் செயலாக்கப்படுகிறது. இது முகப்பில் தோன்றும்.",
+    "finishBackToHome": "முகப்புக்குத் திரும்பு"
 }

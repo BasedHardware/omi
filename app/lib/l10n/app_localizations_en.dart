@@ -1121,6 +1121,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Name updated successfully!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Read selected calendars. New events use $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Calendar settings';
 
   @override
@@ -15544,4 +15549,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Server-reported work';
+
+  @override
+  String get finishNothingToProcess => 'Nothing to process yet.';
+
+  @override
+  String get finishStillProcessing => 'Still processing. It will appear on Home.';
+
+  @override
+  String get finishBackToHome => 'Back to Home';
 }

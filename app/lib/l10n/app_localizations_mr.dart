@@ -1125,6 +1125,11 @@ class AppLocalizationsMr extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'नाव यशस्वीरित्या अपडेट केलं!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'निवडलेले कॅलेंडर वाचा. नवीन इव्हेंटसाठी $calendar वापरले जाईल.';
+  }
+
+  @override
   String get calendarSettings => 'कॅलेंडर सेटिंग्ज';
 
   @override
@@ -15568,4 +15573,13 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'सर्व्हरने नोंदवलेले काम';
+
+  @override
+  String get finishNothingToProcess => 'अजून प्रक्रिया करण्यासाठी काहीही नाही.';
+
+  @override
+  String get finishStillProcessing => 'अजून प्रक्रिया सुरू आहे. हे होमवर दिसेल.';
+
+  @override
+  String get finishBackToHome => 'होमवर परत जा';
 }

@@ -352,6 +352,7 @@
     "enterYourName": "Indtast dit navn",
     "nameCannotBeEmpty": "Navn kan ikke være tomt",
     "nameUpdatedSuccessfully": "Navn opdateret!",
+    "calendarReadSelectionHelp": "Læs de valgte kalendere. Nye begivenheder bruger {calendar}.",
     "calendarSettings": "Kalenderindstillinger",
     "calendarProviders": "Kalenderudbydere",
     "macOsCalendar": "macOS-kalender",
@@ -4728,5 +4729,8 @@
     "downloadNow": "Download nu",
     "onWifiLater": "Senere på Wi-Fi",
     "conversationWritingSummary": "Skriver dit resumé…",
-    "onTheWayServerWork": "Arbejde rapporteret af serveren"
+    "onTheWayServerWork": "Arbejde rapporteret af serveren",
+    "finishNothingToProcess": "Intet at behandle endnu.",
+    "finishStillProcessing": "Behandles stadig. Den vises på Hjem.",
+    "finishBackToHome": "Tilbage til Hjem"
 }

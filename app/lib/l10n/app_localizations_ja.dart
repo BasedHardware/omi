@@ -1110,6 +1110,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get nameUpdatedSuccessfully => '名前が正常に更新されました！';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return '選択したカレンダーを読み込みます。新しい予定には $calendar を使用します。';
+  }
+
+  @override
   String get calendarSettings => 'カレンダー設定';
 
   @override
@@ -15333,4 +15338,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'サーバーが報告した処理';
+
+  @override
+  String get finishNothingToProcess => 'まだ処理するものがありません。';
+
+  @override
+  String get finishStillProcessing => 'まだ処理中です。ホームに表示されます。';
+
+  @override
+  String get finishBackToHome => 'ホームに戻る';
 }

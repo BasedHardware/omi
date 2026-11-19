@@ -1125,6 +1125,11 @@ class AppLocalizationsCs extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Jméno úspěšně aktualizováno!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Číst vybrané kalendáře. Nové události používají $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Nastavení kalendáře';
 
   @override
@@ -15560,4 +15565,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Práce hlášená serverem';
+
+  @override
+  String get finishNothingToProcess => 'Zatím není co zpracovat.';
+
+  @override
+  String get finishStillProcessing => 'Stále se zpracovává. Objeví se na domovské stránce.';
+
+  @override
+  String get finishBackToHome => 'Zpět domů';
 }

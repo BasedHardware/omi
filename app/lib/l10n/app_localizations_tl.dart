@@ -1130,6 +1130,11 @@ class AppLocalizationsTl extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Ang pangalan ay na-update na!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Basahin ang mga napiling kalendaryo. Gagamit ang mga bagong event ng $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Mga setting ng Calendar';
 
   @override
@@ -15683,4 +15688,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Trabahong iniulat ng server';
+
+  @override
+  String get finishNothingToProcess => 'Wala pang ipoproseso.';
+
+  @override
+  String get finishStillProcessing => 'Pinoproseso pa. Lalabas ito sa Home.';
+
+  @override
+  String get finishBackToHome => 'Bumalik sa Home';
 }

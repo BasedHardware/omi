@@ -1124,6 +1124,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'نام با موفقیت به‌روزرسانی شد!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'تقویم‌های انتخاب‌شده خوانده می‌شوند. رویدادهای جدید از $calendar استفاده می‌کنند.';
+  }
+
+  @override
   String get calendarSettings => 'تنظیمات تقویم';
 
   @override
@@ -15553,4 +15558,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'کار گزارش‌شده توسط سرور';
+
+  @override
+  String get finishNothingToProcess => 'هنوز چیزی برای پردازش نیست.';
+
+  @override
+  String get finishStillProcessing => 'هنوز در حال پردازش است. در صفحه اصلی نمایش داده می‌شود.';
+
+  @override
+  String get finishBackToHome => 'بازگشت به صفحه اصلی';
 }

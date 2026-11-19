@@ -352,6 +352,7 @@
     "enterYourName": "Nhập tên của bạn",
     "nameCannotBeEmpty": "Tên không được để trống",
     "nameUpdatedSuccessfully": "Đã cập nhật tên thành công!",
+    "calendarReadSelectionHelp": "Đọc các lịch đã chọn. Sự kiện mới sử dụng {calendar}.",
     "calendarSettings": "Cài đặt lịch",
     "calendarProviders": "Nhà cung cấp lịch",
     "macOsCalendar": "Lịch macOS",
@@ -4686,5 +4687,8 @@
     "downloadNow": "Tải ngay",
     "onWifiLater": "Sau, qua Wi-Fi",
     "conversationWritingSummary": "Đang viết bản tóm tắt của bạn…",
-    "onTheWayServerWork": "Công việc do máy chủ báo cáo"
+    "onTheWayServerWork": "Công việc do máy chủ báo cáo",
+    "finishNothingToProcess": "Chưa có gì để xử lý.",
+    "finishStillProcessing": "Vẫn đang xử lý. Nó sẽ xuất hiện ở Trang chủ.",
+    "finishBackToHome": "Về Trang chủ"
 }

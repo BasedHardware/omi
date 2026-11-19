@@ -63,6 +63,7 @@ UNIT_YIELD_SECONDS = 0.6
 GATE_KIND = 'explicit_memory_deletion'
 # An accepted delete's erasure lost the account gate to a same-account erasure: retry soon.
 BUSY_RETRY_SECONDS = 30
+ARTIFACT_RETRY_SECONDS = 240
 
 
 class RunSuperseded(Exception):
@@ -292,8 +293,8 @@ def finish_run(
     collection: str = COLLECTION,
 ) -> bool:
     """Record the owning run's outcome; only ``completed`` removes the obligation. False if not owner."""
-    if outcome not in {'completed', 'held', 'failed', 'checkpointed', 'busy'}:
-        raise ValueError('outcome must be completed, held, failed, checkpointed or busy')
+    if outcome not in {'completed', 'held', 'failed', 'checkpointed', 'busy', 'artifact_pending'}:
+        raise ValueError('invalid purge outcome')
     client = firestore_client if firestore_client is not None else get_firestore_client()
     current = now or _now()
     ref = client.collection(collection).document(job)
@@ -330,11 +331,9 @@ def finish_run(
             # Progress was made: hand off at once and restart the lost-task backoff.
             transaction.update(ref, {**release, 'due_at': current, 'attempts': 0})
             return False
-        if outcome == 'busy':
-            # A same-account erasure held the gate, so that account is progressing: retry soon.
-            transaction.update(
-                ref, {**release, 'due_at': current + timedelta(seconds=BUSY_RETRY_SECONDS), 'attempts': 0}
-            )
+        if outcome in {'busy', 'artifact_pending'}:
+            wait = BUSY_RETRY_SECONDS if outcome == 'busy' else ARTIFACT_RETRY_SECONDS
+            transaction.update(ref, {**release, 'due_at': current + timedelta(seconds=wait), 'attempts': 0})
             return False
         wait = HOLD_RECHECK_SECONDS if outcome == 'held' else REDRIVE_SECONDS
         transaction.update(ref, {**release, 'due_at': current + timedelta(seconds=wait)})
@@ -478,7 +477,7 @@ def run_job(
     budget_seconds: float = RUN_BUDGET_SECONDS,
 ) -> str:
     """Execute (or resume) one dispatched generation. Raises on a retryable failure."""
-    from database.batch_pipeline_conversation_purge import PurgeCheckpointed, purge_conversation
+    from database.batch_pipeline_conversation_purge import ArtifactUploadPending, PurgeCheckpointed, purge_conversation
 
     # The run's budget and its absolute RPC deadline start at entry: admission is debited too.
     started = clock()
@@ -523,6 +522,9 @@ def run_job(
         except LegalHoldActive:
             finish('held')
             return 'held'
+        except ArtifactUploadPending:
+            finish('artifact_pending')
+            return 'artifact_pending'
         except PurgeCheckpointed:
             finish('checkpointed')
             return 'checkpointed'

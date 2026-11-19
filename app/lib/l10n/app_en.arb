@@ -1243,6 +1243,15 @@
     "enterYourName": "Enter your name",
     "nameCannotBeEmpty": "Name cannot be empty",
     "nameUpdatedSuccessfully": "Name updated successfully!",
+    "calendarReadSelectionHelp": "Read selected calendars. New events use {calendar}.",
+    "@calendarReadSelectionHelp": {
+        "description": "Explains that read/import choices do not change the primary calendar used for new events",
+        "placeholders": {
+            "calendar": {
+                "type": "String"
+            }
+        }
+    },
     "calendarSettings": "Calendar settings",
     "calendarProviders": "Calendar Providers",
     "macOsCalendar": "macOS Calendar",
@@ -19008,5 +19017,17 @@
     "onTheWayServerWork": "Server-reported work",
     "@deleteWhileProcessingMessage": {
         "description": "Delete confirmation for a recording already uploaded whose server job has not finished. Deleting removes the phone copy; the server keeps processing, but if that job fails the app has no local file to re-upload from."
+    },
+    "finishNothingToProcess": "Nothing to process yet.",
+    "@finishNothingToProcess": {
+        "description": "Brief notice after tapping Finish on the live capture page when nothing was heard since the last conversation, so no conversation is made."
+    },
+    "finishStillProcessing": "Still processing. It will appear on Home.",
+    "@finishStillProcessing": {
+        "description": "Shown on the page Finish opens when the conversation has not arrived after a long wait; it will show up on Home by itself."
+    },
+    "finishBackToHome": "Back to Home",
+    "@finishBackToHome": {
+        "description": "Button that leaves the processing page for the Home conversation list."
     }
 }

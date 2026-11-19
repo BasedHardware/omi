@@ -1125,6 +1125,11 @@ class AppLocalizationsNo extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Navn oppdatert!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Les valgte kalendere. Nye hendelser bruker $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalenderinnstillinger';
 
   @override
@@ -15564,4 +15569,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Arbeid rapportert av serveren';
+
+  @override
+  String get finishNothingToProcess => 'Ingenting å behandle ennå.';
+
+  @override
+  String get finishStillProcessing => 'Behandles fortsatt. Den vises på Hjem.';
+
+  @override
+  String get finishBackToHome => 'Tilbake til Hjem';
 }

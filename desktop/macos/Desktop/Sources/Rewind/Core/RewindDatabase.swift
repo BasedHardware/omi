@@ -49,8 +49,8 @@ actor RewindDatabase {
   /// on open does not break the in-flight-close detection in `initialize()`.
   private var poolEpoch: Int = 0
 
-  /// Lock-gated (`OSAllocatedUnfairLock`) so concurrent access from the actor,
-  /// `MainActor` (`AgentVMService`), and nonisolated shutdown is race-free (SCA-8).
+  /// Lock-gated (`OSAllocatedUnfairLock`) so concurrent access from the actor
+  /// and nonisolated shutdown is race-free (SCA-8).
   private static let currentUserIdLock = OSAllocatedUnfairLock<String?>(initialState: nil)
   static var currentUserId: String? {
     get { currentUserIdLock.withLock { $0 } }

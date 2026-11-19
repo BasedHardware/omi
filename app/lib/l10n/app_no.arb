@@ -352,6 +352,7 @@
     "enterYourName": "Skriv inn navnet ditt",
     "nameCannotBeEmpty": "Navn kan ikke være tomt",
     "nameUpdatedSuccessfully": "Navn oppdatert!",
+    "calendarReadSelectionHelp": "Les valgte kalendere. Nye hendelser bruker {calendar}.",
     "calendarSettings": "Kalenderinnstillinger",
     "calendarProviders": "Kalenderleverandører",
     "macOsCalendar": "macOS-kalender",
@@ -4686,5 +4687,8 @@
     "downloadNow": "Last ned nå",
     "onWifiLater": "Senere på Wi-Fi",
     "conversationWritingSummary": "Skriver sammendraget ditt…",
-    "onTheWayServerWork": "Arbeid rapportert av serveren"
+    "onTheWayServerWork": "Arbeid rapportert av serveren",
+    "finishNothingToProcess": "Ingenting å behandle ennå.",
+    "finishStillProcessing": "Behandles fortsatt. Den vises på Hjem.",
+    "finishBackToHome": "Tilbake til Hjem"
 }

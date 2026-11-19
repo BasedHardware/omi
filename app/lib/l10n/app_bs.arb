@@ -1225,6 +1225,7 @@
     "enterYourName": "Unesite svoje ime",
     "nameCannotBeEmpty": "Ime ne sme biti prazno",
     "nameUpdatedSuccessfully": "Ime je uspešno ažurirano!",
+    "calendarReadSelectionHelp": "Čitaj odabrane kalendare. Novi događaji koriste {calendar}.",
     "calendarSettings": "Postavke kalendara",
     "calendarProviders": "Dobavljači kalendara",
     "macOsCalendar": "macOS Kalendar",
@@ -12243,5 +12244,8 @@
     "downloadNow": "Preuzmi sada",
     "onWifiLater": "Kasnije na Wi-Fi",
     "conversationWritingSummary": "Pišemo vaš sažetak…",
-    "onTheWayServerWork": "Rad prijavljen sa servera"
+    "onTheWayServerWork": "Rad prijavljen sa servera",
+    "finishNothingToProcess": "Još nema ništa za obradu.",
+    "finishStillProcessing": "Još se obrađuje. Pojavit će se na početnoj.",
+    "finishBackToHome": "Nazad na početnu"
 }

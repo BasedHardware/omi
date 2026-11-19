@@ -1225,6 +1225,7 @@
     "enterYourName": "הזן את שמך",
     "nameCannotBeEmpty": "השם לא יכול להיות ריק",
     "nameUpdatedSuccessfully": "השם עודכן בהצלחה!",
+    "calendarReadSelectionHelp": "קריאת היומנים שנבחרו. אירועים חדשים משתמשים ב־{calendar}.",
     "calendarSettings": "הגדרות קלנדר",
     "calendarProviders": "ספקי קלנדר",
     "macOsCalendar": "קלנדר macOS",
@@ -12243,5 +12244,8 @@
     "downloadNow": "הורדה עכשיו",
     "onWifiLater": "מאוחר יותר ב-Wi-Fi",
     "conversationWritingSummary": "כותבים את הסיכום שלך…",
-    "onTheWayServerWork": "עבודה שדווחה מהשרת"
+    "onTheWayServerWork": "עבודה שדווחה מהשרת",
+    "finishNothingToProcess": "עדיין אין מה לעבד.",
+    "finishStillProcessing": "עדיין בעיבוד. זה יופיע במסך הבית.",
+    "finishBackToHome": "חזרה למסך הבית"
 }

@@ -352,6 +352,7 @@
     "enterYourName": "输入您的姓名",
     "nameCannotBeEmpty": "姓名不能为空",
     "nameUpdatedSuccessfully": "姓名更新成功！",
+    "calendarReadSelectionHelp": "读取所选日历。新建活动使用 {calendar}。",
     "calendarSettings": "日历设置",
     "calendarProviders": "日历提供商",
     "macOsCalendar": "macOS 日历",
@@ -4686,5 +4687,8 @@
     "downloadNow": "立即下载",
     "onWifiLater": "稍后通过 Wi-Fi",
     "conversationWritingSummary": "正在撰写你的摘要…",
-    "onTheWayServerWork": "服务器报告的任务"
+    "onTheWayServerWork": "服务器报告的任务",
+    "finishNothingToProcess": "还没有可处理的内容。",
+    "finishStillProcessing": "仍在处理中。完成后会显示在首页。",
+    "finishBackToHome": "返回首页"
 }

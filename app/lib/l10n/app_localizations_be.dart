@@ -1125,6 +1125,11 @@ class AppLocalizationsBe extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Імя паспяхова абноўлена!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Чытаць выбраныя календары. Новыя падзеі выкарыстоўваюць $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Налады календара';
 
   @override
@@ -15596,4 +15601,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Праца паводле сервера';
+
+  @override
+  String get finishNothingToProcess => 'Пакуль няма чаго апрацоўваць.';
+
+  @override
+  String get finishStillProcessing => 'Яшчэ апрацоўваецца. З\'явіцца на галоўнай.';
+
+  @override
+  String get finishBackToHome => 'На галоўную';
 }

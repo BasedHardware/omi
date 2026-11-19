@@ -1131,6 +1131,11 @@ class AppLocalizationsCa extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nom actualitzat correctament!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Llegeix els calendaris seleccionats. Els esdeveniments nous utilitzen $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Configuració del calendari';
 
   @override
@@ -15637,4 +15642,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Feina indicada pel servidor';
+
+  @override
+  String get finishNothingToProcess => 'Encara no hi ha res per processar.';
+
+  @override
+  String get finishStillProcessing => 'Encara s\'està processant. Apareixerà a l\'inici.';
+
+  @override
+  String get finishBackToHome => 'Torna a l\'inici';
 }

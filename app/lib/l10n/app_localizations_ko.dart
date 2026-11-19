@@ -1110,6 +1110,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get nameUpdatedSuccessfully => '이름이 성공적으로 업데이트되었습니다!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return '선택한 캘린더를 읽습니다. 새 일정은 $calendar에 생성됩니다.';
+  }
+
+  @override
   String get calendarSettings => '캘린더 설정';
 
   @override
@@ -15339,4 +15344,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => '서버에서 보고한 작업';
+
+  @override
+  String get finishNothingToProcess => '아직 처리할 내용이 없어요.';
+
+  @override
+  String get finishStillProcessing => '아직 처리 중이에요. 홈에 표시될 거예요.';
+
+  @override
+  String get finishBackToHome => '홈으로 돌아가기';
 }

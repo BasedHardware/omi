@@ -1125,6 +1125,11 @@ class AppLocalizationsHr extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Ime uspješno ažurirano!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Čitaj odabrane kalendare. Novi događaji koriste $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Postavke kalendara';
 
   @override
@@ -15597,4 +15602,13 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Rad koji je prijavio poslužitelj';
+
+  @override
+  String get finishNothingToProcess => 'Još nema ničega za obradu.';
+
+  @override
+  String get finishStillProcessing => 'Još se obrađuje. Pojavit će se na početnoj.';
+
+  @override
+  String get finishBackToHome => 'Natrag na početnu';
 }

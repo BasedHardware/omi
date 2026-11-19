@@ -352,6 +352,7 @@
     "enterYourName": "ใส่ชื่อของคุณ",
     "nameCannotBeEmpty": "ชื่อต้องไม่ว่างเปล่า",
     "nameUpdatedSuccessfully": "อัปเดตชื่อสำเร็จ!",
+    "calendarReadSelectionHelp": "อ่านปฏิทินที่เลือก กิจกรรมใหม่จะใช้ {calendar}",
     "calendarSettings": "การตั้งค่าปฏิทิน",
     "calendarProviders": "ผู้ให้บริการปฏิทิน",
     "macOsCalendar": "ปฏิทิน macOS",
@@ -4686,5 +4687,8 @@
     "downloadNow": "ดาวน์โหลดเลย",
     "onWifiLater": "ภายหลังผ่าน Wi-Fi",
     "conversationWritingSummary": "กำลังเขียนสรุปของคุณ…",
-    "onTheWayServerWork": "งานที่เซิร์ฟเวอร์รายงาน"
+    "onTheWayServerWork": "งานที่เซิร์ฟเวอร์รายงาน",
+    "finishNothingToProcess": "ยังไม่มีอะไรให้ประมวลผล",
+    "finishStillProcessing": "ยังประมวลผลอยู่ จะแสดงที่หน้าหลัก",
+    "finishBackToHome": "กลับไปหน้าหลัก"
 }

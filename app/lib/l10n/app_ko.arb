@@ -352,6 +352,7 @@
     "enterYourName": "이름을 입력하세요",
     "nameCannotBeEmpty": "이름은 비워둘 수 없습니다",
     "nameUpdatedSuccessfully": "이름이 성공적으로 업데이트되었습니다!",
+    "calendarReadSelectionHelp": "선택한 캘린더를 읽습니다. 새 일정은 {calendar}에 생성됩니다.",
     "calendarSettings": "캘린더 설정",
     "calendarProviders": "캘린더 제공업체",
     "macOsCalendar": "macOS 캘린더",
@@ -4686,5 +4687,8 @@
     "downloadNow": "지금 다운로드",
     "onWifiLater": "나중에 Wi-Fi로",
     "conversationWritingSummary": "요약을 작성하는 중…",
-    "onTheWayServerWork": "서버에서 보고한 작업"
+    "onTheWayServerWork": "서버에서 보고한 작업",
+    "finishNothingToProcess": "아직 처리할 내용이 없어요.",
+    "finishStillProcessing": "아직 처리 중이에요. 홈에 표시될 거예요.",
+    "finishBackToHome": "홈으로 돌아가기"
 }

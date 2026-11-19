@@ -1132,6 +1132,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Név sikeresen frissítve!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Kijelölt naptárak olvasása. Az új események naptára: $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Naptár beállítások';
 
   @override
@@ -15619,4 +15624,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'A szerver által jelzett munka';
+
+  @override
+  String get finishNothingToProcess => 'Még nincs mit feldolgozni.';
+
+  @override
+  String get finishStillProcessing => 'Még feldolgozás alatt. Megjelenik a Kezdőlapon.';
+
+  @override
+  String get finishBackToHome => 'Vissza a Kezdőlapra';
 }

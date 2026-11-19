@@ -352,6 +352,7 @@
     "enterYourName": "Insira o seu nome",
     "nameCannotBeEmpty": "Nome não pode ser vazio",
     "nameUpdatedSuccessfully": "Nome atualizado com sucesso!",
+    "calendarReadSelectionHelp": "Ler os calendários selecionados. Novos eventos usam {calendar}.",
     "calendarSettings": "Configurações de calendário",
     "calendarProviders": "Provedores de calendário",
     "macOsCalendar": "Calendário macOS",
@@ -4721,5 +4722,8 @@
     "downloadNow": "Baixar agora",
     "onWifiLater": "Depois no Wi-Fi",
     "conversationWritingSummary": "Escrevendo seu resumo…",
-    "onTheWayServerWork": "Trabalho informado pelo servidor"
+    "onTheWayServerWork": "Trabalho informado pelo servidor",
+    "finishNothingToProcess": "Ainda não há nada para processar.",
+    "finishStillProcessing": "Ainda a processar. Vai aparecer no Início.",
+    "finishBackToHome": "Voltar ao Início"
 }

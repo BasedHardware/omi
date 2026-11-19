@@ -1116,6 +1116,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'השם עודכן בהצלחה!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'קריאת היומנים שנבחרו. אירועים חדשים משתמשים ב־$calendar.';
+  }
+
+  @override
   String get calendarSettings => 'הגדרות קלנדר';
 
   @override
@@ -15448,4 +15453,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'עבודה שדווחה מהשרת';
+
+  @override
+  String get finishNothingToProcess => 'עדיין אין מה לעבד.';
+
+  @override
+  String get finishStillProcessing => 'עדיין בעיבוד. זה יופיע במסך הבית.';
+
+  @override
+  String get finishBackToHome => 'חזרה למסך הבית';
 }

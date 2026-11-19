@@ -234,6 +234,11 @@ def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
             service['env']['CONVERSATIONS_V3_FIRST_APP_BUILD'] = deepcopy(build_descriptor)
             # Declared so the staging compose maps it to staging-conversations-v3 like every other queue.
             service['env']['CONVERSATIONS_V3_TASKS_QUEUE'] = {'value': 'conversations-v3', 'category': 'reliability'}
+            # Operator-planned per-owner backfill steps; never the live queue.
+            service['env']['CONVERSATIONS_V3_BACKFILL_QUEUE'] = {
+                'value': 'conversations-v3-backfill',
+                'category': 'reliability',
+            }
         # desktop-backend sets its env inline in its deploy workflow and reads the code defaults
         # (stage beta, no first build), which matches this source while it is beta. If this source
         # leaves beta, desktop capability/episode responses diverge; desktop creates stay one-to-one.
