@@ -165,6 +165,22 @@ _RECORD_LATENCY_LISTEN_ONLY = frozenset(
         'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     }
 )
+# Listen's users/conversation routes synchronously erase retained jobstore copies.
+# pusher/main.py mounts no account/conversation purge routes and has no call to
+# batch_pipeline_shadow_hook.purge_owner; sharing finalization does not make it
+# an erasure executor. These production target/context bindings stay on listen.
+_JOBSTORE_ERASURE_LISTEN_ONLY = frozenset(
+    {
+        'BATCH_JOBSTORE_MODE',
+        'FIRESTORE_DATABASE_ID',
+        'JOBSTORE_PG_DATABASE',
+        'JOBSTORE_PG_HOST',
+        'JOBSTORE_PG_USER',
+        'JOBSTORE_PRODUCTION_MIRROR',
+        'JOBSTORE_SHADOW_NAMESPACES',
+        'OMI_DEPLOYMENT',
+    }
+)
 # Only the listen lifecycle loop rotates live v3 recordings; pusher never owns a capture socket.
 _V3_ROTATION_LISTEN_ONLY = frozenset(
     {
@@ -421,6 +437,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _RECONNECT_RECOVERY_LISTEN_ONLY
     | _V3_ROTATION_LISTEN_ONLY
     | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'})
+    | _JOBSTORE_ERASURE_LISTEN_ONLY
     | _FINALIZATION_REPLAY_LISTEN_ONLY,
 }
 

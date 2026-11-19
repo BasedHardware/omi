@@ -34,8 +34,9 @@ class RefuseOptional(importlib.abc.MetaPathFinder):
 sys.meta_path.insert(0, RefuseOptional())
 os.environ['BATCH_JOBSTORE_MODE'] = 'firestore'
 from database.batch_pipeline_shadow_hook import shadow_parity_collectors
+from database.batch_pipeline_retirement_metrics import RETIREMENT_COLLECTORS
 from database.batch_pipeline_recovery_metrics import RECOVERY_COLLECTORS, RECOVERY_DISCOVERY_TOTAL
-assert shadow_parity_collectors() == RECOVERY_COLLECTORS
+assert shadow_parity_collectors() == (*RECOVERY_COLLECTORS, *RETIREMENT_COLLECTORS)
 RECOVERY_DISCOVERY_TOTAL.labels('other', 'unknown', 'entry', 'none', 'entry').inc()
 private = CollectorRegistry()
 for collector in RECOVERY_COLLECTORS:
