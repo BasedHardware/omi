@@ -237,6 +237,9 @@ async def reconcile(
         saved = {row['fingerprint']: row for row in cached}
         previews = {row['preview_key']: row for row in cached if 'preview_key' in row}
         outlines, cache = [], []
+        if custom_timing and on_open:
+            scoped = {f"{silence_seconds}:{group['key']}" for group in groups}
+            cache.extend(row for key, row in previews.items() if key not in scoped)
         background = await run_blocking(db_executor, context.outline_sources, uid, groups)
         for group in groups:
             await run_blocking(db_executor, leases.renew, uid, key, token)
@@ -276,16 +279,20 @@ async def reconcile(
                                 'preview_key': preview_key,
                                 'anchors': outline.preview_anchors(group, entries),
                             }
-                        await run_blocking(
-                            db_executor,
-                            store.save_outline,
-                            uid,
-                            token,
-                            fingerprint,
-                            entries,
-                            **keyed,
-                            **({'preview': preview_fields} if preview_fields else {}),
-                        )
+                            await run_blocking(
+                                db_executor,
+                                store.save_outline,
+                                uid,
+                                token,
+                                fingerprint,
+                                entries,
+                                key=key,
+                                preview=preview_fields,
+                            )
+                        else:
+                            await run_blocking(
+                                db_executor, store.save_outline, uid, token, fingerprint, entries, **keyed
+                            )
                     except (ValueError, KeyError, TypeError):
                         entries = outline.fallback(group)
                         entries = [{**entry, '_outline_failed': True} for entry in entries]

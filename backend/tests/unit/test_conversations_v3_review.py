@@ -992,3 +992,27 @@ async def test_multiple_previews_defer_topic_lock_and_owe_no_notes(builder, monk
     assert [row['structured']['title'] for row in (new_first, new_second)] == ['First', 'Second']
     assert len(new_first['transcript_segments']) == 2 and len(new_second['transcript_segments']) == 1
     assert len(messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_scoped_open_keeps_other_provisional_outlines(builder, monkeypatch):
+    committed, messages = builder
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    now = datetime.now(timezone.utc)
+    recordings = {}
+    for rid, age in (('older', 20), ('recent', 10)):
+        start = now - timedelta(minutes=age)
+        recordings[rid] = source(rid, started_at=start, finished_at=start + timedelta(seconds=10))
+    inputs = [recordings, {}, []]
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: inputs)
+    await service.reconcile('synthetic')
+    earlier, other = committed[-1][4]
+    cache = committed[-1][5]
+    assert len(cache) == len(messages) == 2
+
+    inputs[0] = {'older': recordings['older']}
+    inputs[1] = {earlier['id']: earlier}
+    inputs[2] = cache
+    await service.reconcile('synthetic', on_open=True, conversation_id=earlier['id'])
+    assert len(messages) == 2
+    assert cache[-1] in committed[-1][5] and other['v3_unlocked']
