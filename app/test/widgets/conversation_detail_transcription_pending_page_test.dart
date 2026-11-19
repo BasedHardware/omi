@@ -12,7 +12,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api/conversations.dart' show ConversationByIdResult;
 import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
@@ -54,18 +56,19 @@ Future<(ConversationDetailProvider, AppLocalizations)> _pumpPage(
   CaptureProvider? capture,
   ConversationsV3Provider? v3,
   bool firstFrameOnly = false,
-  Future<ServerConversation> Function(String)? fetch,
+  Future<ConversationByIdResult> Function(String)? fetchResult,
 }) async {
   final conversations = ConversationProvider(isSignedIn: () => false)
     ..conversations = [initial]
     ..groupedConversations = {
       conversationLocalDayKey(initial.createdAt): [initial],
     }
-    ..conversationDetailsFetcherOverride = fetch ?? (_) async => fetched ?? initial;
+    ..conversationDetailsFetcherOverride = (_) async => fetched ?? initial;
   final apps = AppProvider();
   final detail = ConversationDetailProvider(
     reprocess: heldWireReprocess(409, heldReprocess409Body),
-    fetchConversation: fetch ?? (_) async => fetched ?? initial,
+    fetchConversation: (_) async => fetched ?? initial,
+    fetchConversationResult: fetchResult,
   )..setProviders(apps, conversations);
   addTearDown(() {
     detail.dispose();
@@ -76,7 +79,7 @@ Future<(ConversationDetailProvider, AppLocalizations)> _pumpPage(
       key: _boundary,
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: buildOmiTheme(),
+        theme: buildOmiTheme(brightness: OmiColors.active == OmiPalette.light ? Brightness.light : Brightness.dark),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: MultiProvider(
@@ -167,16 +170,24 @@ Future<void> _drain(WidgetTester tester) async {
 Finder _shownTitle(String text) => find.byWidgetPredicate((w) => w is Text && w.data == text);
 
 class _LiveCapture extends ChangeNotifier implements CaptureProvider {
-  _LiveCapture(this.livePreview, this.recordingId);
+  _LiveCapture(this.livePreview, this.recordingId, this.ownerUid);
   @override
   final LivePreviewController livePreview;
   String? recordingId;
+  void updateRecordingProof(String? id) {
+    recordingId = id;
+    notifyListeners();
+  }
+
+  final String ownerUid;
+  @override
+  List<TranscriptSegment> get segments => const [];
   @override
   bool get pendantCaptureVerified => true;
   @override
   bool get localPreviewAdmitted => true;
   @override
-  String? get verifiedLiveServerRecordingId => recordingId;
+  String? get verifiedLiveServerRecordingId => SharedPreferencesUtil().uid == ownerUid ? recordingId : null;
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -213,7 +224,15 @@ void main() {
     expect(event.recordingId, 'raw-1');
   });
 
-  for (final scenario in ['verified', 'other recording', 'other account', 'locked', 'no lineage']) {
+  for (final scenario in [
+    'verified',
+    'other recording',
+    'other account',
+    'locked',
+    'no lineage',
+    'denied',
+    'offline'
+  ]) {
     testWidgets('LIVE route first frame and hydration with $scenario', (tester) async {
       SharedPreferencesUtil().uid = 'account';
       SummaryGenerationV2Gate.debugOverride = false;
@@ -225,7 +244,7 @@ void main() {
         platform: LivePreviewPlatform.ios,
         osMajor: 26,
       )..admit(language: 'en');
-      final capture = _LiveCapture(preview, scenario == 'other recording' ? 'raw-other' : 'raw-1');
+      final capture = _LiveCapture(preview, scenario == 'other recording' ? 'raw-other' : 'raw-1', 'account');
       final v3 = ConversationsV3Provider(
         fetchLive: () async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
         cached: 'account:1',
@@ -234,7 +253,7 @@ void main() {
       addTearDown(preview.dispose);
       addTearDown(capture.dispose);
       addTearDown(v3.dispose);
-      await pumpEventQueue();
+      await tester.pump();
       engine.emit('earlier', 'Earlier window must stay private', true,
           startedAt: origin.subtract(const Duration(seconds: 5)), endedAt: origin);
       engine.emit('verified', 'The agenda is ready for review.', true,
@@ -261,23 +280,44 @@ void main() {
                   },
             ],
           });
-      if (scenario == 'other account') SharedPreferencesUtil().uid = '';
+      if (scenario == 'other account') SharedPreferencesUtil().uid = 'another-account';
+      if (scenario == 'verified' && _evidence.isNotEmpty) {
+        await tester.runAsync(_loadEvidenceFonts);
+        final previousPalette = OmiColors.active;
+        OmiColors.active = OmiPalette.light;
+        addTearDown(() => OmiColors.active = previousPalette);
+        tester.view.physicalSize = const Size(393 * 3, 852 * 3);
+        tester.view.devicePixelRatio = 3;
+        addTearDown(tester.view.reset);
+      }
       final (detail, _) = await _pumpPage(
         tester,
         row(),
         capture: capture,
         v3: v3,
         fetched: row(),
+        fetchResult: (_) async => switch (scenario) {
+          'denied' => (item: null, ok: true, inaccessible: true),
+          'offline' => (item: null, ok: false, inaccessible: false),
+          _ => (item: row(), ok: true, inaccessible: false),
+        },
         tab: null,
         firstFrameOnly: true,
       );
       final text = find.text('The agenda is ready for review.');
-      expect(text, scenario == 'verified' ? findsOneWidget : findsNothing);
+      expect(text, ['verified', 'denied', 'offline'].contains(scenario) ? findsOneWidget : findsNothing);
       expect(find.text('Earlier window must stay private'), findsNothing);
       if (scenario == 'verified') await _captureEvidence(tester, 'live-transcript-first-frame');
       await _settle(tester);
-      expect(text, scenario == 'verified' ? findsOneWidget : findsNothing);
+      expect(text, ['verified', 'offline'].contains(scenario) ? findsOneWidget : findsNothing);
       if (scenario == 'verified') {
+        await _captureEvidence(tester, 'live-transcript-hydrated');
+        capture.updateRecordingProof('another-window');
+        await _settle(tester);
+        expect(text, findsNothing);
+        capture.updateRecordingProof('raw-1');
+        await _settle(tester);
+        expect(text, findsOneWidget);
         detail.setCachedConversation(row(withLines: true));
         await _settle(tester);
         final list = find.descendant(of: find.byType(TranscriptWidget), matching: find.byType(Scrollable)).first;
@@ -291,10 +331,11 @@ void main() {
         expect(tester.state<ScrollableState>(list).position.pixels, closeTo(before, 2));
         detail.setCachedConversation(row());
         SharedPreferencesUtil().uid = 'another-account';
-        capture.notifyListeners();
+        capture.updateRecordingProof('raw-1');
         await _settle(tester);
         expect(text, findsNothing);
       }
+      preview.endCapture();
       await _drain(tester);
     });
   }

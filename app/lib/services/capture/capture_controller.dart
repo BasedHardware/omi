@@ -869,16 +869,22 @@ class CaptureController extends ChangeNotifier
   /// per-user in-progress pointer or a nearby timestamp cannot prove it.
   String? get verifiedLiveServerRecordingId {
     final identity = _liveSocketIdentity;
+    final socket = _socket;
     if (identity == null ||
+        socket == null ||
         identity.uid.isEmpty ||
         identity.uid != _preferences.uid ||
         identity.recordingId != activeRecordingId ||
         !_captureSessionIsCurrent(identity.token) ||
-        _socket?.state != SocketServiceState.connected) {
+        socket.state != SocketServiceState.connected ||
+        socket.stoppedIntentionally ||
+        !socket.hasCurrentListenOwner(identity.uid) ||
+        socket.clientConversationId != identity.recordingId) {
       return null;
     }
-    final event = _socket?.liveRecording;
-    return event?.clientSessionId == identity.recordingId ? event?.recordingId : null;
+    // Listen rotates its own recording-session identifier on silence, even
+    // when the direct connection and its client capture identifier stay valid.
+    return socket.liveRecording?.recordingId;
   }
 
   // Identifies a conversation boundary within a continuous recording. This is

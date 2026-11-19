@@ -12,6 +12,8 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/on_device/on_device_usage.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
@@ -114,7 +116,14 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   String? source;
   bool customSttMode;
   String? sttConfigId;
-  String? clientConversationId;
+  final String? clientConversationId;
+
+  late final AuthSessionSnapshot? _listenOwner;
+
+  bool hasCurrentListenOwner(String uid) {
+    final owner = _listenOwner;
+    return owner != null && owner.ownerUid == uid && AuthService.instance.isSessionSnapshotCurrent(owner);
+  }
 
   bool onboardingMode;
   bool speechProfileRedo;
@@ -145,7 +154,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.clientConversationId,
     this.localPreview = false,
   }) {
-    var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
+    final uid = SharedPreferencesUtil().uid;
+    _listenOwner = localPreview ? _captureListenOwner(uid) : null;
+    var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=$uid'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
         '&conversation_timeout=${SharedPreferencesUtil().conversationSilenceDuration}';
 
@@ -208,8 +219,19 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.clientConversationId,
     this.localPreview = false,
   }) {
+    _listenOwner = null;
     _socket = socket;
     _socket.setListener(this);
+  }
+
+  static AuthSessionSnapshot? _captureListenOwner(String uid) {
+    if (uid.isEmpty) return null;
+    try {
+      return AuthService.instance.captureSessionSnapshot(expectedUid: uid);
+    } catch (_) {
+      // Missing auth proof only disables projecting the local copy into detail.
+      return null;
+    }
   }
 
   void subscribe(Object context, ITransctiptSegmentSocketServiceListener listener) {
@@ -244,6 +266,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   /// on close instead of holding it open for a reconnect. Drops must not set it.
   Future stop({String? reason, bool userStop = false}) async {
     _stoppedIntentionally = true;
+    _liveRecording = null;
     _detachClientState();
     if (userStop) _sendUserStopReason();
     await _socket.stop();

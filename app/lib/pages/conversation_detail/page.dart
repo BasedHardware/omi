@@ -1162,7 +1162,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       }
       final current = _providerInitialized ? _detailProvider.conversationOrNull : widget.conversation;
       if (current == null ||
-          (_providerInitialized && _detailProvider.detailLoad == ConversationDetailLoad.failed) ||
+          (_providerInitialized && _detailProvider.detailAccessUnavailable) ||
           current.startedAt != startedAt ||
           current.id != conversation.id ||
           current.id != widget.conversation.id ||
@@ -1293,6 +1293,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     if (!_providerInitialized) {
       final preview = selectedTab == ConversationTab.transcript ? _livePreviewTail(widget.conversation, capture) : null;
       return Scaffold(
+        backgroundColor: OmiColors.surface0,
         body: preview == null
             ? null
             : SafeArea(
