@@ -939,7 +939,9 @@ class WorkflowTests(unittest.TestCase):
     # --- dry-run mode (SCA-2944; David 2026-11-19) -------------------------------------------
 
     WRITE_MARKERS = ("worker_image_only.py deploy", "helm ", "docker push", "docker build ", "docker tag ", "docker buildx build",
-                     "gsutil", "gcloud container images delete", "gcloud artifacts", "kubectl patch", "kubectl apply",
+                     "gsutil", "gcloud container images delete", "gcloud artifacts", "gcloud container clusters",
+                     "gcloud run", "gcloud compute", "gcloud iam", "gcloud projects", "gcloud secrets", "gcloud firestore",
+                     "kubectl patch", "kubectl apply",
                      "kubectl replace", "kubectl scale", "kubectl delete", "kubectl create", "rollout restart",
                      "kubectl set ", "kubectl annotate", "kubectl label", "gcloud container images add-tag")
 
@@ -1002,6 +1004,31 @@ class WorkflowTests(unittest.TestCase):
         "BasedHardware/omi/.github/actions/deployment-summary",
         "BasedHardware/omi/.github/actions/deployment-notifier",
     }
+
+    # Every run: step that is NOT excluded from dry-run mode, by name and exact script digest. A new or
+    # edited step that runs during a dry-run must be reviewed here (fail closed), whatever it calls.
+    DRY_RUN_REACHABLE_RUN_STEPS = {
+        "Validate Environment Input",
+        "Delete huge unnecessary tools folder",
+        "Select merged production source and image tag",
+        "Resolve deployment target",
+        None,  # gcloud auth configure-docker (local docker credential helper)
+        "Verify promoted worker digest",
+        "Dry-run worker image preserving live runtime",
+    }
+
+    def test_run_steps_reachable_in_dry_run_mode_are_reviewed(self):
+        reachable = [s for s in self.steps if "run" in s and "inputs.worker_dry_run != true" not in s.get("if", "")]
+        self.assertEqual({s.get("name") for s in reachable}, self.DRY_RUN_REACHABLE_RUN_STEPS)
+        unnamed = [s for s in reachable if s.get("name") is None]
+        self.assertEqual([s["run"].strip() for s in unnamed], ["gcloud auth configure-docker"])
+        for step in reachable:
+            with self.subTest(step=step.get("name")):
+                self.assertFalse(self.writes(step["run"]))
+
+    def test_gcloud_mutations_count_as_writes(self):
+        for run in ("gcloud container clusters resize c --num-nodes 0", "gcloud run deploy x", "gcloud iam roles update r"):
+            self.assertTrue(self.writes(run), run)
 
     def test_every_uses_step_is_reviewed_or_excluded_from_dry_run_mode(self):
         for step in self.steps:
