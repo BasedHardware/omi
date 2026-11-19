@@ -20,7 +20,9 @@ class ConversationPageHeaders {
     );
   }
 
-  /// Whether to request another page: the server's answer when it sent one, else a full page.
+  /// Whether to request another page: the server's answer when it sent one, else a full page that
+  /// was not cut short by the read budget. The server's answer covers a budget cut too: it says more
+  /// only when the cut page advanced, so the next request resumes past it rather than repeating it.
   bool more({required int storageCount, required int pageSize, required bool truncated}) =>
-      !truncated && (hasMore ?? storageCount >= pageSize);
+      hasMore ?? (!truncated && storageCount >= pageSize);
 }

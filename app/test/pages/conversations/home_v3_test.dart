@@ -206,13 +206,15 @@ class _LiveCapture extends CaptureProvider {
   /// Taps on End: the pendant double-tap's action, without draining a real capture.
   int endCalls = 0;
 
-  /// While set, End's drain has not finished: the segments stay, as during a real WAL drain.
-  bool holdDrain = false;
+  /// While set, End's drain has not finished: the segments stay, as during a real WAL drain. Completing
+  /// it settles the drain as failed: the capture keeps its segments.
+  Completer<void>? drain;
 
   @override
   Future<void> forceProcessingCurrentConversation() async {
     endCalls++;
-    if (holdDrain) return;
+    final held = drain;
+    if (held != null) return held.future;
     segments = [];
     notifyListeners();
   }
@@ -651,10 +653,10 @@ void main() {
     });
   });
 
-  testWidgets('End ends once: taps during the drain do not start a second finalize', (tester) async {
+  testWidgets('End ends once: taps during the drain do not finalize again; a failed drain frees it', (tester) async {
     await withClock(Clock.fixed(_now), () async {
       final home = await _pumpHome(tester, v3: true);
-      home.capture.holdDrain = true;
+      final drain = home.capture.drain = Completer<void>();
       await tester.tap(find.text('Launch checklist'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
@@ -665,6 +667,14 @@ void main() {
       await tester.tap(find.byKey(const Key('live_conversation_end')));
       await tester.pump();
       expect(home.capture.endCalls, 1, reason: 'a second tap would add another processing row and finalize again');
+
+      // The drain failed and the capture kept its segments: End still works.
+      home.capture.drain = null;
+      drain.complete();
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('live_conversation_end')));
+      await tester.pump();
+      expect(home.capture.endCalls, 2, reason: 'End is not left on screen but dead');
       await _dispose(tester, home);
     });
   });
