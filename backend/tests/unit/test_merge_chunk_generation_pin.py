@@ -39,7 +39,9 @@ class _MockBlob:
             return
         current = self.bucket.objects[self.name]
         if if_generation_match is not None and current.generation != if_generation_match:
-            raise PreconditionFailed(f"Generation mismatch on delete: current {current.generation} != expected {if_generation_match}")
+            raise PreconditionFailed(
+                f"Generation mismatch on delete: current {current.generation} != expected {if_generation_match}"
+            )
         del self.bucket.objects[self.name]
         self.bucket.deleted.append((self.name, if_generation_match))
 
@@ -62,18 +64,24 @@ class _MockBucket:
     def get_blob(self, name, retry=None):
         return self.objects.get(name)
 
-    def copy_blob(self, source_blob, dest_bucket, new_path, if_generation_match=None, source_generation=None, retry=None):
+    def copy_blob(
+        self, source_blob, dest_bucket, new_path, if_generation_match=None, source_generation=None, retry=None
+    ):
         src = self.objects.get(source_blob.name)
         if src is None:
             raise PreconditionFailed(f"Source not found: {source_blob.name}")
         if source_generation is not None and src.generation != source_generation:
-            raise PreconditionFailed(f"Source generation mismatch: current {src.generation} != pinned {source_generation}")
+            raise PreconditionFailed(
+                f"Source generation mismatch: current {src.generation} != pinned {source_generation}"
+            )
 
         dest_curr = dest_bucket.objects.get(new_path)
         if if_generation_match is not None:
             curr_gen = dest_curr.generation if dest_curr else 0
             if curr_gen != if_generation_match:
-                raise PreconditionFailed(f"Destination generation mismatch: current {curr_gen} != match {if_generation_match}")
+                raise PreconditionFailed(
+                    f"Destination generation mismatch: current {curr_gen} != match {if_generation_match}"
+                )
 
         new_gen = (dest_curr.generation + 1) if dest_curr else 1
         new_blob = _MockBlob(dest_bucket, new_path, data=src.data, generation=new_gen, crc32c=src.crc32c)
@@ -104,9 +112,7 @@ def test_copy_audio_chunks_pins_source_generation(mock_storage, bucket_name, mon
     bucket = mock_storage[bucket_name]
     bucket.objects[src_path] = _MockBlob(bucket, src_path, data=b"original", generation=42)
 
-    chunks = [
-        {'path': src_path, 'generation': 42, 'size': 8, 'crc32c': 'crc-1', 'bucket': bucket_name}
-    ]
+    chunks = [{'path': src_path, 'generation': 42, 'size': 8, 'crc32c': 'crc-1', 'bucket': bucket_name}]
     monkeypatch.setattr(merge, 'list_audio_chunks', lambda uid, cid, **kwargs: chunks)
 
     conversations = [{'id': 'conv_1', 'started_at': '2026-11-01T00:00:00Z'}]
@@ -124,9 +130,7 @@ def test_copy_fails_if_source_chunk_overwritten_before_copy(mock_storage, bucket
     # Listed at gen 42, but overwritten to gen 43
     bucket.objects[src_path] = _MockBlob(bucket, src_path, data=b"new_bytes", generation=43)
 
-    chunks = [
-        {'path': src_path, 'generation': 42, 'size': 8, 'crc32c': 'crc-1', 'bucket': bucket_name}
-    ]
+    chunks = [{'path': src_path, 'generation': 42, 'size': 8, 'crc32c': 'crc-1', 'bucket': bucket_name}]
     monkeypatch.setattr(merge, 'list_audio_chunks', lambda uid, cid, **kwargs: chunks)
 
     conversations = [{'id': 'conv_1', 'started_at': '2026-11-01T00:00:00Z'}]
@@ -157,9 +161,7 @@ def test_copy_audio_chunks_skip_existing_pins_source_and_dest_generation(mock_st
     bucket = mock_storage[bucket_name]
     bucket.objects[src_path] = _MockBlob(bucket, src_path, data=b"original", generation=55, crc32c='crc-55')
 
-    chunks = [
-        {'path': src_path, 'generation': 55, 'size': 8, 'crc32c': 'crc-55', 'bucket': bucket_name}
-    ]
+    chunks = [{'path': src_path, 'generation': 55, 'size': 8, 'crc32c': 'crc-55', 'bucket': bucket_name}]
     monkeypatch.setattr(merge, 'list_audio_chunks', lambda uid, cid, **kwargs: chunks)
 
     out_gens = {}
@@ -170,7 +172,13 @@ def test_copy_audio_chunks_skip_existing_pins_source_and_dest_generation(mock_st
     # Fresh destination: if_generation_match=0, source_generation=55
     assert (src_path, dest_path, 55, 0) in bucket.copies
     assert out_gens.get((bucket_name, src_path)) == 55
-    assert out_gens.get(src_path) == 55
+    assert src_path not in out_gens
+
+    # Cross-bucket lookup fails closed: looking up the same path in a different bucket does not resolve
+    other_bucket = DERIVED if bucket_name == PRIVATE else PRIVATE
+    should_delete, gen = storage._resolve_generation_for_delete(out_gens, other_bucket, src_path)
+    assert not should_delete
+    assert gen is None
 
 
 @pytest.mark.parametrize('bucket_name', [PRIVATE, DERIVED])
