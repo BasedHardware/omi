@@ -10,7 +10,7 @@ own causes, and the queue supplies everything about when and whether work runs.
 | Declare the kind: name, formats, steps, causes | `Kind`, passed to `Open` |
 | Enqueue once per key | `Store.Enqueue`, or `Scope.Enqueue` inside `Store.Tenant` when admission must do more under the erasure barrier |
 | Bind a job to its subject before it can run | `NewJob.Initializing`, then `Scope.Activate` or `Scope.CancelInitialization`; `Scope.Subject` serializes admissions for one subject |
-| Run work with bounded concurrency | `Start` with a `Handler` per kind; `Workers.Stop` |
+| Run work with bounded concurrency | `Start` with a `Handler` per kind; `Workers.Drain` for bounded shutdown, `Workers.Stop` for immediate cancellation |
 | Report what happened in `Work` | one of the sealed outcomes: `Done`, `DoneWith`, `DoneAt`, `Retry`, `Fail`, `Yield`, `Hold`, `Fence`, `Activate`, `BlockForSecret`, `Abort` |
 | Report what had already happened in `Exhausted` | one of the sealed resolutions: `Resolved`, `ResolvedWith`, `Fenced`, `Park`, `Later`, `Dropped` |
 | Turn an error into an outcome | `FromError`, `LaterOnError`; adapters wrap with `Classify` |
@@ -32,6 +32,8 @@ against Postgres, each test in its own database (`internal/platform/pgtest`).
 
 | Rule | Where it is decided | Test |
 | --- | --- | --- |
+| Drain stops intake while running handlers can renew and save | `Workers.Drain` | `TestDrainLetsRunningHandlerSaveAndFinish` |
+| At the deadline, drain refunds each still-owned claim once, preserving its checkpoint, terminal intent, and secret requirement | `Store.releaseClaims` | `TestDrainDeadlineRefundsWorkAndReconciliationForAnotherReplica` |
 | Enqueue is idempotent on the key; the first enqueue fixes the input | `Scope.Enqueue` | `TestEnqueueIdempotencyProperty` |
 | A kind, format or step nobody declared is refused at enqueue and at save | `Scope.admissible`, `Run.Save` | `TestUndeclaredKindFormatAndStepAreRejected` |
 | Invalid policy or declarations fail at `Open`, before any connection | `Config.Validate`, `newRegistry` | `TestOpenRejectsInvalidPolicyAndDeclarations` |
@@ -104,6 +106,10 @@ statement. Renewals use a separate small pool so a busy work pool cannot starve 
 - A lease renewal that was already waiting on a row lock when the lease expired can still extend
   it, as long as nobody took the job over in between. Once a takeover commits, the old token can
   never write. The fence is the token, not the clock.
+- Call `Workers.Drain(ctx)` before cancelling the context passed to `Start`. At the deadline
+  it cancels handlers and gives fenced lease cleanup up to three additional seconds. A gated
+  job still needs a fresh secret unless it is already reconciling. A guarded call that ignores
+  cancellation holds its advisory locks until the call returns or the session closes.
 - `Workers.Stop` waits for handlers. A handler that ignores its context delays shutdown, so every
   adapter call needs a deadline.
 - A resume scheduled for later keeps its secret in memory until then, on one replica. A restart
