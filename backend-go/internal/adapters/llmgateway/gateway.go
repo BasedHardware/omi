@@ -4,6 +4,7 @@ package llmgateway
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -31,6 +32,9 @@ const (
 	StructureShadow       Feature = "conversation_structure.extract.shadow"
 	ActionsShadow         Feature = "conversation_action_items.extract.shadow"
 )
+
+// ConversationApps is the Python accounting feature shared by app selection and generation.
+const ConversationApps Feature = "conv_apps"
 
 // Message is a text prompt message with its OpenAI role, such as system or user.
 type Message struct {
@@ -80,6 +84,8 @@ type Config struct {
 	BaseURL      string
 	ServiceToken string
 	Timeout      time.Duration
+	// IdleConnections sizes the pool to the worker count. Zero uses eight.
+	IdleConnections int
 }
 
 // Replayable couples paid submission with recovery. A paid family port must require
@@ -87,9 +93,15 @@ type Config struct {
 type Replayable interface {
 	Complete(ctx context.Context, g queue.Guarded, in Request) (string, error)
 	Recover(ctx context.Context, g queue.Guarded, step string) (string, error)
+	// Close releases idle connections at shutdown.
+	Close()
 }
 
-const paidReplayHorizon = 29 * 24 * time.Hour
+const (
+	paidReplayHorizon      = 29 * 24 * time.Hour
+	creationClockSkew      = time.Minute
+	defaultIdleConnections = 8
+)
 
 type client struct {
 	endpoint string
@@ -109,18 +121,38 @@ func New(cfg Config, c clock.Clock) (Replayable, error) {
 	if token == "" || cfg.Timeout <= 0 || c == nil {
 		return nil, errors.New("llmgateway: service token, positive timeout and clock are required")
 	}
+	idle := cfg.IdleConnections
+	if idle < 0 {
+		return nil, errors.New("llmgateway: idle connections cannot be negative")
+	}
+	if idle == 0 {
+		idle = defaultIdleConnections
+	}
 	return &client{
 		endpoint: strings.TrimRight(base.String(), "/") + "/v1/chat/completions/operations",
 		token:    token,
 		clock:    c,
 		http: &http.Client{
 			Timeout: cfg.Timeout,
+			Transport: &http.Transport{
+				Proxy:                 http.ProxyFromEnvironment,
+				DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+				ForceAttemptHTTP2:     true,
+				MaxIdleConns:          idle,
+				MaxIdleConnsPerHost:   idle,
+				IdleConnTimeout:       90 * time.Second,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ExpectContinueTimeout: time.Second,
+			},
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
 		},
 	}, nil
 }
+
+// Close releases the client's idle connections.
+func (c *client) Close() { c.http.CloseIdleConnections() }
 
 // Complete executes a single gateway POST and returns the first choice's text in memory.
 // The operation key identifies the same gateway result across retries and takeovers.
@@ -132,7 +164,7 @@ func (c *client) Complete(ctx context.Context, g queue.Guarded, in Request) (str
 		return "", err
 	}
 	now := c.clock.Now()
-	if in.JobCreatedAt.IsZero() || in.JobCreatedAt.After(now) {
+	if in.JobCreatedAt.IsZero() || in.JobCreatedAt.After(now.Add(creationClockSkew)) {
 		return "", classify(CauseRejected, 0, 0)
 	}
 	remaining := in.JobCreatedAt.Add(paidReplayHorizon).Sub(now)
@@ -145,7 +177,7 @@ func (c *client) Complete(ctx context.Context, g queue.Guarded, in Request) (str
 	if err != nil {
 		return "", err
 	}
-	text, err := c.send(req, req.Header.Get(idempotencyHeader), false)
+	text, err := c.send(g, req, req.Header.Get(idempotencyHeader), false)
 	if guardErr := g.Err(); guardErr != nil {
 		return "", guardErr
 	}
@@ -177,7 +209,7 @@ func (c *client) Recover(ctx context.Context, g queue.Guarded, step string) (str
 	}
 	c.authorize(req, g.Tenant())
 	req.Header.Set("X-Omi-Request-Id", key)
-	text, err := c.send(req, key, true)
+	text, err := c.send(g, req, key, true)
 	if guardErr := g.Err(); guardErr != nil {
 		return "", guardErr
 	}

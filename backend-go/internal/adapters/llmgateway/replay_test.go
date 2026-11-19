@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"strings"
 	"sync"
 	"testing"
@@ -75,14 +76,16 @@ func TestOlderGatewayCannotDispatchThroughTheUnkeyedRoute(t *testing.T) {
 	})
 	client := testClient(t, legacy)
 	_, err := client.Complete(t.Context(), queue.GuardedForTest(t, "owner", "job"), prompt())
-	checkFailure(t, err, CauseRejected, http.StatusNotFound, queue.Fail(CauseRejected))
+	checkFailure(t, err, CauseTransient, http.StatusNotFound, queue.Retry(CauseTransient, 0))
 }
 
-func TestPaidReplayHorizonRequiresDurableJobCreation(t *testing.T) {
+func TestCompleteFencesPaidReplayByJobCreatedAt(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.November, 19, 20, 0, 0, 0, time.UTC)
+	skewGuard := queue.GuardedForTest(t, "owner", "skew-job")
+	skewKey := requestID(skewGuard.Operation("notes"))
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
+		if r.Method != http.MethodGet && r.Header.Get(idempotencyHeader) != skewKey {
 			t.Error("invalid job age triggered a paid submission")
 		}
 		w.Header().Set(idempotencyAck, r.Header.Get("X-Omi-Request-Id"))
@@ -97,7 +100,7 @@ func TestPaidReplayHorizonRequiresDurableJobCreation(t *testing.T) {
 		cause   queue.Cause
 	}{
 		{"missing", time.Time{}, CauseRejected},
-		{"future", now.Add(time.Second), CauseRejected},
+		{"beyond clock skew", now.Add(time.Minute + time.Nanosecond), CauseRejected},
 		{"at cutoff", now.Add(-29 * 24 * time.Hour), CauseExpired},
 		{"after cutoff", now.Add(-30 * 24 * time.Hour), CauseExpired},
 	}
@@ -109,6 +112,11 @@ func TestPaidReplayHorizonRequiresDurableJobCreation(t *testing.T) {
 			_, err := client.Complete(t.Context(), guard, in)
 			checkFailure(t, err, tc.cause, 0, queue.Fail(tc.cause))
 		})
+	}
+	in := prompt()
+	in.JobCreatedAt = now.Add(time.Minute)
+	if got, err := client.Complete(t.Context(), skewGuard, in); err != nil || got == "" {
+		t.Fatalf("Complete at accepted clock skew = %q, %v", got, err)
 	}
 	if got, err := client.Recover(t.Context(), guard, "notes"); err != nil || got == "" {
 		t.Fatalf("read-only Recover = %q, %v", got, err)
@@ -214,5 +222,80 @@ func TestStrictSchemaRequiresGatewayLaneSupport(t *testing.T) {
 		if _, err := client.Complete(t.Context(), guard, in); err != nil {
 			t.Errorf("%s: %v", feature, err)
 		}
+	}
+}
+
+func TestGatewayPoolReusesConnectionsAndCloseReleasesThem(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(idempotencyAck, r.Header.Get("X-Omi-Request-Id"))
+		writeResponse(t, w, http.StatusOK, okCompletion)
+	}))
+	t.Cleanup(server.Close)
+	adapter, err := New(Config{BaseURL: server.URL, ServiceToken: "test-service", Timeout: time.Second,
+		IdleConnections: 17}, clock.System{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(adapter.Close)
+	concrete, ok := adapter.(*client)
+	if !ok {
+		t.Fatal("unexpected adapter type")
+	}
+	transport, ok := concrete.http.Transport.(*http.Transport)
+	if !ok || transport.MaxIdleConns != 17 || transport.MaxIdleConnsPerHost != 17 || transport.IdleConnTimeout <= 0 {
+		t.Fatal("gateway transport does not have the configured idle pool")
+	}
+	guard := queue.GuardedForTest(t, "owner", "job")
+	connections := make(chan bool, 1)
+	ctx := httptrace.WithClientTrace(t.Context(), &httptrace.ClientTrace{
+		GotConn: func(info httptrace.GotConnInfo) {
+			connections <- info.Reused
+		},
+	})
+	for _, wantReuse := range []bool{false, true, false} {
+		if _, err := adapter.Recover(ctx, guard, "notes"); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case gotReuse := <-connections:
+			if gotReuse != wantReuse {
+				t.Errorf("connection reused = %t, want %t", gotReuse, wantReuse)
+			}
+		default:
+			t.Fatal("gateway connection was not observed")
+		}
+		if wantReuse {
+			adapter.Close()
+		}
+	}
+}
+
+func TestDispatchChecksTheGuardAfterRequestConstruction(t *testing.T) {
+	t.Parallel()
+	adapter := testClient(t, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("expired guard dispatched a request")
+	}))
+	concrete, ok := adapter.(*client)
+	if !ok {
+		t.Fatal("unexpected adapter type")
+	}
+	ctx := context.WithoutCancel(t.Context())
+	var guard queue.Guarded
+	var req *http.Request
+	// GuardedForTest registers its cleanup below, so it expires before this check.
+	t.Cleanup(func() {
+		if req == nil {
+			return
+		}
+		if _, err := concrete.send(guard, req, req.Header.Get(idempotencyHeader), false); !errors.Is(err, queue.ErrLease) {
+			t.Errorf("send = %v, want expired guard", err)
+		}
+	})
+	guard = queue.GuardedForTest(t, "owner", "job")
+	var err error
+	req, err = concrete.request(ctx, guard, prompt())
+	if err != nil {
+		t.Fatal(err)
 	}
 }

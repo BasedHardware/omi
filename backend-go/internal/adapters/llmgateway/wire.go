@@ -57,6 +57,8 @@ func (f Feature) lane() string {
 		return "omi:auto:" + strings.ReplaceAll(string(f), "_", "-")
 	case StructureShadow, ActionsShadow:
 		return "omi:auto:chat-structured"
+	case ConversationApps:
+		return ""
 	}
 	return ""
 }
@@ -109,6 +111,9 @@ func payloadFeature(in Request) Feature {
 	if feature == ExternalStructure || feature == ConversationV3Summary {
 		return ConversationStructure
 	}
+	if feature == ConversationAppSelect || feature == ConversationAppResult {
+		return ConversationApps
+	}
 	return feature
 }
 
@@ -118,7 +123,7 @@ func (f Feature) acceptsSchema() bool {
 	case ConversationAppSelect, ExternalStructure, ConversationV3Summary, StructureShadow, ActionsShadow:
 		return true
 	case ConversationStructure, ConversationDiscard, ConversationActions, ConversationFolder,
-		ConversationAppResult, Memories, MemoryL1:
+		ConversationAppResult, Memories, MemoryL1, ConversationApps:
 		return false
 	}
 	return false
@@ -197,7 +202,13 @@ type completionResponse struct {
 	} `json:"choices"`
 }
 
-func (c *client) send(req *http.Request, key string, lookup bool) (string, error) {
+func (c *client) send(g queue.Guarded, req *http.Request, key string, lookup bool) (string, error) {
+	if err := g.Err(); err != nil {
+		return "", err
+	}
+	if err := req.Context().Err(); err != nil {
+		return "", err
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return "", classify(CauseTransient, 0, 0)
@@ -219,6 +230,9 @@ func (c *client) read(resp *http.Response, key string, lookup bool) (string, err
 		return "", classify(cause, resp.StatusCode, delay)
 	}
 	if resp.Header.Get(idempotencyAck) != key {
+		if lookup {
+			return "", ErrNotCommitted
+		}
 		return "", classify(CauseIndeterminate, resp.StatusCode, 0)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxCompletionBytes+1))

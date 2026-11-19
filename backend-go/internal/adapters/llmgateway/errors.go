@@ -46,8 +46,10 @@ func classify(cause queue.Cause, status int, delay time.Duration) error {
 	return queue.Classify(err, queue.Fail(cause))
 }
 
+const maxErrorEnvelopeBytes = 64 << 10
+
 type errorEnvelope struct {
-	Error struct {
+	Error *struct {
 		Code         string `json:"code"`
 		FailureClass string `json:"failure_class"`
 	} `json:"error"`
@@ -55,8 +57,12 @@ type errorEnvelope struct {
 
 func readCause(resp *http.Response) (queue.Cause, string) {
 	var payload errorEnvelope
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 16<<10)).Decode(&payload); err != nil {
-		payload = errorEnvelope{}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxErrorEnvelopeBytes)).Decode(&payload); err != nil || payload.Error == nil {
+		if resp.StatusCode == http.StatusNotFound {
+			// An older replica returns a bare 404 for the keyed route.
+			return CauseTransient, ""
+		}
+		return responseCause(resp.StatusCode, "", ""), ""
 	}
 	code := payload.Error.Code
 	return responseCause(resp.StatusCode, code, payload.Error.FailureClass), code
@@ -66,7 +72,7 @@ func responseCause(status int, code, failureClass string) queue.Cause {
 	switch code {
 	case "idempotency_pending":
 		return CauseTransient
-	case "idempotency_indeterminate", "idempotency_expired":
+	case "idempotency_indeterminate", "idempotency_expired", "idempotency_not_found":
 		return CauseIndeterminate
 	case "invalid_route_config", "idempotency_owner_unavailable":
 		return CauseRejected

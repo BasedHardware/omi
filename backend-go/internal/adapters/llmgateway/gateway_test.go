@@ -33,6 +33,7 @@ func dialTestGateway(t *testing.T, baseURL string, c clock.Clock) Replayable {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(client.Close)
 	return client
 }
 
@@ -82,6 +83,9 @@ func TestCompleteSendsFeatureLaneAndAccounting(t *testing.T) {
 				}
 				if feature == ExternalStructure || feature == ConversationV3Summary {
 					feature = ConversationStructure
+				}
+				if feature == ConversationAppResult || feature == ConversationAppSelect {
+					feature = ConversationApps
 				}
 				wantHeaders := map[string]string{
 					"Authorization":        "Bearer test-service",
@@ -218,11 +222,14 @@ func TestRecoverLooksUpTheSameKeyWithoutPosting(t *testing.T) {
 		status   int
 		body     string
 		expected error
+		ack      string
 	}{
-		{"committed", http.StatusOK, okCompletion, nil},
-		{"missing", http.StatusNotFound, gatewayError("", "idempotency_not_found", ""), ErrNotCommitted},
-		{"expired", http.StatusGone, gatewayError("", "idempotency_expired", ""), ErrNotCommitted},
-		{"indeterminate", http.StatusConflict, gatewayError("", "idempotency_indeterminate", ""), ErrNotCommitted},
+		{"committed", http.StatusOK, okCompletion, nil, "correct"},
+		{"missing ack", http.StatusOK, okCompletion, ErrNotCommitted, ""},
+		{"mismatched ack", http.StatusOK, okCompletion, ErrNotCommitted, "other"},
+		{"missing", http.StatusNotFound, gatewayError("", "idempotency_not_found", ""), ErrNotCommitted, ""},
+		{"expired", http.StatusGone, gatewayError("", "idempotency_expired", ""), ErrNotCommitted, ""},
+		{"indeterminate", http.StatusConflict, gatewayError("", "idempotency_indeterminate", ""), ErrNotCommitted, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -234,6 +241,9 @@ func TestRecoverLooksUpTheSameKeyWithoutPosting(t *testing.T) {
 					r.Header.Get("X-Omi-User-Uid") != "owner" || r.Header.Get("Authorization") != "Bearer test-service" ||
 					r.Header.Get("X-Omi-Service-Caller") != "backend" || r.Header.Get("X-Omi-Request-Id") != key {
 					t.Errorf("unexpected recovery request: %s %s", r.Method, r.URL.Path)
+				}
+				if tc.ack != "correct" {
+					w.Header().Set(idempotencyAck, tc.ack)
 				}
 				writeResponse(t, w, tc.status, tc.body)
 			}))
@@ -307,7 +317,11 @@ func TestGatewayFailureEnvelopesMapToQueueOutcomes(t *testing.T) {
 		{"deleting owner", 403, gatewayError("", "idempotency_owner_unavailable", ""), CauseRejected, false},
 		{"BYOK provider timeout", 401, gatewayError("authentication_error", "credential_failure", "timeout_before_output"), CauseTransient, true},
 		{"BYOK provider down", 401, gatewayError("authentication_error", "credential_failure", "provider_5xx_omi_paid"), CauseTransient, true},
-		{"oversized error falls back to status", 401, gatewayError("authentication_error", "credential_failure", strings.Repeat("sensitive", 2048)), CauseServiceAuth, true},
+		{"long BYOK rejection", 401, paddedGatewayError(20 << 10), CauseBYOK, false},
+		{"oversized error falls back to status", 401, paddedGatewayError(70 << 10), CauseServiceAuth, true},
+		{"bare 404 on older replica", 404, `{"detail":"Not Found"}`, CauseTransient, true},
+		{"non-JSON 404 on older replica", 404, "Not Found", CauseTransient, true},
+		{"missing idempotency claim on POST", 404, gatewayError("", "idempotency_not_found", ""), CauseIndeterminate, false},
 		{"model missing", 404, gatewayError("api_error", "model_not_found", ""), CauseRejected, false},
 		{"bad route", 503, gatewayError("invalid_request_error", "invalid_route_config", "invalid_config"), CauseRejected, false},
 		{"provider timeout", 502, gatewayError("api_error", "provider_failure", "timeout_before_output"), CauseTransient, true},
@@ -342,6 +356,11 @@ func TestGatewayFailureEnvelopesMapToQueueOutcomes(t *testing.T) {
 			checkFailure(t, err, tc.cause, tc.status, outcome)
 		})
 	}
+}
+
+func paddedGatewayError(size int) string {
+	return fmt.Sprintf(`{"error":{"message":%q,"code":"credential_failure","failure_class":"byok_auth"}}`,
+		strings.Repeat("sensitive ", size/10))
 }
 
 func gatewayError(kind, code, failureClass string) string {
