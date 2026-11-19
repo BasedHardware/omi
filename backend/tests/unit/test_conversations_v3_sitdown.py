@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from config.conversations_v3 import sitdown_enabled
+from config.conversations_v3 import sitdown_enabled, sitdown_silence_seconds
 from utils.conversations.v3 import outline, planner
 
 AT = datetime(2026, 11, 18, tzinfo=timezone.utc)
@@ -90,3 +90,11 @@ def test_manual_end_stretches_keep_their_existing_single_card():
     groups = outline.stretches([raw], AT + timedelta(hours=1), silence=outline.SITDOWN_SILENCE)
     joined = planner.windows(groups, [[entry(1), entry(2, 'media')]], cohesion=True, sitdown=True)
     assert len(joined) == 1
+
+
+def test_sitdown_silence_is_bounded_and_defaults_to_fifteen_minutes(monkeypatch):
+    monkeypatch.delenv('CONVERSATIONS_V3_SITDOWN_SILENCE_SECONDS', raising=False)
+    assert sitdown_silence_seconds() == 900 == outline.SITDOWN_SILENCE.total_seconds()
+    for raw, expected in (('300', 300), ('1800', 1800), ('120', 900), ('7200', 900), ('soon', 900)):
+        monkeypatch.setenv('CONVERSATIONS_V3_SITDOWN_SILENCE_SECONDS', raw)
+        assert sitdown_silence_seconds() == expected

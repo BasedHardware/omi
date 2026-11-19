@@ -72,6 +72,24 @@ def sitdown_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_SITDOWN', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 
 
+SITDOWN_SILENCE_BOUNDS = (300, 1800)
+SITDOWN_SILENCE_DEFAULT = 900
+
+
+def sitdown_silence_seconds() -> int:
+    """Stretch silence under sit-down cutting, ``CONVERSATIONS_V3_SITDOWN_SILENCE_SECONDS`` (default 900).
+
+    300 keeps the five-minute hold (and the natural-end summary timing) while the outline still cuts
+    at sit-downs; values outside 300-1800 keep the default.
+    """
+    try:
+        value = int(os.getenv('CONVERSATIONS_V3_SITDOWN_SILENCE_SECONDS', str(SITDOWN_SILENCE_DEFAULT)))
+    except ValueError:
+        return SITDOWN_SILENCE_DEFAULT
+    low, high = SITDOWN_SILENCE_BOUNDS
+    return value if low <= value <= high else SITDOWN_SILENCE_DEFAULT
+
+
 def backfill_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_BACKFILL', 'off').strip().lower() == 'on'
 

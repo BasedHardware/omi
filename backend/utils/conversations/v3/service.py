@@ -19,7 +19,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud.firestore_v1 import FieldFilter
 
-from config.conversations_v3 import sitdown_enabled, stretch_cohesion_enabled
+from config.conversations_v3 import sitdown_enabled, sitdown_silence_seconds, stretch_cohesion_enabled
 from utils.conversations.v3.triggers import enqueue, changed
 from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
@@ -216,7 +216,8 @@ async def reconcile(
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
         cohesion = stretch_cohesion_enabled()
         sitdown = sitdown_enabled()
-        groups = outline.stretches(eligible, now, silence=outline.SITDOWN_SILENCE if sitdown else outline.SILENCE)
+        silence = timedelta(seconds=sitdown_silence_seconds()) if sitdown else outline.SILENCE
+        groups = outline.stretches(eligible, now, silence=silence)
         if on_open and conversation_id:
             target = existing.get(conversation_id)
             if target is None:
