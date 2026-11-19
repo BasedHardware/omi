@@ -13,6 +13,7 @@ from database.account_deletion_marker import (
     account_deletion_firestore_client,
 )
 
+from database.batch_account_authority import write_account_authority
 from database.legal_holds import assert_destructive_operation_transaction
 
 ERASE_DEADLINE = timedelta(minutes=15)
@@ -28,6 +29,24 @@ Step = Literal['arm', 'verify', 'receipt', 'wipe']
 
 def claim_fingerprint(token: str) -> str:
     return sha256(token.encode()).hexdigest()
+
+
+@transactional
+def mark_wipe_running(transaction, ref, job_id: str | None, claim: str | None, operation_id: str):
+    snapshot = ref.get(transaction=transaction)
+    marker = (snapshot.to_dict() or {}) if snapshot.exists else {}
+    armed = marker.get(ARMED_AT) is not None
+    if job_id is not None and (
+        marker.get('wipe_job_id') != job_id or marker.get('wipe_status') != 'retrying' or claim is None
+    ):
+        raise RuntimeError('account deletion wipe claim generation changed')
+    if armed and claim is None:
+        raise RuntimeError('armed Go queue erase requires a durable task claim')
+    fields = {'wipe_status': 'running', 'wipe_running_at': datetime.now(timezone.utc)}
+    if claim is not None:
+        fields.update({CLAIM: claim, CLAIM_EXPIRES_AT: None})
+    write_account_authority(transaction, ref, fields, merge=True, preimage=snapshot, operation_id=operation_id)
+    return armed
 
 
 @transactional

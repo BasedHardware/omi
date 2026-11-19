@@ -19,7 +19,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
 from ._client import get_data_plane_firestore_client
-from database.go_queue_erase import ARMED_AT, CLAIM, CLAIM_EXPIRES_AT, RECEIPT_AT
+from database.go_queue_erase import ARMED_AT, RECEIPT_AT, mark_wipe_running
 from database.account_deletion_marker import (
     account_deletion_collection,
     account_deletion_document,
@@ -417,30 +417,12 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
     )
 
 
-@transactional
-def _mark_user_deletion_wipe_running_txn(transaction, ref, job_id: str | None, claim: str | None, operation_id: str):
-    snapshot = ref.get(transaction=transaction)
-    marker = (snapshot.to_dict() or {}) if snapshot.exists else {}
-    armed = marker.get(ARMED_AT) is not None
-    if job_id is not None and (
-        marker.get('wipe_job_id') != job_id or marker.get('wipe_status') != 'retrying' or claim is None
-    ):
-        raise RuntimeError('account deletion wipe claim generation changed')
-    if armed and claim is None:
-        raise RuntimeError('armed Go queue erase requires a durable task claim')
-    fields = {'wipe_status': 'running', 'wipe_running_at': datetime.now(timezone.utc)}
-    if claim is not None:
-        fields.update({CLAIM: claim, CLAIM_EXPIRES_AT: None})
-    write_account_authority(transaction, ref, fields, merge=True, preimage=snapshot, operation_id=operation_id)
-    return armed
-
-
 @cache_writer('deletion_marker_cache')
 def mark_user_deletion_wipe_running(uid: str, job_id: str | None = None, claim: str | None = None) -> bool:
     """Read the current erase requirement and invalidate the previous attempt before running."""
     client = account_deletion_firestore_client()
     ref = account_deletion_document(uid, firestore_client=client)
-    return _mark_user_deletion_wipe_running_txn(client.transaction(), ref, job_id, claim, uuid.uuid4().hex)
+    return mark_wipe_running(client.transaction(), ref, job_id, claim, uuid.uuid4().hex)
 
 
 @transactional
