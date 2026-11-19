@@ -176,6 +176,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   bool _tabScrollInProgress = false;
   bool _tabDragStartedOnTranscript = false;
   bool _initialLiveHydrationFinished = false;
+  Timer? _liveSummaryTimer;
+  int _liveSummaryTick = 0;
   int _summaryOpen = 0;
   int _claimedSummaryOpen = 0;
   ServerConversation? _summaryOpenSnapshot;
@@ -311,6 +313,33 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         AnalyticsManager.identityEpoch == _routeIdentityEpoch;
   }
 
+  bool get _viewingLiveSummary {
+    final c = _detailProvider.conversationOrNull;
+    return c != null &&
+        c.id == widget.conversation.id &&
+        _isLiveV3(c) &&
+        !c.isLocked &&
+        !c.discarded &&
+        c.v3?.homeHidden != true &&
+        _detailProvider.hasHydratedDetail(c.id) &&
+        _summaryTabIsVisible();
+  }
+
+  void _syncLiveSummaryTimer() {
+    if (!_viewingLiveSummary) {
+      _liveSummaryTimer?.cancel();
+      _liveSummaryTimer = null;
+      return;
+    }
+    _liveSummaryTimer ??= Timer.periodic(const Duration(minutes: 5), (_) {
+      if (_viewingLiveSummary) {
+        setState(() => _liveSummaryTick++);
+      } else {
+        _syncLiveSummaryTimer();
+      }
+    });
+  }
+
   bool _claimSummaryOpen(int open) {
     if (open != _summaryOpen || open <= _claimedSummaryOpen) return false;
     _claimedSummaryOpen = open;
@@ -342,6 +371,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       _tabDragStartedOnTranscript = false;
       _scheduleSummaryOpen();
     }
+    _syncLiveSummaryTimer();
     return false;
   }
 
@@ -373,6 +403,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   }
 
   void _onTabChanged() {
+    _syncLiveSummaryTimer();
     _scheduleSummaryOpen();
     final tab = _tabForIndex(_controller!.index);
     if (tab == selectedTab) return;
@@ -591,6 +622,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _syncLiveSummaryTimer();
     if (state != AppLifecycleState.resumed) {
       _summaryOpenPending = false;
       _tabDragStartedOnTranscript = false;
@@ -617,6 +649,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     _detailProvider.leaveSpeakerLabelingSession(widget.conversation.id);
     unawaited(SiriIntegration.instance.setCurrentScreen("", null));
     _cancelOwnedTimers();
+    _liveSummaryTimer?.cancel();
     _liveRefresher.dispose();
     _separation.dispose();
     _controller?.dispose();
@@ -1385,6 +1418,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         ));
     final capture = context.read<CaptureProvider?>();
     context.select<ConversationsV3Provider?, bool>((provider) => provider?.v3 ?? false);
+    _syncLiveSummaryTimer();
     if (!_providerInitialized) {
       final preview = selectedTab == ConversationTab.transcript ? _livePreviewTail(widget.conversation, capture) : null;
       return Scaffold(
@@ -1509,6 +1543,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                           children: [
                             SummaryTab(
                               liveSummaryOpen: _summaryOpen,
+                              liveSummaryTick: _liveSummaryTick,
                               claimLiveSummaryOpen: _claimSummaryOpen,
                               isLiveSummaryVisible: _summaryTabIsVisible,
                               onOpenSource: (id) {
@@ -1613,6 +1648,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                       if (!mounted) return;
                       _liveEndRequested = suppressed;
                       _summaryOpenPending = false;
+                      _syncLiveSummaryTimer();
                     },
                     onStopPressed: () {
                       // Empty since we don't show the stop button in detail mode

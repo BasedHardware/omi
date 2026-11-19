@@ -763,6 +763,70 @@ void main() {
     await _dispose(tester, home);
   });
 
+  testWidgets('live recap refresh requires uninterrupted foreground Summary viewing and new speech', (tester) async {
+    final home = await _pumpHome(tester, v3: true);
+    home.detailSegments = recapSpeech;
+    var opens = 0;
+    LiveSummarySection.debugStream = (_) {
+      opens++;
+      return Stream.value(SummaryDone(Structured('Recap', 'Recap $opens'), _now.subtract(const Duration(minutes: 19))));
+    };
+    addTearDown(() => LiveSummarySection.debugStream = null);
+    await tester.tap(find.text('Launch checklist'));
+    await settleDetailTab(tester);
+    await tester.tap(find.text('Summary'));
+    await settleDetailTab(tester);
+    expect(opens, 1);
+    await tester.pump(const Duration(minutes: 5));
+    await settleDetailTab(tester);
+    expect(opens, 1, reason: 'unchanged transcript');
+    home.detailSegments = [
+      ...recapSpeech,
+      TranscriptSegment(
+          id: 'new',
+          text: 'New speech.',
+          start: 661,
+          end: 664,
+          speaker: 'SPEAKER_00',
+          isUser: true,
+          personId: null,
+          translations: [])
+    ];
+    await tester.pump(const Duration(minutes: 4));
+    await settleDetailTab(tester);
+    await tester.tap(find.text('Transcript'));
+    await settleDetailTab(tester);
+    await tester.pump(const Duration(minutes: 6));
+    await tester.tap(find.text('Summary'));
+    await settleDetailTab(tester);
+    await tester.pump(const Duration(minutes: 4));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump(const Duration(minutes: 6));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await settleDetailTab(tester);
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+    await tester.pump(const Duration(minutes: 4));
+    unawaited(navigator.push(MaterialPageRoute<void>(builder: (_) => const SizedBox())));
+    await settleDetailTab(tester);
+    await tester.pump(const Duration(minutes: 6));
+    navigator.pop();
+    await settleDetailTab(tester);
+    await tester.pump(const Duration(minutes: 4, seconds: 58));
+    await settleDetailTab(tester);
+    expect(opens, 1, reason: 'each interruption resets the five-minute interval');
+    await tester.pump(const Duration(seconds: 3));
+    await settleDetailTab(tester);
+    expect(opens, 2);
+    await tester.pump(const Duration(minutes: 5));
+    await settleDetailTab(tester);
+    expect(opens, 2, reason: 'no duplicate generation');
+    await _dispose(tester, home);
+  });
+
   testWidgets('restoring directly to Summary does not generate a live recap', (tester) async {
     final home = await _pumpHome(tester, v3: true);
     home.detailSegments = recapSpeech;
@@ -779,7 +843,7 @@ void main() {
       builder: (_) => ConversationDetailPage(conversation: restored, initialTab: ConversationTab.summary),
     )));
     await settleDetailTab(tester);
-    expect(find.byKey(const Key('live_summary_catch_up')).hitTestable(), findsOneWidget);
+    expect(find.byKey(const Key('live_summary_catch_up')), findsNothing);
     expect(opens, 0);
     await tester.pump(const Duration(seconds: 15));
     await settleDetailTab(tester);

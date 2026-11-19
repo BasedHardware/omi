@@ -33,6 +33,7 @@ class LiveSummarySection extends StatefulWidget {
     required this.onActiveChanged,
     this.stream,
     this.open = 0,
+    this.refreshTick = 0,
     this.claimOpen,
     this.detailHydrated = true,
     this.detailReadFailed = false,
@@ -50,6 +51,7 @@ class LiveSummarySection extends StatefulWidget {
   final ValueChanged<bool> onActiveChanged;
   final SummaryStreamOpener? stream;
   final int open;
+  final int refreshTick;
   final bool Function(int)? claimOpen;
   final bool detailHydrated;
   final bool detailReadFailed;
@@ -84,6 +86,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   int _requestEpoch = 0;
   int _observedOpen = 0;
   bool _attemptedLiveRecap = false;
+  List<Object>? _lastCompletedSpeech;
   bool _recapUnavailable = false;
   List<Object>? _requestSpeech;
   double _requestBoundary = 0;
@@ -107,6 +110,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
       _sections.clear();
       _ownerUid = SharedPreferencesUtil().uid;
       _attemptedLiveRecap = false;
+      _lastCompletedSpeech = null;
       _recapUnavailable = false;
       _liveResult = null;
       _liveRequestFailed = false;
@@ -141,6 +145,28 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
       if (_phase == _Phase.polling && _landed(widget.conversation)) _finish();
     }
     _observeSummaryOpen();
+    if (widget.refreshTick != oldWidget.refreshTick) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            _phase != _Phase.live ||
+            !_currentLiveTarget ||
+            _liveRequestFailed ||
+            widget.detailReadFailed ||
+            !_canCatchUp) {
+          return;
+        }
+        final c = widget.conversation;
+        if (listEquals(_lastCompletedSpeech, _speechSnapshot(c))) return;
+        final through = _summary?.through;
+        if (through != null) {
+          final start = c.startedAt;
+          if (start == null) return;
+          final coveredSeconds = through.difference(start).inMicroseconds / 1e6;
+          if (!c.transcriptSegments.any((s) => s.end > coveredSeconds && s.text.trim().isNotEmpty)) return;
+        }
+        _catchUp();
+      });
+    }
   }
 
   void _observeSummaryOpen() {
@@ -253,6 +279,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
         if (liveCatchup) {
           final body = _markdown(structured);
           if (coversThrough != null && body.isNotEmpty) {
+            _lastCompletedSpeech = _requestSpeech;
             _liveResult = (through: coversThrough, markdown: body);
           } else {
             _liveRequestFailed = true;
@@ -572,10 +599,10 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
                       Text(context.l10n.conversationWritingSummary, style: style),
                     ],
                   )
-                else if (_canCatchUp)
+                else if (_liveRequestFailed && _canCatchUp)
                   OmiButton.secondary(
                     key: const Key('live_summary_catch_up'),
-                    label: _liveRequestFailed ? context.l10n.tryAgain : context.l10n.update,
+                    label: context.l10n.tryAgain,
                     onPressed: _catchUp,
                     size: OmiButtonSize.compact,
                   ),

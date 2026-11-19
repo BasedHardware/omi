@@ -282,7 +282,7 @@ void main() {
       });
     }
 
-    testWidgets('live summary only starts after a tap and retains honest streamed coverage', (tester) async {
+    testWidgets('saved recap refreshes on a viewing interval and retains streamed coverage', (tester) async {
       final events = StreamController<SummaryStreamEvent>();
       var opens = 0;
       var refreshes = 0;
@@ -299,28 +299,40 @@ void main() {
       tester.view.physicalSize = const Size(390, 500);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(liveSnapshot(LiveSummarySection(
-        conversation: conversation,
-        open: 1,
-        stream: (_) {
-          opens++;
-          return events.stream;
-        },
-        refresh: () async {
-          refreshes++;
-          return false;
-        },
-        onActiveChanged: (_) {},
-      )));
+      conversation.transcriptSegments.add(TranscriptSegment(
+        id: 'append',
+        text: 'New speech.',
+        start: 1190,
+        end: 1200,
+        speaker: 'SPEAKER_00',
+        personId: null,
+        isUser: true,
+        translations: [],
+      ));
+      Future<void> show(int tick) => tester.pumpWidget(liveSnapshot(LiveSummarySection(
+            refreshTick: tick,
+            conversation: conversation,
+            open: 1,
+            stream: (_) {
+              opens++;
+              return events.stream;
+            },
+            refresh: () async {
+              refreshes++;
+              return false;
+            },
+            onActiveChanged: (_) {},
+          )));
+      await show(0);
       await tester.pump();
       expect(opens, 0);
       expect(find.textContaining('Summary through'), findsOneWidget);
       expect(find.textContaining('We agreed on the launch plan.'), findsOneWidget);
       final action = find.byKey(const Key('live_summary_catch_up'));
-      expect(action, findsOneWidget);
+      expect(action, findsNothing);
       await shoot(tester, '01-live-summary-catch-up');
 
-      await tester.tap(action);
+      await show(1);
       await tester.pump();
       await tester.pump();
       expect(opens, 1);
@@ -334,7 +346,10 @@ void main() {
       expect(find.textContaining('We confirmed Thursday.'), findsOneWidget);
       expect(find.textContaining('Summary through'), findsOneWidget);
       expect(find.text('Writing your summary…'), findsNothing);
-      expect(action, findsOneWidget, reason: 'equal speech clocks can conceal a corrected transcript');
+      expect(action, findsNothing);
+      await show(2);
+      await tester.pump();
+      expect(opens, 1, reason: 'no new speech since the prior generation');
       expect(refreshes, 0, reason: 'the terminal stream frame already contains the body and coverage');
       expect(opens, 1);
       await shoot(tester, '02-live-summary-current-coverage');
@@ -369,13 +384,14 @@ void main() {
         return CustomScrollView(slivers: [
           LiveSummarySection(
             conversation: conversation,
+            open: 1,
             stream: (_) => events.stream,
             refresh: () async => false,
             onActiveChanged: (_) {},
           ),
         ]);
       })));
-      await tester.tap(find.byKey(const Key('live_summary_catch_up')));
+      await tester.pump();
       rebuild(() {
         conversation = _conversation(
           state: ConversationTileState.live,
@@ -406,7 +422,7 @@ void main() {
       await tester.pump();
       expect(find.textContaining('Interim live private body.'), findsNothing);
       expect(find.byKey(const Key('live_summary_coverage')), findsNothing);
-      expect(find.byKey(const Key('live_summary_catch_up')), findsOneWidget);
+      expect(find.byKey(const Key('live_summary_catch_up')), findsNothing);
       rebuild(() {
         conversation = ServerConversation.fromJson({
           ...conversation.toJson(),
@@ -426,6 +442,7 @@ void main() {
       var opens = 0;
       await tester.pumpWidget(_sliver(LiveSummarySection(
         conversation: _conversation(state: ConversationTileState.live, latestSpeech: through, speech: enoughSpeech),
+        open: 1,
         stream: (_) {
           opens++;
           return events.stream;
@@ -433,7 +450,7 @@ void main() {
         refresh: () async => throw StateError('Do not refresh the old account'),
         onActiveChanged: (_) {},
       )));
-      await tester.tap(find.byKey(const Key('live_summary_catch_up')));
+      await tester.pump();
       await tester.pump();
       expect(opens, 1);
       await SharedPreferencesUtil().saveString('uid', 'replacement-user');

@@ -18,7 +18,7 @@
     {
       "file": "003-mobile-ios-recap-coverage.png",
       "platform": "mobile-ios",
-      "description": "The selected Summary tab shows the saved recap with its coverage time and Update action.",
+      "description": "The selected Summary tab shows the saved recap with its coverage time.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
