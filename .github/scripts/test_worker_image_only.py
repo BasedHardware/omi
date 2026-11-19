@@ -890,21 +890,44 @@ class DryRunTests(unittest.TestCase):
         self.assertEqual([args for args in seen if is_write(args)], [])
         self.assertEqual(self.cluster.writes, 0)
 
-    def test_kubectl_is_the_only_process_or_network_boundary(self):
+    # The helper's reviewed imports; anything else (an HTTP client, a Kubernetes SDK, importlib) fails closed.
+    REVIEWED_IMPORTS = {"__future__", "argparse", "copy", "hashlib", "json", "os", "pathlib", "re", "subprocess", "sys"}
+    PROCESS_CALLS = {"system", "popen", "execv", "execve", "execvp", "execvpe", "execl", "execlp", "spawnv", "spawnve",
+                     "spawnl", "fork", "forkpty", "posix_spawn", "posix_spawnp", "startfile"}
+
+    def boundary_violations(self, source):
         import ast
-        tree = ast.parse(Path(worker.__file__).read_text())
-        imported = {alias.name.split(".")[0] for node in ast.walk(tree) if isinstance(node, (ast.Import, ast.ImportFrom))
-                    for alias in node.names} | {node.module.split(".")[0] for node in ast.walk(tree)
-                                                 if isinstance(node, ast.ImportFrom) and node.module}
-        self.assertFalse(imported & {"socket", "urllib", "http", "requests", "httpx", "kubernetes", "ssl", "asyncio"})
-        callers = set()
-        for function in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)):
-            for node in ast.walk(function):
-                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in ("subprocess", "os"):
-                    if node.attr in ("run", "Popen", "call", "check_call", "check_output", "system", "popen", "exec",
-                                     "execv", "execvp", "spawnv", "fork"):
-                        callers.add(function.name)
-        self.assertEqual(callers, {"kubectl"})
+        tree = ast.parse(source)
+        found = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                found += [f"import {a.name}" for a in node.names if a.name.split(".")[0] not in self.REVIEWED_IMPORTS]
+            elif isinstance(node, ast.ImportFrom):
+                if (node.module or "").split(".")[0] not in self.REVIEWED_IMPORTS:
+                    found.append(f"from {node.module} import")
+            elif isinstance(node, ast.Name) and node.id in ("__import__", "eval", "exec", "compile"):
+                found.append(node.id)
+        allowed = set()
+        for function in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "kubectl"):
+            allowed |= {id(n) for n in ast.walk(function)}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+                if node.value.id == "subprocess" and node.attr != "TimeoutExpired" and id(node) not in allowed:
+                    found.append(f"subprocess.{node.attr}")
+                if node.value.id == "os" and node.attr in self.PROCESS_CALLS:
+                    found.append(f"os.{node.attr}")
+        return found
+
+    def test_kubectl_is_the_only_process_or_network_boundary(self):
+        self.assertEqual(self.boundary_violations(Path(worker.__file__).read_text()), [])
+
+    def test_boundary_check_rejects_alternate_clients(self):
+        source = Path(worker.__file__).read_text()
+        for extra in ("import urllib3\n", "from kubernetes import client\n", "import importlib\n",
+                      "def other():\n    return subprocess.run(['kubectl'])\n", "subprocess.Popen(['x'])\n",
+                      "def f():\n    os.system('x')\n", "def f():\n    return __import__('socket')\n"):
+            with self.subTest(extra=extra):
+                self.assertTrue(self.boundary_violations(source + "\n" + extra), extra)
 
     def test_guard_refuses_conflicting_or_duplicate_dry_run_flags(self):
         os.environ[worker.DRY_RUN_ENV] = "1"
