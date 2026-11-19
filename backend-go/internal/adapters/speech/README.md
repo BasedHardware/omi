@@ -6,8 +6,11 @@ for the rest. See `backend/utils/batch_pipeline/provider_stt_admission.py`,
 `backend/utils/batch_pipeline/vendor_route_contracts.py`, and
 `backend/utils/stt/{modulate_batch,pre_recorded}.py`. The calling family selects the
 route, resolves audio to WAV or FLAC, and supplies its declared step and language
-fallback. Velma detects the language itself, as in the Python client. The adapter
-returns timed turns and preserves Python's batch speaker-fallback signal.
+fallback. The adapter's input cap is 200 MB, matching `_MAX_UPLOAD_BYTES`
+in `backend/routers/stt.py`. Velma detects the language itself, as in the Python
+client. Speaker diarization defaults to on, and callers can set
+`DisableDiarization` to opt out. The adapter returns timed turns and preserves
+Python's batch speaker-fallback signal.
 
 Python's pre-recorded Modulate route uses the managed Modulate credential, including
 for enrolled BYOK owners. An explicitly enabled owner-key route takes an already
@@ -21,7 +24,9 @@ has no documented idempotency header, client reference, or job lookup. The adapt
 uses `g.Operation(step)` locally as the key under
 `users/{owner}/speech_modulate_operations/{operation}`. A fenced Firestore
 transaction reserves each attempt, and a second fenced read checks the shared
-deletion marker immediately before the POST. The adapter encrypts the
+deletion marker immediately before the POST. Modulate cannot refuse a late write,
+so an erase that starts between the pre-POST fence check and dispatch can still
+result in the owner's audio reaching the vendor. The adapter encrypts the
 successful reply with the owner's key and commits it through the same fence.
 Separate adapter instances sharing the store return the committed reply, including
 silence. Vendor origins require HTTPS, with HTTP allowed for literal loopback
@@ -64,9 +69,11 @@ propagates to the caller. Errors contain closed causes, with no vendor payload o
 
 | Rule | Test |
 | --- | --- |
-| Multipart FLAC, managed auth, timestamps, partial turns, speaker fallback, automatic language, and result reuse across instances | `TestModulateUploadsOnceAndRecoversPartialTranscript` |
-| Multipart WAV, explicitly selected owner auth, and recovery of silence | `TestModulateRecoversValidSilence` |
+| Multipart FLAC, default diarization, managed auth, timestamps, partial turns, speaker fallback, automatic language, and result reuse across instances | `TestModulateUploadsOnceAndRecoversPartialTranscript` |
+| Multipart WAV, explicit diarization opt-out, owner auth, and recovery of silence | `TestModulateRecoversValidSilence` |
 | A lost response blocks further POSTs, even from a new adapter instance | `TestModulateLostReplyNeverUploadsAgain` |
+| A redirect triggers neither a follow-up request nor another POST | `TestModulateDoesNotFollowOrReplayRedirects` |
+| A guard ending during the upload propagates lease loss and prevents the result from being committed | `TestModulatePropagatesLeaseLossBeforeFinishing` |
 | Concurrent adapters sharing one operation send one POST | `TestModulateConcurrentReservationsSendOneUpload` |
 | The operation record encrypts the reply, is owner-scoped and respects owner deletion | `TestModulateStoresEncryptedReplyAndFencesDeletedOwner` |
 | Deletion activated after reservation blocks the POST | `TestModulateFencesDeletionActivatedAfterReservation` |
@@ -77,4 +84,5 @@ propagates to the caller. Errors contain closed causes, with no vendor payload o
 | Malformed and oversized successes block replay and have no recoverable result | `TestModulateInvalidAndOversizedRepliesNeverUploadAgain` |
 | Missing or malformed owner credentials never fall back to managed auth, and a missing guard prevents any call | `TestModulateRequiresGuardAndCredentialBeforeUploading` |
 | Invalid and contradictory vendor replies cannot settle as silence | `TestModulateSilenceRequiresACoherentReply` |
+| Top-level text and duration are used only to validate silence | `TestModulateOnlyUsesTopLevelMetadataToValidateSilence` |
 | Language voting breaks ties on duration and then first occurrence | `TestModulateLanguageUsesWordCountThenDurationThenFirstSeen` |

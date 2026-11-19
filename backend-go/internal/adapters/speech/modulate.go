@@ -21,7 +21,8 @@ const (
 	modulatePath   = "/api/velma-2-stt-batch"
 	// ModulateModel is the model selected by the batch vendor route.
 	ModulateModel = "velma-2"
-	maxAudioBytes = 100_000_000
+	// Match _MAX_UPLOAD_BYTES in backend/routers/stt.py.
+	maxAudioBytes = 200_000_000
 )
 
 // Config supplies the managed credential and owner-fenced operation store.
@@ -75,8 +76,9 @@ func NewModulate(cfg Config) (*Modulate, error) {
 // audio and any owner credential separately under the same tenant guard.
 type Request struct {
 	Audio    []byte
-	Diarize  bool
 	Language string
+	// DisableDiarization opts out of Python's default speaker diarization.
+	DisableDiarization bool
 	// UseOwnerKey selects an explicitly supported owner-key route. The Python
 	// Modulate route uses the managed credential even for enrolled BYOK owners.
 	UseOwnerKey bool

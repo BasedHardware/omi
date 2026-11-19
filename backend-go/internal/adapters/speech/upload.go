@@ -22,7 +22,7 @@ const maxErrorReplyBytes = 64 << 10
 func newUpload(ctx context.Context, endpoint, key string, in Request) (*http.Request, error) {
 	var framing bytes.Buffer
 	form := multipart.NewWriter(&framing)
-	if err := form.WriteField("speaker_diarization", strconv.FormatBool(in.Diarize)); err != nil {
+	if err := form.WriteField("speaker_diarization", strconv.FormatBool(!in.DisableDiarization)); err != nil {
 		return nil, err
 	}
 	filename, contentType := "audio.wav", "audio/wav"

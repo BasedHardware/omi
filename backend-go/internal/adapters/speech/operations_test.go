@@ -140,3 +140,34 @@ func TestModulateFencesDeletionActivatedAfterReservation(t *testing.T) {
 		t.Fatalf("upload error = %v, vendor POSTs = %d, want deletion hold and zero POSTs", err, posts.Load())
 	}
 }
+
+// Capture the queue test guard's normal cleanup to end it during the vendor call.
+type guardCleanup struct {
+	testing.TB
+	end func()
+}
+
+func (g *guardCleanup) Cleanup(end func()) { g.end = end }
+
+func TestModulatePropagatesLeaseLossBeforeFinishing(t *testing.T) {
+	t.Parallel()
+	guard := &guardCleanup{TB: t}
+	g := queue.GuardedForTest(guard, "owner", "job")
+	t.Cleanup(guard.end)
+	var posts atomic.Int32
+	cfg := fakeVendor(t, func(w http.ResponseWriter, _ *http.Request) {
+		posts.Add(1)
+		guard.end()
+		writeReply(t, w, http.StatusOK, partialReply)
+	})
+	client := newClient(t, cfg)
+	_, err := client.Transcribe(t.Context(), g, "speech", Request{Audio: []byte("RIFF synthetic audio")})
+	if !errors.Is(err, queue.ErrLease) {
+		t.Fatalf("transcribe error = %v, want lease loss", err)
+	}
+	next := queue.GuardedForTest(t, "owner", "job")
+	_, err = client.Recover(t.Context(), next, "speech")
+	if !errors.Is(err, ErrNotCommitted) || posts.Load() != 1 {
+		t.Fatalf("recover error = %v, vendor POSTs = %d, want no saved reply and one POST", err, posts.Load())
+	}
+}

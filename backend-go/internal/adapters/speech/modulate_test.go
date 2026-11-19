@@ -36,7 +36,7 @@ func TestModulateUploadsOnceAndRecoversPartialTranscript(t *testing.T) {
 	g := queue.GuardedForTest(t, "owner", "job")
 	client := newClient(t, cfg)
 	got, err := client.Transcribe(t.Context(), g, "speech", Request{
-		Audio: []byte("fLaC synthetic audio"), Diarize: true, Language: "en", OwnerKey: "ignore-unselected-key",
+		Audio: []byte("fLaC synthetic audio"), Language: "en", OwnerKey: "ignore-unselected-key",
 	})
 	want := Transcript{Language: "es", Utterances: []Utterance{
 		{Text: "Okay.", Start: 0.1, End: 0.3, Speaker: "SPEAKER_00", SpeakerFallback: true},
@@ -64,7 +64,8 @@ func TestModulateRecoversValidSilence(t *testing.T) {
 	client := newClient(t, cfg)
 	g := queue.GuardedForTest(t, "owner", "job")
 	got, err := client.Transcribe(t.Context(), g, "speech", Request{
-		Audio: []byte("RIFF synthetic audio"), UseOwnerKey: true, OwnerKey: "owner-test-key", Language: "ja",
+		Audio: []byte("RIFF synthetic audio"), DisableDiarization: true, UseOwnerKey: true,
+		OwnerKey: "owner-test-key", Language: "ja",
 	})
 	want := Transcript{Language: "ja", Utterances: []Utterance{}}
 	checkTranscript(t, got, err, want)
@@ -91,6 +92,30 @@ func TestModulateLostReplyNeverUploadsAgain(t *testing.T) {
 	_, err = restarted.Recover(t.Context(), g, "speech")
 	if !errors.Is(err, ErrNotCommitted) || posts.Load() != 1 {
 		t.Fatalf("recover error = %v, vendor POSTs = %d", err, posts.Load())
+	}
+}
+
+func TestModulateDoesNotFollowOrReplayRedirects(t *testing.T) {
+	t.Parallel()
+	var posts, followed atomic.Int32
+	cfg := fakeVendor(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != modulatePath || r.Method != http.MethodPost {
+			followed.Add(1)
+			writeReply(t, w, http.StatusOK, partialReply)
+			return
+		}
+		posts.Add(1)
+		w.Header().Set("Location", "/redirect-target")
+		w.WriteHeader(http.StatusSeeOther)
+	})
+	client := newClient(t, cfg)
+	g := queue.GuardedForTest(t, "owner", "job")
+	for range 2 {
+		_, err := client.Transcribe(t.Context(), g, "speech", Request{Audio: []byte("RIFF synthetic audio")})
+		checkCause(t, err, CauseUnresolved)
+	}
+	if posts.Load() != 1 || followed.Load() != 0 {
+		t.Fatalf("vendor POSTs = %d, redirect requests = %d, want 1 and 0", posts.Load(), followed.Load())
 	}
 }
 

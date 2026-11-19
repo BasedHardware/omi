@@ -8,8 +8,8 @@ import (
 )
 
 type vendorReply struct {
-	Text       *string            `json:"text"`
-	Duration   *float64           `json:"duration_ms"`
+	Text       json.RawMessage    `json:"text"`
+	Duration   json.RawMessage    `json:"duration_ms"`
 	Utterances []*vendorUtterance `json:"utterances"`
 }
 
@@ -30,8 +30,7 @@ var errInvalidReply = errors.New("speech: invalid Modulate reply")
 
 func parseReply(body []byte, fallback string) (Transcript, error) {
 	var raw vendorReply
-	if json.Unmarshal(body, &raw) != nil || raw.Utterances == nil ||
-		(len(raw.Utterances) == 0 && raw.Text == nil && raw.Duration == nil) {
+	if json.Unmarshal(body, &raw) != nil || raw.Utterances == nil {
 		return Transcript{}, errInvalidReply
 	}
 	out := Transcript{Utterances: make([]Utterance, 0, len(raw.Utterances))}
@@ -56,7 +55,7 @@ func parseReply(body []byte, fallback string) (Transcript, error) {
 		})
 		hasLong = hasLong || len(strings.Fields(text)) >= 3
 	}
-	if len(out.Utterances) == 0 && raw.Text != nil && strings.TrimSpace(*raw.Text) != "" {
+	if len(out.Utterances) == 0 && !raw.validSilence() {
 		return Transcript{}, errInvalidReply
 	}
 	for index := range out.Utterances {
@@ -64,6 +63,20 @@ func parseReply(body []byte, fallback string) (Transcript, error) {
 	}
 	out.Language = detectLanguage(raw.Utterances, hasLong, fallback)
 	return out, nil
+}
+
+func (raw vendorReply) validSilence() bool {
+	var text *string
+	if json.Unmarshal(raw.Text, &text) == nil && text != nil {
+		return strings.TrimSpace(*text) == ""
+	}
+	if len(raw.Utterances) > 0 {
+		return true
+	}
+	// The JSON object already parsed, so the first byte identifies numeric values
+	// without accepting quoted numbers or requiring conversion to float64.
+	return len(raw.Duration) > 0 &&
+		(raw.Duration[0] == '-' || (raw.Duration[0] >= '0' && raw.Duration[0] <= '9'))
 }
 
 func detectLanguage(utterances []*vendorUtterance, hasLong bool, fallback string) string {
