@@ -10,6 +10,7 @@ from database import conversations_v3 as store, conversations_v3_leases as lease
 from utils.conversations.v3 import Conflict, created, service
 from tests.unit.test_conversations_v3_transactions import R, strict  # noqa: F401
 from tests.unit.test_conversations_v3_engine import native_ready_fields
+from tests.unit.test_conversations_v3_review import MemoryQuery
 
 C = ('users', 'synthetic', 'conversations', 'c')
 
@@ -201,22 +202,40 @@ async def test_manual_end_during_a_pass_lands_a_processing_row_within_one_follow
 
 
 @pytest.mark.asyncio
-async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_replay(strict, monkeypatch):
+@pytest.mark.parametrize('case', ['steady', 'reopened_before_notes', 'reopened_before_settlement'])
+async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_replay(strict, monkeypatch, case):
+    revoked = case != 'steady'
+    notes_committed = case == 'reopened_before_settlement'
     end = datetime.now(timezone.utc) - timedelta(seconds=10)
     start = end - timedelta(seconds=20)
     successor_key = ('users', 'synthetic', 'conversations', 'successor')
     old = live(start, **native_ready_fields(end))
     old['transcript_segments'][-1].update(text='The final decision was to ship tomorrow.', end=20)
     strict.rows[R] = old
-    strict.rows[successor_key] = live(end, words=1, id='successor')
+    if not revoked:
+        strict.rows[successor_key] = live(end, words=1, id='successor')
+    clock = end + timedelta(seconds=10)
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock
 
     def load(uid):
-        sources = {key[-1]: loaded(strict.rows[key], 1) for key in (R, successor_key)}
         existing = {
             key[-1]: {**deepcopy(row), '_v3_revision': 1}
             for key, row in strict.rows.items()
             if key[2] == 'conversations' and row.get('v3_derived')
         }
+        open_recordings = {
+            rid for row in existing.values() if row['status'] == 'in_progress' for rid in row['v3_recording_ids']
+        }
+        if not open_recordings and not any(
+            strict.rows[key].get('v3_pending') for key in (R, successor_key) if key in strict.rows
+        ):
+            return {}, {}, []
+        # Pending or open inputs load related derived windows and their recording closure.
+        sources = {key[-1]: loaded(strict.rows[key], 1) for key in (R, successor_key) if key in strict.rows}
         return sources, existing, []
 
     async def blocking(pool, fn, *args, **kwargs):
@@ -235,7 +254,9 @@ async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_repl
     summary_writes = []
 
     async def write_synthetic_summary(uid, row, token):
-        assert row['manual_end'] and row['v3_recording_ids'] == ['r']
+        if not service.writers.begin_processing(uid, row, token, firestore_client=strict):
+            return
+        assert row['manual_end'] is not revoked and row['v3_recording_ids'] == ['r']
         assert row['transcript_segments'][-1]['text'] == 'The final decision was to ship tomorrow.'
         summary = {'overview': row['transcript_segments'][-1]['text']}
         strict.rows[('users', uid, 'conversations', row['id'])].update(structured=summary, status='completed')
@@ -250,7 +271,15 @@ async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_repl
     monkeypatch.setattr(service, 'has_pending', lambda uid: False)
     monkeypatch.setattr(service, 'pending_processing', pending)
     monkeypatch.setattr(service, '_process_leased', write_synthetic_summary)
-    monkeypatch.setattr(service, 'enqueue', lambda *a, **kw: None)
+    enqueued = []
+    monkeypatch.setattr(service, 'enqueue', lambda uid, *, at=None: enqueued.append((uid, at)))
+    monkeypatch.setattr(service, 'datetime', Clock)
+    monkeypatch.setattr(
+        strict,
+        'collection_group',
+        lambda name: MemoryQuery({'/' + '/'.join(key): row for key, row in strict.rows.items()}).collection_group(name),
+        raising=False,
+    )
     monkeypatch.setattr(created, 'deliver', no_fanout)
     monkeypatch.setattr(service.context, 'outline_sources', lambda *a: ({}, [], []))
     monkeypatch.setattr(
@@ -260,14 +289,60 @@ async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_repl
             {'conversations': [{'first_line': 1, 'kind': 'conversation', 'title': 'Plan', 'line': 'You planned.'}]}
         ),
     )
-    assert await service.reconcile('synthetic') == 'committed'
-    assert await service.reconcile('synthetic') == 'committed'
+    if revoked:
+        drain = service.drain_processing
+        monkeypatch.setattr(service, 'drain_processing', no_fanout)
+        assert await service.reconcile('synthetic') == 'committed'
+        monkeypatch.setattr(service, 'drain_processing', drain)
+        assert not strict.rows[R]['v3_pending']
+        (before,) = [row for row in strict.rows.values() if row.get('v3_derived')]
+        assert before['manual_end'] and before['v3_process_pending']
+        if notes_committed:
+            # The core write had authorized substantive notes, but the notes lease had not settled yet.
+            receipt = service.policy.native_manual_notes_receipt(before)
+            assert receipt
+            before.update(
+                status='completed',
+                structured={'overview': 'The final decision was to ship tomorrow.'},
+                v3_native_manual_notes_visibility=receipt,
+            )
+            summary_writes.append(before['id'])
+        strict.rows[R].update(record_upload_revision=8, record_audio_closed=False)
+
+        # The next notes admission rejects the old proof and rearms the exact source.
+        await drain('synthetic')
+        assert len(summary_writes) == int(notes_committed) and strict.rows[R]['v3_pending']
+        pending_since = strict.rows[R]['v3_pending_since']
+        await drain('synthetic')
+        assert strict.rows[R]['v3_pending_since'] == pending_since
+
+        assert await service.sweep() == 1
+        assert enqueued[-1] == ('synthetic', None)  # The still-owed derived row wakes the owner.
+        assert await service.reconcile('synthetic') == 'committed'
+        (after,) = [row for row in strict.rows.values() if row.get('v3_derived')]
+        assert after['id'] == before['id'] and not after['v3_process_pending']
+        assert not strict.rows[R]['v3_pending'] and len(summary_writes) == int(notes_committed)
+
+        if notes_committed:
+            assert after['status'] == 'completed' and not after['manual_end']
+            assert after['v3_native_manual_notes_visibility'] == before['v3_native_manual_notes_visibility']
+            assert after['tile_state'] == 'done' and after['v3_created_pending']
+        else:
+            assert after['status'] == 'in_progress' and not after['manual_end']
+            clock = end + timedelta(minutes=5)
+            strict.rows[R].update(record_audio_closed=True, record_sealed_at=clock.timestamp())
+            assert await service.reconcile('synthetic') == 'committed'
+        assert await service.sweep() == 0
+    else:
+        assert await service.reconcile('synthetic') == 'committed'
+        assert await service.reconcile('synthetic') == 'committed'
     assert len(summary_writes) == 1
     produced = strict.rows[('users', 'synthetic', 'conversations', summary_writes[0])]
     assert produced['v3_notes_written'] and produced['summary_covers_through'] == end
-    windows = [row for row in strict.rows.values() if row.get('v3_derived')]
-    (successor,) = [row for row in windows if row['status'] == 'in_progress']
-    assert successor['v3_recording_ids'] == ['successor']
+    if not revoked:
+        windows = [row for row in strict.rows.values() if row.get('v3_derived')]
+        (successor,) = [row for row in windows if row['status'] == 'in_progress']
+        assert successor['v3_recording_ids'] == ['successor']
 
 
 @pytest.mark.parametrize(

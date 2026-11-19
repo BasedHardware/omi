@@ -14,6 +14,32 @@ from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.conversations.v3 import Conflict, policy
 
+_STALE_NATIVE_SOURCE = object()
+
+
+def admit_native_summary(uid, cid, token, revision, *, firestore_client=None):
+    """Check a foreground native source before paid work; persist any stale rearm."""
+    client = firestore_client or store.get_firestore_client()
+    ref = store.user_conversations(client, uid).document(cid)
+    held = leases.lease_ref(client, uid, 'summary-' + cid)
+
+    @firestore.transactional
+    def admit(tx):
+        snapshot = ref.get(transaction=tx)
+        lease = held.get(transaction=tx).to_dict() or {}
+        row = snapshot.to_dict() or {}
+        return bool(
+            snapshot.exists
+            and snapshot.update_time == revision
+            and lease.get('token') == token
+            and lease.get('until')
+            and lease['until'] > datetime.now(timezone.utc)
+            and row.get(policy.NATIVE_MANUAL_BINDING)
+            and permits_native_source(tx, client, uid, row)
+        )
+
+    return admit(client.transaction())
+
 
 def store_summary(uid, cid, token, revision, structured, covers, *, firestore_client=None):
     client = firestore_client or store.get_firestore_client()
@@ -40,9 +66,10 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
             or lease.get('token') != token
             or not lease.get('until')
             or lease['until'] <= datetime.now(timezone.utc)
-            or not permits_native_source(tx, client, uid, current)
         ):
             raise Conflict('summary_source_changed')
+        if not permits_native_source(tx, client, uid, current):
+            return _STALE_NATIVE_SOURCE
         if current.get('title_locked'):
             patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
             patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
@@ -76,7 +103,10 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
         )
         return armed
 
-    return persist(client.transaction())
+    result = persist(client.transaction())
+    if result is _STALE_NATIVE_SOURCE:
+        raise Conflict('summary_source_changed')
+    return result
 
 
 def settle_processing(
@@ -100,7 +130,7 @@ def settle_processing(
         if not row:
             return False
         if not skipped and not row.get('deleted') and not permits_native_source(tx, client, uid, row):
-            raise Conflict('processing_source_changed')
+            return _STALE_NATIVE_SOURCE
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
             decoded = store.decode_row(uid, snapshot)
             if not content_hash or processing_hash(decoded) != content_hash:
@@ -129,7 +159,10 @@ def settle_processing(
         )
         return armed
 
-    return settle(client.transaction())
+    result = settle(client.transaction())
+    if result is _STALE_NATIVE_SOURCE:
+        raise Conflict('processing_source_changed')
+    return result
 
 
 CREATED_CLAIM = timedelta(minutes=5)
@@ -313,7 +346,7 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
             tx.update(ref, {'v3_process_pending': False, 'tile_state': 'done', 'v3_process_failed': False})
             return False
         if not permits_native_source(tx, client, uid, row):
-            raise Conflict('processing_source_changed')
+            return _STALE_NATIVE_SOURCE
         if row.get('sync_content_revision') != revision:
             if not content_hash or processing_hash(store.decode_row(uid, snapshot)) != content_hash:
                 raise Conflict('processing_source_changed')
@@ -321,6 +354,8 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
         return not row.get('v3_process_failed')
 
     changed = fail(client.transaction())
+    if changed is _STALE_NATIVE_SOURCE:
+        raise Conflict('processing_source_changed')
     if changed:
         metrics.terminal_failure('processing')
     return changed

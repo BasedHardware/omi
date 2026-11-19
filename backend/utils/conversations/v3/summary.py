@@ -131,6 +131,11 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
         if row.get('recording') or row.get('is_locked'):
             yield 'error: {"detail":"Conversation not available"}\n\n'
             return
+        if row.get(policy.NATIVE_MANUAL_BINDING) is not None and not await run_blocking(
+            db_executor, writers.admit_native_summary, uid, cid, token, snapshot.update_time
+        ):
+            yield 'error: {"detail":"Summary unavailable; poll conversation detail"}\n\n'
+            return
         # run_blocking is awaited by a tracked task and never holds a DB worker
         # while waiting on a model. Request cancellation cannot authorize a write.
         from utils.executors import start_background_task

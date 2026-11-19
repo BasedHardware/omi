@@ -544,7 +544,7 @@ def test_native_notes_recheck_source_custody_during_the_write(strict, change):
     from tests.unit.test_conversations_v3_engine import native_ready_fields
     from utils.conversations.v3 import policy
 
-    source = {'id': 'r', 'recording': True, **native_ready_fields(AT)}
+    source = {'id': 'r', 'recording': True, 'started_at': AT - timedelta(seconds=20), **native_ready_fields(AT)}
     strict.rows[R] = source
     binding = policy.native_manual_binding(source)
     assert binding
@@ -566,13 +566,33 @@ def test_native_notes_recheck_source_custody_during_the_write(strict, change):
         assert fence.permits(strict.transaction(), strict, 'synthetic', path[-1], strict.rows[path])
         # The builder has not updated the derived row; only the raw custody facts moved.
         strict.rows[R].update(change)
-        assert not fence.permits(strict.transaction(), strict, 'synthetic', path[-1], strict.rows[path])
-        assert not writers.begin_processing('synthetic', derived, token, firestore_client=strict)
         with pytest.raises(store.Conflict, match='summary_source_changed'):
             writers.store_summary(
                 'synthetic', path[-1], token, 1, {'overview': 'Stale content'}, AT, firestore_client=strict
             )
+        assert strict.rows[R]['v3_pending'] is True  # The refusal is raised after the rearm transaction commits.
+        pending_since = strict.rows[R]['v3_pending_since']
+        assert not fence.permits(strict.transaction(), strict, 'synthetic', path[-1], strict.rows[path])
+        assert not writers.begin_processing('synthetic', derived, token, firestore_client=strict)
+        assert strict.rows[R]['v3_pending_since'] == pending_since
         with pytest.raises(store.Conflict, match='processing_source_changed'):
             writers.settle_processing('synthetic', path[-1], token, 3, AT, notes=True, firestore_client=strict)
     assert not strict.rows[path].get('structured')
     assert not strict.rows[path].get('v3_notes_written')
+
+
+@pytest.mark.parametrize('change', [{'deleted': True}, {'is_locked': True}, {'recording': False}])
+def test_stale_native_proof_does_not_rearm_an_ineligible_source(strict, change):
+    from database import conversations_v3_fence as fence
+    from tests.unit.test_conversations_v3_engine import native_ready_fields
+    from utils.conversations.v3 import policy
+
+    source = {'id': 'r', 'recording': True, 'started_at': AT - timedelta(seconds=20), **native_ready_fields(AT)}
+    binding = policy.native_manual_binding(source)
+    strict.rows[R] = {**source, **change}
+    tx = strict.transaction()
+    assert not fence.permits_native_source(
+        tx, strict, 'synthetic', {'v3_recording_ids': ['r'], 'v3_native_manual_binding': binding}
+    )
+    assert not tx.has_written
+    assert 'v3_pending' not in strict.rows[R]
