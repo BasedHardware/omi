@@ -104,7 +104,7 @@ class _Capture extends CaptureProvider {
 
   final LivePreviewController? preview;
   final ({String id, DateTime at, int previewWords, int previewSession})? closed;
-  final CreateConversationResponse? answer;
+  CreateConversationResponse? answer;
   final Future<void>? answerDelay;
   var finishes = 0;
 
@@ -119,8 +119,11 @@ class _Capture extends CaptureProvider {
   ({String id, DateTime at, int previewWords, int previewSession})? get lastServerClose => closed;
 
   @override
-  void noteClientFinish() => lastClientFinish =
-      (at: DateTime.now(), previewWords: preview?.totalWordsSeen ?? 0, previewSession: preview?.sessionGeneration ?? 0);
+  void noteClientFinish() => lastClientFinish = (
+        at: DateTime.now(),
+        previewWords: preview?.totalWordsSeen ?? 0,
+        previewSession: preview?.sessionGeneration ?? 0,
+      );
 
   @override
   String? get liveCaptureSource => 'omi';
@@ -142,7 +145,7 @@ Map<String, dynamic> _row(String id, {String createdAt = '2026-11-18T22:00:09Z',
       'status': 'completed',
       'structured': {'title': 'Fundraising call', 'overview': 'A synthetic summary', 'emoji': '📞'},
       'transcript_segments': [
-        {'text': 'Synthetic speech.', 'start': 0.0, 'end': 4.0, 'is_user': true}
+        {'text': 'Synthetic speech.', 'start': 0.0, 'end': 4.0, 'is_user': true},
       ],
       ...?extra,
     };
@@ -151,21 +154,28 @@ ServerConversation _conversation(String id, {String createdAt = '2026-11-18T22:0
     ServerConversation.fromJson(_row(id, createdAt: createdAt, extra: extra));
 
 ServerConversation _derived(String id, String recordingId, {String createdAt = '2026-11-18T22:00:09Z'}) =>
-    _conversation(id, createdAt: createdAt, extra: {
-      'kind': 'conversation',
-      'tile_state': 'writing',
-      'recording_pieces': [
-        {'recording_id': recordingId, 'audio_file_id': 'a1', 'start': 0.0, 'end': 600.0}
-      ],
-    });
+    _conversation(
+      id,
+      createdAt: createdAt,
+      extra: {
+        'kind': 'conversation',
+        'tile_state': 'writing',
+        'recording_pieces': [
+          {'recording_id': recordingId, 'audio_file_id': 'a1', 'start': 0.0, 'end': 600.0},
+        ],
+      },
+    );
 
 /// The recording document Process Now answers with: processing once admitted, still in progress when
 /// the server found nothing to process in it.
-ServerConversation _recordingDoc(String id, {bool notProcessed = false}) => _conversation(id, extra: {
-      'recording': true,
-      'status': notProcessed ? 'in_progress' : 'processing',
-      'structured': {'title': ''}
-    });
+ServerConversation _recordingDoc(String id, {bool notProcessed = false}) => _conversation(
+      id,
+      extra: {
+        'recording': true,
+        'status': notProcessed ? 'in_progress' : 'processing',
+        'structured': {'title': ''},
+      },
+    );
 
 const _line = LivePreviewLine(id: 'l1', text: 'We closed the round', isFinal: true);
 
@@ -213,9 +223,8 @@ Future<_Harness> _pump(WidgetTester tester, _Capture capture) async {
           builder: (context) => Scaffold(
             body: Center(
               child: TextButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const LiveEpisodePage()),
-                ),
+                onPressed: () =>
+                    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const LiveEpisodePage())),
                 child: const Text('home'),
               ),
             ),
@@ -254,8 +263,9 @@ void main() {
     final harness = await _pump(
       tester,
       _Capture(
-          preview: _Preview(const [_line], 4),
-          answer: CreateConversationResponse(messages: const [], conversation: _recordingDoc('rec-1'))),
+        preview: _Preview(const [_line], 4),
+        answer: CreateConversationResponse(messages: const [], conversation: _recordingDoc('rec-1')),
+      ),
     );
 
     final page = await _finishAndCapturePushed(tester, harness.capture) as FinishedCapturePage?;
@@ -288,7 +298,7 @@ void main() {
           id: 'rec-closed',
           at: DateTime.now().subtract(const Duration(seconds: 3)),
           previewWords: 4,
-          previewSession: 1
+          previewSession: 1,
         ),
       ),
     );
@@ -345,6 +355,30 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('a Finish that failed offline is sent again by the next Finish', (tester) async {
+    final harness = await _pump(tester, _Capture(preview: _Preview(const [_line], 4)));
+    // Offline: Process Now has no answer, and the page goes back to Home as before.
+    final first = await _finishAndCapturePushed(tester, harness.capture);
+    expect(harness.capture.finishes, 1);
+    expect(first, isNull);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(LiveEpisodePage), findsNothing);
+
+    // Back online, same preview lines, no new words: the retry still has something to process.
+    harness.capture
+      ..answer = CreateConversationResponse(messages: const [], conversation: _recordingDoc('rec-1'))
+      ..tapped = false;
+    await tester.tap(find.text('home'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    final second = await _finishAndCapturePushed(tester, harness.capture) as FinishedCapturePage?;
+
+    expect(harness.capture.finishes, 2, reason: 'the failed Finish processed nothing');
+    expect(second?.recordingId, 'rec-1');
+    expect(find.text('Nothing to process yet.'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('Finish again with no new speech sends nothing and says so', (tester) async {
     final preview = _Preview(const [_line], 4);
     final harness = await _pump(
@@ -380,7 +414,9 @@ void main() {
       _Capture(
         preview: _Preview(const [_line], 4),
         answer: CreateConversationResponse(
-            messages: const [], conversation: _recordingDoc('rec-empty', notProcessed: true)),
+          messages: const [],
+          conversation: _recordingDoc('rec-empty', notProcessed: true),
+        ),
       ),
     );
     final page = await _finishAndCapturePushed(tester, harness.capture);
@@ -442,18 +478,20 @@ void main() {
       var reads = 0;
       final home = HomeProvider()..setIndex(HomeProvider.tasksTab);
       addTearDown(home.dispose);
-      await tester.pumpWidget(pageApp(
-        FinishedCapturePage(
-          recordingId: 'rec-1',
-          maxWait: const Duration(seconds: 12),
-          fetch: () async {
-            reads++;
-            return const [];
-          },
-          open: (_, __) => fail('nothing to open'),
+      await tester.pumpWidget(
+        pageApp(
+          FinishedCapturePage(
+            recordingId: 'rec-1',
+            maxWait: const Duration(seconds: 12),
+            fetch: () async {
+              reads++;
+              return const [];
+            },
+            open: (_, __) => fail('nothing to open'),
+          ),
+          home: home,
         ),
-        home: home,
-      ));
+      );
       await tester.tap(find.text('home'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -476,13 +514,17 @@ void main() {
     testWidgets('a resume after the wait still reads once and opens it', (tester) async {
       var ready = false;
       ServerConversation? opened;
-      await tester.pumpWidget(pageApp(FinishedCapturePage(
-        recordingId: 'rec-1',
-        pollInterval: const Duration(seconds: 10),
-        maxWait: const Duration(seconds: 12),
-        fetch: () async => ready ? [_derived('714c4186', 'rec-1')] : const [],
-        open: (_, conversation) => opened = conversation,
-      )));
+      await tester.pumpWidget(
+        pageApp(
+          FinishedCapturePage(
+            recordingId: 'rec-1',
+            pollInterval: const Duration(seconds: 10),
+            maxWait: const Duration(seconds: 12),
+            fetch: () async => ready ? [_derived('714c4186', 'rec-1')] : const [],
+            open: (_, conversation) => opened = conversation,
+          ),
+        ),
+      );
       await tester.tap(find.text('home'));
       await tester.pump();
       await tester.pump(const Duration(seconds: 25));
@@ -498,21 +540,23 @@ void main() {
     testWidgets('waits, then opens the conversation as soon as it is listed', (tester) async {
       var reads = 0;
       ServerConversation? opened;
-      await tester.pumpWidget(MaterialApp(
-        locale: const Locale('en'),
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: FinishedCapturePage(
-          recordingId: 'rec-1',
-          fetch: () async => ++reads < 3 ? [_conversation('3d2eea45-sync-piece')] : [_derived('714c4186', 'rec-1')],
-          open: (_, conversation) => opened = conversation,
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: FinishedCapturePage(
+            recordingId: 'rec-1',
+            fetch: () async => ++reads < 3 ? [_conversation('3d2eea45-sync-piece')] : [_derived('714c4186', 'rec-1')],
+            open: (_, conversation) => opened = conversation,
+          ),
         ),
-      ));
+      );
       await tester.pump();
       expect(find.text('Processing conversation…'), findsOneWidget);
       expect(opened, isNull);
