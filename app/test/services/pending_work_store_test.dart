@@ -33,6 +33,7 @@ PendingWorkStore _store(
   ApiResult<AttentionRetryResult> Function(String id)? retry,
   ApiResult<List<AttentionRetryResult>> Function()? retryAll,
   Future<ApiResult<void>> Function(String id)? dismiss,
+  List<String>? dismissedStore,
 }) {
   var keys = 0;
   return PendingWorkStore(
@@ -58,6 +59,10 @@ PendingWorkStore _store(
       return const ApiSuccess(null);
     },
     dismiss: dismiss ?? (_) async => const ApiSuccess(null),
+    loadDismissed: () => [...?dismissedStore],
+    saveDismissed: (ids) => dismissedStore
+      ?..clear()
+      ..addAll(ids),
     newKey: () => 'key-${keys++}',
   );
 }
@@ -356,6 +361,30 @@ void main() {
       expect(store.attention.map((i) => i.id), ['x', 'y', 'z']);
       expect(store.retryErrors, {'y'});
       expect(store.attentionConversationIds, {'c-x', 'c-y', 'c-z'});
+    });
+
+    test('a dismissed conversation stays out of the failure projection after a relaunch', () async {
+      final saved = <String>[];
+      final first = _store(_Calls(), attention: page([_item('x')]), dismissedStore: saved);
+      await first.refresh();
+      await first.dismiss(first.attention.single);
+      expect(saved, ['c-x']);
+      first.reset();
+      expect(first.attentionConversationIds, contains('c-x'));
+      final relaunched = _store(_Calls(), dismissedStore: saved);
+      await relaunched.refresh();
+      expect(relaunched.attentionConversationIds, {'c-x'});
+    });
+
+    test('a failed dismiss forgets the saved conversation', () async {
+      final saved = <String>[];
+      final store = _store(_Calls(),
+          attention: page([_item('x')]),
+          dismissedStore: saved,
+          dismiss: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)));
+      await store.refresh();
+      await store.dismiss(store.attention.single);
+      expect(saved, isEmpty);
     });
 
     test('a 404 means the row is already gone', () async {

@@ -1076,6 +1076,11 @@ class SharedPreferencesUtil {
 
   set cachedTranscriptionVocabulary(List<String> value) => saveStringList('cachedTranscriptionVocabulary', value);
 
+  /// Conversations whose Needs attention row the user dismissed (ids are unique across accounts).
+  List<String> get dismissedAttentionConversations => getStringList('dismissedAttentionConversations');
+
+  set dismissedAttentionConversations(List<String> value) => saveStringList('dismissedAttentionConversations', value);
+
   // User primary language preferences
   String get userPrimaryLanguage => getString('userPrimaryLanguage');
 

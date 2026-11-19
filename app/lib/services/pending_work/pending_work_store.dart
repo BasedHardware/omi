@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/pending_work.dart' as api;
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 
@@ -19,6 +20,8 @@ class PendingWorkStore extends ChangeNotifier {
     Future<ApiResult<List<AttentionRetryResult>>> Function({required String idempotencyKey})? retryAll,
     Future<ApiResult<void>> Function(List<String> ids)? markSeen,
     Future<ApiResult<void>> Function(String id)? dismiss,
+    List<String> Function()? loadDismissed,
+    void Function(List<String> conversationIds)? saveDismissed,
     String Function()? newKey,
   })  : _loadPending = loadPending ?? api.getPendingWork,
         _loadAttention = loadAttention ?? api.getAttentionItems,
@@ -26,6 +29,8 @@ class PendingWorkStore extends ChangeNotifier {
         _retryAll = retryAll ?? api.retryAllAttentionItems,
         _markSeen = markSeen ?? api.markAttentionItemsSeen,
         _dismiss = dismiss ?? api.dismissAttentionItem,
+        _loadDismissed = loadDismissed ?? (() => SharedPreferencesUtil().dismissedAttentionConversations),
+        _saveDismissed = saveDismissed ?? ((ids) => SharedPreferencesUtil().dismissedAttentionConversations = ids),
         _newKey = newKey ?? (() => const Uuid().v4());
 
   static PendingWorkStore instance = PendingWorkStore();
@@ -36,6 +41,8 @@ class PendingWorkStore extends ChangeNotifier {
   final Future<ApiResult<List<AttentionRetryResult>>> Function({required String idempotencyKey}) _retryAll;
   final Future<ApiResult<void>> Function(List<String> ids) _markSeen;
   final Future<ApiResult<void>> Function(String id) _dismiss;
+  final List<String> Function() _loadDismissed;
+  final void Function(List<String> conversationIds) _saveDismissed;
   final String Function() _newKey;
 
   List<PendingWorkItem> _pending = const [];
@@ -59,7 +66,6 @@ class PendingWorkStore extends ChangeNotifier {
     _setAttention(const []);
     _retryKeys.clear();
     _acceptedNotes.clear();
-    _dismissedConversations.clear();
     _acceptedOperations.clear();
     _retrying.clear();
     retryErrors.clear();
@@ -94,8 +100,16 @@ class PendingWorkStore extends ChangeNotifier {
       };
   final Map<String, String> _acceptedNotes = {};
 
-  /// A dismissed row's conversation must not come back as Activity's projected failure row.
-  final Set<String> _dismissedConversations = {};
+  /// A dismissed row's conversation must not come back as Activity's projected failure row, also
+  /// after a relaunch. Kept on the device, newest last, bounded.
+  late final Set<String> _dismissedConversations = {..._loadDismissed()};
+  static const _maxDismissed = 500;
+
+  void _saveDismissedConversations() {
+    final ids = _dismissedConversations.toList();
+    _saveDismissed(ids.length > _maxDismissed ? ids.sublist(ids.length - _maxDismissed) : ids);
+  }
+
   final Set<String> retryErrors = {};
   final Map<String, String?> _acceptedOperations = {};
   final Set<String> _retrying = {};
@@ -263,6 +277,7 @@ class PendingWorkStore extends ChangeNotifier {
     retryErrors.remove(item.id);
     final conversationId = removed.conversationId;
     final suppressing = conversationId != null && _dismissedConversations.add(conversationId);
+    if (suppressing) _saveDismissedConversations();
     _setAttention([
       for (final i in _attention)
         if (i.id != item.id) i
@@ -276,7 +291,10 @@ class PendingWorkStore extends ChangeNotifier {
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         return true;
       case ApiFailure():
-        if (suppressing) _dismissedConversations.remove(conversationId);
+        if (suppressing) {
+          _dismissedConversations.remove(conversationId);
+          _saveDismissedConversations();
+        }
         if (!_attention.any((i) => i.id == item.id)) {
           _attentionRevision++;
           _setAttention([..._attention]..insert(index.clamp(0, _attention.length), removed));
