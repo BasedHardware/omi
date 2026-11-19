@@ -218,3 +218,11 @@ def test_preview_anchors_skip_model_sections_without_line_numbers():
     assert set(anchors) == {'1', '2'}
     [rebased] = outline.reuse_preview(group, {'entries': entries, 'anchors': anchors})
     assert rebased['sections'] == [{'title': 'valid', 'first_line': 2}]
+
+
+def test_locked_refinement_keeps_overview_only_card_in_place():
+    from utils.conversations.v3 import refinement
+
+    window, existing, recordings = _locked_pair()
+    existing['late']['structured'].pop('sections')
+    assert refinement.candidate([window], existing, recordings) is None

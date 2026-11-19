@@ -191,7 +191,14 @@ def candidate(windows, existing, recordings):
         flags = ('data_protection_level', 'private_cloud_sync_enabled', 'uses_custom_stt')
         if any(row.get(flag) != rows[0].get(flag) for row in rows[1:] for flag in flags):
             continue
-        if any(not isinstance(row.get('structured'), dict) or not row.get('transcript_segments') for row in rows):
+        # A user overview edit deletes generated sections. Older edits have no
+        # separate provenance marker, so preserve sectionless cards in place.
+        if any(
+            not isinstance(row.get('structured'), dict)
+            or not row['structured'].get('sections')
+            or not row.get('transcript_segments')
+            for row in rows
+        ):
             continue
         claims = _owned_claims(rows, recordings)
         if claims is None:
