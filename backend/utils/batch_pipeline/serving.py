@@ -531,9 +531,9 @@ async def _supervise_held_dead_letters(stop):
     while not stop.is_set():
         try:
             if batch_held_dead_letter_enabled():
-                service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+                service = await run_blocking(db_executor, serving_for_stage, current_stage())
                 with batch_privacy_attempt():
-                    await run_blocking(sync_executor, service.sweep_held_dead_letters, periodic=True)
+                    await run_blocking(db_executor, service.sweep_held_dead_letters, periodic=True)
         except Exception as error:
             logging.getLogger(__name__).error(
                 'event=batch_held_dead_letter outcome=retry exception_type=%s', type(error).__name__

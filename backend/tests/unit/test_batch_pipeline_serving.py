@@ -967,6 +967,29 @@ async def test_serving_expires_held_jobs_while_reconciliation_is_blocked(monkeyp
     assert runtime[1].done()
 
 
+@pytest.mark.asyncio
+async def test_held_expiry_supervisor_uses_db_executor_for_lookup_and_sweep(monkeypatch):
+    from utils.batch_pipeline import serving
+
+    stop = asyncio.Event()
+    calls = []
+    service = SimpleNamespace(sweep_held_dead_letters=Mock(side_effect=lambda **_: stop.set()))
+
+    async def run_on(executor, fn, *args, **kwargs):
+        calls.append(executor)
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(serving, 'batch_held_dead_letter_enabled', lambda: True)
+    monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'prod')
+    monkeypatch.setattr(serving, 'run_blocking', run_on)
+
+    await serving._supervise_held_dead_letters(stop)
+
+    assert calls == [serving.db_executor, serving.db_executor]
+    service.sweep_held_dead_letters.assert_called_once_with(periodic=True)
+
+
 def test_serving_maintenance_fails_open_when_lease_store_errors():
     from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
 

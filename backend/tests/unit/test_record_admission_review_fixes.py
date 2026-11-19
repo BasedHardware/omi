@@ -87,7 +87,7 @@ async def test_serving_tick_drains_admitted_recordings_after_admission_rollback(
     reconcile = AsyncMock(side_effect=lambda **kwargs: stop.set())
     service.reconcile_async = reconcile
     await asyncio.wait_for(coro, timeout=1)
-    reconcile.assert_awaited_once_with(recover_quarantine=True, periodic=True)
+    reconcile.assert_awaited_once_with(recover_quarantine=True, periodic=True, run_held_expiry=False)
     assert drain.await_count == 1  # Discovery must retain already-admitted work after rollback.
 
 
