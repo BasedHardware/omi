@@ -12,8 +12,6 @@ import inspect
 from functools import wraps
 from google.cloud.firestore_v1.types import Document, DocumentMask, Value, Write
 
-from database.home_feed_fields import COMMIT_STAMPED_FIELDS as COMMIT_STAMPED_FIELDS  # re-exported
-
 _ERASING_ROOTS: ContextVar[frozenset[str]] = ContextVar("home_feed_erasing_roots", default=frozenset())
 
 _ERASING: ContextVar[frozenset[str]] = ContextVar("home_feed_erasing_owner", default=frozenset())
