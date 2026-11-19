@@ -130,16 +130,19 @@ def recording_short_path(fn):
 
 def _match(window, existing, used):
     start, end = window['lines'][0]['start'], window['lines'][-1]['end']
+    published = window.get('_published_ids', ())
     candidates = [
         r
         for r in existing.values()
         if r['id'] not in used
+        and (r['id'] not in published or r.get('deleted'))
         and r.get('started_at')
         and r.get('finished_at')
         and r['started_at'] <= end
         and r['finished_at'] >= start
     ]
-    # First resulting split retains the live id. Deleted targets also retain
+    # Published claimants are assigned by the planner. First resulting split retains
+    # the live id. Deleted targets also retain
     # their identity, so rebuilds cannot resurrect a deleted time window.
     return min(candidates, key=lambda r: r['started_at']) if candidates else None
 
@@ -290,6 +293,7 @@ async def reconcile(
             # recording outgrows Firestore's 1 MiB document limit (document_too_large).
             rows, used = [], {window['existing_id'] for window in windows if window.get('existing_id')}
             taken = set()
+            allocated = {}
             await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
             for window in windows:
                 # An affirmative transcription failure is terminal even before the silence deadline.
@@ -298,8 +302,8 @@ async def reconcile(
                 prior = existing.get(window.get('existing_id')) or _match(window, existing, used)
                 if prior:
                     used.add(prior['id'])
-                row = planner.build(uid, window, recordings, prior)
-                if not prior and row['id'] in used | taken:
+                row = planner.build(uid, window, recordings, prior, allocated=allocated)
+                if not prior and (row['id'] in used | taken or row['id'] in window.get('_published_ids', ())):
                     # A fresh window starting at a planned row's exact start derives the same start-keyed
                     # id; qualify it with its first recording so one id never names two planned rows.
                     first = window['lines'][0]['conversation_id']
@@ -396,6 +400,8 @@ async def reconcile(
                     row['v3_process_pending'] = False
                     row['v3_backfill_process_pending'] = True
                 rows.append(row)
+                for rid, claims in row['_v3_claims'].items():
+                    allocated.setdefault(rid, []).extend((claim['start'], claim['end']) for claim in claims)
             return rows
 
         rows = await plan()
