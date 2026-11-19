@@ -15612,4 +15612,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Audio anda selamat pada peranti atau telefon anda';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Ringkasan sehingga $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Transkrip terkini';
 }

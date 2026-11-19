@@ -15584,4 +15584,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Ditt ljud är säkert på din enhet eller telefon';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Sammanfattning till $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Senaste transkription';
 }

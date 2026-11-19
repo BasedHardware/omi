@@ -4691,5 +4691,7 @@
     "finishBackToHome": "Zpět domů",
     "conversationSummaryWhenItEnds": "Shrnutí po skončení tohoto rozhovoru",
     "deviceUploadsWaitingOnServer": "Nahrávky čekající na serveru",
-    "deviceUploadsWaitingOnServerSubtitle": "Váš zvuk je v bezpečí na vašem zařízení nebo telefonu"
+    "deviceUploadsWaitingOnServerSubtitle": "Váš zvuk je v bezpečí na vašem zařízení nebo telefonu",
+    "conversationSummaryThrough": "Shrnutí do {time}",
+    "conversationRecentTranscript": "Nejnovější přepis"
 }

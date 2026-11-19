@@ -15580,4 +15580,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Äänityksesi ovat turvassa laitteella tai puhelimella';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Yhteenveto klo $time asti';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Viimeisin litterointi';
 }

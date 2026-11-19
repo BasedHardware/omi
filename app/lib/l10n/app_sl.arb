@@ -12248,5 +12248,7 @@
     "finishBackToHome": "Nazaj na začetno",
     "conversationSummaryWhenItEnds": "Povzetek, ko se ta pogovor konča",
     "deviceUploadsWaitingOnServer": "Nalaganja, ki čakajo na strežniku",
-    "deviceUploadsWaitingOnServerSubtitle": "Vaš zvok je varen v vaši napravi ali telefonu"
+    "deviceUploadsWaitingOnServerSubtitle": "Vaš zvok je varen v vaši napravi ali telefonu",
+    "conversationSummaryThrough": "Povzetek do {time}",
+    "conversationRecentTranscript": "Nedavni prepis"
 }

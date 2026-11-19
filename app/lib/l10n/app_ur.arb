@@ -12248,5 +12248,7 @@
     "finishBackToHome": "ہوم پر واپس جائیں",
     "conversationSummaryWhenItEnds": "یہ گفتگو ختم ہونے پر خلاصہ",
     "deviceUploadsWaitingOnServer": "اپ لوڈز سرور پر انتظار میں ہیں",
-    "deviceUploadsWaitingOnServerSubtitle": "آپ کا آڈیو آپ کی ڈیوائس یا فون پر محفوظ ہے"
+    "deviceUploadsWaitingOnServerSubtitle": "آپ کا آڈیو آپ کی ڈیوائس یا فون پر محفوظ ہے",
+    "conversationSummaryThrough": "{time} تک کا خلاصہ",
+    "conversationRecentTranscript": "حالیہ ٹرانسکرپٹ"
 }

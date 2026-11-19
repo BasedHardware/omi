@@ -4691,5 +4691,7 @@
     "finishBackToHome": "Tillbaka till Hem",
     "conversationSummaryWhenItEnds": "Sammanfattning när det här samtalet avslutas",
     "deviceUploadsWaitingOnServer": "Uppladdningar som väntar på servern",
-    "deviceUploadsWaitingOnServerSubtitle": "Ditt ljud är säkert på din enhet eller telefon"
+    "deviceUploadsWaitingOnServerSubtitle": "Ditt ljud är säkert på din enhet eller telefon",
+    "conversationSummaryThrough": "Sammanfattning till {time}",
+    "conversationRecentTranscript": "Senaste transkription"
 }

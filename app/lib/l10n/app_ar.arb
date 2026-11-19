@@ -4691,5 +4691,7 @@
     "finishBackToHome": "العودة إلى الرئيسية",
     "conversationSummaryWhenItEnds": "الملخص عند انتهاء هذه المحادثة",
     "deviceUploadsWaitingOnServer": "عمليات الرفع بانتظار الخادم",
-    "deviceUploadsWaitingOnServerSubtitle": "الصوت الخاص بك آمن على جهازك أو هاتفك"
+    "deviceUploadsWaitingOnServerSubtitle": "الصوت الخاص بك آمن على جهازك أو هاتفك",
+    "conversationSummaryThrough": "الملخص حتى {time}",
+    "conversationRecentTranscript": "النص المكتوب الأخير"
 }

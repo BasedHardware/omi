@@ -12248,5 +12248,7 @@
     "finishBackToHome": "חזרה למסך הבית",
     "conversationSummaryWhenItEnds": "סיכום כשהשיחה הזו תסתיים",
     "deviceUploadsWaitingOnServer": "העלאות שממתינות בשרת",
-    "deviceUploadsWaitingOnServerSubtitle": "האודיו שלך נשמר בבטחה במכשיר או בטלפון שלך"
+    "deviceUploadsWaitingOnServerSubtitle": "האודיו שלך נשמר בבטחה במכשיר או בטלפון שלך",
+    "conversationSummaryThrough": "סיכום עד {time}",
+    "conversationRecentTranscript": "תמלול אחרון"
 }

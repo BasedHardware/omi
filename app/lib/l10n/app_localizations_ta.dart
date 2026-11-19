@@ -15680,4 +15680,12 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get deviceUploadsWaitingOnServerSubtitle =>
       'உங்கள் ஆடியோ உங்கள் சாதனத்தில் அல்லது தொலைபேசியில் பாதுகாப்பாக உள்ளது';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time வரையிலான சாரம்';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'சமீபத்திய உரையாடல் உரை';
 }

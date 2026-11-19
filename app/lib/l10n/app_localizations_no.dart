@@ -15579,4 +15579,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Lyden din er trygg på enheten eller telefonen din';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Sammendrag til $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Siste transkripsjon';
 }

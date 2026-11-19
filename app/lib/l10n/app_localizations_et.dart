@@ -15568,4 +15568,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Teie audio on turvaliselt teie seadmes või telefonis';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Kokkuvõte kuni $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Hiljutine transkriptsioon';
 }

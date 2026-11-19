@@ -15324,4 +15324,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => '您的音频安全保存在您的设备或手机上';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '截至 $time 的摘要';
+  }
+
+  @override
+  String get conversationRecentTranscript => '最近的文字记录';
 }

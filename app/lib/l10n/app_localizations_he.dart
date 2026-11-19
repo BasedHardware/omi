@@ -15463,4 +15463,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'האודיו שלך נשמר בבטחה במכשיר או בטלפון שלך';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'סיכום עד $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'תמלול אחרון';
 }

@@ -15612,4 +15612,12 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Tvoj je audio siguran na tvom uređaju ili telefonu';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Sažetak do $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Nedavna transkripcija';
 }

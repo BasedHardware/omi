@@ -12248,5 +12248,7 @@
     "finishBackToHome": "Nazad na početnu",
     "conversationSummaryWhenItEnds": "Sažetak kada se ovaj razgovor završi",
     "deviceUploadsWaitingOnServer": "Otpremanja koja čekaju na serveru",
-    "deviceUploadsWaitingOnServerSubtitle": "Vaš audio je siguran na vašem uređaju ili telefonu"
+    "deviceUploadsWaitingOnServerSubtitle": "Vaš audio je siguran na vašem uređaju ili telefonu",
+    "conversationSummaryThrough": "Sažetak do {time}",
+    "conversationRecentTranscript": "Nedavni prepis"
 }

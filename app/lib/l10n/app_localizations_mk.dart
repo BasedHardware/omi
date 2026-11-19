@@ -15640,4 +15640,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Вашето аудио е безбедно на вашиот уред или телефон';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Резиме до $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Скорешен транскрипт';
 }

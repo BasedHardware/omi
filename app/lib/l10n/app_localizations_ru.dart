@@ -15625,4 +15625,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Ваше аудио в безопасности на устройстве или телефоне';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Сводка до $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Последняя расшифровка';
 }

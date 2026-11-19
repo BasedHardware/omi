@@ -4691,5 +4691,7 @@
     "finishBackToHome": "Takaisin kotiin",
     "conversationSummaryWhenItEnds": "Yhteenveto, kun tämä keskustelu päättyy",
     "deviceUploadsWaitingOnServer": "Palvelimelle lähetetyt tiedostot odottavat",
-    "deviceUploadsWaitingOnServerSubtitle": "Äänityksesi ovat turvassa laitteella tai puhelimella"
+    "deviceUploadsWaitingOnServerSubtitle": "Äänityksesi ovat turvassa laitteella tai puhelimella",
+    "conversationSummaryThrough": "Yhteenveto klo {time} asti",
+    "conversationRecentTranscript": "Viimeisin litterointi"
 }

@@ -4726,5 +4726,7 @@
     "finishBackToHome": "Wróć do ekranu głównego",
     "conversationSummaryWhenItEnds": "Podsumowanie po zakończeniu tej rozmowy",
     "deviceUploadsWaitingOnServer": "Wysłane pliki oczekujące na serwerze",
-    "deviceUploadsWaitingOnServerSubtitle": "Twoje nagrania są bezpieczne na urządzeniu lub telefonie"
+    "deviceUploadsWaitingOnServerSubtitle": "Twoje nagrania są bezpieczne na urządzeniu lub telefonie",
+    "conversationSummaryThrough": "Podsumowanie do {time}",
+    "conversationRecentTranscript": "Najnowsza transkrypcja"
 }

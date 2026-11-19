@@ -15652,4 +15652,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'El vostre àudio està segur al vostre dispositiu o telèfon';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Resum fins a $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Transcripció recent';
 }

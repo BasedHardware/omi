@@ -15568,4 +15568,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'صدای شما روی دستگاه یا گوشی شما در امان است';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'خلاصه تا $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'رونویسی اخیر';
 }

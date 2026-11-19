@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-live-transcript-preview.png",
+      "platform": "mobile-ios",
+      "description": "First frame of a live conversation showing verified speech from this phone.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-request-live-recap.png",
+      "platform": "mobile-ios",
+      "description": "Opening the live Summary tab shows that the first recap is being written.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-recap-coverage.png",
+      "platform": "mobile-ios",
+      "description": "The selected Summary tab shows the saved recap with its coverage time.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-short-transcript.png",
+      "platform": "mobile-ios",
+      "description": "A short conversation shows recent speech on the Summary tab.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

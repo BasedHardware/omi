@@ -2368,6 +2368,7 @@ def get_conversations_without_photos(
                 'episode_id',
                 'finalization_status',
                 'notes_written_at',
+                'v3_notes_written',
                 *SETTLING_FIELDS,
                 *SUMMARY_DEBT_FIELDS,
                 *transcribing_hold.READ_FIELDS,

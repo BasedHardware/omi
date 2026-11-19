@@ -15698,4 +15698,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Ligtas ang iyong audio sa iyong device o phone';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Buod hanggang $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Pinakabagong Transcript';
 }
