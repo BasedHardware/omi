@@ -923,23 +923,46 @@ class WorkflowTests(unittest.TestCase):
 
     # --- dry-run mode (SCA-2944; David 2026-11-19) -------------------------------------------
 
-    WRITE_MARKERS = ("worker_image_only.py deploy", "helm ", "docker push", "kubectl patch", "kubectl apply",
+    WRITE_MARKERS = ("worker_image_only.py deploy", "helm ", "docker push", "docker build ", "docker tag ", "docker buildx build",
+                     "gsutil", "gcloud container images delete", "gcloud artifacts", "kubectl patch", "kubectl apply",
                      "kubectl replace", "kubectl scale", "kubectl delete", "kubectl create", "rollout restart",
                      "kubectl set ", "kubectl annotate", "kubectl label", "gcloud container images add-tag")
 
-    READ_KUBECTL = re.compile(r"kubectl\b[^\n|;&]*?\b(get|describe|rollout status|auth can-i|config|version|wait|logs|top)\b")
+    # A kubectl segment is a read only when its verb (the first non-flag word after kubectl) is one of these.
+    READ_VERBS = {"get", "describe", "auth", "config", "version", "wait", "logs", "top"}
+
+    def kubectl_segment_reads(self, segment):
+        words = segment.split()
+        after = words[words.index("kubectl") + 1:]
+        skip = False
+        for word in after:
+            if skip:
+                skip = False
+                continue
+            if word in ("-n", "--namespace", "--context", "--request-timeout"):
+                skip = True
+                continue
+            if word.startswith("-"):
+                continue
+            if word == "rollout":
+                rest = after[after.index("rollout") + 1:]
+                return bool(rest) and rest[0] == "status"
+            return word in self.READ_VERBS
+        return False
 
     def writes(self, run):
         if any(m in run for m in self.WRITE_MARKERS):
             return True
-        # Fail closed: any kubectl invocation that is not a known read verb counts as a write.
-        for line in run.splitlines():
-            if re.search(r"\bkubectl\b", line) and not self.READ_KUBECTL.search(line):
+        # Fail closed: every kubectl invocation, split on shell separators, must be a known read.
+        for segment in re.split(r"&&|\|\||;|\||\$\(|`|\n", run):
+            if re.search(r"(^|\s)kubectl(\s|$)", segment) and not self.kubectl_segment_reads(segment.strip().strip('"')):
                 return True
         return False
 
     def test_unknown_kubectl_verbs_count_as_writes(self):
-        for run in ("kubectl -n x rollout undo deploy/y", "kubectl patch deploy y", "kubectl cordon n", "kubectl drain n"):
+        for run in ("kubectl -n x rollout undo deploy/y", "kubectl patch deploy y", "kubectl cordon n", "kubectl drain n",
+                    "kubectl get pods; kubectl rollout undo deploy/x", "kubectl get deploy x && kubectl cordon n",
+                    "x=$(kubectl -n ns scale deploy/y --replicas=0)", "docker build -t i .", "docker tag a b"):
             self.assertTrue(self.writes(run), run)
         for run in ("kubectl -n x get deploy y -o json", "kubectl -n x rollout status deploy/y --timeout=1s"):
             self.assertFalse(self.writes(run), run)
@@ -953,6 +976,26 @@ class WorkflowTests(unittest.TestCase):
             if line:
                 self.assertRegex(line, allowed)
         self.assertFalse(self.writes(body))
+
+    # Reviewed uses: actions that read, authenticate or report only; any other uses: step must exclude the mode.
+    READ_ONLY_ACTIONS = {
+        "actions/checkout",
+        "./.github/firestore-workflow/.github/actions/firestore-readiness",
+        "google-github-actions/auth",
+        "google-github-actions/setup-gcloud",
+        "google-github-actions/get-gke-credentials",
+        "BasedHardware/omi/.github/actions/deployment-summary",
+        "BasedHardware/omi/.github/actions/deployment-notifier",
+    }
+
+    def test_every_uses_step_is_reviewed_or_excluded_from_dry_run_mode(self):
+        for step in self.steps:
+            if "uses" in step:
+                with self.subTest(uses=step["uses"]):
+                    action = step["uses"].split("@")[0]
+                    self.assertTrue(action in self.READ_ONLY_ACTIONS or "inputs.worker_dry_run != true" in step.get("if", ""))
+            else:
+                self.assertIn("run", step)
 
     def test_every_write_step_is_excluded_from_dry_run_mode(self):
         writers = [s for s in self.steps if self.writes(s.get("run", ""))]
