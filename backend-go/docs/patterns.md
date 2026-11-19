@@ -45,8 +45,9 @@ Time, configuration and cancellation arrive as parameters. Nothing is read from 
 - Wire names live at the edge. Domain types carry no JSON tags; a small unexported struct beside
   the code that stores or serves it does (`stored` in `batchunit`, `unitWire` in `cmd/jobd`).
 - Enforced by: `exhaustive`, `gochecksumtype`, `musttag`, the queue's registry, and `CHECK`
-  constraints that repeat the closed sets in the database. Not enforced: that a new constant is
-  added to its lister (`States()`, `Terminals()`); review for it.
+  constraints that repeat the closed sets in the database. Archcheck uses `go/types` to check
+  that `States()` and `Terminals()` each return a slice naming every package constant of
+  their type exactly once.
 
 ## 4. Errors are handled where they happen
 
@@ -106,9 +107,19 @@ interface it declares and the binary fills in. A new family needs no entry in an
   `tools/archcheck` (`ports.go`: in a family, an interface method, a named function type and a
   function-typed field or parameter that take a context must take a capability, and
   `context.Context` may not be renamed; a capability cannot be made, stored in a struct, or
-  minted with the test constructors outside tests; `roles.go`: the Firestore import rule); the contract tests in `internal/queue`, `internal/batchunit` and
-  `internal/adapters/batchdocs`. Not enforced: handing a capability to a goroutine that outlives
-  the guard. An adapter checks `g.Err()` before it commits, which catches that at run time.
+  minted with the test constructors outside tests; `roles.go`: the Firestore import rule); the
+  contract tests in `internal/queue`, `internal/batchunit` and `internal/adapters/batchdocs`.
+- Archcheck rejects direct capability arguments and receivers of `go` calls, and closures that
+  capture a typed capability and are stored, returned, sent, or passed to an unknown callback
+  consumer. A directly invoked closure and the synchronous `Scope.Subject` callback may capture
+  an outer capability. Each nested closure is checked separately. Assigning a capturing
+  helper to a local variable is rejected even if its only use is a synchronous call inside
+  `Scope.Subject`. Call the literal directly or pass the capability as a parameter.
+- Pointer chains retain the capability. Call its methods directly: a stored or passed bound
+  method value retains the receiver, so archcheck rejects it at the selection. An unbound
+  method expression such as `queue.Guarded.Err` can be stored and called with a guard.
+  The check uses the static type at the use site. Values previously
+  hidden behind an interface or container require review. Adapters still check `g.Err()`.
 
 ## 7. Plain SQL with typed rows
 
@@ -119,9 +130,9 @@ interface it declares and the binary fills in. A new family needs no entry in an
   ledger stores each file's checksum and the queue refuses a database that disagrees.
 - Enforced by: `depguard` (no ORM, no `database/sql`, no query builder), `unqueryvet`
   (no `SELECT *`), `sqlclosecheck`, `rowserrcheck`, the checksum ledger, and
-  `scripts/migrations-frozen.sh` in CI. Not enforced by a tool: that projection and scan order
-  match, or that every statement carries its tenant predicate. Those are covered by tests against
-  Postgres, not by parsing.
+  `scripts/migrations-frozen.sh` in CI. `TestJobScanMatchesItsProjection` passes distinct values through the job projection
+  and scan on Postgres, varying each boolean independently to detect same-type swaps.
+  Tenant predicates are covered by the queue's isolation and erase tests.
 
 ## 8. Nothing sensitive in logs, metrics or job rows
 
