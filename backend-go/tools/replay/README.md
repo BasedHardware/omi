@@ -4,20 +4,23 @@ Replay the same stored recording state through Python admission and its persiste
 and through the Go conformance worker in `cmd/jobd`. The runner seeds identical snapshots
 in two private projects on one Firestore emulator. It runs the Go queue against a fresh
 database on local Postgres 16. Python's native queue and leases live in Firestore. Both
-use deterministic responses at the notes and memory provider boundaries. The Python
-webhook fanout uses its real payload builder and an in-process transport. The Go shim
-records the conformance port's webhook requests and persists its memory and vector
-effects in Firestore.
+use deterministic provider responses. Python runs its production notes shaping, canonical
+memory extraction and persistence, app summaries, folder assignment, task and goal writes,
+and both webhook builders. A loopback HTTP server serves the model responses and receives
+webhooks. The recorder also captures writes at the vector vendor SDK boundary. The Go shim
+adapts the same notes and memory responses to the conformance protocol and records the Go
+worker's webhook, vector and memory operations.
 
 The runner compares disposition, every stored conversation field, changed derived
-documents, and webhook deliveries. Object comparison distinguishes missing fields from
-nulls. The report includes stable JSON Pointer paths and a reason for each allowed
-difference. The allowlist covers generated queue IDs, delivery keys and the conversation's
-write clock when both values are present. It does not absorb absent fields, extra
-documents or payload changes. The two Python queue bookkeeping collections are outside
-the derived-document comparison. Their public effect is represented by the finalization
-disposition. Webhook deliveries are sorted by destination with ordering preserved within
-each destination.
+documents, vendor effects, and webhook deliveries by destination and delivery order.
+Object comparison distinguishes missing fields from nulls. The report uses JSON Pointer
+paths and gives a reason for each allowed difference. Generated job and fanout IDs
+must agree with the corresponding side's admission and stored binding. Changed write
+timestamps must land inside the corresponding side's execution window. Python-only
+effects such as canonical memory documents, app results, folders, tasks, goals, and
+the developer-created webhook appear as `unported` when missing in Go. They still
+count as unexplained differences. Queue bookkeeping collections are excluded from the
+derived-document diff, with the finalization disposition and queue binding checked directly.
 
 ## Run
 
@@ -25,12 +28,15 @@ From `backend-go/`, with the backend lock installed via
 `../backend/scripts/sync-python-deps.sh`, Postgres 16, Java 21 and firebase-tools 15:
 
 ```sh
+../backend/.venv/bin/python -c "import tiktoken; tiktoken.encoding_for_model('text-embedding-3-large')"
 ./tools/replay/test.sh
 ```
 
 The test starts local emulators with the same wrappers as `make check`. It accepts
 `REPLAY_PYTHON` with an absolute path to a different backend interpreter.
-The command is suitable for a CI runner with the locked Python environment installed.
+The first command primes the tokenizer dependency cache before network isolation. The
+existing Backend Go Checks workflow installs locked Python dependencies, primes the cache,
+and runs the replay test against its Postgres 16 service and Firestore emulator.
 
 To examine the active corpus interactively:
 
@@ -81,7 +87,11 @@ Firestore timestamps and bytes. `uid` and `conversation_id` override synthetic
 identifiers. UIDs must be unique within a corpus. Use separate corpus files to replay multiple recordings for the same owner. Other case controls are `trigger`,
 `end_reason`, `revision` (the Go endpoint's requested revision), `min_words`
 (the deterministic notes fixture's discard floor), `memories` (scripted extraction
-results), `repeat` (duplicate admission), and `own_key` (seeded subscription mode).
+results), `repeat` (duplicate admission), and `own_key` (seeded subscription mode and
+fixture live-session key). Use `responses` to supply recorded, synthetic gateway response
+bodies keyed by model lane (for example `conv-structure` or `memory-l1`). The conformance
+adapter projects title and overview from notes and text from memory candidates. The report
+can show response paths and effects that only Python currently supports.
 Add consented captures as private corpus files with stored transcript fields already
 re-encrypted under a replay-only key. Pass the owned mode-0600 key file as
 `-test-key-file`. Both workers use that key. The oracle does not fetch recordings or
@@ -92,9 +102,11 @@ read production keys.
 | Rule | Proof |
 | --- | --- |
 | Nested fields, arrays, numeric values, missing fields and escaped paths compare deterministically | `TestCompareReportsNestedDiffsAndKeepsPresence` |
+| Object, array, scalar and null mismatches produce a report | `TestCompareDifferencesWithIncompatibleJSONShapes` |
+| Job IDs and fanout keys must match admission, and generated timestamps must be inside the replay window | `TestCompareOnlyExcusesVerifiedBindingsAndClocks` |
 | Missing evidence or driver errors cannot yield a pass | `TestCompareRejectsInvalidEvidence`, `TestCompareCountsExecutionErrors` |
 | Ten completed, failed, discarded and missing-row admissions across both paths produce zero unexplained differences | `test.sh` with `corpus/parity.json` |
-| Active workers actually persist notes, reach the memory and vector sinks and send both webhooks. Standard and encrypted compressed transcripts reach completion, and empty input exposes disposition drift | `test.sh` with `corpus/conformance-gaps.json` |
+| Active workers persist notes, reach the memory and vector sinks, deliver webhooks and resume a seeded own-key job. Python also runs its canonical memory, app, task, folder, goal and developer-webhook code. Compressed and enhanced transcripts complete, and empty input exposes disposition drift | `test.sh` with `corpus/conformance-gaps.json` |
 
 The active corpus is a detection test for the interim conformance port. It intentionally
 exits 1. Current differences include Go's conformance payload, Python-only Home and

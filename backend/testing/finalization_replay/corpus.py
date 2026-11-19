@@ -59,6 +59,7 @@ def _validate_case(case, seen):
         'end_reason',
         'repeat',
         'own_key',
+        'responses',
     }
     if not isinstance(case, dict) or set(case) - fields:
         raise ValueError('unknown replay case fields')
@@ -95,6 +96,9 @@ def _validate_case(case, seen):
         or any(not isinstance(item, str) for item in case['notes'].values())
     ):
         raise ValueError('invalid synthetic notes response')
+    responses = case.get('responses', {})
+    if not isinstance(responses, dict) or any(not SLUG.fullmatch(feature) for feature in responses):
+        raise ValueError('invalid gateway response map')
     recording = case.get('recording', {})
     if not isinstance(recording, dict) or set(recording) - {'segments', 'duration_s'}:
         raise ValueError('invalid recording')

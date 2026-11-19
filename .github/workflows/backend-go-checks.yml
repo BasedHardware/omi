@@ -81,3 +81,19 @@ jobs:
           TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:5432/postgres?sslmode=disable
           TEST_FIRESTORE_REQUIRED: "1"
         run: make check
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+      - uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock.toml
+      - name: Install locked Python replay dependencies
+        working-directory: backend
+        run: |
+          ./scripts/sync-python-deps.sh
+          .venv/bin/python -c "import tiktoken; tiktoken.encoding_for_model('text-embedding-3-large')"
+      - name: Replay Python and Go finalization
+        env:
+          TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:5432/postgres?sslmode=disable
+        run: ./tools/replay/test.sh

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
+from contextvars import copy_context
 from unittest.mock import patch
+from urllib.parse import urlsplit
 
 
 async def _finalize(state, intent, claim, trigger):
@@ -37,94 +38,87 @@ def _run(state):
     from utils.conversations import lifecycle
     from utils.conversations.processing_trigger import ProcessingTrigger
 
+    from utils.byok import get_byok_keys
+
+    has_keys = bool(get_byok_keys())
     trigger = ProcessingTrigger(state.case.get('trigger', 'capture_end'))
-    intent = lifecycle.request_finalization(state.uid, state.cid, has_byok_keys=False, trigger=trigger)
+    intent = lifecycle.request_finalization(state.uid, state.cid, has_byok_keys=has_keys, trigger=trigger)
     job_id = intent['job_id']
     if job_id is None:
         return 'not_found' if intent['status'] == 'missing' else intent['status']
+    state.admitted = {'job_id': job_id, 'fanout_key': intent['fanout_key'], 'own_key': intent['requires_byok']}
     if state.case.get('repeat'):
-        again = lifecycle.request_finalization(state.uid, state.cid, has_byok_keys=False, trigger=trigger)
+        again = lifecycle.request_finalization(state.uid, state.cid, has_byok_keys=has_keys, trigger=trigger)
         if again['job_id'] != job_id:
             raise RuntimeError('Python duplicate admitted a different job')
-    claim = jobs.claim_finalization_job(job_id, intent['dispatch_generation'], count_worker_claim=True)
-    if claim['status'] != 'claimed':
-        return claim['status']
-    return asyncio.run(_finalize(state, intent, claim, trigger))
-
-
-def run_reference(state, stack):
-    from models.structured import Structured
-    from testing.listen_pusher_stack import finalizer_leaves as leaves
-    from utils.conversations import finalizer, process_conversation as processing
-    from utils.conversations.memory_extraction_telemetry import (
-        ConversationMemoryExtractionResult,
-        PATH_CANONICAL,
-        source_for_conversation,
+    claim = jobs.claim_finalization_job(
+        job_id, intent['dispatch_generation'], count_worker_claim=True, allow_byok=has_keys
     )
-    from utils.encryption import encrypt
-
-    def notes(_uid, _language, conversation, **_kwargs):
-        words = ' '.join(segment.text for segment in conversation.transcript_segments).split()
-        if len(words) < state.case.get('min_words', 1):
-            return Structured(), True
-        return Structured(**state.notes), False
-
-    def memories(uid, conversation, **_kwargs):
-        protection = conversation.data_protection_level
-        for index, content in enumerate(state.memories):
-            stored = encrypt(content, uid) if protection == 'enhanced' else content
-            state.memory(f'{state.cid}-{index}', stored, protection)
-        return ConversationMemoryExtractionResult(
-            count=len(state.memories),
-            source=source_for_conversation(conversation),
-            path=PATH_CANONICAL,
-        )
-
-    def vector(_uid, conversation, **_kwargs):
-        state.vector(conversation.structured.overview)
-        return True
-
-    stack.enter_context(patch.object(processing, '_get_structured', notes))
-    stack.enter_context(patch.object(processing, '_extract_memories_canonical', memories))
-    stack.enter_context(patch.object(processing, 'trigger_conversation_apps', leaves._offline_noop))
-    stack.enter_context(patch.object(processing, 'assign_conversation_to_folder', leaves._offline_folder_assignment))
-    stack.enter_context(patch.object(processing, 'save_structured_vector', vector))
-    stack.enter_context(patch.object(processing, '_save_action_items', leaves._offline_noop))
-    stack.enter_context(patch.object(processing, 'update_goal_progress', leaves._offline_noop))
-    stack.enter_context(patch.object(processing, 'conversation_created_webhook', leaves._offline_noop_async))
-    stack.enter_context(patch.object(processing.conversations_db, 'create_audio_files_from_chunks', return_value=[]))
-    stack.enter_context(patch.object(finalizer, 'save_structured_vector', vector))
-    _record_webhooks(state, stack)
-    return _run(state)
+    status = claim['status']
+    if status == 'claimed':
+        status = asyncio.run(_finalize(state, intent, claim, trigger))
+    state.queue_fanout_key = jobs.get_finalization_job(job_id).get('fanout_key')
+    return status
 
 
-def _record_webhooks(state, stack):
-    """Run the real integration fanout against an in-process transport."""
-    from httpx import Response
-    from utils import app_integrations
+def run_reference(state, stack, url):
+    from database import redis_db, vector_db
+    from models.users import WebhookType
+    from utils import app_integrations, webhooks
+    from utils.byok import set_validated_byok_keys
+    from utils.conversations import process_conversation as processing
 
-    apps = [
-        SimpleNamespace(
-            id=app,
-            uid=state.uid,
-            enabled=True,
-            triggers_on_conversation_creation=lambda: True,
-            external_integration=SimpleNamespace(webhook_url=f'https://replay.invalid/apps/{app}'),
-        )
-        for app in state.apps
-    ]
+    def pin(target):
+        parsed = urlsplit(target)
+        if parsed.scheme != 'http' or parsed.netloc != urlsplit(url).netloc or not parsed.path.startswith('/receive/'):
+            raise ValueError('webhook must target the replay HTTP receiver')
+        return target, {'headers': {}, 'extensions': {}}
 
-    class Transport:
-        async def post(self, url, *, json, headers, **_kwargs):
-            app = url.split('?', 1)[0].rsplit('/', 1)[1]
-            state.webhook(app, headers.get('X-Omi-Idempotency-Key'), json)
-            return Response(200, json={})
+    stack.enter_context(patch.object(app_integrations, 'safe_request_target', pin))
+    stack.enter_context(patch.object(webhooks, 'safe_request_targets', lambda target: [pin(target)]))
+    # Replace the vendor SDK at its network boundary. Production computes metadata and records.
+    stack.enter_context(patch.object(vector_db, 'index', VectorReceiver(state)))
 
-    def target(url):
-        # The injected transport never resolves or connects to this fixture URL.
-        return url, {'headers': {}, 'extensions': {}}
+    futures = []
+    submit = processing.submit_with_context
 
-    stack.enter_context(patch.object(app_integrations, 'get_available_apps', return_value=apps))
-    stack.enter_context(patch.object(app_integrations, 'is_app_webhook_disabled', return_value=False))
-    stack.enter_context(patch.object(app_integrations, 'safe_request_target', target))
-    stack.enter_context(patch.object(app_integrations, 'get_webhook_client', return_value=Transport()))
+    def track(executor, fn, *args, **kwargs):
+        future = submit(executor, fn, *args, **kwargs)
+        futures.append(future)
+        return future
+
+    stack.enter_context(patch.object(processing, 'submit_with_context', track))
+    for app in state.apps:
+        redis_db.enable_app(state.uid, app)
+    if state.apps:
+        redis_db.set_user_preferred_app(state.uid, state.apps[0])
+        hook = WebhookType.memory_created
+        redis_db.set_user_webhook_db(state.uid, hook, f'{url}/receive/developer-created')
+        redis_db.enable_user_webhook_db(state.uid, hook)
+
+    def invoke():
+        if state.user.get().to_dict()['byok']['active']:
+            set_validated_byok_keys({'openai': 'replay-only-vendor-key'}, state.uid)
+        return _run(state)
+
+    try:
+        return copy_context().run(invoke)
+    finally:
+        for future in futures:
+            future.result(timeout=12)
+
+
+class VectorReceiver:
+    """Record the outgoing vector operation after the real owner routing and shaping."""
+
+    def __init__(self, state):
+        self.state = state
+
+    def query(self, **_kwargs):
+        return {'matches': []}
+
+    def upsert(self, *, vectors, namespace, **_kwargs):
+        for record in vectors:
+            kind = 'conversation_vector' if record['id'] == f'{self.state.uid}-{self.state.cid}' else 'other_vectors'
+            self.state.effects.setdefault(kind, []).append({'namespace': namespace, 'record': record})
+        return {'upserted_count': len(vectors)}, 200, {'x-pinecone-request-lsn': '1'}

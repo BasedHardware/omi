@@ -7,16 +7,28 @@ import (
 	"fmt"
 	"math/big"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 )
 
+type admission struct {
+	Job    string `json:"job_id"`
+	Fanout string `json:"fanout_key"`
+	OwnKey bool   `json:"own_key"`
+}
+
 type observation struct {
-	Status   string         `json:"status"`
-	Document any            `json:"conversation"`
-	Derived  map[string]any `json:"derived_documents"`
-	Webhooks []any          `json:"webhooks"`
+	QueueFanout      string         `json:"queue_fanout_key"`
+	UpdatedAtChanged bool           `json:"updated_at_changed"`
+	Admitted         *admission     `json:"admitted"`
+	Started          time.Time      `json:"started_at"`
+	Finished         time.Time      `json:"finished_at"`
+	ProviderCalls    []string       `json:"provider_calls"`
+	Effects          map[string]any `json:"effects"`
+	Status           string         `json:"status"`
+	Document         any            `json:"conversation"`
+	Derived          map[string]any `json:"derived_documents"`
+	Webhooks         []any          `json:"webhooks"`
 }
 
 type replayCase struct {
@@ -69,10 +81,7 @@ func compare(cases []replayCase) (report, error) {
 		case c.Python == nil || c.Go == nil || c.Python.Status == "" || c.Go.Status == "":
 			return report{}, fmt.Errorf("missing replay observation")
 		default:
-			compareValue(&entry.Differences, "/status", c.Python.Status, c.Go.Status)
-			compareValue(&entry.Differences, "/conversation", c.Python.Document, c.Go.Document)
-			compareValue(&entry.Differences, "/derived_documents", c.Python.Derived, c.Go.Derived)
-			compareValue(&entry.Differences, "/webhooks", c.Python.Webhooks, c.Go.Webhooks)
+			entry.Differences = compareObservations(c.Python, c.Go)
 			matched := true
 			for _, diff := range entry.Differences {
 				if diff.Reason == "" {
@@ -103,28 +112,40 @@ func compareValue(diffs *[]difference, path string, python, goValue any) {
 		}
 	case []any:
 		if g, ok := goValue.([]any); ok {
-			for i := range max(len(p), len(g)) {
-				child := fmt.Sprintf("%s/%d", path, i)
-				switch {
-				case i >= len(p):
-					addDifference(diffs, child, "missing_in_python")
-				case i >= len(g):
-					addDifference(diffs, child, "missing_in_go")
-				default:
-					compareValue(diffs, child, p[i], g[i])
-				}
-			}
+			compareArray(diffs, path, p, g)
 			return
 		}
 	case json.Number:
 		if g, ok := goValue.(json.Number); ok && equalNumbers(p, g) {
 			return
 		}
+	case string:
+		if g, ok := goValue.(string); ok && p == g {
+			return
+		}
+	case bool:
+		if g, ok := goValue.(bool); ok && p == g {
+			return
+		}
+	case nil:
+		if goValue == nil {
+			return
+		}
 	}
-	if python != goValue {
-		*diffs = append(*diffs, difference{
-			Path: path, Kind: "different_value", Reason: allowedDifference(path, python, goValue),
-		})
+	addDifference(diffs, path, "different_value")
+}
+
+func compareArray(diffs *[]difference, path string, python, goValue []any) {
+	for i := range max(len(python), len(goValue)) {
+		child := fmt.Sprintf("%s/%d", path, i)
+		switch {
+		case i >= len(python):
+			addDifference(diffs, child, "missing_in_python")
+		case i >= len(goValue):
+			addDifference(diffs, child, "missing_in_go")
+		default:
+			compareValue(diffs, child, python[i], goValue[i])
+		}
 	}
 }
 
@@ -163,31 +184,6 @@ func compareObject(diffs *[]difference, path string, python, goValue map[string]
 func addDifference(diffs *[]difference, path, kind string) {
 	// Presence is part of the contract even for fields with nondeterministic values.
 	*diffs = append(*diffs, difference{Path: path, Kind: kind})
-}
-
-func allowedDifference(path string, python, goValue any) string {
-	left, leftOK := python.(string)
-	right, rightOK := goValue.(string)
-	if !leftOK || !rightOK || left == "" || right == "" {
-		return ""
-	}
-	switch path {
-	case "/conversation/updated_at/$timestamp":
-		_, leftErr := time.Parse(time.RFC3339Nano, left)
-		_, rightErr := time.Parse(time.RFC3339Nano, right)
-		if leftErr == nil && rightErr == nil {
-			return "each backend commits on its own wall clock"
-		}
-	case "/conversation/finalization_job_id":
-		return "the Python and Go queues use different job ID derivations"
-	}
-	if suffix, ok := strings.CutPrefix(path, "/webhooks/"); ok {
-		index, field, found := strings.Cut(suffix, "/")
-		if _, err := strconv.ParseUint(index, 10, 32); err == nil && found && field == "idempotency_key" {
-			return "the two finalizers derive the delivery key from different queue identifiers"
-		}
-	}
-	return ""
 }
 
 func decodeCases(raw []byte) ([]replayCase, error) {

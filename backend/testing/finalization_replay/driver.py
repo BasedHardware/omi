@@ -8,12 +8,14 @@ import logging
 import os
 from pathlib import Path
 import signal
+import socket
 import sys
 from unittest.mock import patch
 from uuid import uuid4
 
 from testing.finalization_replay.candidate import migrate, replay_database, run_candidate
 from testing.finalization_replay.corpus import DEFAULT_TEST_KEY, read_corpus
+from testing.finalization_replay.providers import allow_provider_port, provider_server
 from testing.finalization_replay.reference import run_reference
 from testing.finalization_replay.state import CaseState
 from testing.replay_harness.env import emulator_endpoint, replay_environment
@@ -23,6 +25,7 @@ from testing.replay_harness.guard import private_text
 def _observe(state, run, output, side):
     try:
         before = state.documents()
+        state.start()
         output[side] = state.observe(run(state), before)
     except Exception as error:
         output['errors'][side] = type(error).__name__
@@ -34,9 +37,10 @@ def _clear(client):
 
 
 class _ReplayKey:
-    def __init__(self, key, project):
+    def __init__(self, key, project, url):
         self.key = key
         self.project = project
+        self.url = url
 
     def apply(self, settings):
         settings.update(
@@ -44,16 +48,22 @@ class _ReplayKey:
                 'ENCRYPTION_SECRET': self.key,
                 'FIREBASE_PROJECT_ID': self.project,
                 'GOOGLE_CLOUD_PROJECT': self.project,
+                'OMI_LLM_GATEWAY_URL': self.url,
+                'OMI_LLM_GATEWAY_FEATURE_MODE': 'gateway',
+                'OMI_SHAPED_AGENT_MODE': 'on',
+                'OPENAI_BASE_URL': f'{self.url}/v1',
+                'PINECONE_INDEX_NAME': 'replay-local',
+                **({'TIKTOKEN_CACHE_DIR': os.environ['TIKTOKEN_CACHE_DIR']} if os.getenv('TIKTOKEN_CACHE_DIR') else {}),
             }
         )
 
 
-def _seed(client, cases):
+def _seed(client, cases, url):
     states = [CaseState(client, case) for case in cases]
     if len({state.uid for state in states}) != len(states):
         raise ValueError('each case needs its own replay uid')
     for state in states:
-        state.seed()
+        state.seed(url)
     return states
 
 
@@ -74,17 +84,36 @@ def replay(cases, jobd, dsn, key):
         for firestore_client in (reference, candidate):
             cleanup.callback(firestore_client.close)
             cleanup.callback(_clear, firestore_client)
-        # Seed both sides before product imports install SDK-wide write hooks.
-        reference_cases, candidate_cases = _seed(reference, cases), _seed(candidate, cases)
-        for state, output in zip(candidate_cases, outputs, strict=True):
-            _observe(state, lambda target: run_candidate(target, jobd, database, key), output, 'go')
-        # After this point product hooks can run only against the Python project.
-        with patch.object(store_fixtures, '_emulator_client', lambda: reference), replay_environment(
-            _ReplayKey(key, reference.project)
-        ):
-            for state, output in zip(reference_cases, outputs, strict=True):
-                with ExitStack() as leaves:
-                    _observe(state, lambda target: run_reference(target, leaves), output, 'python')
+        connect, connect_ex = socket.socket.connect, socket.socket.connect_ex
+        with provider_server() as server:
+            url = f'http://127.0.0.1:{server.server_port}'
+            # Seed both sides before product imports install SDK-wide write hooks.
+            reference_cases, candidate_cases = _seed(reference, cases, url), _seed(candidate, cases, url)
+            for state, output in zip(candidate_cases, outputs, strict=True):
+                _observe(state, lambda target: run_candidate(target, jobd, database, key), output, 'go')
+            # After this point product hooks can run only against the Python project.
+            with patch.object(store_fixtures, '_emulator_client', lambda: reference), replay_environment(
+                _ReplayKey(key, reference.project, url)
+            ), allow_provider_port(server.server_port, connect, connect_ex):
+                import fakeredis
+                import tiktoken
+
+                # Load the pinned data file under the network guard. A missing
+                # tokenizer must fail the replay instead of suppressing vector work.
+                tiktoken.encoding_for_model('text-embedding-3-large')
+                from database import redis_db
+
+                # Product Redis helpers expect bytes just as they do from redis-py.
+                with fakeredis.FakeRedis() as redis, patch.object(redis_db, 'r', redis), patch.object(
+                    redis_db, 'create_bounded_redis_client', lambda *_a, **_kw: redis
+                ):
+                    for state, output in zip(reference_cases, outputs, strict=True):
+                        server.state = state
+                        server.errors.clear()
+                        with ExitStack() as leaves:
+                            _observe(state, lambda target: run_reference(target, leaves, url), output, 'python')
+                        if server.errors:
+                            output['errors']['python'] = 'ReplayProviderError'
     return outputs
 
 

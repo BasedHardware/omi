@@ -85,6 +85,8 @@ func invoke(ctx context.Context, python, corpus, jobd, testKey string, stderr io
 	cmd := exec.CommandContext(ctx, python, args...)
 	cmd.Env = []string{
 		"PATH=" + os.Getenv("PATH"),
+		"TMPDIR=" + os.Getenv("TMPDIR"),
+		"TIKTOKEN_CACHE_DIR=" + os.Getenv("TIKTOKEN_CACHE_DIR"),
 		"FIRESTORE_EMULATOR_HOST=" + os.Getenv("FIRESTORE_EMULATOR_HOST"),
 		"TEST_DATABASE_URL=" + os.Getenv("TEST_DATABASE_URL"),
 		"PYTHONPATH=" + filepath.Clean("../backend"),

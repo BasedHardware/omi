@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from testing.finalization_replay.corpus import pack, seed_document
+from datetime import datetime, timezone
+
+from testing.finalization_replay.corpus import FIXED_DATE, pack, seed_document
 
 # Python stores its queue and queue metrics projection in Firestore. Go stores
 # the queue in Postgres. The disposition is compared separately from these rows.
@@ -32,8 +34,14 @@ class CaseState:
         self.memories = case.get('memories', [])
         self.webhooks = []
         self.version = 1
+        self.admitted = None
+        self.queue_fanout_key = None
+        self.initial_updated_at = None
+        self.effects = {}
+        self.provider_calls = []
+        self.started_at = None
 
-    def seed(self):
+    def seed(self, provider_url):
         self.user.set(
             {
                 'data_protection_level': 'standard',
@@ -43,6 +51,54 @@ class CaseState:
         doc = seed_document(self.case, self.cid)
         if doc is not None:
             self.conversation.set(doc)
+        self.seed_app_catalog(provider_url)
+
+    def seed_app_catalog(self, provider_url):
+        for app in self.apps:
+            data = {
+                'id': app,
+                'uid': self.uid,
+                'name': app,
+                'private': True,
+                'approved': True,
+                'category': 'other',
+                'author': 'Replay',
+                'description': 'Synthetic replay app',
+                'image': '',
+                'capabilities': ['memories', 'external_integration'],
+                'memory_prompt': 'Summarize the replay agenda.',
+                'external_integration': {
+                    'triggers_on': 'memory_creation',
+                    'webhook_url': f'{provider_url}/receive/{app}',
+                },
+            }
+            self.client.collection('plugins_data').document(app).create(data)
+        if self.apps:
+            self.user.collection('folders').document('replay-folder').set(
+                {
+                    'id': 'replay-folder',
+                    'name': 'Replay',
+                    'description': 'Replay planning',
+                    'color': '#6366F1',
+                    'icon': '📋',
+                    'created_at': FIXED_DATE,
+                    'updated_at': FIXED_DATE,
+                    'is_default': True,
+                    'conversation_count': 0,
+                    'order': 0,
+                }
+            )
+            self.user.collection('goals').document('replay-goal').set(
+                {
+                    'id': 'replay-goal',
+                    'title': 'Review agendas',
+                    'is_active': True,
+                    'target_value': 10,
+                    'current_value': 0,
+                    'metric': 'agendas',
+                    'created_at': FIXED_DATE,
+                }
+            )
 
     def documents(self):
         return {
@@ -53,6 +109,10 @@ class CaseState:
             if path != self.conversation.path
         }
 
+    def start(self):
+        self.initial_updated_at = (self.conversation.get().to_dict() or {}).get('updated_at')
+        self.started_at = datetime.now(timezone.utc)
+
     def observe(self, status, before):
         after = self.documents()
         changed = {
@@ -60,15 +120,23 @@ class CaseState:
             for path in sorted(before.keys() | after.keys())
             if before.get(path) != after.get(path)
         }
+        document = self.conversation.get().to_dict()
         return {
             'status': status,
-            'conversation': pack(self.conversation.get().to_dict()),
+            'queue_fanout_key': self.queue_fanout_key,
+            'updated_at_changed': (document or {}).get('updated_at') != self.initial_updated_at,
+            'admitted': self.admitted,
+            'started_at': self.started_at.isoformat(),
+            'finished_at': datetime.now(timezone.utc).isoformat(),
+            'provider_calls': sorted(self.provider_calls),
+            'effects': pack(self.effects),
+            'conversation': pack(document),
             'derived_documents': changed,
             'webhooks': sorted(self.webhooks, key=lambda delivery: delivery['app']),
         }
 
     def vector(self, overview):
-        self.user.collection('replay_vectors').document(self.cid).set({'overview': overview})
+        self.effects['conversation_vector'] = {'overview': overview}
 
     def memory(self, memory_id, content, protection):
         self.user.collection('replay_memories').document(memory_id).set(

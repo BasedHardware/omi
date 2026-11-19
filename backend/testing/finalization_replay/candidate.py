@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from testing.finalization_replay.corpus import pack
+from testing.finalization_replay.providers import response
 
 
 @contextmanager
@@ -67,9 +68,9 @@ def _bound(state, body):
     )
 
 
-def _request(method, url, data=None):
+def _request(method, url, data=None, headers=None):
     body = json.dumps(data).encode() if data is not None else None
-    request = Request(url, data=body, method=method, headers={'Content-Type': 'application/json'})
+    request = Request(url, data=body, method=method, headers={'Content-Type': 'application/json', **(headers or {})})
     try:
         with urlopen(request, timeout=3) as response:
             return response.status, json.load(response)
@@ -138,7 +139,12 @@ class _Handler(BaseHTTPRequestHandler):
             case 'POST', ['llm', 'notes' | 'memories' as step]:
                 request = self._body()
                 if (request['uid'], request['subject_id']) == (state.uid, state.cid):
-                    return 200, state.notes if step == 'notes' else {'contents': state.memories}
+                    feature = 'conv-structure' if step == 'notes' else 'memory-l1'
+                    state.provider_calls.append(feature)
+                    fixture = response(state, feature)
+                    if step == 'notes':
+                        return 200, {field: fixture[field] for field in ('title', 'overview')}
+                    return 200, {'contents': [item['text'] for item in fixture['items']]}
             case 'PUT', ['vectors', uid, cid] if (uid, cid) == (state.uid, state.cid):
                 body = self._body()
                 if not _bound(state, body):
@@ -218,6 +224,15 @@ def _admit(proc, url, state):
         f'{url}/v1/jobs/{job_id}',
         lambda code, job: (code == 200 and job['state'] in {'completed', 'parked', 'blocked_byok'}),
     )
+    own_key = job['state'] == 'blocked_byok'
+    state.admitted = {'job_id': job_id, 'fanout_key': job['fanout_key'], 'own_key': own_key}
+    if own_key:
+        job_url = f'{url}/v1/jobs/{job_id}'
+        status, _ = _request('POST', f'{job_url}/resume', headers={'X-Omi-Vendor-Key': 'replay-only-vendor-key'})
+        if status != 202:
+            raise RuntimeError('Go BYOK resume rejected')
+        job = _wait(proc, job_url, lambda code, result: code == 200 and result['state'] in {'completed', 'parked'})
+    state.queue_fanout_key = job['fanout_key']
     if job.get('outcome') == 'fenced':
         return 'fenced'
     return job['state']

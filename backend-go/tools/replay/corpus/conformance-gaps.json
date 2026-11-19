@@ -22,9 +22,28 @@
         "audit"
       ],
       "memories": [
-        "Visit the simulated lab"
+        "Our test lab opens on Tuesday"
       ],
-      "repeat": true
+      "repeat": true,
+      "responses": {
+        "conv-structure": {
+          "title": "Synthetic replay",
+          "overview": "Reviewed two agendas and assigned the synthetic planning worksheet.",
+          "action_items": [
+            {
+              "description": "Send the meeting notes",
+              "capture_kind": "clear_commitment",
+              "capture_owner": "user",
+              "capture_confidence": 1,
+              "ownership_confidence": 1,
+              "concrete_deliverable": true,
+              "source_segment_ids": [
+                "segment-1"
+              ]
+            }
+          ]
+        }
+      }
     },
     {
       "name": "word-floor",
@@ -74,6 +93,18 @@
         "transcript_segments": "qJs/QB5O0MEOAucZqHyMnCJJSN4uwWJi2yirSuHU2Spcy3EcU4mM99nku30A5uN1WC3aqWKnPJ2+tek3wQ21iQ2sCdl4mTqSntP/TEs6ROaAThzEBYXhIMu8GnZzO8ngRJjhPWCQLilBFR05iOgaoMrBfoVPP1JdPgJ6fNXt/5PU2CiY2/DkR6y917dKjbDjM7Fr7fTqVutj6pnWL1QahocjVZxSZmgfQn94hku2/Tdc51qJAF68g5aZAXx2/s1CUuWCq9YIpWRgEi1pfNmQak05ax4oJsBIFr6bL8g8Ji5KgbogwOrG5XprdgiaUg5On0Fq6lsgkJUGuRhlP62Gv2hOFsU8nuOTCRzgWT9GmMO1tI8PA95cFHqsQhXBkMKccDk=",
         "transcript_segments_compressed": true,
         "data_protection_level": "enhanced"
+      }
+    },
+    {
+      "name": "own-key-resume",
+      "own_key": true,
+      "recording": {
+        "duration_s": 28,
+        "segments": [
+          {
+            "text": "We finished testing own key admission for the synthetic conversation. This sentence records enough words to send the notes request."
+          }
+        ]
       }
     }
   ]
