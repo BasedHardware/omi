@@ -4,7 +4,6 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from tests.support.firestore_query_drivers import (
-    CoveredByEntry,
     DriverEntry,
     SHAPE_UID,
     FROZEN_NOW,
@@ -95,13 +94,6 @@ def entries():
             'database.conversations_v3.merge_donors_have_tasks',
             base={'uid': SHAPE_UID, 'donor_ids': ['donor-one', 'donor-two']},
             domains={'transaction': [None, ref_transaction()]},
-        ),
-        CoveredByEntry(
-            'database.conversations_v3.commit_projection',
-            covered_by=('database.conversations_v3.merge_donors_have_tasks',),
-            reason='lease-fenced projection; the only collection query checks donor task links before writes',
-            expect_observed=False,
-            body_digest='b8d186c5dde47b6a5259a3c116a05a157bb1afb6b4c5cdd8c2293d5cce47b4c4',
         ),
         DriverEntry('database.conversations_v3.pending_backfill_processing', base={'uid': SHAPE_UID}),
         DriverEntry('database.conversations_v3.backfill_run_documents', base={'uid': SHAPE_UID, 'run_id': 'shape-run'}),
