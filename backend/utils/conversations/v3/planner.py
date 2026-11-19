@@ -469,6 +469,10 @@ def preserve_finished_windows(planned, existing, recordings=None):
     for window in planned:
         gaps = []
         partition = window.get('_stretch_partition')
+        # An open window's boundaries are not final, so its unmatched lines stay one window: the open
+        # edge. A fragment per gap between retained rows left several open windows, which the commit
+        # refuses (multiple_open_conversations) on every pass. A finished window splits as before.
+        together = window.get('_keep_unmatched_together') or window.get('finished') is False
         for line in window['lines']:
             claims = claims_by_recording.get(line['conversation_id'])
             owner = next(
@@ -480,7 +484,7 @@ def preserve_finished_windows(planned, existing, recordings=None):
                 if owner or any(a < line['end'] and line['start'] < b for a, b in spans):
                     published_partitions.add(partition)
             if owner:
-                if gaps and not window.get('_keep_unmatched_together'):
+                if gaps and not together:
                     fresh.append({**window, **fresh_metadata, 'lines': gaps, 'manual_end': False})
                     gaps = []
                 target = retained.setdefault(
