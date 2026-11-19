@@ -404,7 +404,11 @@ runs:
       run: |
         set -euo pipefail
         umask 077
-        git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
         python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
           --revision "$ROLLBACK_REVISION" --project "${{ inputs.project_id }}" --region "${{ inputs.region }}"
         extension_args=()

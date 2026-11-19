@@ -535,6 +535,23 @@ def test_failed_promotion_restore_checks_release_floor(tmp_path, shallow, auto_d
     assert '--release-floor-check /workflow/.github/scripts/verify_backend_release_floor.py' in calls[2]
 
 
+def test_integration_prepare_unshallows_before_the_release_floor_check():
+    """The floor verifier needs the rollback revision's history (review desk, 2026-11-19)."""
+    prepare = next(
+        step
+        for step in yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())['runs'][
+            'steps'
+        ]
+        if step.get('id') == 'integration-transport-prepare'
+    )
+    script = prepare['run']
+    shallow = script.index('git rev-parse --is-shallow-repository')
+    fetch = script.index('git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main')
+    floor = script.index('verify_backend_release_floor.py')
+    assert shallow < fetch < floor
+    assert 'history_args=(--unshallow)' in script[shallow:fetch]
+
+
 def test_actual_renderer_and_native_cloud_validator_share_same_canary_composition(monkeypatch, tmp_path):
     module = runpy.run_path(str(ROOT / 'backend/scripts/render_backend_runtime_env.py'))
     base = config()
