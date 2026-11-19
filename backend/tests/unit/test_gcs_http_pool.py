@@ -58,6 +58,7 @@ def test_private_sync_gets_count_prepared_sdk_requests_and_restore_reader(monkey
 
     from utils.other import private_sync_get_metrics as usage
     from utils.other import storage as storage_helpers
+    from utils.other.audio_chunks import AudioChunkReadSession
 
     client = storage.Client(project='synthetic', credentials=AnonymousCredentials())
     bucket = client.bucket('private-synthetic')
@@ -73,7 +74,8 @@ def test_private_sync_gets_count_prepared_sdk_requests_and_restore_reader(monkey
         if 'alt=media' in request.url:
             query = parse_qs(urlsplit(request.url).query)
             assert query['ifGenerationMatch'] == ['3']
-            assert query['ifMetagenerationMatch'] == ['2']
+            if 'audio-outbox' in request.url:
+                assert query['ifMetagenerationMatch'] == ['2']
             assert 'generation' not in query
             response.raw = SimpleNamespace(headers={})
             response._content = b'payload'
@@ -100,12 +102,23 @@ def test_private_sync_gets_count_prepared_sdk_requests_and_restore_reader(monkey
     monkeypatch.setattr(storage_helpers, '_playback_artifact_blob', lambda *_: playback_blob)
     monkeypatch.setattr(storage_helpers, '_get_signed_url', lambda *_: 'https://example.invalid/playback')
     assert storage_helpers.get_playback_artifact_signed_url('synthetic', 'conversation', 'artifact')
+    chunk_path = 'audio-chunks/synthetic/capture.pcm'
+    speaker_session = AudioChunkReadSession('synthetic', 'conversation')
+    speaker_session._chunks = [{'path': chunk_path, 'generation': 3, 'size': 7}]
+    monkeypatch.setattr(storage_helpers, 'get_private_cloud_sync_bucket', lambda: bucket)
+
+    def decode_downloaded(selected, path, *_args, **_kwargs):
+        return selected.blob(path).download_as_bytes()
+
+    monkeypatch.setattr(storage_helpers, 'download_and_decode_chunk_blob', decode_downloaded)
+    assert speaker_session.fetch(chunk_path) == b'payload'
     assert [call.args for call in counter.labels.call_args_list] == [
         ('playback_inventory', 'metadata'),
         ('playback_inventory', 'payload'),
         ('playback_inventory', 'metadata'),
         ('other', 'metadata'),
         ('playback_media', 'metadata'),
+        ('speaker_evidence', 'payload'),
     ]
 
 
