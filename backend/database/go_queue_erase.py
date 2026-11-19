@@ -20,6 +20,8 @@ ARMED_AT = 'go_queue_erase_armed_at'
 RECEIPT_AT = 'go_queue_erase_receipt_at'
 WIPE_AT = 'go_queue_erase_wipe_started_at'
 CLAIM = 'go_queue_erase_claim'
+CLAIM_EXPIRES_AT = 'go_queue_erase_claim_expires_at'
+ERASE_LEASE_SECONDS = 180
 PATH = 'go_queue_erase_path'
 Step = Literal['arm', 'verify', 'receipt', 'wipe']
 
@@ -45,15 +47,25 @@ def _record(transaction, client, ref, uid: str, job_id: str, claim: str, step: S
         )
     ):
         raise RuntimeError('Go queue erase requires the active due wipe generation')
+    if marker.get(CLAIM) != claim:
+        raise RuntimeError('Go queue erase claim changed')
     if step == 'arm':
-        fields = {CLAIM: claim}
+        if marker.get(RECEIPT_AT) is not None:
+            return marker
+        fields = {CLAIM_EXPIRES_AT: datetime.now(timezone.utc) + timedelta(seconds=25)}
         if marker.get(ARMED_AT) is None:
             fields.update({ARMED_AT: firestore.SERVER_TIMESTAMP, RECEIPT_AT: None})
+            if isinstance(marker.get('wipe_auth_deleted_at'), datetime):
+                fields[WIPE_AT] = marker['wipe_auth_deleted_at']
         transaction.update(ref, fields)
-    elif marker.get(CLAIM) != claim or not isinstance(marker.get(ARMED_AT), datetime):
+    elif not isinstance(marker.get(ARMED_AT), datetime):
         raise RuntimeError('Go queue erase claim changed')
+    elif step == 'verify' and (
+        not isinstance(marker.get(CLAIM_EXPIRES_AT), datetime) or marker[CLAIM_EXPIRES_AT] <= datetime.now(timezone.utc)
+    ):
+        raise RuntimeError('Go queue erase claim expired')
     elif step == 'receipt' and marker.get(RECEIPT_AT) is None:
-        transaction.update(ref, {RECEIPT_AT: firestore.SERVER_TIMESTAMP, PATH: path})
+        transaction.update(ref, {RECEIPT_AT: firestore.SERVER_TIMESTAMP, PATH: path, CLAIM_EXPIRES_AT: None})
     elif step == 'wipe':
         if not isinstance(marker.get(RECEIPT_AT), datetime):
             raise RuntimeError('Go queue erase receipt missing')

@@ -181,7 +181,7 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
         (users_router.resolve_deletion_wipe_job_id, ('job-1',)),
         (users_router.try_acquire_job_run_lock, ('account-deletion:uid1',)),
         (users_router.claim_deletion_wipe_for_task, ('uid1',)),
-        (users_router.run_deletion_wipe_with_lease, ('uid1', 0, False, 'lock-token')),
+        (users_router.run_deletion_wipe_with_lease, ('uid1', 0, False, 'lock-token', 'job-1')),
         (users_router.release_job_run_lock, ('account-deletion:uid1', 'lock-token')),
     ]
 
@@ -216,7 +216,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
 
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'failed_final'}
-    assert background_args == [('uid1', 1, True, 'lock-token')]
+    assert background_args == [('uid1', 1, True, 'lock-token', 'job-1')]
 
 
 def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):

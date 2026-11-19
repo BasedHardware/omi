@@ -6,11 +6,13 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/api/idtoken"
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
@@ -74,16 +76,19 @@ func (e eraseEndpoint) handle(w http.ResponseWriter, r *http.Request) {
 	marker, err := e.markers.ReadDeletionMarker(ctx, request.Tenant)
 	if err != nil {
 		e.report(err)
-		http.Error(w, "marker unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "marker error", eraseFailureStatus(err))
 		return
 	}
-	if !armedForErase(marker, request) {
+	expires, armed := eraseGrant(marker, request, time.Now())
+	if !armed {
 		http.Error(w, "erase claim rejected", http.StatusConflict)
 		return
 	}
+	ctx, endGrant := context.WithDeadline(ctx, expires)
+	defer endGrant()
 	if eraseErr := e.erase(ctx, request.Tenant); eraseErr != nil {
 		e.report(eraseErr)
-		http.Error(w, "erase unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "erase error", eraseFailureStatus(eraseErr))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -100,10 +105,34 @@ func validEraseRequest(req eraseRequest) bool {
 	return wipeJobID.MatchString(req.JobID) && claimHash.MatchString(req.Claim)
 }
 
-func armedForErase(marker map[string]any, req eraseRequest) bool {
+func eraseGrant(marker map[string]any, req eraseRequest, now time.Time) (time.Time, bool) {
 	armed, ok := marker["go_queue_erase_armed_at"].(time.Time)
-	return ok && !armed.IsZero() && marker["wipe_status"] == "running" &&
+	expires, expiryOK := marker["go_queue_erase_claim_expires_at"].(time.Time)
+	return expires, ok && !armed.IsZero() && expiryOK && now.Before(expires) && marker["wipe_status"] == "running" &&
 		marker["wipe_job_id"] == req.JobID && marker["go_queue_erase_claim"] == req.Claim
+}
+
+func eraseFailureStatus(err error) int {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return http.StatusServiceUnavailable
+	}
+	if fault, ok := errors.AsType[*docstore.CallError](err); ok && fault.Kind == docstore.KindTransient {
+		return http.StatusServiceUnavailable
+	}
+	if fault, ok := errors.AsType[*pgconn.PgError](err); ok {
+		switch fault.Code {
+		case "55P03", "57014", "57P01", "57P02", "57P03", "53300":
+			return http.StatusServiceUnavailable
+		}
+		if strings.HasPrefix(fault.Code, "08") {
+			return http.StatusServiceUnavailable
+		}
+	}
+	var network net.Error
+	if errors.As(err, &network) && network.Timeout() {
+		return http.StatusServiceUnavailable
+	}
+	return http.StatusConflict
 }
 
 func authorizeErase(validator *idtoken.Validator, cfg eraseConfig) func(context.Context, string) error {

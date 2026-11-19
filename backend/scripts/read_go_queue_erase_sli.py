@@ -14,7 +14,7 @@ def main() -> None:
         json.dumps(
             {
                 'event': 'go_queue_erase_readback',
-                'severity': 'ERROR' if result['overdue_pending'] else 'INFO',
+                'severity': 'ERROR' if result['overdue_pending'] or result['met'] < eligible else 'INFO',
                 **result,
                 'success_ratio': result['met'] / eligible if eligible else None,
             },

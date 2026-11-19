@@ -1231,7 +1231,7 @@ return 0
 """
 
 
-def renew_job_run_lock(job_id: str, token: str) -> bool:
+def renew_job_run_lock(job_id: str, token: str, lease_seconds: int = RUN_LOCK_TTL_SECONDS) -> bool:
     """Renew a run lease only when *token* still owns it.
 
     Redis errors deliberately propagate: a caller must distinguish an
@@ -1244,7 +1244,7 @@ def renew_job_run_lock(job_id: str, token: str) -> bool:
             1,
             _key(f'{RUN_LOCK_KEY_PREFIX}{job_id}'),
             token,
-            RUN_LOCK_TTL_SECONDS,
+            lease_seconds,
         )
     )
 

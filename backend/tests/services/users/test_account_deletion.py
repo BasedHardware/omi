@@ -2659,14 +2659,14 @@ def test_go_queue_erase_gates_data_wipe_after_billing(monkeypatch, workerd_down)
     _stub_wipe_steps_after_billing(monkeypatch)
     seen = []
     monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'true')
-    monkeypatch.setattr(account_deletion, 'renew_job_run_lock', lambda _key, _token: True)
+    monkeypatch.setattr(account_deletion, 'renew_job_run_lock', lambda _key, _token, *_ttl: True)
     monkeypatch.setattr(account_deletion, 'assert_destructive_gate_still_ours', MagicMock())
     monkeypatch.setattr(
         account_deletion, '_cancel_subscription_for_account_deletion', lambda uid: seen.append('billing')
     )
     monkeypatch.setattr(account_deletion, 'delete_agent_vm_for_account', lambda uid: seen.append('agent_vm'))
 
-    def barrier(uid, job_id, token, owns_claim):
+    def barrier(uid, job_id, token, owns_claim, remote_inflight):
         assert (uid, job_id, token) == ('uid1', 'opaque-job-id', 'current-token')
         owns_claim()
         seen.append('erase')
@@ -2674,7 +2674,9 @@ def test_go_queue_erase_gates_data_wipe_after_billing(monkeypatch, workerd_down)
             raise RuntimeError('unavailable')
 
     monkeypatch.setattr(account_deletion, 'require_committed_erase', barrier)
-    result = account_deletion.background_wipe_user_data('uid1', erase_claim=('opaque-job-id', 'current-token'))
+    result = account_deletion.background_wipe_user_data(
+        'uid1', erase_claim=('opaque-job-id', 'current-token', account_deletion.Event())
+    )
     assert result is (not workerd_down)
     assert seen == (['billing', 'erase'] if workerd_down else ['billing', 'erase', 'agent_vm'])
     if workerd_down:
@@ -2686,7 +2688,7 @@ def test_go_queue_erase_gates_data_wipe_after_billing(monkeypatch, workerd_down)
 def test_billing_failure_does_not_arm_the_go_queue_barrier(monkeypatch):
     _stub_wipe_steps_after_billing(monkeypatch)
     monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'true')
-    monkeypatch.setattr(account_deletion, 'renew_job_run_lock', lambda _key, _token: True)
+    monkeypatch.setattr(account_deletion, 'renew_job_run_lock', lambda _key, _token, *_ttl: True)
     monkeypatch.setattr(
         account_deletion,
         '_cancel_subscription_for_account_deletion',
@@ -2695,6 +2697,11 @@ def test_billing_failure_does_not_arm_the_go_queue_barrier(monkeypatch):
     require = MagicMock()
     monkeypatch.setattr(account_deletion, 'require_committed_erase', require)
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_billing_failed', MagicMock(return_value=True))
-    assert account_deletion.background_wipe_user_data('uid1', erase_claim=('opaque-job-id', 'current-token')) is False
+    assert (
+        account_deletion.background_wipe_user_data(
+            'uid1', erase_claim=('opaque-job-id', 'current-token', account_deletion.Event())
+        )
+        is False
+    )
     require.assert_not_called()
     account_deletion.users_db.mark_user_deletion_billing_failed.assert_called_once()

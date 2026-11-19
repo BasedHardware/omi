@@ -55,9 +55,9 @@ def test_only_committed_erase_unlocks_wipe(monkeypatch, error, enabled, expected
     monkeypatch.setattr(erase, '_erase_at_postgres', recovery)
     if failure:
         with pytest.raises(failure):
-            erase.require_committed_erase('tenant', 'job', 'token', lambda: None)
+            erase.require_committed_erase('tenant', 'job', 'token', lambda: None, lambda _inflight: None)
     else:
-        erase.require_committed_erase('tenant', 'job', 'token', lambda: None)
+        erase.require_committed_erase('tenant', 'job', 'token', lambda: None, lambda _inflight: None)
     assert observed == expected
 
 
@@ -70,5 +70,21 @@ def test_older_receipt_is_reused_under_new_claim(monkeypatch):
         return {receipts.RECEIPT_AT: datetime.now(timezone.utc)}
 
     monkeypatch.setattr(receipts, 'record', record)
-    erase.require_committed_erase('tenant', 'job', 'new-token', lambda: None)
+    erase.require_committed_erase('tenant', 'job', 'new-token', lambda: None, lambda _inflight: None)
     assert observed == ['arm', 'wipe']
+
+
+def test_workerd_certificate_failure_cannot_authorize_recovery():
+    import ssl
+
+    import httpx
+
+    error = httpx.ConnectError('connection rejected')
+    error.__cause__ = ssl.SSLCertVerificationError('bad certificate')
+    assert not erase._is_network_unavailable(error)
+    assert erase._is_network_unavailable(httpx.ConnectTimeout('timeout'))
+
+
+def test_recovery_is_off_without_a_database_binding(monkeypatch):
+    monkeypatch.delenv('GO_QUEUE_ERASE_RECOVERY_DATABASE_URL', raising=False)
+    assert erase._erase_at_postgres('tenant') is False

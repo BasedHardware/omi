@@ -37,7 +37,6 @@ from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
 from services.users.data_export_response import DataExportStreamingResponse
-from services.users.go_queue_erase import go_queue_erase_required
 from services.users.account_deletion import run_deletion_wipe_with_lease
 from routers.account_deletion import router as account_deletion_router
 from database.app_review_config import should_hide_subscription_ui
@@ -378,12 +377,7 @@ async def run_account_deletion_wipe(
 
         max_attempts = get_account_deletion_tasks_max_attempts()
         terminal = task_authentication.retry_count >= max_attempts - 1
-        if go_queue_erase_required() or resolution.get('go_queue_erase_armed') is True:
-            ok = await run_deletion_wipe_with_lease(
-                uid, task_authentication.retry_count, terminal, lock_token, wipe_job_id
-            )
-        else:
-            ok = await run_deletion_wipe_with_lease(uid, task_authentication.retry_count, terminal, lock_token)
+        ok = await run_deletion_wipe_with_lease(uid, task_authentication.retry_count, terminal, lock_token, wipe_job_id)
         if ok:
             return JSONResponse(status_code=200, content={'status': 'done'})
 

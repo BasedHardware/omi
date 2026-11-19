@@ -22,12 +22,14 @@ from database.legal_holds import (
     assert_account_deletion_permitted,
     assert_destructive_gate_still_ours,
     finish_destructive_operation,
+    mark_remote_erasure,
 )
 from database.dev_api_key import delete_dev_key, get_dev_keys_for_user
 from database.mcp_api_key import delete_mcp_key, get_mcp_keys_for_user
 from database.mcp_oauth import delete_user_oauth_credentials
 from database import account_deletion_grace as deletion_grace_db
 from database import account_deletion_marker as deletion_marker_db
+from database import go_queue_erase as go_erase_db
 from database import users as users_db
 from database import processing_backlog as processing_backlog_db
 from database.action_items import get_action_item_ids
@@ -329,10 +331,13 @@ class DeletionBillingError(RuntimeError):
 _DELETION_HEARTBEAT_INTERVAL_SECONDS = 60
 
 
-async def _renew_deletion_wipe_lease(uid: str, token: str, stop: asyncio.Event, lost: Event) -> None:
+async def _renew_deletion_wipe_lease(
+    uid: str, token: str, stop: asyncio.Event, lost: Event, short_erase_lease: Event
+) -> None:
     while not stop.is_set():
         try:
-            if not await run_blocking(db_executor, renew_job_run_lock, f'account-deletion:{uid}', token):
+            lease_args = (go_erase_db.ERASE_LEASE_SECONDS,) if short_erase_lease.is_set() else ()
+            if not await run_blocking(db_executor, renew_job_run_lock, f'account-deletion:{uid}', token, *lease_args):
                 lost.set()
                 return
             # Also heartbeat during a single long provider/Firestore operation.
@@ -359,14 +364,18 @@ async def run_deletion_wipe_with_lease(
     async def run() -> bool:
         stop = asyncio.Event()
         lost = Event()
+        short_erase_lease = Event()
         heartbeat = start_background_task(
-            _renew_deletion_wipe_lease(uid, token, stop, lost), name='account-deletion-lease'
+            _renew_deletion_wipe_lease(uid, token, stop, lost, short_erase_lease), name='account-deletion-lease'
         )
         try:
             arguments = (uid, retry_count, terminal, lost)
             if wipe_job_id is not None:
                 return await run_blocking(
-                    cleanup_executor, background_wipe_user_data, *arguments, erase_claim=(wipe_job_id, token)
+                    cleanup_executor,
+                    background_wipe_user_data,
+                    *arguments,
+                    erase_claim=(wipe_job_id, token, short_erase_lease),
                 )
             return await run_blocking(cleanup_executor, background_wipe_user_data, *arguments)
         finally:
@@ -383,13 +392,15 @@ def background_wipe_user_data(
     terminal: bool = False,
     lease_lost: Event | None = None,
     *,
-    erase_claim: tuple[str, str] | None = None,
+    erase_claim: tuple[str, str, Event] | None = None,
 ) -> bool:
     started_at = time.monotonic()
     current_operation = 'wipe_running_marker'
     purge_result: object = {}
     deletion_gate_token = f'account-deletion:{uid}'
     deletion_gate_acquired = False
+    needs_erase = False
+    preserve_erase_gate = False
 
     def heartbeat() -> None:
         if lease_lost is not None and lease_lost.is_set():
@@ -411,7 +422,15 @@ def background_wipe_user_data(
         # genuinely orphaned ``pending`` marker (queued but never started)
         # from a wipe that is actively executing. Without this, a slow wipe
         # could be duplicate-claimed after the short ``pending`` stale window.
-        users_db.mark_user_deletion_wipe_running(uid)
+        if erase_claim is None:
+            armed = users_db.mark_user_deletion_wipe_running(uid)
+        else:
+            job_id, token, _short_lease = erase_claim
+            if not renew_job_run_lock(deletion_gate_token, token):
+                raise RuntimeError('account deletion wipe claim lost')
+            armed = users_db.mark_user_deletion_wipe_running(uid, job_id, go_erase_db.claim_fingerprint(token))
+        preserve_erase_gate = armed is True
+        needs_erase = preserve_erase_gate or go_queue_erase_required()
         # The durable marker and queue claim are the authority for every
         # irreversible step below. In particular, do not cancel billing or
         # remove Firebase Auth from the request thread: a queue NotFound must
@@ -422,19 +441,35 @@ def background_wipe_user_data(
         # grace admission check. Re-read Stripe at the irreversible boundary,
         # even when admission recorded an earlier successful cancellation.
         _cancel_subscription_for_account_deletion(uid)
-        if erase_claim is not None or go_queue_erase_required():
+        if needs_erase:
             current_operation = 'go_queue_erase'
             if erase_claim is None:
                 raise RuntimeError('Go queue erase requires an authenticated wipe claim')
-            job_id, token = erase_claim
+            job_id, token, short_lease = erase_claim
+            short_lease.set()
 
             def owns_erase_claim() -> None:
                 heartbeat()
                 assert_destructive_gate_still_ours(uid, 'account_deletion', token=deletion_gate_token)
-                if not renew_job_run_lock(deletion_gate_token, token):
+                if not renew_job_run_lock(deletion_gate_token, token, go_erase_db.ERASE_LEASE_SECONDS):
                     raise RuntimeError('Go queue erase wipe claim lost')
 
-            require_committed_erase(uid, job_id, token, owns_erase_claim)
+            def set_erase_inflight(inflight: bool) -> None:
+                nonlocal preserve_erase_gate
+                if inflight:
+                    preserve_erase_gate = True
+                mark_remote_erasure(
+                    uid,
+                    kind='account_deletion',
+                    token=deletion_gate_token,
+                    inflight=inflight,
+                    firestore_client=deletion_marker_db.account_deletion_firestore_client(),
+                    target='go_queue_erase',
+                )
+                if not inflight:
+                    preserve_erase_gate = False
+
+            require_committed_erase(uid, job_id, token, owns_erase_claim, set_erase_inflight)
         current_operation = 'agent_vm'
         heartbeat()
         delete_agent_vm_for_account(uid)
@@ -494,14 +529,15 @@ def background_wipe_user_data(
     except Exception as e:
         if erase_claim is not None:
             try:
-                if not renew_job_run_lock(deletion_gate_token, erase_claim[1]):
+                lease_args = (go_erase_db.ERASE_LEASE_SECONDS,) if erase_claim[2].is_set() else ()
+                if not renew_job_run_lock(deletion_gate_token, erase_claim[1], *lease_args):
                     logger.warning('delete_account failure ignored after losing the run lock')
                     return False
             except Exception:
                 logger.error('delete_account could not confirm ownership to record wipe failure')
                 return False
         logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
-        if deletion_gate_acquired:
+        if deletion_gate_acquired and not preserve_erase_gate:
             try:
                 finish_destructive_operation(
                     uid,

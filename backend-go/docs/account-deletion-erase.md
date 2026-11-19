@@ -18,12 +18,15 @@ receivers continue to fence late writes after a queue database session disappear
 2. Lane B owns the queue migration and the separately applied recovery access migration.
    David must approve the new recovery role before any access change. After approval,
    provision the environment-specific login or IAM binding for the EXECUTE-only role,
-   supply `GO_QUEUE_ERASE_RECOVERY_DATABASE_URL` via an approved secret binding, and set
-   `GO_QUEUE_ERASE_RECOVERY_ENABLED=true`. It defaults to false.
+   supply `GO_QUEUE_ERASE_RECOVERY_DATABASE_URL` via an approved secret binding and set
+   `GO_QUEUE_ERASE_RECOVERY_SCHEMA` to the schema used by workerd. An absent recovery URL
+   disables recovery. Verify both paths target the same queue using a synthetic tenant.
 3. Wire aggregate readback and paging in the environment as described below. Exercise both
    erase paths and a workerd outage with synthetic tenants. Confirm the armed receipt and
    wipe-start timestamp ordering. The queue and Firestore fences must both be active.
-4. In the first live family's release, set `GO_QUEUE_ERASE_REQUIRED=true` for the Python
+4. Let wipes that began removing data under the old behavior finish before enabling the
+   barrier. Preserve and audit existing wipe-start evidence for any legacy retry.
+   In the first live family's release, set `GO_QUEUE_ERASE_REQUIRED=true` for the Python
    Cloud Tasks deletion executor and supply `GO_QUEUE_ERASE_URL` and `GO_QUEUE_ERASE_AUDIENCE`
    before admitting any live tenant traffic. The URL is a private TLS endpoint at
    `/internal/v1/tenant-erase` and the audience is that service's configured OIDC audience.
@@ -40,7 +43,8 @@ arming and before the first data wipe step, and the overdue pending count. The c
 the trailing seven days, excluding the 15-minute grace for measurement. Empty cohorts
 publish a null ratio. Pending and failed generations count as misses once mature.
 
-Page the deletion owner on `go_queue_erase_readback` with positive `overdue_pending`, on
+Page the deletion owner on `go_queue_erase_readback` with positive `overdue_pending` or
+`met < eligible`, on
 `go_queue_erase_page` for an authorization or generation failure, and when scheduled
 readback goes missing. Acceptance is a 100% ratio with a visible numerator and denominator.
 A shared Postgres outage keeps the wipe pending. Restore or fail over the queue store,

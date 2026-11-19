@@ -24,7 +24,7 @@ def test_go_queue_erase_receipt_requires_held_due_generation(monkeypatch):
     monkeypatch.setattr(receipts, 'account_deletion_firestore_client', lambda: db)
     ref = db.collection('account_deletions').document(uid)
     try:
-        ref.set({'wipe_job_id': 'job', 'wipe_status': 'running'})
+        ref.set({'wipe_job_id': 'job', 'wipe_status': 'running', receipts.CLAIM: 'claim'})
         with pytest.raises(LegalHoldAuthorityUnavailable):
             receipts.record(uid, 'job', 'claim', 'arm')
         acquire_destructive_operation(
@@ -40,6 +40,7 @@ def test_go_queue_erase_receipt_requires_held_due_generation(monkeypatch):
         with pytest.raises(RuntimeError, match='receipt missing'):
             receipts.record(uid, 'job', 'claim', 'wipe')
         receipts.record(uid, 'job', 'claim', 'receipt', 'workerd')
+        ref.update({receipts.CLAIM: 'new-claim', receipts.CLAIM_EXPIRES_AT: None})
         receipts.record(uid, 'job', 'new-claim', 'arm')
         receipts.record(uid, 'job', 'new-claim', 'wipe')
         marker = ref.get().to_dict()
