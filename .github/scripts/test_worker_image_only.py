@@ -1,6 +1,7 @@
 """Offline behavioral fixtures for the SCA-2149 preservation primitive."""
 
 import copy
+import hashlib
 import contextlib
 import io
 import json
@@ -8,6 +9,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 import re
 import subprocess
 import sys
@@ -783,7 +785,7 @@ class DryRunTests(unittest.TestCase):
             self.dry_run(NEW)
         self.assertEqual(self.cluster.writes, 0)
 
-    def test_dry_run_rechecks_t4_on_the_final_read(self):
+    def activate_t4_before_final_read(self):
         start = self.cluster.consumer_reads
         original = Cluster.__call__
 
@@ -793,8 +795,26 @@ class DryRunTests(unittest.TestCase):
             return original(cluster, *args)
 
         self.cluster.__class__ = type("T4Cluster", (Cluster,), {"__call__": activate_t4})
-        with self.assertRaisesRegex(ValueError, "consumer drift|active T4"):
+
+    def test_dry_run_final_read_refuses_t4_replica_drift(self):
+        self.activate_t4_before_final_read()
+        with self.assertRaisesRegex(ValueError, "^consumer drift$"):
             self.dry_run(NEW)
+        self.assertEqual(self.cluster.writes, 0)
+
+    def test_dry_run_rechecks_t4_on_the_final_read(self):
+        # Isolate the T4 gate: let the final bindings comparison pass so only require_t4_serves can refuse.
+        self.activate_t4_before_final_read()
+        real_bindings = worker.bindings
+        calls = []
+
+        def bindings(items):
+            calls.append(1)
+            return self.baseline["consumers"] if len(calls) > 1 else real_bindings(items)
+
+        with mock.patch.object(worker, "bindings", bindings):
+            with self.assertRaisesRegex(ValueError, "active T4 fallback must already serve the candidate"):
+                self.dry_run(NEW)
         self.assertEqual(self.cluster.writes, 0)
 
     def test_guard_allows_only_reads_and_server_dry_run_patches(self):
@@ -1005,25 +1025,31 @@ class WorkflowTests(unittest.TestCase):
         "BasedHardware/omi/.github/actions/deployment-notifier",
     }
 
-    # Every run: step that is NOT excluded from dry-run mode, by name and exact script digest. A new or
-    # edited step that runs during a dry-run must be reviewed here (fail closed), whatever it calls.
+    # Every run: step, in any job, that is NOT excluded from dry-run mode, pinned by name and the sha256 of
+    # its exact script. A new step, or any edit to one of these scripts, fails here until it is reviewed
+    # for writes (fail closed), whatever it calls.
     DRY_RUN_REACHABLE_RUN_STEPS = {
-        "Validate Environment Input",
-        "Delete huge unnecessary tools folder",
-        "Select merged production source and image tag",
-        "Resolve deployment target",
-        None,  # gcloud auth configure-docker (local docker credential helper)
-        "Verify promoted worker digest",
-        "Dry-run worker image preserving live runtime",
+        ("deploy", "Validate Environment Input"): "96f625184865014f0b2e49dadbfefb10f33d338bfbc35941a4c2e3603ed3edad",
+        ("deploy", "Delete huge unnecessary tools folder"): "99c44db74408ad1e6174a3bf28a90e72a976ce4005a1bb175f6525c06af417d2",
+        ("deploy", "Select merged production source and image tag"): "259f74511721d4d448b962a9ead92f0fae477ec60ead6fffa9319540b48f745a",
+        ("deploy", "Resolve deployment target"): "63f02fcafe44590aad8e5fba0e997859e4d4ff28dc1f86108a8847dfb0487c73",
+        ("deploy", None): "cea3c6ca1bb08b72231064902dbf642d6c47200f802f6eefef709d24b6534438",  # gcloud auth configure-docker
+        ("deploy", "Verify promoted worker digest"): "f006e9315fa3308a136f384a69bcf27a56dac6112c090c6df316d4c1813d6a2d",
+        ("deploy", "Dry-run worker image preserving live runtime"): "72af588008714cad26482e7b845d922f81070a7bed1b52a16d8588862a111d05",
     }
 
     def test_run_steps_reachable_in_dry_run_mode_are_reviewed(self):
-        reachable = [s for s in self.steps if "run" in s and "inputs.worker_dry_run != true" not in s.get("if", "")]
-        self.assertEqual({s.get("name") for s in reachable}, self.DRY_RUN_REACHABLE_RUN_STEPS)
-        unnamed = [s for s in reachable if s.get("name") is None]
-        self.assertEqual([s["run"].strip() for s in unnamed], ["gcloud auth configure-docker"])
-        for step in reachable:
-            with self.subTest(step=step.get("name")):
+        reachable = {
+            (job_name, step.get("name")): step
+            for job_name, job in self.workflow["jobs"].items()
+            for step in job.get("steps", [])
+            if "run" in step and "inputs.worker_dry_run != true" not in str(step.get("if", ""))
+        }
+        digests = {key: hashlib.sha256(step["run"].encode()).hexdigest() for key, step in reachable.items()}
+        self.assertEqual(digests, self.DRY_RUN_REACHABLE_RUN_STEPS)
+        self.assertEqual(reachable[("deploy", None)]["run"].strip(), "gcloud auth configure-docker")
+        for key, step in reachable.items():
+            with self.subTest(step=key):
                 self.assertFalse(self.writes(step["run"]))
 
     def test_gcloud_mutations_count_as_writes(self):
