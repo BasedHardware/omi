@@ -20,11 +20,12 @@ from uuid import NAMESPACE_URL, uuid5
 from google.cloud.firestore_v1 import FieldFilter
 
 from utils.conversations.v3.triggers import enqueue, changed
+from config.conversations_v3 import quiet_notes_enabled
 from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
-from utils.conversations.v3 import Conflict, outline, planner, models, metrics, policy, visibility, context
+from utils.conversations.v3 import Conflict, outline, planner, models, metrics, policy, quiet, visibility, context
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
 
@@ -469,6 +470,16 @@ async def reconcile(
                 await run_blocking(
                     db_executor, enqueue, uid, at=max(group['end'] + outline.SILENCE, now + timedelta(minutes=1))
                 )
+        if not derive and not on_open and quiet_notes_enabled(uid):
+            for row in rows:
+                if quiet.proven({**(existing.get(row['id']) or {}), **row}, recordings):
+                    try:
+                        await run_blocking(db_executor, quiet.enqueue, uid, row)
+                    except Exception as error:
+                        # The five-minute close still owns the notes.
+                        logger.warning(
+                            'event=v3_quiet_notes outcome=dispatch_error exception_type=%s', type(error).__name__
+                        )
         for row in rows:
             prior = existing.get(row['id']) or {}
             if (

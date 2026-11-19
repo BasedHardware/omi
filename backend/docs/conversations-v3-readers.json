@@ -799,6 +799,10 @@
     "policy": "both",
     "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."
   },
+  "backend/utils/conversations/v3/quiet.py:user_conversations": {
+    "policy": "both",
+    "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."
+  },
   "backend/utils/conversations/v3/summary.py:user_conversations": {
     "policy": "both",
     "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."

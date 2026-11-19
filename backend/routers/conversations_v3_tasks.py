@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from utils.cloud_tasks import verify_cloud_tasks_oidc
-from utils.conversations.v3 import backfill, service
+from utils.conversations.v3 import backfill, quiet, service
 from config.conversations_v3 import backfill_enabled
 
 router = APIRouter()
@@ -14,10 +14,13 @@ router = APIRouter()
 
 class ReconcileRequest(BaseModel):
     uid: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
+    quiet_notes: str | None = Field(default=None, min_length=1, max_length=128, pattern=r'^[^/]+$')
 
 
 @router.post('/v1/conversations-v3/reconcile', include_in_schema=False)
 async def reconcile(body: ReconcileRequest, _retry: int = Depends(verify_cloud_tasks_oidc)):
+    if body.quiet_notes:
+        return {'outcome': await quiet.run(body.uid, body.quiet_notes)}
     return {'outcome': await service.reconcile(body.uid)}
 
 

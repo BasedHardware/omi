@@ -95,9 +95,14 @@ Cloud Tasks queue and the configured sync origin/OIDC identity unless
 task coalesces each owner-minute. Explicit manual ends use a separate,
 deterministic source-close task name so an already completed live task in the
 same minute cannot swallow the close. They do not wait for the silence deadline.
-Automatic end detection still waits five minutes of speech quiet; this is not
-a measured 30-second end-to-notes guarantee. On-open Standard notes stream
+Automatic end detection still waits five minutes of speech quiet. On-open Standard notes stream
 through the existing summary endpoint without that background close wait.
+`CONVERSATIONS_V3_QUIET_NOTES` (`off` default; `cohort` = rollout cohort `v3-quiet-notes`; `on`)
+writes those same on-open notes in the background once the live window's last recording is
+transcribed and listen sealed it on speech quiet (no `v3_rotation_cap_seconds` stamp). A
+rotation seal is not quiet proof. At most two paid attempts per window (`quiet_notes` on its
+summary lease). Final processing reuses the notes when no speech followed and still owns
+memories, tasks, webhooks and the created delivery. Log: `event=v3_quiet_notes`.
 The builder holds a Firestore token/expiry
 lease, revision-checks sources and targets, and writes conversation copies and
 recording claims together. A conflict retains pending work. The five-minute

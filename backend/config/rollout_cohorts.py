@@ -16,6 +16,7 @@ class RolloutCohortUnavailable(RuntimeError):
 COHORT_ENVS = {
     'conversations-v3': lambda: os.getenv('CONVERSATIONS_V3_UID_ALLOWLIST', ''),
     'v3-recording-rotation': lambda: '',
+    'v3-quiet-notes': lambda: '',
     'batch-pipeline-shadow': lambda: '',
     # The composition root injects scoped policy env readers with the runtime.
     'batch-pipeline': lambda: '',

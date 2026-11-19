@@ -36,6 +36,17 @@ def recording_rotation_enabled(uid: str) -> bool:
     return mode == 'cohort' and in_rollout_cohort(uid, ROTATION_COHORT)
 
 
+QUIET_NOTES_COHORT = 'v3-quiet-notes'
+
+
+def quiet_notes_enabled(uid: str) -> bool:
+    """Background notes once listen seals on speech quiet. ``off`` (default), ``cohort`` or ``on``."""
+    mode = os.getenv('CONVERSATIONS_V3_QUIET_NOTES', 'off').strip().lower()
+    if mode == 'on':
+        return True
+    return mode == 'cohort' and in_rollout_cohort(uid, QUIET_NOTES_COHORT)
+
+
 def rotation_seconds() -> tuple[float, float]:
     """(minimum age, hard cap) of a rotated recording; an invalid pair keeps the defaults."""
     try:
