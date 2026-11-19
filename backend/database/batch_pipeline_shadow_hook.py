@@ -11,7 +11,6 @@ import os
 from typing import Iterable
 
 from database.batch_pipeline_recovery_metrics import RECOVERY_COLLECTORS
-from database.batch_pipeline_retirement_metrics import RETIREMENT_COLLECTORS
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +62,7 @@ def shadow_parity_collectors() -> tuple:
     Core collectors are required; their import does not traverse caller utilities or jobstore.
     """
     if not _shadow_mode():
-        return (*RECOVERY_COLLECTORS, *RETIREMENT_COLLECTORS)
+        return RECOVERY_COLLECTORS
     try:
         import database.jobstore.dual_store as dual_store
 
@@ -71,7 +70,6 @@ def shadow_parity_collectors() -> tuple:
 
         collectors = (
             *RECOVERY_COLLECTORS,
-            *RETIREMENT_COLLECTORS,
             SERVING_PARITY_TOTAL,
             dual_store.SHADOW_PARITY_TOTAL,
             dual_store.SHADOW_CONVERGENCE_TOTAL,
@@ -84,7 +82,7 @@ def shadow_parity_collectors() -> tuple:
         return collectors
     except Exception:
         logger.warning('event=jobstore_shadow outcome=metrics_unavailable', exc_info=True)
-        return (*RECOVERY_COLLECTORS, *RETIREMENT_COLLECTORS)
+        return RECOVERY_COLLECTORS
 
 
 def shadow_from_env(primary):
