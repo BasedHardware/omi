@@ -7,13 +7,13 @@ PCM concatenation, never elapsed wall time. A media upload alone is not proof.
 import hashlib
 import json
 import math
+import os
 import time
 from typing import Any
 
 from google.api_core.exceptions import PreconditionFailed
 
 from config.record_wal_storage import private_archive_bucket
-from config.refactor_modes import default_on
 from utils import encryption
 from utils.pusher_audio_window import AUDIO_TIMELINE_CONTINUITY_TOLERANCE
 
@@ -76,7 +76,11 @@ def resampled_samples(samples: int, rate: int, output_rate: int = 16000) -> int:
 
 def _listed_manifest_bytes(blob, listed, deadline):
     """Use listing metadata only when the current object still matches both versions."""
-    if listed is None or listed.name != blob.name or not default_on('PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED'):
+    if (
+        listed is None
+        or listed.name != blob.name
+        or os.getenv('PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED', 'true').strip().lower() == 'false'
+    ):
         return None
     generation = listed.generation
     metageneration = getattr(listed, 'metageneration', None)
