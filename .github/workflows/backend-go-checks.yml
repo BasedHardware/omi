@@ -15,11 +15,23 @@ on:
   pull_request:
     paths:
       - "backend-go/**"
+      - "backend/testing/finalization_replay/**"
+      - "backend/utils/conversations/finalizer.py"
+      - "backend/utils/conversations/process_conversation.py"
+      - "backend/utils/conversations/lifecycle.py"
+      - "backend/database/conversation_finalization_jobs.py"
+      - "backend/database/conversations.py"
       - ".github/workflows/backend-go-checks.yml"
   push:
     branches: [main]
     paths:
       - "backend-go/**"
+      - "backend/testing/finalization_replay/**"
+      - "backend/utils/conversations/finalizer.py"
+      - "backend/utils/conversations/process_conversation.py"
+      - "backend/utils/conversations/lifecycle.py"
+      - "backend/database/conversation_finalization_jobs.py"
+      - "backend/database/conversations.py"
       - ".github/workflows/backend-go-checks.yml"
 
 permissions:

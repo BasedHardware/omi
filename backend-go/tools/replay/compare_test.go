@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -10,10 +11,10 @@ func TestCompareReportsNestedDiffsAndKeepsPresence(t *testing.T) {
 	t.Parallel()
 	raw := `[{"name":"nested","python":{"status":"completed","conversation":{
 		"updated_at":"now","finalization_job_id":"py","structured":{"a/b":null,"list":[1,2]}},
-		"derived_documents":{"memories/item":{"content":"one"}},"webhooks":[{"app":"first"}]},
+		"effects":{},"derived_documents":{"memories/item":{"content":"one"}},"webhooks":[{"app":"first"}]},
 		"go":{"status":"completed","conversation":{
 		"finalization_job_id":"go","structured":{"list":[1.0,3],"til~de":true}},
-		"derived_documents":{"memories/item":{"content":"two"}},"webhooks":[]}}]`
+		"effects":{},"derived_documents":{"memories/item":{"content":"two"}},"webhooks":[]}}]`
 	cases, err := decodeCases([]byte(raw))
 	if err != nil {
 		t.Fatal(err)
@@ -110,5 +111,85 @@ func TestCompareOnlyExcusesVerifiedBindingsAndClocks(t *testing.T) {
 		if diff.Reason != "" {
 			t.Fatalf("invalid binding or clock was allowed: %v", diff)
 		}
+	}
+}
+
+func TestProviderCallCountsPreventFalseParity(t *testing.T) {
+	t.Parallel()
+	baseline := observation{
+		Status: "completed", Derived: map[string]any{}, Effects: map[string]any{},
+		ProviderCalls: []string{"notes", "embeddings"},
+	}
+	for _, tc := range []struct {
+		name  string
+		calls []string
+		path  string
+		kind  string
+	}{
+		{name: "same calls in another order", calls: []string{"embeddings", "notes"}},
+		{name: "extra invocation of one lane", calls: []string{"notes", "embeddings", "notes"}, path: "/provider_calls/notes", kind: "different_value"},
+		{name: "missing embedding request", calls: []string{"notes"}, path: "/provider_calls/embeddings", kind: "missing_in_go"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			candidate := baseline
+			candidate.ProviderCalls = tc.calls
+			result, err := compare([]replayCase{{Name: tc.name, Python: &baseline, Go: &candidate}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			diffs := result.Cases[0].Differences
+			if tc.path == "" {
+				if result.Matched != 1 || len(diffs) != 0 {
+					t.Fatalf("same provider calls failed parity: %+v", diffs)
+				}
+				return
+			}
+			want := difference{Path: tc.path, Kind: tc.kind}
+			if result.Matched != 0 || result.Unexplained != 1 || len(diffs) != 1 || diffs[0] != want {
+				t.Fatalf("want one unexplained difference %+v, got %+v", want, diffs)
+			}
+		})
+	}
+}
+
+func TestObservationsRequireExplicitEffectObjects(t *testing.T) {
+	t.Parallel()
+	const valid = `{"status":"completed","derived_documents":{},"effects":{}}`
+	for _, tc := range []struct {
+		partial string
+		field   string
+	}{
+		{`"effects":{}`, "derived_documents"},
+		{`"derived_documents":null,"effects":{}`, "derived_documents"},
+		{`"derived_documents":[],"effects":{}`, "derived_documents"},
+		{`"derived_documents":{}`, "effects"},
+		{`"derived_documents":{},"effects":null`, "effects"},
+		{`"derived_documents":{},"effects":[]`, "effects"},
+	} {
+		for _, reverse := range []bool{false, true} {
+			invalid := fmt.Sprintf(`{"status":"completed",%s}`, tc.partial)
+			left, right := valid, invalid
+			if reverse {
+				left, right = right, left
+			}
+			raw := fmt.Sprintf(`[{"name":"invalid","python":%s,"go":%s}]`, left, right)
+			cases, err := decodeCases([]byte(raw))
+			if err == nil {
+				_, err = compare(cases)
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.field) {
+				t.Fatalf("wanted %s evidence error for %s, got %v", tc.field, raw, err)
+			}
+		}
+	}
+
+	raw := fmt.Sprintf(`[{"name":"empty","python":%s,"go":%s}]`, valid, valid)
+	cases, err := decodeCases([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := compare(cases); err != nil || result.Matched != 1 {
+		t.Fatalf("explicit empty objects must match: matches=%d, err=%v", result.Matched, err)
 	}
 }

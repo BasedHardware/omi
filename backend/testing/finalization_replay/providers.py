@@ -61,6 +61,7 @@ def provider_server():
                 state.webhook(path.removeprefix('/receive/'), key, body)
                 return {}
             if path == '/v1/embeddings':
+                state.provider_calls.append(body['model'].removeprefix('omi:auto:'))
                 return {
                     'object': 'list',
                     'data': [

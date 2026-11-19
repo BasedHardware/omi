@@ -86,13 +86,13 @@
       "budget_p50_minutes": 5,
       "display_name": "check",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 4,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "New 2026-11-19: make check for backend-go (vet, lint, structural rules, race tests with Postgres 16 and the Firestore emulator); runs only when backend-go/ changes; 5-minute placeholder until observed",
+      "rationale": "Five-minute budget retained for Go checks and replay. Forecast four runs/day from one Go sentinel plus three additional runs/day estimated from 21 first-parent changes to selected Python sources over seven days.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3603,11 +3603,17 @@
     "backend-go-checks.yml": {
       "name": "Backend Go Checks",
       "owner": "CI maintainers",
-      "rationale": "Path-selected checks for the Go backend foundation (backend-go/)",
+      "rationale": "Run Go checks and replay on Go changes, the Python replay driver and its direct finalization and storage entry points.",
       "triggers": {
         "pull_request": {
           "paths": [
             "backend-go/**",
+            "backend/testing/finalization_replay/**",
+            "backend/utils/conversations/finalizer.py",
+            "backend/utils/conversations/process_conversation.py",
+            "backend/utils/conversations/lifecycle.py",
+            "backend/database/conversation_finalization_jobs.py",
+            "backend/database/conversations.py",
             ".github/workflows/backend-go-checks.yml"
           ]
         },
@@ -3617,6 +3623,12 @@
           ],
           "paths": [
             "backend-go/**",
+            "backend/testing/finalization_replay/**",
+            "backend/utils/conversations/finalizer.py",
+            "backend/utils/conversations/process_conversation.py",
+            "backend/utils/conversations/lifecycle.py",
+            "backend/database/conversation_finalization_jobs.py",
+            "backend/database/conversations.py",
             ".github/workflows/backend-go-checks.yml"
           ]
         },

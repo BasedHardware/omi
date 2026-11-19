@@ -12,7 +12,8 @@ adapts the same notes and memory responses to the conformance protocol and recor
 worker's webhook, vector and memory operations.
 
 The runner compares disposition, every stored conversation field, changed derived
-documents, vendor effects, and webhook deliveries by destination and delivery order.
+documents, vendor effects, provider call counts by lane, and webhook deliveries by destination and delivery order.
+Both observations must supply JSON objects for derived documents and vendor effects. Empty objects are valid.
 Object comparison distinguishes missing fields from nulls. The report uses JSON Pointer
 paths and gives a reason for each allowed difference. Generated job and fanout IDs
 must agree with the corresponding side's admission and stored binding. Changed write

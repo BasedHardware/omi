@@ -80,6 +80,10 @@ func compare(cases []replayCase) (report, error) {
 			out.Failed++
 		case c.Python == nil || c.Go == nil || c.Python.Status == "" || c.Go.Status == "":
 			return report{}, fmt.Errorf("missing replay observation")
+		case c.Python.Derived == nil || c.Go.Derived == nil:
+			return report{}, fmt.Errorf("derived_documents must be a JSON object in both observations")
+		case c.Python.Effects == nil || c.Go.Effects == nil:
+			return report{}, fmt.Errorf("effects must be a JSON object in both observations")
 		default:
 			entry.Differences = compareObservations(c.Python, c.Go)
 			matched := true

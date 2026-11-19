@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ func compareObservations(python, goRun *observation) []difference {
 	compareValue(&diffs, "/conversation", python.Document, goRun.Document)
 	compareObject(&diffs, "/derived_documents", python.Derived, goRun.Derived)
 	compareObject(&diffs, "/effects", python.Effects, goRun.Effects)
+	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
 	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
 	for i := range diffs {
 		diff := &diffs[i]
@@ -33,6 +35,18 @@ func compareObservations(python, goRun *observation) []difference {
 		compareValue(&diffs, "/admitted/own_key", python.Admitted.OwnKey, goRun.Admitted.OwnKey)
 	}
 	return diffs
+}
+
+func countProviderCalls(calls []string) map[string]any {
+	counts := make(map[string]int)
+	for _, lane := range calls {
+		counts[lane]++
+	}
+	fields := make(map[string]any, len(counts))
+	for lane, count := range counts {
+		fields[lane] = json.Number(strconv.Itoa(count))
+	}
+	return fields
 }
 
 func documentField(run *observation, field string) any {

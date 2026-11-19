@@ -36,6 +36,11 @@ def main():
         own_key = by_name['own-key-resume'][side]
         assert own_key['admitted']['own_key'] and own_key['status'] == 'completed', side
 
+    assert 'openai-embeddings' in py['provider_calls']
+    assert {
+        'path': '/provider_calls/openai-embeddings',
+        'kind': 'missing_in_go',
+    } in kept['differences']
     unported = {diff['path'] for diff in kept['differences'] if diff['kind'] == 'unported'}
     assert '/webhooks/developer-created' in unported
     assert '/conversation/apps_results' in unported
