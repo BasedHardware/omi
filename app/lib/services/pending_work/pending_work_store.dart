@@ -59,6 +59,7 @@ class PendingWorkStore extends ChangeNotifier {
     _setAttention(const []);
     _retryKeys.clear();
     _acceptedNotes.clear();
+    _dismissedConversations.clear();
     _acceptedOperations.clear();
     _retrying.clear();
     retryErrors.clear();
@@ -89,8 +90,12 @@ class PendingWorkStore extends ChangeNotifier {
         for (final item in attention)
           if (item.conversationId != null) item.conversationId!,
         ..._acceptedNotes.values,
+        ..._dismissedConversations,
       };
   final Map<String, String> _acceptedNotes = {};
+
+  /// A dismissed row's conversation must not come back as Activity's projected failure row.
+  final Set<String> _dismissedConversations = {};
   final Set<String> retryErrors = {};
   final Map<String, String?> _acceptedOperations = {};
   final Set<String> _retrying = {};
@@ -256,6 +261,8 @@ class PendingWorkStore extends ChangeNotifier {
     final removed = _attention[index];
     final retryKey = _retryKeys[item.id];
     retryErrors.remove(item.id);
+    final conversationId = removed.conversationId;
+    final suppressing = conversationId != null && _dismissedConversations.add(conversationId);
     _setAttention([
       for (final i in _attention)
         if (i.id != item.id) i
@@ -269,6 +276,7 @@ class PendingWorkStore extends ChangeNotifier {
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         return true;
       case ApiFailure():
+        if (suppressing) _dismissedConversations.remove(conversationId);
         if (!_attention.any((i) => i.id == item.id)) {
           _attentionRevision++;
           _setAttention([..._attention]..insert(index.clamp(0, _attention.length), removed));

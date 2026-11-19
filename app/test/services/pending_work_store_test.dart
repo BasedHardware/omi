@@ -343,6 +343,8 @@ void main() {
       answer.complete(const ApiSuccess(null));
       expect(await pending, isTrue);
       expect(store.attention.map((i) => i.id), ['y']);
+      // Activity's projected failure row for the same conversation stays hidden.
+      expect(store.attentionConversationIds, containsAll(['c-x', 'c-y']));
     });
 
     test('a failed request puts the row back in place with the quiet error line', () async {
@@ -353,6 +355,7 @@ void main() {
       expect(await store.dismiss(store.attention[1]), isFalse);
       expect(store.attention.map((i) => i.id), ['x', 'y', 'z']);
       expect(store.retryErrors, {'y'});
+      expect(store.attentionConversationIds, {'c-x', 'c-y', 'c-z'});
     });
 
     test('a 404 means the row is already gone', () async {

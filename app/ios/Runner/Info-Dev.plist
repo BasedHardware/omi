@@ -2,30 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>UIApplicationSceneManifest</key>
-	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
-		<key>UISceneConfigurations</key>
-		<dict>
-			<key>UIWindowSceneSessionRoleApplication</key>
-			<array>
-				<dict>
-					<key>UISceneClassName</key>
-					<string>UIWindowScene</string>
-					<key>UISceneDelegateClassName</key>
-					<string>$(PRODUCT_MODULE_NAME).OmiSceneDelegate</string>
-					<key>UISceneConfigurationName</key>
-					<string>flutter</string>
-					<key>UISceneStoryboardFile</key>
-					<string>Main</string>
-				</dict>
-			</array>
-		</dict>
-	</dict>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.omi.recording-sync.refresh</string>
+		<string>com.omi.on-device.processing</string>
 		<string>daily-summary</string>
 		<string>com.friend-app-with-wearable.ios12.daily-summary</string>
 		<string>dev.flutter.background.refresh</string>
@@ -166,14 +146,6 @@
 	</dict>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<!-- Dev-only plist. NSAllowsArbitraryLoads rather than NSAllowsLocalNetworking,
-		     because the latter covers only .local, unqualified hostnames and link-local
-		     addresses — never a Tailscale CGNAT address (100.64.0.0/10), which is what
-		     the local dev harness is reached on.
-
-		     These two keys must not be combined: declaring NSAllowsArbitraryLoads
-		     alongside NSAllowsLocalNetworking makes the former a documented no-op on any
-		     OS that understands the newer key, silently leaving CGNAT hosts blocked. -->
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
@@ -211,8 +183,33 @@
 	<string>We use speech recognition to convert your speech to text for processing on your device.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>com.omi.siri.viewing</string>
+	</array>
 	<key>PermissionGroupNotification</key>
 	<string>You need to enable notifications to receive your pro-active feedback.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).OmiSceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
@@ -257,9 +254,5 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>com.posthog.posthog.AUTO_INIT</key>
 	<false/>
-	<key>NSUserActivityTypes</key>
-	<array>
-		<string>com.omi.siri.viewing</string>
-	</array>
 </dict>
 </plist>
