@@ -576,3 +576,6 @@ tests/unit/test_mcp_conversation_detail_paging.py::test_walk_1200_segments_once_
 # First synchronous-finalize test of its file pays the lazy finalize import chain (batch pipeline, STT,
 # scipy/onnxruntime; ~627 modules) in its call phase: 1.04-1.07s CPU on CI runners, ~0.5s locally.
 tests/unit/test_client_processing_finalize.py::test_paid_sync_finalize_projection_is_in_firestore_on_reread
+# First call amortizes the file-isolated utils.other.storage / audio_chunks import (lazy, inside the test) into its call phase:
+# 1.10 s and 1.13 s CPU on CI against 1.00 s (runs 44559705629, 44567333983), exposed by a full-suite PR run.
+tests/unit/test_gcs_http_pool.py::test_private_sync_gets_count_prepared_sdk_requests_and_restore_reader
