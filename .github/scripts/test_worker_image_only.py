@@ -689,6 +689,8 @@ class DryRunTests(unittest.TestCase):
         self.assertEqual(saved["mode"], "dry-run")
         self.assertTrue(saved["prior_image_admission"]["admitted"])
         self.assertTrue(saved["prior_image_admission"]["noop"])
+        # The pre-forward receipt must not claim rollback admission; only the post-forward rehearsal can.
+        self.assertEqual(saved["inverse_admission"], "not verified before the forward roll; rehearse with worker_rollback_receipt")
         self.assertEqual(saved["prior_image_admission"]["image"], OLD)
         self.assertIsNone(saved["forward"])
         self.assertIsNone(saved["inverse"])
@@ -789,6 +791,7 @@ class DryRunTests(unittest.TestCase):
         self.assertEqual(self.cluster.target, self.before)
         self.assertEqual([c for c in recorder.calls if is_write(c)], [])
         self.assertEqual(result["inverse"]["restores"], receipt["before"])
+        self.assertEqual(result["inverse_admission"], "verified: server dry-run of the real rollback CAS patch")
         self.assertIn({"op": "test", "path": "/spec/template/spec/containers/0/image", "value": NEW}, result["inverse"]["patch"])
         forged = {**receipt, "before": {**receipt["before"], "spec_sha256": "forged"}}
         with self.assertRaisesRegex(ValueError, "rollback"):
@@ -1242,6 +1245,36 @@ class WorkflowTests(unittest.TestCase):
             for step in job.get("steps", []):
                 if not self.excludes_dry_run(step.get("if")):
                     self.assertNotIn("continue-on-error", step, step.get("name") or step.get("uses"))
+
+    # Every uses: step reachable in dry-run mode, pinned by position and the sha256 of its uses, with, env, if
+    # and id, so an input edit (a checkout ref, credentials target) fails here until reviewed.
+    DRY_RUN_REACHABLE_USES_STEPS = {
+        ("deploy", 2, "actions/checkout@v7"): "4fb614bb7e46760136a1991dd31d5e0934afebee07489e943bb30fa4bb1a189f",
+        ("deploy", 4, "actions/checkout@v7"): "283f9e569234e2552922cc61ee534f04186e382ef036b83d200b7cd66723c841",
+        ("deploy", 5, "actions/checkout@v7"): "2ca758dd5cfcfcf1b84411b8cc51d64b964159ef2cb7ad2d53888b9b96121769",
+        ("deploy", 6, "./.github/firestore-workflow/.github/actions/firestore-readiness"): "0d1f2c04c68ed64fe3aa9f9ad52cdf069fcb263c393cfe52480db951d2a1a6a0",
+        ("deploy", 8, "google-github-actions/auth@v3"): "3286efbdc0d1bd5adf1bf9c3afe2c88d539cd036e9aa5a42b0edb88fd9a62f40",
+        ("deploy", 9, "google-github-actions/auth@v3"): "6fc980f3f5bfc28ac2316bf7d0b0a8d3742dcb06f095984d3b19f5db6849f6b4",
+        ("deploy", 10, "google-github-actions/setup-gcloud@v3"): "81788bbf5c63a19208a6c40180026073562ec37f254843f07dfeae9348f616c9",
+        ("deploy", 14, "google-github-actions/get-gke-credentials@v3"): "45f3c39c6de870255d441dea6ea993c5cceb60a5c0b034d9d3563ec03f331090",
+        ("deploy", 20, "BasedHardware/omi/.github/actions/deployment-summary@979b573718fd74b31edab3530adf2ed6082622dc"): "4cd14521853a508ad41a70b493185a7088ac3d4ecb72865472d638d12ede1a3c",
+        ("deploy", 21, "BasedHardware/omi/.github/actions/deployment-notifier@979b573718fd74b31edab3530adf2ed6082622dc"): "5ccc2df60e2e5e011fbd5aa099e2cf1ece1803a96706acce85599e596c935609",
+    }
+
+    @staticmethod
+    def uses_digest(step):
+        fields = {k: step.get(k) for k in ("uses", "with", "env", "if", "id", "continue-on-error", "timeout-minutes")}
+        return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
+
+    def test_uses_steps_reachable_in_dry_run_mode_are_pinned(self):
+        reachable = {
+            (job_name, index, step["uses"]): self.uses_digest(step)
+            for job_name, job in self.workflow["jobs"].items()
+            if not self.excludes_dry_run(job.get("if"))
+            for index, step in enumerate(job.get("steps", []))
+            if "uses" in step and not self.excludes_dry_run(step.get("if"))
+        }
+        self.assertEqual(reachable, self.DRY_RUN_REACHABLE_USES_STEPS)
 
     def test_dry_run_execution_context_is_reviewed(self):
         self.assertEqual(self.context_digest(), self.DRY_RUN_CONTEXT_DIGEST)

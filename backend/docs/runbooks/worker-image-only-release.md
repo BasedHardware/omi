@@ -95,15 +95,16 @@ same read; those HPAs are bound by UID and spec hash, so removing or retargeting
 `worker_dry_run=true` runs the preserve-live path to its server dry-run and stops:
 - It takes the same `prod-train` concurrency group; break-glass is refused.
 - It promotes an existing `image_digest`, so there is no build or push. The image-tree check still runs.
-- The step sets `WORKER_IMAGE_ONLY_DRY_RUN=1`. While that is set, the helper refuses `deploy` outright and refuses any API call other than a read or a `--dry-run=server` patch.
+- The step sets `WORKER_IMAGE_ONLY_DRY_RUN=1`. While that variable is set to any value, the helper refuses `deploy` outright and refuses any API call other than a read or a patch with exactly one dry-run option, `--dry-run=server`. The check runs in the API wrapper and again in `kubectl()`, the helper's only process boundary.
 - The Helm, preserve-live writer, rollout and post-roll verify steps all exclude the mode in their `if:`.
 - The deployment summary and Telegram notification carry `DRY-RUN (no write)` as the release version.
 
 The helper's `dry-run` command runs every writer gate: admitted baseline, required companion, T4 fallback (early and final reads) and sibling bindings. Then:
 
 - **Before a forward roll** (no receipt):
-  - if `image_digest` differs from live, it server-dry-runs the forward patch and checks offline that the inverse patch built from the would-be post-roll object restores the live identity;
+  - if `image_digest` differs from live, it server-dry-runs the forward patch, builds the inverse patch from the server's admitted post-roll object, and checks that applying it restores the live identity;
   - it always server-dry-runs the live (prior) image against fresh live state. That is a **no-op patch**: it proves admission of the prior spec and the UID/resourceVersion tests, not the rollback CAS.
+  - **Rollback admission is not verified before the forward roll.** The receipt says so in `inverse_admission`. Only the post-forward rehearsal below verifies it.
 - **After a forward roll** (`worker_rollback_receipt` set, with the rollback input rules): it applies the rollback writer's exact preflight and server-dry-runs the real inverse patch, whose image test is on the forward digest, against post-forward live state. This is the receipt-bound inverse rehearsal.
 
 It writes `worker-dry-run-receipt.json` (identities, hashes and patches only) and prints it to the step summary. Prior-image proof before the forward roll:

@@ -405,12 +405,14 @@ def dry_run(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
     obj, actual, index, after, expected = preflight(baseline, image, run, rollback_receipt, allow_same=same)
     fresh = run("get", "deployment", TARGET, "-o", "json")
     require(target_state(fresh)[0] == actual["target"], "target drift immediately before dry-run")
-    result = {"mode": "dry-run", "baseline": actual, "forward": None, "prior_image_admission": None, "inverse": None}
+    result = {"mode": "dry-run", "baseline": actual, "forward": None, "prior_image_admission": None, "inverse": None,
+              "inverse_admission": "not verified before the forward roll; rehearse with worker_rollback_receipt"}
     if rollback_receipt is not None:
         identity, patch, _ = server_preview(run, fresh, image)
         require(identity == rollback_receipt["before"], "inverse dry-run does not restore the recorded prior identity")
         result["inverse"] = {"admitted": True, "image": image, "patch": patch, "restores": identity,
                              "cas": "real rollback patch against the post-forward live state"}
+        result["inverse_admission"] = "verified: server dry-run of the real rollback CAS patch"
     else:
         if not same:
             identity, patch, admitted = server_preview(run, fresh, image)
