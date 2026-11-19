@@ -1878,6 +1878,9 @@ overlay:
           JOBSTORE_SHADOW_NAMESPACES: {value: 'batch_pipeline_prod', category: config}
           JOBSTORE_PRODUCTION_MIRROR: {value: 'off', category: config}
           BATCH_JOBSTORE_MODE: {value: 'firestore', category: config}
+          # Staged roll (lead2 a392ec): no copy retirement until Release reads back 0010. Re-enable by
+          # deleting this line in a separate config step after that readback. Kill switch: 'off'.
+          JOBSTORE_RETIREMENT_ENABLED: {value: 'off', category: rollout}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
