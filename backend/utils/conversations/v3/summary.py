@@ -30,7 +30,13 @@ def fresh(row):
     return bool(covers and end and end - covers < timedelta(minutes=5))
 
 
+def needs_open_reconcile(row):
+    return row.get('v3_derived') and (row.get('status') == 'in_progress' or row.get('v3_unlocked'))
+
+
 def summary_eligible(row):
+    if row.get('v3_unlocked'):
+        return False
     if row.get('processing_tier') == 'historical':
         # Historical rows summarize only through POST .../summary/open (its caps and gates).
         return False

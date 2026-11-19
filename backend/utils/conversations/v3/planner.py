@@ -140,7 +140,7 @@ def _cohesive_groups(groups, outlines) -> Iterator[tuple[dict[str, Any], list[di
             start = end
 
 
-def windows(groups, outlines, *, cohesion=False):
+def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topic_lock=False):
     result = []
     pairs = _cohesive_groups(groups, outlines) if cohesion else zip(groups, outlines)
     for group, entries in pairs:
@@ -167,7 +167,11 @@ def windows(groups, outlines, *, cohesion=False):
                         or group.get('manual_end')
                         or group.get('after_manual_end')
                     ),
-                    'finished': group['finished'] or end < len(group['lines']) or part_index < len(capped) - 1,
+                    'finished': (
+                        group['finished']
+                        or (not defer_topic_lock and end < len(group['lines']))
+                        or part_index < len(capped) - 1
+                    ),
                 }
                 if cohesion:
                     candidate['_stretch_words'] = group['_stretch_words']
@@ -181,7 +185,7 @@ def windows(groups, outlines, *, cohesion=False):
                     and not prior.get('manual_end')
                     and prior['kind'] == candidate['kind']
                     and prior.get('people') == candidate.get('people')
-                    and max(timedelta(0), part[0]['start'] - max(line['end'] for line in prior['lines'])) < SILENCE
+                    and max(timedelta(0), part[0]['start'] - max(line['end'] for line in prior['lines'])) < silence_gap
                     and max(max(line['end'] for line in prior['lines']), max(line['end'] for line in part))
                     - prior['lines'][0]['start']
                     <= CAP
@@ -210,10 +214,14 @@ def _unowned_spans(start, end, occupied):
         yield cursor, end
 
 
+def is_unlocked(row):
+    return row.get('status') == 'in_progress' or bool(row.get('v3_unlocked'))
+
+
 def build(uid, window, recordings, existing=None, *, allocated=None):
     lines = window['lines']
     start, end = lines[0]['start'], max(line['end'] for line in lines)
-    if existing and existing.get('status') != 'in_progress':
+    if existing and not is_unlocked(existing):
         start, end = existing['started_at'], existing['finished_at']
     cid = existing['id'] if existing else str(uuid5(NAMESPACE_URL, f'v3:{uid}:{start.isoformat()}'))
     first = recordings[lines[0]['conversation_id']]
@@ -224,7 +232,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         segments.append(segment)
     pieces, files, claims = [], [], {}
     published = window.get('_published', {})
-    retained = existing and existing.get('status') != 'in_progress'
+    retained = existing and not is_unlocked(existing)
     for rid in dict.fromkeys(line['conversation_id'] for line in lines):
         recording = recordings[rid]
         owned = [line for line in lines if line['conversation_id'] == rid]
@@ -439,11 +447,7 @@ def _contains_line(row, line, spans):
 
 def preserve_finished_windows(planned, existing, recordings=None):
     """Late speech cannot move a published finished conversation's boundaries."""
-    finished = [
-        r
-        for r in existing.values()
-        if r.get('status') != 'in_progress' and r.get('started_at') and r.get('finished_at')
-    ]
+    finished = [r for r in existing.values() if not is_unlocked(r) and r.get('started_at') and r.get('finished_at')]
     protected = {r['id'] for r in finished}
     published_ids = set()
     claims_by_recording = {}

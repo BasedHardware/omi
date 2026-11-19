@@ -19,7 +19,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud.firestore_v1 import FieldFilter
 
-from config.conversations_v3 import stretch_cohesion_enabled
+from config.conversations_v3 import DEFAULT_BOUNDARY_SECONDS, boundary_seconds, stretch_cohesion_enabled
 from utils.conversations.v3.triggers import enqueue, changed
 from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
@@ -215,7 +215,10 @@ async def reconcile(
         now = datetime.now(timezone.utc)
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
         cohesion = stretch_cohesion_enabled()
-        groups = outline.stretches(eligible, now)
+        silence_seconds, lock_seconds = boundary_seconds(cohesion=cohesion)
+        custom_timing = (silence_seconds, lock_seconds) != (DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS)
+        silence_gap, lock_delay = timedelta(seconds=silence_seconds), timedelta(seconds=lock_seconds)
+        groups = outline.stretches(eligible, now, silence_gap=silence_gap, lock_delay=lock_delay)
         if on_open and conversation_id:
             target = existing.get(conversation_id)
             if target is None:
@@ -254,7 +257,7 @@ async def reconcile(
             if hit:
                 entries = hit['entries']
                 report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
-            elif group['finished'] or on_open:
+            elif group['outline_ready'] or on_open:
                 if await run_blocking(db_executor, store.outline_attempt, uid, token, fingerprint, **keyed):
                     metrics.MODEL_CALLS.labels('outline').inc()
                     report['outline_calls'] = report.get('outline_calls', 0) + 1
@@ -283,12 +286,16 @@ async def reconcile(
                     }
                 ]
             outlines.append(entries)
-            if group['finished'] or on_open:
+            if group['outline_ready'] or on_open:
                 cache.append({'fingerprint': fingerprint, 'entries': entries})
 
         async def plan():
             windows = planner.preserve_finished_windows(
-                planner.windows(groups, outlines, cohesion=cohesion), existing, recordings
+                planner.windows(
+                    groups, outlines, cohesion=cohesion, silence_gap=silence_gap, defer_topic_lock=custom_timing
+                ),
+                existing,
+                recordings,
             )
             # A retained finished conversation owns its id by claim evidence; a fresh window that sorts
             # before it (late speech overlapping its start) must not time-match the same id. Two planned
@@ -305,7 +312,12 @@ async def reconcile(
                 prior = existing.get(window.get('existing_id')) or _match(window, existing, used)
                 if prior:
                     used.add(prior['id'])
+                if on_open and prior and prior['id'] == conversation_id and custom_timing:
+                    window['finished'] = True
                 row = planner.build(uid, window, recordings, prior, allocated=allocated)
+                row.pop('v3_unlocked', None)
+                if custom_timing and not window['finished']:
+                    row['v3_unlocked'] = True
                 published_ids = window.get('_published_ids', ())
                 if not prior and (row['id'] in used | taken or row['id'] in published_ids):
                     first = window['lines'][0]['conversation_id']
@@ -336,7 +348,7 @@ async def reconcile(
                 before = sum(len(s.get('text', '').split()) for s in (prior or {}).get('transcript_segments') or [])
                 new_words = max(0, sum(len(s.get('text', '').split()) for s in row['transcript_segments']) - before)
                 ended = window['finished']
-                was_ended = prior and prior.get('status') != 'in_progress'
+                was_ended = prior and not planner.is_unlocked(prior)
                 promoted = bool(
                     prior
                     and not row.get('home_hidden')
@@ -352,6 +364,7 @@ async def reconcile(
                 rewrite = bool(
                     prior is not None
                     and was_ended
+                    and not custom_timing
                     and planner.late_rewrite(
                         previous_words=before,
                         new_words=new_words,
@@ -413,6 +426,12 @@ async def reconcile(
                 rows.append(row)
                 for rid, claims in row['_v3_claims'].items():
                     allocated.setdefault(rid, []).extend((claim['start'], claim['end']) for claim in claims)
+            if custom_timing:
+                provisional = [row for row in rows if row.get('v3_unlocked')]
+                # The lease carries a single current live ID. Older provisional cards still
+                # expose their outline and have no notes obligation until their own deadline.
+                for row in provisional[:-1]:
+                    row['status'] = 'processing'
             return rows
 
         rows = await plan()
@@ -470,9 +489,8 @@ async def reconcile(
             if not group['finished']:
                 # A different minute than the currently executing task avoids
                 # Cloud Tasks' completed-name dedupe swallowing the continuation.
-                await run_blocking(
-                    db_executor, enqueue, uid, at=max(group['end'] + outline.SILENCE, now + timedelta(minutes=1))
-                )
+                delay = lock_delay if group['outline_ready'] else min(silence_gap, lock_delay)
+                await run_blocking(db_executor, enqueue, uid, at=max(group['end'] + delay, now + timedelta(minutes=1)))
         for row in rows:
             prior = existing.get(row['id']) or {}
             if (

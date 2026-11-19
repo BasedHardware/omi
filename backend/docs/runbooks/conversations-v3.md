@@ -69,6 +69,14 @@ Set the switch to `off` on v3 builder and backfill runners to restore the prior
 prompt and per-topic Home minimum for subsequent passes. Existing published
 windows and claims remain in place when the switch changes.
 
+With stretch cohesion enabled, `CONVERSATIONS_V3_SILENCE_GAP_SECONDS`
+controls recorded-speech grouping (120–1800 seconds), and `CONVERSATIONS_V3_LOCK_SECONDS`
+controls when a card locks and owes notes (120–3600 seconds). Both default to
+300. Invalid values use the defaults. When either value differs from its
+default, the existing summary-open path and explicit End bypass the lock timer.
+Setting both values back to 300 or disabling cohesion restores the prior
+timing; provisional rows remain reachable for the builder to finish.
+
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product
 conversations. Legacy recording-wide naming keeps its existing behavior.

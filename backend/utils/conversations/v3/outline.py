@@ -55,7 +55,7 @@ SILENCE = timedelta(minutes=5)
 DUPLICATE_OVERLAP_SLACK = timedelta(seconds=2)
 
 
-def stretches(members, now):
+def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE):
     lines = []
     seen = []
     for row in sorted(
@@ -117,7 +117,7 @@ def stretches(members, now):
             if previous and previous['lines'][0]['start'] < cut:
                 previous['manual_end'] = True
             cut = next(cuts, None)
-        silence = previous is None or line['start'] - previous['end'] >= SILENCE
+        silence = previous is None or line['start'] - previous['end'] >= silence_gap
         if silence or (previous and previous['manual_end']):
             key = hashlib.sha256(f"{line['conversation_id']}:{line['start'].isoformat()}".encode()).hexdigest()[:24]
             groups.append(
@@ -138,7 +138,9 @@ def stretches(members, now):
         continues = any(
             r.get('_v3_page_continues') and r['id'] == group['lines'][-1]['conversation_id'] for r in members
         )
-        group['finished'] = (now - group['end'] >= SILENCE and not continues) or group['manual_end']
+        age = now - group['end']
+        group['finished'] = (age >= lock_delay and not continues) or group['manual_end']
+        group['outline_ready'] = group['finished'] or (age >= silence_gap and not continues)
         group['fingerprint'] = hashlib.sha256(
             json.dumps(
                 [{k: line[k] for k in ('start', 'end', 'text', 'conversation_id')} for line in group['lines']],

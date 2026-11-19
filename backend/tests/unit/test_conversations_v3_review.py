@@ -862,3 +862,28 @@ def test_rotated_recordings_stitch_into_one_stretch_in_order():
     (window,) = planner.windows(groups, entries)
     row = planner.build('u', window, {m['id']: m for m in members})
     assert row['v3_recording_ids'] == ['r1', 'r2', 'r3']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('on_open', [True, False])
+async def test_configured_lock_is_bypassed_by_open_and_manual_end(builder, monkeypatch, on_open):
+    committed, _ = builder
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    start = datetime.now(timezone.utc) - timedelta(seconds=30)
+    end = start + timedelta(seconds=10)
+    prior = {
+        'id': 'card',
+        'started_at': start,
+        'finished_at': end,
+        'status': 'in_progress',
+        'v3_unlocked': True,
+        'v3_recording_ids': ['r'],
+    }
+    raw = source(started_at=start, finished_at=end, v3_manual_end=not on_open)
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': raw}, {'card': prior}, []))
+    await service.reconcile('synthetic', on_open=on_open, conversation_id='card' if on_open else None)
+    (row,) = committed[0][4]
+    assert row['id'] == 'card' and row['status'] == 'processing'
+    assert not row.get('v3_unlocked')
+    assert row['v3_process_pending']
+    assert row['manual_end'] is not on_open
