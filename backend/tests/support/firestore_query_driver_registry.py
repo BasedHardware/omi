@@ -158,6 +158,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'llm_gateway.gateway.idempotency._request_body': 'afc3e002a0a3d2b17f17f3b9f27dfeccc0f77c2b8ffc67e3cbf4b235e0cc6843',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -3793,6 +3794,14 @@ _add(
         reason='Builder consumed by its registered serving parent',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.proactivity_producers.task_items_query'],
+    )
+)
+
+_add(
+    SkipEntry(
+        'llm_gateway.gateway.idempotency._request_body',
+        reason='FastAPI Request.stream() reads incoming HTTP body bytes, without a Firestore query.',
+        body_digest=BODY_DIGEST['llm_gateway.gateway.idempotency._request_body'],
     )
 )
 
