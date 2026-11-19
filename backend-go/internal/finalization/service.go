@@ -16,6 +16,9 @@ type Service struct {
 	Documents    Documents
 	Lifecycle    Lifecycle
 	Replay       ReplayStore
+	Quiet        QuietStore
+	Episodes     EpisodePort
+	Summaries    SummaryStore
 	Meeting      MeetingEvidence
 	Batch        BatchCustody
 	Gateway      Gateway
@@ -110,6 +113,9 @@ func (s *Service) Work(ctx context.Context, run *queue.Run) queue.Outcome {
 	}
 	if finished {
 		return queue.Done()
+	}
+	if startErr := s.startEpisode(ctx, run, claim, snapshot); startErr != nil {
+		return s.workError(ctx, run, claim, startErr)
 	}
 	if processErr := s.process(ctx, run, claim, snapshot); processErr != nil {
 		return s.workError(ctx, run, claim, processErr)

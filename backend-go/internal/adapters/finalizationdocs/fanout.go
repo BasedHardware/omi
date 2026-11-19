@@ -60,8 +60,9 @@ func fanoutSnapshot(row document) finalization.Conversation {
 	return finalization.Conversation{
 		Status: rules.Completed, JobID: field[string](row, "finalization_job_id"),
 		Revision: field[int64](row, "finalization_revision"), SyncRevision: field[int64](row, "sync_content_revision"),
-		AppPlatform: field[string](row, "client_platform"), RecordingLayer: field[bool](row, "recording"),
+		AppPlatform: field[string](row, "client_platform"), RecordingLayer: field[bool](row, "recording") || field[bool](row, "v3_derived"),
 		NoDerivedEffects: field[bool](row, "terminal_no_derived_effects"),
+		UntrustedCapture: field[string](row, "capture_time_trust") == "untrusted",
 		Notes:            finalization.Notes{Title: field[string](structured, "title"), Overview: field[string](structured, "overview")},
 	}
 }

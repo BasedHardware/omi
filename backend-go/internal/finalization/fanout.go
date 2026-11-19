@@ -36,9 +36,13 @@ func (s *Service) fanout(ctx context.Context, run *queue.Run, claim Claim) error
 	if err != nil {
 		return err
 	}
-	return run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
+	if commitErr := run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
 		return s.Lifecycle.CompleteFanout(ctx, g, claim, dropped)
-	})
+	}); commitErr != nil {
+		return commitErr
+	}
+	s.reconcileEpisode(ctx, run, claim, fanout.Conversation)
+	return nil
 }
 
 func (s *Service) deliver(ctx context.Context, run *queue.Run, claim Claim, fanout Fanout) (bool, error) {

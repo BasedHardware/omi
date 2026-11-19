@@ -6,9 +6,8 @@ lifecycle fields on the conversation. After the commit, the family dispatches
 the intent to PostgreSQL. An enqueue retry reuses the committed job.
 
 This adapter owns the job and binding transaction. Processing-result patches and
-Home receipts belong to the merged conversation adapter. This adapter currently
-admits ordinary capture and explicit client end. Recovery and silent backfill
-need the recording-session and content-custody checks before they can admit.
+Home receipts belong to the merged conversation adapter. This adapter admits ordinary capture, explicit client end, and quiet recovery
+with a fenced recording lease. Silent backfill still needs its owner gate.
 Legacy photo sidecars and object-lake transcript custody also need a reader.
 Do not enable this adapter until the deployment grants one dispatcher ownership
 of each intent.
@@ -45,3 +44,20 @@ runs a real PostgreSQL worker against these transactions and the merged
 conversation reader and compare-and-apply patch on a Firestore emulator. The
 gateway response and downstream effects are synthetic. Sections, hashes and
 additional policy fields require a production processing port before wiring.
+
+## Quiet wakes, explicit merge and summary debt
+
+| Contract behavior | Test |
+| --- | --- |
+| F18 keeps the earlier wake, clamps the timeout and retains BYOK evidence. | `TestF18QuietArmKeepsEarlierWakeAndKeyEvidence` |
+| F19 ignores an old wake, reserves a successor with unknown lease evidence, fences a reconnect and atomically retires a successful quiet admission. | `TestF19QuietSuccessorBeforeAdmissionAndReconnectFence`, `TestF19QuietAdmissionBindsAndRetiresCurrentCheck` |
+| F23 claims all sources atomically, rejects a foreign generation, and checks source ownership again before sealing. | `TestF23MergeAdmissionIsAllOrNothingAndSealRechecksOwnership` |
+| F24 and F36 reuse the sealed target, reject rollback before target retraction, and restore only still-bound sources. | `TestF24AndF36RollbackWaitsForTargetRetractionAndSealedRetryKeepsTarget` |
+| F28 reuses the enrichment outbox, preserves its pending window and dispatch binding, blocks BYOK, and parks expired debt. | `TestF28ConcurrentSummaryRepairReusesTheOutboxAndOldestDeadline`, `TestF28SummaryRepairBlocksBYOKAndParksExpiredDebt` |
+
+Quiet wakes reserve their successor before trying admission. Empty custody is
+handed to repair until an authoritative storage proof and conditional delete
+are available. Merge recovery can reopen sealed cleanup or authorize a rollback.
+The correction-aware source deletion and its scheduler remain separate from
+these transitions. Summary repair keeps the existing enrichment dispatch binding.
+A new unbound debt needs the existing dispatcher to assign its binding.

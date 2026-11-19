@@ -35,9 +35,9 @@ The Firestore implementation and cross-adapter test are described in
 | F34 | Distinct enrichment-envelope parsing, including mixed envelope rejection. `TestF34EnrichmentIsASeparateEnvelope` |
 | F35 | Reconcile staleness and budget-delay defaults. The durable sync wait and redrive tests are in the job-adapter README. `TestF35OrdinaryPolicyDefaults` |
 
-Unlisted rules and the rest of the listed rules remain open. This includes the HTTP
-dispatch and replay protocols, smart and explicit merge, quiet checks, episodes, summary
-repair, and the production notes and derived-effect policies. The replay-oracle comparison
+Unlisted rules and the rest of the listed rules remain open. This includes the HTTP dispatch and replay protocols, quiet storage-proof and
+size-limit handling, smart absorb and sealed merge cleanup, durable episode
+attachment, and the production notes and derived-effect policies. The replay-oracle comparison
 is pending.
 
 ## Wiring dependencies
@@ -58,3 +58,15 @@ is pending.
   integrations.
 - The draft format uses its own queue schema version. Worker wiring and replay against
   the Python corpus are still required before rollout.
+
+## Additional policy tests
+
+| Rule | Assertion and test |
+| --- | --- |
+| F21 | Cache reuse binds the pair, revisions and gap. Shadow cannot absorb. `TestF21SmartMergeRequiresEvidenceAndShadowCannotAbsorb` |
+| F24 | Recovery rolls back before seal and stops cleanup after five claims. `TestF24MergeRecoveryChangesAtTheIrreversibleBoundary` |
+| F25 | Client close and server occasion, tail and idle gates. `TestF25OnlyRealOccasionBoundariesCloseTheEpisode` |
+| F26 | Eligibility, sync memo and committed fanout surviving a failed bounded hook. `TestF26EpisodeEffectsSkipUntrustedAndUnchangedCaptures`, `TestF26EpisodeFailureCannotUndoCommittedFanout` |
+| F27 | Server minimum versus protected, manual, historical or short output. `TestF27OnlyEligibleServerMinimumsKeepDebt` |
+| F28 | The empty-output rearm rule allows only two newer content revisions. `TestF28OnlyTwoNewContentRevisionsRearmEmptyOutput` |
+| F37 | Unplaced retained identity advances activity once. `TestF37UnplacedSpeechAdvancesActivityOnlyOnce` |

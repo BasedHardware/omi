@@ -32,13 +32,14 @@ const (
 	CauseStore           queue.Cause = "finalization_store"
 	CauseStale           queue.Cause = "finalization_stale"
 	CauseChanged         queue.Cause = "finalization_source_changed"
+	CauseEpisodeNotes    queue.Cause = "finalization_episode_notes_pending"
 	CauseArchiveOpen     queue.Cause = "finalization_archive_open"
 	CauseDeliveryDropped queue.Cause = "integration_dropped"
 )
 
 // Declaration registers this format and the closed causes that its collaborators can return.
 func Declaration(adapterCauses ...queue.Cause) queue.Kind {
-	causes := []queue.Cause{CauseInvalid, CauseStore, CauseStale, CauseChanged, CauseArchiveOpen, CauseDeliveryDropped}
+	causes := []queue.Cause{CauseInvalid, CauseStore, CauseStale, CauseChanged, CauseArchiveOpen, CauseEpisodeNotes, CauseDeliveryDropped}
 	for _, cause := range adapterCauses {
 		if !slices.Contains(causes, cause) {
 			causes = append(causes, cause)
@@ -80,6 +81,7 @@ type AdmissionRequest struct {
 	RequiresDispatch        bool
 	DispatchAvailable       bool
 	RecoveryCutoff          time.Time
+	QuietGeneration         int64
 	RequireExpiredLease     bool
 	BackfillRunID           string
 	ExpectedUpdateTime      time.Time

@@ -19,6 +19,8 @@ func wireFinalizationDocuments(service *finalization.Service, store finalization
 	service.Outbox = store
 	service.Lifecycle = store
 	service.Replay = store
+	service.Quiet = store
+	service.Summaries = store
 	service.Documents = finalizationDocuments{store: conversations.Store{Docs: store.Docs, Codec: store.Codec}}
 }
 

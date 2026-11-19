@@ -80,7 +80,7 @@ func field[T any](row document, key string) T {
 // Admit binds an ordinary capture intent and its deterministic job in one
 // transaction. The Firestore job exists before the service attempts SQL enqueue.
 func (s Store) Admit(ctx context.Context, a queue.Admitting, req finalization.AdmissionRequest, decide func(rules.AdmissionFacts) rules.AdmissionAction) (finalization.Intent, error) {
-	if req.Trigger != rules.CaptureEnd && req.Trigger != rules.ClientFinalize {
+	if req.Trigger != rules.CaptureEnd && req.Trigger != rules.ClientFinalize && req.Trigger != rules.ServerRecovery {
 		return finalization.Intent{}, ErrUnsupported
 	}
 	ref, err := conversationRef(req.Ref)
@@ -122,6 +122,14 @@ func (s Store) admit(tx *docstore.Tx, ref docstore.Ref, req finalization.Admissi
 		Protected:  field[bool](row, "is_locked") || field[string](row, "data_protection_level") == "private",
 		HasContent: s.hasInlineContent(req.Ref.Owner, row), ExistingJob: existing.JobID != "", HasBinding: binding != "",
 	}
+	var quiet quietRows
+	if req.Trigger == rules.ServerRecovery {
+		var allowed bool
+		quiet, allowed, err = prepareRecovery(tx, req, row, now, &facts)
+		if err != nil || !allowed {
+			return finalization.Intent{}, err
+		}
+	}
 	switch decide(facts) {
 	case rules.Refuse:
 		return finalization.Intent{}, nil
@@ -131,7 +139,11 @@ func (s Store) admit(tx *docstore.Tx, ref docstore.Ref, req finalization.Admissi
 		if revision < 0 || revision == math.MaxInt64 {
 			return finalization.Intent{}, finalization.ErrInvalid
 		}
-		return bind(tx, ref, row, req, revision+1, now)
+		intent, bindErr := bind(tx, ref, row, req, revision+1, now)
+		if bindErr == nil && intent.JobID != "" && quiet.job != nil {
+			bindErr = retireQuiet(tx, quiet.jobPath, quiet.job, now, "")
+		}
+		return intent, bindErr
 	}
 	return finalization.Intent{}, finalization.ErrInvalid
 }

@@ -41,6 +41,7 @@ type Conversation struct {
 	AppPlatform      string
 	Discarded        bool
 	RecordingLayer   bool
+	UntrustedCapture bool
 	NoDerivedEffects bool
 	LazyEffects      bool
 	PendingMinimum   bool

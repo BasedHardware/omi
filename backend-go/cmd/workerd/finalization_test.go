@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+
 	"strings"
 	"sync"
 	"testing"
@@ -127,5 +129,50 @@ func TestF09MergedDocumentAdapterFencesNewerInputAndUpdatesHome(t *testing.T) {
 		fields.Structured.Overview != "Summary includes late speech" ||
 		!bench.Exists(t, "users/replay-owner/episode_links/replay-conversation") {
 		t.Fatalf("stale input committed or Home receipt missing: %+v", fields)
+	}
+}
+
+type unavailableNotes struct{}
+
+func (unavailableNotes) Complete(context.Context, queue.Guarded, finalization.CompletionRequest) (string, error) {
+	return "", errors.New("synthetic provider outage")
+}
+
+func (unavailableNotes) Recover(context.Context, queue.Guarded, string) (string, error) {
+	return "", finalization.ErrCompletionAbsent
+}
+
+func TestF35ManualRedriveResumesFanoutWithoutAnotherAutomaticGrant(t *testing.T) {
+	t.Parallel()
+	bench := docstoretest.Open(t)
+	ref := finalization.Ref{Owner: "redrive-owner", ID: "redrive-conversation"}
+	path := "users/" + ref.Owner + "/conversations/" + ref.ID
+	if _, err := bench.Raw.Doc(path).Set(t.Context(), map[string]any{
+		"status": "in_progress", "transcript_segments": []map[string]any{{"text": "retained conversation"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	policy := queuetest.Policy()
+	policy.MaxAttempts = 1
+	causes := append(finalizationdocs.Causes(), conversations.Causes()...)
+	h := queuetest.Open(t, policy, finalization.Declaration(causes...))
+	effects := syntheticEffects{}
+	s := &finalization.Service{Queue: h.Store, Meeting: effects, Effects: effects, Targets: effects, Gateway: unavailableNotes{}}
+	wireFinalizationDocuments(s, finalizationdocs.Store{Docs: bench.Store, Clock: clock.System{}})
+	intent, err := s.Admit(t.Context(), finalization.AdmissionRequest{Ref: ref, Trigger: rules.CaptureEnd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Start(map[string]queue.Handler{finalization.Kind: s})
+	failed := h.Settled(intent.JobID)
+	if failed.Outcome == nil || *failed.Outcome != queue.TerminalFailure || failed.BudgetRequeues != 1 {
+		t.Fatalf("expected one spent budget: %+v", failed)
+	}
+	if redriveErr := s.Redrive(t.Context(), intent); redriveErr != nil {
+		t.Fatal(redriveErr)
+	}
+	settled := h.Settled(intent.JobID)
+	if settled.Outcome == nil || *settled.Outcome != queue.TerminalSuccess || settled.BudgetRequeues != 1 || settled.Attempts != 1 {
+		t.Fatalf("expected redriven fanout with preserved budget: %+v", settled)
 	}
 }
