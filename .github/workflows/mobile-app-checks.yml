@@ -781,9 +781,14 @@ jobs:
       - name: Select and assert pinned Xcode
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
 
-      # Manifest flow coverage bootstraps the pinned Swift formatter. Share the
-      # desktop binary cache so a cold source build cannot consume the iOS
-      # compiler's job budget (16 minutes on PR #21488).
+      # Manifest flow coverage bootstraps the pinned Swift formatter only when
+      # the checked diff contains desktop Swift sources (SCA-2046: the checker
+      # resolves the formatter lazily, after the changed-file list, so a diff
+      # with no desktop Swift source never touches it). PR runs reach that
+      # path; scoped nightly runs pass their file list positionally and never
+      # resolve it at all. Restore the desktop binary cache anyway so the runs
+      # that do need it cannot consume the iOS compiler's job budget with a
+      # cold source build (16 minutes on PR #21488).
       - name: Restore Swift formatter and linter tools
         id: ios-swift-tools-cache
         uses: actions/cache/restore@v6

@@ -117,4 +117,60 @@ fi
 grep -q "UNCOVERED desktop/macos/Desktop/Sources/MainWindow/Pages/LiteralWhitespace.swift" "$TMPDIR/literal-whitespace.out" || \
   fail "string-literal whitespace change was not reported as uncovered"
 
+# SCA-2046: the pinned formatter bootstrap (~20 min from source on a cold
+# hosted runner) must happen only when the checked diff actually contains
+# desktop Swift sources. Scoped nightly manifest runs invoke this checker with
+# only --base when any desktop path is in scope, so an eager resolve billed the
+# bootstrap to Swift-free runs.
+BOOT_REPO="$TMPDIR/bootstrap-order"
+BOOT_LOG="$TMPDIR/bootstrap-order.log"
+mkdir -p "$BOOT_REPO/desktop/macos/e2e/flows" "$BOOT_REPO/desktop/macos/Desktop/Sources" \
+  "$BOOT_REPO/desktop/macos/scripts" "$BOOT_REPO/backend"
+cat >"$BOOT_REPO/desktop/macos/scripts/swift-format-wrapper.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "wrapper:$1" >>"${BOOT_LOG:?BOOT_LOG must be set for the bootstrap-order test}"
+if [ "$1" = "binary-path" ]; then
+  echo /usr/bin/true
+fi
+exit 0
+SH
+chmod +x "$BOOT_REPO/desktop/macos/scripts/swift-format-wrapper.sh"
+: >"$BOOT_REPO/desktop/macos/Desktop/.swift-format"
+printf 'let value = 1\n' >"$BOOT_REPO/desktop/macos/Desktop/Sources/Alpha.swift"
+printf 'baseline\n' >"$BOOT_REPO/backend/README.md"
+boot_git() {
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$BOOT_REPO" "$@"
+}
+boot_git init -q
+boot_git config user.email "desktop-tests@example.com"
+boot_git config user.name "Desktop Tests"
+boot_git config core.hooksPath /dev/null
+boot_git add .
+boot_git commit -q -m "baseline"
+printf 'docs only\n' >"$BOOT_REPO/backend/README.md"
+boot_git add .
+boot_git commit -q -m "docs-only change"
+
+if ! BOOT_LOG="$BOOT_LOG" "$SCRIPT" --root "$BOOT_REPO" --base HEAD~1 >"$TMPDIR/no-bootstrap.out" 2>"$TMPDIR/no-bootstrap.err"; then
+  cat "$TMPDIR/no-bootstrap.out"
+  cat "$TMPDIR/no-bootstrap.err" >&2
+  fail "Swift-free diff unexpectedly failed the coverage check"
+fi
+if [ -s "$BOOT_LOG" ]; then
+  cat "$BOOT_LOG" >&2
+  fail "a Swift-free diff still invoked the formatter wrapper"
+fi
+
+printf 'let value = 2\n' >"$BOOT_REPO/desktop/macos/Desktop/Sources/Alpha.swift"
+boot_git add .
+boot_git commit -q -m "desktop Swift change"
+if ! BOOT_LOG="$BOOT_LOG" "$SCRIPT" --root "$BOOT_REPO" --base HEAD~1 >"$TMPDIR/bootstrap-needed.out" 2>"$TMPDIR/bootstrap-needed.err"; then
+  cat "$TMPDIR/bootstrap-needed.out"
+  cat "$TMPDIR/bootstrap-needed.err" >&2
+  fail "desktop Swift diff unexpectedly failed the coverage check"
+fi
+grep -q "wrapper:bootstrap" "$BOOT_LOG" || \
+  fail "a diff with desktop Swift sources must resolve the pinned formatter"
+
 echo "e2e flow coverage tests passed"
