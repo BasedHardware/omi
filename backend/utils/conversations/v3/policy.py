@@ -7,6 +7,7 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 
 # Listen seals a live v3 recording at a pause this long (config/conversations_v3.py rotation_seconds).
 ROTATION_PAUSE_SECONDS = 1.5
+LIVE_SUMMARY_FIELD = 'v3_live_summary'
 # Stamped on a recording that rotation sealed: the listen hard cap in force, in seconds.
 ROTATION_CAP_FIELD = 'v3_rotation_cap_seconds'
 # How long a sealed recording's pending transcript keeps the previous stretch open.

@@ -1,6 +1,6 @@
 """Pure boundary and late-speech policy. No switch reads and no IO."""
 
-from utils.conversations.v3 import visibility
+from utils.conversations.v3 import policy, visibility
 from utils.conversations.v3.outline import SILENCE, playback_origin
 
 from copy import deepcopy
@@ -251,6 +251,8 @@ def build(uid, window, recordings, existing=None):
                 row['_v3_claims'][rid] = [
                     {'start': min(l['start'] for l in owned), 'end': max(l['end'] for l in owned)}
                 ]
+    if window['finished']:
+        row.pop(policy.LIVE_SUMMARY_FIELD, None)
     row.pop('updated_at', None)
     return row
 

@@ -4,8 +4,10 @@ from database import conversations_v3_leases as leases
 
 import base64
 import json
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from fastapi import HTTPException
 
 import pytest
 
@@ -13,6 +15,8 @@ from utils.conversations.v3 import summary
 from utils.conversations import process_conversation as process
 from models.structured import Structured
 from routers import conversations as routes
+from tests.unit.test_conversations_v3_transactions import strict  # noqa: F401
+from utils.conversations.v3 import service
 
 AT = datetime(2026, 11, 16, tzinfo=timezone.utc)
 
@@ -569,3 +573,167 @@ async def test_cancelled_builder_keeps_lease_until_paid_outline_exits(monkeypatc
         release.set()
         await asyncio.gather(task, return_exceptions=True)
     assert not held
+
+
+_LIVE_PATH = ('users', 'synthetic', 'conversations', 'live')
+
+
+@pytest.fixture
+def catchup(strict, monkeypatch):
+    row = {
+        'id': 'live',
+        'status': 'in_progress',
+        'v3_derived': True,
+        'kind': 'conversation',
+        'v3_recording_ids': ['raw'],
+        'started_at': AT,
+        'finished_at': AT + timedelta(seconds=10),
+        'transcript_segments': [{'text': 'discussion ' * 300, 'start': 0.0, 'end': 10.0}],
+        '_test_revision': 1,
+    }
+    strict.rows[_LIVE_PATH] = row
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    def exact_row(uid, cid, **kwargs):
+        return deepcopy(strict.rows[('users', uid, 'conversations', cid)])
+
+    monkeypatch.setattr(routes, 'run_blocking', blocking)
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(summary.store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(summary.store, 'decode_row', lambda uid, snapshot: snapshot.to_dict())
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', exact_row)
+    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
+    monkeypatch.setattr(service, 'reconcile', lambda *a, **kw: pytest.fail('catch-up ran the paid outline path'))
+    monkeypatch.setattr(summary, '_wake_created', lambda *a: pytest.fail('live catch-up woke the background builder'))
+    return row
+
+
+async def catchup_frames():
+    response = await routes.conversation_live_catchup_stream('live', 'synthetic')
+    return [frame async for frame in response.body_iterator]
+
+
+@pytest.mark.asyncio
+async def test_live_catchup_concurrent_taps_reuse_input_and_same_clock_edits_refresh(catchup, monkeypatch):
+    calls = []
+
+    def model(uid, row, emit):
+        calls.append(row['transcript_segments'][0]['text'])
+        emit('Uncommitted preview fragment')
+        return {'overview': 'Outcome', 'sections': [{'heading': 'Decision', 'body_markdown': 'Ship Friday.'}]}
+
+    monkeypatch.setattr(summary, 'write', model)
+    first = await routes.conversation_live_catchup_stream('live', 'synthetic')
+    with pytest.raises(HTTPException) as busy:
+        await routes.conversation_live_catchup_stream('live', 'synthetic')
+    assert busy.value.status_code == 409
+    frames = [frame async for frame in first.body_iterator]
+    assert frames[-1].startswith('done:')
+    assert all('Uncommitted' not in frame for frame in frames)
+    assert len(calls) == 1
+    assert 'structured' not in catchup and 'summary_covers_through' not in catchup
+    assert 'Ship Friday.' not in catchup['v3_live_summary']['ciphertext']
+    preview = routes.get_conversation_by_id(
+        'live', source=None, include_discarded=None, uid='synthetic', include_translations=False
+    )['live_summary']
+    assert preview['structured']['sections'][0]['body_markdown'] == 'Ship Friday.'
+    replay = await catchup_frames()
+    assert len(replay) == 1 and replay[0].startswith('done:') and len(calls) == 1
+
+    # Word/clock thresholds alone cannot see this correction.
+    catchup['transcript_segments'][0]['text'] = 'corrected ' * 300
+    catchup['_test_revision'] += 1
+    changed = await catchup_frames()
+    assert changed[-1].startswith('done:') and len(calls) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', ['strict_append', 'equal_boundary', 'correction', 'removed', 'replaced', 'ended'])
+async def test_live_catchup_publishes_only_to_the_still_eligible_covered_input(catchup, monkeypatch, change):
+    def model(uid, row, emit):
+        emit('Uncommitted preview fragment')
+        catchup['_test_revision'] += 1
+        if change in {'strict_append', 'equal_boundary'}:
+            start = 11.0 if change == 'strict_append' else 10.0
+            catchup['transcript_segments'].append({'text': 'New tail', 'start': start, 'end': 20.0})
+            catchup['finished_at'] = AT + timedelta(seconds=20)
+        elif change == 'correction':
+            catchup['transcript_segments'][0]['text'] = 'Replacement'
+        elif change == 'removed':
+            catchup['transcript_segments'].clear()
+        elif change == 'replaced':
+            catchup['v3_recording_ids'] = ['successor']
+            catchup['transcript_segments'].append({'text': 'Next conversation', 'start': 11.0, 'end': 20.0})
+        else:
+            catchup['status'] = 'completed'
+        return {'overview': 'Outcome'}
+
+    monkeypatch.setattr(summary, 'write', model)
+    frames = await catchup_frames()
+    assert all('Uncommitted' not in frame for frame in frames)
+    if change == 'strict_append':
+        assert frames[-1].startswith('done:')
+        preview = summary.writers.read_live_summary('synthetic', catchup)
+        assert preview['summary_covers_through'] == AT + timedelta(seconds=10)
+        assert catchup['finished_at'] == AT + timedelta(seconds=20)
+        assert summary.writers.read_live_summary('synthetic', catchup, exact=True) is None
+        assert 'summary_covers_through' not in catchup
+    else:
+        assert frames[-1].startswith('error:')
+        assert 'v3_live_summary' not in catchup
+
+
+@pytest.mark.asyncio
+async def test_live_preview_drops_undecryptable_raw_cache(catchup, monkeypatch):
+    monkeypatch.setattr(summary, 'write', lambda *a: {'overview': 'Live only'})
+    assert (await catchup_frames())[-1].startswith('done:')
+    catchup['v3_live_summary']['ciphertext'] = '{"overview":"Raw fallback text"}'
+    monkeypatch.setattr(summary.writers, 'decrypt', lambda encrypted, uid: encrypted)
+    assert summary.writers.read_live_summary('synthetic', catchup) is None
+
+
+@pytest.mark.asyncio
+async def test_live_preview_never_satisfies_the_final_notes_gate(catchup, monkeypatch):
+    monkeypatch.setattr(summary, 'write', lambda *a: {'overview': 'Live only'})
+    assert (await catchup_frames())[-1].startswith('done:')
+    catchup['status'] = 'processing'
+    assert summary.writers.read_live_summary('synthetic', catchup) is None
+    assert not summary.fresh(catchup)
+    token = await summary.prepare('synthetic', catchup)
+    assert token
+    leases.release('synthetic', 'summary-live', token)
+
+
+@pytest.mark.asyncio
+async def test_denied_live_catchup_never_acquires_a_lease_or_uses_old_notes(catchup, monkeypatch):
+    catchup.update(uses_custom_stt=True, structured={'overview': 'Old notes'}, summary_covers_through=AT)
+    monkeypatch.setattr(summary, 'should_skip_omi_paid_postprocessing', lambda *a, **kw: True)
+    monkeypatch.setattr(leases, 'acquire', lambda *a: pytest.fail('denied catch-up acquired a writer'))
+    monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('denied catch-up ran the notes model'))
+    (frame,) = await catchup_frames()
+    assert frame.startswith('done:')
+    assert json.loads(base64.b64decode(frame[6:].strip()))['structured'] == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'change', [{'status': 'completed'}, {'home_hidden': True}, {'data_protection_level': 'private'}]
+)
+async def test_live_catchup_stale_or_hidden_identity_is_not_available(catchup, monkeypatch, change):
+    catchup.update(change)
+    monkeypatch.setattr(leases, 'acquire', lambda *a: pytest.fail('refused source acquired a writer'))
+    with pytest.raises(HTTPException) as error:
+        await routes.conversation_live_catchup_stream('live', 'synthetic')
+    assert error.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_live_catchup_does_not_start_notes_after_target_closes_before_stream(catchup, monkeypatch):
+    response = await routes.conversation_live_catchup_stream('live', 'synthetic')
+    catchup.update(status='completed', _test_revision=2)
+    monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('closed capture ran the notes model'))
+    (frame,) = [event async for event in response.body_iterator]
+    assert frame.startswith('error:')
+    assert leases.acquire('synthetic', 'summary-live')

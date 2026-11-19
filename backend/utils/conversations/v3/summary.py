@@ -75,8 +75,9 @@ def paid_notes_refused(uid, row):
     )
 
 
-async def prepare(uid, row):
-    if fresh(row) or not summary_eligible(row):
+async def prepare(uid, row, *, live=False):
+    is_fresh = bool(writers.read_live_summary(uid, row, exact=True)) if live else fresh(row)
+    if is_fresh or not summary_eligible(row):
         return None
     if await run_blocking(db_executor, paid_notes_refused, uid, row):
         # No foreground model work: the stream serves the stored row, as processing would.
@@ -87,11 +88,13 @@ async def prepare(uid, row):
     return token
 
 
-async def stream(uid: str, row: dict[str, Any], *, token=None):
-    if fresh(row) or not summary_eligible(row):
+async def stream(uid: str, row: dict[str, Any], *, token=None, live=False):
+    cached = writers.read_live_summary(uid, row, exact=True) if live else None
+    is_fresh = bool(cached) if live else fresh(row)
+    if is_fresh or not summary_eligible(row) or (live and token is None):
         if token:
             await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
-        yield done(row)
+        yield done((cached or {}) if live else row)
         return
     token = token or await prepare(uid, row)
     if token is None:
@@ -110,7 +113,8 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
             queue.put_nowait(text)
 
     def emit(text):
-        loop.call_soon_threadsafe(deliver, text)
+        if not live:
+            loop.call_soon_threadsafe(deliver, text)
 
     worker = None
     try:
@@ -124,6 +128,20 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
         if decoded is None:
             yield 'error: {"detail":"Conversation not found"}\n\n'
             return
+        if live:
+            if not writers.live_summary_target(decoded) or decoded.get('id') != cid:
+                yield 'error: {"detail":"Conversation not available"}\n\n'
+                return
+            cached = writers.read_live_summary(uid, decoded, exact=True)
+            if cached:
+                yield done(cached)
+                return
+            if not summary_eligible(decoded) or (
+                decoded.get('uses_custom_stt') != row.get('uses_custom_stt')
+                and await run_blocking(db_executor, paid_notes_refused, uid, decoded)
+            ):
+                yield done({})
+                return
         row = decoded
         if row.get('recording') or row.get('is_locked'):
             yield 'error: {"detail":"Conversation not available"}\n\n'
@@ -154,6 +172,7 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
             snapshot.update_time,
             structured,
             row.get('finished_at'),
+            **({'live_input': row} if live else {}),
         )
         if armed:
             await _wake_created(uid)
@@ -174,7 +193,7 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
             await asyncio.shield(worker)
         raise
     except Exception:
-        if row.get('v3_derived') and row.get('status') != 'in_progress':
+        if not live and row.get('v3_derived') and row.get('status') != 'in_progress':
             try:
                 await run_blocking(
                     db_executor,
