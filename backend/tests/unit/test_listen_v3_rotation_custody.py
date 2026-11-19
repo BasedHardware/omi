@@ -302,7 +302,7 @@ def _failed_create_store(monkeypatch, stray_updates=None):
     return db, stray
 
 
-def _failing_rotation_host(db, stray, *, archive=None):
+def _failing_rotation_host(db, stray, *, archive=None, hold_window=None):
     from fastapi import WebSocketException
 
     h = archive_host()
@@ -326,6 +326,8 @@ def _failing_rotation_host(db, stray, *, archive=None):
         h.recording_session_id = 'session-2'
         h.recording_session_ids_by_conversation['stray'] = 'session-2'
         db.documents[_key('stray')] = stray
+        if hold_window is not None:
+            await hold_window()  # the caller decides when the arm fails, not the scheduler
         for _ in range(5):
             await asyncio.sleep(0)
         raise RuntimeError('arm failed')
@@ -380,17 +382,32 @@ async def test_frames_during_a_failed_create_never_bind_to_its_successor(remote,
         'note_server_batch_audio_received',
         lambda uid, cid, **kw: server_batch_audio.note_server_batch_audio_received(uid, cid, firestore_client=db, **kw),
     )
-    controller, h = _failing_rotation_host(db, stray)
+    labelled = asyncio.Event()  # the create has bound the stray and labelled the socket with its session
+    framed = asyncio.Event()  # a frame was appended while that label was live
+
+    async def hold_window():
+        labelled.set()
+        await asyncio.wait_for(framed.wait(), timeout=30)
+
+    controller, h = _failing_rotation_host(db, stray, hold_window=hold_window)
     archive = h.receiver.raw_archive
     labels = []
 
     async def produce():
         for index in range(40):
+            if index == 20:
+                # Drive the residual window explicitly: an executor hop in append (the first
+                # frame marks audio received) can outlast the whole failed create on a loaded
+                # runner, so frames must not rely on the scheduler to land inside it.
+                await labelled.wait()
             # The receiver binds audio by current_conversation_id; the session label may already
             # name the stray's recording session while its create is in flight.
-            labels.append(h.recording_session_id)
+            label = h.recording_session_id
+            labels.append(label)
             packet = struct.pack('<160h', *[index] * 160)
             await archive.append(packet, h.state.current_conversation_id, 1000 + index * 0.01, 160, decoded=packet)
+            if label == 'session-2':
+                framed.set()
             await asyncio.sleep(0)
 
     await asyncio.gather(produce(), controller._rotate_v3_recording('current'))
