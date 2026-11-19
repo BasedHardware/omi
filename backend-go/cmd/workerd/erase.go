@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -76,7 +77,7 @@ func (e eraseEndpoint) handle(w http.ResponseWriter, r *http.Request) {
 	marker, err := e.markers.ReadDeletionMarker(ctx, request.Tenant)
 	if err != nil {
 		e.report(err)
-		http.Error(w, "marker authority unavailable", http.StatusConflict)
+		http.Error(w, "marker authority check failed", eraseFailureStatus(err))
 		return
 	}
 	expires, armed := eraseGrant(marker, request, time.Now())
@@ -116,14 +117,22 @@ func eraseFailureStatus(err error) int {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return http.StatusServiceUnavailable
 	}
+	if fault, ok := errors.AsType[*docstore.CallError](err); ok {
+		if fault.Kind == docstore.KindTransient {
+			return http.StatusServiceUnavailable
+		}
+		return http.StatusConflict
+	}
 	if fault, ok := errors.AsType[*pgconn.PgError](err); ok {
 		switch fault.Code {
-		case "55P03", "57014", "57P01", "57P02", "57P03", "53300":
+		case "08000", "08001", "08003", "08006", "08007", "55P03", "57014", "57P01", "57P02", "57P03", "53300":
 			return http.StatusServiceUnavailable
 		}
-		if strings.HasPrefix(fault.Code, "08") {
-			return http.StatusServiceUnavailable
-		}
+		return http.StatusConflict
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) {
+		return http.StatusServiceUnavailable
 	}
 	var network net.Error
 	if errors.As(err, &network) && network.Timeout() {

@@ -6,9 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore/docstoretest"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 	"github.com/BasedHardware/omi/backend-go/internal/queue/queuetest"
@@ -25,15 +29,23 @@ func TestEraseRequiresAuthenticatedArmedGenerationAndCommit(t *testing.T) {
 	claim := strings.Repeat("b", 64)
 	for _, tc := range []struct {
 		name, token, status, jobID string
-		eraseErr                   error
+		markerErr, eraseErr        error
 		want                       int
 		calls                      int
 	}{
-		{"wrong identity", "bad", "running", "job", nil, http.StatusUnauthorized, 0},
-		{"grace pending", "trusted", "pending_deletion", "job", nil, http.StatusConflict, 0},
-		{"stale generation", "trusted", "running", "old", nil, http.StatusConflict, 0},
-		{"uncommitted erase", "trusted", "running", "job", context.DeadlineExceeded, http.StatusServiceUnavailable, 1},
-		{"committed erase", "trusted", "running", "job", nil, http.StatusOK, 1},
+		{"wrong identity", "bad", "running", "job", nil, nil, http.StatusUnauthorized, 0},
+		{"grace pending", "trusted", "pending_deletion", "job", nil, nil, http.StatusConflict, 0},
+		{"stale generation", "trusted", "running", "old", nil, nil, http.StatusConflict, 0},
+		{"uncommitted erase", "trusted", "running", "job", nil, context.DeadlineExceeded, http.StatusServiceUnavailable, 1},
+		{"Firestore unavailable", "trusted", "running", "job",
+			&docstore.CallError{Kind: docstore.KindTransient, Code: "Unavailable"}, nil, http.StatusServiceUnavailable, 0},
+		{"Firestore permission denied", "trusted", "running", "job",
+			&docstore.CallError{Kind: docstore.KindRejected, Code: "PermissionDenied"}, nil, http.StatusConflict, 0},
+		{"Postgres connection refused", "trusted", "running", "job", nil,
+			syscall.ECONNREFUSED, http.StatusServiceUnavailable, 1},
+		{"Postgres permission denied", "trusted", "running", "job", nil,
+			&pgconn.PgError{Code: "42501"}, http.StatusConflict, 1},
+		{"committed erase", "trusted", "running", "job", nil, nil, http.StatusOK, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -48,6 +60,9 @@ func TestEraseRequiresAuthenticatedArmedGenerationAndCommit(t *testing.T) {
 				markers: markerReaderFunc(func(_ context.Context, owner string) (map[string]any, error) {
 					if owner != "test-tenant" {
 						t.Fatalf("marker read for %q", owner)
+					}
+					if tc.markerErr != nil {
+						return nil, tc.markerErr
 					}
 					return map[string]any{
 						"wipe_status": tc.status, "wipe_job_id": tc.jobID,
