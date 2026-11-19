@@ -573,7 +573,7 @@ and an explicit empty literal renders as `''`.
 | `HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED` | Default on; queued batch captures stay Transcribing for a read-time 24h server-pending wait per upload revision; reads never renew it | backend | env | open | — | true (backend-listen (chart), pusher (chart)); {value: 'true', category: ops_kill} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'true', category: ops_kill} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | keep | — | quality-lead |
 | `HOME_TRANSCRIPTION_SEAL_WAIT_ENABLED` | Default on; bound queued-transcription presentation from immutable first seal admission | backend | env | open | — | — | — | — | keep | keep | — | quality-12h/Q12-AN |
 | `JOBSTORE_INDEX_READS` | Default on unless 0/false/off/no; kill index discovery while retaining mirror and independent erasure | backend | env | open | — | — | — | — | keep | keep | — | jobstore-index |
-| `JOBSTORE_RETIREMENT_ENABLED` | Default on with complete retained target; off stops supervised copy rotation | backend | env | open | — | — | — | — | keep | keep | — | jobstore-index |
+| `JOBSTORE_RETIREMENT_ENABLED` | Default on with complete retained target; off stops supervised copy rotation | backend | env | open | — | — | {value: 'off', category: ops_kill} | — | keep | keep | — | jobstore-index |
 | `JOBSTORE_SHADOW_WRITES` | Default on unless 0/false/off/no; off stops the A2 Postgres shadow mirror (and its parity reads) while BATCH_JOBSTORE_MODE=shadow | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `LATE_AUDIO_SYNC_INTAKE_ENABLED` | Default on; route delayed listen transcripts through recorded-time sync assignment and reject stale live stamps | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED` | Abandon finalization after BYOK failure | backend | env | open | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | unowned |
@@ -1382,7 +1382,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `JOBSTORE_INDEX_READS` — Default on unless 0/false/off/no; kill index discovery while retaining mirror and independent erasure (fail: open)
 - `JOBSTORE_INDEX_RECOVERY_POLICY` — Default unset/primary; role_minute_v1:BPS selects logical namespace/caller/UTC-minute hash units for bounded leased recovery hints, BPS0..10000 (fail: closed)
 - `JOBSTORE_PRODUCTION_MIRROR_SAMPLE_BPS` — Deterministic owner sample, explicit ASCII integer 1..10000; unset or invalid refuses admission (fail: closed)
-- `JOBSTORE_RETIREMENT_ENABLED` — Default on with complete retained target; off stops supervised copy rotation (fail: open)
 - `JOBSTORE_RETIREMENT_INTERVAL_SECONDS` — Per-process supervised tick interval; default/minimum 20 seconds (fail: closed)
 - `JOBSTORE_RETIREMENT_MAX_PRIMARY_READS` — Rotation page primary read cap; default 20, bounded 2..2000 (fail: closed)
 - `JOBSTORE_RETIREMENT_MAX_ROWS` — Rotation page row cap; default 10, bounded 1..1000 (fail: closed)
