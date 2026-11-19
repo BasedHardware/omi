@@ -59,9 +59,12 @@ class Partition:
         return out
 
 
-def ideal_partition(ideal: Mapping[str, Any]) -> Partition:
+def ideal_partition(ideal: Mapping[str, Any], *, ignore_kinds: Sequence[str] = ()) -> Partition:
+    """``ignore_kinds``: cards of these kinds are "don't care": their lines leave the score entirely."""
     part = Partition()
     for card in ideal.get('cards') or []:
+        if card.get('kind') in ignore_kinds:
+            continue
         cid = str(card['id'])
         part.home[cid] = bool(card.get('home'))
         part.title[cid] = str(card.get('title') or '')
@@ -159,16 +162,22 @@ def score(ideal: Partition, candidate: Partition, lines: Sequence[Mapping[str, A
     for cid, ids in cand_cards.items():
         if not candidate.home.get(cid):
             continue
+        scored = [lid for lid in ids if lid in ideal.card_of]  # lines the ideal cares about
+        if not scored:
+            continue
         cand_home_cards += 1
-        in_ideal_home = sum(1 for lid in ids if ideal.home.get(ideal.card_of.get(lid, ''), False))
-        if in_ideal_home / len(ids) >= MOSTLY:
+        in_ideal_home = sum(1 for lid in scored if ideal.home.get(ideal.card_of[lid], False))
+        if in_ideal_home / len(scored) >= MOSTLY:
             cand_home_good += 1
         else:
             false_adds.append(candidate.title.get(cid, cid))
     return {
         'lines': len(order),
         'unassigned_lines': len(unassigned),
-        'cards': {'ideal': len(ideal_cards), 'candidate': len(cand_cards)},
+        'cards': {
+            'ideal': len(ideal_cards),
+            'candidate': sum(1 for ids in cand_cards.values() if any(lid in ideal.card_of for lid in ids)),
+        },
         'split': split,
         'merge': merge,
         'boundary': {'precision': round(precision, 3), 'recall': round(recall, 3), 'f1': round(f1, 3)},
@@ -220,9 +229,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     group.add_argument('--baseline')
     group.add_argument('--other')
     parser.add_argument('--json', action='store_true')
+    parser.add_argument(
+        '--ignore-kind', action='append', default=[], help='ideal card kind to leave out (e.g. voice_work)'
+    )
     args = parser.parse_args(argv)
     lines = load_lines(Path(args.packet))
-    ideal = ideal_partition(json.loads(Path(args.ideal).read_text(encoding='utf-8')))
+    ideal = ideal_partition(
+        json.loads(Path(args.ideal).read_text(encoding='utf-8')), ignore_kinds=tuple(args.ignore_kind)
+    )
     if args.other:
         candidate = ideal_partition(json.loads(Path(args.other).read_text(encoding='utf-8')))
     else:

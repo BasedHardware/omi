@@ -168,3 +168,66 @@ def test_review_agrees_on_matching_cards_and_disputes_a_split_or_home_flip(day):
     result = spans(a, split)
     assert [s['agreed'] for s in result] == [False, True]
     assert result[0]['lines'] == ['L0001', 'L0002', 'L0004', 'L0005'] and len(result[0]['b']) == 2
+
+
+def test_hourpass_walks_windows_carries_the_open_card_and_merges_continuations():
+    from testing.pipeline_lab.ideal.hourpass import run_day
+
+    t = T0
+    rows = []
+    # 0-50 min: talk A; 55-70 min: talk B (crosses the 60 min window edge); 80 min: talk C
+    for i, minute in enumerate([0, 20, 50, 55, 58, 62, 70, 80]):
+        rows.append(seg(f'line {i}', minute * 60, minute * 60 + 5))
+    lines, _ = build_lines([recording('rec', t, rows)], tz=TZ)
+    asked = []
+
+    def ask(messages, tag):
+        prompt = messages[-1]['content'] if len(messages) == 2 else messages[1]['content']
+        ids = [ln.split()[0] for ln in prompt.split('THIS STRETCH')[1].splitlines()[1:] if ln.startswith('L')]
+        asked.append(ids)
+        if len(asked) == 1:  # first window: A = first three lines, B = the rest (still open)
+            return {
+                'cards': [
+                    {
+                        'lines': [f'{ids[0]}-{ids[2]}'],
+                        'kind': 'conversation',
+                        'home': True,
+                        'title': 'A',
+                        'key_points': ['a'],
+                    },
+                    {
+                        'lines': [f'{ids[3]}-{ids[-1]}'],
+                        'kind': 'conversation',
+                        'home': False,
+                        'hidden_reason': 'too_short',
+                        'title': 'B',
+                    },
+                ]
+            }
+        # second window: B again (whole), C says it continues A
+        return {
+            'cards': [
+                {
+                    'lines': [ids[0] + '-' + ids[-2]],
+                    'kind': 'conversation',
+                    'home': True,
+                    'title': 'B',
+                    'key_points': ['b'],
+                },
+                {
+                    'lines': [ids[-1]],
+                    'kind': 'conversation',
+                    'home': False,
+                    'hidden_reason': 'too_short',
+                    'title': 'C',
+                    'continues': 'c001',
+                },
+            ]
+        }
+
+    cards, logs = run_day(lines, spec='rules', context={'day': 'd'}, ask=ask)
+    assert asked[0] == ['L0001', 'L0002', 'L0003', 'L0004', 'L0005']  # lines before minute 60
+    assert asked[1][0] == 'L0004'  # the open card B is carried, not decided
+    assert logs[0].carried == 'B' and logs[1].continued == ['c001']
+    assert [(c.title, c.home) for c in cards] == [('A', True), ('B', True)]
+    assert cards[0].lines == ['L0001', 'L0002', 'L0003', 'L0008']  # C merged into A, A never split
