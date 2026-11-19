@@ -2,8 +2,9 @@
 
 Wire the service with the integrations HTTP sender and Firestore receipts. Register
 `Causes()` on the finalization kind. Call `Deliver` after the canonical revision has claimed
-fanout. It appends `:revision:<number>` to the persisted Python fanout key. With no persisted
-key it uses the canonical job's operation ID. Revision numbers start at one.
+fanout. A persisted Python key must match `conversation:<cid>:finalization:<rev>` for this
+conversation and is sent verbatim. With no persisted key, the service uses the canonical
+job's operation ID. Revision numbers start at one.
 
 Resolve destination settings on every claim. Supply the owner opt-in, created-conversation
 trigger, operational disablement and whether the owner owns the app. Supply the redacted
@@ -31,4 +32,4 @@ Use `queue.FromError` to handle a delivery error. After committing finalization,
 | Only unsettled receivers retry. An exhausted destination is dropped and the job can finish. | `TestFanoutRetriesOnlyUnsettledReceiversAndIsRevisionScoped`, `TestFanoutDropsTransientDeliveryOnFinalAttempt` |
 | Locked or discarded conversations are skipped. The Firestore fence pauses deleting owners and is rechecked between outbound calls. | `TestFanoutSkipsLockedAndDiscardedConversationsAndHoldsDeletingOwner`, `TestFanoutReportsTransientAttemptAndRechecksDeletionBeforeNextSend` |
 | Attempt reports carry health data, marketplace usage eligibility, app messages and developer DLQ eligibility. The next claim respects an operational disablement. | `TestFanoutReportsAttemptsForHealthUsageMessagesAndDeveloperDLQ` |
-| One persisted fanout key yields different outbound keys for distinct revisions. Revision zero is invalid. | `TestFanoutRetriesOnlyUnsettledReceiversAndIsRevisionScoped`, `TestFanoutRejectsRevisionZero` |
+| The persisted Python key is sent verbatim. A key for another revision and revision zero are invalid. | `TestFanoutRetriesOnlyUnsettledReceiversAndIsRevisionScoped`, `TestFanoutRejectsRevisionZero`, `TestDeliverRejectsMismatchedPersistedKey` |

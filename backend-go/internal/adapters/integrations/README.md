@@ -19,11 +19,11 @@ receiver acts, the retry depends on the receiver honoring the same outbound key.
 
 | Delivery rule | Test |
 | --- | --- |
-| Destinations are deduplicated. Settled receivers are skipped on retry. A new revision derives a fresh key from the same persisted key. | `TestFanoutRetriesOnlyUnsettledReceiversAndIsRevisionScoped` |
+| Destinations are deduplicated. Settled receivers are skipped on retry. A Python app delivery and Go replay use the same persisted key for that revision. | `TestFanoutRetriesOnlyUnsettledReceiversAndIsRevisionScoped` |
 | Apps retry 408, 425, 429 and 5xx. Developer webhooks retry redirects at the original destination, 408, 429 and 5xx. Other 4xx responses are terminal. Transient responses honor Retry-After. | `TestSenderClassifiesReceiverStatusAndHonorsRetryAfter`, `TestFanoutUsesRetryAfterFromReceiver` |
 | A transient delivery gets a terminal dropped receipt on the job's final attempt. | `TestFanoutDropsTransientDeliveryOnFinalAttempt` |
 | A deleting owner is held for a minute. The batch lookup, marker refresh and receipt transaction reject a deleting owner. | `TestFanoutSkipsLockedAndDiscardedConversationsAndHoldsDeletingOwner`, `TestFanoutReportsTransientAttemptAndRechecksDeletionBeforeNextSend`, `TestReceiptPreservesAcceptanceAndRefusesDeletion` |
-| Apps and developer webhooks receive their respective headers. Replacing uid preserves unrelated query bytes, fragments are stripped, and URL Basic Auth is preserved. Redirects are never followed. | `TestSenderPreservesWireContractAndRefusesRedirect`, `TestDeveloperWebhookKeepsBasicAuthAndUsesDeveloperKey` |
+| Apps and developer webhooks receive their respective headers. The app query preserves unrelated bytes. The developer query uses Python-style ordered re-encoding. Both strip fragments and preserve URL Basic Auth. Redirects are never followed. | `TestSenderPreservesWireContractAndRefusesRedirect`, `TestDeveloperWebhookKeepsBasicAuthAndUsesDeveloperKey` |
 | A slow receiver times out before acknowledgement. A 2xx remains accepted when the bounded response read times out, cannot parse a message, or exceeds the body cap. | `TestSenderTimesOutBeforeHeadersButAcceptsWithoutWaitingForBody`, `TestSenderKeepsAcceptanceWhenAppMessageIsInvalidOrOversized` |
 | The production sender requires a live guard, validates every resolved address and dials only validated addresses directly. | `TestSenderRefusesPrivateAddressesAndInvalidGuards` |
 | Rejected store calls, receipt conflicts and owner mismatches use the deterministic attempt budget. Transient and unclassified store failures use the transient budget. | `TestReceiptErrorsUseDeterministicOrTransientBudget` |

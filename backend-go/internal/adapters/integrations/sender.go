@@ -9,8 +9,10 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/BasedHardware/omi/backend-go/internal/integrationfanout"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
@@ -109,7 +111,11 @@ func buildRequest(ctx context.Context, owner string, d integrationfanout.Deliver
 		return nil
 	}
 	u.Fragment, u.RawFragment = "", ""
-	u.RawQuery = ownerQuery(u.RawQuery, owner)
+	if d.AppID == "" {
+		u.RawQuery = developerQuery(u.RawQuery, owner)
+	} else {
+		u.RawQuery = ownerQuery(u.RawQuery, owner)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(d.Body))
 	if err != nil {
 		return nil
@@ -141,6 +147,70 @@ func ownerQuery(query, owner string) string {
 		}
 	}
 	return strings.Join(append(parts, "uid="+url.QueryEscape(owner)), "&")
+}
+
+// developerQuery mirrors Python's ordered parse_qsl and urlencode, including
+// repeated keys, blank values, and bare flags.
+func developerQuery(query, owner string) string {
+	var parts []string
+	for part := range strings.SplitSeq(query, "&") {
+		if part == "" {
+			continue
+		}
+		name, value, _ := strings.Cut(part, "=")
+		name = decodeQueryField(name)
+		if name != "uid" {
+			parts = append(parts, url.QueryEscape(name)+"="+url.QueryEscape(decodeQueryField(value)))
+		}
+	}
+	return strings.Join(append(parts, "uid="+url.QueryEscape(owner)), "&")
+}
+
+func decodeQueryField(field string) string {
+	// Python keeps malformed percent escapes literal before re-encoding them.
+	var decoded strings.Builder
+	for len(field) > 0 {
+		switch {
+		case field[0] == '+':
+			decoded.WriteByte(' ')
+		case field[0] == '%' && len(field) >= 3:
+			if value, err := strconv.ParseUint(field[1:3], 16, 8); err == nil {
+				decoded.WriteByte(byte(value))
+				field = field[3:]
+				continue
+			}
+			decoded.WriteByte('%')
+		default:
+			decoded.WriteByte(field[0])
+		}
+		field = field[1:]
+	}
+	return replaceInvalidQueryUTF8(decoded.String())
+}
+
+// Python emits one replacement per invalid UTF-8 subsequence. When a valid
+// leading prefix is cut short, consume the prefix and leave the next byte.
+func replaceInvalidQueryUTF8(field string) string {
+	if utf8.ValidString(field) {
+		return field
+	}
+	var decoded strings.Builder
+	for len(field) > 0 {
+		width := 1
+		for width < len(field) && !utf8.FullRuneInString(field[:width]) {
+			width++
+		}
+		r, size := utf8.DecodeRuneInString(field[:width])
+		if r == utf8.RuneError && size == 1 {
+			size = width
+			if utf8.FullRuneInString(field[:width]) {
+				size = max(1, width-1)
+			}
+		}
+		decoded.WriteRune(r)
+		field = field[size:]
+	}
+	return decoded.String()
 }
 
 func resultForStatus(status int, retryAfter string, developer bool, now time.Time) integrationfanout.Result {

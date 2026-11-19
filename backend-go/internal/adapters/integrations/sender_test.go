@@ -120,14 +120,14 @@ func TestDeveloperWebhookKeepsBasicAuthAndUsesDeveloperKey(t *testing.T) {
 		user, password, ok := r.BasicAuth()
 		if !ok || user != "user" || password != "p@ss" ||
 			r.Header.Get(appKeyHeader) != "" || r.Header.Get(devKeyHeader) != "developer-key" ||
-			r.URL.RawQuery != "z=one%20two&uid=owner" || r.URL.Fragment != "" {
+			r.URL.RawQuery != "z=one+two&flag=&tag=%2F&z=+&broken=%25ZZ&encoding=%EF%BF%BD%EF%BF%BD%EF%BF%BDx&uid=owner" || r.URL.Fragment != "" {
 			t.Error("developer webhook request changed")
 		}
 		w.WriteHeader(http.StatusTemporaryRedirect)
 	}))
 	defer server.Close()
 	d := integrationfanout.Delivery{
-		URL:  strings.Replace(server.URL, "://", "://user:p%40ss@", 1) + "?z=one%20two#discard",
+		URL:  strings.Replace(server.URL, "://", "://user:p%40ss@", 1) + "?z=one%20two&flag&&%75id=old&tag=%2f&z=%20&broken=%ZZ&encoding=%FF%FF%E2%82x#discard",
 		Body: []byte(`{}`), IdempotencyKey: "developer-key", Headers: map[string]string{appKeyHeader: "ignored"},
 	}
 	got, err := testSender(t, server, time.Second).Send(t.Context(), queue.GuardedForTest(t, "owner", "job"), d)

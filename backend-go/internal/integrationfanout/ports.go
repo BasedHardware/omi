@@ -76,7 +76,8 @@ type Attempt struct {
 }
 
 // Report includes attempts made in this call, including when Deliver returns an
-// error. Previously settled receipts suppress delivery and contribute to Dropped.
+// error. Previously settled receipts suppress delivery. A settled receipt
+// contributes to Dropped only if it recorded a rejection.
 type Report struct {
 	Dropped  bool
 	Attempts []Attempt

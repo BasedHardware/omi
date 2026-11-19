@@ -33,8 +33,9 @@ func (f finalizer) Work(ctx context.Context, run *queue.Run) queue.Outcome {
 		return queue.Fail(integrationfanout.CauseInvalid)
 	}
 	event := integrationfanout.Event{
-		ConversationID: run.Job().Subject, Revision: rev, FanoutKey: "conversation:finalization",
-		Locked: run.Job().Subject == "locked", Discarded: run.Job().Subject == "discarded",
+		ConversationID: run.Job().Subject, Revision: rev,
+		FanoutKey: "conversation:" + run.Job().Subject + ":finalization:" + run.Job().Key,
+		Locked:    run.Job().Subject == "locked", Discarded: run.Job().Subject == "discarded",
 	}
 	targets := append([]integrationfanout.Target(nil), f.targets...)
 	if f.disabled != nil {
@@ -91,7 +92,8 @@ func TestFanoutRetriesOnlyUnsettledReceiversAndIsRevisionScoped(t *testing.T) {
 	bench := docstoretest.Open(t)
 	var accepted, rejected, developer, disabled, ambiguous atomic.Int32
 	var mu sync.Mutex
-	effects := make(map[string]bool)
+	// The receiver has already processed revision 1 through Python.
+	effects := map[string]bool{"conversation:conversation:finalization:1": true}
 	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/ambiguous":
@@ -125,22 +127,22 @@ func TestFanoutRetriesOnlyUnsettledReceiversAndIsRevisionScoped(t *testing.T) {
 	h := startFanout(t, bench, receiver,
 		target("ambiguous-app", receiver.URL+"/ambiguous"), ok, ok, off,
 		target("bad-app", receiver.URL+"/rejected"), target("", receiver.URL+"/developer"))
-	for _, rev := range []string{"1", "2"} {
+	for i, rev := range []string{"1", "2"} {
 		enqueue(t, h, rev, "conversation")
 		job := h.Settled(rev)
-		if job.State != queue.StateCompleted || job.Attempts != 2 ||
+		if job.State != queue.StateCompleted || job.Attempts != i+1 ||
 			job.Reason == nil || *job.Reason != integrationfanout.CauseDropped {
 			t.Fatalf("revision %s: state %s, attempts %d, reason %v", rev, job.State, job.Attempts, job.Reason)
 		}
 	}
 	if accepted.Load() != 2 || rejected.Load() != 2 || developer.Load() != 2 ||
-		disabled.Load() != 0 || ambiguous.Load() != 4 {
+		disabled.Load() != 0 || ambiguous.Load() != 3 {
 		t.Fatalf("requests accepted=%d rejected=%d developer=%d disabled=%d ambiguous=%d",
 			accepted.Load(), rejected.Load(), developer.Load(), disabled.Load(), ambiguous.Load())
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(effects) != 2 || !effects["conversation:finalization:revision:1"] || !effects["conversation:finalization:revision:2"] {
+	if len(effects) != 2 || !effects["conversation:conversation:finalization:1"] || !effects["conversation:conversation:finalization:2"] {
 		t.Fatalf("receiver applied unexpected idempotent effects: %v", effects)
 	}
 }

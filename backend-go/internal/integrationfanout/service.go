@@ -28,7 +28,7 @@ func Causes() []queue.Cause {
 }
 
 // Event describes a claimed conversation revision. FanoutKey is the persisted
-// Python key, when available, and is scoped to the revision before sending.
+// Python key for this conversation revision, when available.
 type Event struct {
 	ConversationID string
 	Revision       int64
@@ -73,6 +73,9 @@ func (s Service) Deliver(ctx context.Context, run *queue.Run, event Event, targe
 	}
 	if event.ConversationID == "" || event.Revision <= 0 {
 		return Report{}, queue.Classify(errors.New("integration: invalid conversation revision"), queue.Fail(CauseInvalid))
+	}
+	if event.FanoutKey != "" && event.FanoutKey != pythonFanoutKey(event.ConversationID, event.Revision) {
+		return Report{}, queue.Classify(errors.New("integration: invalid persisted fanout key"), queue.Fail(CauseInvalid))
 	}
 	destinations, ids := selectDestinations(event, targets)
 	if len(ids) == 0 {
@@ -171,7 +174,11 @@ func (s Service) send(ctx context.Context, g queue.Guarded, event Event, d desti
 
 func deliveryKey(g queue.Guarded, event Event, app string) string {
 	if event.FanoutKey != "" {
-		return event.FanoutKey + ":revision:" + strconv.FormatInt(event.Revision, 10)
+		return event.FanoutKey
 	}
 	return g.Operation("integration:" + app)
+}
+
+func pythonFanoutKey(conversationID string, revision int64) string {
+	return "conversation:" + conversationID + ":finalization:" + strconv.FormatInt(revision, 10)
 }

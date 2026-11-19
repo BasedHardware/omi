@@ -30,3 +30,14 @@ func TestOnlyEnabledCreatedTargetsAreEligible(t *testing.T) {
 		})
 	}
 }
+
+func TestDeliverRejectsMismatchedPersistedKey(t *testing.T) {
+	t.Parallel()
+	event := Event{ConversationID: "cid", Revision: 2, FanoutKey: "conversation:cid:finalization:1"}
+	_, err := (Service{}).Deliver(t.Context(), nil, event, []Target{
+		{Enabled: true, Created: true, URL: "https://receiver.example"},
+	})
+	if err == nil {
+		t.Fatal("a key for another revision could be sent")
+	}
+}
