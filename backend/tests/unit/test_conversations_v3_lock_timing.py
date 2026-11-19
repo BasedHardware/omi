@@ -249,3 +249,15 @@ def test_locked_refinement_does_not_absorb_a_card_owning_open_loop_extractions()
     window, existing, recordings = _locked_pair()
     existing['late']['open_loop_extractions'] = 'synthetic-protected-payload'
     assert refinement.candidate([window], existing, recordings) is None
+
+
+@pytest.mark.parametrize(
+    'flag',
+    ['sync_relevance_user_kept', 'has_photos', 'folder_user_set', 'has_transcript_corrections', 'capture_group'],
+)
+def test_locked_refinement_preserves_user_managed_cards(flag):
+    from utils.conversations.v3 import refinement
+
+    window, existing, recordings = _locked_pair()
+    existing['late'][flag] = True
+    assert refinement.candidate([window], existing, recordings) is None

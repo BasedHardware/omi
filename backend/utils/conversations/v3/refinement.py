@@ -5,6 +5,7 @@ from datetime import timedelta
 import json
 from typing import Any
 
+from utils.conversations.smart_merge_policy import user_managed
 from utils.conversations.summary_selection import render_sections_markdown
 from utils.conversations.v3 import planner
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD
@@ -21,6 +22,7 @@ def _eligible(row):
         and row.get('kind') in {'conversation', 'voice_work'}
         and row.get('visibility', 'private') == 'private'
         and not row.get('home_hidden')
+        and not user_managed(row)
         and row.get('finalization_status') != 'dead_letter'
         and not any(
             row.get(key)
@@ -31,7 +33,6 @@ def _eligible(row):
                 'dream_duplicate_of',
                 'summary_retryable',
                 'manual_end',
-                'is_locked',
                 'backfilled',
                 'v3_backfill_run',
                 'v3_unlocked',
@@ -40,15 +41,12 @@ def _eligible(row):
                 'v3_created_pending',
                 'sync_merged_into',
                 'v3_claims_transferred_to',
-                'starred',
                 'external_data',
                 'apps_results',
                 'episode_id',
                 'client_processing',
-                'user_title',
                 'folder_id',
                 'photos',
-                'manual_speaker_assignments',
             )
         )
     )
