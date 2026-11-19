@@ -15562,4 +15562,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Tagasi avalehele';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Kokkuvõte, kui see vestlus lõpeb';
 }

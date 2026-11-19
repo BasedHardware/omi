@@ -199,7 +199,7 @@ except ModuleNotFoundError:
         )
 
     class Structured(BaseModel):
-        title_provenance: SkipJsonSchema[Optional[Literal['server_minimum']]] = None
+        title_provenance: SkipJsonSchema[Optional[Literal['server_minimum', 'historical_minimum']]] = None
         note_claims: Optional[List[NoteClaim]] = Field(
             default=None, description='Episode claim provenance; absent on legacy notes'
         )

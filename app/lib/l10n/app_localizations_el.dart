@@ -15671,4 +15671,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Πίσω στην Αρχική';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Σύνοψη όταν τελειώσει αυτή η συζήτηση';
 }

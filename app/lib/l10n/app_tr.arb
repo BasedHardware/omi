@@ -4724,5 +4724,6 @@
     "onTheWayServerWork": "Sunucunun bildirdiği işler",
     "finishNothingToProcess": "Henüz işlenecek bir şey yok.",
     "finishStillProcessing": "Hâlâ işleniyor. Ana sayfada görünecek.",
-    "finishBackToHome": "Ana Sayfaya Dön"
+    "finishBackToHome": "Ana Sayfaya Dön",
+    "conversationSummaryWhenItEnds": "Bu konuşma bittiğinde özet"
 }

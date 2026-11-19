@@ -19,9 +19,6 @@ from tests.integration.test_conversation_batch_purge_emulator import plane  # no
 @pytest.fixture
 def world(monkeypatch, plane):
     monkeypatch.delenv(scans.SWITCH, raising=False)
-    plane.client.collection(scans.READINESS_COLLECTION).document(scans.READINESS_DOCUMENT).set(
-        {'all_consumers_new': True, 'valid_until': jobs._now() + timedelta(hours=1)}
-    )
     monkeypatch.setattr(purge, 'conversation_objects', lambda *a, **k: [])
     monkeypatch.setattr(purge, 'purge_jobstore_owner', lambda *a: 0)
     monkeypatch.setattr(purge, 'mirror_refresh', lambda *a: None)

@@ -15634,4 +15634,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Înapoi la pagina principală';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Rezumat când se încheie această conversație';
 }

@@ -132,7 +132,7 @@ def _assert_private_output(capsys):
         ('OMI_ENV_STAGE', 'dev'),
         ('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev'),
         ('OMI_CUSTOMER_DATA_PROJECT', ''),
-        ('OMI_FIRESTORE_DATA_PLANE_PROJECT', 'based-hardware-dev'),
+        ('OMI_FIRESTORE_DATA_PLANE_PROJECT', ''),
         ('FIRESTORE_DATABASE_ID', 'staging'),
         ('FIRESTORE_EMULATOR_HOST', '127.0.0.1:8080'),
         ('GCLOUD_PROJECT', 'wrong-project'),

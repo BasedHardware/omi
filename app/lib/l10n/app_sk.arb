@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "Práca hlásená serverom",
     "finishNothingToProcess": "Zatiaľ nie je čo spracovať.",
     "finishStillProcessing": "Stále sa spracúva. Zobrazí sa na domovskej stránke.",
-    "finishBackToHome": "Späť domov"
+    "finishBackToHome": "Späť domov",
+    "conversationSummaryWhenItEnds": "Zhrnutie po skončení tohto rozhovoru"
 }

@@ -12246,5 +12246,6 @@
     "onTheWayServerWork": "کار گزارش‌شده توسط سرور",
     "finishNothingToProcess": "هنوز چیزی برای پردازش نیست.",
     "finishStillProcessing": "هنوز در حال پردازش است. در صفحه اصلی نمایش داده می‌شود.",
-    "finishBackToHome": "بازگشت به صفحه اصلی"
+    "finishBackToHome": "بازگشت به صفحه اصلی",
+    "conversationSummaryWhenItEnds": "خلاصه پس از پایان این گفتگو"
 }

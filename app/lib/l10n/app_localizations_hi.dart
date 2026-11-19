@@ -15552,4 +15552,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'होम पर वापस जाएं';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'यह बातचीत खत्म होने पर सारांश';
 }

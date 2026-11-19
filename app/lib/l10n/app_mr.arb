@@ -12246,5 +12246,6 @@
     "onTheWayServerWork": "सर्व्हरने नोंदवलेले काम",
     "finishNothingToProcess": "अजून प्रक्रिया करण्यासाठी काहीही नाही.",
     "finishStillProcessing": "अजून प्रक्रिया सुरू आहे. हे होमवर दिसेल.",
-    "finishBackToHome": "होमवर परत जा"
+    "finishBackToHome": "होमवर परत जा",
+    "conversationSummaryWhenItEnds": "हे संभाषण संपल्यावर सारांश"
 }

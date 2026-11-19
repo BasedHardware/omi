@@ -12246,5 +12246,6 @@
     "onTheWayServerWork": "சேவையகம் தெரிவித்த பணி",
     "finishNothingToProcess": "இன்னும் செயலாக்க எதுவும் இல்லை.",
     "finishStillProcessing": "இன்னும் செயலாக்கப்படுகிறது. இது முகப்பில் தோன்றும்.",
-    "finishBackToHome": "முகப்புக்குத் திரும்பு"
+    "finishBackToHome": "முகப்புக்குத் திரும்பு",
+    "conversationSummaryWhenItEnds": "இந்த உரையாடல் முடிந்ததும் சுருக்கம்"
 }

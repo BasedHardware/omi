@@ -12246,5 +12246,6 @@
     "onTheWayServerWork": "Trabahong iniulat ng server",
     "finishNothingToProcess": "Wala pang ipoproseso.",
     "finishStillProcessing": "Pinoproseso pa. Lalabas ito sa Home.",
-    "finishBackToHome": "Bumalik sa Home"
+    "finishBackToHome": "Bumalik sa Home",
+    "conversationSummaryWhenItEnds": "Buod kapag natapos ang usapang ito"
 }

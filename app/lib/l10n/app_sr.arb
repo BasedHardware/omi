@@ -12246,5 +12246,6 @@
     "onTheWayServerWork": "Рад који је пријавио сервер",
     "finishNothingToProcess": "Још нема ничега за обраду.",
     "finishStillProcessing": "Још се обрађује. Појавиће се на почетној.",
-    "finishBackToHome": "Назад на почетну"
+    "finishBackToHome": "Назад на почетну",
+    "conversationSummaryWhenItEnds": "Резиме када се овај разговор заврши"
 }

@@ -288,6 +288,3 @@ recordSealSweeper:
   runtimeEnabled: true
   # Lead can observe one in-cluster plan cycle before the apply train.
   mode: apply
-
-# Prod-only bindings; staging post-render remains the sole staging source.
-jobstoreEnv: {}

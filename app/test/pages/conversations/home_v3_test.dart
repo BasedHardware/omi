@@ -28,6 +28,7 @@ import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/local_recording.dart';
@@ -35,8 +36,11 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/live_summary_section.dart';
+import 'package:omi/pages/conversation_detail/widgets/summary_tab.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
@@ -197,6 +201,22 @@ class _LiveCapture extends CaptureProvider {
 
   @override
   String? get topConversationId => 'conv-0-live';
+
+  /// Taps on End: the pendant double-tap's action, without draining a real capture.
+  int endCalls = 0;
+
+  /// While set, End's drain has not finished: the segments stay, as during a real WAL drain. Completing
+  /// it settles the drain as failed: the capture keeps its segments.
+  Completer<void>? drain;
+
+  @override
+  Future<void> forceProcessingCurrentConversation() async {
+    endCalls++;
+    final held = drain;
+    if (held != null) return held.future;
+    segments = [];
+    notifyListeners();
+  }
 }
 
 class _RecordingAdapter implements AnalyticsAdapter {
@@ -237,17 +257,39 @@ class _RecordingAdapter implements AnalyticsAdapter {
 final _now = DateTime(2026, 11, 16, 12, 30);
 
 ServerConversation _conversation(String id, DateTime start, String title,
-        {ConversationV3Fields? v3, Duration length = const Duration(minutes: 25)}) =>
+        {ConversationV3Fields? v3,
+        Duration length = const Duration(minutes: 25),
+        DateTime? lastSpeech,
+        List<TranscriptSegment> segments = const []}) =>
     ServerConversation(
       id: id,
       speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0]),
       createdAt: start,
       startedAt: start,
-      finishedAt: v3?.tileState == ConversationTileState.live ? null : start.add(length),
+      finishedAt: v3?.tileState == ConversationTileState.live ? lastSpeech : start.add(length),
       structured: Structured(title, 'Overview of $title.', emoji: '💬', category: 'work'),
-      transcriptSegments: const [],
+      transcriptSegments: segments,
       v3: v3,
     );
+
+TranscriptSegment _said(String id, String text, double start, double end, {bool user = true}) => TranscriptSegment(
+    id: id,
+    text: text,
+    speaker: user ? 'SPEAKER_00' : 'SPEAKER_01',
+    isUser: user,
+    personId: null,
+    start: start,
+    end: end,
+    translations: []);
+
+/// What was said so far in the conversation in progress: an 11-minute speech span, the length its
+/// Home row and its page both show.
+final _liveSoFar = [
+  _said('l1', 'Okay, launch checklist. The venue confirmed Thursday the 26th.', 0, 6),
+  _said('l2', 'Deposit is due Friday, so I will send it tomorrow morning.', 7, 12, user: false),
+  _said('l3', 'Capacity is 180 seated. We need to cut the list by about twenty.', 300, 306),
+  _said('l4', 'Priya sends the speaker bios by Tuesday; I own the slide order.', 640, 660, user: false),
+];
 
 const _done = ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.done, titleLocked: true);
 
@@ -263,10 +305,35 @@ class _Home {
   int episodeCalls = 0;
   int liveReads = 0;
 
+  /// Reads of the open conversation by its detail page, and the state those reads return.
+  int detailReads = 0;
+  ConversationTileState detailState = ConversationTileState.live;
+
+  ServerConversation? detailRead(String id) {
+    detailReads++;
+    if (id != 'live-1') return null;
+    return _conversation('live-1', _now.subtract(const Duration(minutes: 20)), 'Launch checklist',
+        lastSpeech: _now.subtract(const Duration(minutes: 9)),
+        segments: _liveSoFar,
+        v3: ConversationV3Fields(kind: 'conversation', tileState: detailState));
+  }
+
   /// False once the conversation in progress has closed.
   bool liveOpen = true;
   final sync = _StubSyncProvider();
-  late final _LiveCapture capture = _LiveCapture();
+  late final _LiveCapture capture = _LiveCapture()
+    ..segments = [
+      // The same segment the open window's transcript ends with: this phone's capture is in it.
+      TranscriptSegment(
+          id: 'l4',
+          text: 'Doors at six.',
+          speaker: 'SPEAKER_00',
+          isUser: true,
+          personId: null,
+          start: 0,
+          end: 2,
+          translations: []),
+    ];
   late final EpisodeProvider episodes = EpisodeProvider(
     fetchPage: (from, to, {cursor}) async {
       episodeCalls++;
@@ -310,6 +377,9 @@ class _Home {
         v3: v3,
         conversation: v3 && liveOpen
             ? _conversation('live-1', _now.subtract(const Duration(minutes: 20)), 'Launch checklist',
+                // The server's finished_at for an open window is its last speech: 11 minutes in.
+                lastSpeech: _now.subtract(const Duration(minutes: 9)),
+                segments: _liveSoFar,
                 v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.live))
             : null,
       ));
@@ -374,9 +444,10 @@ Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
             ),
           ),
           ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
-            create: (_) => ConversationDetailProvider(),
+            create: (_) => ConversationDetailProvider(fetchConversation: (id) async => home.detailRead(id)),
             update: (_, app, conversations, previous) =>
-                (previous?..setProviders(app, conversations)) ?? ConversationDetailProvider(),
+                (previous?..setProviders(app, conversations)) ??
+                ConversationDetailProvider(fetchConversation: (id) async => home.detailRead(id)),
           ),
         ],
         child: MaterialApp(
@@ -478,6 +549,18 @@ void main() {
       expect(find.byKey(const ValueKey('day_summary_header_2026-11-16')), findsNothing);
 
       expect(home.episodeCalls, 0, reason: 'a v3 account makes no episode calls');
+
+      // The live tile shows the speech so far (11m), the length its detail shows, not start to now (20m).
+      final length = tester.widget<Text>(find.byKey(const Key('conversation_row_live_length')));
+      expect(length.data, contains('11'));
+      expect(length.data, isNot(contains('20')));
+      await tester.pump(const Duration(minutes: 3));
+      expect(tester.widget<Text>(find.byKey(const Key('conversation_row_live_length'))).data, length.data,
+          reason: 'silence after the last words does not grow it');
+
+      // Home stays uncluttered: End lives on the live conversation's detail page, not on its row.
+      expect(find.byKey(const Key('live_conversation_end')), findsNothing);
+      expect(find.byType(V3LivePlaceholderRow), findsNothing);
       await _dispose(tester, home);
     });
   });
@@ -496,6 +579,20 @@ void main() {
       expect(home.conversationsV3.live, isNull);
       expect(home.conversations.listReads, before + 1,
           reason: 'the closed conversation comes back as an ordinary row from the list read');
+
+      // The pendant is still streaming with no window open: the live row's placeholder stands in, and
+      // the pendant capture card does not come back between windows.
+      expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
+      expect(find.descendant(of: find.byType(ConversationCaptureWidget), matching: find.byType(GestureDetector)),
+          findsNothing);
+
+      // The next window opens: its row replaces the placeholder.
+      home.liveOpen = true;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(V3LivePlaceholderRow), findsNothing);
+      expect(_rowIds(tester).first, 'live-1');
       await _dispose(tester, home);
     });
   });
@@ -533,6 +630,96 @@ void main() {
     });
   });
 
+  testWidgets("End is hidden on a live window that is not this phone's capture", (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      // This phone records something else (another device's window is the one in progress).
+      home.capture.segments = [_said('other-1', 'Something only this phone heard.', 0, 3)];
+      await tester.tap(find.text('Launch checklist'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const ValueKey('detail_ask_omi')), findsOneWidget);
+      expect(find.byKey(const Key('live_conversation_end')), findsNothing,
+          reason: "End would finalize this phone's capture, not the conversation on screen");
+      expect(home.capture.endCalls, 0);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('End ends once: taps during the drain do not finalize again; a failed drain frees it', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      final drain = home.capture.drain = Completer<void>();
+      await tester.tap(find.text('Launch checklist'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.byKey(const Key('live_conversation_end')));
+      await tester.pump();
+      expect(find.byKey(const Key('live_conversation_end')), findsOneWidget, reason: 'the drain is still running');
+      await tester.tap(find.byKey(const Key('live_conversation_end')));
+      await tester.pump();
+      expect(home.capture.endCalls, 1, reason: 'a second tap would add another processing row and finalize again');
+
+      // The drain failed and the capture kept its segments: End still works.
+      home.capture.drain = null;
+      drain.complete();
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('live_conversation_end')));
+      await tester.pump();
+      expect(home.capture.endCalls, 2, reason: 'End is not left on screen but dead');
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('the live page opened on Transcript keeps re-reading until the summary is being written', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      await tester.tap(find.text('Launch checklist'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(SummaryTab), findsNothing, reason: 'it opens on Transcript; Summary is not built');
+      final atOpen = home.detailReads;
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      expect(home.detailReads, atOpen + 1, reason: 'the page, not the Summary tab, keeps a live window current');
+
+      // It ended; its transcript is still arriving. The page keeps reading.
+      home.detailState = ConversationTileState.transcribing;
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      expect(home.detailReads, atOpen + 3);
+
+      // Its summary is being written: the page has seen it move on and stops re-reading.
+      home.detailState = ConversationTileState.writing;
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      expect(home.detailReads, atOpen + 4);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('a 320pt phone: the live detail bar fits Ask Omi and End', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true, size: const Size(320, 640));
+      await tester.tap(find.text('Launch checklist'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.takeException(), isNull, reason: 'no overflow in the bar');
+      expect(find.byKey(const Key('live_conversation_end')), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('live_conversation_end'))).width, lessThanOrEqualTo(320 * 0.45 + 2),
+          reason: 'at most about half the bar, border included');
+      await _dispose(tester, home);
+    });
+  });
+
   group('render evidence (written when V3_HOME_RENDER_OUTPUT is set; a layout check otherwise)', () {
     const output = String.fromEnvironment('V3_HOME_RENDER_OUTPUT');
     final boundary = GlobalKey();
@@ -566,31 +753,78 @@ void main() {
         final palette = OmiColors.active;
         addTearDown(() => OmiColors.active = palette);
         OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        var summaryOpens = 0;
         final sections = StreamController<SummaryStreamEvent>();
-        LiveSummarySection.debugStream = (_) => sections.stream;
+        LiveSummarySection.debugStream = (_) {
+          summaryOpens++;
+          return sections.stream;
+        };
         final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
-        await shoot(tester, '001-mobile-ios-v3-home');
+        expect(find.byKey(const Key('live_conversation_end')), findsNothing);
+        await shoot(tester, '001-mobile-ios-v3-home-live-row');
 
         await tester.tap(find.text('Launch checklist'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.byType(ConversationDetailPage), findsOneWidget);
-        expect(find.text('Writing your summary…'), findsOneWidget);
-        await shoot(tester, '002-mobile-ios-v3-live-summary-writing');
+        _expectLiveDetail(tester);
+        await shoot(tester, '002-mobile-ios-v3-live-detail-end');
 
-        sections
-          ..add(const SummarySection('## Venue and date\n- The venue holds Thursday the 26th; deposit due Friday.'
-              '\n- Capacity is 180 seated, so the guest list needs a cut of about 20.'))
-          ..add(const SummarySection('## Run of show\n- Doors at 6, talks at 7, demos after.'
-              '\n- You own the slide order; Priya sends speaker bios by Tuesday.'));
+        // The Summary tab keeps one quiet line: no summary write, no spinner, no "No summary", no link.
+        await tester.tap(find.text('Summary'));
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 100));
-        expect(find.textContaining('deposit due Friday'), findsOneWidget);
-        await shoot(tester, '003-mobile-ios-v3-live-summary-streamed');
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.byKey(const Key('live_summary_in_progress')), findsOneWidget);
+        expect(find.text('Summary when this conversation ends'), findsOneWidget);
+        expect(find.text('Writing your summary…'), findsNothing);
+        expect(find.byKey(const Key('live_summary_open_transcript')), findsNothing);
+        expect(summaryOpens, 0, reason: 'a conversation still in progress has no summary to write yet');
+        await shoot(tester, '006-mobile-ios-v3-live-detail-summary-tab');
+
+        // The ⋯ menu offers nothing that writes, edits, shares or deletes an unfinished conversation.
+        await tester.tap(find.byKey(const Key('conversation_more')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.text('Search'), findsOneWidget);
+        for (final hidden in ['Reprocess Conversation', 'Summary Template', 'Copy Summary', 'Share Audio', 'Delete']) {
+          expect(find.text(hidden), findsNothing, reason: '$hidden waits until the conversation ends');
+        }
+        await tester.tapAt(const Offset(20, 700));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        await tester.tap(find.byKey(const Key('live_conversation_end')));
+        await tester.pump();
+        expect(home.capture.endCalls, 1, reason: "the pendant double-tap's action");
+        expect(find.byKey(const Key('live_conversation_end')), findsNothing,
+            reason: 'nothing is left on this phone to end');
 
         LiveSummarySection.debugStream = null;
         unawaited(sections.close());
+        await tester.pageBack();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        // Between windows the live row's placeholder holds the place, not the pendant capture card.
+        home.capture.segments = [
+          TranscriptSegment(
+              id: 's2',
+              text: 'Next item.',
+              speaker: 'SPEAKER_00',
+              isUser: true,
+              personId: null,
+              start: 0,
+              end: 2,
+              translations: []),
+        ];
+        home.liveOpen = false;
+        await home.conversationsV3.refresh();
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
+        await shoot(tester, '003-mobile-ios-v3-home-live-placeholder');
+
         debugDefaultTargetPlatformOverride = null;
         await _dispose(tester, home);
       });
@@ -605,11 +839,30 @@ void main() {
         final home = await _pumpHome(tester,
             v3: true, boundary: boundary, theme: theme(Brightness.light), size: const Size(393, 852));
         await shoot(tester, '004-mobile-ios-v3-home-light');
+
+        await tester.tap(find.text('Launch checklist'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pump(const Duration(milliseconds: 500));
+        _expectLiveDetail(tester);
+        await shoot(tester, '005-mobile-ios-v3-live-detail-light');
         debugDefaultTargetPlatformOverride = null;
         await _dispose(tester, home);
       });
     });
   });
+}
+
+/// The live conversation's page as it opens: on its transcript, a live chip with the speech so far,
+/// no Share, and End beside Ask Omi.
+void _expectLiveDetail(WidgetTester tester) {
+  expect(find.textContaining('Deposit is due Friday', findRichText: true), findsWidgets,
+      reason: 'it opens on the transcript');
+  expect(find.byKey(const Key('conversation_when_live')), findsOneWidget);
+  expect(find.text('Live · 11m'), findsOneWidget, reason: "the speech so far, the length its Home row shows");
+  expect(find.byKey(const Key('conversation_share')), findsNothing, reason: 'nothing to share until it ends');
+  expect(find.byKey(const Key('conversation_star')), findsOneWidget);
+  expect(find.byKey(const Key('live_conversation_end')), findsOneWidget);
 }
 
 Future<void> _loadFonts() async {

@@ -404,6 +404,13 @@ runs:
       run: |
         set -euo pipefail
         umask 077
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
+        python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
+          --revision "$ROLLBACK_REVISION" --project "${{ inputs.project_id }}" --region "${{ inputs.region }}"
         extension_args=()
         if [[ "${{ inputs.integration_only }}" == true ]]; then extension_args=(--integration-only); fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" prepare \
@@ -543,6 +550,7 @@ runs:
     - name: Preflight Cloud Run deploy
       shell: bash
       run: |
+        set -euo pipefail
         PREFLIGHT_ARGS=(
           ${{ inputs.cloud_run_service != 'all' && format('--service {0}', inputs.cloud_run_service) || '' }} \
           --env ${{ inputs.runtime_env }}
@@ -557,6 +565,14 @@ runs:
                "${{ inputs.environment }}" == "prod" ||
                "${{ inputs.environment }}" == "development") ]]; then
           PREFLIGHT_ARGS+=(--repair-traffic)
+          if [[ "${{ inputs.deploy_profile }}" == manual ]]; then
+            history_args=()
+            if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+              history_args=(--unshallow)
+            fi
+            git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
+            PREFLIGHT_ARGS+=(--release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py")
+          fi
         fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" "${PREFLIGHT_ARGS[@]}"
 
@@ -1728,8 +1744,15 @@ runs:
         ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev' && (failure() || cancelled()) && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure')) }}
       shell: bash
       run: |
+        set -euo pipefail
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
           --snapshot artifacts/dev-backend-cloud-run-pre-promotion-traffic-snapshot.json \
+          --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
           --evidence-path artifacts/dev-backend-cloud-run-traffic-restore.json
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
@@ -1745,8 +1768,14 @@ runs:
             --state "$RUNNER_TEMP/integration-canary-private.json" || rollback_rc=$?
           canary_args=(--exclude-service backend-integration)
         fi
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
           --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
+          --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
           "${canary_args[@]}" \
           --evidence-path artifacts/backend-cloud-run-traffic-restore.json || rollback_rc=$?
         exit "$rollback_rc"

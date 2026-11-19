@@ -15562,4 +15562,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'بازگشت به صفحه اصلی';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'خلاصه پس از پایان این گفتگو';
 }
