@@ -893,7 +893,8 @@ async def test_configured_lock_is_bypassed_by_open_and_manual_end(builder, monke
 
 
 @pytest.mark.asyncio
-async def test_configured_preview_reuses_outline_at_lock(builder, monkeypatch):
+@pytest.mark.parametrize('insert_before_preview', [False, True])
+async def test_configured_preview_reuses_outline_at_lock(builder, monkeypatch, insert_before_preview):
     committed, messages = builder
     monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
     start = datetime.now(timezone.utc) - timedelta(minutes=10)
@@ -901,7 +902,7 @@ async def test_configured_preview_reuses_outline_at_lock(builder, monkeypatch):
     raw = source(
         started_at=start,
         finished_at=end,
-        transcript_segments=[{'text': 'synthetic ' * 310, 'start': 0, 'end': 10}],
+        transcript_segments=[{'text': 'synthetic ' * 310, 'start': 4, 'end': 10}],
     )
     inputs = [{'r': raw}, {}, []]
     monkeypatch.setattr(store, 'load', lambda *a, **kw: inputs)
@@ -913,7 +914,10 @@ async def test_configured_preview_reuses_outline_at_lock(builder, monkeypatch):
 
     inputs[1] = {preview['id']: preview}
     inputs[2] = committed[-1][5]
-    raw['transcript_segments'].append({'text': 'revised tail', 'start': 11, 'end': 12})
+    if insert_before_preview:
+        raw['transcript_segments'].insert(0, {'text': 'revised prefix', 'start': 0, 'end': 2})
+    else:
+        raw['transcript_segments'].append({'text': 'revised tail', 'start': 11, 'end': 12})
     monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '301')
     await service.reconcile('synthetic')
     (locked,) = committed[-1][4]

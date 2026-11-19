@@ -595,7 +595,7 @@ def commit_projection(
     if len(open_ids) > 1:
         raise Conflict('multiple_open_conversations')
     planned_unlocked = {r['id'] for r in rows if r.get('v3_unlocked') and not r.get('deleted')}
-    deferred_wakes = preview_wakes(rows, recordings) if key == 'builder' and clear_pending else {}
+    deferred_wakes = preview_wakes(rows, recordings) if key == 'builder' else {}
     # One merge per pass, with all donor redirects in the survivor's batch.
     all_absorbed = [cid for row in rows for cid in row.get('_v3_absorbed', ())]
     if all_absorbed:
@@ -748,6 +748,10 @@ def commit_projection(
             # Identical copies (left by an earlier duplicate plan) collapse, so a bloated source shrinks
             # on its next commit instead of failing every pass at the document limit.
             claims = unique_claims(claims)
+            wake_at = deferred_wakes.get(rid) if final or not clear_pending else None
+            existing_pending_at = recording.get('v3_pending_since')
+            if not clear_pending and wake_at is not None and recording.get('v3_pending'):
+                wake_at = min(wake_at, existing_pending_at or wake_at)
             update = {
                 'claims': claims,
                 # A backfill conversion hides its donor as a recording in the first batch; until the
@@ -756,12 +760,13 @@ def commit_projection(
                 'v3_pending': (
                     rid in deferred_wakes
                     if final and clear_pending
-                    else bool(recording.get('v3_pending') or (recording.get('_v3_derive') and not final))
+                    else bool(wake_at or recording.get('v3_pending') or (recording.get('_v3_derive') and not final))
                 ),
                 'v3_pending_since': (
-                    deferred_wakes.get(rid)
+                    wake_at
                     if final and clear_pending
-                    else recording.get('v3_pending_since')
+                    else wake_at
+                    or existing_pending_at
                     or (datetime.now(timezone.utc) if recording.get('_v3_derive') and not final else None)
                 ),
                 'v3_audio_purge_pending': bool(recording.get('deleted_spans'))

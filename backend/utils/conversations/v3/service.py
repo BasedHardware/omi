@@ -247,7 +247,11 @@ async def reconcile(
                 return 'stored'
         # Keep a bounded cache; every fingerprint is checked even for finished stretches.
         saved = {row['fingerprint']: row for row in cached}
-        previews = {row['preview_key']: row for row in cached if 'preview_key' in row}
+        preview_prefix = f'{silence_seconds}:'
+        scoped_preview_keys = {f"{preview_prefix}{group['key']}" for group in groups} if custom_timing else set()
+        previews = {row['preview_key']: row for row in cached if row.get('preview_key', '').startswith(preview_prefix)}
+        unmatched_previews = {key: row for key, row in previews.items() if key not in scoped_preview_keys}
+        consumed_previews = set()
         outlines, cache = [], []
         background = await run_blocking(db_executor, context.outline_sources, uid, groups)
         for group in groups:
@@ -267,8 +271,13 @@ async def reconcile(
                 messages.append(('human', 'Preceding conversation: ' + previous['title'] + '\n' + previous['line']))
             fingerprint = context.cache_key(group, messages)
             hit = saved.get(fingerprint)
-            preview_key = f"{silence_seconds}:{group['key']}" if custom_timing else None
+            preview_key = f"{preview_prefix}{group['key']}" if custom_timing else None
             preview = previews.get(preview_key) if preview_key else None
+            if preview_key and preview is None and hit is None:
+                matched_key = outline.matching_preview(group, unmatched_previews)
+                if matched_key is not None:
+                    preview = unmatched_previews.pop(matched_key)
+                    consumed_previews.add(matched_key)
             preview_fields = {}
             if hit:
                 entries = hit['entries']
@@ -329,10 +338,12 @@ async def reconcile(
                 cache.append({'fingerprint': fingerprint, 'entries': entries, **preview_fields})
 
         if custom_timing and on_open:
-            scoped = {f"{silence_seconds}:{group['key']}" for group in groups}
             replaced = {row['fingerprint'] for row in cache}
+            replaced_previews = scoped_preview_keys | consumed_previews
             cache = [
-                row for row in cached if row.get('preview_key') not in scoped and row['fingerprint'] not in replaced
+                row
+                for row in cached
+                if row.get('preview_key') not in replaced_previews and row['fingerprint'] not in replaced
             ] + cache
 
         preferred = conversation_id if on_open and custom_timing else None

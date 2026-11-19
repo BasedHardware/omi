@@ -239,6 +239,18 @@ def test_preview_anchors_disambiguate_lines_with_the_same_clock(segment_ids):
     assert [entry['sections'][0]['first_line'] for entry in rebased] == [2, 3]
 
 
+def test_preview_skips_topic_whose_anchor_was_deleted():
+    window, _, _ = _locked_pair()
+    first, second = window['lines']
+    entries = [{'first_line': 1, 'title': 'Removed'}, {'first_line': 2, 'title': 'Remaining'}]
+    anchors = outline.preview_anchors({'lines': [first, second]}, entries)
+
+    [rebased] = outline.reuse_preview({'lines': [second]}, {'entries': entries, 'anchors': anchors})
+
+    assert rebased['first_line'] == 1
+    assert rebased['title'] == 'Remaining'
+
+
 def test_locked_refinement_keeps_overview_only_card_in_place():
     from utils.conversations.v3 import refinement
 
@@ -269,7 +281,14 @@ def test_locked_refinement_does_not_absorb_a_card_owning_open_loop_extractions()
 
 @pytest.mark.parametrize(
     'flag',
-    ['sync_relevance_user_kept', 'has_photos', 'folder_user_set', 'has_transcript_corrections', 'capture_group'],
+    [
+        'sync_relevance_user_kept',
+        'has_photos',
+        'folder_user_set',
+        'has_transcript_corrections',
+        'user_corrections',
+        'capture_group',
+    ],
 )
 def test_locked_refinement_preserves_user_managed_cards(flag):
     from utils.conversations.v3 import refinement

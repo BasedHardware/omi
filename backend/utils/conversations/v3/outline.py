@@ -196,15 +196,27 @@ def preview_anchors(group, entries):
     return {str(index): anchors[index - 1] for index in indexes if 1 <= index <= len(anchors)}
 
 
+def matching_preview(group, previews):
+    """A revision may move the stretch start. Reuse only an unambiguous anchored preview."""
+    if not previews:
+        return None
+    anchors = set(_line_anchors(group['lines']))
+    scores = {key: len(anchors.intersection(preview['anchors'].values())) for key, preview in previews.items()}
+    best = max(scores.values(), default=0)
+    matches = [key for key, score in scores.items() if score == best and best > 0]
+    return matches[0] if len(matches) == 1 else None
+
+
 def reuse_preview(group, preview):
     """Rebase the existing outline when revisions or late speech change line numbers."""
     positions = {anchor: index for index, anchor in enumerate(_line_anchors(group['lines']), 1)}
     moved = {int(index): positions.get(anchor) for index, anchor in preview['anchors'].items()}
     entries = []
     for entry in preview['entries']:
-        first = 1 if not entries else moved.get(entry['first_line'])
-        if first is None or (entries and first <= entries[-1]['first_line']):
+        position = moved.get(entry['first_line'])
+        if position is None or (entries and position <= entries[-1]['first_line']):
             continue
+        first = position if entries else 1
         sections = []
         for section in entry.get('sections') or ():
             index = _section_line(section)
@@ -217,7 +229,7 @@ def reuse_preview(group, preview):
         entry['sections'] = [
             section for section in entry['sections'] if section['first_line'] < following['first_line']
         ]
-    return entries
+    return entries or fallback(group)
 
 
 def messages(group, tz, *, cohesion=False, silence_gap=SILENCE):

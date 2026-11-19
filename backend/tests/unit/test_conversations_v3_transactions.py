@@ -673,3 +673,31 @@ def test_preview_deadline_keeps_a_durable_sweep_obligation_until_lock(strict):
     )
     assert strict.rows[R]['v3_pending'] is False
     assert strict.rows[R]['v3_pending_since'] is None
+
+
+@pytest.mark.parametrize('already_pending', [False, True])
+def test_scoped_preview_commit_sets_wake_without_delaying_pending_speech(strict, already_pending):
+    strict.rows[R] = {
+        'recording': True,
+        'v3_pending': already_pending,
+        'v3_pending_since': AT if already_pending else None,
+    }
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    raw = {'id': 'r', **strict.rows[R], '_v3_revision': 1}
+    due = AT + timedelta(minutes=30)
+    preview = {
+        'id': 'preview',
+        'status': 'processing',
+        'v3_unlocked': True,
+        'started_at': AT,
+        'finished_at': AT,
+        'v3_recording_ids': ['r'],
+        '_v3_preview_due_at': due,
+    }
+
+    store.commit_projection(
+        'synthetic', token, {'r': raw}, {}, [preview], [], clear_pending=False, firestore_client=strict
+    )
+
+    assert strict.rows[R]['v3_pending'] is True
+    assert strict.rows[R]['v3_pending_since'] == (AT if already_pending else due)

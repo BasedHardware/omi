@@ -42,6 +42,7 @@ def _eligible(row):
                 'sync_merged_into',
                 'v3_claims_transferred_to',
                 'external_data',
+                'user_corrections',
                 'apps_results',
                 'episode_id',
                 'client_processing',
