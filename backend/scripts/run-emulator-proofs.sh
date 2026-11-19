@@ -97,6 +97,7 @@ run_proof "Dream idle parking keeps every wakeup (park/acquire vs concurrent mar
   "$PYTHON" scripts/dream_park_race_emulator_test.py
 run_proof "summary task recovery, concurrency and expiry" \
   "$PYTHON" -m pytest \
+  tests/integration/test_summary_debt_repair_firestore.py \
   tests/integration/test_summary_task_promotion_emulator.py \
   tests/integration/test_candidate_accept_expiry_emulator.py -q
 run_proof "desktop screen sync frame request delivery, expiry and quota" \
