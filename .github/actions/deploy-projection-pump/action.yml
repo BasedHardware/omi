@@ -314,12 +314,20 @@ runs:
         # latestRevision, which the zero-traffic sidecar attachment refuses. Stop before
         # any mutation and name the one command that repairs it.
         if [[ "$count" == 1 ]]; then
-          following="$(gcloud run services describe backend-projection-pump \
-            --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" --format=json \
-            | jq -er '[.status.traffic[]? | select(.latestRevision == true and (.percent // 0) > 0)] | length')"
+          live="$(gcloud run services describe backend-projection-pump \
+            --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" --format=json)"
+          following="$(jq -er '[.status.traffic[]? | select(.latestRevision == true and (.percent // 0) > 0)] | length' <<<"$live")"
           if [[ "$following" != 0 ]]; then
             echo 'ERROR: backend-projection-pump traffic follows latestRevision (an earlier first deploy stopped before pinning).' >&2
             echo 'Pin it to its ready revision, then rerun: gcloud run services update-traffic backend-projection-pump --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=<status.latestReadyRevisionName>=100' >&2
+            exit 1
+          fi
+          # Requested and serving traffic must agree before anything changes: the
+          # pre-promotion snapshot records requested traffic, and a failed promotion
+          # restores it, so a divergence would roll back to a revision that is not serving.
+          routed='[.[]? | select((.percent // 0) > 0) | {revisionName, percent, latestRevision: (.latestRevision // false)}] | sort_by(.revisionName)'
+          if [[ "$(jq -ecS ".spec.traffic | $routed" <<<"$live")" != "$(jq -ecS ".status.traffic | $routed" <<<"$live")" ]]; then
+            echo 'ERROR: backend-projection-pump requested traffic differs from serving traffic; resolve it before deploying.' >&2
             exit 1
           fi
         fi

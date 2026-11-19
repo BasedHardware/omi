@@ -337,6 +337,8 @@ def test_pump_composite_refuses_latest_revision_traffic_before_any_mutation():
     ids = [s.get('id') for s in steps]
     detect = steps[ids.index('pump-service')]
     assert '.latestRevision == true' in detect['run']
+    assert 'requested traffic differs from serving traffic' in detect['run']
+    assert '.spec.traffic | $routed' in detect['run'] and '.status.traffic | $routed' in detect['run']
     assert 'exit 1' in detect['run'].split('following=', 1)[1]
     assert 'update-traffic backend-projection-pump' in detect['run']
     assert ids.index('pump-service') < ids.index('deploy-backend-projection-pump')
