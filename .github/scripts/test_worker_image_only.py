@@ -1441,7 +1441,7 @@ class WorkflowTests(unittest.TestCase):
     def test_registry_read_reachable_in_dry_run_is_time_bounded(self):
         # The mode holds prod-train; a hung registry read must not hold it for the whole job cap.
         step = self.step("Verify promoted worker digest")
-        self.assertLessEqual(step.get("timeout-minutes", 999), 10)
+        self.assertLessEqual(step.get("timeout-minutes", 999), 5)
 
     def test_dry_run_input_is_declared_and_validated(self):
         inputs = self.workflow[True]["workflow_dispatch"]["inputs"] if True in self.workflow else self.workflow["on"]["workflow_dispatch"]["inputs"]
