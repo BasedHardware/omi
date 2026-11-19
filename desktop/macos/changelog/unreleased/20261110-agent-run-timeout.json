@@ -1,3 +1,0 @@
-{
-  "change": "Fixed agent runs that stall on a provider or silent subprocess hanging forever by stopping them at a configurable deadline"
-}
