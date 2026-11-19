@@ -187,3 +187,17 @@ def test_sort_score_puts_home_flip_above_grouping_above_content():
     grouping = next(g for g in _view()['groups'] if g['kind'] == 'merge')
     cosmetic = next(g for g in _view()['groups'] if g['kind'] == 'cosmetic')
     assert home['score'] > grouping['score'] > content['score'] > cosmetic['score'] > 0
+
+
+def test_worth_a_look_is_what_the_owner_can_see():
+    from testing.pipeline_lab.baseline.compare import _tags
+
+    hidden = {'production': 0, 'replay': 0}
+    on_home = {'production': 1, 'replay': 1}
+    rewritten = {'overview': {'class': 'substantive'}}
+    assert 'worth' not in _tags('split', {}, hidden)  # regrouping that stays hidden
+    assert 'worth' not in _tags('content', rewritten, hidden)  # rewrite nobody sees on Home
+    assert 'worth' in _tags('content', {'tasks': {'class': 'substantive'}}, hidden)  # tasks surface anyway
+    assert 'worth' in _tags('split', {}, on_home)
+    assert 'worth' in _tags('content', rewritten, on_home)
+    assert 'worth' in _tags('content', {}, {'production': 1, 'replay': 0})  # dropped off Home

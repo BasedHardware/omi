@@ -694,7 +694,16 @@ def _tags(kind: str, fields: Mapping[str, Mapping[str, Any]], home: Mapping[str,
         tags.append('cosmetic')
     if kind == 'same':
         tags.append('same')
-    worth = bool({'home_dropped', 'home_added'} & set(tags)) or kind in GROUPING_KINDS or bool(substantive)
+    # Worth a look = what can change what the owner sees: a Home flip; tasks, memories, pushes or
+    # events (they surface outside Home); or a regrouping / content change on a conversation that is
+    # on Home on either side. Regrouping and rewrites that stay hidden on both sides are reachable
+    # under "Everything" (on the first real day they were 60+ of 76 groups).
+    on_home = bool(home['production'] or home['replay'])
+    worth = (
+        bool({'home_dropped', 'home_added'} & set(tags))
+        or bool(substantive & {'events', 'tasks', 'memories', 'pushes', 'discarded'})
+        or (on_home and (kind in GROUPING_KINDS or bool(substantive)))
+    )
     if worth:
         tags.insert(0, 'worth')
     return tags
