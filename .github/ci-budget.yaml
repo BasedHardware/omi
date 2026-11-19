@@ -1239,6 +1239,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_backend_auto_dev.yml/admit_source": {
+      "budget_p50_minutes": 5,
+      "display_name": "admit_source",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": "(needs.scope.outputs.applies == 'true' || needs.scope.outputs.workerd == 'true') && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "scope",
+      "owner": "CI maintainers",
+      "rationale": "SCA-3174 splits GitHub-only source admission from Firestore and dev registry authentication. Conservative five-minute placeholder for the non-PR job.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "gcp_backend_auto_dev.yml/deploy": {
       "budget_p50_minutes": 5,
       "display_name": "deploy",
@@ -1265,12 +1283,15 @@
       "display_name": "firestore_readiness",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
-      "if": "(needs.scope.outputs.applies == 'true' || needs.scope.outputs.workerd == 'true') && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository",
+      "if": "needs.scope.outputs.applies == 'true'",
       "matrix": {},
       "matrix_size": 1,
-      "needs": "scope",
+      "needs": [
+        "scope",
+        "admit_source"
+      ],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-11-01 keyless index check: the gate now mints an OIDC token through the dev deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. 2026-11-19 this gate also runs for backend-go-only changes so image publishing is pinned to an admitted SHA; forecast one eligible daily release run (previously unbudgeted).",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-11-01 keyless index check: the gate now mints an OIDC token through the dev deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. SCA-3174 keeps the gate on backend service deployments after shared GitHub-only SHA admission. Forecast one eligible daily release run.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1288,7 +1309,7 @@
       "matrix_size": 1,
       "needs": [
         "scope",
-        "firestore_readiness"
+        "admit_source"
       ],
       "owner": "Omi backend maintainers",
       "rationale": "2026-11-19 SCA-3174: publish an amd64 workerd image from the admitted source SHA to the dev registry using dev Workload Identity; no service deployment. Conservative 5-minute p50 placeholder; workflow_run is non-PR, so PR frequency is zero.",

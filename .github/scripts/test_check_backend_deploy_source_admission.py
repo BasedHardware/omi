@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -438,17 +440,58 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.AUTO_WORKFLOW_PATH,
-            "    if: needs.scope.outputs.applies == 'true'\n",
-            "    if: always()\n",
+            "  deploy:\n    needs: [scope, firestore_readiness]\n    if: needs.scope.outputs.applies == 'true'\n",
+            "  deploy:\n    needs: [scope, firestore_readiness]\n    if: always()\n",
         )
         self.assertIn("auto backend deploy must run only for backend changes", CHECKER.validate(root))
+
+    def test_workerd_scope_keeps_workflow_validation_out_of_backend_deploy(self) -> None:
+        workflow = yaml.safe_load((ROOT / CHECKER.AUTO_WORKFLOW_PATH).read_text())
+        scope_script = workflow["jobs"]["scope"]["steps"][1]["run"]
+        git_fixture = """git() {
+  case "$1" in
+    cat-file) return 0 ;;
+    rev-parse) printf 'parent\n' ;;
+    diff) printf '%s\n' "$CHANGED_FILES" ;;
+    *) return 1 ;;
+  esac
+}
+"""
+        workerd_changes = (
+            "backend-go/cmd/workerd/main.go\n"
+            ".github/workflows/gcp_backend_auto_dev.yml\n"
+            "backend/scripts/runtime_env_validation/workflows.py\n"
+            "backend/tests/unit/test_workflow_contracts.py"
+        )
+        for changed_files, expected in (
+            (workerd_changes, "workerd=true\napplies=false\n"),
+            (workerd_changes + "\nbackend/main.py", "workerd=true\napplies=true\n"),
+            ("backend/tests/unit/test_workflow_contracts.py", "workerd=false\napplies=true\n"),
+        ):
+            with self.subTest(changed_files=changed_files), tempfile.TemporaryDirectory() as temp:
+                output = Path(temp) / "output"
+                subprocess.run(
+                    ["bash", "-c", git_fixture + scope_script],
+                    check=True,
+                    capture_output=True,
+                    env={
+                        **os.environ,
+                        "RELEASE_SHA": SHA,
+                        "CHANGED_FILES": changed_files,
+                        "GITHUB_OUTPUT": str(output),
+                        "GITHUB_STEP_SUMMARY": str(Path(temp) / "summary"),
+                    },
+                )
+                self.assertEqual(output.read_text(), expected)
 
     def test_workerd_publish_is_admitted_dev_only_and_never_deploys(self) -> None:
         cases = (
             (
                 "mutable source checkout",
-                "ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}",
-                "ref: main",
+                "name: Checkout admitted workerd source\n        uses: actions/checkout@v7\n"
+                "        with:\n          ref: ${{ needs.admit_source.outputs.admitted_sha }}",
+                "name: Checkout admitted workerd source\n        uses: actions/checkout@v7\n"
+                "        with:\n          ref: main",
                 "workerd publishing must check out the admitted source SHA",
             ),
             (
@@ -473,18 +516,6 @@ class WorkflowContractTests(unittest.TestCase):
     def test_auto_workflow_rejects_steps_outside_the_source_admission_sequence(self) -> None:
         cases = (
             (
-                "admitted source checkout",
-                "Checkout admitted Firestore source",
-                "Resolve and verify the newest proven main source",
-                "automatic release-proof freshness validation must run before admitted-source checkout or execution",
-            ),
-            (
-                "Firestore readiness gate before admission",
-                "Verify serving Firestore indexes",
-                "Resolve and verify the newest proven main source",
-                "automatic release-proof freshness validation must run before the Firestore readiness gate",
-            ),
-            (
                 "Firestore readiness gate before admitted source checkout",
                 "Verify serving Firestore indexes",
                 "Checkout admitted Firestore source",
@@ -502,25 +533,7 @@ class WorkflowContractTests(unittest.TestCase):
                 )
                 self.assertIn(expected, CHECKER.validate(root))
 
-    def test_auto_workflow_scopes_admission_steps_to_readiness_and_rejects_duplicates(self) -> None:
-        root = self.fixture_root()
-        self.move_step_before(
-            root,
-            CHECKER.AUTO_WORKFLOW_PATH,
-            "Checkout admitted Firestore source",
-            "Resolve and verify the newest proven main source",
-        )
-        self.mutate(
-            root,
-            CHECKER.AUTO_WORKFLOW_PATH,
-            "  firestore_readiness:\n",
-            "  dummy:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Resolve and verify the newest proven main source\n        run: true\n\n  firestore_readiness:\n",
-        )
-        self.assertIn(
-            "automatic release-proof freshness validation must run before admitted-source checkout or execution",
-            CHECKER.validate(root),
-        )
-
+    def test_auto_workflow_rejects_duplicate_admission_steps(self) -> None:
         root = self.fixture_root()
         self.mutate(
             root,

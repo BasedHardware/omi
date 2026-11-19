@@ -91,15 +91,8 @@ jobs:
           # never deploys. Admission now resolves the newest eligible commit
           # instead, which subsumes supersession without that hole.
           if ! parent_sha="$(git rev-parse "${RELEASE_SHA}^" 2>/dev/null)"; then
-            # An unavailable parent is uncertain scope: retain the existing
-            # exact-SHA admission and deployment path rather than skip.
-            echo "applies=true" >> "$GITHUB_OUTPUT"
-            echo "workerd=true" >> "$GITHUB_OUTPUT"
-            {
-              echo "### Backend development build scope"
-              echo "In scope: could not resolve the triggering commit parent; retain the admitted backend and workerd paths."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            echo "Cannot determine backend scope without the triggering commit parent." >&2
+            exit 1
           fi
 
           changed_files="$(git diff --name-only "$parent_sha" "$RELEASE_SHA")"
@@ -107,6 +100,9 @@ jobs:
           if grep -Eq '^backend-go/' <<<"$changed_files"; then
             echo "workerd=true" >> "$GITHUB_OUTPUT"
             echo "Workerd image publishing is in scope for this admitted source SHA."
+            # Go changes may carry workflow validation and tests. Those changes
+            # alone do not authorize a backend service rollout.
+            changed_files="$(sed '/^backend\/tests\//d; /^backend\/scripts\/runtime_env_validation\/workflows\.py$/d' <<<"$changed_files")"
           else
             echo "workerd=false" >> "$GITHUB_OUTPUT"
           fi
@@ -126,7 +122,7 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  firestore_readiness:
+  admit_source:
     # A workflow_run can access deployment credentials, so never run source
     # code until the first completed proof identifies the exact current commit
     # on this repository's main branch. Every later checkout and release vector
@@ -139,17 +135,9 @@ jobs:
       github.event.workflow_run.run_attempt == 1 &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
-    environment: development
     permissions:
-      # actions:read lists Release Eligibility proofs, exactly as the manual
-      # deploy lane's readiness job already does.
       actions: 'read'
       contents: 'read'
-      # Keyless index check (2026-11-01): the readiness composite now mints its
-      # OIDC token through the dev deploy pool, so this boundary job needs
-      # id-token: write. The token still impersonates only omi-ci-index-check@
-      # (ciFirestoreIndexReader), never the deployer.
-      id-token: 'write'
     runs-on: ubuntu-latest
     outputs:
       admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
@@ -227,10 +215,21 @@ jobs:
             --trigger-is-ancestor-of-sha "$trigger_is_ancestor_of_sha"
           printf 'admitted_sha=%s\n' "$admitted_sha" >> "$GITHUB_OUTPUT"
 
+  firestore_readiness:
+    needs: [scope, admit_source]
+    if: needs.scope.outputs.applies == 'true'
+    environment: development
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    outputs:
+      admitted_sha: ${{ needs.admit_source.outputs.admitted_sha }}
+    steps:
       - name: Checkout admitted Firestore source
         uses: actions/checkout@v7
         with:
-          ref: ${{ steps.admitted_source.outputs.admitted_sha }}
+          ref: ${{ needs.admit_source.outputs.admitted_sha }}
 
       - name: Checkout immutable Firestore gate controls
         uses: actions/checkout@v7
@@ -247,7 +246,7 @@ jobs:
       - name: Verify serving Firestore indexes
         uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
         with:
-          source_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
+          source_sha: ${{ needs.admit_source.outputs.admitted_sha }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
           service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
@@ -293,7 +292,7 @@ jobs:
 
   publish_workerd:
     name: Build and publish workerd development image
-    needs: [scope, firestore_readiness]
+    needs: [scope, admit_source]
     if: needs.scope.outputs.workerd == 'true'
     environment: development
     permissions:
@@ -306,7 +305,7 @@ jobs:
       - name: Checkout admitted workerd source
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          ref: ${{ needs.admit_source.outputs.admitted_sha }}
           persist-credentials: false
 
       - name: Google Auth
@@ -326,7 +325,7 @@ jobs:
       - name: Build and publish admitted workerd image
         id: publish
         env:
-          ADMITTED_SHA: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          ADMITTED_SHA: ${{ needs.admit_source.outputs.admitted_sha }}
         run: |
           set -euo pipefail
           if [[ ! "$ADMITTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then

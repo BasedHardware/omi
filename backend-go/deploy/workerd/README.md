@@ -21,8 +21,9 @@ selected dev GKE context.
    a main SHA includes `backend-go/` changes, source admission resolves the newest eligible
    main SHA and the job builds from that exact admitted SHA. It pushes
    `gcr.io/based-hardware-dev/workerd:<short-sha>` with the development Workload Identity, and
-   prints the immutable digest in the job summary. The job does not deploy or change dev
-   services. Use that digest as `WORKERD_DIGEST`.
+   prints the immutable digest in the job summary. A workerd-only change runs GitHub
+   source admission and the dev registry publish. The serving Firestore check and backend
+   deploy require their own backend scope. Use the reported digest as `WORKERD_DIGEST`.
 
    Until the workflow job is available, the following local build and push is an interim path
    only: use the authorized dev registry identity to run
