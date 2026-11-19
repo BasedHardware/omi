@@ -582,6 +582,13 @@ class WorkflowContractTests(unittest.TestCase):
             "projection pump deployment must pass the admitted SHA to its composite action", CHECKER.validate(root)
         )
 
+        root = self.fixture_root()
+        path = root / CHECKER.MANUAL_WORKFLOW_PATH
+        text = path.read_text(encoding="utf-8")
+        renamed = text.replace("  deploy-projection-pump:\n", "  deploy-projection-pump-renamed:\n", 1)
+        path.write_text(renamed, encoding="utf-8")
+        self.assertIn("manual backend deploy is missing its projection pump deployment job", CHECKER.validate(root))
+
     def test_manual_workflow_rejects_boundary_dependency_bypasses(self) -> None:
         root = self.fixture_root()
         self.mutate(

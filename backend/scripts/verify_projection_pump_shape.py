@@ -4,8 +4,8 @@
 Offline evaluation of a ``gcloud run services describe --format=json`` document
 and its ``get-iam-policy`` document, written by the deploy-projection-pump
 composite before traffic moves. It fails when the service is reachable from
-outside the VPC, has a public invoker, is not fixed at four always-allocated
-instances, or its candidate revision does not carry the dark batch settings the
+outside the VPC, has any invoker, is not fixed at four always-allocated 2 vCPU /
+4Gi instances, or its candidate revision does not carry the dark batch settings the
 rendered runtime manifest declares. It never calls a cloud API itself.
 """
 
@@ -20,6 +20,9 @@ from typing import Any, Mapping
 SERVICE = 'backend-projection-pump'
 FIXED_INSTANCES = '4'
 TIMEOUT_SECONDS = 3600
+CPU_LIMIT = '2'
+MEMORY_LIMIT = '4Gi'
+INVOKER_ROLE = 'roles/run.invoker'
 PUBLIC_MEMBERS = frozenset({'allUsers', 'allAuthenticatedUsers'})
 # The pump must never run the serving loops; the pump flag and ledger identity follow the manifest.
 ALWAYS_FALSE_ENV = ('BATCH_PIPELINE_SERVING_ENABLED',)
@@ -30,13 +33,15 @@ def _mapping(value: object) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
-def _ingress_env(template_spec: Mapping[str, Any]) -> dict[str, str]:
+def _application(template_spec: Mapping[str, Any]) -> Mapping[str, Any]:
     containers = [item for item in template_spec.get('containers') or [] if isinstance(item, Mapping)]
     application = [item for item in containers if item.get('name') != 'collector']
-    if len(application) != 1:
-        return {}
+    return application[0] if len(application) == 1 else {}
+
+
+def _ingress_env(template_spec: Mapping[str, Any]) -> dict[str, str]:
     env: dict[str, str] = {}
-    for entry in application[0].get('env') or []:
+    for entry in _application(template_spec).get('env') or []:
         if isinstance(entry, Mapping) and isinstance(entry.get('name'), str) and 'valueFrom' not in entry:
             env[entry['name']] = str(entry.get('value', ''))
     return env
@@ -79,6 +84,9 @@ def evaluate(
         public = sorted(members & PUBLIC_MEMBERS)
         if public:
             errors.append(f'IAM role {_mapping(binding).get("role")} grants public members {public}')
+        # Nothing calls this service: any invoker, public or private, breaks the contract.
+        if _mapping(binding).get('role') == INVOKER_ROLE and members:
+            errors.append(f'{INVOKER_ROLE} must have no members, found {sorted(members)}')
     if template_metadata.get('name') != revision:
         errors.append(f'template revision is not {revision}')
     for key in ('autoscaling.knative.dev/minScale', 'autoscaling.knative.dev/maxScale'):
@@ -92,6 +100,9 @@ def evaluate(
         errors.append('CPU must be always allocated (cpu-throttling false)')
     if template_spec.get('timeoutSeconds') != TIMEOUT_SECONDS:
         errors.append(f'timeoutSeconds must be {TIMEOUT_SECONDS}')
+    limits = _mapping(_mapping(_application(template_spec).get('resources')).get('limits'))
+    if str(limits.get('cpu', '')) != CPU_LIMIT or str(limits.get('memory', '')) != MEMORY_LIMIT:
+        errors.append(f'application container limits must be cpu {CPU_LIMIT} and memory {MEMORY_LIMIT}')
     env = _ingress_env(template_spec)
     if not env:
         errors.append('candidate revision has no unambiguous application container env')

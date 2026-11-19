@@ -353,6 +353,7 @@ def _live(**changes):
                     'containers': [
                         {
                             'name': PROJECTION_PUMP,
+                            'resources': {'limits': {'cpu': '2', 'memory': '4Gi'}},
                             'env': [
                                 {'name': 'BATCH_PIPELINE_SERVING_ENABLED', 'value': 'false'},
                                 {'name': 'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'value': 'false'},
@@ -372,7 +373,7 @@ def _live(**changes):
 
 
 MANIFEST_ENV = {'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED': 'false', 'FIRESTORE_READ_LEDGER_SERVICE': PROJECTION_PUMP}
-PRIVATE = {'bindings': [{'role': 'roles/run.invoker', 'members': ['serviceAccount:x@y.iam.gserviceaccount.com']}]}
+PRIVATE = {'bindings': [{'role': 'roles/run.viewer', 'members': ['serviceAccount:x@y.iam.gserviceaccount.com']}]}
 
 
 def _evaluate(service, iam=PRIVATE, env=MANIFEST_ENV):
@@ -397,6 +398,10 @@ def _set_env(name, value):
     return mutate
 
 
+def _set_limit(name, value):
+    return lambda s: s['spec']['template']['spec']['containers'][0]['resources']['limits'].__setitem__(name, value)
+
+
 @pytest.mark.parametrize(
     'mutate, fragment',
     [
@@ -411,6 +416,9 @@ def _set_env(name, value):
         (_set_env('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'true'), 'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED'),
         (_set_env('FIRESTORE_READ_LEDGER_SERVICE', 'backend-integration'), 'FIRESTORE_READ_LEDGER_SERVICE'),
         (lambda s: s['spec']['template']['spec']['containers'].append({'name': 'extra'}), 'application container'),
+        (_set_limit('cpu', '1'), 'limits'),
+        (_set_limit('memory', '2Gi'), 'limits'),
+        (lambda s: s['spec']['template']['spec']['containers'][0].pop('resources'), 'limits'),
     ],
 )
 def test_shape_readback_refuses_drift(mutate, fragment):
@@ -422,6 +430,11 @@ def test_shape_readback_refuses_drift(mutate, fragment):
 def test_shape_readback_refuses_a_public_invoker(member):
     iam = {'bindings': [{'role': 'roles/run.invoker', 'members': [member]}]}
     assert any('public members' in error for error in _evaluate(_live(), iam=iam))
+
+
+def test_shape_readback_refuses_a_private_invoker():
+    iam = {'bindings': [{'role': 'roles/run.invoker', 'members': ['serviceAccount:x@y.iam.gserviceaccount.com']}]}
+    assert any('roles/run.invoker must have no members' in error for error in _evaluate(_live(), iam=iam))
 
 
 def test_shape_readback_refuses_a_manifest_that_names_another_ledger():

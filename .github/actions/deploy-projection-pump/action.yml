@@ -72,7 +72,9 @@ runs:
       uses: actions/checkout@v7
       with:
         ref: ${{ inputs.admitted_sha }}
-        fetch-depth: 1
+        # Full history: build-only publishes the full-history abbreviation, and a
+        # shallow clone can shorten an ambiguous SHA to a different tag.
+        fetch-depth: 0
 
     - name: Install immutable workflow validation source and deploy-control scripts
       shell: bash
@@ -289,6 +291,7 @@ runs:
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
           --check-workflows \
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          --cloud-run-service backend-projection-pump \
           --cloud-run-state "$RUNNER_TEMP/backend-runtime-env-state.json"
 
     # A listing distinguishes a fresh service from an API/auth failure, which must stop

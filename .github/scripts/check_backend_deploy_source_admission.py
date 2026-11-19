@@ -655,7 +655,9 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
         if contract.count('--commit-sha "${{ inputs.admitted_sha }}"') != 3:
             errors.append("manual deployment must bind every release vector to the admitted SHA")
     pump_job = mapping_block(text, "deploy-projection-pump", 2)
-    if pump_job is not None:
+    if pump_job is None:
+        errors.append("manual backend deploy is missing its projection pump deployment job")
+    else:
         require_fragment(
             errors,
             pump_job,
