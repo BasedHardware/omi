@@ -77,7 +77,7 @@ def test_old_takeover_ignores_shared_cursor_and_handback_retains_legacy_progress
     assert not row.get('scan_epoch') and row.get('run_token') is None
 
 
-def test_old_completion_has_no_rearm_fence_so_release_floor_is_required(versions):
+def test_legacy_completion_succeeds_after_rearm_with_same_dispatch_generation(versions):
     v = versions
     row = v.client.rows[(jobs.COLLECTION, v.leader)]
     row['lease_until'] = jobs._now() - timedelta(seconds=1)

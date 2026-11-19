@@ -270,10 +270,14 @@ void main() {
       await tester.ensureVisible(find.byKey(const Key('too_old_download')));
       await tester.pumpAndSettle();
       expect(find.text('Download Audio'), findsOneWidget);
+      // The copy names no day count: the server lookback is 60 days in production, 30 on dev.
       expect(
           find.text(
-              "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here."),
+              "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here."),
           findsOneWidget);
+      for (final locale in AppLocalizations.supportedLocales) {
+        expect(lookupAppLocalizations(locale).syncTooOldExplanation, isNot(matches(RegExp(r'\d'))), reason: '$locale');
+      }
       await _frame(tester, scale == 1 ? '001-mobile-ios-too-old-recording' : '002-mobile-ios-too-old-larger-text');
       debugDefaultTargetPlatformOverride = null;
     });

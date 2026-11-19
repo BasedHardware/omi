@@ -75,9 +75,12 @@ and makes it due. The existing reconciler redrives ordinary per-conversation
 execution. A delivery observing an off-state group can perform this handback too.
 No member completes merely because handback or an HTTP acknowledgement happened.
 
-Release must enforce the workspace rollback floor for every purge consumer.
+Release must enforce the rollback floor for every purge consumer. The workspace
+tooling must read the authoritative `backend/deploy/release_floor.json` from
+`BasedHardware/omi` main through the GitHub contents API and refuse admission
+when the policy cannot be loaded or validated.
 Use the floor-guarded workspace tooling for deploy and rollback admission. For
-other manual traffic moves, verify the target against the workspace floor first.
+other manual traffic moves, verify the target against the product floor first.
 The direct backend workflow checks the floor from product main for the requested
 release, traffic repair, integration-only canary rollback, and failed-promotion
 traffic restoration. Supply a floor-qualified retained revision when dispatching
@@ -138,3 +141,25 @@ schema or replacement coordination service. Paged scan collections, TTL, new tas
 protocols and historical backfills remain unnecessary: work stays on existing
 obligations/journals. Live sharing factor, read attribution, revision mix and
 savings remain canary questions.
+
+## Remainder audit
+
+Run `scripts/audit_conversation_purge_remainders.py` from the backend with
+read-only ADC and explicit `--project`, `--start` and `--end`. The script
+compares the half-open deletion-intent window with the immediately preceding
+window of equal length. It checks current state. A tombstone's `deleted_at`
+survives retries, and absence of an obligation gives no completion timestamp
+or execution-path attribution. Firestore needs a collection-group index on
+`deleted_conversations.deleted_at`. An unavailable index prevents enumeration.
+Missing coverage is reported separately from observed remainder counts.
+Content-free result ordering edges are an intended part of the purge contract.
+Associations discarded with successful bindings and the Postgres mirror
+require independent evidence.
+
+The worker emits `conversation_batch_purge_owner_scan_audit` at WARNING
+after a committed seal, completion, or handback. Join group events on
+`epoch_hash` and sum `members` for groups with a completed outcome. Handback
+counts describe the sealed group, including any members already taken over.
+These records give group and member totals. They carry no member identities.
+A process exit after the transaction commits and before logging, or a legacy
+takeover after lease expiry, can leave a seal without a terminal event.

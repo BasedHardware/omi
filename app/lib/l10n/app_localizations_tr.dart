@@ -15487,7 +15487,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15571,4 +15571,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Sunucunun bildirdiği işler';
+
+  @override
+  String get finishNothingToProcess => 'Henüz işlenecek bir şey yok.';
+
+  @override
+  String get finishStillProcessing => 'Hâlâ işleniyor. Ana sayfada görünecek.';
+
+  @override
+  String get finishBackToHome => 'Ana Sayfaya Dön';
 }

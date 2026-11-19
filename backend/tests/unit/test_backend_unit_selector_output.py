@@ -194,3 +194,30 @@ def test_runtime_composition_selects_render_and_binding_contracts(selector, sour
     assert 'tests/unit/test_cross_service_deploy_contract.py' in selected
     assert 'tests/unit/test_render_backend_runtime_env.py' in selected
     assert 'tests/unit/test_render_gke_backend_config.py' in selected
+
+
+ISOLATED_ROUTER_TESTS = (
+    'tests/unit/test_conversations_date_range_validation.py',
+    'tests/unit/test_conversations_merge_duplicate_guard.py',
+    'tests/unit/test_dev_api_lock_bypass.py',
+    'tests/unit/test_lock_bypass_fixes.py',
+    'tests/unit/test_recovery_rule_skip.py',
+    'tests/unit/test_client_processing_finalize.py',
+    'tests/unit/test_process_conversation_duplicate_capture.py',
+)
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        'backend/database/conversations_v3.py',
+        'backend/database/conversations_v3_processing.py',
+        'backend/database/home_feed_writer.py',
+        'backend/database/home_feed_fields.py',
+    ],
+)
+def test_v3_chain_changes_select_isolated_router_tests(selector, source):
+    """Pins the #25739 guard: these fresh-loading router tests broke main without the import graph selecting them."""
+    assert set(ISOLATED_ROUTER_TESTS) <= set(selector['all_tests'])
+    selected, _reason = selector['tests_for_changed_paths']([source], selector['all_tests'])
+    assert set(ISOLATED_ROUTER_TESTS) <= set(selected)

@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import time
 from contextlib import contextmanager
+from hashlib import sha256
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Iterator
 from uuid import uuid4
@@ -23,7 +24,12 @@ from config.policy.kill_switches import kill_switch
 from database import conversation_batch_purge_jobs as jobs
 from database import legal_holds, rpc_deadline
 from database._client import get_firestore_client, run_transactional
-from database.batch_pipeline_conversation_purge import PurgeCheckpointed, PurgeIntentMissing, purge_conversations
+from database.batch_pipeline_conversation_purge import (
+    ArtifactUploadPending,
+    PurgeCheckpointed,
+    PurgeIntentMissing,
+    purge_conversations,
+)
 from database.batch_pipeline_purge import NAMESPACES
 from utils.observability.fallback import record_fallback
 
@@ -31,6 +37,16 @@ logger = logging.getLogger(__name__)
 MAX_MEMBERS = 16
 ASSOCIATION_CHUNK = 100
 SWITCH = 'CONVERSATION_BATCH_PURGE_COALESCING_ENABLED'
+
+
+def _audit_group(kind: str, outcome: str, epoch: str, members: int) -> None:
+    logger.warning(
+        'event=conversation_batch_purge_owner_scan_audit kind=%s outcome=%s members=%d epoch_hash=%s',
+        kind,
+        outcome,
+        members,
+        sha256(epoch.encode()).hexdigest(),
+    )
 
 
 def _now() -> datetime:
@@ -101,7 +117,7 @@ def handback(client: Any, leader: str, epoch: str, token: str) -> bool:
         row = ref.get(transaction=transaction).to_dict() or {}
         scan: dict[str, Any] = row.get('owner_scan') or {}
         if scan.get('epoch') != epoch or scan.get('token') != token:
-            return False
+            return 0
         rows = _read_members(client, transaction, scan)
         for job, member in scan['members'].items():
             current = rows[job]
@@ -115,10 +131,11 @@ def handback(client: Any, leader: str, epoch: str, token: str) -> bool:
             if owned:
                 changes.update(run_token=None, lease_generation=None, lease_until=None, due_at=_now())
             transaction.update(_ref(client, job), changes)
-        return True
+        return len(scan['members'])
 
     changed = _in_transaction(client, body)
     if changed:
+        _audit_group('terminal', 'handed_back', epoch, changed)
         record_fallback(
             component='other',
             from_mode='coalesced_owner_scan',
@@ -127,7 +144,7 @@ def handback(client: Any, leader: str, epoch: str, token: str) -> bool:
             outcome='degraded',
             log=logger,
         )
-    return changed
+    return bool(changed)
 
 
 def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] | None]:
@@ -226,7 +243,10 @@ def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] 
             transaction.update(_ref(client, key), changes)
         return 'run', scan
 
-    return _in_transaction(client, body)
+    status, scan = _in_transaction(client, body)
+    if status == 'run' and scan is not None:
+        _audit_group('sealed', 'sealed', epoch, len(scan['members']))
+    return status, scan
 
 
 def _resume(client: Any, leader: str, generation: int, observed: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
@@ -414,6 +434,7 @@ class ScanProgress(jobs.RunProgress):
                 'held': jobs.HOLD_RECHECK_SECONDS,
                 'failed': jobs.REDRIVE_SECONDS,
                 'busy': jobs.BUSY_RETRY_SECONDS,
+                'artifact_pending': jobs.ARTIFACT_RETRY_SECONDS,
                 'checkpointed': 0,
             }[outcome]
             # Only the leader becomes dispatchable. Followers retain ordinary,
@@ -428,7 +449,7 @@ class ScanProgress(jobs.RunProgress):
                     'lease_until': None,
                     'due_at': _now() + timedelta(seconds=wait),
                     'last_outcome': outcome,
-                    **({'attempts': 0} if outcome in {'checkpointed', 'busy'} else {}),
+                    **({'attempts': 0} if outcome in {'checkpointed', 'busy', 'artifact_pending'} else {}),
                 },
             )
             return False
@@ -501,6 +522,8 @@ def run_job(
             return 'superseded'
         except legal_holds.LegalHoldActive:
             return hand_off('held')
+        except ArtifactUploadPending:
+            return hand_off('artifact_pending')
         except PurgeCheckpointed:
             return hand_off('checkpointed')
         except BaseException as error:
@@ -521,4 +544,5 @@ def run_job(
                     return 'busy'
             raise
         logger.info('event=conversation_batch_purge_owner_scan_completed members=%d count=1', len(scan['members']))
+        _audit_group('terminal', 'completed', scan['epoch'], len(scan['members']))
         return 'purged'

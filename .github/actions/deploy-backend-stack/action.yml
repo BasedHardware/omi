@@ -1740,8 +1740,15 @@ runs:
         ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev' && (failure() || cancelled()) && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure')) }}
       shell: bash
       run: |
+        set -euo pipefail
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
           --snapshot artifacts/dev-backend-cloud-run-pre-promotion-traffic-snapshot.json \
+          --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
           --evidence-path artifacts/dev-backend-cloud-run-traffic-restore.json
 
     - name: Restore Cloud Run traffic snapshot after failed promotion

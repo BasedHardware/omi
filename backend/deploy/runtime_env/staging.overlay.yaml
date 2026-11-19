@@ -120,6 +120,8 @@ cloud_run:
     JOBSTORE_PG_HOST: 172.20.207.3
     JOBSTORE_PG_DATABASE: jobstore_staging
     JOBSTORE_PG_USER: staging-runtime@based-hardware-dev.iam
+    # Prod stages retirement off on backend-integration until its 0010 readback; staging keeps the default.
+    JOBSTORE_RETIREMENT_ENABLED: 'on'
   # Queue names: every *_QUEUE value is mapped prod name -> staging name; unmapped prod queues fail compose.
   queue_map:
     sync-jobs: staging-sync-jobs
@@ -131,6 +133,7 @@ cloud_run:
     enrichment-fresh: staging-enrichment-fresh
     provider-stt: staging-provider-stt
     conversations-v3: staging-conversations-v3
+    conversations-v3-backfill: staging-conversations-v3-backfill
     conversation-finalization: staging-conversation-finalization
     audio-merge: staging-audio-merge
     account-deletion: staging-account-deletion

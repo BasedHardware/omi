@@ -111,6 +111,45 @@ FIELD_SITES = {
             ),
         ),
     ],
+    # Reviewed backfill re-derive: resets a prior backfilled copy to an open window before the lease-fenced commit.
+    'database/conversations_v3.py': [
+        (
+            '_rederive_prior',
+            'status',
+            "'in_progress'",
+            (
+                'discarded',
+                'manual_end',
+                'status',
+                'structured',
+                'summary_covers_through',
+                'title_locked',
+                'v3_notes_written',
+                'v3_process_attempts',
+                'v3_process_failed',
+                'v3_process_failure_reason',
+                'v3_process_fingerprint',
+                'v3_rewrites',
+            ),
+        )
+    ],
+    # Reviewed backfill run ledger: run and partition status, not a conversation lifecycle field.
+    'database/conversations_v3_backfill_runs.py': [
+        ('create_run.create', 'status', "'planned'", ('created_at', 'run_id', 'status', 'updated_at')),
+        ('update_run.update', 'status', 'status', ('status',)),
+    ],
+    # Reviewed backfill run ledger: partition plan/step status and operator results, not conversation fields.
+    'utils/conversations/v3/backfill.py': [
+        ('plan_partitions', 'status', "'pending'", ('documents', 'forced_cut', 'since', 'status', 'until')),
+        ('plan_partitions', 'status', "'pending'", ('documents', 'forced_cut', 'since', 'status', 'until')),
+        ('resume_run', 'status', "'pending'", ('status',)),
+        ('resume_run', 'status', "(run or {}).get('status')", ('outcome', 'status')),
+        ('run_step', 'status', "'blocked'", ('reason', 'status')),
+        ('run_step', 'status', "'committed'", ('status',)),
+        ('run_step', 'status', "'deriving'", ('code_sha', 'status')),
+        ('run_step', 'status', "'notes'", ('status',)),
+        ('run_step', 'status', "'notes'", ('status',)),
+    ],
     # Reviewed v3 lease-fenced projection/processing payloads; no test-time refresh.
     'database/conversations_v3_processing.py': [
         (

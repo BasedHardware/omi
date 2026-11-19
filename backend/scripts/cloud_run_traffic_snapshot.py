@@ -304,7 +304,7 @@ def restore_snapshot(
         if release_floor_check:
             try:
                 for revision, _ in targets:
-                    subprocess.run(
+                    execute(
                         [
                             sys.executable,
                             str(release_floor_check),
@@ -314,8 +314,7 @@ def restore_snapshot(
                             project,
                             '--region',
                             region,
-                        ],
-                        check=True,
+                        ]
                     )
             except subprocess.CalledProcessError:
                 result.update({'result': 'failed', 'error': f'backend release floor rejected {revision}'})

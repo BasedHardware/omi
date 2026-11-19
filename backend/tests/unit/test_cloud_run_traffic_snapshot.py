@@ -268,7 +268,7 @@ def test_restore_deletes_and_observes_services_missing_before_bootstrap() -> Non
     assert evidence['deleted_services']['backend-beta']['result'] == 'deleted'
 
 
-def test_release_floor_rejects_split_restore_before_mutating_traffic(monkeypatch) -> None:
+def test_release_floor_rejects_split_restore_before_mutating_traffic() -> None:
     snapshot = {
         'project': 'based-hardware',
         'region': 'us-central1',
@@ -285,16 +285,14 @@ def test_release_floor_rejects_split_restore_before_mutating_traffic(monkeypatch
     }
     checks = []
 
-    def check(command, *, check):
+    def check(command):
         checks.append(command)
         if 'backend-sync-old' in command:
             raise subprocess.CalledProcessError(1, command)
 
-    monkeypatch.setattr(snapshots.subprocess, 'run', check)
-    mutations = []
     evidence = snapshots.restore_snapshot(
         snapshot,
-        runner=mutations.append,
+        runner=check,
         release_floor_check=Path('floor.py'),
     )
 
@@ -302,6 +300,5 @@ def test_release_floor_rejects_split_restore_before_mutating_traffic(monkeypatch
         [sys.executable, 'floor.py', '--revision', revision, '--project', 'based-hardware', '--region', 'us-central1']
         for revision in ('backend-sync-new', 'backend-sync-old')
     ]
-    assert mutations == []
     assert evidence['failed_services'] == ['backend-sync']
     assert evidence['services']['backend-sync']['error'] == 'backend release floor rejected backend-sync-old'
