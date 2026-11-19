@@ -1987,14 +1987,15 @@
     "main_nightly_full.yml/backend-go-checks": {
       "budget_p50_minutes": 5,
       "display_name": "backend-go-checks",
-      "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 0,
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": "source",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu. Added 2026-11-19 with backend-go-checks.yml so the Go backend foundation is checked nightly against pinned main.",
       "reusable": "./.github/workflows/backend-go-checks.yml",
       "runner": "reusable",
       "runner_counts": {
@@ -2286,7 +2287,7 @@
         "windows-preflight-portability"
       ],
       "owner": "CI maintainers",
-      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu. Report also waits on sdk-dart so the Dart device SDK suite is reported nightly.",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu. Report also waits on sdk-dart so the Dart device SDK suite is reported nightly, and on backend-go-checks so the Go backend foundation is reported nightly.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
