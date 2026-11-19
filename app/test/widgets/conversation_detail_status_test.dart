@@ -194,7 +194,7 @@ void main() {
         createdAt: DateTime(2026, 11, 19, 10),
         structured: Structured('Choosing a Table', '', emoji: '🍽️'),
         status: ConversationStatus.completed,
-        v3: ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.writing),
+        v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.writing),
       );
       var fetches = 0;
       final detail = _detail(writing, fetch: (_) async {
