@@ -55,7 +55,7 @@ on:
         default: false
         type: boolean
       worker_dry_run:
-        description: 'Preserve-live only: under the shared lock, server dry-run the image patch (forward and prior-image inverse) and record a receipt; never writes, builds or pushes'
+        description: 'Preserve-live only, under the shared lock; never writes, builds or pushes. Without a rollback receipt: forward admission plus a no-op prior-image admission (inverse not verified). With worker_rollback_receipt: server dry-run of the real inverse CAS'
         required: false
         default: false
         type: boolean

@@ -893,8 +893,8 @@ class DryRunTests(unittest.TestCase):
 
     # The helper's reviewed imports; anything else (an HTTP client, a Kubernetes SDK, importlib) fails closed.
     REVIEWED_IMPORTS = {"__future__", "argparse", "copy", "hashlib", "json", "os", "pathlib", "re", "subprocess", "sys"}
-    PROCESS_CALLS = {"system", "popen", "execv", "execve", "execvp", "execvpe", "execl", "execlp", "spawnv", "spawnve",
-                     "spawnl", "fork", "forkpty", "posix_spawn", "posix_spawnp", "startfile"}
+    # The only os attributes the helper may use (fail closed: any process-spawn variant is outside this set).
+    REVIEWED_OS_ATTRS = {"environ", "fdopen", "open", "O_WRONLY", "O_CREAT", "O_TRUNC"}
 
     def boundary_violations(self, source):
         import ast
@@ -943,7 +943,7 @@ class DryRunTests(unittest.TestCase):
                 found.append(f"bare {node.id}")
             elif node.id == "subprocess" and parent.attr != "TimeoutExpired" and id(parent) not in allowed:
                 found.append(f"subprocess.{parent.attr}")
-            elif node.id == "os" and parent.attr in self.PROCESS_CALLS:
+            elif node.id == "os" and parent.attr not in self.REVIEWED_OS_ATTRS:
                 found.append(f"os.{parent.attr}")
         return found
 
@@ -965,7 +965,8 @@ class DryRunTests(unittest.TestCase):
         for extra in ("import urllib3\n", "from subprocess import run\n", "import subprocess as sp\n",
                       "from os import system\n", "import os as o\n",
                       "transport = subprocess\ndef w():\n    transport.run(['kubectl'])\n",
-                      "def w():\n    getattr(subprocess, 'run')(['kubectl'])\n", "def w(m=os):\n    m.system('x')\n", "from kubernetes import client\n", "import importlib\n",
+                      "def w():\n    getattr(subprocess, 'run')(['kubectl'])\n", "def w(m=os):\n    m.system('x')\n",
+                      "def w():\n    os.spawnvp(0, 'x', ['x'])\n", "def w():\n    os.execle('x', 'x', {})\n", "from kubernetes import client\n", "import importlib\n",
                       "def other():\n    return subprocess.run(['kubectl'])\n", "subprocess.Popen(['x'])\n",
                       "def f():\n    os.system('x')\n", "def f():\n    return __import__('socket')\n"):
             with self.subTest(extra=extra):
@@ -1172,7 +1173,11 @@ class WorkflowTests(unittest.TestCase):
                 skip = True
                 continue
             if word.startswith("-"):
-                continue
+                # Fail closed: before the verb, only reviewed global flags; an unknown one may take a value
+                # that looks like a read verb (`kubectl --as get delete ...`).
+                if word.split("=", 1)[0] in ("-n", "--namespace", "--context", "--request-timeout") and "=" in word:
+                    continue
+                return False
             if word == "rollout":
                 rest = after[after.index("rollout") + 1:]
                 return bool(rest) and rest[0] == "status"
@@ -1202,6 +1207,9 @@ class WorkflowTests(unittest.TestCase):
                     "kubectl auth can-i patch deploy"):
             self.assertFalse(self.writes(run), run)
         self.assertTrue(self.writes("kubectl auth reconcile -f rbac.yaml"))
+        for run in ("kubectl --as get delete deployment/x", "kubectl --as=get delete deployment/x",
+                    "kubectl -s get delete deployment/x", "kubectl --kubeconfig get patch deploy x"):
+            self.assertTrue(self.writes(run), run)
 
     def test_unknown_gcloud_verbs_count_as_writes(self):
         for run in ("gcloud dns record-sets create x", "gcloud pubsub topics publish t --message m",
@@ -1428,7 +1436,7 @@ class WorkflowTests(unittest.TestCase):
             self.assertLess(names.index(gate), names.index(step["name"]))
         self.assertNotIn("continue-on-error", step)
 
-    INPUTS_DIGEST = "dd3e92856902855affec400dd6e2022ad8e3a07154dcacdfe4c630417efbc6eb"
+    INPUTS_DIGEST = "dadaf25a68f829315917b6df7ce00546bbd752e7900df5aced1ea20c5b99e701"
 
     def test_registry_read_reachable_in_dry_run_is_time_bounded(self):
         # The mode holds prod-train; a hung registry read must not hold it for the whole job cap.
