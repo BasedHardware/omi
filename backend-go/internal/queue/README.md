@@ -38,6 +38,9 @@ against Postgres, each test in its own database (`internal/platform/pgtest`).
 | A replica claims only the kinds it has a handler for and the formats it declares; the rest stays untouched for a replica that can run it, and is reported | `candidate` in `claim.go`, `Store.Stranded` | `TestReplicaClaimsOnlyKindsAndFormatsItDeclares`, `TestWorkersLeaveKindsTheyHaveNoHandlerFor`, `TestStartRejectsWhatIsNotDeclared` |
 | One lease holder at a time; a takeover gets a larger token; a stale holder can neither save nor call out | `Store.lease`, `Run.transition`, `Run.Guard` | `TestSingleLeaseProperty`, `TestGuardReadsLeaseAfterWaitingForErase` |
 | The heartbeat keeps a long handler's lease while it saves progress | `Run.execute`, `Store.renewUntilDone` | `TestWorkersRenewTheLeaseWhileTheHandlerSavesProgress` |
+| Drain closes admission while existing handlers keep their leases through grace | `Workers.Drain` | `TestDrainKeepsHeartbeatAndClosesAdmission` |
+| At the deadline another replica can reclaim unfinished work with its attempt charged, or resume its recorded reconciliation | `Store.expireClaims` | `TestDrainTimeoutReturnsWorkAndReconciliation` |
+| A direct claim that commits during shutdown is refunded before drain completes | `Workers.submit`, `Run.unclaim` | `TestDrainRefundsResumeRacingCommit` |
 | A claim is charged when it is issued, so a worker that dies has spent it; a yield refunds it | `Store.lease`, `Run.wait` | `TestAttemptAccountingProperty` |
 | What follows a transient or deterministic failure | `rules.AfterRetry`, `rules.AfterFail` | `TestAfterRetry`, `TestAfterFail` |
 | Backoff doubles from the base and caps at 30 times | `rules.Backoff` | `TestBackoffDoublesFromBaseAndCapsAtThirtyTimes`, `TestBackoffNeverDecreasesAsAttemptsGrow` |
@@ -55,9 +58,6 @@ against Postgres, each test in its own database (`internal/platform/pgtest`).
 | A `Guarded` is valid only inside its guard, and an operation's identity survives a takeover | `Run.Guard`, `Guarded.Operation` | `TestGuardedStopsBeingValidWhenTheGuardReturns` |
 | A handler panic or a missing outcome is retried and reported; the replica keeps running; locks are released | `Run.step`, `Run.Guard` | `TestHandlerPanicIsRetriedAndTheReplicaKeepsRunning`, `TestPanicInsideGuardReleasesItsLocks` |
 | A resume after `Stop` reports `ErrStopped` and leaves the job untouched | `Workers.take`, `Run.unclaim` | `TestResumeAfterStopReportsStopped` |
-| Drain closes admission while existing handlers keep their leases through grace | `Workers.Drain` | `TestDrainKeepsHeartbeatAndClosesAdmission` |
-| At the deadline another replica can reclaim unfinished work with its attempt charged, or resume its recorded reconciliation | `Store.expireClaims` | `TestDrainTimeoutReturnsWorkAndReconciliation` |
-| A direct claim that commits during shutdown is refunded before drain completes | `Workers.submit`, `Run.unclaim` | `TestDrainRefundsResumeRacingCommit` |
 | The watcher sleeps until the next timer, and backs off on work it cannot claim | `rules.IdleWait`, `Workers.idle` | `TestIdleWaitSleepsUntilDueWithinBounds` |
 | A cause no kind declared is recorded as `unknown` | `registry.known` | `TestUndeclaredCauseIsRecordedAsUnknown` |
 | A database whose applied migration differs from the embedded file is refused | `Store.Migrate`, `Store.Ready` | `TestMigrateRefusesAnEditedMigration` |
