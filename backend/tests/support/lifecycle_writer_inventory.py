@@ -502,6 +502,8 @@ FIELD_SITES = {
         ('ProjectionStore.complete.commit', 'state', "'ready'", ('conversation_id', 'created', 'state')),
         ('ProjectionStore.complete_partial.commit', 'state', "'ready'", ('conversation_id', 'created', 'state')),
         ('ProjectionStore.hold_for_quarantine.commit', 'projection_state', "'ready'", ('projection_state',)),
+        # A settled historical output: acknowledged after the guard, with no first-summary wake.
+        ('ProjectionStore.mark_enrichment.commit', 'state', "'ready'", ('conversation_id', 'state')),
         (
             'ProjectionStore.mark_enrichment.commit',
             'state',

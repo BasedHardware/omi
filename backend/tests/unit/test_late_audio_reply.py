@@ -27,6 +27,8 @@ T0 = datetime(2026, 10, 30, 20, tzinfo=timezone.utc)
 @pytest.fixture
 def intake(monkeypatch):
     store = StrictFirestore()
+    # T0 is a fixed date, so it ages past the enrichment gate; these tests pin the full-processing reply.
+    monkeypatch.setenv('SYNC_HISTORICAL_TIER_ENABLED', 'false')
     monkeypatch.setattr(conversations_db, 'stop_quiet_check_for_conversation', lambda *a, **k: None)
     monkeypatch.setattr(conversations_db, 'index_sync_assignment', lambda *a, **k: None)
     monkeypatch.setattr(conversations_db, 'db', store)
