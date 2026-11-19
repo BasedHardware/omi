@@ -7,22 +7,22 @@
   },
   {
    "key": "finishAudioNotReceived",
-   "en": "Omi hasn't received this audio yet. It will be processed when it arrives.",
+   "en": "Audio's still on its way.",
    "description": "Toast after tapping Finish when the page showed words but the server has none of the audio yet (a wearable device's audio is still on its way). The recording carries on."
   },
   {
    "key": "finishFailedOffline",
-   "en": "Couldn't reach Omi to finish this conversation. Nothing is lost.",
+   "en": "Didn't go through. Your audio is safe.",
    "description": "Error toast after tapping Finish on a live recording when the request got no answer (offline, timeout, server error). Shown with a Try Again button; the transcript stays on screen."
   },
   {
    "key": "finishFailed",
-   "en": "Couldn't finish this conversation. Nothing is lost.",
+   "en": "Didn't go through. Your audio is safe.",
    "description": "Error toast after tapping Finish on a live recording when something in the app failed. Shown with a Try Again button; the transcript stays on screen."
   },
   {
    "key": "micBlockedCannotRecord",
-   "en": "Omi can't use the microphone. Allow it in Settings to record.",
+   "en": "Allow the microphone to record.",
    "description": "Error toast when the user taps the record button but the microphone permission is blocked. Shown with an Open Settings button."
   },
   {
@@ -32,17 +32,17 @@
   },
   {
    "key": "restorePurchasesFailed",
-   "en": "Couldn't check your plan. Your purchases are safe.",
+   "en": "Couldn't check your plan.",
    "description": "Error toast after Restore Purchases when the app could not reach the server to read the plan. Shown with a Try Again button. Must never imply the user is on the free plan."
   },
   {
    "key": "firmwareCheckFailed",
-   "en": "Couldn't check for firmware updates.",
+   "en": "Couldn't check for updates.",
    "description": "Error state on the device firmware page when the update check got no answer (offline, server error). Shown with a Try Again button, instead of 'up to date'."
   },
   {
    "key": "conversationStillPublic",
-   "en": "This conversation is still shared. Anyone with the link can view it.",
+   "en": "It's still shared by link.",
    "description": "Error toast after sharing a conversation failed or was dismissed and the app could not make it private again. Shown with a Make Private button."
   },
   {
@@ -52,7 +52,7 @@
   },
   {
    "key": "goalDeleteFailed",
-   "en": "Couldn't delete the goal. It's back in your list.",
+   "en": "Couldn't delete. Goal restored.",
    "description": "Error toast when deleting a goal failed on the server and the goal returned to the list. Shown with a Try Again button."
   },
   {
@@ -62,17 +62,17 @@
   },
   {
    "key": "missingTargetEndedRecording",
-   "en": "That recording has ended. It's on Home.",
+   "en": "That recording has ended.",
    "description": "Toast when a notification or card links to a live recording that has already ended. 'Home' is the conversation list tab."
   },
   {
    "key": "missingTargetMemory",
-   "en": "This memory is no longer available.",
+   "en": "That memory is gone.",
    "description": "Toast when a link points to a memory that was deleted or is not on this phone."
   },
   {
    "key": "missingTargetTask",
-   "en": "This task is no longer available.",
+   "en": "That task is gone.",
    "description": "Toast when a link points to a task that was deleted or could not be read."
   },
   {
@@ -82,12 +82,12 @@
   },
   {
    "key": "couldNotRefreshConversations",
-   "en": "Couldn't refresh. Showing what's on this phone.",
+   "en": "Couldn't refresh.",
    "description": "Error toast after pull-to-refresh on the conversation list failed; the rows already shown stay. Shown with a Try Again button."
   },
   {
    "key": "connectDeviceForOfflineSync",
-   "en": "Connect your device to use Offline Sync.",
+   "en": "Connect your Omi to sync.",
    "description": "Toast when the user taps Offline Sync while their wearable device is disconnected."
   },
   {
@@ -97,17 +97,12 @@
   },
   {
    "key": "rayBanMetaNotFoundAfterSetup",
-   "en": "Setup finished, but your glasses weren't found. Make sure they're on and nearby.",
+   "en": "Glasses not found. Are they on?",
    "description": "Error toast when Ray-Ban Meta glasses setup completed but a rescan did not find the glasses. Shown with a Try Again button."
   },
   {
-   "key": "couldNotLoadMoreTasks",
-   "en": "Couldn't load more tasks.",
-   "description": "Notice at the end of the task list when loading the next page failed. Shown with a Try Again button."
-  },
-  {
    "key": "couldNotMoveTask",
-   "en": "Couldn't move the task. It's back where it was.",
+   "en": "Couldn't move the task.",
    "description": "Error toast when dragging a task to another section failed to save. Shown with a Try Again button."
   },
   {
@@ -127,17 +122,17 @@
   },
   {
    "key": "couldNotLoadNotificationSettings",
-   "en": "Couldn't load your notification settings.",
+   "en": "Couldn't load your settings.",
    "description": "Error state on the notification settings page when the settings could not be read from the server. Shown with a Try Again button."
   },
   {
    "key": "waitForOmiToFinish",
-   "en": "Wait for Omi to finish answering.",
+   "en": "Wait for Omi to finish.",
    "description": "Toast when the user tries to clear the chat or switch chat persona while Omi is still answering."
   },
   {
    "key": "voiceNoteTooShort",
-   "en": "Voice note too short. Hold to record.",
+   "en": "Too short. Hold to record.",
    "description": "Toast when a chat voice note was shorter than half a second and was not sent."
   },
   {
@@ -147,7 +142,7 @@
   },
   {
    "key": "appSetupNotFinished",
-   "en": "Setup isn't finished yet. Finish it in your browser, then tap Try Again.",
+   "en": "Setup isn't finished yet.",
    "description": "Notice on an app's page when waiting for the user to complete the app's setup in the browser timed out."
   },
   {
@@ -159,6 +154,71 @@
    "key": "submitAppFinishDetails",
    "en": "Finish the capability and pricing details above to submit.",
    "description": "Small hint under a disabled Submit button on the create-app form, shown when the name, description, image, category and capability are filled in but a capability-specific field (a prompt, a trigger, notification scopes) or the paid plan details are still missing."
+  },
+  {
+   "key": "finishNothingNew",
+   "en": "Nothing new yet.",
+   "description": "Toast after tapping Finish on a live recording when there is nothing new to save yet."
+  },
+  {
+   "key": "takingLongerThanUsual",
+   "en": "Taking longer than usual. We'll have it on Home.",
+   "description": "Status on the page that waits for a finished recording's conversation, after a long wait while the app can still reach the server. 'Home' is the app's conversation list."
+  },
+  {
+   "key": "couldNotCheckOnIt",
+   "en": "Couldn't check on it. Try again.",
+   "description": "Status on the page that waits for a finished recording's conversation, when the app could not reach the server several times in a row. Shown with a Try Again button."
+  },
+  {
+   "key": "upgradeToOpenThisOne",
+   "en": "Upgrade to open this one.",
+   "description": "Toast when a link opens a conversation that needs a paid plan."
+  },
+  {
+   "key": "missingTargetConversationGone",
+   "en": "That conversation was deleted.",
+   "description": "Toast when a link opens a conversation that was deleted."
+  },
+  {
+   "key": "cantConnectRightNow",
+   "en": "Can't connect right now.",
+   "description": "Toast when a link could not be opened because the phone is offline. Shown with a Try Again action."
+  },
+  {
+   "key": "loadOlderFailed",
+   "en": "Couldn't load older ones. Tap to retry.",
+   "description": "One quiet line at the end of a list when loading older items failed; tapping it retries."
+  },
+  {
+   "key": "listeningWithDuration",
+   "en": "Listening · {duration}",
+   "description": "Status line under the title of a conversation that is still being recorded. {duration} is a short length such as '11m'.",
+   "placeholders": {
+    "duration": {
+     "type": "String"
+    }
+   }
+  },
+  {
+   "key": "conversationLiveNoEdits",
+   "en": "Wait until it ends to change it.",
+   "description": "Toast when the reader tries to delete, reprocess, share or edit a conversation that is still being recorded."
+  },
+  {
+   "key": "finishedSummaryReady",
+   "en": "Summary ready",
+   "description": "Screen reader announcement when a conversation on Home finishes and its summary is ready."
+  },
+  {
+   "key": "writingSummaryStatus",
+   "en": "Writing summary…",
+   "description": "Status while a finished conversation's summary is being written: under its title on Home, and on the conversation page."
+  },
+  {
+   "key": "stillWorkingOnIt",
+   "en": "Still working on it.",
+   "description": "Quiet notice on a conversation page when the app stopped checking a conversation that is still being transcribed or summarized. Shown with a Try Again button."
   }
  ]
 }

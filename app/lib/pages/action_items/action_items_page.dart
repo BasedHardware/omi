@@ -512,25 +512,33 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     OmiHaptics.medium();
                     return provider.forceRefreshActionItems();
                   },
-                  child: (provider.isLoading ||
-                              (_initialLoadScheduled && !provider.hasLoaded && apiPhase == ApiViewPhase.data)) &&
-                          provider.actionItems.isEmpty
-                      ? _buildLoadingState()
-                      : showTypedStatus
-                          ? CustomScrollView(
-                              controller: _scrollController,
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              slivers: [
-                                SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
-                                SliverFillRemaining(
-                                  hasScrollBody: false,
-                                  child: Center(child: ActionItemsApiStatus(provider: provider)),
-                                ),
-                              ],
-                            )
-                          : categorizedItems.values.every((l) => l.isEmpty)
-                              ? _buildEmptyTasksList(provider)
-                              : _buildTasksList(categorizedItems, provider),
+                  // First load cross-fades the skeleton into the list in the same place (§10 Motion).
+                  child: AnimatedSwitcher(
+                    duration: OmiMotion.of(context).standard,
+                    child: (provider.isLoading ||
+                                (_initialLoadScheduled && !provider.hasLoaded && apiPhase == ApiViewPhase.data)) &&
+                            provider.actionItems.isEmpty
+                        ? KeyedSubtree(key: const ValueKey('tasks_loading'), child: _buildLoadingState())
+                        : KeyedSubtree(
+                            key: const ValueKey('tasks_content'),
+                            child: showTypedStatus
+                                ? CustomScrollView(
+                                    controller: _scrollController,
+                                    physics: const AlwaysScrollableScrollPhysics(),
+                                    slivers: [
+                                      SliverToBoxAdapter(
+                                          child: TaskSuggestionsSection(controller: provider.suggestions)),
+                                      SliverFillRemaining(
+                                        hasScrollBody: false,
+                                        child: Center(child: ActionItemsApiStatus(provider: provider)),
+                                      ),
+                                    ],
+                                  )
+                                : categorizedItems.values.every((l) => l.isEmpty)
+                                    ? _buildEmptyTasksList(provider)
+                                    : _buildTasksList(categorizedItems, provider),
+                          ),
+                  ),
                 ),
               ),
               // The empty state points to conversation capture on Home.
@@ -546,8 +554,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildLoadingState() {
+    // No scroll controller: it cross-fades with the list, which owns the controller.
     return CustomScrollView(
-      controller: _scrollController,
       physics: const NeverScrollableScrollPhysics(),
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 16)),
@@ -632,17 +640,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           _buildDateSections(categorizedItems, provider),
         ],
 
-        // A page that failed to load says so where the list ends, with Try Again (T1).
+        // A page that failed to load says so where the list ends, one quiet line to retry (T1).
         if (!isSearching && provider.loadMoreFailed)
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-              child: OmiPartialNotice(
-                key: const Key('tasks_load_more_failed'),
-                message: context.l10n.couldNotLoadMoreTasks,
-                onRetry: provider.loadMoreActionItems,
-              ),
-            ),
+            child: OmiLoadMoreFailed(key: const Key('tasks_load_more_failed'), onRetry: provider.loadMoreActionItems),
           ),
 
         // Bottom padding so the last row scrolls clear of the nav bar
@@ -1238,9 +1239,20 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
+  /// Tasks whose tick is showing before the row moves to Completed.
+  final Set<String> _ticking = {};
+
   Future<void> _toggleCompleted(ActionItemsProvider provider, ActionItemWithMetadata item) async {
     OmiHaptics.light();
+    if (!item.completed) {
+      // The control answers first (ux-contract §10 Motion): the tick lands within quick, then the
+      // row leaves for Completed.
+      setState(() => _ticking.add(item.id));
+      await Future<void>.delayed(OmiMotion.of(context).quick);
+      if (!mounted) return;
+    }
     final saved = await provider.updateActionItemState(item, !item.completed);
+    if (mounted && _ticking.remove(item.id)) setState(() {});
     if (!saved && mounted) OmiFeedback.error(context, context.l10n.failedToUpdateActionItem);
     if (saved && !item.completed) _onActionItemCompleted();
   }
@@ -1349,7 +1361,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: SizedBox(
                     width: 44,
                     height: 44,
-                    child: Center(child: TaskCompletionMark(completed: item.completed)),
+                    child: Center(child: TaskCompletionMark(completed: item.completed || _ticking.contains(item.id))),
                   ),
                 ),
               ),

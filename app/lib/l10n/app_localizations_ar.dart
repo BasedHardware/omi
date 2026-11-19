@@ -15486,68 +15486,64 @@ class AppLocalizationsAr extends AppLocalizations {
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';
 
   @override
-  String get finishAudioNotReceived => 'Omi hasn\'t received this audio yet. It will be processed when it arrives.';
+  String get finishAudioNotReceived => 'Audio\'s still on its way.';
 
   @override
-  String get finishFailedOffline => 'Couldn\'t reach Omi to finish this conversation. Nothing is lost.';
+  String get finishFailedOffline => 'Didn\'t go through. Your audio is safe.';
 
   @override
-  String get finishFailed => 'Couldn\'t finish this conversation. Nothing is lost.';
+  String get finishFailed => 'Didn\'t go through. Your audio is safe.';
 
   @override
-  String get micBlockedCannotRecord => 'Omi can\'t use the microphone. Allow it in Settings to record.';
+  String get micBlockedCannotRecord => 'Allow the microphone to record.';
 
   @override
   String get couldNotStartRecording => 'Couldn\'t start recording.';
 
   @override
-  String get restorePurchasesFailed => 'Couldn\'t check your plan. Your purchases are safe.';
+  String get restorePurchasesFailed => 'Couldn\'t check your plan.';
 
   @override
-  String get firmwareCheckFailed => 'Couldn\'t check for firmware updates.';
+  String get firmwareCheckFailed => 'Couldn\'t check for updates.';
 
   @override
-  String get conversationStillPublic => 'This conversation is still shared. Anyone with the link can view it.';
+  String get conversationStillPublic => 'It\'s still shared by link.';
 
   @override
   String get goalSaveFailed => 'Couldn\'t save your goal.';
 
   @override
-  String get goalDeleteFailed => 'Couldn\'t delete the goal. It\'s back in your list.';
+  String get goalDeleteFailed => 'Couldn\'t delete. Goal restored.';
 
   @override
   String get goalsLoadFailed => 'Couldn\'t load your goals.';
 
   @override
-  String get missingTargetEndedRecording => 'That recording has ended. It\'s on Home.';
+  String get missingTargetEndedRecording => 'That recording has ended.';
 
   @override
-  String get missingTargetMemory => 'This memory is no longer available.';
+  String get missingTargetMemory => 'That memory is gone.';
 
   @override
-  String get missingTargetTask => 'This task is no longer available.';
+  String get missingTargetTask => 'That task is gone.';
 
   @override
   String get missingTargetConversation => 'Couldn\'t open this conversation.';
 
   @override
-  String get couldNotRefreshConversations => 'Couldn\'t refresh. Showing what\'s on this phone.';
+  String get couldNotRefreshConversations => 'Couldn\'t refresh.';
 
   @override
-  String get connectDeviceForOfflineSync => 'Connect your device to use Offline Sync.';
+  String get connectDeviceForOfflineSync => 'Connect your Omi to sync.';
 
   @override
   String get useDifferentAccountMessage => 'You\'ll be signed out, and this phone\'s Omi settings will be reset.';
 
   @override
-  String get rayBanMetaNotFoundAfterSetup =>
-      'Setup finished, but your glasses weren\'t found. Make sure they\'re on and nearby.';
+  String get rayBanMetaNotFoundAfterSetup => 'Glasses not found. Are they on?';
 
   @override
-  String get couldNotLoadMoreTasks => 'Couldn\'t load more tasks.';
-
-  @override
-  String get couldNotMoveTask => 'Couldn\'t move the task. It\'s back where it was.';
+  String get couldNotMoveTask => 'Couldn\'t move the task.';
 
   @override
   String lockedTasksKept(int count) {
@@ -15564,23 +15560,61 @@ class AppLocalizationsAr extends AppLocalizations {
   String get settingNotSaved => 'Couldn\'t save that change.';
 
   @override
-  String get couldNotLoadNotificationSettings => 'Couldn\'t load your notification settings.';
+  String get couldNotLoadNotificationSettings => 'Couldn\'t load your settings.';
 
   @override
-  String get waitForOmiToFinish => 'Wait for Omi to finish answering.';
+  String get waitForOmiToFinish => 'Wait for Omi to finish.';
 
   @override
-  String get voiceNoteTooShort => 'Voice note too short. Hold to record.';
+  String get voiceNoteTooShort => 'Too short. Hold to record.';
 
   @override
   String get submitAppMissingFields => 'Add a name, description, image, category and capability to submit.';
 
   @override
-  String get appSetupNotFinished => 'Setup isn\'t finished yet. Finish it in your browser, then tap Try Again.';
+  String get appSetupNotFinished => 'Setup isn\'t finished yet.';
 
   @override
   String get finishNothingKeptTitle => 'Nothing to Keep';
 
   @override
   String get submitAppFinishDetails => 'Finish the capability and pricing details above to submit.';
+
+  @override
+  String get finishNothingNew => 'Nothing new yet.';
+
+  @override
+  String get takingLongerThanUsual => 'Taking longer than usual. We\'ll have it on Home.';
+
+  @override
+  String get couldNotCheckOnIt => 'Couldn\'t check on it. Try again.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Upgrade to open this one.';
+
+  @override
+  String get missingTargetConversationGone => 'That conversation was deleted.';
+
+  @override
+  String get cantConnectRightNow => 'Can\'t connect right now.';
+
+  @override
+  String get loadOlderFailed => 'Couldn\'t load older ones. Tap to retry.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Listening · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Wait until it ends to change it.';
+
+  @override
+  String get finishedSummaryReady => 'Summary ready';
+
+  @override
+  String get writingSummaryStatus => 'Writing summary…';
+
+  @override
+  String get stillWorkingOnIt => 'Still working on it.';
 }

@@ -92,6 +92,10 @@ class ConversationProvider extends ChangeNotifier {
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
 
   bool isLoadingConversations = false;
+
+  /// The last older-page read failed; Home ends its list with one line to retry it (X6). Cleared
+  /// when the next page or a fresh first page lands.
+  bool loadMoreFailed = false;
   bool _isLoadingConversationList = false;
   bool _isLoadingConversationSearch = false;
   bool showDiscardedConversations = false;
@@ -783,6 +787,7 @@ class ConversationProvider extends ChangeNotifier {
   Future _fetchNewConversations({bool restoreMergeWatches = true}) async {
     if (!_isSignedIn()) return;
     if (restoreMergeWatches) _restoreMergeWatches();
+    loadMoreFailed = false;
     final generation = _sessionGeneration;
     final fetchRevision = ++_conversationFetchRevision;
     _conversationLoadingRevision = fetchRevision;
@@ -902,6 +907,7 @@ class ConversationProvider extends ChangeNotifier {
       return false;
     }
     if (restoreMergeWatches) _restoreMergeWatches();
+    loadMoreFailed = false;
     final generation = _sessionGeneration;
     final fetchRevision = ++_conversationFetchRevision;
     _conversationLoadingRevision = fetchRevision;
@@ -1370,10 +1376,12 @@ class ConversationProvider extends ChangeNotifier {
       return getMoreConversationsFromServer();
     }
     if (!pageResult.ok) {
+      loadMoreFailed = true;
       setLoadingConversations(false);
       notifyListeners();
       return false;
     }
+    loadMoreFailed = false;
     final newConversations = pageResult.items;
     _conversationServerOffset += _recordServerPageIds(newConversations, pageResult.storageCount);
     _conversationServerHasMore = !pageResult.truncated && pageResult.storageCount >= _conversationPageSize;

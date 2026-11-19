@@ -45,6 +45,7 @@ import 'conversation_detail_provider.dart';
 import 'conversation_summary_selection.dart';
 import 'widgets.dart' show summaryRetrySlotApplies;
 import 'share.dart';
+import 'conversation_live_guard.dart';
 import 'share_flow.dart';
 import 'test_prompts.dart';
 import 'widgets/audio_download_progress_sheet.dart';
@@ -631,6 +632,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   };
 
   void _handleMenuSelection(BuildContext context, String value, ConversationDetailProvider provider) async {
+    if (refuseWhileLive(context, provider.conversation, value)) return; // X11
     // Track the menu action selection
     PlatformManager.instance.analytics.conversationThreeDotsMenuActionSelected(
       conversationId: provider.conversation.id,
@@ -861,6 +863,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   /// agrees ("Anyone with the link can view"), and goes back to private if the share sheet reports
   /// that it was dismissed without sharing.
   Future<void> _shareConversation(ConversationDetailProvider provider) async {
+    if (refuseWhileLive(context, provider.conversation, 'share')) return; // X11
     HapticFeedback.mediumImpact();
     final conversation = provider.conversation;
     final end = await runConversationShare(

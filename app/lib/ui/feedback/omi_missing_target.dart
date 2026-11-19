@@ -16,7 +16,16 @@ enum OmiMissingTarget {
   task,
 
   /// A cited conversation that could not be opened (deleted, locked or unreachable).
-  conversation;
+  conversation,
+
+  /// A linked conversation the server says is deleted (404).
+  conversationGone,
+
+  /// A linked conversation that needs a plan to open (402).
+  conversationLocked,
+
+  /// A link opened with no connection: never "deleted"; Try Again helps (X14).
+  offline;
 
   String message(BuildContext context) {
     final l10n = context.l10n;
@@ -25,6 +34,9 @@ enum OmiMissingTarget {
       OmiMissingTarget.memory => l10n.missingTargetMemory,
       OmiMissingTarget.task => l10n.missingTargetTask,
       OmiMissingTarget.conversation => l10n.missingTargetConversation,
+      OmiMissingTarget.conversationGone => l10n.missingTargetConversationGone,
+      OmiMissingTarget.conversationLocked => l10n.upgradeToOpenThisOne,
+      OmiMissingTarget.offline => l10n.cantConnectRightNow,
     };
   }
 

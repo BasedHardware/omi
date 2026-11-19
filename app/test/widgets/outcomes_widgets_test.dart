@@ -141,7 +141,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('firmware_check_failed')), findsOneWidget);
-    expect(find.text("Couldn't check for firmware updates."), findsOneWidget);
+    expect(find.text("Couldn't check for updates."), findsOneWidget);
     expect(find.text('Your device is up to date'), findsNothing);
 
     answer = true;
@@ -207,7 +207,7 @@ void main() {
     }
     await tester.pump(const Duration(milliseconds: 500));
     expect(provider.goals.map((g) => g.id), ['a']);
-    expect(find.text("Couldn't delete the goal. It's back in your list."), findsOneWidget);
+    expect(find.text("Couldn't delete. Goal restored."), findsOneWidget);
     await tester.pump(const Duration(seconds: 9));
   });
 
@@ -320,7 +320,7 @@ void main() {
     )));
     await tester.tap(find.text('record'));
     await tester.pump();
-    expect(find.text("Omi can't use the microphone. Allow it in Settings to record."), findsOneWidget);
+    expect(find.text('Allow the microphone to record.'), findsOneWidget);
     expect(find.text('Open Settings'), findsOneWidget);
     expect(find.textContaining('Something went wrong'), findsNothing);
     await tester.pump(const Duration(seconds: 9));

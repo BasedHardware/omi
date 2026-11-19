@@ -293,7 +293,7 @@ void main() {
         await _tapFinish(tester);
 
         expect(find.byType(LiveEpisodePage), findsOneWidget, reason: 'never a silent pop to Home (C1)');
-        expect(find.text("Couldn't reach Omi to finish this conversation. Nothing is lost."), findsOneWidget);
+        expect(find.text("Didn't go through. Your audio is safe."), findsOneWidget);
         expect(find.text('Try Again'), findsOneWidget);
         expect(find.byKey(const Key('process_now_button')), findsOneWidget, reason: 'Finish stays (C7)');
         _expectTranscriptKept(capture);
@@ -314,8 +314,8 @@ void main() {
         await _tapFinish(tester);
 
         expect(find.byType(LiveEpisodePage), findsOneWidget);
-        expect(find.text("Couldn't finish this conversation. Nothing is lost."), findsOneWidget);
-        expect(find.text('Nothing to process yet.'), findsNothing);
+        expect(find.text("Didn't go through. Your audio is safe."), findsOneWidget);
+        expect(find.text('Nothing new yet.'), findsNothing);
         _expectTranscriptKept(capture);
 
         capture.answer = _success();
@@ -331,8 +331,8 @@ void main() {
         await _tapFinish(tester);
 
         expect(find.byType(LiveEpisodePage), findsOneWidget);
-        expect(find.text("Omi hasn't received this audio yet. It will be processed when it arrives."), findsOneWidget);
-        expect(find.text('Nothing to process yet.'), findsNothing, reason: 'the page shows words (C5)');
+        expect(find.text("Audio's still on its way."), findsOneWidget);
+        expect(find.text('Nothing new yet.'), findsNothing, reason: 'the page shows words (C5)');
         _expectTranscriptKept(capture);
         await tester.pumpWidget(const SizedBox());
       });
@@ -343,7 +343,7 @@ void main() {
         await _tapFinish(tester);
 
         expect(find.text('That recording was too short or empty to keep.'), findsOneWidget);
-        expect(find.text('Nothing to process yet.'), findsNothing);
+        expect(find.text('Nothing new yet.'), findsNothing);
         await tester.pump(const Duration(seconds: 1));
         expect(find.byType(LiveEpisodePage), findsNothing);
         expect(find.byType(FinishedCapturePage), findsNothing, reason: 'nothing to wait 20 minutes for (C6)');

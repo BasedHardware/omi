@@ -267,7 +267,7 @@ void main() {
     expect(home.selectedIndex, HomeProvider.homeTab);
     expect(find.byType(LiveEpisodePage), findsNothing);
     // L1 (audit 2026-11-19): it says why nothing opened.
-    expect(find.text("That recording has ended. It's on Home."), findsOneWidget);
+    expect(find.text('That recording has ended.'), findsOneWidget);
     await tester.pump(const Duration(seconds: 5));
   });
 
@@ -293,7 +293,7 @@ void main() {
     );
     await tester.pump();
     expect(opened, isFalse);
-    expect(find.text('This memory is no longer available.'), findsOneWidget);
+    expect(find.text('That memory is gone.'), findsOneWidget);
     expect(find.textContaining('Something went wrong'), findsNothing);
     await tester.pump(const Duration(seconds: 5));
   });

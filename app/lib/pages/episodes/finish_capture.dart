@@ -96,7 +96,7 @@ String? finishMessage(BuildContext context, FinishOutcome outcome) {
   final l10n = context.l10n;
   return switch (outcome) {
     FinishNothingNew(alreadySaved: true) => l10n.finishAlreadySaved,
-    FinishNothingNew() => l10n.finishNothingToProcess,
+    FinishNothingNew() => l10n.finishNothingNew,
     FinishDiscarded() => l10n.discardedOnlyRecording,
     FinishNotReceived() => l10n.finishAudioNotReceived,
     FinishFailed(reason: FinishFailure.noAnswer) => l10n.finishFailedOffline,

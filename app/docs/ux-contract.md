@@ -249,6 +249,18 @@ participant lists, the speaker filter and every copied, shared or exported trans
 - **Motion** `OmiMotion`: quick 150 ms (a control answering a press), standard 250 ms (content
   changing in place), emphasized 400 ms (a surface arriving or leaving). Read durations through
   `OmiMotion.of(context)`, which is zero under Reduce Motion.
+  Motion rules (David, 2026-11-19). New and changed motion follows them; existing motion moves to
+  them as its code is touched:
+  - *Direction is meaning.* A deeper page slides in from the side, something over the page rises
+    from below, and content changing in the same place cross-fades. There are no other route
+    transitions.
+  - *Nothing teleports.* A thing that changes state changes in place; a thing that moves is seen
+    moving.
+  - *The control answers first.* Press feedback lands within `OmiMotion.quick`, before any network.
+  - *Loading keeps the shape.* Placeholders match the final layout. A full-page spinner is for first
+    launch only.
+  - *Leaving is faster than arriving.* An exit runs at about two thirds of its entrance.
+  - *One thing moves at a time.* Reduce Motion turns every movement into a fade.
 - **Haptics** `OmiHaptics`: `selection()` for tabs, segments and navigation, `light()` for
   toggles, `medium()` for record start/stop and completions, `success()` / `error()` for outcomes.
 - The theme (`buildOmiTheme()`) sets the app bar (black, centred title, white icons), the spinner,

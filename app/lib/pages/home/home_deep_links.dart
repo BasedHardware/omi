@@ -7,11 +7,12 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/backend/http/api/memories.dart' as memories_api;
-import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/conversation_open.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/chat/chat_route.dart';
@@ -35,7 +36,6 @@ import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
 import 'package:omi/ui/feedback/omi_missing_target.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/share_links.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -166,6 +166,8 @@ Future<bool> openHomeDeepLink(
   void Function(Memory)? onMemoryOpened,
   void Function()? onItemUnavailable,
   bool Function()? canOpen,
+  Future<ConversationOpen> Function(String)? conversationById,
+  String? Function()? currentUid,
 }) async {
   if (canOpen != null && !canOpen()) return false;
   final id = link.id;
@@ -257,14 +259,36 @@ Future<bool> openHomeDeepLink(
       unawaited(routeToPage(context, const MemoriesPage()));
     case 'conversation':
       if (id == null) return false;
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final readUid = currentUid ?? () => FirebaseAuth.instance.currentUser?.uid;
+      final uid = readUid();
       if (uid == null) return false;
-      final conversation = await getConversationById(id);
+      final opened = await (conversationById ?? openConversationById)(id);
       if (!context.mounted || (canOpen != null && !canOpen())) return false;
-      if (FirebaseAuth.instance.currentUser?.uid != uid || conversation == null) {
-        Logger.debug('Conversation not found: $id');
-        OmiFeedback.info(context, context.l10n.conversationNotFoundOrDeleted);
-        return false;
+      if (readUid() != uid) return false;
+      // Offline is never "deleted" (X14): each answer says what happened, and Try Again only where
+      // it can help.
+      final ServerConversation conversation;
+      switch (opened) {
+        case ConversationOpenFound(conversation: final found):
+          conversation = found;
+        case ConversationOpenGone():
+          OmiMissingTarget.conversationGone.show(context);
+          return false;
+        case ConversationOpenLocked():
+          OmiMissingTarget.conversationLocked.show(context);
+          return false;
+        case ConversationOpenUnreachable():
+          OmiMissingTarget.offline.show(context, onRetry: () {
+            if (context.mounted) {
+              unawaited(openHomeDeepLink(context, link,
+                  openSettings: openSettings,
+                  openSearch: openSearch,
+                  conversationById: conversationById,
+                  currentUid: currentUid,
+                  canOpen: canOpen));
+            }
+          });
+          return false;
       }
       unawaited(
         routeToPage(

@@ -40,6 +40,7 @@ export 'components/omi_locked_preview.dart';
 export 'components/omi_icon_button.dart';
 export 'components/omi_nav_buttons.dart';
 export 'components/omi_page_states.dart';
+export 'components/omi_load_more_failed.dart';
 export 'components/omi_partial_notice.dart';
 export 'components/omi_permission_row.dart';
 export 'components/omi_row_menu.dart';

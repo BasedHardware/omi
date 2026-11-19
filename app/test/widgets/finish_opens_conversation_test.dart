@@ -278,7 +278,7 @@ void main() {
     expect(harness.home.selectedIndex, HomeProvider.homeTab);
     expect(page?.recordingId, 'rec-1', reason: 'v3 answers with the recording; wait for its conversation');
     expect(find.byKey(const Key('finished_capture_processing')), findsOneWidget);
-    expect(find.text('Processing conversation…'), findsOneWidget);
+    expect(find.text('Writing your summary…'), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(LiveEpisodePage), findsNothing);
     await tester.pumpWidget(const SizedBox());
@@ -330,7 +330,7 @@ void main() {
     await tester.pump();
 
     expect(harness.capture.finishes, 0);
-    expect(find.text('Nothing to process yet.'), findsWidgets);
+    expect(find.text('Nothing new yet.'), findsWidgets);
     expect(harness.home.selectedIndex, HomeProvider.tasksTab);
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(LiveEpisodePage), findsNothing);
@@ -372,7 +372,8 @@ void main() {
     expect(harness.capture.finishes, 1);
     expect(first, isNull);
     await tester.pump(const Duration(seconds: 1));
-    expect(find.byType(LiveEpisodePage), findsOneWidget, reason: 'never a silent pop to Home');
+    expect(find.byType(LiveEpisodePage), findsOneWidget, reason: 'never a silent pop to Home (C1, X2)');
+    expect(find.text("Didn't go through. Your audio is safe."), findsOneWidget, reason: 'an error, not silence (X2)');
     expect(find.text('Try Again'), findsOneWidget);
 
     // Back online, same preview lines, no new words: the retry still has something to process.
@@ -381,7 +382,7 @@ void main() {
 
     expect(harness.capture.finishes, 2, reason: 'the failed Finish processed nothing');
     expect(second?.recordingId, 'rec-1');
-    expect(find.text('Nothing to process yet.'), findsNothing);
+    expect(find.text('Nothing new yet.'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -407,7 +408,7 @@ void main() {
     await tester.pump();
 
     expect(harness.capture.finishes, 1, reason: 'no new words since the last Finish');
-    expect(find.text('Nothing to process yet.'), findsWidgets);
+    expect(find.text('Nothing new yet.'), findsWidgets);
     expect(find.byType(FinishedCapturePage), findsNothing);
 
     await tester.pump(const Duration(seconds: 5));
@@ -430,8 +431,8 @@ void main() {
     expect(harness.capture.finishes, 1);
     expect(page, isNull, reason: 'no conversation will come from it yet');
     // C5 (audit 2026-11-19): the page shows words, so "Nothing to process yet" was false.
-    expect(find.text('Nothing to process yet.'), findsNothing);
-    expect(find.text("Omi hasn't received this audio yet. It will be processed when it arrives."), findsOneWidget);
+    expect(find.text('Nothing new yet.'), findsNothing);
+    expect(find.text("Audio's still on its way."), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(LiveEpisodePage), findsOneWidget, reason: 'the recording carries on');
     await tester.pump(const Duration(seconds: 5));
@@ -507,7 +508,7 @@ void main() {
 
       await tester.pump(const Duration(seconds: 15));
       expect(find.byKey(const Key('finished_capture_expired')), findsOneWidget);
-      expect(find.text('Still processing. It will appear on Home.'), findsOneWidget);
+      expect(find.text("Taking longer than usual. We'll have it on Home."), findsOneWidget);
       final readsAtExpiry = reads;
       await tester.pump(const Duration(seconds: 30));
       expect(reads, readsAtExpiry, reason: 'no polling after it gave up');
@@ -566,7 +567,7 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.text('Processing conversation…'), findsOneWidget);
+      expect(find.text('Writing your summary…'), findsOneWidget);
       expect(opened, isNull);
 
       await tester.pump(const Duration(seconds: 5));

@@ -83,6 +83,12 @@ class _FinishedCapturePageState extends State<FinishedCapturePage> with WidgetsB
   bool _discarded = false;
   Timer? _expiry;
 
+  /// Reads in a row that got no answer. After [_failedReadsShown] the page says it could not check,
+  /// with Try Again, instead of claiming it is still working (X10).
+  int _failedReads = 0;
+  static const _failedReadsShown = 3;
+  bool get _readsFailing => _failedReads >= _failedReadsShown;
+
   @override
   void initState() {
     super.initState();
@@ -110,7 +116,8 @@ class _FinishedCapturePageState extends State<FinishedCapturePage> with WidgetsB
     if (_reading || _opened || _discarded || !mounted) return;
     _reading = true;
     try {
-      final rows = await (widget.fetch ?? () => api.getConversations(limit: 10, includeDiscarded: true))();
+      final rows = await (widget.fetch ?? _defaultFetch)();
+      if (_failedReads > 0 && mounted) setState(() => _failedReads = 0);
       final found = FinishedCapturePage.match(rows, widget.recordingId);
       if (found != null && mounted && !_opened) {
         final route = ModalRoute.of(context);
@@ -122,10 +129,31 @@ class _FinishedCapturePageState extends State<FinishedCapturePage> with WidgetsB
         setState(() => _discarded = true);
       }
     } catch (_) {
-      // Offline or a failed read: the next tick tries again.
+      // Offline or a failed read: the next tick tries again, and repeated failures are said (X10).
+      if (mounted) setState(() => _failedReads++);
     } finally {
       _reading = false;
     }
+  }
+
+  /// A failed list read throws, so it counts as a failed read rather than "not there yet".
+  static Future<List<ServerConversation>> _defaultFetch() async {
+    final result = await api.getConversationsResult(limit: 10, includeDiscarded: true);
+    if (!result.ok) throw StateError('conversation list read failed');
+    return result.items;
+  }
+
+  /// Try Again after failed reads: read now, and keep polling until the wait runs out.
+  void _retryReads() {
+    setState(() {
+      _failedReads = 0;
+      _expired = false;
+    });
+    _poll?.cancel();
+    _poll = Timer.periodic(widget.pollInterval, (_) => _check());
+    _expiry?.cancel();
+    _expiry = Timer(widget.maxWait, _expire);
+    unawaited(_check());
   }
 
   /// After [FinishedCapturePage.maxWait] it stops polling and says so; Home shows the conversation
@@ -167,15 +195,23 @@ class _FinishedCapturePageState extends State<FinishedCapturePage> with WidgetsB
               message: l10n.discardedOnlyRecording,
               action: OmiButton.secondary(label: l10n.finishBackToHome, onPressed: _backToHome),
             )
-          : _expired
+          // Reads keep failing: say so with Try Again; "still working" only after a read that answered.
+          : _readsFailing
               ? OmiErrorState(
-                  key: const Key('finished_capture_expired'),
-                  message: l10n.finishStillProcessing,
-                  retryLabel: l10n.finishBackToHome,
-                  onRetry: _backToHome,
+                  key: const Key('finished_capture_read_failed'),
+                  message: l10n.couldNotCheckOnIt,
+                  retryLabel: l10n.tryAgain,
+                  onRetry: _retryReads,
                 )
-              : OmiLoadingState(
-                  key: const Key('finished_capture_processing'), label: l10n.processingConversationProgress),
+              : _expired
+                  ? OmiErrorState(
+                      key: const Key('finished_capture_expired'),
+                      message: l10n.takingLongerThanUsual,
+                      retryLabel: l10n.finishBackToHome,
+                      onRetry: _backToHome,
+                    )
+                  : OmiLoadingState(
+                      key: const Key('finished_capture_processing'), label: l10n.conversationWritingSummary),
     );
   }
 }

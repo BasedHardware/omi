@@ -222,11 +222,7 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
         }
       }
       if (_cursor != null && _moreFailed) {
-        rows.add(OmiPartialNotice(
-          key: const Key('recent_changes_more_failed'),
-          message: l10n.reviewChangesLoadFailed,
-          onRetry: _more,
-        ));
+        rows.add(OmiLoadMoreFailed(key: const Key('recent_changes_more_failed'), onRetry: _more));
       } else if (_cursor != null) {
         rows.add(Center(
           child: OmiButton.tertiary(label: l10n.reviewShowMore, isLoading: _loadingMore, onPressed: _more),
