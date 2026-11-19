@@ -17,11 +17,19 @@ import (
 
 const okCompletion = `{"id":"test","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"{\"title\":\"Example\"}"}}],"usage":{"prompt_tokens":20,"completion_tokens":5}}`
 
-func testClient(t *testing.T, handler http.Handler) *Client {
+func testClient(t *testing.T, handler http.Handler) Replayable {
 	t.Helper()
-	server := httptest.NewServer(handler)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(idempotencyAck, r.Header.Get("X-Omi-Request-Id"))
+		handler.ServeHTTP(w, r)
+	}))
 	t.Cleanup(server.Close)
-	client, err := New(Config{BaseURL: server.URL, ServiceToken: " test-service ", Timeout: 5 * time.Second}, clock.System{})
+	return dialTestGateway(t, server.URL, clock.System{})
+}
+
+func dialTestGateway(t *testing.T, baseURL string, c clock.Clock) Replayable {
+	t.Helper()
+	client, err := New(Config{BaseURL: baseURL, ServiceToken: " test-service ", Timeout: 5 * time.Second}, c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +46,10 @@ func writeResponse(t *testing.T, w http.ResponseWriter, status int, body string)
 }
 
 func prompt() Request {
-	return Request{Step: "notes", Feature: ConversationStructure, Messages: []Message{{Role: "user", Text: "test prompt"}}}
+	return Request{
+		Step: "notes", JobCreatedAt: clock.System{}.Now(), Feature: ConversationStructure,
+		Messages: []Message{{Role: "user", Text: "test prompt"}},
+	}
 }
 
 func TestCompleteSendsFeatureLaneAndAccounting(t *testing.T) {
@@ -62,7 +73,7 @@ func TestCompleteSendsFeatureLaneAndAccounting(t *testing.T) {
 		t.Run(string(tc.feature), func(t *testing.T) {
 			t.Parallel()
 			client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodPost || r.URL.Path != "/v1/chat/completions" {
+				if r.Method != http.MethodPost || r.URL.Path != "/v1/chat/completions/operations" {
 					t.Errorf("unexpected route: %s %s", r.Method, r.URL.Path)
 				}
 				feature := tc.feature
@@ -98,6 +109,9 @@ func TestCompleteSendsFeatureLaneAndAccounting(t *testing.T) {
 			}))
 			in := prompt()
 			in.Feature, in.AppPlatform = tc.feature, " Mobile "
+			if tc.feature == MemoryL1 {
+				in.UsageFeature = MemoryL1
+			}
 			got, err := client.Complete(t.Context(), queue.GuardedForTest(t, "test-owner", "job"), in)
 			if err != nil || got != `{"title":"Example"}` {
 				t.Fatalf("Complete = %q, %v", got, err)
@@ -146,7 +160,11 @@ func TestOperationIDSurvivesReplayAndSeparatesJobsAndSteps(t *testing.T) {
 	t.Parallel()
 	ids := make(chan string, 4)
 	client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ids <- r.Header.Get("X-Omi-Request-Id")
+		key := r.Header.Get(idempotencyHeader)
+		if key != r.Header.Get("X-Omi-Request-Id") {
+			t.Error("key and correlation ID differ")
+		}
+		ids <- key
 		writeResponse(t, w, http.StatusOK, okCompletion)
 	}))
 	for _, item := range []struct{ job, step string }{
@@ -167,16 +185,13 @@ func TestOperationIDSurvivesReplayAndSeparatesJobsAndSteps(t *testing.T) {
 	}
 }
 
-func TestRecoverAndInvalidRequestsDoNotCallGateway(t *testing.T) {
+func TestInvalidRequestsDoNotCallGateway(t *testing.T) {
 	t.Parallel()
 	client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		t.Error("unexpected paid call")
 		writeResponse(t, w, http.StatusOK, okCompletion)
 	}))
 	guard := queue.GuardedForTest(t, "owner", "job")
-	if _, err := client.Recover(t.Context(), guard, guard.Operation("notes")); !errors.Is(err, ErrNotCommitted) {
-		t.Fatalf("Recover = %v", err)
-	}
 	var dead queue.Guarded
 	if _, err := client.Complete(t.Context(), dead, prompt()); !errors.Is(err, queue.ErrLease) {
 		t.Fatalf("Complete without guard = %v", err)
@@ -194,6 +209,50 @@ func TestRecoverAndInvalidRequestsDoNotCallGateway(t *testing.T) {
 	in.BYOK, in.Step = nil, ""
 	_, err = client.Complete(t.Context(), guard, in)
 	checkFailure(t, err, CauseRejected, 0, queue.Fail(CauseRejected))
+}
+
+func TestRecoverLooksUpTheSameKeyWithoutPosting(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		status   int
+		body     string
+		expected error
+	}{
+		{"committed", http.StatusOK, okCompletion, nil},
+		{"missing", http.StatusNotFound, gatewayError("", "idempotency_not_found", ""), ErrNotCommitted},
+		{"expired", http.StatusGone, gatewayError("", "idempotency_expired", ""), ErrNotCommitted},
+		{"indeterminate", http.StatusConflict, gatewayError("", "idempotency_indeterminate", ""), ErrNotCommitted},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			guard := queue.GuardedForTest(t, "owner", "job")
+			client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				const key = "d2241ab4-95e3-880b-bda8-23f7e5334859"
+				if r.Method != http.MethodGet || r.URL.Path != "/v1/chat/completions/operations/"+key ||
+					r.Header.Get("X-Omi-User-Uid") != "owner" || r.Header.Get("Authorization") != "Bearer test-service" ||
+					r.Header.Get("X-Omi-Service-Caller") != "backend" || r.Header.Get("X-Omi-Request-Id") != key {
+					t.Errorf("unexpected recovery request: %s %s", r.Method, r.URL.Path)
+				}
+				writeResponse(t, w, tc.status, tc.body)
+			}))
+			text, err := client.Recover(t.Context(), guard, "notes")
+			if !errors.Is(err, tc.expected) || (tc.expected == nil && text != `{"title":"Example"}`) {
+				t.Fatalf("Recover = %q, %v", text, err)
+			}
+		})
+	}
+}
+
+func TestCompleteRejectsUnacknowledgedSuccess(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Del(idempotencyAck)
+		writeResponse(t, w, http.StatusOK, okCompletion)
+	}))
+	_, err := client.Complete(t.Context(), queue.GuardedForTest(t, "owner", "job"), prompt())
+	checkFailure(t, err, CauseIndeterminate, http.StatusOK, queue.Fail(CauseIndeterminate))
 }
 
 func TestBYOKEnvelopeDoesNotRetryOrFallBack(t *testing.T) {
@@ -243,13 +302,21 @@ func TestGatewayFailureEnvelopesMapToQueueOutcomes(t *testing.T) {
 	}{
 		{"validation", 400, gatewayError("invalid_request_error", "invalid_request", ""), CauseRejected, false},
 		{"capability", 400, gatewayError("invalid_request_error", "capability_not_supported", "capability_mismatch"), CauseRejected, false},
-		{"service auth", 401, `{"detail":"sensitive"}`, CauseRejected, false},
+		{"service auth invalid token", 401, `{"detail":"sensitive"}`, CauseServiceAuth, true},
+		{"service auth invalid caller", 403, `{"detail":"sensitive"}`, CauseServiceAuth, true},
+		{"deleting owner", 403, gatewayError("", "idempotency_owner_unavailable", ""), CauseRejected, false},
+		{"BYOK provider timeout", 401, gatewayError("authentication_error", "credential_failure", "timeout_before_output"), CauseTransient, true},
+		{"BYOK provider down", 401, gatewayError("authentication_error", "credential_failure", "provider_5xx_omi_paid"), CauseTransient, true},
+		{"oversized error falls back to status", 401, gatewayError("authentication_error", "credential_failure", strings.Repeat("sensitive", 2048)), CauseServiceAuth, true},
 		{"model missing", 404, gatewayError("api_error", "model_not_found", ""), CauseRejected, false},
 		{"bad route", 503, gatewayError("invalid_request_error", "invalid_route_config", "invalid_config"), CauseRejected, false},
 		{"provider timeout", 502, gatewayError("api_error", "provider_failure", "timeout_before_output"), CauseTransient, true},
 		{"proxy timeout", 504, "<html>sensitive</html>", CauseTransient, true},
 		{"managed capacity", 502, gatewayError("api_error", "provider_failure", "reserved_capacity_unavailable"), CauseTransient, true},
 		{"managed provider 429", 502, gatewayError("api_error", "provider_failure", "provider_429_omi_paid"), CauseQuota, true},
+		{"key pending", 409, gatewayError("", "idempotency_pending", ""), CauseTransient, true},
+		{"key conflict", 409, gatewayError("", "idempotency_conflict", ""), CauseRejected, false},
+		{"key indeterminate", 409, gatewayError("", "idempotency_indeterminate", ""), CauseIndeterminate, false},
 		{"bare 429", 429, "", CauseQuota, true},
 		{"BYOK quota", 429, gatewayError("rate_limit_error", "credential_failure", "byok_quota"), CauseBYOKQuota, false},
 		{"BYOK rate limit", 429, gatewayError("rate_limit_error", "credential_failure", "byok_rate_limit"), CauseBYOKRateLimit, true},

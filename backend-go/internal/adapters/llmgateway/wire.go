@@ -9,9 +9,15 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode"
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/httpx"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
+)
+
+const (
+	idempotencyHeader = "Idempotency-Key"
+	idempotencyAck    = "X-Omi-Idempotency-Key"
 )
 
 type message struct {
@@ -55,7 +61,7 @@ func (f Feature) lane() string {
 	return ""
 }
 
-func (c *Client) request(ctx context.Context, g queue.Guarded, in Request) (*http.Request, error) {
+func (c *client) request(ctx context.Context, g queue.Guarded, in Request) (*http.Request, error) {
 	lane := in.Feature.lane()
 	if strings.TrimSpace(in.Step) == "" || lane == "" || len(in.Messages) == 0 {
 		return nil, classify(CauseRejected, 0, 0)
@@ -68,13 +74,13 @@ func (c *Client) request(ctx context.Context, g queue.Guarded, in Request) (*htt
 	if err != nil {
 		return nil, classify(CauseRejected, 0, 0)
 	}
-	// No idempotent replays in the transport. This is a correlation header.
+	// Keep retries under the queue's attempt budget, including when the transport sees the key.
 	req.GetBody = nil
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("X-Omi-Service-Caller", "backend")
-	req.Header.Set("X-Omi-Request-Id", requestID(g.Operation(in.Step)))
-	req.Header.Set("X-Omi-User-Uid", g.Tenant())
+	c.authorize(req, g.Tenant())
+	key := requestID(g.Operation(in.Step))
+	req.Header.Set(idempotencyHeader, key)
+	req.Header.Set("X-Omi-Request-Id", key)
 	req.Header.Set("X-Omi-LLM-Feature", string(payloadFeature(in)))
 	switch platform := strings.ToLower(strings.TrimSpace(in.AppPlatform)); platform {
 	case "desktop", "mobile", "web":
@@ -86,17 +92,36 @@ func (c *Client) request(ctx context.Context, g queue.Guarded, in Request) (*htt
 	return req, nil
 }
 
+func (c *client) authorize(req *http.Request, tenant string) {
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("X-Omi-Service-Caller", "backend")
+	req.Header.Set("X-Omi-User-Uid", tenant)
+}
+
 func payloadFeature(in Request) Feature {
-	if in.UsageFeature != "" {
-		return in.UsageFeature
+	feature := in.UsageFeature
+	if feature == "" {
+		feature = in.Feature
 	}
-	if in.Feature == MemoryL1 {
+	if feature == MemoryL1 {
 		return Memories
 	}
-	if in.Feature == ExternalStructure || in.Feature == ConversationV3Summary {
+	if feature == ExternalStructure || feature == ConversationV3Summary {
 		return ConversationStructure
 	}
-	return in.Feature
+	return feature
+}
+
+// acceptsSchema follows _STRUCTURED_OUTPUT_FEATURES, V3_FEATURES and the pilot lane.
+func (f Feature) acceptsSchema() bool {
+	switch f {
+	case ConversationAppSelect, ExternalStructure, ConversationV3Summary, StructureShadow, ActionsShadow:
+		return true
+	case ConversationStructure, ConversationDiscard, ConversationActions, ConversationFolder,
+		ConversationAppResult, Memories, MemoryL1:
+		return false
+	}
+	return false
 }
 
 func buildPayload(in Request, lane string) ([]byte, error) {
@@ -116,7 +141,7 @@ func buildPayload(in Request, lane string) ([]byte, error) {
 	}
 	if in.Schema != nil {
 		schema := bytes.TrimSpace(in.Schema.JSON)
-		if in.Schema.Name == "" || len(schema) == 0 || schema[0] != '{' {
+		if !in.Feature.acceptsSchema() || in.Schema.Name == "" || len(schema) == 0 || schema[0] != '{' {
 			return nil, classify(CauseRejected, 0, 0)
 		}
 		body.ResponseFormat = &responseFormat{
@@ -139,7 +164,7 @@ func setBYOK(req *http.Request, in Request) error {
 		return classify(CauseBYOK, 0, 0)
 	}
 	key := strings.TrimSpace(in.BYOK.Key)
-	if key == "" {
+	if key == "" || strings.ContainsFunc(in.BYOK.Key, unicode.IsControl) {
 		return classify(CauseBYOK, 0, 0)
 	}
 	switch in.BYOK.Provider {
@@ -172,22 +197,29 @@ type completionResponse struct {
 	} `json:"choices"`
 }
 
-func (c *Client) send(req *http.Request) (string, error) {
+func (c *client) send(req *http.Request, key string, lookup bool) (string, error) {
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return "", classify(CauseTransient, 0, 0)
 	}
-	text, err := c.read(resp)
+	text, err := c.read(resp, key, lookup)
 	if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
 		return "", classify(CauseTransient, resp.StatusCode, 0)
 	}
 	return text, err
 }
 
-func (c *Client) read(resp *http.Response) (string, error) {
+func (c *client) read(resp *http.Response, key string, lookup bool) (string, error) {
 	if resp.StatusCode != http.StatusOK {
+		cause, code := readCause(resp)
+		if lookup && (code == "idempotency_not_found" || code == "idempotency_expired" || code == "idempotency_indeterminate") {
+			return "", ErrNotCommitted
+		}
 		delay := httpx.RetryAfter(resp.Header.Get("Retry-After"), c.clock.Now())
-		return "", classify(readCause(resp), resp.StatusCode, delay)
+		return "", classify(cause, resp.StatusCode, delay)
+	}
+	if resp.Header.Get(idempotencyAck) != key {
+		return "", classify(CauseIndeterminate, resp.StatusCode, 0)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxCompletionBytes+1))
 	if err != nil {

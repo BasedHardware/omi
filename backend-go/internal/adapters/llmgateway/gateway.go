@@ -64,7 +64,9 @@ type BYOK struct {
 // Request holds data for one non-streaming completion. Step must identify one paid
 // call within the job, including when the same feature is used more than once.
 type Request struct {
-	Step         string
+	Step string
+	// JobCreatedAt is the durable Job.CreatedAt, shared by retries and redrives.
+	JobCreatedAt time.Time
 	Feature      Feature
 	Messages     []Message
 	Schema       *StrictSchema
@@ -80,8 +82,16 @@ type Config struct {
 	Timeout      time.Duration
 }
 
-// Client speaks the gateway's internal OpenAI-compatible API.
-type Client struct {
+// Replayable couples paid submission with recovery. A paid family port must require
+// both operations and supply a job's durable creation time for every submission.
+type Replayable interface {
+	Complete(ctx context.Context, g queue.Guarded, in Request) (string, error)
+	Recover(ctx context.Context, g queue.Guarded, step string) (string, error)
+}
+
+const paidReplayHorizon = 29 * 24 * time.Hour
+
+type client struct {
 	endpoint string
 	token    string
 	http     *http.Client
@@ -89,7 +99,7 @@ type Client struct {
 }
 
 // New builds a client with a bounded call timeout and redirects disabled.
-func New(cfg Config, c clock.Clock) (*Client, error) {
+func New(cfg Config, c clock.Clock) (Replayable, error) {
 	base, err := url.Parse(cfg.BaseURL)
 	if err != nil || base.Hostname() == "" || (base.Scheme != "http" && base.Scheme != "https") ||
 		base.User != nil || base.RawQuery != "" || base.ForceQuery || base.Fragment != "" {
@@ -99,8 +109,8 @@ func New(cfg Config, c clock.Clock) (*Client, error) {
 	if token == "" || cfg.Timeout <= 0 || c == nil {
 		return nil, errors.New("llmgateway: service token, positive timeout and clock are required")
 	}
-	return &Client{
-		endpoint: strings.TrimRight(base.String(), "/") + "/v1/chat/completions",
+	return &client{
+		endpoint: strings.TrimRight(base.String(), "/") + "/v1/chat/completions/operations",
 		token:    token,
 		clock:    c,
 		http: &http.Client{
@@ -113,19 +123,29 @@ func New(cfg Config, c clock.Clock) (*Client, error) {
 }
 
 // Complete executes a single gateway POST and returns the first choice's text in memory.
-// The request ID correlates replays but the gateway can execute and charge each replay.
-func (c *Client) Complete(ctx context.Context, g queue.Guarded, in Request) (string, error) {
+// The operation key identifies the same gateway result across retries and takeovers.
+func (c *client) Complete(ctx context.Context, g queue.Guarded, in Request) (string, error) {
 	if err := g.Err(); err != nil {
 		return "", err
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	req, err := c.request(ctx, g, in)
+	now := c.clock.Now()
+	if in.JobCreatedAt.IsZero() || in.JobCreatedAt.After(now) {
+		return "", classify(CauseRejected, 0, 0)
+	}
+	remaining := in.JobCreatedAt.Add(paidReplayHorizon).Sub(now)
+	if remaining <= 0 {
+		return "", classify(CauseExpired, 0, 0)
+	}
+	callCtx, cancel := context.WithTimeout(ctx, remaining)
+	defer cancel()
+	req, err := c.request(callCtx, g, in)
 	if err != nil {
 		return "", err
 	}
-	text, err := c.send(req)
+	text, err := c.send(req, req.Header.Get(idempotencyHeader), false)
 	if guardErr := g.Err(); guardErr != nil {
 		return "", guardErr
 	}
@@ -135,17 +155,34 @@ func (c *Client) Complete(ctx context.Context, g queue.Guarded, in Request) (str
 	return text, err
 }
 
-// ErrNotCommitted means the gateway cannot supply a previously committed completion.
-var ErrNotCommitted = errors.New("llmgateway: committed completion lookup unavailable")
+// ErrNotCommitted means the gateway has no recoverable completion for this operation.
+var ErrNotCommitted = errors.New("llmgateway: no recoverable completion")
 
-// Recover reports that the gateway has no lookup by operation ID, without starting a call.
-// The operation must be the one produced by Guarded.Operation for the paid call.
-func (c *Client) Recover(ctx context.Context, g queue.Guarded, _ string) (string, error) {
+// Recover fetches the committed result for the same guarded job and step.
+// A lookup never submits work to a provider.
+func (c *client) Recover(ctx context.Context, g queue.Guarded, step string) (string, error) {
 	if err := g.Err(); err != nil {
 		return "", err
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	return "", ErrNotCommitted
+	if strings.TrimSpace(step) == "" {
+		return "", classify(CauseRejected, 0, 0)
+	}
+	key := requestID(g.Operation(step))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpoint+"/"+key, nil)
+	if err != nil {
+		return "", classify(CauseRejected, 0, 0)
+	}
+	c.authorize(req, g.Tenant())
+	req.Header.Set("X-Omi-Request-Id", key)
+	text, err := c.send(req, key, true)
+	if guardErr := g.Err(); guardErr != nil {
+		return "", guardErr
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return "", ctxErr
+	}
+	return text, err
 }
