@@ -1129,6 +1129,11 @@ class AppLocalizationsTa extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'பெயர் வெற்றிகரமாக புதுப்பிக்கப்பட்டது!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'தேர்ந்தெடுத்த நாட்காட்டிகளைப் படிக்கவும். புதிய நிகழ்வுகள் $calendar ஐப் பயன்படுத்தும்.';
+  }
+
+  @override
   String get calendarSettings => 'நாட்காட்டி அமைப்புகள்';
 
   @override
@@ -12312,7 +12317,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'இணைத்ததிலிருந்து: $drops துண்டிப்புகள், $failed தோல்வியுற்ற இணைப்புகள்.';
+    return 'இணைத்ததிலிருந்து: $drops மறு இணைப்புகள், $failed தோல்வியடைந்த இணைப்புகள்.';
   }
 
   @override
@@ -13556,16 +13561,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount உரையாடல்களாக மாற்றப்படுகிறது';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total முடிந்தது · இந்தத் திரையிலிருந்து வெளியேறலாம்';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount ஒத்திசைக்கத் தயார்';
   }
@@ -13589,7 +13584,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'இந்த ஃபோனில் காத்திருக்கிறது';
 
   @override
-  String get syncDetailsTranscribing => 'Omi இல் எழுத்தாக்கம் நடக்கிறது';
+  String get syncDetailsTranscribing => 'பதிவேற்றப்பட்டது, சேவையகத்திற்குக் காத்திருக்கிறது';
 
   @override
   String get syncDetailsAudioFiles => 'ஆடியோ கோப்புகள்';
@@ -14053,6 +14048,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi ஏற்கனவே இந்த உரையாடலில் வேலை செய்கிறது. முடிந்ததும் சுருக்கம் இங்கே தோன்றும்.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'இன்னும் படியெடுக்கப்படவில்லை';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'படியெடுப்பு தயாரானதும் சுருக்கம் தோன்றும்.';
 
   @override
   String get summaryCheckAgain => 'மீண்டும் சரிபார்';
@@ -15579,7 +15580,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15660,4 +15661,16 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'உங்கள் சுருக்கம் எழுதப்படுகிறது…';
+
+  @override
+  String get onTheWayServerWork => 'சேவையகம் தெரிவித்த பணி';
+
+  @override
+  String get finishNothingToProcess => 'இன்னும் செயலாக்க எதுவும் இல்லை.';
+
+  @override
+  String get finishStillProcessing => 'இன்னும் செயலாக்கப்படுகிறது. இது முகப்பில் தோன்றும்.';
+
+  @override
+  String get finishBackToHome => 'முகப்புக்குத் திரும்பு';
 }

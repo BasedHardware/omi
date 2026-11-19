@@ -279,9 +279,9 @@ def entries():
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.run',
             covered_by=('database.batch_pipeline_store.service_frontier',),
-            reason='queries only through reseed_hinted_activation after the body transaction commits',
+            reason='optional pre-begin pacing adds no query; queries only through reseed_hinted_activation after commit',
             expect_observed=False,
-            body_digest='d7cced46951bbfea06f7c501288ee41c76d972f6149aa7ead6e3c31573055b52',
+            body_digest='20a0e3fdea5dd2194d7c806216e36c644fccbeca46bd5a6489e132ae902d8e32',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.service_frontier',
@@ -496,6 +496,24 @@ def entries():
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces, 'skip_terminal': [False, True]},
             neutrals={'transaction': (None, 'transaction binding only, no shape change')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.pending_page',
+            covered_by=('database.batch_pipeline_store.pending_page',),
+            reason='thin store adapter delegates unchanged query arguments to the named query builder',
+            expect_observed=False,
+            body_digest='b7bcced82f592d8f14f8cdae8f7bde59e27b63c90e165ec175b762e30876cb5c',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.pending_page',
+            trials=2,
+            patchers=(_poll_skip_modes,),
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces, 'skip_terminal': [False, True]},
+            neutrals={
+                'limit': (129, 'first_pending shape; only the bounded stale-head page size differs'),
+                'transaction': (None, 'transaction binding only, no shape change'),
+            },
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending',

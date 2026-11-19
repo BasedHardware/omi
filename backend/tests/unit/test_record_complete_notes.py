@@ -167,9 +167,35 @@ def test_large_output_set_checkpoints_without_repeating_notes_after_restart(reco
     outputs = ['capture', *(f'split-{i}' for i in range(128))]
     for cid in outputs[1:]:
         f.user.collection('conversations').document(cid).create({'status': 'completed'})
+    # Arrange ready fallback obligations in linear time. mark_enrichment's
+    # per-output producer walk is covered above; repeating that whole walk here
+    # rechecks all 129 privacy targets for each fallback (quadratic setup).
+    # This test keeps the real 128/129 completion boundary and strict guards.
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    collection = f.client.collection(reprocess.COLLECTION)
+    fallback_due = collection.document(reprocess.key(f.binding.owner_id, 'capture')).get().to_dict()['due_at']
+    outbox = FirestoreEnrichmentOutbox(f.client)
+    for cid in outputs[1:]:
+        outbox.enqueue(
+            reprocess.key(f.binding.owner_id, cid),
+            f.binding.owner_id,
+            {
+                'conversation_id': cid,
+                'language': 'en',
+                'record_notes_producer': {'conversation_id': 'capture', 'revision': 1},
+            },
+            fallback_due,
+            tx=f.client.transaction(),
+            now=NOW,
+            coalesce='min',
+            snapshot_summary=True,
+            eager_if_unheld=True,
+        )
+    f.client.rows[f.ledger.path]['record_notes_fallback_outputs'] = sorted(outputs)
     entry = f.client.rows[f.store.ref('results', 'first').path]
     entry['projection']['size_rollover_outputs'] = [{'conversation_id': cid, 'created': False} for cid in outputs]
-    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    initial_rows = [data for path, data in f.client.rows.items() if path[0] == reprocess.COLLECTION]
+    assert len(initial_rows) == 129 and all(row['version'] == 1 for row in initial_rows)
     assert f.store.complete('first', f.binding, NOW, f.accounting, policy=POLICY) is None
     assert len(f.ledger.get().to_dict()['record_notes_prepared_outputs']) == 128
     assert len([path for path in f.client.rows if path[0] == reprocess.COLLECTION]) == 129
@@ -505,3 +531,156 @@ def test_terminal_record_unit_allows_suffix_to_merge_and_complete_partial(record
     result, _ = f.store.complete_partial(f.binding, NOW, f.accounting)
     assert result['outcome'] == 'partial' and result['held_segments'] == 1
     assert result['total_segments'] == 3
+
+
+def _sealed_live(f, **extra):
+    """The fixture capture as a sealed batch-owned live record with a phone copy merged in."""
+    f.client.rows[f.conversation.path].update(
+        record_lane_owner='batch_live_v1',
+        private_cloud_sync_enabled=True,
+        record_projection_revision=1,
+        record_sealed_at=NOW - 300,
+        sync_processing_hold={'held': True, 'pending_since': NOW - 30, 'last_content_at': NOW - 20},
+        **extra,
+    )
+    return f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
+
+
+@pytest.mark.parametrize('notes_written', [False, True])
+def test_eager_off_sealed_live_record_completion_wakes_first_notes_now_after_the_ledger(
+    recording, monkeypatch, notes_written
+):
+    # Production runs with eager record notes off: units mark the main settle
+    # path, so the obligation waited for its 120 s first-summary deadline.
+    f = recording
+    monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
+    row = _sealed_live(f, **({'summary_completed_at': NOW - 60} if notes_written else {}))
+    order = []
+    f.store._observe_transcription.side_effect = lambda *args: order.append('ledger')
+    f.wake.side_effect = lambda row_id, token: order.append('wake')
+    # Without a queue binding (this fixture) no wake is armed; give the row one.
+    monkeypatch.setattr(FirestoreEnrichmentOutbox, '_can_wake', lambda self, row, effects=False: True)
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert f.store.complete('first', f.binding, NOW, f.accounting, policy=POLICY) is None
+    assert row.get().to_dict()['due_at'] == NOW + 120
+    f.store.mark_enrichment('last', f.binding, NOW + 5, 'capture', 'en', policy=POLICY)
+    order.clear()
+    assert f.store.complete('last', f.binding, NOW + 5, f.accounting, policy=POLICY)
+    if notes_written:
+        # After the first notes a later copy keeps its normal clock.
+        assert row.get().to_dict()['due_at'] == NOW + 120
+        assert order == ['ledger']
+    else:
+        stored = row.get().to_dict()
+        assert stored['due_at'] == stored['task_due_at'] == NOW + 5
+        # The woken callback's seal proof reads the ledger stage, so it lands first.
+        assert order == ['ledger', 'wake']
+        assert f.wake.call_args.args == (reprocess.key(f.binding.owner_id, 'capture'), stored['task_token'])
+
+
+def test_eager_off_completion_leaves_unsealed_rows_and_the_kill_switch_alone(recording, monkeypatch):
+    f = recording
+    monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
+    row = _sealed_live(f, record_audio_closed=False)
+    for sid in f.binding.segment_ids:
+        f.store.mark_enrichment(sid, f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
+    assert row.get().to_dict()['due_at'] == NOW + 120
+
+
+def test_eager_off_completion_obeys_the_seal_proof_kill_switch(recording, monkeypatch):
+    f = recording
+    monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
+    monkeypatch.setenv('SYNC_UPLOAD_WATERMARK_ENABLED', 'false')
+    row = _sealed_live(f)
+    for sid in f.binding.segment_ids:
+        f.store.mark_enrichment(sid, f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
+    assert row.get().to_dict()['due_at'] == NOW + 120
+
+
+@pytest.mark.parametrize('recording', [3], indirect=True)
+@pytest.mark.parametrize('sibling', ['held', 'transcribing'])
+def test_a_unit_held_for_recovery_does_not_hold_the_sealed_records_first_notes(recording, monkeypatch, sibling):
+    # Prod 2026-11-17: one near-silent unit returned empty ASR, sat quarantined
+    # for 65 minutes and kept the record's completion (and its notes) open.
+    f = recording
+    monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
+    # Without a queue binding (this fixture) no wake is armed; give the row one.
+    monkeypatch.setattr(FirestoreEnrichmentOutbox, '_can_wake', lambda self, row, effects=False: True)
+    row = _sealed_live(f)
+    conversation = f.client.rows[f.conversation.path]
+    held = {'state': 'quarantined', 'merge_pending': False, 'result': None, 'recovery_state': 'held'}
+    if sibling == 'held':
+        f.client.rows[f.store.ref('jobs', 'last').path].update(held)
+        del f.client.rows[f.store.ref('results', 'last').path]
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert f.store.hold_for_quarantine('first', f.binding, NOW, policy=POLICY) is (sibling == 'held')
+    # A unit still on its way keeps the wait: nothing is stamped or pulled in.
+    assert 'units_settled_seal_at' not in conversation['sync_processing_hold']
+    assert row.get().to_dict()['due_at'] == NOW + 120
+    f.store.mark_enrichment(f.binding.segment_ids[1], f.binding, NOW + 5, 'capture', 'en', policy=POLICY)
+    f.store.hold_for_quarantine(f.binding.segment_ids[1], f.binding, NOW + 5, policy=POLICY)
+    if sibling == 'held':
+        # Every other unit landed: the seal is stamped once and notes are due now.
+        assert conversation['sync_processing_hold']['units_settled_seal_at'] == NOW - 300
+        assert conversation['sync_processing_hold']['held'] is True
+        assert capture_end.seal_proof(conversation, None) == 'units_held'
+        stored = row.get().to_dict()
+        assert stored['due_at'] == stored['task_due_at'] == NOW + 5
+        # The new wake goes out with the rotated token.
+        assert f.wake.call_args.args == (reprocess.key(f.binding.owner_id, 'capture'), stored['task_token'])
+    else:
+        assert 'units_settled_seal_at' not in conversation['sync_processing_hold']
+        assert row.get().to_dict()['due_at'] == NOW + 120
+
+
+@pytest.mark.parametrize('recording', [2], indirect=True)
+def test_a_held_unit_after_first_notes_changes_nothing(recording, monkeypatch):
+    f = recording
+    monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
+    row = _sealed_live(f, summary_output_present=True)
+    f.client.rows[f.store.ref('jobs', 'last').path].update(
+        {'state': 'quarantined', 'merge_pending': False, 'result': None, 'recovery_state': 'held'}
+    )
+    del f.client.rows[f.store.ref('results', 'last').path]
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert f.store.hold_for_quarantine('first', f.binding, NOW, policy=POLICY) is True
+    assert 'units_settled_seal_at' not in f.client.rows[f.conversation.path]['sync_processing_hold']
+    assert row.get().to_dict()['due_at'] == NOW + 120
+
+
+@pytest.mark.parametrize('recording', [2], indirect=True)
+def test_a_failed_held_unit_notes_wake_never_fails_the_unit_job(recording, monkeypatch):
+    f = recording
+    monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
+    monkeypatch.setattr(FirestoreEnrichmentOutbox, '_can_wake', lambda self, row, effects=False: True)
+    row = _sealed_live(f)
+    f.client.rows[f.store.ref('jobs', 'last').path].update(
+        {'state': 'quarantined', 'merge_pending': False, 'result': None, 'recovery_state': 'held'}
+    )
+    del f.client.rows[f.store.ref('results', 'last').path]
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    f.wake.reset_mock()
+    f.wake.side_effect = RuntimeError('synthetic task queue outage')
+    assert f.store.hold_for_quarantine('first', f.binding, NOW, policy=POLICY) is True
+    f.wake.assert_called_once()
+    # The committed obligation stays due now for the sweep to wake.
+    assert row.get().to_dict()['due_at'] == NOW
+
+
+def test_a_failed_completion_notes_wake_never_skips_the_committed_follow_ups(recording, monkeypatch):
+    f = recording
+    monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
+    monkeypatch.setattr(FirestoreEnrichmentOutbox, '_can_wake', lambda self, row, effects=False: True)
+    row = _sealed_live(f)
+    for sid in f.binding.segment_ids:
+        f.store.mark_enrichment(sid, f.binding, NOW, 'capture', 'en', policy=POLICY)
+    f.wake.reset_mock()
+    f.wake.side_effect = RuntimeError('synthetic task queue outage')
+    assert f.store.complete('last', f.binding, NOW + 5, f.accounting, policy=POLICY)
+    f.wake.assert_called_once()
+    # The commit stands: the row is due now for the sweep, and the post-commit steps still ran.
+    assert row.get().to_dict()['due_at'] == NOW + 5
+    f.store._mirror.assert_called()
+    f.store._settle_allowance.assert_called_once()

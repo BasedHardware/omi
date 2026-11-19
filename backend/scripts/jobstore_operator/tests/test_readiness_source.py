@@ -200,6 +200,14 @@ class SourceTests(unittest.TestCase):
                 self.assertNotIn('SECRET', json.dumps(fields))
 
     def test_remaining_deadline_caps_both_git_calls_and_expiration_refuses(self):
+        # A full remaining budget uses the measured stage allocation; both
+        # calls still share the unchanged overall readiness deadline.
+        with patch.object(readiness.time, 'monotonic', return_value=50), patch.object(
+            readiness.subprocess, 'check_output', side_effect=[self.head, '']
+        ) as command:
+            readiness.verify_source(self.root, 100)
+        self.assertEqual([call.kwargs['timeout'] for call in command.call_args_list], [5, 30])
+        self.assertEqual(readiness.READINESS_SECONDS, 50)
         with patch.object(readiness.time, 'monotonic', return_value=99), patch.object(
             readiness.subprocess, 'check_output', side_effect=[self.head, '']
         ) as command:

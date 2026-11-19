@@ -1109,6 +1109,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nameUpdatedSuccessfully => '姓名更新成功！';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return '读取所选日历。新建活动使用 $calendar。';
+  }
+
+  @override
   String get calendarSettings => '日历设置';
 
   @override
@@ -12029,7 +12034,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return '配对以来：断开 $drops 次，连接失败 $failed 次。';
+    return '自配对以来：重连 $drops 次，连接失败 $failed 次。';
   }
 
   @override
@@ -13256,16 +13261,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '正在将 $amount 转为对话';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '已完成 $done / $total · 你可以离开此屏幕';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount 可同步';
   }
@@ -13289,7 +13284,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => '等待此手机上传';
 
   @override
-  String get syncDetailsTranscribing => 'Omi 正在转录';
+  String get syncDetailsTranscribing => '已上传，等待服务器';
 
   @override
   String get syncDetailsAudioFiles => '音频文件';
@@ -13739,6 +13734,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi 已在处理此对话。完成后，摘要将显示在这里。';
+
+  @override
+  String get summaryTranscriptionPendingTitle => '尚未转录';
+
+  @override
+  String get summaryTranscriptionPendingBody => '转录完成后将显示摘要。';
 
   @override
   String get summaryCheckAgain => '再次检查';
@@ -15224,7 +15225,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15305,4 +15306,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => '正在撰写你的摘要…';
+
+  @override
+  String get onTheWayServerWork => '服务器报告的任务';
+
+  @override
+  String get finishNothingToProcess => '还没有可处理的内容。';
+
+  @override
+  String get finishStillProcessing => '仍在处理中。完成后会显示在首页。';
+
+  @override
+  String get finishBackToHome => '返回首页';
 }

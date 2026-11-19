@@ -90,6 +90,9 @@ class _Recording:
     def first_pending(self, owner_key: str) -> dict | None:
         return self._tx.first_pending(owner_key)
 
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        return self._tx.pending_page(owner_key, limit)
+
     def fresh_first_pending(self, owner_key: str) -> dict | None:
         return self._tx.fresh_first_pending(owner_key)
 

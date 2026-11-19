@@ -29,7 +29,9 @@ Every other case keeps immediate finalization: desktop, web, multi-channel,
 mobile sources without a quiet check, empty captures, an explicit client
 reason, a refused or failed arm, or a row finalized meanwhile. The existing
 `LISTEN_QUIET_FINALIZATION_ENABLED=false` also restores immediate finalization,
-because a disabled quiet check never arms. No new flag or wire change.
+because a disabled quiet check never arms. No new wire change. Since
+2026-11-17 the hold also requires `LISTEN_BATCH_RECONNECT_ENABLED` (see
+2026-11-17-drop-hold-regate.md).
 
 Contract: [server batch-only capture](../../listen_pusher_pipeline.mdx#server-batch-only-capture-by-platform)
 and [durable mono pendant/phone quiet checks](../../listen_pusher_pipeline.mdx#durable-mono-pendantphone-quiet-checks).

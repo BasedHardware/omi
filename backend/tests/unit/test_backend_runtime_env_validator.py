@@ -542,7 +542,8 @@ def with_conversations_v3_env(payload: str) -> str:
             rf'("{service}":\s*\{{.*?"env":\s*\[)',
             r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "beta"},'
             r'\n        {"name": "CONVERSATIONS_V3_FIRST_APP_BUILD", "value": ""},'
-            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},',
+            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},'
+            r'\n        {"name": "CONVERSATIONS_V3_BACKFILL_QUEUE", "value": "conversations-v3-backfill"},',
             payload,
             count=1,
             flags=re.DOTALL,
@@ -3734,6 +3735,52 @@ def test_guarded_long_recovery_stays_disabled_and_hours_are_inert():
             assert env.get('SYNC_BACKFILL_ADMISSION_LIMITS', {}).get('value', 'false') == 'false'
 
 
+def _settings_named(node, key):
+    if isinstance(node, dict):
+        for name, child in node.items():
+            if name == key:
+                yield child
+            else:
+                yield from _settings_named(child, key)
+    elif isinstance(node, list):
+        for child in node:
+            yield from _settings_named(child, key)
+
+
+def test_prod_sync_backfill_lookback_is_sixty_days_and_no_release_reach_undercuts_it():
+    # The lookback is checked once, at upload admission; a backlog that older app builds
+    # or slow drains cannot clear within the window gets a terminal 422 on the phone.
+    # Prod admits 60 days. The batch backlog-release reach (capture-age based) must never
+    # hold back what admission accepted, on any prod surface (Cloud Run services and
+    # jobs, GKE). This covers the env seed only: the effective reach lives on the
+    # Firestore gate row, whose code floor is MIN_REACH_SECONDS (30 days).
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    prod = manifest['environments']['prod']
+    services = prod['cloud_run']['services']
+    lookback = 60 * 86400
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['SYNC_BACKFILL_MAX_AGE_SECONDS']['value'] == str(lookback)
+    assert len(list(_settings_named(prod, 'SYNC_BACKFILL_MAX_AGE_SECONDS'))) >= 2  # walker reaches service env
+    for setting in _settings_named(prod, 'BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS'):
+        reach = int(setting.get('value', '0') if isinstance(setting, dict) else setting)
+        assert reach == 0 or reach >= lookback
+
+
+def test_prod_unlimited_backfill_day_cap_is_on_at_24_hours_on_every_declaring_surface():
+    # Enforced only at sync upload (retryable 503 backfill_capacity); dev keeps it off.
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    for stage, expected in (('prod', 'true'), ('dev', 'false')):
+        environment = manifest['environments'][stage]
+        enabled = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED'))
+        hours = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS'))
+        assert len(enabled) == len(hours) >= 5
+        assert {setting['value'] for setting in enabled} == {expected}
+        assert {setting['value'] for setting in hours} == {'24'}
+    services = manifest['environments']['prod']['cloud_run']['services']
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED']['value'] == 'true'
+
+
 # M7: compose and validate declarations offline; no cloud clients or rollout writes.
 @pytest.fixture(scope='module')
 def read_lever_sources():
@@ -3750,12 +3797,19 @@ def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources
         assert lever in notes
     prod_worker = generated['surfaces']['chart/prod/batch-pipeline-worker']
     integration = generated['surfaces']['runtime/prod/cloud_run/services/backend-integration']
-    assert prod_worker['explicit'] == dict(integration['explicit'], usage_month_cache=0, usage_month_total=0)
+    assert prod_worker['explicit'] == dict(
+        integration['explicit'],
+        usage_month_cache=0,
+        usage_month_total=0,
+        bpp_decision_cache=100,
+        privacy_checks_shadow=10,
+        bpp_owner_memo_enforce=0,
+    )
     assert prod_worker['effective']['bpp_decision_cache'] == 100
     assert prod_worker['effective']['batch_timeliness_leader'] == 100
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         surface = generated['surfaces'][f'runtime/prod/cloud_run/services/{service}']
-        assert surface['explicit']['bpp_decision_cache'] == 100
+        assert surface['explicit']['bpp_decision_cache'] == 0
     dev_worker = generated['surfaces']['chart/dev/batch-pipeline-worker']
     assert dev_worker['explicit'] == {}
     assert dev_worker['inheritance']['status'] == 'UNRESOLVED'
@@ -3817,7 +3871,8 @@ def test_read_lever_evidence_metadata_lives_only_in_generator(read_lever_sources
     policy, _, _ = read_lever_sources
     assert policy['reviewed_inheritance'] == read_lever_manifest.REVIEWED_INHERITANCE
     assert policy['unresolved_notes'] == read_lever_manifest.UNRESOLVED_NOTES
-    generated = read_lever_manifest.build_manifest(today=date(2026, 11, 11))
+    # This inspects current source metadata; fixed-date expiry boundary cases are separate below.
+    generated = read_lever_manifest.build_manifest()
     assert generated['notes'] == [*read_lever_manifest.RESOLVED_NOTES, *read_lever_manifest.UNRESOLVED_NOTES]
     for surface, annotation in read_lever_manifest.REVIEWED_INHERITANCE.items():
         assert generated['surfaces'][surface]['inheritance'] == annotation
@@ -4157,3 +4212,15 @@ def test_control_sync_routing_validates_deployed_values_without_changing_manifes
     assert validator.validate_runtime_env(
         env='prod', cloud_run_state_path=path, cloud_run_service='backend-integration', sync_routing_env_path=overlay
     )[0].message == ('sync routing overlay outside selected service scope')
+
+
+@pytest.mark.parametrize('lever', ['bpp_decision_cache', 'privacy_checks_shadow', 'bpp_owner_memo_enforce'])
+def test_read_lever_parity_rejects_worker_inheriting_api_privacy_scope(read_lever_sources, lever):
+    """API-only admission must not flow through the integration comparison into a worker train."""
+    policy, sources, expected = read_lever_sources
+    changed = copy.deepcopy(sources)
+    worker = 'chart/prod/batch-pipeline-worker'
+    integration = 'runtime/prod/cloud_run/services/backend-integration'
+    assert changed[worker][lever] != expected[integration][lever]
+    changed[worker][lever] = expected[integration][lever]
+    assert any(worker in error for error in read_lever_manifest.parity_errors(changed, expected, policy))

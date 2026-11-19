@@ -168,7 +168,10 @@ from config.conversations_v3 import conversations_v3_enabled
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
-from utils.conversations.v3 import audio as v3_audio, summary as v3_summary
+from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
+from utils.conversations.v3 import live as v3_live
+from database import conversations_v3_live
+from utils.conversations import list_page_headers
 
 router = APIRouter()
 
@@ -179,11 +182,13 @@ def get_live_conversation(
 ):
     if app_channel(channel) == 'beta':
         client_gate.note_client_seen(uid)
+    # Only v3-capable builds call this route, on any channel: that call is what stage all admits.
+    v3_client_capability.note_capable(uid)
     enabled = conversations_v3_enabled(uid)
     if not enabled:
         return {'v3': False, 'conversation': None}
-    rows = conversations_db.get_conversations_without_photos(uid, limit=1, statuses=['in_progress'], hide_home=True)
-    row = next((r for r in rows if not r.get('recording')), None)
+    now = datetime.now(timezone.utc)
+    row = conversations_v3_live.live_window(uid, now=now, max_idle=v3_live.MAX_IDLE, pick=v3_live.active)
     compact = (
         {
             key: row[key]
@@ -1110,6 +1115,13 @@ def get_conversations(
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
+    cursor: Optional[str] = Query(
+        None,
+        description=(
+            "Opaque page cursor from a previous response's X-Omi-Next-Cursor header; when accepted it "
+            "replaces offset. An unknown or stale cursor falls back to offset."
+        ),
+    ),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     if start_date is not None and end_date is not None and aware_datetime(start_date) > aware_datetime(end_date):
@@ -1149,10 +1161,18 @@ def get_conversations(
     # query and the page stream runs under the derived per-RPC timeout, so a
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
     budget = list_read_budget_for_request(request, route='conversations')
+    page: Dict[str, Any] = {}
+    reveal = include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
+    default_home = not (reveal or start_date or end_date)
+    # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
+    # legacy sync piece there would duplicate them.
+    show_held = default_home and not conversations_v3_enabled(uid)
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
         offset,
+        cursor=cursor,
+        cursor_page=page,
         include_discarded=include_discarded,
         statuses=status_filter,
         sources=source_list,
@@ -1165,15 +1185,10 @@ def get_conversations(
         presentation=True,
         include_recordings=status_filter == ['in_progress'],
         capture_only=status_filter == ['in_progress'],
-        hide_home=not (
-            include_discarded
-            or sources
-            or start_date
-            or end_date
-            or folder_id
-            or starred is not None
-            or statuses != 'processing,completed'
-        ),
+        # A date range alone is still Home: the day view is Home's own drill-in,
+        # so it hides what Home hides. Explicit reveal filters still opt out.
+        hide_home=not reveal,
+        show_held=show_held,
     )
 
     conversations = home_membership.project_list(
@@ -1185,8 +1200,12 @@ def get_conversations(
             include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
         ),
     )
+    if response is not None:
+        list_page_headers.apply(response, page)
     _heal_locked_conversations_if_eligible(uid, conversations)
-    conversations = [transcribing_hold.project(home_step.project(row)) for row in conversations]
+    conversations = [
+        transcribing_hold.project(home_step.project(row, show_held=show_held), home_list=True) for row in conversations
+    ]
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
@@ -1589,6 +1608,13 @@ def delete_conversation(
     http_request: Request = None,  # type: ignore[assignment]
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    # A tombstone plus an absent primary row proves this request is already satisfied.
+    # Leave any existing erasure obligation to its runner; never re-arm it on a retry.
+    if (
+        conversation_tombstones.is_deleted(uid, conversation_id)
+        and conversations_db.get_conversation_raw_snapshot(uid, conversation_id, field_paths=['id']) is None
+    ):
+        return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'already_deleted'})
     db_client = getattr(db_client_module, 'db', None) if cascade else None
     memory_service = MemoryService(db_client=db_client) if cascade else None
     # Acquire before recording delete intent, so a delete that can neither run nor be
@@ -1621,9 +1647,10 @@ def delete_conversation(
                     raise
                 return _accept_conversation_delete(uid, conversation_id, http_request)
             held.enter_context(deferred_batch_purges(uid))
-            return _delete_conversation_under_gate(
+            _delete_conversation_under_gate(
                 conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client
             )
+            return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'tombstoned'})
     except RuntimeError as error:
         if type(error).__name__ not in {
             'DestructiveGateTakeover',
@@ -1660,7 +1687,7 @@ def _gate_busy_with_same_account_delete(error: BaseException, uid: str, db_clien
         return False
 
 
-def _accept_conversation_delete(uid: str, conversation_id: str, http_request: Request) -> None:
+def _accept_conversation_delete(uid: str, conversation_id: str, http_request: Request) -> Response:
     # Hide + tombstone + owe the cascade in one commit; the obligation runner erases it.
     conversation_tombstones.accept_deletion(uid, conversation_id)
     # Mode change, not a failure: the user's delete is done; derived-data erasure is deferred.
@@ -1674,6 +1701,7 @@ def _accept_conversation_delete(uid: str, conversation_id: str, http_request: Re
     )
     record_product_event('conversation_deleted', request=http_request)
     # 204, no body: released mobile clients gate delete success on exactly 204.
+    return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'accepted_deferred'})
 
 
 class _DeferredCleanup:

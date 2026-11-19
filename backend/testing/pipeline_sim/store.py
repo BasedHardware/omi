@@ -174,6 +174,9 @@ class SimTransaction:
     def first_pending(self, owner_key: str) -> dict | None:
         return self.store.first_pending(owner_key)
 
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        return self.store.pending_page(owner_key, limit)
+
     def fresh_first_pending(self, owner_key: str) -> dict | None:
         return self._fresh_first(owner_key, ready=False)
 
@@ -432,6 +435,15 @@ class SimStore:
         return True
 
     # -- Query helpers --------------------------------------------------
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        skip = held_poll_skip_enabled()
+        rows = sorted(
+            (self.rows[('jobs', segment_id)]['capture_at'], segment_id)
+            for segment_id in self._pending_by_owner.get(owner_key, ())
+            if not (skip and self.rows[('jobs', segment_id)].get('state') in (None, *MERGE_POLL_TERMINAL_STATES))
+        )
+        return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[: max(1, min(limit, 160))]]
+
     def first_pending(self, owner_key: str, *, ready_only: bool = False, skip_terminal: bool = True) -> dict | None:
         skip = not ready_only and skip_terminal and held_poll_skip_enabled()
         best = None

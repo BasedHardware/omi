@@ -40,6 +40,7 @@ from utils.batch_pipeline.ready_discovery import ReadyDiscovery
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
 from utils.batch_pipeline.allowance_hold import AllowanceHolds, entitlement
 from utils.batch_pipeline.retention import cleanup_completed_artifacts
 from utils.sync.stage import current_stage
@@ -58,6 +59,8 @@ HELD_PARTIAL_TICK_SECONDS = 20.0
 # + the query read; steady replays cost 14).
 HELD_PARTIAL_READS_PER_HOUR = 120_000
 HELD_PARTIAL_READS_PER_UNIT = 16
+# One lookup and one normal CAS read per sweep segment. Charge retries after execution.
+HELD_PARTIAL_CHECKPOINT_READ_RESERVE = 2
 HELD_PARTIAL_WINDOW_SECONDS = 3600.0
 # Re-examine landed targets at most once per minute on the maintenance leader.
 # One page has its own inter-row time budget, so fresh projection resumes.
@@ -90,6 +93,7 @@ class Serving:
         self.enrichment_sweep = enrichment_sweep
         self.recovery = recovery
         self.allowance_hold_due = 0.0
+        self._retirement = None
         # Optional single-owner lease for periodic maintenance (see reconcile).
         self.leader = leader
         self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
@@ -157,7 +161,14 @@ class Serving:
 
     @with_batch_privacy_attempt
     async def reconcile_async(
-        self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
+        self,
+        *,
+        recover_quarantine=False,
+        periodic=False,
+        owner_id=None,
+        recovered=None,
+        owner_only=False,
+        supervised=False,
     ):
         owner_only = owner_only and recovery_owner_only_enabled()
         priority = await run_blocking(
@@ -168,6 +179,7 @@ class Serving:
             owner_id=owner_id,
             recovered=recovered,
             owner_only=owner_only,
+            supervised=supervised,
         )
         # Walk-owed follow-ups keep the drain scheduled until they are queued.
         owes = getattr(self.projector, 'owes_followups', False) is True
@@ -207,7 +219,14 @@ class Serving:
         return []
 
     def reconcile(
-        self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
+        self,
+        *,
+        recover_quarantine=False,
+        periodic=False,
+        owner_id=None,
+        recovered=None,
+        owner_only=False,
+        supervised=False,
     ) -> list[str]:
         """Returns async follow-ups an owner-chain wake wants run first."""
         if owner_only:
@@ -215,7 +234,11 @@ class Serving:
                 raise ValueError('owner-only recovery requires an owner and recovered unit')
             return self._reconcile_owner(owner_id, recovered)
         if self._leads(periodic):
-            self._maintain(recover_quarantine=recover_quarantine)
+            self._maintain(
+                recover_quarantine=recover_quarantine,
+                recovery_caller=RecoveryCaller.SERVING if periodic else RecoveryCaller.RECONCILE,
+                retire_copies=periodic and supervised,
+            )
         elif self.metrics:
             self.metrics.fresh_guard.deactivate()
             self.metrics.delivered_share.deactivate()
@@ -261,7 +284,8 @@ class Serving:
             charged for charged in self.held_partial_reads if now - charged[0] < HELD_PARTIAL_WINDOW_SECONDS
         ]
         spent = sum(reads for _, reads in self.held_partial_reads)
-        return (HELD_PARTIAL_READS_PER_HOUR - spent) // (HELD_PARTIAL_PAGE * HELD_PARTIAL_READS_PER_UNIT)
+        remaining = max(0, HELD_PARTIAL_READS_PER_HOUR - spent - HELD_PARTIAL_CHECKPOINT_READ_RESERVE)
+        return remaining // (HELD_PARTIAL_PAGE * HELD_PARTIAL_READS_PER_UNIT)
 
     def _log_held_partial_segment(self, counts: dict, segment_started: float, budget_pages: int) -> None:
         """One INFO line per sweep segment; a wrapped scan closes the pass with
@@ -294,8 +318,9 @@ class Serving:
         )
         if not counts.get('more'):
             logging.getLogger(__name__).info(
-                'event=batch_held_partial action=pass outcome=completed segments=%d pages=%d units=%d partial=%d '
+                'event=batch_held_partial action=pass outcome=%s segments=%d pages=%d units=%d partial=%d '
                 'waiting=%d error=%d reads=%d pass_seconds=%.1f',
+                'cursor_unconfirmed' if counts.get('wrap_unconfirmed') else 'completed',
                 self.held_pass_segments,
                 self.held_pass_counts['pages'],
                 self.held_pass_counts['units'],
@@ -319,7 +344,7 @@ class Serving:
             self.metrics.fresh_guard.deactivate()
         return leads
 
-    def _maintain(self, *, recover_quarantine: bool):
+    def _maintain(self, *, recover_quarantine: bool, recovery_caller=None, retire_copies=False):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
         leads = self.refresh_fresh_guard()
         if self.metrics:
@@ -387,7 +412,7 @@ class Serving:
             logging.getLogger(__name__).error(
                 'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
             )
-        self.queue().recover(time.time())
+        self.queue().recover(time.time(), caller=recovery_caller)
         if time.monotonic() >= self.allowance_hold_due and self._leads(True):
             self.allowance_hold_due = time.monotonic() + 30
             AllowanceHolds(self.store, entitlement).tick(time.time())
@@ -406,6 +431,23 @@ class Serving:
             self._drain_ready_page()
         # Held owners by durable marker: the page above can be all one held backlog.
         self.merge.reoffer_marked(self.drain_owner)
+        if retire_copies and self._leads(True):
+            try:
+                from database.jobstore.retirement import Retirement
+
+                if self._retirement is None:
+                    self._retirement = Retirement()
+                self._retirement.tick(self.store)
+            except Exception:
+                # Imports/config/provider failures cannot stop critical maintenance.
+                from database.batch_pipeline_retirement_metrics import RetirementPageReason, page_error
+
+                namespace = (
+                    self.store.namespace
+                    if self.store.namespace in {'batch_pipeline_dev', 'batch_pipeline_prod'}
+                    else 'other'
+                )
+                page_error(namespace, 'copy', 'jobs', RetirementPageReason.OPERATION_FAILED)
 
     def _drain_ready_page(self):
         owners = set()
@@ -547,7 +589,7 @@ def start_serving_from_env():
         while not stop.is_set():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                await service.reconcile_async(recover_quarantine=True, periodic=True)
+                await service.reconcile_async(recover_quarantine=True, periodic=True, supervised=True)
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__

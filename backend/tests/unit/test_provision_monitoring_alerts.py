@@ -364,6 +364,40 @@ def test_grafana13_readback_defaults_are_not_drift(provisioner):
     assert provisioner.definition(desired)['notification_settings']['repeat_interval'] == '24h'
 
 
+def test_empty_mute_time_intervals_readback_is_not_drift(provisioner):
+    # Measured on omi-pipeline-projection-drain-stall after the 2026-11-18 prod
+    # run: Grafana drops the empty list on save and re-renders 24h as 1d.
+    desired = {
+        'uid': 'omi-pipeline-projection-drain-stall',
+        'notification_settings': {
+            'receiver': 'Omi - Services Alerting (Telegram)',
+            'repeat_interval': '24h',
+            'mute_time_intervals': [],
+        },
+    }
+    live = {
+        'uid': 'omi-pipeline-projection-drain-stall',
+        'notification_settings': {
+            'receiver': 'Omi - Services Alerting (Telegram)',
+            'repeat_interval': '1d',
+        },
+    }
+    assert provisioner.comparable(desired) == provisioner.comparable(live)
+    # Only comparison drops the empty list; the write payload keeps it.
+    assert provisioner.definition(desired)['notification_settings']['mute_time_intervals'] == []
+
+
+def test_empty_notification_lists_are_absent_but_nonempty_lists_still_drift(provisioner):
+    base = {'uid': 'r', 'notification_settings': {'receiver': 'x'}}
+    for key in ('group_by', 'mute_time_intervals', 'active_time_intervals'):
+        assert provisioner.comparable({**base, 'notification_settings': {'receiver': 'x', key: []}}) == (
+            provisioner.comparable(base)
+        )
+        assert provisioner.comparable({**base, 'notification_settings': {'receiver': 'x', key: ['a']}}) != (
+            provisioner.comparable(base)
+        )
+
+
 def test_readback_still_reports_semantic_changes(provisioner):
     base = {'uid': 'r', 'execErrState': 'KeepLast', 'data': [{'refId': 'A', 'model': {'intervalMs': 30000}}]}
     assert provisioner.comparable(base) != provisioner.comparable(dict(base, execErrState='Error'))

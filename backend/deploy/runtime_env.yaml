@@ -21,6 +21,9 @@ environments:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
+          CONVERSATIONS_V3_RECORDING_ROTATION: {value: 'off', category: rollout}
+          CONVERSATIONS_V3_ROTATION_MIN_SECONDS: {value: '180', category: rollout}
+          CONVERSATIONS_V3_ROTATION_MAX_SECONDS: {value: '300', category: rollout}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
             value: 'true'
             category: ops_kill
@@ -1415,6 +1418,9 @@ environments:
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
               category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
+              category: reliability
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
@@ -1823,6 +1829,9 @@ environments:
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
               category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
+              category: reliability
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -2215,6 +2224,9 @@ environments:
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
               category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
+              category: reliability
           provisional: true
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -2581,6 +2593,9 @@ environments:
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
               category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
+              category: reliability
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -2898,6 +2913,9 @@ environments:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
+          CONVERSATIONS_V3_RECORDING_ROTATION: {value: 'off', category: rollout}
+          CONVERSATIONS_V3_ROTATION_MIN_SECONDS: {value: '180', category: rollout}
+          CONVERSATIONS_V3_ROTATION_MAX_SECONDS: {value: '300', category: rollout}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
             value: 'true'
             category: ops_kill
@@ -2912,7 +2930,7 @@ environments:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
@@ -3256,6 +3274,33 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          OMI_DEPLOYMENT:
+            value: prod
+            category: config
+          FIRESTORE_DATABASE_ID:
+            value: (default)
+            category: config
+          JOBSTORE_PG_HOST:
+            value: 172.25.29.2
+            category: config
+          JOBSTORE_PG_DATABASE:
+            value: jobstore_prod
+            category: config
+          JOBSTORE_PG_USER:
+            value: backend-listen-runtime@based-hardware.iam
+            category: config
+          JOBSTORE_SHADOW_NAMESPACES:
+            value: batch_pipeline_prod
+            category: config
+          JOBSTORE_PRODUCTION_MIRROR:
+            value: 'off'
+            category: config
+          BATCH_JOBSTORE_MODE:
+            value: firestore
+            category: config
+          MEDIA_NOISE_MODE: {value: shadow, category: rollout}
+          MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+          NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
             value: 'false'
             category: ops_kill
@@ -3613,6 +3658,12 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          SYNC_TASKS_PROJECT:
+            value: based-hardware
+            category: reliability
+          SYNC_TASKS_LOCATION:
+            value: us-central1
+            category: reliability
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -3851,6 +3902,9 @@ environments:
             source: environment
           SYNC_TASKS_INVOKER_SA:
             source: environment
+          CONVERSATIONS_V3:
+            source: literal
+            value: 'on'
           CONVERSATIONS_V3_STAGE:
             source: literal
             value: beta
@@ -4056,7 +4110,7 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             LADDER_V1_PLUS_MONTH_PRICE_ID:
               env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
@@ -4167,7 +4221,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4330,6 +4384,30 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            OMI_DEPLOYMENT:
+              value: prod
+              category: config
+            FIRESTORE_DATABASE_ID:
+              value: (default)
+              category: config
+            JOBSTORE_PG_HOST:
+              value: 172.25.29.2
+              category: config
+            JOBSTORE_PG_DATABASE:
+              value: jobstore_prod
+              category: config
+            JOBSTORE_PG_USER:
+              value: backend-runtime@based-hardware.iam
+              category: config
+            JOBSTORE_SHADOW_NAMESPACES:
+              value: batch_pipeline_prod
+              category: config
+            JOBSTORE_PRODUCTION_MIRROR:
+              value: 'off'
+              category: config
+            BATCH_JOBSTORE_MODE:
+              value: firestore
+              category: config
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -4391,7 +4469,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
@@ -4566,12 +4644,18 @@ environments:
               env_var: SYNC_TASKS_HANDLER_URL
               default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
               category: reliability
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
+              category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
               category: reliability
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
@@ -4619,7 +4703,7 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
@@ -4716,7 +4800,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4810,7 +4894,7 @@ environments:
             ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
-              value: '2592000'
+              value: '5184000'
               category: rollout
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'true'}
             SYNC_FRESH_MAX_AGE_SECONDS:
@@ -4884,6 +4968,33 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            OMI_DEPLOYMENT:
+              value: prod
+              category: config
+            FIRESTORE_DATABASE_ID:
+              value: (default)
+              category: config
+            JOBSTORE_PG_HOST:
+              value: 172.25.29.2
+              category: config
+            JOBSTORE_PG_DATABASE:
+              value: jobstore_prod
+              category: config
+            JOBSTORE_PG_USER:
+              value: backend-runtime@based-hardware.iam
+              category: config
+            JOBSTORE_SHADOW_NAMESPACES:
+              value: batch_pipeline_prod
+              category: config
+            JOBSTORE_PRODUCTION_MIRROR:
+              value: 'off'
+              category: config
+            BATCH_JOBSTORE_MODE:
+              value: firestore
+              category: config
+            CONVERSATIONS_V3_BACKFILL:
+              value: 'on'
+              category: ops_kill
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -4939,7 +5050,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
@@ -5125,12 +5236,18 @@ environments:
             SYNC_TASKS_QUEUE:
               value: sync-jobs-fresh
               category: reliability
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
+              category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
               category: reliability
           flags:
             --timeout: 3600s
@@ -5176,7 +5293,7 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED:
               value: 'on'
@@ -5276,7 +5393,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":0,"bpp_owner_memo_enforce":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":0,"bpp_owner_memo_enforce":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -5370,7 +5487,7 @@ environments:
             ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
-              value: '2592000'
+              value: '5184000'
               category: rollout
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'true'}
             SYNC_FRESH_MAX_AGE_SECONDS:
@@ -5427,6 +5544,30 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            OMI_DEPLOYMENT:
+              value: prod
+              category: config
+            FIRESTORE_DATABASE_ID:
+              value: (default)
+              category: config
+            JOBSTORE_PG_HOST:
+              value: 172.25.29.2
+              category: config
+            JOBSTORE_PG_DATABASE:
+              value: jobstore_prod
+              category: config
+            JOBSTORE_PG_USER:
+              value: backend-runtime@based-hardware.iam
+              category: config
+            JOBSTORE_SHADOW_NAMESPACES:
+              value: batch_pipeline_prod
+              category: config
+            JOBSTORE_PRODUCTION_MIRROR:
+              value: 'off'
+              category: config
+            BATCH_JOBSTORE_MODE:
+              value: firestore
+              category: config
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -5482,7 +5623,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
@@ -5649,12 +5790,18 @@ environments:
             SYNC_TASKS_QUEUE:
               value: sync-backfill-fresh
               category: reliability
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
+              category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
               category: reliability
           provisional: true
           forbidden_env:
@@ -5705,7 +5852,7 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
@@ -5795,7 +5942,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -5915,6 +6062,36 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            OMI_DEPLOYMENT:
+              value: prod
+              category: config
+            FIRESTORE_DATABASE_ID:
+              value: (default)
+              category: config
+            JOBSTORE_PG_HOST:
+              value: 172.25.29.2
+              category: config
+            JOBSTORE_PG_DATABASE:
+              value: jobstore_prod
+              category: config
+            JOBSTORE_PG_USER:
+              value: backend-runtime@based-hardware.iam
+              category: config
+            JOBSTORE_SHADOW_NAMESPACES:
+              value: batch_pipeline_prod
+              category: config
+            JOBSTORE_PRODUCTION_MIRROR:
+              value: 'off'
+              category: config
+            BATCH_JOBSTORE_MODE:
+              value: firestore
+              category: config
+            JOBSTORE_RETIREMENT_ENABLED:
+              value: 'off'
+              category: ops_kill
+            BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
+            BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
+            BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -5970,7 +6147,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
@@ -6118,12 +6295,18 @@ environments:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
             CONVERSATIONS_V3_TASKS_QUEUE:
               value: conversations-v3
+              category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
               category: reliability
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -6194,6 +6377,9 @@ environments:
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -6268,6 +6454,9 @@ environments:
               value: 'on'
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -6315,6 +6504,9 @@ environments:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
@@ -6373,6 +6565,9 @@ environments:
               value: based-hardware
             BASE_API_URL:
               value: https://api.omi.me
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
             CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''

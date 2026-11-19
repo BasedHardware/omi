@@ -43,6 +43,7 @@ import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'conversation_detail_provider.dart';
 import 'conversation_summary_selection.dart';
+import 'widgets.dart' show summaryRetrySlotApplies;
 import 'share.dart';
 import 'test_prompts.dart';
 import 'widgets/audio_download_progress_sheet.dart';
@@ -1234,6 +1235,18 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
             if (detailProvider.reprocessedConversationId == detailProvider.conversationOrNull?.id) {
               OmiFeedback.confirm(context, context.l10n.conversationReprocessed);
             }
+          case 'REPROCESS_TRANSCRIPTION_PENDING':
+            // The redesigned Summary tab explains this in place.
+            if (SummaryGenerationV2Gate.isEnabled) break;
+            final open = detailProvider.conversationOrNull;
+            final failedId = detailProvider.lastFailedReprocessConversationId;
+            if (open == null || failedId == null || failedId != open.id) break;
+            // The legacy Summary tab's empty state already shows the same notice in place.
+            final noticeShown = selectedTab == ConversationTab.summary &&
+                detailProvider.getDisplayedSummarySelection().kind == ConversationSummaryKind.empty &&
+                summaryRetrySlotApplies(open);
+            if (noticeShown) break;
+            OmiFeedback.info(context, context.l10n.summaryTranscriptionPendingBody);
         }
       },
       child: Scaffold(

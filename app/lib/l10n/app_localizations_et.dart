@@ -1123,6 +1123,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nimi edukalt uuendatud!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Loe valitud kalendreid. Uued sündmused kasutavad kalendrit $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalendri seaded';
 
   @override
@@ -12220,7 +12225,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Pärast sidumist: katkestusi $drops, ebaõnnestunud ühendusi $failed.';
+    return 'Sidumisest alates: $drops taasühendust, $failed ebaõnnestunud ühendust.';
   }
 
   @override
@@ -13458,16 +13463,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Muudan $amount vestlusteks';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total valmis · võid selle ekraani sulgeda';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount on sünkroonimiseks valmis';
   }
@@ -13491,7 +13486,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Ootab selles telefonis';
 
   @override
-  String get syncDetailsTranscribing => 'Omi transkribeerib';
+  String get syncDetailsTranscribing => 'Üles laaditud, ootab serverit';
 
   @override
   String get syncDetailsAudioFiles => 'Helifailid';
@@ -13947,6 +13942,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi juba töötab selle vestlusega. Kokkuvõte ilmub siia, kui see valmis saab.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Pole veel transkribeeritud';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Kokkuvõte ilmub, kui transkriptsioon on valmis.';
 
   @override
   String get summaryCheckAgain => 'Kontrolli uuesti';
@@ -15468,7 +15469,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15549,4 +15550,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Kirjutame sinu kokkuvõtet…';
+
+  @override
+  String get onTheWayServerWork => 'Serveri teatatud töö';
+
+  @override
+  String get finishNothingToProcess => 'Veel pole midagi töödelda.';
+
+  @override
+  String get finishStillProcessing => 'Veel töödeldakse. See ilmub avalehele.';
+
+  @override
+  String get finishBackToHome => 'Tagasi avalehele';
 }

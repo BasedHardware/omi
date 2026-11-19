@@ -1110,6 +1110,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get nameUpdatedSuccessfully => '名前が正常に更新されました！';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return '選択したカレンダーを読み込みます。新しい予定には $calendar を使用します。';
+  }
+
+  @override
   String get calendarSettings => 'カレンダー設定';
 
   @override
@@ -12046,7 +12051,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'ペアリング以降: 切断 $drops 回、接続の失敗 $failed 回。';
+    return 'ペアリング以降：再接続 $drops 回、接続失敗 $failed 回。';
   }
 
   @override
@@ -13274,16 +13279,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amountを会話に変換中';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total 完了 · この画面を閉じても大丈夫です';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amountを同期できます';
   }
@@ -13307,7 +13302,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'このスマホで待機中';
 
   @override
-  String get syncDetailsTranscribing => 'Omiで文字起こし中';
+  String get syncDetailsTranscribing => 'アップロード済み、サーバー待ち';
 
   @override
   String get syncDetailsAudioFiles => '音声ファイル';
@@ -13758,6 +13753,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi はすでにこの会話を処理しています。完了すると、ここに要約が表示されます。';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'まだ文字起こしされていません';
+
+  @override
+  String get summaryTranscriptionPendingBody => '文字起こしが完了すると、要約が表示されます。';
 
   @override
   String get summaryCheckAgain => '再確認';
@@ -15247,7 +15248,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15328,4 +15329,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => '要約を作成しています…';
+
+  @override
+  String get onTheWayServerWork => 'サーバーが報告した処理';
+
+  @override
+  String get finishNothingToProcess => 'まだ処理するものがありません。';
+
+  @override
+  String get finishStillProcessing => 'まだ処理中です。ホームに表示されます。';
+
+  @override
+  String get finishBackToHome => 'ホームに戻る';
 }

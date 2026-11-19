@@ -182,19 +182,22 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
             # Only the staging seam gains an opt-in provenance probe. Compare
             # every other byte, then execute the default seam below as well.
             def without_staging(text):
-                node = next(
-                    n
-                    for n in ast.parse(text).body
-                    if isinstance(n, ast.FunctionDef)
-                    and n.name
-                    == (
-                        'apply_wal_audio_coverage'
-                        if path.endswith('/wal_audio_coverage.py')
-                        else '_retrieve_file_paths_v2'
-                    )
+                # pipeline.py also exempts process_segment: the backfill day cap moved
+                # out of it to upload admission (#25677); no early-placement code there.
+                names = (
+                    {'apply_wal_audio_coverage'}
+                    if path.endswith('/wal_audio_coverage.py')
+                    else {'_retrieve_file_paths_v2', 'process_segment'}
                 )
                 lines = text.splitlines(keepends=True)
-                return ''.join(lines[: node.lineno - 1] + lines[node.end_lineno :])
+                for node in sorted(
+                    (n for n in ast.parse(text).body if isinstance(n, ast.FunctionDef) and n.name in names),
+                    key=lambda n: n.lineno,
+                    reverse=True,
+                ):
+                    start = min([node.lineno] + [d.lineno for d in node.decorator_list])
+                    lines = lines[: start - 1] + lines[node.end_lineno :]
+                return ''.join(lines).replace('from utils import backfill_hours_cap\n', '')
 
             if path.endswith('/wal_audio_coverage.py'):
                 actual = actual.replace(

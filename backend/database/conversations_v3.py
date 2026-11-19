@@ -5,21 +5,30 @@ codec; cached outlines are encrypted. Nothing is cleared after a lost race.
 """
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from google.api_core.exceptions import InvalidArgument
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
+from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.encryption import encrypt, decrypt
-from utils.conversations.v3 import Conflict
+from utils.conversations.v3 import Conflict, policy
+from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
+
+logger = logging.getLogger(__name__)
 
 LIMIT = 128
+# The backfill holds its own builder lease (and outline cache) so a running backfill never makes the
+# owner's live builder busy; the two passes touch disjoint documents and both are revision-fenced.
+BACKFILL_LEASE = 'backfill-builder'
 
 
 def user_conversations(client, uid):
@@ -45,16 +54,149 @@ def decode_row(uid, snapshot) -> dict[str, Any] | None:
     return data
 
 
+# A source recording whose revision moved during a pass may still be committed against when only its
+# speech moved (appended segments, audio files, status, pending/manual-end markers). Any change to
+# these fields (deletion, merge, privacy, lock, claims, identity) keeps the strict source_changed fence.
+SOURCE_FENCE_FIELDS = (
+    'recording',
+    'deleted',
+    'deleted_spans',
+    'sync_merged_into',
+    'data_protection_level',
+    'is_locked',
+    'started_at',
+    'claims',
+    'v3_derived',
+)
+
+
+def source_fence(raw):
+    return {key: (raw or {}).get(key) for key in SOURCE_FENCE_FIELDS}
+
+
 def recording_input(uid, snapshot):
     if not snapshot.exists:
         return None
     raw = snapshot.to_dict() or {}
     if raw.get('data_protection_level') != 'private' and raw.get('started_at'):
         try:
-            return decode_row(uid, snapshot)
+            row = decode_row(uid, snapshot)
         except (ValueError, TypeError, FileNotFoundError, TranscriptBlobAbsent, TranscriptShredded, Conflict):
-            pass
-    return {**raw, 'id': snapshot.id, '_v3_revision': snapshot.update_time, '_v3_unreadable': True}
+            row = None
+        if row is not None:
+            row['_v3_fence'] = source_fence(raw)
+            return row
+    return {
+        **raw,
+        'id': snapshot.id,
+        '_v3_revision': snapshot.update_time,
+        '_v3_unreadable': True,
+        '_v3_fence': source_fence(raw),
+    }
+
+
+def speech_moved(recording, current):
+    """True when a loaded source recording changed only by receiving more speech."""
+    fence = recording.get('_v3_fence')
+    return bool(
+        fence is not None
+        and current
+        and not recording.get('_v3_derive')
+        and not recording.get('deleted')
+        and not recording.get('sync_merged_into')
+        and current.get('recording')
+        and source_fence(current) == fence
+    )
+
+
+def speech_end(row):
+    """Late text on a completed recording appends segments without moving finished_at."""
+    end = row.get('finished_at') or row['started_at']
+    for segment in row.get('transcript_segments') or []:
+        try:
+            end = max(end, row['started_at'] + timedelta(seconds=float(segment.get('end') or 0)))
+        except (TypeError, ValueError):
+            continue
+    return end
+
+
+def adoptable(uid, ids, *, firestore_client=None):
+    """Derived rows that already own a planned id but were outside the loaded closure.
+
+    Only live derived rows qualify: a deleted or tombstoned target keeps raising, so a rebuild can
+    never resurrect a window the user deleted.
+    """
+    client = firestore_client or get_firestore_client()
+    coll = user_conversations(client, uid)
+    found = {}
+    for cid in ids:
+        snapshot = coll.document(cid).get()
+        raw = snapshot.to_dict() or {} if snapshot.exists else {}
+        if not raw.get('v3_derived') or raw.get('deleted') or raw.get('recording'):
+            continue
+        tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(cid).get()
+        if tombstone.exists:
+            continue
+        row = decode_row(uid, snapshot)
+        if row:
+            found[cid] = row
+    return found
+
+
+def save_outline(uid, token, fingerprint, entries, *, key='builder', firestore_client=None):
+    """Keep a paid outline even when this pass's projection commit later conflicts."""
+    client = firestore_client or get_firestore_client()
+    ref = leases.lease_ref(client, uid, key)
+
+    @firestore.transactional
+    def save(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        if row.get('token') != token or row.get('until', datetime.min.replace(tzinfo=timezone.utc)) <= datetime.now(
+            timezone.utc
+        ):
+            raise Conflict('lease_lost')
+        cache = json.loads(decrypt(row['outline_cache'], uid)) if row.get('outline_cache') else []
+        cache = [c for c in cache if c.get('fingerprint') != fingerprint]
+        cache.append({'fingerprint': fingerprint, 'entries': entries})
+        tx.update(ref, {'outline_cache': encrypt(json.dumps(cache[-128:], default=str), uid)})
+
+    save(client.transaction())
+
+
+BLOCKED_BACKOFF_MAX = timedelta(hours=1)
+
+
+def record_blocked(uid, token, reason, *, firestore_client=None):
+    """Deterministic conflicts back off per owner instead of retrying through the shared queue.
+
+    Fenced by the builder token: a stale pass must not park an owner after a successor committed.
+    """
+    client = firestore_client or get_firestore_client()
+    ref = leases.lease_ref(client, uid, 'builder')
+
+    @firestore.transactional
+    def park(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        now = datetime.now(timezone.utc)
+        if row.get('token') != token or row.get('until', datetime.min.replace(tzinfo=timezone.utc)) <= now:
+            return False
+        count = int(row.get('v3_blocked_count') or 0) + 1
+        delay = min(BLOCKED_BACKOFF_MAX, timedelta(minutes=5) * (2 ** min(count - 1, 6)))
+        tx.update(ref, {'v3_blocked_count': count, 'v3_blocked_reason': reason, 'v3_backoff_until': now + delay})
+        return True
+
+    return park(client.transaction())
+
+
+def backoff_until(uid, *, firestore_client=None):
+    return backoff_state(uid, firestore_client=firestore_client)[0]
+
+
+def backoff_state(uid, *, firestore_client=None):
+    """(v3_backoff_until, v3_blocked_reason) from the owner's builder lease doc."""
+    client = firestore_client or get_firestore_client()
+    row = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
+    return row.get('v3_backoff_until'), row.get('v3_blocked_reason')
 
 
 def load(uid, *, conversation_id=None, firestore_client=None):
@@ -109,7 +251,9 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         if opened:
             existing[opened['id']] = opened
     queried = set()
-    for _round in range(4):
+    # Follow linked recordings until the closure converges. Each round adds at least one recording and
+    # derived rows stay bounded by LIMIT; a fixed hop depth failed the same owner on every retry.
+    for _round in range(LIMIT + 1):
         ids = {rid for row in existing.values() for rid in row.get('v3_recording_ids') or []}
         ids.update(
             p['recording_id']
@@ -132,7 +276,7 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         intervals = []
         for row in sorted(fresh, key=lambda r: r['started_at']):
             left = row['started_at'] - timedelta(minutes=20)
-            right = (row.get('finished_at') or row['started_at']) + timedelta(minutes=20)
+            right = min(speech_end(row), datetime.now(timezone.utc) + timedelta(minutes=5)) + timedelta(minutes=20)
             if intervals and left <= intervals[-1][1]:
                 intervals[-1] = (intervals[-1][0], max(intervals[-1][1], right))
             else:
@@ -154,7 +298,123 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         queried.update(row['id'] for row in fresh)
     else:
         raise Conflict('v3_source_closure_budget')
+    _mark_successor_pending(coll, recordings)
     return {**recordings, **unreadable}, existing, cache
+
+
+def _mark_successor_pending(coll, recordings):
+    """Keep the latest stretch open while the recording after a rotation is captured or transcribed.
+
+    Batch recordings get no transcript until they seal. Only a recording that listen rotation
+    sealed carries the cap stamp; every other stretch keeps the plain five-minute rule.
+    """
+    spoken = [r for r in recordings.values() if r.get('transcript_segments') and r.get('started_at')]
+    if not spoken:
+        return
+    latest = max(spoken, key=speech_end)
+    cap = latest.get(policy.ROTATION_CAP_FIELD)
+    if latest.get('_v3_page_continues') or type(cap) not in (int, float) or not 0 < cap <= 3600:
+        return
+    end, now = speech_end(latest), datetime.now(timezone.utc)
+    query = (
+        coll.where(filter=FieldFilter('started_at', '>', latest['started_at']))
+        .order_by('started_at')
+        .select(SUCCESSOR_FIELDS)
+    )
+    for doc in query.limit(8).stream():
+        raw = doc.to_dict() or {}
+        start = raw.get('started_at')
+        if not start or start - end >= timedelta(minutes=5):
+            return
+        if (
+            doc.id != latest['id']
+            and raw.get('recording') is True
+            and not raw.get('deleted')
+            and not raw.get('sync_merged_into')
+            and raw.get('data_protection_level') != 'private'
+            and policy.awaiting_transcript(raw, now, cap)
+        ):
+            latest['_v3_page_continues'] = True
+            return
+
+
+SUCCESSOR_FIELDS = [
+    'started_at',
+    'created_at',
+    'finished_at',
+    'status',
+    'recording',
+    'deleted',
+    'sync_merged_into',
+    'data_protection_level',
+]
+
+
+def unique_claims(claims):
+    """Identical claims (same conversation, same span) are one claim; order of first appearance is kept."""
+    return list({(c.get('conversation_id'), c.get('start'), c.get('end')): c for c in claims}.values())
+
+
+# Firestore's per-document limit is 1 MiB ("... exceeds the maximum allowed size"); a commit request is
+# separately capped ("Request payload size exceeds the limit: N bytes").
+DOCUMENT_TOO_LARGE = 'exceeds the maximum allowed size'
+REQUEST_TOO_LARGE = 'Request payload size exceeds the limit'
+# Derived-row bytes per transaction, and every write in it (rows, source claim updates, lease): batches
+# split on whichever fills first, so the source rewrites each batch repeats count against the request.
+BATCH_ROW_BYTES = 2 * 1024 * 1024
+BATCH_WRITE_BYTES = 8 * 1024 * 1024
+
+
+def size_error(error):
+    """'document' or 'request' when a Firestore InvalidArgument is a size limit, else None."""
+    text = str(error)
+    if DOCUMENT_TOO_LARGE in text:
+        return 'document'
+    if REQUEST_TOO_LARGE in text:
+        return 'request'
+    return None
+
+
+def fixed_write_bytes(recordings, rows, encrypted_cache):
+    """Estimated bytes every batch writes besides its rows: each source's claim update and the lease."""
+    total = _encoded_bytes(encrypted_cache)
+    for rid, recording in recordings.items():
+        spans = sum(
+            len(row.get('_v3_claims', {}).get(rid) or [None]) for row in rows if rid in row.get('v3_recording_ids', [])
+        )
+        claims = unique_claims(recording.get('claims') or [])
+        total += _encoded_bytes(claims) + spans * 120 + 200
+        if recording.get('_v3_derive'):
+            total += _encoded_bytes(backfill_conversion(recording))
+    return total
+
+
+def _encoded_bytes(value):
+    return len(json.dumps(value, default=str).encode())
+
+
+def log_largest_write(staged, *, batch, batches):
+    """Name the largest document the failed transaction staged: kind and estimated bytes, never ids or content."""
+    sizes: list[tuple[str, int, int | None]] = [
+        ('derived_row', _encoded_bytes(row), None) for row in staged.get('rows') or []
+    ]
+    for current, update in (staged.get('recordings') or {}).values():
+        merged = {**current, **update}
+        sizes.append(('recording', _encoded_bytes(merged), len(merged.get('claims') or [])))
+    if staged.get('lease') is not None:
+        sizes.append(('builder_lease', _encoded_bytes({**staged['lease'][0], **staged['lease'][1]}), None))
+    if not sizes:
+        return
+    kind, size, claims = max(sizes, key=lambda item: item[1])
+    logger.warning(
+        'v3 projection write too large kind=%s bytes=%d claims=%s batch=%d batches=%d staged_total_bytes=%d',
+        kind,
+        size,
+        claims if claims is not None else '-',
+        batch,
+        batches,
+        sum(item[1] for item in sizes),
+    )
 
 
 def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
@@ -175,10 +435,30 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     return mark(client.transaction())
 
 
-def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pending=True, firestore_client=None):
+def commit_projection(
+    uid,
+    token,
+    recordings,
+    existing,
+    rows,
+    cache,
+    *,
+    clear_pending=True,
+    remove=(),
+    key='builder',
+    firestore_client=None,
+):
+    """Commit derived rows and source claims; returns the ids of source recordings that kept moving.
+
+    A recording that only received more speech during the pass does not fail the commit (a live
+    wearer would otherwise starve every pass): the windows planned from the loaded snapshot commit,
+    its claims merge onto the re-read document and it stays v3_pending so the next pass reads the
+    new speech. Derived rows and any other source change keep the strict source_changed fence.
+    """
     client = firestore_client or get_firestore_client()
+    moved = set()
     coll = user_conversations(client, uid)
-    held = leases.lease_ref(client, uid, 'builder')
+    held = leases.lease_ref(client, uid, key)
     open_ids = [r['id'] for r in rows if r['status'] == 'in_progress' and not r.get('deleted')]
     if len(open_ids) > 1:
         raise Conflict('multiple_open_conversations')
@@ -188,16 +468,38 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
     prepared = []
     for row in rows:
         clean = {k: v for k, v in row.items() if not k.startswith('_v3_') and k != 'updated_at'}
-        prepared.append(
-            conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
-                clean, uid, clean.get('data_protection_level') or 'standard', allow_offload=True
-            )
+        # A prior row carries its stored open-loop extractions as the protected blob (the read
+        # path never decodes them); the codec accepts only the decoded object.
+        blob = clean.pop(OPEN_LOOP_EXTRACTIONS_FIELD, None)
+        marker = clean.pop(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, None)
+        level = clean.get('data_protection_level') or 'standard'
+        encoded = conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
+            clean, uid, level, allow_offload=True
         )
+        if blob:
+            prior_level = (existing.get(row['id']) or {}).get('data_protection_level') or 'standard'
+            if marker and prior_level == level:
+                encoded[OPEN_LOOP_EXTRACTIONS_FIELD] = blob
+                encoded[OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD] = marker
+            else:
+                retained = conversations.decode_open_loop_extractions(uid, blob, bool(marker))
+                encoded.update(
+                    conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage]
+                        {OPEN_LOOP_EXTRACTIONS_FIELD: retained}, uid, level
+                    )
+                )
+        prepared.append(encoded)
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
+    # What the current transaction attempt writes, kept by reference and sized only after a failure.
+    staged = {}
 
     @firestore.transactional
     def commit(tx, batch_rows, batch_prepared, final):
         observed = {}
+        staged.clear()
+        staged.update(
+            rows=[row for raw, row in zip(batch_rows, batch_prepared) if not raw.get('deleted')], recordings={}
+        )
         now = datetime.now(timezone.utc)
         lease = held.get(transaction=tx).to_dict() or {}
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
@@ -210,9 +512,12 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
         # Firestore requires every read before every write, including tombstones.
         for rid, row in {**recordings, **existing}.items():
             snapshot = coll.document(rid).get(transaction=tx)
+            current = snapshot.to_dict() or {} if snapshot.exists else None
             if not snapshot.exists or snapshot.update_time != row['_v3_revision']:
-                raise Conflict('source_changed')
-            observed[rid] = snapshot.to_dict() or {}
+                if rid in existing or rid not in recordings or not speech_moved(row, current):
+                    raise Conflict('source_changed')
+                moved.add(rid)
+            observed[rid] = current or {}
         for row in batch_rows:
             tombstone = (
                 client.collection('users')
@@ -227,6 +532,11 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
         for cid in new_ids:
             if coll.document(cid).get(transaction=tx).exists:
                 raise Conflict('target_exists')
+        if final:
+            for cid in remove:
+                # Only a backfill re-derive retires a copy, and only its own backfilled rows.
+                if not (existing.get(cid) or {}).get('backfilled'):
+                    raise Conflict('remove_not_backfilled')
         from database.recurring_voice_privacy import filter_processing_write
 
         user = client.collection('users').document(uid)
@@ -236,64 +546,87 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
             if raw.get('deleted'):
                 continue
             tx.set(coll.document(row['id']), row)
+        if final:
+            for cid in remove:
+                tx.delete(coll.document(cid))
         for rid, recording in recordings.items():
             if recording.get('deleted') or recording.get('sync_merged_into'):
                 tx.update(coll.document(rid), {'v3_pending': False, 'v3_pending_since': None})
                 continue
-            replaced = {r['id'] for r in batch_rows}
+            replaced = {r['id'] for r in batch_rows} | (set(remove) if final else set())
+            if rid in moved:
+                # Merge onto the re-read document; never write the stale snapshot's view of a live source.
+                claims = [c for c in observed[rid].get('claims') or [] if c['conversation_id'] not in replaced]
+                for row in batch_rows:
+                    if rid not in row.get('v3_recording_ids', []) or row.get('deleted'):
+                        continue
+                    spans = row.get('_v3_claims', {}).get(
+                        rid, [{'start': row['started_at'], 'end': row['finished_at']}]
+                    )
+                    claims.extend({'conversation_id': row['id'], **span} for span in spans)
+                # The new speech is still owed to the next pass; leave purge decisions to that pass.
+                update = {
+                    'claims': unique_claims(claims),
+                    'v3_pending': True,
+                    'v3_pending_since': observed[rid].get('v3_pending_since')
+                    or recording.get('v3_pending_since')
+                    or datetime.now(timezone.utc),
+                }
+                staged['recordings'][rid] = (observed[rid], update)
+                tx.update(coll.document(rid), update)
+                continue
             claims = [c for c in recording.get('claims') or [] if c['conversation_id'] not in replaced]
             for row in batch_rows:
                 if rid not in row.get('v3_recording_ids', []) or row.get('deleted'):
                     continue
                 spans = row.get('_v3_claims', {}).get(rid, [{'start': row['started_at'], 'end': row['finished_at']}])
                 claims.extend({'conversation_id': row['id'], **span} for span in spans)
-            tx.update(
-                coll.document(rid),
-                {
-                    'claims': claims,
-                    # A backfill conversion hides its donor as a recording in the first batch; until the
-                    # final batch commits, it keeps a durable obligation so an interrupted run is rebuilt
-                    # by the ordinary builder (backfill's loader skips recordings).
-                    'v3_pending': (
-                        False
-                        if final and clear_pending
-                        else bool(recording.get('v3_pending') or (recording.get('_v3_derive') and not final))
-                    ),
-                    'v3_pending_since': (
-                        None
-                        if final and clear_pending
-                        else recording.get('v3_pending_since')
-                        or (datetime.now(timezone.utc) if recording.get('_v3_derive') and not final else None)
-                    ),
-                    'v3_audio_purge_pending': bool(recording.get('deleted_spans'))
-                    and final
-                    and clear_pending
-                    and not claims
-                    and recording.get('status') == 'completed',
-                    **(
-                        {'recording': True, 'structured': {}, 'backfill_superseded': True}
-                        if recording.get('_v3_derive')
-                        else {}
-                    ),
-                },
-            )
-        tx.update(
-            held,
-            {
-                'outline_cache': encrypted_cache,
-                'open_id': (
-                    open_ids[0]
-                    if open_ids
-                    else (lease.get('open_id') if lease.get('open_id') not in existing else None)
+            # Identical copies (left by an earlier duplicate plan) collapse, so a bloated source shrinks
+            # on its next commit instead of failing every pass at the document limit.
+            claims = unique_claims(claims)
+            update = {
+                'claims': claims,
+                # A backfill conversion hides its donor as a recording in the first batch; until the
+                # final batch commits, it keeps a durable obligation so an interrupted run is rebuilt
+                # by the ordinary builder (backfill's loader skips recordings).
+                'v3_pending': (
+                    False
+                    if final and clear_pending
+                    else bool(recording.get('v3_pending') or (recording.get('_v3_derive') and not final))
                 ),
-            },
-        )
+                'v3_pending_since': (
+                    None
+                    if final and clear_pending
+                    else recording.get('v3_pending_since')
+                    or (datetime.now(timezone.utc) if recording.get('_v3_derive') and not final else None)
+                ),
+                'v3_audio_purge_pending': bool(recording.get('deleted_spans'))
+                and final
+                and clear_pending
+                and not claims
+                and not recording.get('_v3_derive')
+                and not recording.get('v3_backfill_run')
+                and recording.get('status') == 'completed',
+                **(backfill_conversion(recording) if recording.get('_v3_derive') else {}),
+            }
+            staged['recordings'][rid] = (observed.get(rid) or {}, update)
+            tx.update(coll.document(rid), update)
+        lease_update = {
+            **({'v3_blocked_count': 0, 'v3_backoff_until': None, 'v3_blocked_reason': None} if final else {}),
+            'outline_cache': encrypted_cache,
+            'open_id': (
+                open_ids[0] if open_ids else (lease.get('open_id') if lease.get('open_id') not in existing else None)
+            ),
+        }
+        staged['lease'] = (lease, lease_update)
+        tx.update(held, lease_update)
         return observed
 
+    fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
     batches, current, size = [], [], 0
     for raw, encoded in zip(rows, prepared):
         amount = len(json.dumps(encoded, default=str).encode())
-        if current and size + amount > 2 * 1024 * 1024:
+        if current and (size + amount > BATCH_ROW_BYTES or fixed + size + amount > BATCH_WRITE_BYTES):
             batches.append(current)
             current, size = [], 0
         current.append((raw, encoded))
@@ -301,7 +634,14 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
     if current or not batches:
         batches.append(current)
     for index, batch in enumerate(batches):
-        observed = commit(client.transaction(), [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1)
+        try:
+            observed = commit(
+                client.transaction(), [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
+            )
+        except InvalidArgument as error:
+            if size_error(error):
+                log_largest_write(staged, batch=index, batches=len(batches))
+            raise
         from utils.conversations.v3 import metrics
 
         for row, _encoded in batch:
@@ -314,26 +654,56 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
             for rid in recordings:
                 snapshot = coll.document(rid).get()
                 current = snapshot.to_dict() or {}
-                owned = {'claims', 'v3_pending', 'v3_pending_since', 'v3_audio_purge_pending', 'backfill_superseded'}
+                # The Home feed hook stamps every conversation write at Commit (COMMIT_STAMPED_FIELDS); those
+                # stamps are our own write, not an external change.
+                owned = {
+                    'claims',
+                    'v3_pending',
+                    'v3_pending_since',
+                    'v3_audio_purge_pending',
+                    'backfill_superseded',
+                    *COMMIT_STAMPED_FIELDS,
+                }
                 if recordings[rid].get('_v3_derive'):
                     # Our own committed conversion, not an external change.
-                    owned |= {'recording', 'structured'}
-                if {k: v for k, v in current.items() if k not in owned} != {
-                    k: v for k, v in observed[rid].items() if k not in owned
-                }:
-                    raise Conflict('source_changed')
+                    owned |= {'recording', 'v3_backfill_run', 'v3_backfill_prior'}
+                changed = sorted(
+                    k
+                    for k in set(current) | set(observed[rid])
+                    if k not in owned
+                    and ((k in current) != (k in observed[rid]) or current.get(k) != observed[rid].get(k))
+                )
+                if changed:
+                    # Claims are ours between batches; any other protected change still conflicts.
+                    fence = recordings[rid].get('_v3_fence')
+                    if fence is None or not speech_moved(
+                        {**recordings[rid], '_v3_fence': {**fence, 'claims': current.get('claims')}}, current
+                    ):
+                        logger.warning(
+                            'v3 projection readback changed kind=recording batch=%d fields=%s', index, changed[:8]
+                        )
+                        raise Conflict('source_changed')
+                    moved.add(rid)
                 recordings[rid] = {
                     **recordings[rid],
                     'claims': current.get('claims') or [],
                     '_v3_revision': snapshot.update_time,
+                    **({'_v3_fence': source_fence(current)} if recordings[rid].get('_v3_fence') is not None else {}),
                 }
             for raw, encoded in batch:
                 snapshot = coll.document(raw['id']).get()
                 if snapshot.exists:
                     current = snapshot.to_dict() or {}
-                    if any(current.get(k) != value for k, value in encoded.items()):
+                    changed = sorted(
+                        k for k, value in encoded.items() if k not in COMMIT_STAMPED_FIELDS and current.get(k) != value
+                    )
+                    if changed:
+                        logger.warning(
+                            'v3 projection readback changed kind=derived_row batch=%d fields=%s', index, changed[:8]
+                        )
                         raise Conflict('source_changed')
                     existing[raw['id']] = {**raw, '_v3_revision': snapshot.update_time}
+    return moved
 
 
 def release_claims(uid, row, *, firestore_client=None):
@@ -396,8 +766,11 @@ def release_claims(uid, row, *, firestore_client=None):
                 {
                     'claims': claims,
                     'deleted_spans': spans,
+                    # A backfill donor is a legacy conversation hidden only for the spot check: deleting
+                    # a backfilled copy never erases the donor's audio or tombstones it; undo restores it.
                     'v3_audio_purge_pending': not claims
                     and not recording.get('v3_pending')
+                    and not recording.get('v3_backfill_run')
                     and recording.get('status') == 'completed',
                 },
             )
@@ -405,29 +778,286 @@ def release_claims(uid, row, *, firestore_client=None):
     remove(client.transaction())
 
 
-def load_derive(uid, *, firestore_client=None):
+# Fields the backfill conversion (and the claim/purge machinery that follows it) may write on a
+# legacy donor. Their original values are kept on the donor so undo restores it exactly.
+BACKFILL_TRACKED = (
+    'recording',
+    'claims',
+    'v3_pending',
+    'v3_pending_since',
+    'v3_audio_purge_pending',
+    'v3_audio_purge_retry_after',
+    'v3_audio_purge_attempts',
+    'backfill_superseded',
+    'deleted_spans',
+)
+BACKFILL_SOURCES = frozenset({'omi', 'phone'})
+# Metadata page for planning an owner's window; a larger window is refused, never truncated.
+BACKFILL_WINDOW_MAX = 10000
+BACKFILL_UNDO_PAGE = 100
+
+
+def backfill_legacy_source(raw):
+    """A completed legacy pendant/phone conversation the v3 backfill may re-derive."""
+    return bool(
+        raw.get('source') in BACKFILL_SOURCES
+        and raw.get('status') == 'completed'
+        and raw.get('started_at')
+        and raw.get('data_protection_level') != 'private'
+        and not any(
+            raw.get(k)
+            # Discarded rows stay discarded and imported rows were never pendant capture (live never
+            # converts them either); re-deriving them would surface hidden or foreign history on Home.
+            for k in (
+                'recording',
+                'v3_derived',
+                'deleted',
+                'discarded',
+                'imported',
+                'sync_merged_into',
+                'is_locked',
+                'v3_backfill_run',
+            )
+        )
+    )
+
+
+def legacy_manual_end(raw):
+    """Legacy rows keep the trigger that closed them only in their relevance audit record."""
+    decision = raw.get('relevance_decision')
+    return isinstance(decision, dict) and decision.get('trigger') == 'client_finalize'
+
+
+def backfill_conversion(recording):
+    """Source patch for a backfill donor: hidden as a recording, its notes and summary untouched."""
+    patch = {'recording': True, 'backfill_superseded': True, 'v3_backfill_run': recording['_v3_backfill_run']}
+    if '_v3_backfill_prior' in recording:
+        patch['v3_backfill_prior'] = recording['_v3_backfill_prior']
+    return patch
+
+
+def _rederive_prior(row):
+    """A previously derived backfill row offered to the planner as an open window with the same id.
+
+    The planner then rebuilds its boundaries, text and notes from the sources (an id is reused, never
+    deleted and recreated); edits made to the backfilled copy are not retained.
+    """
+    return {
+        **row,
+        'status': 'in_progress',
+        'structured': {},
+        'summary_covers_through': None,
+        'title_locked': False,
+        'manual_end': False,
+        'discarded': False,
+        'v3_rewrites': 0,
+        'v3_process_attempts': 0,
+        'v3_process_fingerprint': None,
+        'v3_process_failed': False,
+        'v3_process_failure_reason': None,
+        'v3_notes_written': False,
+    }
+
+
+def load_derive(uid, *, since, until, run_id, rederive=False, firestore_client=None):
+    """One planned backfill partition: legacy donors, this run's converted donors and derived rows.
+
+    The operator plans partitions at five-minute silence gaps, so a stretch never spans two loads.
+    Overflow is a blocked partition, never a partial conversion. Unreadable or private legacy rows
+    stay ordinary visible conversations.
+    """
     client = firestore_client or get_firestore_client()
     if account_deletion_blocks_user_work(uid, firestore_client=client):
         raise Conflict('account_deletion')
-    start = datetime.now(timezone.utc) - timedelta(days=30)
-    # Query by time alone, then classify sources. Overflow is a blocked backfill,
-    # never a claim that a partial 30-day history was converted.
     snapshots = list(
-        user_conversations(client, uid).where(filter=FieldFilter('started_at', '>=', start)).limit(LIMIT + 1).stream()
+        user_conversations(client, uid)
+        .where(filter=FieldFilter('started_at', '>=', since))
+        .where(filter=FieldFilter('started_at', '<', until))
+        .order_by('started_at')
+        .limit(LIMIT + 1)
+        .stream()
     )
     if len(snapshots) > LIMIT:
-        raise Conflict('backfill_window_budget; partition the operator job before enabling')
-    rows = {}
+        raise Conflict('backfill_partition_budget')
+
+    def ours(raw):
+        return bool(raw.get('v3_backfill_run')) and (rederive or raw.get('v3_backfill_run') == run_id)
+
+    recordings, existing = {}, {}
     for snapshot in snapshots:
-        row = decode_row(uid, snapshot)
-        if (
-            row
-            and row.get('source') in {'omi', 'phone'}
-            and row.get('status') == 'completed'
-            and not any(row.get(k) for k in ('recording', 'v3_derived', 'deleted', 'sync_merged_into', 'is_locked'))
-        ):
-            rows[row['id']] = {**row, 'recording': True, '_v3_derive': True}
-    return rows, {}, []
+        raw = snapshot.to_dict() or {}
+        if raw.get('deleted'):
+            continue
+        if backfill_legacy_source(raw) and not rederive:
+            row = recording_input(uid, snapshot)
+            if row is None or row.get('_v3_unreadable'):
+                continue
+            recordings[snapshot.id] = {
+                **row,
+                'recording': True,
+                '_v3_derive': True,
+                '_v3_backfill_run': run_id,
+                '_v3_backfill_prior': {k: raw[k] for k in BACKFILL_TRACKED if k in raw},
+                **({'v3_manual_end': True} if legacy_manual_end(raw) else {}),
+            }
+        elif raw.get('recording') and not raw.get('v3_derived') and ours(raw):
+            # A donor this run (or, re-deriving, any run) already converted: resume or rebuild it.
+            row = recording_input(uid, snapshot)
+            if row is None or row.get('_v3_unreadable'):
+                # Its copies are loaded below; planning without it would retire them and leave the
+                # donor hidden with nothing on Home. Block until it reads again.
+                raise Conflict('backfill_source_unreadable')
+            recordings[snapshot.id] = {
+                **row,
+                '_v3_derive': True,
+                '_v3_backfill_run': raw['v3_backfill_run'],
+                **({'v3_manual_end': True} if legacy_manual_end(raw) else {}),
+            }
+        elif raw.get('v3_derived') and raw.get('backfilled') and ours(raw):
+            row = decode_row(uid, snapshot)
+            if row:
+                existing[row['id']] = _rederive_prior(row) if rederive else row
+    state = leases.lease_ref(client, uid, BACKFILL_LEASE).get().to_dict() or {}
+    cache = json.loads(decrypt(state['outline_cache'], uid)) if state.get('outline_cache') else []
+    return recordings, existing, cache
+
+
+def backfill_window_metadata(uid, since, until, *, firestore_client=None):
+    """Metadata only (no transcript decode) for planning an owner's window; refuses a truncated read."""
+    client = firestore_client or get_firestore_client()
+    snapshots = list(
+        user_conversations(client, uid)
+        .where(filter=FieldFilter('started_at', '>=', since))
+        .where(filter=FieldFilter('started_at', '<', until))
+        .order_by('started_at')
+        .select(
+            [
+                'source',
+                'status',
+                'started_at',
+                'finished_at',
+                'recording',
+                'v3_derived',
+                'backfilled',
+                'deleted',
+                'discarded',
+                'imported',
+                'sync_merged_into',
+                'is_locked',
+                'data_protection_level',
+                'v3_backfill_run',
+            ]
+        )
+        .limit(BACKFILL_WINDOW_MAX + 1)
+        .stream()
+    )
+    if len(snapshots) > BACKFILL_WINDOW_MAX:
+        raise Conflict('backfill_window_budget')
+    return [{**(snapshot.to_dict() or {}), 'id': snapshot.id} for snapshot in snapshots]
+
+
+def pending_backfill_processing(uid, *, firestore_client=None):
+    """Backfilled rows whose notes are owed; the live sweep and live drain never read this marker."""
+    client = firestore_client or get_firestore_client()
+    return [
+        decode_row(uid, doc)
+        for doc in user_conversations(client, uid)
+        .where(filter=FieldFilter('v3_backfill_process_pending', '==', True))
+        .limit(LIMIT)
+        .stream()
+    ]
+
+
+def backfill_run_documents(uid, run_id, *, firestore_client=None):
+    """Every document one backfill run stamped: converted donors and derived rows (ids and flags only)."""
+    client = firestore_client or get_firestore_client()
+    query = (
+        user_conversations(client, uid)
+        .where(filter=FieldFilter('v3_backfill_run', '==', run_id))
+        .select(
+            [
+                'v3_derived',
+                'backfilled',
+                'recording',
+                'claims',
+                'deleted_spans',
+                'v3_backfill_prior',
+                'v3_recording_ids',
+            ]
+        )
+    )
+    return [{**(doc.to_dict() or {}), 'id': doc.id} for doc in query.stream()]
+
+
+def deleted_after_backfill(donor):
+    """The owner deleted a backfilled copy of this donor: restoring it would resurrect what they deleted.
+
+    A delete releases the copy's claim and records its interval in deleted_spans. A converted donor
+    always has a claim, so no claim left also means every copy that covered it was deleted.
+    """
+    prior = donor.get('v3_backfill_prior') or {}
+    before = {s.get('conversation_id') for s in prior.get('deleted_spans') or []}
+    spans = donor.get('deleted_spans') or []
+    return any(s.get('conversation_id') not in before for s in spans) or not donor.get('claims')
+
+
+def restore_backfill_donors(uid, token, ids, *, firestore_client=None):
+    """Undo one page of donors exactly: every tracked field returns to its pre-backfill value.
+
+    A donor whose backfilled copy the owner deleted stays converted (hidden), so the deletion holds;
+    returns (restored, kept ids).
+    """
+    client = firestore_client or get_firestore_client()
+    coll = user_conversations(client, uid)
+    held = leases.lease_ref(client, uid, BACKFILL_LEASE)
+
+    @firestore.transactional
+    def restore(tx):
+        lease = held.get(transaction=tx).to_dict() or {}
+        snapshots = [(coll.document(cid), coll.document(cid).get(transaction=tx)) for cid in ids]
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+            raise Conflict('lease_lost')
+        restored, kept = 0, []
+        for cid, (ref, snapshot) in zip(ids, snapshots):
+            row = snapshot.to_dict() or {}
+            if not snapshot.exists or row.get('v3_derived') or not row.get('v3_backfill_run'):
+                continue
+            prior = row.get('v3_backfill_prior')
+            if not isinstance(prior, dict):
+                raise Conflict('backfill_prior_missing')
+            if deleted_after_backfill(row):
+                kept.append(cid)
+                continue
+            patch = {k: prior[k] if k in prior else firestore.DELETE_FIELD for k in BACKFILL_TRACKED}
+            patch.update(v3_backfill_run=firestore.DELETE_FIELD, v3_backfill_prior=firestore.DELETE_FIELD)
+            tx.update(ref, patch)
+            restored += 1
+        return restored, kept
+
+    return restore(client.transaction())
+
+
+def delete_backfill_rows(uid, token, ids, *, firestore_client=None):
+    """Remove one page of backfill-derived rows. No tombstone: they were never the user's conversations."""
+    client = firestore_client or get_firestore_client()
+    coll = user_conversations(client, uid)
+    held = leases.lease_ref(client, uid, BACKFILL_LEASE)
+
+    @firestore.transactional
+    def remove(tx):
+        lease = held.get(transaction=tx).to_dict() or {}
+        snapshots = [(coll.document(cid), coll.document(cid).get(transaction=tx)) for cid in ids]
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+            raise Conflict('lease_lost')
+        removed = 0
+        for ref, snapshot in snapshots:
+            row = snapshot.to_dict() or {}
+            if snapshot.exists and row.get('v3_derived') and row.get('backfilled') and row.get('v3_backfill_run'):
+                tx.delete(ref)
+                removed += 1
+        return removed
+
+    return remove(client.transaction())
 
 
 def claim_audio_purge(uid, rid, *, firestore_client=None):
@@ -443,6 +1073,7 @@ def claim_audio_purge(uid, rid, *, firestore_client=None):
         if (
             not row.get('recording')
             or not row.get('v3_audio_purge_pending')
+            or row.get('v3_backfill_run')
             or row.get('claims')
             or row.get('v3_pending')
             or row.get('status') != 'completed'
@@ -494,9 +1125,9 @@ def transfer_claims(uid, sources, target, *, firestore_client=None):
     transfer(client.transaction())
 
 
-def outline_attempt(uid, token, fingerprint, *, firestore_client=None):
+def outline_attempt(uid, token, fingerprint, *, key='builder', firestore_client=None):
     client = firestore_client or get_firestore_client()
-    ref = leases.lease_ref(client, uid, 'builder')
+    ref = leases.lease_ref(client, uid, key)
 
     @firestore.transactional
     def begin(tx):

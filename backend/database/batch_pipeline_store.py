@@ -40,6 +40,7 @@ from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database import record_recovery_gate
 from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_pipeline_transaction_attempt import note_direct_reads as _note_direct_reads, prepare_transaction
 from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
 from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
@@ -67,6 +68,7 @@ class Transaction(Protocol):
     def put(self, table: str, key: str, value: dict) -> None: ...
     def patch(self, table: str, key: str, fields: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]: ...
     def first_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_first_pending(self, owner_key: str) -> dict | None: ...
     def fresh_first_ready_pending(self, owner_key: str) -> dict | None: ...
@@ -105,34 +107,6 @@ class Store(Protocol):
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
     def allowance_owners(self, now: float, limit: int) -> list[str]: ...
     def allowance_page(self, owner_key: str | None, after, limit: int) -> list[str]: ...
-
-
-# Reads that bypass the view cache and go through the raw transaction, by kind.
-_DIRECT_READ_KINDS = {
-    'first_pending': 'jobs_query',
-    'first_ready_pending': 'jobs_query',
-    'fresh_first_pending': 'jobs_query',
-    'fresh_first_ready_pending': 'jobs_query',
-    'ready_predecessor': 'jobs_query',
-    'protected_ready': 'jobs_query',
-    'service_frontier': 'control_query',
-    'check_privacy': 'privacy',
-}
-
-
-def _note_direct_reads(view: 'FirestoreTransaction') -> None:
-    """Record, per attempt, which kinds of direct reads ran, so contention logs can name them.
-
-    Wraps the bound methods on this one view; the class methods stay untouched.
-    """
-    for name, kind in _DIRECT_READ_KINDS.items():
-        method = getattr(view, name)
-
-        def noted(*args, _method=method, _kind=kind, **kwargs):
-            view.direct_reads.add(_kind)
-            return _method(*args, **kwargs)
-
-        setattr(view, name, noted)
 
 
 def contention_tables(view: 'FirestoreTransaction') -> tuple[str, str]:
@@ -227,6 +201,9 @@ class FirestoreTransaction:
 
     def first_pending(self, owner_key: str) -> dict | None:
         return first_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
+
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        return pending_page(self.client, self.namespace, owner_key, limit, transaction=self.transaction)
 
     def first_ready_pending(self, owner_key: str) -> dict | None:
         return first_ready_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
@@ -365,7 +342,7 @@ class FirestoreStore:
         self._require_stage()
         return self._client if self._client is not None else get_data_plane_firestore_client()
 
-    def run(self, body):
+    def run(self, body, *, before_attempt=None):
         client = self.client
         last_view: list[FirestoreTransaction] = []
 
@@ -378,7 +355,10 @@ class FirestoreStore:
             view.flush()
             return result
 
-        result = self._run_committed(client, commit, last_view)
+        if before_attempt is None:
+            result = self._run_committed(client, commit, last_view)
+        else:
+            result = self._run_committed(client, commit, last_view, before_attempt=before_attempt)
         for key, priority in sorted(last_view[0].hinted_activations) if last_view else ():
             try:
                 reseed_hinted_activation(client, self.namespace, key, priority)
@@ -390,15 +370,15 @@ class FirestoreStore:
                 )
         return result
 
-    def _run_committed(self, client, commit, last_view):
+    def _run_committed(self, client, commit, last_view, *, before_attempt=None):
         if not contention_retry_enabled():
-            return commit(client.transaction())
+            return commit(prepare_transaction(client, before_attempt))
         # The outer budget owns fresh transaction IDs and all retries. The
         # SDK's same-ID commit loop would multiply the contention window.
         operation = current_operation()
         try:
             return run_with_transaction_contention_retry(
-                lambda: client.transaction(max_attempts=1),
+                lambda: prepare_transaction(client, before_attempt, max_attempts=1),
                 commit,
                 operation_name=operation,
             )
@@ -669,6 +649,15 @@ def projection_successor(client: Any, namespace: str, owner_key: str, previous: 
 def first_pending(
     client: Any, namespace: str, owner_key: str, *, transaction: Any = None, skip_terminal: bool = True
 ) -> dict | None:
+    docs = pending_page(client, namespace, owner_key, 1, transaction=transaction, skip_terminal=skip_terminal)
+    return docs[0] if docs else None
+
+
+def pending_page(
+    client: Any, namespace: str, owner_key: str, limit: int, *, transaction: Any = None, skip_terminal: bool = True
+) -> list[dict]:
+    """The owner's earliest-captured pending rows, at most ``limit`` (capped at 160)."""
+    limit = max(1, min(limit, 160))
     query = (
         client.collection(f'{namespace}_jobs').where('owner_key', '==', owner_key).where('merge_pending', '==', True)
     )
@@ -677,12 +666,12 @@ def first_pending(
     if skip:
         query = query.where('state', 'not-in', list(MERGE_POLL_TERMINAL_STATES))
     try:
-        docs = list(query.order_by('capture_at').order_by('segment_id').limit(1).stream(transaction=transaction))
+        docs = list(query.order_by('capture_at').order_by('segment_id').limit(limit).stream(transaction=transaction))
     except (FailedPrecondition, InvalidArgument):
         if not skip:
             raise
-        docs = list(base.order_by('capture_at').order_by('segment_id').limit(1).stream(transaction=transaction))
-    return docs[0].to_dict() if docs else None
+        docs = list(base.order_by('capture_at').order_by('segment_id').limit(limit).stream(transaction=transaction))
+    return [doc.to_dict() for doc in docs]
 
 
 def first_ready_pending(client: Any, namespace: str, owner_key: str, *, transaction: Any = None) -> dict | None:

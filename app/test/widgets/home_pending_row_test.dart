@@ -138,6 +138,7 @@ Wal _wal(String id, int minutes, WalStatus status) => Wal(
       codec: BleAudioCodec.opus,
       seconds: minutes * 60,
       status: status,
+      uploadedAt: status == WalStatus.uploaded ? DateTime.now().millisecondsSinceEpoch ~/ 1000 : 0,
       storage: WalStorage.disk,
       device: 'pendant',
     );
@@ -214,8 +215,8 @@ void main() {
       await pumpWithServerWork(tester, _FakeSync(), store);
 
       expect(find.text('All recordings are synced'), findsNothing);
-      expect(find.text('Transcribing…'), findsNWidgets(2),
-          reason: 'the summarizing conversation' 's day and the sync job');
+      expect(find.text('Processing'), findsOneWidget);
+      expect(find.text('Transcribing…'), findsOneWidget, reason: 'only the server sync job is transcribing');
       expect(find.text('No date'), findsOneWidget, reason: 'the sync job has no start of its own');
     });
 
@@ -225,7 +226,7 @@ void main() {
       ]);
       await pumpWithServerWork(tester, _FakeSync(wals: [_wal('phone', 4, WalStatus.uploaded)]), store);
 
-      expect(find.text('Transcribing…'), findsOneWidget, reason: 'the recording only, not the job again');
+      expect(find.text('Uploaded, awaiting server'), findsOneWidget, reason: 'the recording only, not the job again');
     });
 
     testWidgets('a refused recording does not hide a server sync job', (tester) async {
@@ -253,7 +254,7 @@ void main() {
       await _pumpPage(tester, _FakeSync(wals: [phone, deviceTwin]));
 
       expect(find.text('On your device'), findsNothing);
-      expect(find.text('Transcribing…'), findsOneWidget);
+      expect(find.text('Uploaded, awaiting server'), findsOneWidget);
     });
 
     testWidgets('a fully synced twin hides its lagging device source completely', (tester) async {
@@ -415,7 +416,7 @@ void main() {
         extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)],
       );
       expect(find.textContaining('1 recording'), findsOneWidget);
-      expect(find.text('Transcribing…'), findsOneWidget);
+      expect(find.text('Uploaded, awaiting server'), findsOneWidget);
     });
 
     testWidgets('a live capture still processing is not repeated as its not-yet-uploaded audio', (tester) async {
@@ -439,7 +440,7 @@ void main() {
         extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)],
       );
       expect(find.textContaining('1 recording'), findsOneWidget);
-      expect(find.text('Next'), findsNothing, reason: 'its audio is not waiting as a second recording');
+      expect(find.text('Next'), findsOneWidget, reason: 'the WAL still waits locally; server work cannot hide it');
     });
 
     testWidgets('one recording straddling an upload batch is listed once, by its least advanced part', (tester) async {
@@ -448,6 +449,7 @@ void main() {
         codec: BleAudioCodec.opus,
         seconds: 300,
         status: WalStatus.uploaded,
+        uploadedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
         device: 'pendant',
       );
       final next = Wal(

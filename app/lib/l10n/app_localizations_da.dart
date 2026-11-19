@@ -1126,6 +1126,11 @@ class AppLocalizationsDa extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Navn opdateret!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Læs de valgte kalendere. Nye begivenheder bruger $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalenderindstillinger';
 
   @override
@@ -12213,7 +12218,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Siden parring: $drops afbrydelser, $failed mislykkede forbindelser.';
+    return 'Siden parring: $drops genforbindelser, $failed mislykkede forbindelser.';
   }
 
   @override
@@ -13450,16 +13455,6 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Omdanner $amount til samtaler';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done af $total færdig · du kan forlade denne skærm';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount klar til synkronisering';
   }
@@ -13483,7 +13478,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Venter på denne telefon';
 
   @override
-  String get syncDetailsTranscribing => 'Transskriberer på Omi';
+  String get syncDetailsTranscribing => 'Uploadet, afventer server';
 
   @override
   String get syncDetailsAudioFiles => 'Lydfiler';
@@ -13941,6 +13936,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi arbejder allerede på denne samtale. Opsummeringen vises her, når den er færdig.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Ikke transskriberet endnu';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Opsummeringen vises, når transskriptionen er klar.';
 
   @override
   String get summaryCheckAgain => 'Tjek igen';
@@ -15466,7 +15467,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15547,4 +15548,16 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Skriver dit resumé…';
+
+  @override
+  String get onTheWayServerWork => 'Arbejde rapporteret af serveren';
+
+  @override
+  String get finishNothingToProcess => 'Intet at behandle endnu.';
+
+  @override
+  String get finishStillProcessing => 'Behandles stadig. Den vises på Hjem.';
+
+  @override
+  String get finishBackToHome => 'Tilbage til Hjem';
 }

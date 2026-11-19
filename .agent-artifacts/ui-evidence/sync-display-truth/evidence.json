@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-pending-work-truth.png",
+      "platform": "mobile-ios",
+      "description": "On the Way separates WAL day totals, unconfirmed upload attention and server-reported work.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-sync-details-truth.png",
+      "platform": "mobile-ios",
+      "description": "Sync details splits one active inventory into device, phone and uploaded awaiting-server audio.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-sync-banner-truth.png",
+      "platform": "mobile-ios",
+      "description": "Offline Sync banner and Pending tab use the shared active inventory and preserve step progress.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-stalled-upload-details.png",
+      "platform": "mobile-ios",
+      "description": "Device Settings retains a direct Offline Sync details link when only expired uploads remain.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-sync-ready-with-stalled-upload.png",
+      "platform": "mobile-ios",
+      "description": "Automatic Offline Sync keeps the ready amount and Sync action ahead of expired upload attention.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-legacy-ready-with-stalled-upload.png",
+      "platform": "mobile-ios",
+      "description": "Legacy Offline Sync keeps the ready amount and Sync action ahead of expired upload attention.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

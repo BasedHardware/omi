@@ -1129,6 +1129,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nume actualizat cu succes!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Citește calendarele selectate. Evenimentele noi folosesc $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Setări calendar';
 
   @override
@@ -12283,7 +12288,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'De la asociere: $drops întreruperi, $failed conexiuni eșuate.';
+    return 'De la asociere: $drops reconectări, $failed conexiuni eșuate.';
   }
 
   @override
@@ -13521,16 +13526,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Se transformă $amount în conversații';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done din $total gata · poți părăsi acest ecran';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount gata de sincronizare';
   }
@@ -13554,7 +13549,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Așteaptă pe acest telefon';
 
   @override
-  String get syncDetailsTranscribing => 'Se transcrie pe Omi';
+  String get syncDetailsTranscribing => 'Încărcat, în așteptarea serverului';
 
   @override
   String get syncDetailsAudioFiles => 'Fișiere audio';
@@ -14015,6 +14010,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi lucrează deja la această conversație. Rezumatul va apărea aici când se termină.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Încă netranscris';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Rezumatul va apărea când transcrierea este gata.';
 
   @override
   String get summaryCheckAgain => 'Verifică din nou';
@@ -15540,7 +15541,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15621,4 +15622,16 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Se scrie rezumatul tău…';
+
+  @override
+  String get onTheWayServerWork => 'Activitate raportată de server';
+
+  @override
+  String get finishNothingToProcess => 'Încă nu este nimic de procesat.';
+
+  @override
+  String get finishStillProcessing => 'Încă se procesează. Va apărea pe pagina principală.';
+
+  @override
+  String get finishBackToHome => 'Înapoi la pagina principală';
 }

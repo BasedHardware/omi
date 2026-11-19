@@ -1127,6 +1127,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Ім\'я успішно оновлено!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Читати вибрані календарі. Нові події використовують $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Налаштування календаря';
 
   @override
@@ -12253,7 +12258,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'З моменту спарування: обривів — $drops, невдалих підключень — $failed.';
+    return 'Від сполучення: $drops повторних підключень, $failed невдалих підключень.';
   }
 
   @override
@@ -13495,16 +13500,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Перетворення $amount на розмови';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Готово $done із $total · можна залишити цей екран';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount готово до синхронізації';
   }
@@ -13528,7 +13523,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Очікує на цьому телефоні';
 
   @override
-  String get syncDetailsTranscribing => 'Розшифровується в Omi';
+  String get syncDetailsTranscribing => 'Завантажено, очікування сервера';
 
   @override
   String get syncDetailsAudioFiles => 'Аудіофайли';
@@ -13985,6 +13980,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi вже працює над цією розмовою. Підсумок з\'явиться тут, щойно буде готовий.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Ще не транскрибовано';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Підсумок з\'явиться, щойно буде готова транскрипція.';
 
   @override
   String get summaryCheckAgain => 'Перевірити знову';
@@ -15509,7 +15510,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15590,4 +15591,16 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Пишемо ваш підсумок…';
+
+  @override
+  String get onTheWayServerWork => 'Робота за даними сервера';
+
+  @override
+  String get finishNothingToProcess => 'Поки що нічого обробляти.';
+
+  @override
+  String get finishStillProcessing => 'Ще обробляється. З\'явиться на головній.';
+
+  @override
+  String get finishBackToHome => 'На головну';
 }

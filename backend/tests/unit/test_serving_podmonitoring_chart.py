@@ -179,3 +179,9 @@ def test_serving_podmonitoring_render(chart, values_suffix, stage):
         if doc['kind'] == 'PodMonitoring' and doc['metadata']['name'] == 'synthetic-serving'
     )
     assert overridden['spec']['endpoints'][0]['interval'] == '30s'
+    if chart == 'pusher':
+        # The isolated prod canary borrows the shared KSA and the shared collector Role; the CI
+        # deployer cannot create RBAC, so the canary must render none of its own.
+        canary = render('--set', 'serviceAccount.create=false', '--set-string', 'serviceAccount.name=shared')
+        assert [doc for doc in canary if doc['kind'] == 'PodMonitoring'] == monitors
+        assert not any(doc['kind'] in {'Role', 'RoleBinding'} for doc in canary)

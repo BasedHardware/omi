@@ -1123,6 +1123,11 @@ class AppLocalizationsKn extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'ಹೆಸರನ್ನು ಯಶಸ್ವಿಯಾಗಿ ನವೀಕರಣ ಮಾಡಲಾಗಿದೆ!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'ಆಯ್ಕೆಮಾಡಿದ ಕ್ಯಾಲೆಂಡರ್‌ಗಳನ್ನು ಓದಿ. ಹೊಸ ಈವೆಂಟ್‌ಗಳು $calendar ಅನ್ನು ಬಳಸುತ್ತವೆ.';
+  }
+
+  @override
   String get calendarSettings => 'ಕ್ಯಾಲೆಂಡರ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
 
   @override
@@ -12265,7 +12270,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'ಜೋಡಿಯಾದಾಗಿನಿಂದ: $drops ಕಡಿತಗಳು, $failed ವಿಫಲ ಸಂಪರ್ಕಗಳು.';
+    return 'ಜೋಡಿಸಿದಾಗಿನಿಂದ: $drops ಮರುಸಂಪರ್ಕಗಳು, $failed ವಿಫಲ ಸಂಪರ್ಕಗಳು.';
   }
 
   @override
@@ -13504,16 +13509,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount ಅನ್ನು ಸಂಭಾಷಣೆಗಳಾಗಿ ಪರಿವರ್ತಿಸಲಾಗುತ್ತಿದೆ';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total ಪೂರ್ಣ · ನೀವು ಈ ಪರದೆಯಿಂದ ಹೊರಡಬಹುದು';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount ಸಿಂಕ್‌ಗೆ ಸಿದ್ಧ';
   }
@@ -13537,7 +13532,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ ಕಾಯುತ್ತಿದೆ';
 
   @override
-  String get syncDetailsTranscribing => 'Omi ನಲ್ಲಿ ಲಿಪ್ಯಂತರವಾಗುತ್ತಿದೆ';
+  String get syncDetailsTranscribing => 'ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ, ಸರ್ವರ್‌ಗಾಗಿ ಕಾಯುತ್ತಿದೆ';
 
   @override
   String get syncDetailsAudioFiles => 'ಆಡಿಯೊ ಫೈಲ್‌ಗಳು';
@@ -13997,6 +13992,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi ಈಗಾಗಲೇ ಈ ಸಂಭಾಷಣೆಯ ಮೇಲೆ ಕೆಲಸ ಮಾಡುತ್ತಿದೆ. ಮುಗಿದಾಗ ಸಾರಾಂಶ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'ಇನ್ನೂ ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗಿಲ್ಲ';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'ಲಿಪ್ಯಂತರ ಸಿದ್ಧವಾದಾಗ ಸಾರಾಂಶ ಕಾಣಿಸುತ್ತದೆ.';
 
   @override
   String get summaryCheckAgain => 'ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ';
@@ -15526,7 +15527,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15607,4 +15608,16 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'ನಿಮ್ಮ ಸಾರಾಂಶವನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get onTheWayServerWork => 'ಸರ್ವರ್ ವರದಿ ಮಾಡಿದ ಕೆಲಸ';
+
+  @override
+  String get finishNothingToProcess => 'ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಏನೂ ಇಲ್ಲ.';
+
+  @override
+  String get finishStillProcessing => 'ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತಿದೆ. ಇದು ಹೋಮ್‌ನಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.';
+
+  @override
+  String get finishBackToHome => 'ಹೋಮ್‌ಗೆ ಹಿಂತಿರುಗಿ';
 }

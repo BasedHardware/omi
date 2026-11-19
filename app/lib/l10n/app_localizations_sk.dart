@@ -1128,6 +1128,11 @@ class AppLocalizationsSk extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Meno bolo úspešne aktualizované!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Čítať vybrané kalendáre. Nové udalosti používajú $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Nastavenia kalendára';
 
   @override
@@ -12221,7 +12226,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Od spárovania: výpadkov $drops, neúspešných pripojení $failed.';
+    return 'Od spárovania: $drops opätovných pripojení, $failed neúspešných pripojení.';
   }
 
   @override
@@ -13460,16 +13465,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Premena $amount na konverzácie';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Hotovo $done z $total · túto obrazovku môžete opustiť';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount pripravené na synchronizáciu';
   }
@@ -13493,7 +13488,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Čaká v tomto telefóne';
 
   @override
-  String get syncDetailsTranscribing => 'Prepisuje sa v Omi';
+  String get syncDetailsTranscribing => 'Nahrané, čaká na server';
 
   @override
   String get syncDetailsAudioFiles => 'Zvukové súbory';
@@ -13950,6 +13945,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi už na tomto rozhovore pracuje. Zhrnutie sa tu zobrazí po dokončení.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Zatiaľ neprepísané';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Zhrnutie sa zobrazí, keď bude prepis hotový.';
 
   @override
   String get summaryCheckAgain => 'Skontrolovať znova';
@@ -15471,7 +15472,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15552,4 +15553,16 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Píšeme vaše zhrnutie…';
+
+  @override
+  String get onTheWayServerWork => 'Práca hlásená serverom';
+
+  @override
+  String get finishNothingToProcess => 'Zatiaľ nie je čo spracovať.';
+
+  @override
+  String get finishStillProcessing => 'Stále sa spracúva. Zobrazí sa na domovskej stránke.';
+
+  @override
+  String get finishBackToHome => 'Späť domov';
 }

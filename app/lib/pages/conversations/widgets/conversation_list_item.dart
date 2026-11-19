@@ -41,13 +41,21 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 
 /// The row title for a conversation (hub audit #21): its title, else its transcript text (legacy
 /// rows the server left untitled), a recording date/time when neither exists, and
 /// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
-  if (conversation.homeStep == 'failed') return l10n.summaryTemplateFailedTitle(l10n.omiAppName);
+  // A row the server said is not transcribed keeps its own title and the status slot says why,
+  // unless the title is only the server's stand-in; then the status is the title.
+  if (conversation.homeStep == 'failed') {
+    if (!TranscriptionPendingConversations.contains(conversation.id)) {
+      return l10n.summaryTemplateFailedTitle(l10n.omiAppName);
+    }
+    if (TranscriptionPendingConversations.replacesTitle(conversation)) return l10n.summaryTranscriptionPendingTitle;
+  }
   // A noise clip revealed from Home's fold reads like any row, not as "Discarded".
   if (conversation.discarded && !conversation.isFoldedNoise) {
     final seconds = conversation.getDurationInSeconds();
@@ -92,7 +100,7 @@ class ConversationListItem extends StatefulWidget {
   final ServerConversation conversation;
 
   /// Optional reprocess override for tests.
-  final Future<ServerConversation?> Function(String conversationId)? reprocess;
+  final Future<ReprocessResult> Function(String conversationId)? reprocess;
 
   /// Whether the long-press menu offers Select (multi-select). Off where no selection bar is shown
   /// (the Home preview), so selection mode can never start without a way to act on it or leave.
@@ -176,6 +184,15 @@ class _ConversationListItemState extends State<ConversationListItem> {
   void initState() {
     super.initState();
     _offerAtCapIfLocked();
+    TranscriptionPendingConversations.ids.addListener(_onPendingChanged);
+  }
+
+  bool _pendingShown = false;
+
+  /// Title and retry area follow the not-transcribed set, including marks made on other surfaces.
+  void _onPendingChanged() {
+    final pending = TranscriptionPendingConversations.contains(widget.conversation.id);
+    if (pending != _pendingShown && mounted) setState(() {});
   }
 
   @override
@@ -196,6 +213,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   @override
   void dispose() {
+    TranscriptionPendingConversations.ids.removeListener(_onPendingChanged);
     _conversationNewStatusResetTimer?.cancel();
     super.dispose();
   }
@@ -204,15 +222,20 @@ class _ConversationListItemState extends State<ConversationListItem> {
     if (_reprocessing || widget.conversation.id == '0') return;
     setState(() => _reprocessing = true);
     try {
-      final reprocess = widget.reprocess ?? (String id) async => (await reProcessConversationServer(id)).conversation;
-      final updated = await reprocess(widget.conversation.id);
+      final reprocess = widget.reprocess ?? reProcessConversationServer;
+      final result = await reprocess(widget.conversation.id);
       if (!mounted) return;
-      final provider = context.read<ConversationProvider>();
-      if (updated == null) {
-        AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
-        return;
+      switch (result) {
+        case ReprocessSuccess(:final conversation):
+          context.read<ConversationProvider>().applyConversationReprocessResult(conversation);
+        // Not an error: the row shows the server's waiting state, or the not-transcribed status.
+        case ReprocessTranscriptionPending(conversation: final waiting?):
+          context.read<ConversationProvider>().applyConversationReprocessResult(waiting);
+        case ReprocessTranscriptionPending():
+          TranscriptionPendingConversations.mark(widget.conversation.id);
+        default:
+          AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
       }
-      provider.applyConversationReprocessResult(updated);
     } catch (_) {
       if (!mounted) return;
       AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
@@ -221,8 +244,18 @@ class _ConversationListItemState extends State<ConversationListItem> {
     }
   }
 
-  /// "Summary failed · Retry": shown only when the server says a reprocess can succeed.
+  /// "Summary failed · Retry": shown only when the server says a reprocess can succeed. A row the
+  /// server said is still awaiting transcription gets a plain waiting status and no retry.
   Widget _buildSummaryRetry(BuildContext context) {
+    if (_pendingShown) {
+      return Text(
+        context.l10n.summaryTranscriptionPendingTitle,
+        key: const Key('conversation_transcription_pending_indicator'),
+        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
     return Row(
       children: [
         Flexible(
@@ -401,6 +434,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   @override
   Widget build(BuildContext context) {
+    _pendingShown = TranscriptionPendingConversations.contains(widget.conversation.id);
     bool? linked = widget.homeCard?.hasTasks ?? widget.hasLinkedTasks;
     if (!widget.conversation.isLocked && linked == null) {
       context.read<ConversationTaskPresenceProvider?>()?.request(widget.conversation.id);
@@ -688,7 +722,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       if (widget.conversation.processingDeferred && widget.conversation.homeStep != 'failed')
                         const ProcessingDeferredMarker(),
                       OnDeviceProvenanceChip(conversationId: widget.conversation.id),
-                      if (widget.conversation.showsSummaryRetry || widget.conversation.homeStep == 'failed') ...[
+                      if ((widget.conversation.showsSummaryRetry || widget.conversation.homeStep == 'failed') &&
+                          !TranscriptionPendingConversations.replacesTitle(widget.conversation)) ...[
                         const SizedBox(height: 8),
                         _buildSummaryRetry(context),
                       ],
