@@ -27326,6 +27326,186 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Back to Home'**
   String get finishBackToHome;
+
+  /// Toast after tapping Finish on a live recording when the server had already saved that conversation on its own. 'Home' is the app's conversation list tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Already saved. It\'s on Home.'**
+  String get finishAlreadySaved;
+
+  /// Toast after tapping Finish when the page showed words but the server has none of the audio yet (a wearable device's audio is still on its way). The recording carries on.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi hasn\'t received this audio yet. It will be processed when it arrives.'**
+  String get finishAudioNotReceived;
+
+  /// Error toast after tapping Finish on a live recording when the request got no answer (offline, timeout, server error). Shown with a Try Again button; the transcript stays on screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t reach Omi to finish this conversation. Nothing is lost.'**
+  String get finishFailedOffline;
+
+  /// Error toast after tapping Finish on a live recording when something in the app failed. Shown with a Try Again button; the transcript stays on screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t finish this conversation. Nothing is lost.'**
+  String get finishFailed;
+
+  /// Error toast when the user taps the record button but the microphone permission is blocked. Shown with an Open Settings button.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi can\'t use the microphone. Allow it in Settings to record.'**
+  String get micBlockedCannotRecord;
+
+  /// Error toast when the phone recording failed to start for an unknown reason. Shown with a Try Again button.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t start recording.'**
+  String get couldNotStartRecording;
+
+  /// Error toast after Restore Purchases when the app could not reach the server to read the plan. Shown with a Try Again button. Must never imply the user is on the free plan.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t check your plan. Your purchases are safe.'**
+  String get restorePurchasesFailed;
+
+  /// Error state on the device firmware page when the update check got no answer (offline, server error). Shown with a Try Again button, instead of 'up to date'.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t check for firmware updates.'**
+  String get firmwareCheckFailed;
+
+  /// Error toast after sharing a conversation failed or was dismissed and the app could not make it private again. Shown with a Make Private button.
+  ///
+  /// In en, this message translates to:
+  /// **'This conversation is still shared. Anyone with the link can view it.'**
+  String get conversationStillPublic;
+
+  /// Error toast when creating, editing, or moving the progress of a goal failed. Shown with a Try Again button; the goal editor stays open.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save your goal.'**
+  String get goalSaveFailed;
+
+  /// Error toast when deleting a goal failed on the server and the goal returned to the list. Shown with a Try Again button.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t delete the goal. It\'s back in your list.'**
+  String get goalDeleteFailed;
+
+  /// Error state on the Goals page when goals could not be loaded and none are stored on the phone. Shown with a Try Again button.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your goals.'**
+  String get goalsLoadFailed;
+
+  /// Toast when a notification or card links to a live recording that has already ended. 'Home' is the conversation list tab.
+  ///
+  /// In en, this message translates to:
+  /// **'That recording has ended. It\'s on Home.'**
+  String get missingTargetEndedRecording;
+
+  /// Toast when a link points to a memory that was deleted or is not on this phone.
+  ///
+  /// In en, this message translates to:
+  /// **'This memory is no longer available.'**
+  String get missingTargetMemory;
+
+  /// Toast when a link points to a task that was deleted or could not be read.
+  ///
+  /// In en, this message translates to:
+  /// **'This task is no longer available.'**
+  String get missingTargetTask;
+
+  /// Error toast when a cited or linked conversation could not be opened (deleted, locked, or offline). Shown with a Try Again button.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open this conversation.'**
+  String get missingTargetConversation;
+
+  /// Error toast after pull-to-refresh on the conversation list failed; the rows already shown stay. Shown with a Try Again button.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t refresh. Showing what\'s on this phone.'**
+  String get couldNotRefreshConversations;
+
+  /// Toast when the user taps Offline Sync while their wearable device is disconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect your device to use Offline Sync.'**
+  String get connectDeviceForOfflineSync;
+
+  /// Confirmation dialog message before 'Use a Different Account' during onboarding signs the user out and clears local settings.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ll be signed out, and this phone\'s Omi settings will be reset.'**
+  String get useDifferentAccountMessage;
+
+  /// Error toast when Ray-Ban Meta glasses setup completed but a rescan did not find the glasses. Shown with a Try Again button.
+  ///
+  /// In en, this message translates to:
+  /// **'Setup finished, but your glasses weren\'t found. Make sure they\'re on and nearby.'**
+  String get rayBanMetaNotFoundAfterSetup;
+
+  /// Notice at the end of the task list when loading the next page failed. Shown with a Try Again button.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load more tasks.'**
+  String get couldNotLoadMoreTasks;
+
+  /// Error toast when dragging a task to another section failed to save. Shown with a Try Again button.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t move the task. It\'s back where it was.'**
+  String get couldNotMoveTask;
+
+  /// Toast after clearing a section of tasks when some tasks are locked (on a paid plan feature) and were intentionally kept. {count} is the number of locked tasks kept.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Deleted. 1 locked task was kept.} other{Deleted. {count} locked tasks were kept.}}'**
+  String lockedTasksKept(int count);
+
+  /// Error toast when a settings change failed to save and was put back. Shown with a Try Again button.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save that change.'**
+  String get settingNotSaved;
+
+  /// Error state on the notification settings page when the settings could not be read from the server. Shown with a Try Again button.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your notification settings.'**
+  String get couldNotLoadNotificationSettings;
+
+  /// Toast when the user tries to clear the chat or switch chat persona while Omi is still answering.
+  ///
+  /// In en, this message translates to:
+  /// **'Wait for Omi to finish answering.'**
+  String get waitForOmiToFinish;
+
+  /// Toast when a chat voice note was shorter than half a second and was not sent.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice note too short. Hold to record.'**
+  String get voiceNoteTooShort;
+
+  /// Hint under the disabled Submit App button explaining what the form still needs.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a name, description, image, category and capability to submit.'**
+  String get submitAppMissingFields;
+
+  /// Notice on an app's page when waiting for the user to complete the app's setup in the browser timed out.
+  ///
+  /// In en, this message translates to:
+  /// **'Setup isn\'t finished yet. Finish it in your browser, then tap Try Again.'**
+  String get appSetupNotFinished;
+
+  /// Title on the processing page when the server discarded the finished recording (too short or no speech). Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to Keep'**
+  String get finishNothingKeptTitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -1205,6 +1205,15 @@ class _ConversationsPageState extends State<ConversationsPage>
                   when review.availability != ReviewAvailability.off)
                 review.load(),
             ]);
+            // The reader pulled; a refresh that failed says so above the rows it kept (§17.4).
+            if (context.mounted && convoProvider.conversationsLoadFailed && convoProvider.conversations.isNotEmpty) {
+              OmiFeedback.error(
+                context,
+                context.l10n.couldNotRefreshConversations,
+                actionLabel: context.l10n.tryAgain,
+                onAction: () => unawaited(convoProvider.getInitialConversations()),
+              );
+            }
             final historyReady = await history;
             if (mounted && historyReady) {
               if (_initialOverlayReady case final ready? when !ready.isCompleted) ready.complete();

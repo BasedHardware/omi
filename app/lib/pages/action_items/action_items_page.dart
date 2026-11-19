@@ -166,7 +166,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   void _onScroll() {
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-      if (!provider.isFetching && provider.hasMore) {
+      if (!provider.isFetching && provider.hasMore && !provider.loadMoreFailed) {
         provider.loadMoreActionItems();
       }
     }
@@ -357,10 +357,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  void _updateTaskCategory(ActionItemWithMetadata item, TaskCategory newCategory) {
+  /// A drop into another section moves the task at once; a save that fails moves it back and says
+  /// so, with Try Again (T3).
+  Future<void> _updateTaskCategory(ActionItemWithMetadata item, TaskCategory newCategory) async {
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
     final newDueDate = _getDefaultDueDateForCategory(newCategory);
-    provider.updateActionItemDueDate(item, newDueDate);
+    final saved = await provider.updateActionItemDueDate(item, newDueDate);
+    if (saved || !mounted) return;
+    OmiFeedback.error(
+      context,
+      context.l10n.couldNotMoveTask,
+      actionLabel: context.l10n.tryAgain,
+      onAction: () => _updateTaskCategory(item, newCategory),
+    );
   }
 
   /// Deleting a whole section at once cannot be undone: confirm every time (contract §4).
@@ -377,11 +386,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     if (!shouldClear) return;
     // One batch request, not one delete per task: concurrent single deletes for one owner
     // contend on the same server route document and fail.
-    final deleted = await provider.deleteActionItems(items);
-    if (!mounted || deleted) return;
-    // The provider has already put each rejected row back; say so, as a single delete does
-    // (task_delete_undo.dart), instead of letting the rows reappear in silence.
-    OmiFeedback.error(context, l10n.failedToDeleteActionItem);
+    final result = await provider.clearSection(items);
+    if (!mounted) return;
+    if (result.failed > 0) {
+      // The provider has already put each rejected row back; say so, as a single delete does
+      // (task_delete_undo.dart), instead of letting the rows reappear in silence.
+      OmiFeedback.error(context, l10n.failedToDeleteActionItem);
+    } else if (result.lockedKept > 0) {
+      // Locked tasks stay by design; that is not a failure (T5).
+      OmiFeedback.info(context, l10n.lockedTasksKept(result.lockedKept));
+    }
   }
 
   int _getIndentLevel(ActionItemWithMetadata item) {
@@ -617,6 +631,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           const SliverPadding(padding: EdgeInsets.only(top: 6)),
           _buildDateSections(categorizedItems, provider),
         ],
+
+        // A page that failed to load says so where the list ends, with Try Again (T1).
+        if (!isSearching && provider.loadMoreFailed)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+              child: OmiPartialNotice(
+                key: const Key('tasks_load_more_failed'),
+                message: context.l10n.couldNotLoadMoreTasks,
+                onRetry: provider.loadMoreActionItems,
+              ),
+            ),
+          ),
 
         // Bottom padding so the last row scrolls clear of the nav bar
         SliverPadding(padding: EdgeInsets.only(bottom: homeBottomClearance(context))),

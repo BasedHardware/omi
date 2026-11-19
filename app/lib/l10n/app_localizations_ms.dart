@@ -15606,4 +15606,103 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Kembali ke Laman Utama';
+
+  @override
+  String get finishAlreadySaved => 'Already saved. It\'s on Home.';
+
+  @override
+  String get finishAudioNotReceived => 'Omi hasn\'t received this audio yet. It will be processed when it arrives.';
+
+  @override
+  String get finishFailedOffline => 'Couldn\'t reach Omi to finish this conversation. Nothing is lost.';
+
+  @override
+  String get finishFailed => 'Couldn\'t finish this conversation. Nothing is lost.';
+
+  @override
+  String get micBlockedCannotRecord => 'Omi can\'t use the microphone. Allow it in Settings to record.';
+
+  @override
+  String get couldNotStartRecording => 'Couldn\'t start recording.';
+
+  @override
+  String get restorePurchasesFailed => 'Couldn\'t check your plan. Your purchases are safe.';
+
+  @override
+  String get firmwareCheckFailed => 'Couldn\'t check for firmware updates.';
+
+  @override
+  String get conversationStillPublic => 'This conversation is still shared. Anyone with the link can view it.';
+
+  @override
+  String get goalSaveFailed => 'Couldn\'t save your goal.';
+
+  @override
+  String get goalDeleteFailed => 'Couldn\'t delete the goal. It\'s back in your list.';
+
+  @override
+  String get goalsLoadFailed => 'Couldn\'t load your goals.';
+
+  @override
+  String get missingTargetEndedRecording => 'That recording has ended. It\'s on Home.';
+
+  @override
+  String get missingTargetMemory => 'This memory is no longer available.';
+
+  @override
+  String get missingTargetTask => 'This task is no longer available.';
+
+  @override
+  String get missingTargetConversation => 'Couldn\'t open this conversation.';
+
+  @override
+  String get couldNotRefreshConversations => 'Couldn\'t refresh. Showing what\'s on this phone.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Connect your device to use Offline Sync.';
+
+  @override
+  String get useDifferentAccountMessage => 'You\'ll be signed out, and this phone\'s Omi settings will be reset.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup =>
+      'Setup finished, but your glasses weren\'t found. Make sure they\'re on and nearby.';
+
+  @override
+  String get couldNotLoadMoreTasks => 'Couldn\'t load more tasks.';
+
+  @override
+  String get couldNotMoveTask => 'Couldn\'t move the task. It\'s back where it was.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Deleted. $count locked tasks were kept.',
+      one: 'Deleted. 1 locked task was kept.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Couldn\'t save that change.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Couldn\'t load your notification settings.';
+
+  @override
+  String get waitForOmiToFinish => 'Wait for Omi to finish answering.';
+
+  @override
+  String get voiceNoteTooShort => 'Voice note too short. Hold to record.';
+
+  @override
+  String get submitAppMissingFields => 'Add a name, description, image, category and capability to submit.';
+
+  @override
+  String get appSetupNotFinished => 'Setup isn\'t finished yet. Finish it in your browser, then tap Try Again.';
+
+  @override
+  String get finishNothingKeptTitle => 'Nothing to Keep';
 }

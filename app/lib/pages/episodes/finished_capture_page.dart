@@ -53,6 +53,21 @@ class FinishedCapturePage extends StatefulWidget {
     return best;
   }
 
+  /// True when the server discarded what was made from [recordingId] (too short or no speech) and
+  /// kept nothing: a discarded conversation holding a piece of it, or the recording itself marked
+  /// discarded, with no kept conversation. The page then ends at once instead of waiting (C6).
+  static bool discarded(Iterable<ServerConversation> rows, String recordingId) {
+    if (match(rows, recordingId) != null) return false;
+    for (final row in rows) {
+      if (!row.discarded) continue;
+      final v3 = row.v3;
+      final holds =
+          row.id == recordingId || (v3 != null && v3.recordingPieces.any((piece) => piece.recordingId == recordingId));
+      if (holds) return true;
+    }
+    return false;
+  }
+
   @override
   State<FinishedCapturePage> createState() => _FinishedCapturePageState();
 }
@@ -65,6 +80,7 @@ class _FinishedCapturePageState extends State<FinishedCapturePage> with WidgetsB
   bool _reading = false;
   bool _opened = false;
   bool _expired = false;
+  bool _discarded = false;
   Timer? _expiry;
 
   @override
@@ -91,7 +107,7 @@ class _FinishedCapturePageState extends State<FinishedCapturePage> with WidgetsB
   }
 
   Future<void> _check() async {
-    if (_reading || _opened || !mounted) return;
+    if (_reading || _opened || _discarded || !mounted) return;
     _reading = true;
     try {
       final rows = await (widget.fetch ?? () => api.getConversations(limit: 10))();
@@ -99,6 +115,11 @@ class _FinishedCapturePageState extends State<FinishedCapturePage> with WidgetsB
       if (found != null && mounted && !_opened) {
         final route = ModalRoute.of(context);
         if (route != null && route.isCurrent) return _open(found);
+      }
+      if (found == null && mounted && !_opened && FinishedCapturePage.discarded(rows, widget.recordingId)) {
+        _poll?.cancel();
+        _expiry?.cancel();
+        setState(() => _discarded = true);
       }
     } catch (_) {
       // Offline or a failed read: the next tick tries again.
@@ -138,14 +159,23 @@ class _FinishedCapturePageState extends State<FinishedCapturePage> with WidgetsB
     final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(automaticallyImplyLeading: false, leading: const Center(child: OmiBackButton.circled())),
-      body: _expired
-          ? OmiErrorState(
-              key: const Key('finished_capture_expired'),
-              message: l10n.finishStillProcessing,
-              retryLabel: l10n.finishBackToHome,
-              onRetry: _backToHome,
+      body: _discarded
+          ? OmiEmptyState(
+              key: const Key('finished_capture_discarded'),
+              icon: Icons.mic_off_outlined,
+              title: l10n.finishNothingKeptTitle,
+              message: l10n.discardedOnlyRecording,
+              action: OmiButton.secondary(label: l10n.finishBackToHome, onPressed: _backToHome),
             )
-          : OmiLoadingState(key: const Key('finished_capture_processing'), label: l10n.processingConversationProgress),
+          : _expired
+              ? OmiErrorState(
+                  key: const Key('finished_capture_expired'),
+                  message: l10n.finishStillProcessing,
+                  retryLabel: l10n.finishBackToHome,
+                  onRetry: _backToHome,
+                )
+              : OmiLoadingState(
+                  key: const Key('finished_capture_processing'), label: l10n.processingConversationProgress),
     );
   }
 }

@@ -34,6 +34,16 @@ enum FirmwareUpdateFailure {
   noReconnect,
 }
 
+/// Tests replace the latest-firmware request; production asks the server.
+@visibleForTesting
+Future<Map?> Function({
+  required String deviceModelNumber,
+  required String firmwareRevision,
+  required String hardwareRevision,
+  required String manufacturerName,
+  String? serialNumber,
+})? debugLatestFirmwareLookup;
+
 mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   FirmwareUpdateBuildPolicy get firmwareUpdatePolicy => FirmwareUpdateBuildPolicy.current;
 
@@ -386,36 +396,45 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     });
   }
 
-  Future getLatestVersion({
+  /// Returns false when the check itself failed (no answer): the caller shows an error state, never
+  /// "up to date".
+  Future<bool> getLatestVersion({
     required String deviceModelNumber,
     required String firmwareRevision,
     required String hardwareRevision,
     required String manufacturerName,
     String? serialNumber,
   }) async {
-    latestFirmwareDetails = await getLatestFirmwareVersion(
+    final details = await (debugLatestFirmwareLookup ?? getLatestFirmwareVersion)(
       deviceModelNumber: deviceModelNumber,
       firmwareRevision: firmwareRevision,
       hardwareRevision: hardwareRevision,
       manufacturerName: manufacturerName,
       serialNumber: serialNumber,
     );
+    latestFirmwareDetails = details ?? {};
+    if (details == null) return false;
     if (latestFirmwareDetails['ota_update_steps'] != null) {
       otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);
     }
     if (latestFirmwareDetails['is_legacy_secure_dfu'] != null) {
       isLegacySecureDFU = latestFirmwareDetails['is_legacy_secure_dfu'];
     }
+    return true;
   }
 
-  Future getStableVersion({required String deviceModelNumber}) async {
-    latestFirmwareDetails = await getStableFirmwareVersion(deviceModelNumber: deviceModelNumber);
+  /// Returns false when the check itself failed (no answer).
+  Future<bool> getStableVersion({required String deviceModelNumber}) async {
+    final details = await getStableFirmwareVersion(deviceModelNumber: deviceModelNumber);
+    latestFirmwareDetails = details ?? {};
+    if (details == null) return false;
     if (latestFirmwareDetails['ota_update_steps'] != null) {
       otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);
     }
     if (latestFirmwareDetails['is_legacy_secure_dfu'] != null) {
       isLegacySecureDFU = latestFirmwareDetails['is_legacy_secure_dfu'];
     }
+    return true;
   }
 
   Future<(String, bool, String)> shouldUpdateFirmware({required String currentFirmware}) async {

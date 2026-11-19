@@ -80,17 +80,19 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     if (_locked) return;
     setState(() => _busy = true);
     try {
-      final usage = context.read<UsageProvider>();
-      await usage.fetchSubscription();
+      final outcome = await context.read<UsageProvider>().restorePurchases();
       if (!mounted || _dismissed) return;
       final l10n = context.l10n;
-      if (usage.subscription?.subscription.plan.isPaid == true) {
-        OmiFeedback.confirm(context, l10n.unlimitedPlan);
-        _dismissed = true;
-        Navigator.of(context).pop(true);
-        return;
+      switch (outcome) {
+        case RestoreOutcome.paid:
+          OmiFeedback.confirm(context, l10n.unlimitedPlan);
+          _dismissed = true;
+          Navigator.of(context).pop(true);
+        case RestoreOutcome.free:
+          OmiFeedback.info(context, l10n.freePlan);
+        case RestoreOutcome.failed:
+          OmiFeedback.error(context, l10n.restorePurchasesFailed, actionLabel: l10n.tryAgain, onAction: _restore);
       }
-      OmiFeedback.info(context, l10n.freePlan);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

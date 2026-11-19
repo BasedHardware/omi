@@ -33,6 +33,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
+import 'package:omi/ui/feedback/omi_missing_target.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -172,8 +173,11 @@ Future<bool> openHomeDeepLink(
     case 'capture':
       final capture = context.read<CaptureProvider>();
       context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
-      // A card for a recording that has since ended leaves Home on screen.
-      if (capture.activeRecordingId == null || capture.activeRecordingId != link.query['recording']) return false;
+      // A card for a recording that has since ended leaves Home on screen, and says why.
+      if (capture.activeRecordingId == null || capture.activeRecordingId != link.query['recording']) {
+        OmiMissingTarget.endedRecording.show(context);
+        return false;
+      }
       unawaited(routeToPage(context, const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript)));
     case 'conversations':
       context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
@@ -188,7 +192,7 @@ Future<bool> openHomeDeepLink(
         if (onItemUnavailable != null) {
           onItemUnavailable();
         } else {
-          OmiFeedback.info(context, context.l10n.somethingWentWrong);
+          OmiMissingTarget.memory.show(context);
         }
         return false;
       } else if (onMemoryOpened != null) {
@@ -214,7 +218,7 @@ Future<bool> openHomeDeepLink(
         if (onItemUnavailable != null) {
           onItemUnavailable();
         } else {
-          OmiFeedback.info(context, context.l10n.somethingWentWrong);
+          OmiMissingTarget.task.show(context);
         }
         return false;
       } else if (onTaskOpened != null) {

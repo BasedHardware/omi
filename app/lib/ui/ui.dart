@@ -50,6 +50,8 @@ export 'components/omi_spinner.dart';
 export 'feedback/omi_clipboard.dart';
 export 'feedback/omi_dialogs.dart';
 export 'feedback/omi_feedback.dart';
+export 'feedback/omi_missing_target.dart';
+export 'feedback/omi_setting_write.dart';
 export 'format/omi_date_format.dart';
 export 'format/omi_duration.dart';
 export 'format/speaker_names.dart';
