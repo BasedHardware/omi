@@ -1255,6 +1255,38 @@ def test_a_failed_undo_group_is_recorded_and_leaves_the_run_resumable(monkeypatc
     assert ledger.run['status'] == 'undoing' and ledger.run['undo']['reason'] == 'lease_lost'
 
 
+def test_a_lease_lost_on_renew_is_recorded_like_a_failed_group(monkeypatch):
+    ledger = _undo_ledger(monkeypatch)
+    _undo_leases(monkeypatch)
+    docs = [
+        {'id': 'd1', 'claims': [{'conversation_id': 'c1'}]},
+        {'id': 'c1', 'v3_derived': True, 'v3_recording_ids': ['d1']},
+    ]
+    monkeypatch.setattr(store, 'backfill_run_documents', lambda *a, **kw: docs)
+    monkeypatch.setattr(store, 'undo_backfill_group', lambda *a, **kw: ('undone', 1, 1))
+
+    def lost(*a, **kw):
+        raise store.Conflict('lease_lost')
+
+    monkeypatch.setattr(leases, 'renew', lost)
+    result = backfill.undo_run('u', RUN)
+    assert result['outcome'] == 'error' and result['reason'] == 'lease_lost'
+    assert ledger.run['status'] == 'undoing' and ledger.run['undo']['reason'] == 'lease_lost'
+
+
+def test_an_existing_run_is_a_typed_blocked_owner(tmp_path, monkeypatch, capsys):
+    from scripts import conversations_v3_backfill as script
+
+    owners = tmp_path / 'owners.txt'
+    owners.write_text('owner-one\nowner-two\n')
+    monkeypatch.setattr(runs, 'list_runs', lambda uid: [])
+    monkeypatch.setattr(script, 'plan_owner', lambda *a: ({}, [], {}))
+    monkeypatch.setattr(runs, 'create_run', lambda *a, **kw: False)
+    assert issubclass(backfill.BackfillRunExists, ValueError)
+    assert script.main(['run', '--owners-file', str(owners), '--no-wait']) == 1
+    assert capsys.readouterr().out.count('blocked: backfill_run_exists') == 2
+
+
 def test_undo_refuses_a_group_whose_copy_took_a_notes_lease_after_the_first_check(strict):
     token = convert(strict)
     strict.rows[('users', 'synthetic', 'conversation_v3_leases', 'summary-c0')] = {

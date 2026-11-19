@@ -50,6 +50,10 @@ class BackfillRetry(Exception):
     """The step could not run now (owner busy); the task is retried by the queue."""
 
 
+class BackfillRunExists(ValueError):
+    """A run with this id is already planned for the owner."""
+
+
 def _utc(value):
     return outline.utc(value)
 
@@ -213,7 +217,7 @@ def create_run(
         'forced_cuts': sum(1 for p in partitions if p.get('forced_cut')),
     }
     if not runs.create_run(uid, run_id, record, firestore_client=firestore_client):
-        raise ValueError('backfill_run_exists')
+        raise BackfillRunExists('backfill_run_exists')
     runs.mark_start(uid, run_id, firestore_client=firestore_client)
     return run_id
 
@@ -516,6 +520,8 @@ def undo_run(uid, run_id, *, firestore_client=None):
                 outcome, donors_touched, _removed = store.undo_backfill_group(
                     uid, token, donors, rows, run_id=run_id, firestore_client=firestore_client
                 )
+                for key, held_token in held:
+                    leases.renew(uid, key, held_token, firestore_client=firestore_client)
             except store.Conflict as error:
                 # Groups already done stay done; the run stays 'undoing' and a rerun continues. Copies
                 # removed so far are still checked for a delete that raced them.
@@ -539,8 +545,6 @@ def undo_run(uid, run_id, *, firestore_client=None):
             elif outcome == 'kept_live':
                 kept['groups_kept_live'] += 1
                 kept['donors_kept_live'] += donors_touched
-            for key, held_token in held:
-                leases.renew(uid, key, held_token, firestore_client=firestore_client)
         progress, result = totals()
         # A delete whose tombstone landed after its copy was undone raced undo (the shared delete path
         # reads the copy before it writes the tombstone): that legacy row is visible again. Every

@@ -159,9 +159,7 @@ def cmd_run(args) -> int:
             print(f'{label} blocked: {error}')
             status = 1
             continue
-        except ValueError as error:
-            if str(error) != 'backfill_run_exists':
-                raise
+        except backfill.BackfillRunExists as error:
             # One owner's blocked plan (overfull partition, account deletion, unreadable source,
             # existing run) is reported by reason and never stops the other owners' plans.
             print(f'{label} blocked: {error}')
