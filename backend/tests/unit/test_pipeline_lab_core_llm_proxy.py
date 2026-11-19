@@ -37,6 +37,7 @@ class FakeUpstream:
     def __init__(self):
         self.requests = []
         self.fail_status = None
+        self.fail_next = []  # statuses answered once each, in order, before normal behaviour
         upstream = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -48,6 +49,15 @@ class FakeUpstream:
             def do_POST(self):
                 body = self.rfile.read(int(self.headers['Content-Length']))
                 upstream.requests.append({'path': self.path, 'headers': dict(self.headers.items()), 'body': body})
+                if upstream.fail_next:
+                    status = upstream.fail_next.pop(0)
+                    payload = b'{"error":{"message":"transient"}}'
+                    self.send_response(status)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Content-Length', str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
                 if upstream.fail_status:
                     payload = b'{"error":{"message":"boom"}}'
                     self.send_response(upstream.fail_status)
@@ -250,6 +260,31 @@ def test_upstream_error_is_relayed_unbilled_and_not_cached(lab, upstream):
     calls = lab.read_llm_calls('run-1')
     assert calls[0].extra['status'] == 500 and calls[0].usd == 0
     assert SpendLedger(lab.ledger_path('run-1'), budget_usd=1.0).snapshot()['in_flight_usd'] == 0
+
+
+def test_transient_gateway_answers_are_retried_before_the_client_sees_them(lab, upstream, monkeypatch):
+    # A real-day replay died on one 502 from the dev gateway while seeding embeddings.
+    from testing.pipeline_lab.llm_proxy import server
+
+    monkeypatch.setattr(server, 'UPSTREAM_BACKOFF_SECONDS', 0.0)
+    upstream.fail_next = [502, 503]
+    with _proxy(lab, upstream) as proxy:
+        status, headers, _ = _post(proxy.url + '/v1/embeddings', {'model': 'e', 'input': ['x']})
+    assert status == 200 and headers['X-Pipeline-Lab-Cache'] == 'miss'
+    assert len(upstream.requests) == 3
+    calls = lab.read_llm_calls('run-1')
+    assert calls[0].extra['retries'] == [502, 503] and calls[0].extra['status'] == 200
+
+
+def test_persistent_gateway_error_is_relayed_after_the_last_attempt(lab, upstream, monkeypatch):
+    from testing.pipeline_lab.llm_proxy import server
+
+    monkeypatch.setattr(server, 'UPSTREAM_BACKOFF_SECONDS', 0.0)
+    upstream.fail_status = 502
+    with _proxy(lab, upstream) as proxy:
+        status, _, _ = _post(proxy.url + '/v1/chat/completions', CHAT)
+    assert status == 502 and len(upstream.requests) == server.UPSTREAM_ATTEMPTS
+    assert lab.read_llm_calls('run-1')[0].usd == 0
 
 
 def test_unreachable_upstream_releases_or_keeps_reservation(lab):

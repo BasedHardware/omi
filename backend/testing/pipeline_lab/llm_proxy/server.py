@@ -42,6 +42,9 @@ from testing.pipeline_lab.store import Store
 
 MODES = ('record', 'replay', 'refresh')
 CACHE_NAMESPACE = 'llm'
+RETRYABLE_UPSTREAM_STATUS = frozenset({429, 502, 503, 504})
+UPSTREAM_ATTEMPTS = 4
+UPSTREAM_BACKOFF_SECONDS = 2.0
 _HOP = {
     'connection',
     'keep-alive',
@@ -346,17 +349,37 @@ class _Handler(BaseHTTPRequestHandler):
 
         upstream = urllib.parse.urlsplit(config.upstream)
         connection_cls = http.client.HTTPSConnection if upstream.scheme == 'https' else http.client.HTTPConnection
-        connection = connection_cls(upstream.hostname, upstream.port, timeout=config.timeout)
         target = upstream.path.rstrip('/') + self.path
+        connection = None
         sent = False
         try:
-            connection.putrequest('POST', target, skip_accept_encoding=True)
-            for name, value in self._upstream_headers().items():
-                connection.putheader(name, value)
-            connection.putheader('Content-Length', str(len(body)))
-            connection.endheaders(body)
-            sent = True
-            response = connection.getresponse()
+            # A transient gateway answer (429/502/503/504) is retried before anything reaches the
+            # client, so one blip does not fail a whole replay. Those answers are not billed upstream.
+            # A transport error after the body was sent is never retried: its fate is unknown.
+            for attempt in range(1, UPSTREAM_ATTEMPTS + 1):
+                connection = connection_cls(upstream.hostname, upstream.port, timeout=config.timeout)
+                sent = False
+                try:
+                    connection.putrequest('POST', target, skip_accept_encoding=True)
+                    for name, value in self._upstream_headers().items():
+                        connection.putheader(name, value)
+                    connection.putheader('Content-Length', str(len(body)))
+                    connection.endheaders(body)
+                    sent = True
+                    response = connection.getresponse()
+                except (OSError, http.client.HTTPException):
+                    if sent or attempt == UPSTREAM_ATTEMPTS:
+                        raise
+                    connection.close()
+                    time.sleep(UPSTREAM_BACKOFF_SECONDS * attempt)
+                    continue
+                if response.status in RETRYABLE_UPSTREAM_STATUS and attempt < UPSTREAM_ATTEMPTS:
+                    response.read()
+                    connection.close()
+                    call.extra.setdefault('retries', []).append(response.status)
+                    time.sleep(UPSTREAM_BACKOFF_SECONDS * attempt)
+                    continue
+                break
             content_type = response.getheader('Content-Type') or 'application/json'
             event_stream = 'text/event-stream' in content_type
             if event_stream or stream:
@@ -383,7 +406,8 @@ class _Handler(BaseHTTPRequestHandler):
                 pass
             return
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
 
         status = response.status
         call.extra['status'] = status
