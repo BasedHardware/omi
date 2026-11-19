@@ -141,9 +141,8 @@ def _match(window, existing, used):
         and r['started_at'] <= end
         and r['finished_at'] >= start
     ]
-    # Published claimants are assigned by the planner. First resulting split retains
-    # the live id. Deleted targets also retain
-    # their identity, so rebuilds cannot resurrect a deleted time window.
+    # Published claimants are assigned by the planner. Time matching is the fallback
+    # for live rows, legacy rows without claims or playback, and deletion tombstones.
     return min(candidates, key=lambda r: r['started_at']) if candidates else None
 
 
@@ -303,11 +302,19 @@ async def reconcile(
                 if prior:
                     used.add(prior['id'])
                 row = planner.build(uid, window, recordings, prior, allocated=allocated)
-                if not prior and (row['id'] in used | taken or row['id'] in window.get('_published_ids', ())):
-                    # A fresh window starting at a planned row's exact start derives the same start-keyed
-                    # id; qualify it with its first recording so one id never names two planned rows.
+                published_ids = window.get('_published_ids', ())
+                if not prior and (row['id'] in used | taken or row['id'] in published_ids):
                     first = window['lines'][0]['conversation_id']
-                    row['id'] = str(uuid5(NAMESPACE_URL, f"v3:{uid}:{row['started_at'].isoformat()}:{first}"))
+                    seed = f"v3:{uid}:{row['started_at'].isoformat()}:{first}"
+                    blocked_ids = used | taken | set(published_ids)
+                    # Preserve the recording-qualified ID when free. Same-clock windows can also
+                    # share a recording, so probe deterministic suffixes in planner order.
+                    identifier = str(uuid5(NAMESPACE_URL, seed))
+                    suffix = 0
+                    while identifier in blocked_ids:
+                        suffix += 1
+                        identifier = str(uuid5(NAMESPACE_URL, f'{seed}:{suffix}'))
+                    row['id'] = identifier
                 taken.add(row['id'])
                 contributing = _backfill_runs(window, recordings)
                 if derive and len(contributing) > 1:

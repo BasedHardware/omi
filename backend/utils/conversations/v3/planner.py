@@ -38,12 +38,25 @@ def _capped(lines, sections):
 
 
 def _as_sections(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    first, *rest = entries
-    sections = list(first.get('sections') or [])
-    for entry in rest:
-        sections.append({'first_line': entry['first_line'], 'title': entry['title']})
+    first = entries[0]
+    # Participating speech determines the card when it shares a stretch with passive audio.
+    priority = {'conversation': 0, 'voice_work': 1}
+    primary = min(entries, key=lambda entry: priority.get(entry['kind'], 2))
+    sections = []
+    for entry in entries:
+        if entry is not first or entry is not primary:
+            sections.append({'first_line': entry['first_line'], 'title': entry['title']})
         sections.extend(entry.get('sections') or [])
-    return [{**first, 'sections': sections}]
+    return [
+        {
+            **primary,
+            'first_line': first['first_line'],
+            'line': primary.get('line') or next((entry['line'] for entry in entries if entry.get('line')), ''),
+            'resumes_previous': first.get('resumes_previous', False),
+            'people': list(dict.fromkeys(name for entry in entries for name in entry.get('people') or [])),
+            'sections': sections,
+        }
+    ]
 
 
 def windows(groups, outlines):
@@ -302,9 +315,9 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
 
 def _contains_line(row, line, spans):
     inside_window = row['started_at'] <= line['start'] and line['end'] <= row['finished_at']
-    if spans is None:
-        return inside_window
-    if inside_window and any(a <= line['start'] and line['end'] <= b for a, b in spans):
+    if not inside_window:
+        return False
+    if spans is None or any(a <= line['start'] and line['end'] <= b for a, b in spans):
         return True
     # A previous pass may have published this segment with a clipped audio claim.
     # Its original timing and id still identify the segment on retry.

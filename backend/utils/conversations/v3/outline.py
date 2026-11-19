@@ -124,7 +124,7 @@ def stretches(members, now):
                     'end': line['end'],
                     'lines': [],
                     'manual_end': False,
-                    'after_manual_end': bool(previous and previous['manual_end']),
+                    'after_manual_end': bool(previous and previous['manual_end'] and not silence),
                 }
             )
         group = groups[-1]

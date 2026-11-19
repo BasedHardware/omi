@@ -120,12 +120,36 @@ class FragmentationRepro(unittest.TestCase):
             groups,
             [
                 [
-                    {'first_line': 1, 'title': 'First', 'kind': 'conversation', 'line': ''},
-                    {'first_line': 60, 'title': 'Second', 'kind': 'conversation', 'line': ''},
+                    {'first_line': 1, 'title': 'First', 'kind': 'media', 'line': '', 'people': ['A']},
+                    {'first_line': 60, 'title': 'Second', 'kind': 'conversation', 'line': '', 'people': ['B']},
                 ]
             ],
         )
         assert len(windows) == 1
         assert windows[0]['manual_end']
         assert len(windows[0]['lines']) == 120
-        assert windows[0]['sections'][0]['first_line'] == 60
+        assert any(section['first_line'] == 60 for section in windows[0]['sections'])
+        assert windows[0]['people'] == ['A', 'B']
+        row = planner.build('synthetic', windows[0], {'recording': recording})
+        assert row['outline_kind'] == 'conversation' and not row['home_hidden']
+
+    def test_silence_ends_the_manual_continuation_context(self):
+        origin = datetime(2026, 11, 19, tzinfo=timezone.utc)
+        recording = {
+            'id': 'recording',
+            'started_at': origin,
+            'finished_at': origin + timedelta(seconds=10),
+            'v3_manual_end': True,
+            'transcript_segments': [
+                {'id': 'before', 'start': 0, 'end': 10, 'text': 'before'},
+                {'id': 'after', 'start': 310, 'end': 320, 'text': 'after'},
+                {'id': 'new', 'start': 325, 'end': 330, 'text': 'new'},
+            ],
+        }
+        groups = outline.stretches([recording], origin + timedelta(minutes=20))
+        assert len(groups) == 2
+        assert groups[0]['manual_end']
+        assert not groups[1]['after_manual_end']
+        entry = {'first_line': 1, 'kind': 'conversation', 'title': '', 'line': ''}
+        windows = planner.windows(groups, [[entry], [entry, {**entry, 'first_line': 2}]])
+        assert [window['manual_end'] for window in windows] == [True, False, False]
