@@ -14,7 +14,7 @@ Catalog any uncovered workloads before treating the counter as a full bucket
 census. GCS also serves clients using signed playback URLs directly.
 
 ```promql
-sum by (service_name, reader, kind) (increase(omi_private_sync_object_get_total[1h]))
+sum by (job, service_name, reader, kind) (increase(omi_private_sync_object_get_total[1h]))
 ```
 
 ```promql
@@ -32,7 +32,8 @@ its listing. The payload remains a live, conditional GET. Set
 reload. A stale listing takes the same fallback path. A missing object
 remains missing.
 
-Compare only one scrape job per workload. The cap is eight reader values
+Compare one scrape job per workload. Identify workloads without `service_name`
+by `job`. The cap is eight reader values
 times two kinds per process. The counter measures authenticated SDK attempts
 and includes SDK retries and ranges. Direct client requests using signed URLs
 and requests outside the shared client remain in the native bucket total.

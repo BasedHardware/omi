@@ -57,6 +57,7 @@ def test_private_sync_gets_count_prepared_sdk_requests_and_restore_reader(monkey
     from requests import Response
 
     from utils.other import private_sync_get_metrics as usage
+    from utils.other import storage as storage_helpers
 
     client = storage.Client(project='synthetic', credentials=AnonymousCredentials())
     bucket = client.bucket('private-synthetic')
@@ -95,11 +96,16 @@ def test_private_sync_gets_count_prepared_sdk_requests_and_restore_reader(monkey
     list(bucket.list_blobs(retry=None))
     client.bucket('other-bucket').blob(blob.name).reload(retry=None)
     blob.reload(retry=None)
+    playback_blob = bucket.blob('playback/synthetic/conversation/artifact.mp3')
+    monkeypatch.setattr(storage_helpers, '_playback_artifact_blob', lambda *_: playback_blob)
+    monkeypatch.setattr(storage_helpers, '_get_signed_url', lambda *_: 'https://example.invalid/playback')
+    assert storage_helpers.get_playback_artifact_signed_url('synthetic', 'conversation', 'artifact')
     assert [call.args for call in counter.labels.call_args_list] == [
         ('playback_inventory', 'metadata'),
         ('playback_inventory', 'payload'),
         ('playback_inventory', 'metadata'),
         ('other', 'metadata'),
+        ('playback_media', 'metadata'),
     ]
 
 

@@ -1649,6 +1649,7 @@ def get_cached_merged_audio_path(uid: str, conversation_id: str, audio_file_id: 
 
 
 @coalesce_rebuild
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_or_create_merged_audio(
     uid: str,
     conversation_id: str,
@@ -1748,6 +1749,7 @@ def get_or_create_merged_audio(
     return wav_data, False
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_merged_audio_signed_url(uid: str, conversation_id: str, audio_file_id: str) -> str | None:
     """
     Get a signed URL for cached merged audio if it exists and is valid.
@@ -1899,6 +1901,7 @@ def _playback_artifact_blob(uid: str, conversation_id: str, audio_file_id: str):
     return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{audio_file_id}.mp3')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_playback_artifact_signed_url(uid: str, conversation_id: str, audio_file_id: str):
     blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
     if not blob.exists():
@@ -1915,6 +1918,7 @@ def download_playback_artifact(uid: str, conversation_id: str, audio_file_id: st
         return None
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def upload_playback_artifact(uid: str, conversation_id: str, audio_file_id: str, mp3_data: bytes) -> None:
     blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
     with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
@@ -1938,10 +1942,12 @@ def mark_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str
         blob.upload_from_string(reason, content_type='text/plain')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def is_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str) -> bool:
     return _playback_unavailable_blob(uid, conversation_id, audio_file_id).exists()
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_playback_failure_retry_epoch(
     uid: str, conversation_id: str, audio_file_id: str | None = None, *, fingerprint: str | None = None
 ) -> str | None:
@@ -2066,6 +2072,7 @@ def _conversation_playback_blob(uid: str, conversation_id: str, fingerprint: str
     return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{name}.mp3')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_conversation_playback_signed_url(uid: str, conversation_id: str, fingerprint: str | None = None):
     blob = _conversation_playback_blob(uid, conversation_id, fingerprint)
     if not blob.exists():
@@ -2073,6 +2080,7 @@ def get_conversation_playback_signed_url(uid: str, conversation_id: str, fingerp
     return _get_signed_url(blob, 60)
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def upload_conversation_playback_artifact(
     uid: str, conversation_id: str, mp3_data: bytes, fingerprint: str | None = None, *, spans=None
 ) -> None:
@@ -2081,6 +2089,7 @@ def upload_conversation_playback_artifact(
         write_once(blob, mp3_data, spans=spans)
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_conversation_playback_manifest(uid: str, conversation_id: str, fingerprint: str):
     blob = _conversation_playback_blob(uid, conversation_id, fingerprint)
     with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
@@ -2100,6 +2109,7 @@ def mark_conversation_playback_unavailable(uid: str, conversation_id: str, finge
         blob.upload_from_string(f'{fingerprint}:{reason}', content_type='text/plain')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_conversation_playback_unavailable_fingerprint(uid: str, conversation_id: str) -> Optional[str]:
     blob = _conversation_playback_unavailable_blob(uid, conversation_id)
     try:
