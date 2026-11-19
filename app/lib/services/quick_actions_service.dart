@@ -14,8 +14,10 @@ import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 
 const _kAddTask = 'add_task';
@@ -55,7 +57,7 @@ class QuickActionsService {
     _initialized = true;
 
     _quickActions.initialize((shortcutType) {
-      _handleShortcut(shortcutType);
+      unawaited(_handleShortcut(shortcutType));
     });
 
     _updateShortcuts(context);
@@ -155,7 +157,7 @@ class QuickActionsService {
     });
   }
 
-  void _handleShortcut(String shortcutType) {
+  Future<void> _handleShortcut(String shortcutType) async {
     final navigator = globalNavigatorKey.currentState;
     final context = globalNavigatorKey.currentContext;
     if (navigator == null || context == null) return;
@@ -172,10 +174,10 @@ class QuickActionsService {
         openChatSheet(context, const ChatPage(isPivotBottom: false, autoStartVoice: true));
         break;
       case _kMute:
-        _toggleMute(context, mute: true);
+        await _toggleMute(context, mute: true);
         break;
       case _kUnmute:
-        _toggleMute(context, mute: false);
+        await _toggleMute(context, mute: false);
         break;
       case _kConnectDevice:
         Provider.of<DeviceProvider>(context, listen: false).initiateConnection('QuickActions');
@@ -200,12 +202,19 @@ class QuickActionsService {
     });
   }
 
-  void _toggleMute(BuildContext context, {required bool mute}) {
+  /// Mute / Unmute from the home-screen shortcut. The capture commands throw when their effect
+  /// fails; say so, as the live page does, instead of leaving an unhandled async error.
+  Future<void> _toggleMute(BuildContext context, {required bool mute}) async {
     final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-    if (mute) {
-      captureProvider.pauseCapture();
-    } else {
-      captureProvider.resumeCapture();
+    try {
+      if (mute) {
+        await captureProvider.pauseCapture();
+      } else {
+        await captureProvider.resumeCapture();
+      }
+    } catch (e) {
+      Logger.debug('QuickActions: ${mute ? 'mute' : 'unmute'} shortcut failed: $e');
+      if (context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
     }
   }
 }

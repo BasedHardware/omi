@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:quick_actions/quick_actions.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -24,8 +25,25 @@ class _Device extends ChangeNotifier implements DeviceProvider {
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
   RecordingState state = RecordingState.stop;
+  int pauses = 0;
+  int resumes = 0;
+
+  /// Thrown by the next pause/resume, as the controller does when the dispatch fails.
+  Object? failure;
   @override
   RecordingState get recordingState => state;
+  @override
+  Future<void> pauseCapture() async {
+    pauses++;
+    if (failure != null) throw failure!;
+  }
+
+  @override
+  Future<void> resumeCapture() async {
+    resumes++;
+    if (failure != null) throw failure!;
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -38,8 +56,14 @@ class _Recordings implements LocalRecordingsProvider {
 class _QuickActions extends QuickActions {
   final publications = <List<ShortcutItem>>[];
   Completer<void>? nextCompletion;
+
+  /// The callback the service registered: tests fire shortcuts through the production path.
+  QuickActionHandler? handler;
   @override
-  Future<void> initialize(QuickActionHandler handler) async {}
+  Future<void> initialize(QuickActionHandler handler) async {
+    this.handler = handler;
+  }
+
   @override
   Future<void> setShortcutItems(List<ShortcutItem> items) {
     publications.add(items);
@@ -236,6 +260,58 @@ void main() {
     // The dedupe cache must still hold B's projection, not be rolled back to A.
     service.updateShortcuts(context);
     expect(native.publications, hasLength(3), reason: 'the superseding projection must keep deduping later updates');
+    await tester.pumpWidget(const SizedBox());
+    device.dispose();
+    capture.dispose();
+  });
+  testWidgets('Mute and Unmute shortcuts await the capture command and say so when it fails', (tester) async {
+    final device = _Device()..connected = true;
+    final capture = _Capture();
+    final native = _QuickActions();
+    final service = QuickActionsService.forTesting(quickActions: native);
+    final en = lookupAppLocalizations(const Locale('en'));
+    late BuildContext context;
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<DeviceProvider>.value(value: device),
+        ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+      ],
+      child: MaterialApp(
+        // The shortcut handler reaches the app through the global navigator, as in production.
+        navigatorKey: globalNavigatorKey,
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(builder: (ctx) {
+            context = ctx;
+            return const SizedBox();
+          }),
+        ),
+      ),
+    ));
+    service.initialize(context);
+    final handler = native.handler;
+    expect(handler, isNotNull, reason: 'initialize registers the shortcut callback');
+
+    // The handler is fire-and-forget: a frame for the awaited dispatch to settle, one more for
+    // any feedback to show.
+    handler!('mute');
+    await tester.pump();
+    await tester.pump();
+    expect(capture.pauses, 1);
+    expect(find.text(en.somethingWentWrong), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    // The dispatch refused the resume, for example because the socket could not be reopened.
+    capture.failure = StateError('resume refused');
+    handler('unmute');
+    await tester.pump();
+    await tester.pump();
+    expect(capture.resumes, 1);
+    expect(find.text(en.somethingWentWrong), findsOneWidget, reason: 'the shortcut says so, like the live page');
+    expect(tester.takeException(), isNull, reason: 'the failure is handled, not an unhandled async error');
+
     await tester.pumpWidget(const SizedBox());
     device.dispose();
     capture.dispose();
