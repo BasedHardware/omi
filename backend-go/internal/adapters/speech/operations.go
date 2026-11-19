@@ -16,6 +16,7 @@ var ErrNotCommitted = errors.New("speech: no committed transcription")
 const (
 	operationCollection = "speech_modulate_operations"
 	statePending        = "pending"
+	stateRetryable      = "retryable"
 	stateRejected       = "rejected"
 	stateComplete       = "complete"
 )
@@ -42,9 +43,19 @@ func Causes() []queue.Cause {
 }
 
 type operationRecord struct {
-	State string `firestore:"state"`
-	Reply string `firestore:"reply,omitempty"`
-	Cause string `firestore:"cause,omitempty"`
+	State   string `firestore:"state"`
+	Attempt int64  `firestore:"attempt"`
+	Reply   string `firestore:"reply,omitempty"`
+	Cause   string `firestore:"cause,omitempty"`
+}
+
+type reservation struct {
+	ref     docstore.Ref
+	attempt int64
+}
+
+func (rec operationRecord) canReserve() bool {
+	return rec.State == "" || rec.State == stateRetryable
 }
 
 type savedReply struct {
@@ -76,36 +87,58 @@ func (m *Modulate) read(ctx context.Context, g queue.Guarded, ref docstore.Ref) 
 	return rec, storeFailure(err)
 }
 
-// An existing record suppresses the upload. Only a successful Create authorizes it,
-// even if Firestore retries the transaction callback or the worker loses its lease.
+// Atomically claim an absent or retryable operation. An empty result state with
+// no error authorizes one POST for that attempt.
 func (m *Modulate) reserve(ctx context.Context, g queue.Guarded, ref docstore.Ref) (operationRecord, error) {
 	var rec operationRecord
 	err := m.docs.Fenced(ctx, g, g.Tenant(), func(tx *docstore.Tx) error {
 		rec = operationRecord{}
 		found, err := tx.Get(ref, &rec)
-		if err != nil || found {
-			if found && rec.State == "" {
-				rec.State = statePending
-			}
+		if err != nil {
 			return err
 		}
-		return tx.Create(ref, operationRecord{State: statePending})
+		if !found {
+			rec.Attempt = 1
+			return tx.Create(ref, operationRecord{State: statePending, Attempt: rec.Attempt})
+		}
+		if rec.State == "" {
+			rec.State = statePending
+		}
+		if rec.State != stateRetryable {
+			return nil
+		}
+		rec = operationRecord{Attempt: rec.Attempt + 1}
+		return tx.Update(ref, map[string]any{"state": statePending, "attempt": rec.Attempt})
 	})
 	return rec, storeFailure(err)
 }
 
-func (m *Modulate) finish(ctx context.Context, g queue.Guarded, ref docstore.Ref, rec operationRecord) error {
+func (m *Modulate) finish(ctx context.Context, g queue.Guarded, claim reservation, rec operationRecord) error {
 	err := m.docs.Fenced(ctx, g, g.Tenant(), func(tx *docstore.Tx) error {
-		return tx.Update(ref, map[string]any{
+		var current operationRecord
+		found, err := tx.Get(claim.ref, &current)
+		if err != nil {
+			return err
+		}
+		if !found || current.State != statePending || current.Attempt != claim.attempt {
+			return docstore.ErrMissing
+		}
+		return tx.Update(claim.ref, map[string]any{
 			"state": rec.State, "reply": rec.Reply, "cause": rec.Cause,
 		})
 	})
 	return storeFailure(err)
 }
 
-func (m *Modulate) reject(ctx context.Context, g queue.Guarded, ref docstore.Ref, cause queue.Cause) error {
+func (m *Modulate) reject(ctx context.Context, g queue.Guarded, claim reservation, cause queue.Cause) error {
+	if cause == CauseProviderRateLimit {
+		if err := m.finish(ctx, g, claim, operationRecord{State: stateRetryable}); err != nil {
+			return err
+		}
+		return queue.Classify(errors.New(string(cause)), queue.Retry(cause, 0))
+	}
 	if cause != CauseUnresolved {
-		if err := m.finish(ctx, g, ref, operationRecord{State: stateRejected, Cause: string(cause)}); err != nil {
+		if err := m.finish(ctx, g, claim, operationRecord{State: stateRejected, Cause: string(cause)}); err != nil {
 			return err
 		}
 	}

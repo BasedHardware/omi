@@ -91,7 +91,7 @@ func TestModulateStoresEncryptedReplyAndFencesDeletedOwner(t *testing.T) {
 	plain, err := client.codec.Open("owner", rec.Reply)
 	if err != nil || !strings.Contains(string(plain), "Muchas gracias") ||
 		!strings.Contains(string(plain), "private-fallback") ||
-		strings.Contains(rec.Reply, "Muchas gracias") || len(snapshot.Data()) != 3 {
+		strings.Contains(rec.Reply, "Muchas gracias") || len(snapshot.Data()) != 4 {
 		t.Fatal("vendor reply and fallback must be stored encrypted")
 	}
 
@@ -107,5 +107,36 @@ func TestModulateStoresEncryptedReplyAndFencesDeletedOwner(t *testing.T) {
 	_, err = client.Transcribe(t.Context(), g, "later", in)
 	if !errors.Is(err, docstore.ErrOwnerDeleting) || posts.Load() != 1 {
 		t.Fatalf("owner deletion did not fence upload: error = %v, POSTs = %d", err, posts.Load())
+	}
+}
+
+func TestModulateFencesDeletionActivatedAfterReservation(t *testing.T) {
+	t.Parallel()
+	b := docstoretest.Open(t)
+	var posts atomic.Int32
+	cfg := fakeVendor(t, func(w http.ResponseWriter, _ *http.Request) {
+		posts.Add(1)
+		writeReply(t, w, http.StatusOK, partialReply)
+	})
+	cfg.Docs = b.Store
+	client := newClient(t, cfg)
+	g := queue.GuardedForTest(t, "owner", "job")
+	ref, err := operationRef(g, "speech")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := client.reserve(t.Context(), g, ref)
+	if err != nil || rec.State != "" || rec.Attempt == 0 {
+		t.Fatalf("reservation not granted: %+v, %v", rec, err)
+	}
+	b.Mark(t, "owner", map[string]any{"wipe_status": "pending"})
+	in := Request{Audio: []byte("RIFF synthetic audio")}
+	req, err := newUpload(t.Context(), client.endpoint, cfg.ManagedKey, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.upload(t.Context(), g, reservation{ref: ref, attempt: rec.Attempt}, req, in)
+	if !errors.Is(err, docstore.ErrOwnerDeleting) || posts.Load() != 0 {
+		t.Fatalf("upload error = %v, vendor POSTs = %d, want deletion hold and zero POSTs", err, posts.Load())
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -47,6 +48,12 @@ func NewModulate(cfg Config) (*Modulate, error) {
 		origin.User != nil || origin.RawQuery != "" || origin.ForceQuery || origin.Fragment != "" ||
 		(origin.Path != "" && origin.Path != "/") || origin.RawPath != "" {
 		return nil, errors.New("speech: invalid Modulate origin")
+	}
+	if origin.Scheme == "http" {
+		ip, parseErr := netip.ParseAddr(origin.Hostname())
+		if parseErr != nil || !ip.Unmap().IsLoopback() {
+			return nil, errors.New("speech: Modulate requires HTTPS outside loopback")
+		}
 	}
 	if cfg.Docs == nil {
 		return nil, errors.New("speech: missing operation store")
@@ -103,7 +110,7 @@ func (m *Modulate) Transcribe(ctx context.Context, g queue.Guarded, step string,
 	if err != nil {
 		return Transcript{}, err
 	}
-	if rec.State != "" {
+	if !rec.canReserve() {
 		return m.result(g.Tenant(), rec)
 	}
 	key, err := m.credential(in)
@@ -124,13 +131,7 @@ func (m *Modulate) Transcribe(ctx context.Context, g queue.Guarded, step string,
 	if rec.State != "" {
 		return m.result(g.Tenant(), rec)
 	}
-	if err := g.Err(); err != nil {
-		return Transcript{}, err
-	}
-	if err := ctx.Err(); err != nil {
-		return Transcript{}, err
-	}
-	return m.upload(ctx, g, ref, req, in)
+	return m.upload(ctx, g, reservation{ref: ref, attempt: rec.Attempt}, req, in)
 }
 
 // Recover returns a locally saved result by operation without submitting audio.

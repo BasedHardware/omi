@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore/docstoretest"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
@@ -106,8 +107,8 @@ func TestModulateSeparatesOwnerAndManagedRejections(t *testing.T) {
 		{"managed auth", http.StatusUnauthorized, "private refusal", false, CauseManagedKey},
 		{"owner credits", http.StatusPaymentRequired, "private refusal", true, CauseOwnerQuota},
 		{"owner throttle", http.StatusTooManyRequests, "private refusal", true, CauseOwnerQuota},
-		{"managed credits", http.StatusTooManyRequests, "Insufficient Credits", false, CauseProviderBudget},
-		{"managed throttle", http.StatusTooManyRequests, "private refusal", false, CauseProviderRateLimit},
+		{"managed credits past 4 KiB", http.StatusTooManyRequests, strings.Repeat(" ", 5<<10) + "Insufficient Credits", false, CauseProviderBudget},
+		{"unconfirmed managed throttle", http.StatusTooManyRequests, strings.Repeat("x", maxErrorReplyBytes+1), false, CauseUnresolved},
 		{"invalid audio", http.StatusUnprocessableEntity, "private refusal", false, CauseInput},
 		{"owner request vendor outage", http.StatusBadGateway, "private refusal", true, CauseUnresolved},
 	}
@@ -128,6 +129,89 @@ func TestModulateSeparatesOwnerAndManagedRejections(t *testing.T) {
 			}
 			if posts.Load() != 1 {
 				t.Fatalf("vendor POSTs = %d, want 1", posts.Load())
+			}
+		})
+	}
+}
+
+func TestModulateRequiresTLSOutsideLoopback(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		origin string
+		ok     bool
+	}{
+		{"https://vendor.example", true},
+		{"http://127.0.0.1:8080", true},
+		{"http://[::1]:8080", true},
+		{"http://vendor.example", false},
+		{"http://192.0.2.1", false},
+	} {
+		cfg := Config{Origin: tc.origin, Docs: &docstore.Store{}, EncryptionSecret: strings.Repeat("x", 32)}
+		if _, err := NewModulate(cfg); (err == nil) != tc.ok {
+			t.Errorf("origin %q accepted = %v, want %v", tc.origin, err == nil, tc.ok)
+		}
+	}
+}
+
+func TestModulateRetriesConfirmedManagedRateLimit(t *testing.T) {
+	t.Parallel()
+	var posts atomic.Int32
+	cfg := fakeVendor(t, func(w http.ResponseWriter, _ *http.Request) {
+		if posts.Add(1) == 1 {
+			writeReply(t, w, http.StatusTooManyRequests, "try again later")
+			return
+		}
+		writeReply(t, w, http.StatusOK, partialReply)
+	})
+	g := queue.GuardedForTest(t, "owner", "job")
+	in := Request{Audio: []byte("RIFF synthetic audio")}
+	_, err := newClient(t, cfg).Transcribe(t.Context(), g, "speech", in)
+	if got := queue.FromError(err, "fallback"); got != queue.Retry(CauseProviderRateLimit, 0) {
+		t.Fatalf("error = %v, outcome = %v, want vendor rate-limit retry", err, got)
+	}
+
+	restarted := newClient(t, cfg)
+	_, err = restarted.Recover(t.Context(), g, "speech")
+	if !errors.Is(err, ErrNotCommitted) {
+		t.Fatalf("recover after rate limit = %v", err)
+	}
+	for range 2 {
+		got, transcribeErr := restarted.Transcribe(t.Context(), g, "speech", in)
+		if transcribeErr != nil || len(got.Utterances) != 2 {
+			t.Fatalf("retry result = %+v, error = %v", got, transcribeErr)
+		}
+	}
+	if posts.Load() != 2 {
+		t.Fatalf("vendor POSTs = %d, want one refusal and one success", posts.Load())
+	}
+}
+
+func TestModulateInvalidAndOversizedRepliesNeverUploadAgain(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		body string
+		want queue.Cause
+	}{
+		{"malformed", `{"utterances":null}`, CauseInvalidReply},
+		{"oversized", strings.Repeat("x", maxReplyBytes+1), CauseUnresolved},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var posts atomic.Int32
+			cfg := fakeVendor(t, func(w http.ResponseWriter, _ *http.Request) {
+				posts.Add(1)
+				writeReply(t, w, http.StatusOK, tc.body)
+			})
+			g := queue.GuardedForTest(t, "owner", "job")
+			in := Request{Audio: []byte("RIFF synthetic audio")}
+			for range 2 {
+				_, err := newClient(t, cfg).Transcribe(t.Context(), g, "speech", in)
+				checkCause(t, err, tc.want)
+			}
+			_, err := newClient(t, cfg).Recover(t.Context(), g, "speech")
+			if !errors.Is(err, ErrNotCommitted) || posts.Load() != 1 {
+				t.Fatalf("recover error = %v, vendor POSTs = %d", err, posts.Load())
 			}
 		})
 	}

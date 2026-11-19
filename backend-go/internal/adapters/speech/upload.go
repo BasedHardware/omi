@@ -17,6 +17,7 @@ import (
 
 // The encrypted base64 result must fit in one Firestore document (1 MiB).
 const maxReplyBytes = 700 << 10
+const maxErrorReplyBytes = 64 << 10
 
 func newUpload(ctx context.Context, endpoint, key string, in Request) (*http.Request, error) {
 	var framing bytes.Buffer
@@ -51,25 +52,30 @@ func newUpload(ctx context.Context, endpoint, key string, in Request) (*http.Req
 }
 
 func (m *Modulate) upload(
-	ctx context.Context, g queue.Guarded, ref docstore.Ref, req *http.Request, in Request,
+	ctx context.Context, g queue.Guarded, claim reservation, req *http.Request, in Request,
 ) (Transcript, error) {
+	err := m.docs.Fenced(ctx, g, g.Tenant(), func(*docstore.Tx) error { return nil })
+	if err != nil {
+		return Transcript{}, storeFailure(err)
+	}
 	resp, err := m.http.Do(req)
 	if err != nil {
 		return Transcript{}, failure(CauseUnresolved)
 	}
 	body, tooLarge, readErr := readReply(resp)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if readErr != nil {
-			body = nil
+		cause := rejection(resp.StatusCode, body, in.UseOwnerKey)
+		if cause == CauseProviderRateLimit && (tooLarge || readErr != nil) {
+			cause = CauseUnresolved
 		}
-		return Transcript{}, m.reject(ctx, g, ref, rejection(resp.StatusCode, body, in.UseOwnerKey))
+		return Transcript{}, m.reject(ctx, g, claim, cause)
 	}
 	if tooLarge || readErr != nil {
 		return Transcript{}, failure(CauseUnresolved)
 	}
 	result, err := parseReply(body, in.Language)
 	if err != nil {
-		return Transcript{}, m.reject(ctx, g, ref, CauseInvalidReply)
+		return Transcript{}, m.reject(ctx, g, claim, CauseInvalidReply)
 	}
 	payload, err := json.Marshal(savedReply{Body: body, Language: in.Language})
 	if err != nil {
@@ -82,7 +88,7 @@ func (m *Modulate) upload(
 	if err != nil {
 		return Transcript{}, failure(CauseStoreRejected)
 	}
-	err = m.finish(ctx, g, ref, operationRecord{State: stateComplete, Reply: sealed})
+	err = m.finish(ctx, g, claim, operationRecord{State: stateComplete, Reply: sealed})
 	if err != nil {
 		return Transcript{}, err
 	}
@@ -92,7 +98,7 @@ func (m *Modulate) upload(
 func readReply(resp *http.Response) ([]byte, bool, error) {
 	limit := maxReplyBytes
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		limit = 4 << 10
+		limit = maxErrorReplyBytes
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(limit)+1))
 	if closeErr := resp.Body.Close(); err == nil {
