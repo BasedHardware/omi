@@ -140,6 +140,9 @@ class BatchStack(Stack):
         if role == 'batch-serving':
             return {
                 'BATCH_PIPELINE_SERVING_ENABLED': 'true',
+                # Match backend-integration's bounded fresh-transaction retries
+                # when concurrent projection writers contend in the emulator.
+                'SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED': 'true',
                 # Only the owning serving role stamps these onto each job.
                 'BATCH_PIPELINE_RECOVERY_MODE': 'on',
                 'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED': 'true',
