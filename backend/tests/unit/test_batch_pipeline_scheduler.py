@@ -1249,6 +1249,41 @@ def test_post_commit_telemetry_failure_never_drops_an_issued_lease(monkeypatch):
     assert all(store.rows['jobs', v.item.segment_id]['token'] == v.token for v in pulled)
 
 
+def test_packing_sample_runs_after_commit_and_cohort_completes_once(monkeypatch):
+    from prometheus_client import CollectorRegistry
+    from utils.batch_pipeline import scheduler as module
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    queue = Scheduler(store, metrics=metrics)
+    sampled = []
+
+    def observe(sample_store, owner, segment, priority, attempt, when, ceiling, later):
+        assert sample_store.rows['jobs', segment]['state'] == 'leased'
+        sampled.append(segment)
+        raise RuntimeError('diagnostics unavailable')
+
+    monkeypatch.setattr(module, 'packing_sampled', lambda token, rate: rate > 0)
+    monkeypatch.setattr(metrics.packing, 'observe', observe)
+    monkeypatch.setenv('BATCH_PIPELINE_PACKING_SAMPLE_RATE', '0')
+    queue.enqueue(item('off'), 0)
+    assert queue.pull(1)[0].item.segment_id == 'off'
+    assert sampled == []
+    monkeypatch.setenv('BATCH_PIPELINE_PACKING_SAMPLE_RATE', '0.001')
+    queue.enqueue(item('on', capture=2), 2)
+    store.rows['jobs', 'on']['packing_observation'] = {'version': 1, 'entitlement': 'trial', 'age': '1h_to_6h'}
+    lease = queue.pull(3)[0]
+    assert lease.item.segment_id == 'on' and sampled == ['on']
+    assert 'packing_observation' not in lease.item.to_dict()
+    result = WorkResult('on', 'gs://results/on')
+    assert queue.complete(result, lease.token, 4)
+    assert queue.complete(result, lease.token, 5)
+    labels = {'event': 'completed', 'entitlement': 'trial', 'source_age': '1h_to_6h'}
+    assert registry.get_sample_value('omi_batch_pipeline_packing_cohort_units_total', labels) == 1
+
+
 def test_release_expires_lease_now_with_expiry_semantics_and_fences_stale_tokens():
     store = MemoryStore()
     queue = Scheduler(store)

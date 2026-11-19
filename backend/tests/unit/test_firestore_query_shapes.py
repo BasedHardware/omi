@@ -23,6 +23,7 @@ fresh recording fakes; the tests then assert:
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 import inspect
 import json
 import socket
@@ -38,6 +39,8 @@ import pytest
 
 import database.conversations
 from scripts import firestore_query_shapes as export_mod
+from config.batch_census_selectors import EXCEPTIONS
+from tests.support.batch_census_selector_guard import requires_exception, violation as selector_violation
 from tests.support.firestore_index_rules import is_served, required_index
 from tests.support.firestore_caller_witnesses import (
     WITNESSES,
@@ -92,6 +95,51 @@ def export_pair(two_captures) -> tuple[str, str]:
     first = export_mod.build_export(two_captures[0], manifest)
     second = export_mod.build_export(two_captures[1], manifest)
     return json.dumps(first, sort_keys=True), json.dumps(second, sort_keys=True)
+
+
+def test_recurring_batch_selectors_have_due_bounds_or_reviewed_exceptions(driver_results):
+    today = datetime.now(timezone.utc).date()
+    needed = set()
+    errors = set()
+    for driver in driver_results.values():
+        for shape in driver.shapes:
+            if requires_exception(shape):
+                needed.add(shape.calling_function)
+                if error := selector_violation(shape, today):
+                    errors.add(error)
+    assert not errors, '\n'.join(sorted(errors))
+    assert needed == set(EXCEPTIONS), f'Remove unused selector exceptions: {sorted(set(EXCEPTIONS) - needed)}'
+    for name, entry in EXCEPTIONS.items():
+        assert entry.owner and entry.reason and entry.cadence and entry.removal and entry.max_rows > 0
+        assert entry.body_digest == serving_function_body_digest(name.replace('.<locals>.', '.')), name
+
+
+def test_new_batch_selector_needs_a_due_bound_even_with_a_cursor():
+    state = {'field': 'state', 'operator': '==', 'value': 'ready'}
+    chronology = {'field': 'enqueued_at', 'operator': '<=', 'value': 10.0}
+    due = {'field': 'available_at', 'operator': '<=', 'value': 10.0}
+    today = date(2026, 11, 18)
+
+    def shape(filters, op='AND', **changes):
+        return QueryShape(
+            'batch_pipeline_prod_jobs',
+            calling_function=changes.pop('calling_function', 'database.sync_maintenance.new_selector'),
+            filters=tuple(QueryFilter(**item) for item in filters),
+            filter_tree={'op': op, 'filters': filters},
+            cursors=(('start_after', 'opaque'),),
+            limit=changes.pop('limit', 1),
+            **changes,
+        )
+
+    assert selector_violation(shape([state, chronology]), today)
+    assert selector_violation(shape([state, due], op='OR'), today)
+    assert selector_violation(shape([state, due]), today) is None
+
+    name = 'database.batch_pipeline_store.due'
+    reviewed = shape([state, chronology], calling_function=name, limit=1)
+    assert selector_violation(reviewed, today) is None
+    assert selector_violation(replace(reviewed, limit=None), today)
+    assert selector_violation(reviewed, date(2026, 12, 19))
 
 
 @pytest.fixture(scope='module')

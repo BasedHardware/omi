@@ -1488,3 +1488,34 @@ carry the cells; a failed page clears counts and ratio, and both expire after
 gauges. The Core Features row "Did the user get a transcript?" and the
 `omi-batch-delivered-share-language` rule read them. See the 2026-11-14
 delivered-share change note and `docs/runbooks/batch-language-delivery.md`.
+
+## Lease packing observation
+
+`BATCH_PIPELINE_PACKING_SAMPLE_RATE` defaults to `0.001` of committed leases and
+accepts rates up to `0.01`. Set `0` on intake, serving, and GPU worker roles to
+disable new metadata stamps, candidate reads, and cohort completion counters.
+In Helm use `worker.packingSampleRate: '0'`.
+
+Each accepted probe reads at most 17 projected job rows in capture order for the
+selected owner. One probe may be queued or running per process. The read runs
+after commit with a one-second RPC deadline and no retry. Its Firestore origin is
+`job:batch_packing_counterfactual`. The read is a near-lease observation. Concurrent
+lease, completion, and erasure can change its view. Stale, busy, missing-anchor,
+and capped observations have explicit coverage signals. Due depth describes only
+the observed owner-priority partition. Costs multiply across worker replicas.
+
+The nine packing estimates use validated device-bound source intervals and the
+original PCM seconds before inserted gap silence. The size ceiling also includes
+decoded padding already present in the row. A pack ends at the first incompatible,
+unready, overlapping, oversize, or predecessor-blocked row, or at the count cap.
+The admission stamp carries only bounded proof and cohort metadata. Session and
+compatibility equality use owner-local digests. Logs and metric labels carry no
+customer IDs. Old or uncertain clocks and ambiguous paid-versus-trial snapshots
+remain unknown. Trial and conversion releases carry their explicit evidence.
+
+Existing readers, including GPU image `ef42ee8`, ignore the optional job stamp.
+New readers accept unstamped jobs and the worker RPC payload is unchanged. The
+ordinary fenced completion counter remains the cost denominator. The separate
+cohort counter uses the newest-source age frozen at intake and records each
+completion once. Compare coverage, sample overhead and production results before
+using the estimates to choose a packing policy.
