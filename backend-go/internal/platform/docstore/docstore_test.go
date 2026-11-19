@@ -3,6 +3,7 @@ package docstore_test
 import (
 	"context"
 	"errors"
+	"maps"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -223,5 +224,44 @@ func TestAGuardForOneTenantCannotWriteForAnother(t *testing.T) {
 	}
 	if b.Exists(t, "users/owner/notes/n1") {
 		t.Fatal("a document was written under another tenant's guard")
+	}
+}
+
+func TestReadDeletionMarker(t *testing.T) {
+	t.Parallel()
+	b := open(t)
+	ctx := t.Context()
+	want := map[string]any{"wipe_status": "retrying", "wipe_job_id": "generation-2", "go_queue_erase_armed": true}
+	b.Mark(t, "wiping", want)
+	got, err := b.Store.ReadDeletionMarker(ctx, "wiping")
+	if err != nil || !maps.Equal(got, want) {
+		t.Fatalf("read existing marker: got %v, err %v", got, err)
+	}
+	b.Mark(t, "empty", map[string]any{})
+	got, err = b.Store.ReadDeletionMarker(ctx, "empty")
+	if err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("read empty document: got %v, err %v", got, err)
+	}
+	got, err = b.Store.ReadDeletionMarker(ctx, "absent")
+	if err != nil || got != nil {
+		t.Fatalf("read absent document: got %v, err %v", got, err)
+	}
+	for _, tenant := range []string{"", ".", "..", "wiping/nested/id"} {
+		got, err = b.Store.ReadDeletionMarker(ctx, tenant)
+		if !errors.Is(err, docstore.ErrPath) || got != nil {
+			t.Errorf("malformed tenant %q: got %v, err %v", tenant, got, err)
+		}
+	}
+}
+
+func TestReadDeletionMarkerClassifiesFailedRead(t *testing.T) {
+	t.Parallel()
+	b := open(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	got, err := b.Store.ReadDeletionMarker(ctx, "owner")
+	failure, ok := errors.AsType[*docstore.CallError](err)
+	if got != nil || !ok || failure.Kind != docstore.KindTransient || failure.Code != "Canceled" {
+		t.Fatalf("canceled read: got %v, err %v", got, err)
 	}
 }

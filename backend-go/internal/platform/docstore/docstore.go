@@ -132,6 +132,29 @@ func Doc(collection, id string, more ...string) (Ref, error) {
 	return Ref{path: strings.Join(segments, "/")}, nil
 }
 
+// ReadDeletionMarker reads account_deletions/{tenant} from this store's database,
+// including while deletion is in progress. An absent document returns a nil map.
+// The deletion executor validates the marker's state and generation.
+func (s *Store) ReadDeletionMarker(ctx context.Context, tenant string) (map[string]any, error) {
+	ref, err := Doc(MarkerCollection, tenant)
+	if err != nil {
+		return nil, err
+	}
+	// GetAll represents a missing document as a snapshot, keeping absence
+	// distinct from an RPC failure such as a missing database.
+	snapshots, err := s.client.GetAll(ctx, []*firestore.DocumentRef{s.client.Doc(ref.path)})
+	if err != nil {
+		return nil, classify(err)
+	}
+	var fields map[string]any
+	if snapshot := snapshots[0]; snapshot.Exists() {
+		if err := snapshot.DataTo(&fields); err != nil {
+			return nil, &CallError{Kind: KindRejected, Code: "Undecodable"}
+		}
+	}
+	return fields, nil
+}
+
 // Tx is one fenced transaction. Its methods are valid only inside the callback.
 type Tx struct {
 	store *Store
