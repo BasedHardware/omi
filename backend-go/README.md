@@ -26,6 +26,7 @@ Agents and people start with [AGENTS.md](AGENTS.md). The reasons behind the rule
 | --- | --- |
 | `github.com/jackc/pgx/v5` | Postgres driver: plain SQL, typed scans, connection pools. |
 | `cloud.google.com/go/firestore` | Firestore client, used only inside `internal/platform/docstore`. It brings gRPC and the Google API libraries with it. |
+| `github.com/prometheus/client_golang` | Prometheus metrics for the queue worker binary. |
 
 Tooling is pinned in the Makefile and run through the module cache: `golangci-lint`. `go.mod`
 names the minimum Go version; CI builds with exactly that version.
