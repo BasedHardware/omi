@@ -16,7 +16,7 @@ import sys
 NAMESPACE = "prod-omi-backend"
 TARGET = "prod-omi-batch-pipeline-worker"
 REPOSITORY = "gcr.io/based-hardware/batch-pipeline-worker"
-RESOURCES = "deployments,statefulsets,daemonsets,jobs,cronjobs"
+RESOURCES = "deployments,statefulsets,daemonsets,jobs,cronjobs,horizontalpodautoscalers"
 IMAGE = re.compile(re.escape(REPOSITORY) + r"@sha256:[a-f0-9]{64}\Z")
 
 
@@ -30,10 +30,23 @@ def digest(value):
 
 
 # HorizontalPodAutoscalers own .spec.replicas on exactly these Deployments (chart-defined), so
-# identity hashes exclude that one field for them only. Every other workload, including the
-# operator-scaled T4 fallback, keeps its replica count bound; image, UID and any other spec change
-# still refuses.
+# identity hashes exclude that one field for them only, and only while the same read proves a live
+# HPA (minReplicas >= 1) targets each of them; the HPA objects are bound by UID and spec hash.
+# Every other workload, including the operator-scaled T4 fallback, keeps its replica count bound;
+# image, UID and any other spec change still refuses.
 HPA_DEPLOYMENTS = frozenset({TARGET, "record-seal-worker"})
+# Fields the Job controller and API defaulting add to a CronJob-created Job, with their defaults.
+JOB_DEFAULTED = {
+    "completionMode": "NonIndexed",
+    "completions": 1,
+    "parallelism": 1,
+    "suspend": False,
+    "manualSelector": False,
+    "podReplacementPolicy": "TerminatingOrFailed",
+}
+JOB_GENERATED_LABELS = frozenset(
+    {"batch.kubernetes.io/controller-uid", "batch.kubernetes.io/job-name", "controller-uid", "job-name"}
+)
 
 
 def identity_spec(obj):
@@ -66,7 +79,28 @@ def cronjob_history(obj, cronjobs):
     if len(owners) != 1 or owners[0].get("kind") != "CronJob" or not owners[0].get("uid"):
         return False
     owner = cronjobs.get(owners[0].get("uid"))
-    return owner is not None and worker_images(pod_spec(obj)) == worker_images(pod_spec(owner))
+    if owner is None or not re.fullmatch(re.escape(owner["metadata"]["name"]) + r"-\d+", obj["metadata"]["name"]):
+        return False
+    # The whole run must be the owner's current template: pod spec, template annotations, and every
+    # Job field either equal to the jobTemplate or a controller default. Anything else stays bound.
+    spec, template = obj["spec"], owner["spec"]["jobTemplate"]["spec"]
+    for key, value in spec.items():
+        if key in ("template", "selector"):
+            continue
+        if key in template:
+            if value != template[key]:
+                return False
+        elif JOB_DEFAULTED.get(key, object()) != value:
+            return False
+    if any(key not in spec for key in template if key not in ("template", "selector")):
+        return False
+    run_meta, owner_meta = spec["template"].get("metadata", {}), template["template"].get("metadata", {})
+    run_labels, owner_labels = run_meta.get("labels", {}), owner_meta.get("labels", {})
+    return (
+        spec["template"]["spec"] == template["template"]["spec"]
+        and run_meta.get("annotations") == owner_meta.get("annotations")
+        and {k: v for k, v in run_labels.items() if k not in JOB_GENERATED_LABELS} == owner_labels
+    )
 
 
 def kubectl(*args):
@@ -107,12 +141,46 @@ def target_state(obj):
     return {"uid": meta["uid"], "image": image, "spec_sha256": digest(identity_spec(obj))}, index
 
 
+def autoscalers(items):
+    """Bind the HPA that owns each HPA_DEPLOYMENTS replica count; refuse if any is unproven."""
+    bindings = []
+    for name in sorted(HPA_DEPLOYMENTS):
+        owners = [
+            o for o in items
+            if o["kind"] == "HorizontalPodAutoscaler"
+            and o["spec"].get("scaleTargetRef", {}).get("kind") == "Deployment"
+            and o["spec"]["scaleTargetRef"].get("name") == name
+        ]
+        require(len(owners) == 1, f"replica exclusion needs exactly one HPA for {name}")
+        hpa = owners[0]
+        require(hpa["metadata"].get("uid") and hpa["spec"].get("minReplicas", 1) >= 1, f"HPA for {name} is unproven")
+        bindings.append(
+            {
+                "kind": "HorizontalPodAutoscaler",
+                "name": hpa["metadata"]["name"],
+                "uid": hpa["metadata"]["uid"],
+                "field": "scaleTargetRef",
+                "container": name,
+                "image": "",
+                "spec_sha256": digest(hpa["spec"]),
+            }
+        )
+    return bindings
+
+
+def bindings(items):
+    """Everything a release must hold constant: owning HPAs plus shared worker-image consumers."""
+    return sorted(autoscalers(items) + consumers(items), key=lambda b: (b["kind"], b["name"], b["field"], b["container"]))
+
+
 def consumers(items):
     bindings = []
     cronjobs = {o["metadata"]["uid"]: o for o in items if o["kind"] == "CronJob" and o["metadata"].get("uid")}
     for obj in items:
         meta = obj["metadata"]
         require(meta.get("namespace") == NAMESPACE, "consumer outside target namespace")
+        if obj["kind"] == "HorizontalPodAutoscaler":
+            continue
         if obj["kind"] == "Deployment" and meta["name"] == TARGET:
             continue
         for field in ("containers", "initContainers"):
@@ -139,7 +207,7 @@ def consumers(items):
 def snapshot(run=kubectl):
     obj = run("get", "deployment", TARGET, "-o", "json")
     state, _ = target_state(obj)
-    shared = consumers(run("get", RESOURCES, "-o", "json")["items"])
+    shared = bindings(run("get", RESOURCES, "-o", "json")["items"])
     return obj, {"target": state, "consumers": shared}
 
 
@@ -219,8 +287,16 @@ def deploy(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
     )
     # Re-read siblings immediately before the CAS write. They are never mutated here.
     final = run("get", RESOURCES, "-o", "json")["items"]
-    require(consumers(final) == baseline["consumers"], "consumer drift")
+    require(bindings(final) == baseline["consumers"], "consumer drift")
     require_t4_serves(final, image)
+    # An HPA rescale since the first read bumps resourceVersion; rebuild the CAS patch from a fresh
+    # read whose identity (UID, image, spec without replicas) must still equal the admitted one.
+    fresh = run("get", "deployment", TARGET, "-o", "json")
+    require(target_state(fresh)[0] == actual["target"], "target drift immediately before write")
+    patch = patch_for(fresh, image)
+    expected = copy.deepcopy(fresh)
+    expected["spec"]["template"]["spec"]["containers"][index]["image"] = image
+    exact = digest(expected["spec"])
     result = run("patch", "deployment", TARGET, "--type=json", "-p", json.dumps(patch), "-o", "json")
     require(
         target_state(result)[0] == after and digest(result["spec"]) == exact,

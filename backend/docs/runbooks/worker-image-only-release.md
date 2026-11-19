@@ -40,7 +40,7 @@ All discovered sibling templates must remain on their admitted identities,
 images and spec hashes. The worker alone moves. An active T4 fallback or required
 companion must already have the candidate image or this mode refuses before the
 write; a release requiring a joint roll needs a separately admitted carrier.
-Job creation/deletion, autoscaling or a config change may invalidate the packet;
+A config change (other than the tolerated autoscaling and CronJob history below) invalidates the packet;
 refresh and re-admit it instead of retrying blindly. The namespace inventory is
 not a claim about consumers in other namespaces or systems: reconcile those in
 the existing shared-artifact release gate before dispatch.
@@ -83,7 +83,12 @@ digest change, a changed object UID, any other spec field, a standalone Job or a
 controller CronJob is absent. An activated T4 fallback (containers and init containers) is checked
 directly on the early read, the final pre-write read and at verify. The admission dry-run and the CAS write still compare the whole spec, replicas
 included, because they act on the object just read. Receipts written before this change hash the
-full spec and no longer match; take a fresh inventory and forward receipt.
+full spec and no longer match; take a fresh inventory and forward receipt. A pre-change receipt
+cannot drive the rollback path: to return to its recorded prior digest, dispatch that digest with
+its merged source SHA as a forward preserve-live roll from a fresh inventory (no rollback receipt);
+the image-tree check, source floor and all other gates still apply. The replica exclusion also
+requires exactly one live HPA (minReplicas >= 1) targeting each of the two Deployments in the
+same read; those HPAs are bound by UID and spec hash, so removing or retargeting one refuses.
 
 ## Verification and rollback custody
 
