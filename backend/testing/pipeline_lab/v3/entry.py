@@ -46,6 +46,7 @@ def v3_options(overlay: Any) -> dict[str, Any]:
             else None
         ),
         'partial_lag': timedelta(seconds=float(raw.get('partial_lag_seconds', 60))),
+        'max_events': int(raw.get('max_events', 20000)),
     }
 
 

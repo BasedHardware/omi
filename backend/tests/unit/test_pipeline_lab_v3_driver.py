@@ -324,3 +324,15 @@ def test_replayed_rows_leave_next_day_conversations_out_like_the_production_base
     ]
     assert [r['id'] for r in replayed_rows(rows, {'late'}, T0, end)] == ['before']
     assert [r['id'] for r in replayed_rows(rows, {'late'}, T0)] == ['before', 'after']
+
+
+def test_seeded_recording_claims_get_datetimes_back():
+    from datetime import datetime
+
+    from testing.pipeline_lab.seed.writer import revive_claim_times
+
+    row = revive_claim_times(
+        {'claims': [{'conversation_id': 'c', 'start': '2026-03-14T09:00:00+00:00', 'end': '2026-03-14T09:05:00Z'}]}
+    )
+    assert all(isinstance(row['claims'][0][k], datetime) for k in ('start', 'end'))
+    assert revive_claim_times({'id': 'x'}) == {'id': 'x'}

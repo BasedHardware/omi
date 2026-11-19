@@ -69,20 +69,21 @@ def install_attribution(stack: ExitStack) -> None:
     original_outline = models.outline
     original_process = service._process
 
-    def messages(group: Mapping[str, Any], tz: Any) -> list:
-        result = original_messages(group, tz)
+    # Pass every other argument through: product signatures grow keywords (cohesion=, #25786).
+    def messages(group: Mapping[str, Any], *args: Any, **kwargs: Any) -> list:
+        result = original_messages(group, *args, **kwargs)
         lines = group.get('lines') or []
         if lines:
             first_recording[id(result)] = str(lines[0].get('conversation_id'))
         return result
 
-    def tagged_outline(uid: str, msgs: list) -> Any:
+    def tagged_outline(uid: str, msgs: list, *args: Any, **kwargs: Any) -> Any:
         with capture_scope(first_recording.pop(id(msgs), None), 'v3_outline'):
-            return original_outline(uid, msgs)
+            return original_outline(uid, msgs, *args, **kwargs)
 
-    def tagged_process(uid: str, row: Mapping[str, Any], token: str) -> Any:
+    def tagged_process(uid: str, row: Mapping[str, Any], *args: Any, **kwargs: Any) -> Any:
         with capture_scope(str((row or {}).get('id') or '') or None, 'v3_notes'):
-            return original_process(uid, row, token)
+            return original_process(uid, row, *args, **kwargs)
 
     stack.enter_context(patch.object(outline, 'messages', messages))
     stack.enter_context(patch.object(models, 'outline', tagged_outline))

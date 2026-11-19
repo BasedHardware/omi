@@ -24,7 +24,9 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 import time
+import traceback
 from typing import Any, Callable, Optional, Protocol, Sequence
 
 from testing.pipeline_lab.v3.feed import Arrival
@@ -148,6 +150,9 @@ class V3Driver:
         except Exception as error:  # noqa: BLE001 - one failed event must not hide the rest of the day
             event.outcome = 'error'
             event.error = type(error).__name__
+            # Where it failed (file:line function), never the message: messages can carry owner data.
+            frames = traceback.extract_tb(error.__traceback__)[-8:]
+            event.detail['where'] = [f'{Path(f.filename).name}:{f.lineno} {f.name}' for f in frames]
         event.seconds = round(time.monotonic() - started, 3)
 
     async def run(self, arrivals: Sequence[Arrival]) -> V3Report:

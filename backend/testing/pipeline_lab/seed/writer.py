@@ -83,6 +83,25 @@ def _reason(error: BaseException) -> str:
     return f'{type(error).__name__}: {message}' if message else type(error).__name__
 
 
+def revive_claim_times(row: dict[str, Any]) -> dict[str, Any]:
+    """A v3 recording's ``claims`` hold Firestore timestamps; the corpus stores them as ISO strings.
+
+    The planner compares claim spans with segment datetimes (``planner._contains_line``), so a
+    string span fails with ``TypeError`` on every reconcile.
+    """
+    claims = row.get('claims')
+    if isinstance(claims, list):
+        row['claims'] = [
+            (
+                {**c, **{k: parse_time(c[k]) for k in ('start', 'end') if isinstance(c.get(k), str)}}
+                if isinstance(c, dict)
+                else c
+            )
+            for c in claims
+        ]
+    return row
+
+
 class SeedTargetRefused(PermissionError):
     pass
 
@@ -252,7 +271,7 @@ class ProductSeedWriter:
         written = 0
         batch, pending = self.client.batch(), 0
         for row in rows:
-            row = dict(row)
+            row = revive_claim_times(dict(row))
             for name in clear_sealed_blobs(row):
                 self.cleared[name] = self.cleared.get(name, 0) + 1
             if encode is None:
