@@ -137,3 +137,24 @@ def test_late_fragment_does_not_borrow_words_from_a_published_claim():
     row = planner.build('synthetic', late, {'r': raw})
     assert row['home_hidden_reason'] == 'below_word_minimum'
     assert row['_v3_claims']['r'] == [{'start': AT + timedelta(seconds=2), 'end': AT + timedelta(seconds=3)}]
+
+
+def test_late_topic_past_media_does_not_borrow_from_published_topic():
+    initial = recording([segment(0, 480)])
+    now = AT + timedelta(minutes=10)
+    (planned_prior,) = planner.windows(outline.stretches([initial], now), [[entry(1)]], cohesion=True)
+    prior = planner.build('synthetic', planned_prior, {'r': initial})
+    raw = {
+        **initial,
+        'transcript_segments': [*initial['transcript_segments'], segment(2, 10), segment(4, 37)],
+        'claims': [{'conversation_id': prior['id'], **claim} for claim in prior['_v3_claims']['r']],
+    }
+    planned = planner.windows(
+        outline.stretches([raw], now),
+        [[entry(1), {**entry(2), 'kind': 'media'}, entry(3)]],
+        cohesion=True,
+    )
+    kept, media, late = planner.preserve_finished_windows(planned, {prior['id']: prior}, {'r': raw})
+    assert kept['existing_id'] == prior['id']
+    assert planner.build('synthetic', media, {'r': raw})['home_hidden_reason'] == 'media'
+    assert planner.build('synthetic', late, {'r': raw})['home_hidden_reason'] == 'below_word_minimum'

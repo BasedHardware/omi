@@ -1,4 +1,4 @@
-"""Small label alphabet used only by utils.speakers.display.display_participants.
+"""Small label alphabet for participant displays and stretch outline prompts.
 
 Originally introduced by the live-speaker-names lane. Renderers must use the
 participants authority so identity evidence and count sanity cannot be bypassed.

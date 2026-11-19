@@ -163,6 +163,7 @@ def windows(groups, outlines, *, cohesion=False):
                 }
                 if cohesion:
                     candidate['_stretch_words'] = group['_stretch_words']
+                    candidate['_stretch_partition'] = first_result
                 # A model can undo a topic split, never a recorded silence boundary.
                 prior = result[-1] if result else None
                 if (
@@ -444,22 +445,24 @@ def preserve_finished_windows(planned, existing, recordings=None):
             files = published.setdefault(p['recording_id'], {}).setdefault('files', {})
             files.setdefault(p['audio_file_id'], []).append((p['start'], p['end']))
     retained, fresh = {}, []
+    published_partitions = set()
     fresh_metadata = {'_published': published, '_published_ids': published_ids}
     for window in planned:
         gaps = []
-        had_owner = False
+        partition = window.get('_stretch_partition')
         for line in window['lines']:
             claims = claims_by_recording.get(line['conversation_id'])
             owner = next(
                 (r for r in finished if _contains_line(r, line, None if claims is None else claims.get(r['id'], ()))),
                 None,
             )
+            if partition is not None and partition not in published_partitions:
+                spans = published.get(line['conversation_id'], {}).get('claims', ())
+                if owner or any(a < line['end'] and line['start'] < b for a, b in spans):
+                    published_partitions.add(partition)
             if owner:
-                had_owner = True
                 if gaps and not window.get('_keep_unmatched_together'):
-                    fragment = {**window, **fresh_metadata, 'lines': gaps, 'manual_end': False}
-                    fragment.pop('_stretch_words', None)
-                    fresh.append(fragment)
+                    fresh.append({**window, **fresh_metadata, 'lines': gaps, 'manual_end': False})
                     gaps = []
                 target = retained.setdefault(
                     owner['id'],
@@ -481,14 +484,16 @@ def preserve_finished_windows(planned, existing, recordings=None):
             else:
                 gaps.append(line)
         if gaps:
-            fragment = {
-                **window,
-                **fresh_metadata,
-                'lines': gaps,
-                'manual_end': bool(window.get('manual_end') and gaps[-1] is window['lines'][-1]),
-            }
-            if had_owner:
-                # Published speech cannot qualify a new piece that contains only the unmatched lines.
-                fragment.pop('_stretch_words', None)
-            fresh.append(fragment)
+            fresh.append(
+                {
+                    **window,
+                    **fresh_metadata,
+                    'lines': gaps,
+                    'manual_end': bool(window.get('manual_end') and gaps[-1] is window['lines'][-1]),
+                }
+            )
+    # Even a separate fresh topic in the same stretch cannot qualify on published speech.
+    for window in fresh:
+        if window.get('_stretch_partition') in published_partitions:
+            window.pop('_stretch_words', None)
     return sorted([*retained.values(), *fresh], key=lambda w: w['lines'][0]['start'])
