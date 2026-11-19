@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Episod live · {duration}",
     "deviceCatchingUp": "Recuperare",
     "deviceCatchingUpProgress": "{done} din {total} min",
-    "deviceRecently": "Recent",
-    "deviceDisconnectedFor": "Deconectat timp de {duration}",
     "deviceControls": "Comenzi",
     "homeBackgroundLine": "De asemenea: {items}",
     "deviceOnboardingPressButtonTitle": "Apasă butonul de pe Omi",
@@ -4692,6 +4690,8 @@
     "finishStillProcessing": "Încă se procesează. Va apărea pe pagina principală.",
     "finishBackToHome": "Înapoi la pagina principală",
     "conversationSummaryWhenItEnds": "Rezumat când se încheie această conversație",
+    "deviceUploadsWaitingOnServer": "Încărcări în așteptare pe server",
+    "deviceUploadsWaitingOnServerSubtitle": "Audioul tău este în siguranță pe dispozitiv sau pe telefon",
     "conversationSummaryThrough": "Rezumat până la {time}",
     "conversationRecentTranscript": "Transcriere recentă"
 }

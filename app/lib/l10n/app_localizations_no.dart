@@ -14495,14 +14495,6 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Nylig';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Frakoblet i $duration';
-  }
-
-  @override
   String get deviceControls => 'Kontroller';
 
   @override
@@ -15581,6 +15573,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Sammendrag når denne samtalen avsluttes';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Opplastinger som venter på serveren';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Lyden din er trygg på enheten eller telefonen din';
 
   @override
   String conversationSummaryThrough(String time) {

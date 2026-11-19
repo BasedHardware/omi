@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Епизод на живо · {duration}",
     "deviceCatchingUp": "Наваксва",
     "deviceCatchingUpProgress": "{done} от {total} мин",
-    "deviceRecently": "Наскоро",
-    "deviceDisconnectedFor": "Без връзка за {duration}",
     "deviceControls": "Управление",
     "homeBackgroundLine": "Също: {items}",
     "deviceOnboardingPressButtonTitle": "Натиснете бутона на Omi",
@@ -4692,6 +4690,8 @@
     "finishStillProcessing": "Все още се обработва. Ще се появи на началния екран.",
     "finishBackToHome": "Към началото",
     "conversationSummaryWhenItEnds": "Обобщение, когато този разговор приключи",
+    "deviceUploadsWaitingOnServer": "Качвания, чакащи на сървъра",
+    "deviceUploadsWaitingOnServerSubtitle": "Аудиото ви е в безопасност на устройството или телефона",
     "conversationSummaryThrough": "Обобщение до {time}",
     "conversationRecentTranscript": "Скорошен транскрипт"
 }

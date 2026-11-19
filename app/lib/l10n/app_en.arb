@@ -17656,20 +17656,6 @@
             }
         }
     },
-    "deviceRecently": "Recently",
-    "@deviceRecently": {
-        "description": "Device page section: recent connection events."
-    },
-    "deviceDisconnectedFor": "Disconnected for {duration}",
-    "@deviceDisconnectedFor": {
-        "description": "Device page event: the Omi was disconnected for this long (a compact duration such as 10m).",
-        "placeholders": {
-            "duration": {
-                "type": "String",
-                "example": "24m"
-            }
-        }
-    },
     "deviceControls": "Controls",
     "@deviceControls": {
         "description": "Device page section: controls such as pausing recording."
@@ -19033,6 +19019,14 @@
     "conversationSummaryWhenItEnds": "Summary when this conversation ends",
     "@conversationSummaryWhenItEnds": {
         "description": "On the detail page of a conversation still in progress (v3): the summary is written once it ends."
+    },
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "@deviceUploadsWaitingOnServer": {
+        "description": "Device Settings row (tappable, opens upload details): some recordings were uploaded but the server has not accepted or processed them yet. Calm status, not an error."
+    },
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone",
+    "@deviceUploadsWaitingOnServerSubtitle": {
+        "description": "Subtitle under 'Uploads waiting on the server' in Device Settings: reassures that the recorded audio is still stored on the Omi device or the phone, so nothing is lost while the server catches up."
     },
     "conversationSummaryThrough": "Summary through {time}",
     "@conversationSummaryThrough": {

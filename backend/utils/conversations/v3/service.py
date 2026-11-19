@@ -19,6 +19,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud.firestore_v1 import FieldFilter
 
+from config.conversations_v3 import stretch_cohesion_enabled
 from utils.conversations.v3.triggers import enqueue, changed
 from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
@@ -213,6 +214,7 @@ async def reconcile(
             )
         now = datetime.now(timezone.utc)
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
+        cohesion = stretch_cohesion_enabled()
         groups = outline.stretches(eligible, now)
         if on_open and conversation_id:
             target = existing.get(conversation_id)
@@ -234,7 +236,7 @@ async def reconcile(
         background = await run_blocking(db_executor, context.outline_sources, uid, groups)
         for group in groups:
             await run_blocking(db_executor, leases.renew, uid, key, token)
-            messages = outline.messages(group, timezone.utc)
+            messages = outline.messages(group, timezone.utc, cohesion=cohesion)
             messages.append(
                 (
                     'human',
@@ -285,7 +287,9 @@ async def reconcile(
                 cache.append({'fingerprint': fingerprint, 'entries': entries})
 
         async def plan():
-            windows = planner.preserve_finished_windows(planner.windows(groups, outlines), existing, recordings)
+            windows = planner.preserve_finished_windows(
+                planner.windows(groups, outlines, cohesion=cohesion), existing, recordings
+            )
             # A retained finished conversation owns its id by claim evidence; a fresh window that sorts
             # before it (late speech overlapping its start) must not time-match the same id. Two planned
             # rows with one id each re-add the source's held claims, doubling them every pass until the

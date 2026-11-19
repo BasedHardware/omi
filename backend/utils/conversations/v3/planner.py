@@ -3,10 +3,12 @@
 from utils.conversations.v3 import policy, visibility
 from utils.conversations.v3.outline import SILENCE, playback_origin
 
+from collections.abc import Iterator
 from copy import deepcopy
 from datetime import timedelta
 from uuid import NAMESPACE_URL, uuid5
 from difflib import SequenceMatcher
+from itertools import groupby
 from typing import Any
 
 CAP = timedelta(hours=2)
@@ -37,14 +39,15 @@ def _capped(lines, sections):
     return _capped(lines[:cut], []) + _capped(lines[cut:], [])
 
 
-def _as_sections(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _as_sections(entries: list[dict[str, Any]], *, primary: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     first = entries[0]
     # Participating speech determines the card when it shares a stretch with passive audio.
     priority = {'conversation': 0, 'voice_work': 1}
-    primary = min(entries, key=lambda entry: priority.get(entry['kind'], 2))
+    keep_later_primary_section = primary is None
+    primary = primary or min(entries, key=lambda entry: priority.get(entry['kind'], 2))
     sections = []
     for entry in entries:
-        if entry is not first or entry is not primary:
+        if entry is not primary or (keep_later_primary_section and entry is not first):
             sections.append({'first_line': entry['first_line'], 'title': entry['title']})
         sections.extend(entry.get('sections') or [])
     return [
@@ -52,16 +55,96 @@ def _as_sections(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
             **primary,
             'first_line': first['first_line'],
             'line': primary.get('line') or next((entry['line'] for entry in entries if entry.get('line')), ''),
-            'resumes_previous': first.get('resumes_previous', False),
+            'resumes_previous': (
+                first.get('resumes_previous', False)
+                if keep_later_primary_section
+                else all(entry.get('resumes_previous') for entry in entries)
+            ),
             'people': list(dict.fromkeys(name for entry in entries for name in entry.get('people') or [])),
             'sections': sections,
         }
     ]
 
 
-def windows(groups, outlines):
+def _fold_participating_topics(entries, counts):
+    buckets: list[list[dict[str, Any]]] = []
+    leading = []
+    for entry in entries:
+        if counts[entry['first_line']] >= visibility.MIN_HOME_WORDS:
+            buckets.append([*leading, entry])
+            leading = []
+        elif buckets:
+            buckets[-1].append(entry)
+        else:
+            leading.append(entry)
+    if leading:
+        buckets.append(leading)
+    for bucket in buckets:
+        if len(bucket) == 1:
+            yield bucket[0]
+        else:
+            primary = max(bucket, key=lambda entry: counts[entry['first_line']])
+            yield _as_sections(bucket, primary=primary)[0]
+
+
+def _fold_short_topics(lines: list, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    starts = [entry['first_line'] - 1 for entry in entries]
+    counts = {start + 1: word_count(lines[start:end]) for start, end in zip(starts, starts[1:] + [len(lines)])}
     result = []
+    # Media and background retain their independent Home visibility and wearer evidence.
+    for participating, topics in groupby(entries, key=lambda entry: entry['kind'] in {'conversation', 'voice_work'}):
+        result.extend(_fold_participating_topics(topics, counts) if participating else topics)
+    return result
+
+
+def _cohesive_groups(groups, outlines) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
     for group, entries in zip(groups, outlines):
+        if not entries:
+            continue
+        manual = group.get('manual_end') or group.get('after_manual_end')
+        cut_points = [entry['first_line'] - 1 for entry in entries]
+        cut_points.extend(
+            section['first_line'] - 1
+            for entry in entries
+            for section in entry.get('sections') or []
+            if isinstance(section.get('first_line'), int)
+        )
+        parts = _capped(group['lines'], cut_points)
+        start = 1
+        for index, part in enumerate(parts):
+            end = start + len(part)
+            active = [entry for entry in entries if entry['first_line'] < end]
+            first = max(i for i, entry in enumerate(active) if entry['first_line'] <= start)
+            topics = [
+                {
+                    **entry,
+                    'first_line': max(entry['first_line'], start) - start + 1,
+                    'sections': [
+                        {**section, 'first_line': section['first_line'] - start + 1}
+                        for section in entry.get('sections') or []
+                        if isinstance(section.get('first_line'), int) and start <= section['first_line'] < end
+                    ],
+                }
+                for entry in active[first:]
+            ]
+            last = index == len(parts) - 1
+            bounded = {
+                **group,
+                'lines': part,
+                'manual_end': bool(last and group.get('manual_end')),
+                '_keep_unmatched_together': bool(manual),
+                'finished': group['finished'] or not last,
+                '_stretch_words': word_count(part),
+            }
+            yield bounded, _as_sections(topics) if manual else _fold_short_topics(part, topics)
+            start = end
+
+
+def windows(groups, outlines, *, cohesion=False):
+    result = []
+    pairs = _cohesive_groups(groups, outlines) if cohesion else zip(groups, outlines)
+    for group, entries in pairs:
+        first_result = len(result)
         if len(entries) > 1 and (group.get('manual_end') or group.get('after_manual_end')):
             entries = _as_sections(entries)
         for index, entry in enumerate(entries):
@@ -79,13 +162,21 @@ def windows(groups, outlines):
                     'manual_end': bool(
                         group.get('manual_end') and end == len(group['lines']) and part_index == len(capped) - 1
                     ),
-                    '_keep_unmatched_together': bool(group.get('manual_end') or group.get('after_manual_end')),
+                    '_keep_unmatched_together': bool(
+                        group.get('_keep_unmatched_together')
+                        or group.get('manual_end')
+                        or group.get('after_manual_end')
+                    ),
                     'finished': group['finished'] or end < len(group['lines']) or part_index < len(capped) - 1,
                 }
+                if cohesion:
+                    candidate['_stretch_words'] = group['_stretch_words']
+                    candidate['_stretch_partition'] = first_result
                 # A model can undo a topic split, never a recorded silence boundary.
                 prior = result[-1] if result else None
                 if (
                     prior
+                    and (not cohesion or len(result) > first_result)
                     and entry.get('resumes_previous')
                     and not prior.get('manual_end')
                     and prior['kind'] == candidate['kind']
@@ -95,6 +186,8 @@ def windows(groups, outlines):
                     - prior['lines'][0]['start']
                     <= CAP
                 ):
+                    if cohesion:
+                        prior['sections'] = _as_sections([prior, candidate], primary=prior)[0]['sections']
                     prior['lines'].extend(part)
                     prior['finished'] = candidate['finished']
                     prior['manual_end'] = candidate['manual_end']
@@ -205,11 +298,22 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
     )
     manual_end = bool(window.get('manual_end') or (existing or {}).get('manual_end'))
     outline_kind = window.get('outline_kind', window['kind'])
+    words = window.get('_stretch_words', sum(len(s.get('text', '').split()) for s in segments))
+    if (
+        existing is not None
+        and retained
+        and window.get('_stretch_partition') is not None
+        and existing.get('home_hidden') is False
+        and existing.get('home_hidden_reason') in {'conversation', 'wearer_recognition_uncertain'}
+    ):
+        # Finished visible speech already passed the word gate, possibly on its original stretch.
+        # Passive, manual and wearer-recognition rules still apply to the current projection.
+        words = max(words, visibility.MIN_HOME_WORDS)
     kind, hidden, reason = visibility.project(
         outline_kind,
         recordings,
         {line['conversation_id'] for line in lines},
-        words=sum(len(s.get('text', '').split()) for s in segments),
+        words=words,
         finished=window['finished'],
         manual_end=manual_end,
     )
@@ -362,15 +466,21 @@ def preserve_finished_windows(planned, existing, recordings=None):
             files = published.setdefault(p['recording_id'], {}).setdefault('files', {})
             files.setdefault(p['audio_file_id'], []).append((p['start'], p['end']))
     retained, fresh = {}, []
+    published_partitions = set()
     fresh_metadata = {'_published': published, '_published_ids': published_ids}
     for window in planned:
         gaps = []
+        partition = window.get('_stretch_partition')
         for line in window['lines']:
             claims = claims_by_recording.get(line['conversation_id'])
             owner = next(
                 (r for r in finished if _contains_line(r, line, None if claims is None else claims.get(r['id'], ()))),
                 None,
             )
+            if partition is not None and partition not in published_partitions:
+                spans = published.get(line['conversation_id'], {}).get('claims', ())
+                if owner or any(a < line['end'] and line['start'] < b for a, b in spans):
+                    published_partitions.add(partition)
             if owner:
                 if gaps and not window.get('_keep_unmatched_together'):
                     fresh.append({**window, **fresh_metadata, 'lines': gaps, 'manual_end': False})
@@ -388,6 +498,7 @@ def preserve_finished_windows(planned, existing, recordings=None):
                         'existing_id': owner['id'],
                     },
                 )
+                target.pop('_stretch_words', None)
                 target['lines'].append(line)
                 if line is window['lines'][-1] and window.get('manual_end'):
                     target['manual_end'] = True
@@ -402,4 +513,8 @@ def preserve_finished_windows(planned, existing, recordings=None):
                     'manual_end': bool(window.get('manual_end') and gaps[-1] is window['lines'][-1]),
                 }
             )
+    # Even a separate fresh topic in the same stretch cannot qualify on published speech.
+    for window in fresh:
+        if window.get('_stretch_partition') in published_partitions:
+            window.pop('_stretch_words', None)
     return sorted([*retained.values(), *fresh], key=lambda w: w['lines'][0]['start'])

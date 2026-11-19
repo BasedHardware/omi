@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Tiesioginis epizodas · {duration}",
     "deviceCatchingUp": "Vejamasi",
     "deviceCatchingUpProgress": "{done} iš {total} min.",
-    "deviceRecently": "Neseniai",
-    "deviceDisconnectedFor": "Atsijungta {duration}",
     "deviceControls": "Valdikliai",
     "homeBackgroundLine": "Taip pat: {items}",
     "deviceOnboardingPressButtonTitle": "Paspauskite Omi mygtuką",
@@ -4692,6 +4690,8 @@
     "finishStillProcessing": "Vis dar apdorojama. Tai atsiras pagrindiniame puslapyje.",
     "finishBackToHome": "Grįžti į pagrindinį",
     "conversationSummaryWhenItEnds": "Santrauka, kai šis pokalbis baigsis",
+    "deviceUploadsWaitingOnServer": "Įkėlimai laukia serveryje",
+    "deviceUploadsWaitingOnServerSubtitle": "Jūsų garso įrašai saugūs jūsų įrenginyje arba telefone",
     "conversationSummaryThrough": "Santrauka iki {time}",
     "conversationRecentTranscript": "Naujausia transkripcija"
 }

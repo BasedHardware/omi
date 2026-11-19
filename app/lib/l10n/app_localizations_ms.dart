@@ -14526,14 +14526,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Baru-baru ini';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Terputus selama $duration';
-  }
-
-  @override
   String get deviceControls => 'Kawalan';
 
   @override
@@ -15614,6 +15606,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Ringkasan apabila perbualan ini tamat';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Fail yang dimuat naik sedang menunggu pada pelayan';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Audio anda selamat pada peranti atau telefon anda';
 
   @override
   String conversationSummaryThrough(String time) {

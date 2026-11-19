@@ -14486,14 +14486,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Nedávno';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Odpojené na $duration';
-  }
-
-  @override
   String get deviceControls => 'Ovládanie';
 
   @override
@@ -15573,6 +15565,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Zhrnutie po skončení tohto rozhovoru';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Nahrávky čakajúce na serveri';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Vaše zvukové nahrávky sú v bezpečí na zariadení alebo telefóne';
 
   @override
   String conversationSummaryThrough(String time) {

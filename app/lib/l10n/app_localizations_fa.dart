@@ -14485,14 +14485,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'اخیراً';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'قطع اتصال به مدت $duration';
-  }
-
-  @override
   String get deviceControls => 'کنترل‌ها';
 
   @override
@@ -15570,6 +15562,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'خلاصه پس از پایان این گفتگو';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'بارگذاری‌های در انتظار در سرور';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'صدای شما روی دستگاه یا گوشی شما در امان است';
 
   @override
   String conversationSummaryThrough(String time) {

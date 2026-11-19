@@ -14605,14 +14605,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Kamakailan';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Nadiskonekta nang $duration';
-  }
-
-  @override
   String get deviceControls => 'Mga Kontrol';
 
   @override
@@ -15700,6 +15692,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Buod kapag natapos ang usapang ito';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Mga upload na naghihintay sa server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ligtas ang iyong audio sa iyong device o phone';
 
   @override
   String conversationSummaryThrough(String time) {

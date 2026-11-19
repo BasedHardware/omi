@@ -112,6 +112,7 @@ worker:
   # shared 1800-audio-second decode budget, not only the first, so the GPU
   # section does not wait on artifact fetches. false restores first-only.
   prepareFlightEnabled: true
+  projectionOutbox: true
   shadowPercent: 0
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: ""

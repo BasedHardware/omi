@@ -4448,8 +4448,6 @@
     "deviceLiveEpisode": "Épisode en direct · {duration}",
     "deviceCatchingUp": "Rattrapage",
     "deviceCatchingUpProgress": "{done} sur {total} min",
-    "deviceRecently": "Récemment",
-    "deviceDisconnectedFor": "Déconnecté pendant {duration}",
     "deviceControls": "Commandes",
     "homeBackgroundLine": "Aussi : {items}",
     "deviceOnboardingPressButtonTitle": "Appuie sur le bouton de ton Omi",
@@ -4727,6 +4725,8 @@
     "finishStillProcessing": "Traitement en cours. Elle apparaîtra sur l'accueil.",
     "finishBackToHome": "Retour à l'accueil",
     "conversationSummaryWhenItEnds": "Résumé à la fin de cette conversation",
+    "deviceUploadsWaitingOnServer": "Envois en attente sur le serveur",
+    "deviceUploadsWaitingOnServerSubtitle": "Votre audio est en sécurité sur votre appareil ou votre téléphone",
     "conversationSummaryThrough": "Résumé jusqu'à {time}",
     "conversationRecentTranscript": "Transcription récente"
 }

@@ -14491,14 +14491,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Gần đây';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Mất kết nối $duration';
-  }
-
-  @override
   String get deviceControls => 'Điều khiển';
 
   @override
@@ -15578,6 +15570,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Bản tóm tắt khi cuộc trò chuyện này kết thúc';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Các bản tải lên đang chờ trên máy chủ';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle =>
+      'Âm thanh của bạn vẫn an toàn trên thiết bị hoặc điện thoại của bạn';
 
   @override
   String conversationSummaryThrough(String time) {

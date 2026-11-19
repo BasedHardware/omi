@@ -70,6 +70,7 @@ HELPER_KILL_SWITCHES = {
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
     'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
     'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
+    'BATCH_PROJECTION_OUTBOX',
     'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF',
     'PROJECTION_DRAIN_CLAIM_AWARE',
     'PROJECTION_DRAIN_PRIVACY_BACKOFF',
@@ -328,6 +329,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         elif name == 'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED':
             assert entry['owner'] == 'Goal: Pipeline'
             assert entry['review_by'] == '2026-12-13'
+        elif name == 'BATCH_PROJECTION_OUTBOX':
+            assert entry['owner'] == flag['owner'] == 'omi-pipeline / lead2'
+            assert entry['review_by'] == '2026-12-18'
         elif name in {
             'EPISODE_COMPOSER_THRIFT',
             'SUMMARY_PROJECTION_DEBT_ENABLED',

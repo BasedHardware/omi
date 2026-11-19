@@ -14525,14 +14525,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Нядаўна';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Адключаны на $duration';
-  }
-
-  @override
   String get deviceControls => 'Кіраванне';
 
   @override
@@ -15613,6 +15605,12 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Рэзюмэ, калі гэтая размова скончыцца';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Загрузкі, якія чакаюць на серверы';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ваш аўдыё ў бяспецы на вашай прыладзе або тэлефоне';
 
   @override
   String conversationSummaryThrough(String time) {

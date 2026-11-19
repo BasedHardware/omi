@@ -62,7 +62,7 @@ class WalListItem extends StatelessWidget {
   (Color, String) _rowStatus(BuildContext context, bool hasError) {
     final l = context.l10n;
     if (wal.status == WalStatus.uploaded && !wal.countsAsPendingWork()) {
-      return (Colors.grey.shade400, l.transcriptionUnavailable);
+      return (Colors.grey.shade400, l.syncDetailsTranscribing);
     }
     final state = wal.syncDisplayState;
     if (state == WalSyncDisplayState.syncing) {
@@ -581,8 +581,8 @@ class _SyncPageState extends State<SyncPage> {
         }
       });
     } else if (syncProvider.derivedWals.stalledUploadsAt().isNotEmpty) {
-      title = l.transcriptionUnavailable;
-      titleColor = Colors.orangeAccent;
+      title = l.deviceUploadsWaitingOnServer;
+      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
     } else {
       title = l.syncCardAllBackedUp;
       titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;

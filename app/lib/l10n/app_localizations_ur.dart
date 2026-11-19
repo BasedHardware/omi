@@ -14504,14 +14504,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'حال ہی میں';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration تک منقطع';
-  }
-
-  @override
   String get deviceControls => 'کنٹرولز';
 
   @override
@@ -15589,6 +15581,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'یہ گفتگو ختم ہونے پر خلاصہ';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'اپ لوڈز سرور پر انتظار میں ہیں';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'آپ کا آڈیو آپ کی ڈیوائس یا فون پر محفوظ ہے';
 
   @override
   String conversationSummaryThrough(String time) {
