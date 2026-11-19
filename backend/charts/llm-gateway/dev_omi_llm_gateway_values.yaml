@@ -84,6 +84,7 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ENCRYPTION_SECRET
+        optional: true
   - name: LLM_GATEWAY_ALLOWED_CALLERS
     value: "backend,omi-web,omi-admin-dashboard"
   - name: OPENAI_API_KEY

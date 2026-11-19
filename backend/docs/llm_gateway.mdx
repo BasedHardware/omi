@@ -642,7 +642,8 @@ The keyed protocol defaults on. Set `LLM_GATEWAY_IDEMPOTENCY_ENABLED=off`
 on every gateway replica to refuse keyed calls while keeping unkeyed traffic
 available. Before pointing Go workers at the gateway, verify all replicas
 serve the keyed protocol and enable Firestore TTL on the result
-`expires_at` field. The Helm values mount the existing `ENCRYPTION_SECRET`.
+`expires_at` field. The Helm values mount the existing `ENCRYPTION_SECRET` when available.
+Keyed calls require it, and startup and unkeyed calls can run without it.
 Use the repository's scoped TTL helper with
 `--policy backend/deploy/llm-gateway/retention.json --project <customer-project>`
 to print the plan. An authorized operator applies it with `--apply` and

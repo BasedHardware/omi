@@ -31,6 +31,26 @@
   },
   "budgets": [
     {
+      "collection": "llm_gateway_idempotency_claims",
+      "owner": "Goal: Pipeline (SCA-3176)",
+      "unit": "keyed chat POST or recovery lookup",
+      "reads_per_unit_budget": 10,
+      "reads_per_day_budget": 1000000,
+      "basis": "planning-bound",
+      "source": "backend/docs/llm_gateway.mdx: first success reads its claim twice, and replay or lookup reads it once. The planning budget allows five transaction attempts in each of the two transactions and assumes up to 100,000 keyed HTTP requests per day, including replays and lookups. Account deletion marker reads are separate. Revisit before increasing traffic above that planned envelope.",
+      "reviewed": "2026-11-19"
+    },
+    {
+      "collection": "llm_gateway_idempotency_results",
+      "owner": "Goal: Pipeline (SCA-3176)",
+      "unit": "keyed chat POST or recovery lookup",
+      "reads_per_unit_budget": 5,
+      "reads_per_day_budget": 500000,
+      "basis": "planning-bound",
+      "source": "backend/docs/llm_gateway.mdx: only a committed replay or lookup reads the result, once per transaction attempt. The planning budget assumes up to five transaction attempts and 100,000 keyed HTTP requests per day, including replays and lookups. Revisit before increasing traffic above that planned envelope.",
+      "reviewed": "2026-11-19"
+    },
+    {
       "collection": "conversation_erasure_jobs",
       "owner": "backend conversation deletion (accepted-delete erasure obligations)",
       "unit": "conversation delete accepted behind a busy account gate",
