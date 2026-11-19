@@ -74,6 +74,22 @@ def test_unknown_source_has_no_eligible_seconds():
     assert (result.stop, result.members, result.seconds) == ('unknown_source', 0, 0)
 
 
+@pytest.mark.parametrize(
+    'invalid_duration', [{}, {'duration_seconds': float('nan')}, {'duration_seconds': float('inf')}]
+)
+@pytest.mark.parametrize('invalid_anchor', [True, False])
+def test_unknown_duration_keeps_the_valid_prefix(invalid_duration, invalid_anchor):
+    anchor, candidate = row(), row('next', 200)
+    invalid = anchor if invalid_anchor else candidate
+    del invalid['duration_seconds']
+    invalid.update(invalid_duration)
+
+    result = build_pack(anchor, [candidate], when=10, max_gap=60, max_seconds=600, predecessor=False, capped=False)
+
+    assert result.stop == 'unknown_duration'
+    assert (result.members, result.seconds) == ((0, 0) if invalid_anchor else (1, 90))
+
+
 def test_intake_freezes_newest_source_age_and_scopes_key():
     start = 1_710_000_000
     first = SimpleNamespace(capture_at=start, duration_seconds=20, source_frames=16_000 * 15)

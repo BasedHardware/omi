@@ -226,17 +226,20 @@ def _gap(previous, following):
 
 
 def build_pack(anchor, following, *, when, max_gap, max_seconds, predecessor, capped, later_ready=frozenset()):
+    duration = anchor.get('duration_seconds')
+    if not _number(duration):
+        return Pack(0, 0.0, 'unknown_duration')
     first = job_observation(anchor)
     seconds = first.get('seconds')
     if not _number(seconds) or seconds <= 0:
         return Pack(0, 0.0, 'unknown_source')
-    if anchor['duration_seconds'] > max_seconds:
+    if duration > max_seconds:
         return Pack(0, 0.0, 'size')
     if predecessor:
         return Pack(1, seconds, 'predecessor')
     if not first.get('key'):
         return Pack(1, seconds, 'incompatible_key')
-    previous, members, duration = first, 1, anchor['duration_seconds']
+    previous, members = first, 1
     for row in following:
         candidate = job_observation(row)
         if not _due(row, when, later_ready):
@@ -245,7 +248,9 @@ def build_pack(anchor, following, *, when, max_gap, max_seconds, predecessor, ca
             stop = 'incompatible_key'
         elif (gap := _gap(previous, candidate)) is None or not 0 <= gap <= max_gap:
             stop = 'gap'
-        elif duration + row['duration_seconds'] > max_seconds:
+        elif not _number(candidate_duration := row.get('duration_seconds')):
+            stop = 'unknown_duration'
+        elif duration + candidate_duration > max_seconds:
             stop = 'size'
         elif members == config.MAX_MEMBERS:
             stop = 'count'
@@ -255,7 +260,7 @@ def build_pack(anchor, following, *, when, max_gap, max_seconds, predecessor, ca
             previous = candidate
             members += 1
             seconds += candidate['seconds']
-            duration += row['duration_seconds']
+            duration += candidate_duration
             continue
         return Pack(members, seconds, stop)
     return Pack(members, seconds, 'scan_cap' if capped else 'exhausted')

@@ -55,12 +55,13 @@ spec:
             )
         # The native read metric is per-minute DELTA. Coverage is fleet-wide,
         # including outside batch, because native counts have no caller dimension.
+        # Every observed series contributing to the sum must meet the sample floor.
         - record: omi_firestore_attributed_read_coverage_ratio_1h
           expr: >-
             sum(increase(omi_firestore_billed_reads_total{project_id="based-hardware"}[1h] offset 5m))
             / (
               (sum(sum_over_time(firestore_googleapis_com:document_read_count{project_id="based-hardware",type=~"LOOKUP|NOT_FOUND|QUERY"}[1h] offset 5m)) > 0)
               and on() (
-                count(min by (type) (count_over_time(firestore_googleapis_com:document_read_count{project_id="based-hardware",type=~"LOOKUP|NOT_FOUND|QUERY"}[1h] offset 5m) >= 58)) == 3
+                count(min by (type) (count_over_time(firestore_googleapis_com:document_read_count{project_id="based-hardware",type=~"LOOKUP|NOT_FOUND|QUERY"}[1h] offset 5m)) >= 58) == 3
               )
             )

@@ -140,6 +140,23 @@ def recording_case(name, *, hours=50, reads=50_000, breakouts=False, reset=False
     }
 
 
+def coverage_case(name, second_query, expected):
+    coverage = "omi_firestore_attributed_read_coverage_ratio_1h"
+    native = 'firestore_googleapis_com:document_read_count{project_id="based-hardware",'
+    return {
+        "name": name,
+        "interval": "1m",
+        "input_series": [
+            counter('omi_firestore_billed_reads_total{project_id="based-hardware"}', 300),
+            {"series": native + 'type="LOOKUP"}', "values": "100x60"},
+            {"series": native + 'type="NOT_FOUND"}', "values": "0x60"},
+            {"series": native + 'type="QUERY",database_id="primary"}', "values": "100x60"},
+            {"series": native + 'type="QUERY",database_id="secondary"}', "values": second_query},
+        ],
+        "promql_expr_test": [{"expr": coverage, "eval_time": "65m", "exp_samples": expected}],
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--promtool", required=True, type=Path)
@@ -162,6 +179,12 @@ def main():
         recording_case("observed zero completion volume is low", hours=0),
         recording_case("missing completions suppress ratio", hours=None),
         recording_case("missing reads suppress ratio", reads=None),
+        coverage_case(
+            "native coverage accepts a second series with 58 samples",
+            "100x56 _ _ _ 100",
+            [{"labels": "omi_firestore_attributed_read_coverage_ratio_1h", "value": 1}],
+        ),
+        coverage_case("native coverage rejects a second series with 57 samples", "100x55 _ _ _ _ 100", []),
     ]
     median = rules[-1]["data"][1]["model"]["expr"]
     hourly = rules[-1]["data"][0]["model"]["expr"]
