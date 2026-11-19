@@ -467,10 +467,14 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   /// follows the finger rather than the saved value.
   final Map<String, double> _dragValues = {};
 
+  /// Bumps on every drag and save, so only the latest save for a goal settles its slider.
+  final Map<String, int> _progressRevision = {};
+
   void _updateGoalProgressUI(Goal goal, double newValue) {
     final previous = _dragValues[goal.id] ?? goal.currentValue;
     if (newValue == previous) return;
     OmiHaptics.light();
+    _progressRevision[goal.id] = (_progressRevision[goal.id] ?? 0) + 1;
     setState(() => _dragValues[goal.id] = newValue);
   }
 
@@ -478,9 +482,12 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   /// (ux-contract §17.4).
   Future<void> _saveGoalProgress(Goal goal, double newValue) async {
     final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+    final revision = (_progressRevision[goal.id] ?? 0) + 1;
+    _progressRevision[goal.id] = revision;
     setState(() => _dragValues[goal.id] = newValue);
     final saved = await goalsProvider.updateGoalProgress(goal.id, newValue);
-    if (!mounted) return;
+    // A newer drag or save owns the slider now: this answer neither clears it nor offers a retry.
+    if (!mounted || _progressRevision[goal.id] != revision) return;
     setState(() => _dragValues.remove(goal.id));
     if (saved == null) {
       OmiFeedback.error(

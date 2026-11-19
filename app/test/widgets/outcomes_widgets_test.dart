@@ -16,6 +16,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/action_items/widgets/goal_form_sheet.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/pages/home/firmware_mixin.dart';
@@ -49,6 +50,19 @@ Goal _goal(String id, String title) => Goal(
       createdAt: DateTime.utc(2026, 9, 1),
       updatedAt: DateTime.utc(2026, 9, 1),
     );
+
+class _HeldProgress extends GoalWrites {
+  _HeldProgress();
+
+  final saves = <(double, Completer<Goal?>)>[];
+
+  @override
+  Future<Goal?> progress(String goalId, double currentValue) {
+    final answer = Completer<Goal?>();
+    saves.add((currentValue, answer));
+    return answer.future;
+  }
+}
 
 class _DeleteFails extends GoalWrites {
   const _DeleteFails();
@@ -359,5 +373,61 @@ void main() {
     await tester.pump();
     expect(shown, 2, reason: 'the newer choice stays');
     expect(find.text("Couldn't save that change."), findsNothing);
+  });
+
+  testWidgets('G1: a late failed save of an older drag neither resets the newer drag nor offers its retry',
+      (tester) async {
+    final writes = _HeldProgress();
+    final goals = GoalsProvider(goalsFetcher: () async => [_goal('a', 'Read')], writes: writes);
+    addTearDown(goals.dispose);
+    await goals.loadGoals();
+    await tester.pumpWidget(_app(const Scaffold(body: SingleChildScrollView(child: GoalsWidget())),
+        providers: [ChangeNotifierProvider<GoalsProvider>.value(value: goals)]));
+    await tester.pump();
+    final slider = find.byType(Slider);
+    expect(slider, findsOneWidget);
+    await tester.drag(slider, const Offset(60, 0));
+    await tester.pump();
+    expect(writes.saves, hasLength(1));
+    await tester.drag(slider, const Offset(-120, 0));
+    await tester.pump();
+    expect(writes.saves, hasLength(2));
+    final newer = writes.saves[1].$1;
+    expect(newer, isNot(writes.saves[0].$1));
+    writes.saves[0].$2.complete(null);
+    await tester.pump();
+    expect(tester.widget<Slider>(slider).value, newer, reason: 'the older answer must not move the newer thumb');
+    expect(find.text("Couldn't save your goal."), findsNothing, reason: 'no retry that would undo the newer choice');
+    writes.saves[1].$2.complete(Goal(
+        id: 'a',
+        title: 'Read',
+        goalType: 'numeric',
+        targetValue: 10,
+        currentValue: newer,
+        minValue: 0,
+        maxValue: 10,
+        isActive: true,
+        createdAt: DateTime.utc(2026, 9, 1),
+        updatedAt: DateTime.utc(2026, 9, 1)));
+    await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('P5: two overlapping failed changes show what the server still has', (tester) async {
+    await tester.pumpWidget(_app(const Scaffold(body: SizedBox())));
+    final context = tester.element(find.byType(SizedBox));
+    var shown = true;
+    final first = Completer<bool>();
+    final second = Completer<bool>();
+    final off = applyOmiSetting<bool>(context,
+        setting: 'daily', previous: true, next: false, show: (v) => shown = v, save: (_) => first.future);
+    final on = applyOmiSetting<bool>(context,
+        setting: 'daily', previous: false, next: true, show: (v) => shown = v, save: (_) => second.future);
+    first.complete(false);
+    expect(await off, isFalse);
+    second.complete(false);
+    expect(await on, isFalse);
+    await tester.pump();
+    expect(shown, isTrue, reason: 'neither write saved, so the server still has it on');
+    await tester.pump(const Duration(seconds: 5));
   });
 }
