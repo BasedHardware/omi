@@ -497,6 +497,7 @@ class ActionItemsProvider extends ChangeNotifier {
     required bool decodedPageIsComplete,
     required int readOrdinal,
   }) async {
+    _loadMoreFailed = false; // a fresh first page restarts pagination (T1)
     // Snapshot server IDs before filtering so tombstone retirement is
     // based on the full server response, not the filtered subset.
     final serverIds = response.actionItems.map((e) => e.id).toSet();
@@ -1211,6 +1212,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _loadedTaskPageIds.clear();
     _loadedPageSetComplete = false;
     _hasMore = true;
+    _loadMoreFailed = false;
     _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   }
 

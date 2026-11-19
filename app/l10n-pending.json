@@ -154,6 +154,11 @@
    "key": "finishNothingKeptTitle",
    "en": "Nothing to Keep",
    "description": "Title on the processing page when the server discarded the finished recording (too short or no speech). Title Case."
+  },
+  {
+   "key": "submitAppFinishDetails",
+   "en": "Finish the capability and pricing details above to submit.",
+   "description": "Small hint under a disabled Submit button on the create-app form, shown when the name, description, image, category and capability are filled in but a capability-specific field (a prompt, a trigger, notification scopes) or the paid plan details are still missing."
   }
  ]
 }

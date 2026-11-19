@@ -80,6 +80,7 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
         case ApiSuccess(:final data):
           _changes = data.changes;
           _cursor = data.nextCursor;
+          _moreFailed = false; // a fresh first page restarts Show More (V3)
         case ApiFailure():
           _failed = true;
       }

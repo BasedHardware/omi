@@ -40,6 +40,13 @@ Goal _goal(String id) => Goal(
       updatedAt: DateTime.utc(2026, 9, 1),
     );
 
+class _ThrowingWrites extends GoalWrites {
+  const _ThrowingWrites();
+
+  @override
+  Future<bool> delete(String goalId) async => throw const FormatException('malformed answer');
+}
+
 class _FailingWrites extends GoalWrites {
   const _FailingWrites();
 
@@ -121,6 +128,14 @@ void main() {
       expect(ok.loadFailed, isFalse);
     });
 
+    test('G4: a delete whose answer cannot be read puts the goal back and says it failed', () async {
+      final goals = GoalsProvider(goalsFetcher: () async => [_goal('a')], writes: const _ThrowingWrites());
+      addTearDown(goals.dispose);
+      await goals.loadGoals();
+      expect(await goals.deleteGoal('a'), isFalse);
+      expect(goals.goals.map((g) => g.id), ['a']);
+    });
+
     test('G1: a failed progress save answers null and keeps the saved value', () async {
       final goals = GoalsProvider(goalsFetcher: () async => [_goal('a')], writes: const _FailingWrites());
       addTearDown(goals.dispose);
@@ -169,6 +184,39 @@ void main() {
       expect(p.hasMore, isTrue);
       await p.loadMoreActionItems();
       expect(p.loadMoreFailed, isTrue);
+    });
+
+    test('T1: a fresh first page clears a failed load-more, so scrolling pages again', () async {
+      var failMore = true;
+      var reads = 0;
+      final p = ActionItemsProvider(
+        getActionItems: ({
+          int limit = 100,
+          int offset = 0,
+          bool? completed,
+          String? conversationId,
+          DateTime? startDate,
+          DateTime? endDate,
+          DateTime? dueStartDate,
+          DateTime? dueEndDate,
+        }) async {
+          reads++;
+          if (offset > 0 && failMore) return null;
+          return ActionItemsResponse(actionItems: [_task('a')], hasMore: true);
+        },
+        deleteActionItemRequest: (id) async => true,
+        bulkDeleteActionItemsRequest: (ids) async => ids,
+        deleteLinkedReminder: (_) {},
+      );
+      addTearDown(p.dispose);
+      await p.ensureLoaded();
+      await p.loadMoreActionItems();
+      expect(p.loadMoreFailed, isTrue);
+
+      failMore = false;
+      await p.forceRefreshActionItems();
+      expect(reads, greaterThanOrEqualTo(3));
+      expect(p.loadMoreFailed, isFalse);
     });
 
     test('T4: the Apple Reminder stays when the server refuses the delete', () async {

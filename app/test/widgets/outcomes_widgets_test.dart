@@ -1,5 +1,7 @@
 // ux-contract §17 Outcomes, audit 2026-11-19: what the reader sees after a tap. One case per fix
 // that lives in a page: D1, G2, G4, A1, P4, P5, D2, D5 and C2.
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,7 +15,9 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/action_items/widgets/goal_form_sheet.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/episodes/finish_capture.dart';
+import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
@@ -320,5 +324,40 @@ void main() {
     expect(find.text('Open Settings'), findsOneWidget);
     expect(find.textContaining('Something went wrong'), findsNothing);
     await tester.pump(const Duration(seconds: 9));
+  });
+
+  testWidgets('C6: the processing page ends on its first read when the recording was discarded', (tester) async {
+    final discarded = ServerConversation.fromJson({
+      'id': 'rec-1',
+      'created_at': '2026-11-19T10:00:00Z',
+      'started_at': '2026-11-19T10:00:00Z',
+      'finished_at': '2026-11-19T10:00:04Z',
+      'status': 'completed',
+      'discarded': true,
+      'structured': {'title': '', 'overview': '', 'emoji': ''},
+      'transcript_segments': const [],
+    });
+    await tester.pumpWidget(_app(FinishedCapturePage(recordingId: 'rec-1', fetch: () async => [discarded])));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('finished_capture_discarded')), findsOneWidget, reason: 'no 20-minute wait');
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('P5: a late failure of an older change never rolls back a newer one', (tester) async {
+    await tester.pumpWidget(_app(const Scaffold(body: SizedBox())));
+    final context = tester.element(find.byType(SizedBox));
+    var shown = 0;
+    final first = Completer<bool>();
+    final older = applyOmiSetting<int>(context,
+        setting: 'freq', previous: 0, next: 1, show: (v) => shown = v, save: (_) => first.future);
+    final newer = applyOmiSetting<int>(context,
+        setting: 'freq', previous: 1, next: 2, show: (v) => shown = v, save: (_) async => true);
+    expect(await newer, isTrue);
+    first.complete(false);
+    expect(await older, isFalse);
+    await tester.pump();
+    expect(shown, 2, reason: 'the newer choice stays');
+    expect(find.text("Couldn't save that change."), findsNothing);
   });
 }

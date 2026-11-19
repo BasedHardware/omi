@@ -37,6 +37,15 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
   /// Asks the server which firmware is current. A check that got no answer shows an error state
   /// with Try Again, never "Your device is up to date" (ux-contract §17.2).
+  /// A lookup that throws (a malformed answer) is a failed check, never an endless spinner (D1).
+  Future<bool> _answered(Future<bool> Function() lookup) async {
+    try {
+      return await lookup();
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _check() async {
     final device = widget.device!;
     setState(() {
@@ -45,7 +54,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     });
 
     if (widget.isRollback) {
-      final answered = await getStableVersion(deviceModelNumber: device.modelNumber);
+      final answered = await _answered(() => getStableVersion(deviceModelNumber: device.modelNumber));
       if (!answered) return _failCheck();
       final stableVersion = latestFirmwareDetails['version']?.toString();
       final alreadyStable =
@@ -62,13 +71,13 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         });
       }
     } else {
-      final answered = await getLatestVersion(
-        deviceModelNumber: device.modelNumber,
-        firmwareRevision: device.firmwareRevision,
-        hardwareRevision: device.hardwareRevision,
-        manufacturerName: device.manufacturerName,
-        serialNumber: device.serialNumber,
-      );
+      final answered = await _answered(() => getLatestVersion(
+            deviceModelNumber: device.modelNumber,
+            firmwareRevision: device.firmwareRevision,
+            hardwareRevision: device.hardwareRevision,
+            manufacturerName: device.manufacturerName,
+            serialNumber: device.serialNumber,
+          ));
       if (!answered) return _failCheck();
       var result = await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
       if (mounted) {

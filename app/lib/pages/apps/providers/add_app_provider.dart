@@ -481,9 +481,18 @@ class AddAppProvider extends ChangeNotifier {
 
   void checkValidity() {
     isValid = isFormValid();
+    missingBasics = !isValid &&
+        !(capabilitySelected() &&
+            (imageFile != null || imageUrl != null) &&
+            appCategory != null &&
+            (metadataKey.currentState?.validate() ?? false));
     hasChanges = _originalApp != null && hasDataChanged(_originalApp!, _originalApp!.category);
     notifyListeners();
   }
+
+  /// True while a base field (capability, image, category, or the metadata form) is missing, so
+  /// the disabled Submit can name what it waits for (A2); otherwise a capability or pricing detail is.
+  bool missingBasics = true;
 
   bool isFormValid() {
     if (capabilitySelected() && (imageFile != null || imageUrl != null) && appCategory != null) {

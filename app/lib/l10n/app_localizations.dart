@@ -27506,6 +27506,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nothing to Keep'**
   String get finishNothingKeptTitle;
+
+  /// Small hint under a disabled Submit button on the create-app form, shown when the name, description, image, category and capability are filled in but a capability-specific field (a prompt, a trigger, notification scopes) or the paid plan details are still missing.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish the capability and pricing details above to submit.'**
+  String get submitAppFinishDetails;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

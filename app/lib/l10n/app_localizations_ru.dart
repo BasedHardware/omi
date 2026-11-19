@@ -15718,4 +15718,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get finishNothingKeptTitle => 'Nothing to Keep';
+
+  @override
+  String get submitAppFinishDetails => 'Finish the capability and pricing details above to submit.';
 }

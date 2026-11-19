@@ -168,10 +168,25 @@ class PrecisionTests(unittest.TestCase):
         )
         self.assertEqual(count_hits(text)["generic-error"], 0)
         self.assertEqual(count_hits("OmiErrorState(message: l10n.somethingWentWrongTryAgain)")["generic-error"], 1)
+        # A page state's retry is a way forward too.
+        self.assertEqual(
+            count_hits("OmiErrorState(message: l10n.somethingWentWrong, onRetry: load)")["generic-error"], 0
+        )
+        # A label with nothing to run renders no action, so it is still a dead end.
+        self.assertEqual(
+            count_hits("OmiFeedback.error(context, l10n.somethingWentWrong, actionLabel: l10n.tryAgain);")[
+                "generic-error"
+            ],
+            1,
+        )
         # The action has to be in the same call, not a neighbouring one.
         self.assertEqual(
             count_hits("show(a(l10n.somethingWentWrong), b(actionLabel: l10n.tryAgain));")["generic-error"], 1
         )
+
+    def test_commented_out_material_page_route_is_not_counted(self) -> None:
+        self.assertEqual(count_hits("// Navigator.push(context, MaterialPageRoute(builder: b));")["material-page-route"], 0)
+        self.assertEqual(count_hits("/* MaterialPageRoute(builder: b) */")["material-page-route"], 0)
 
     def test_omi_page_route_is_not_material_page_route(self) -> None:
         self.assertEqual(count_hits("Navigator.of(context).push(omiPageRoute((_) => page));")["material-page-route"], 0)

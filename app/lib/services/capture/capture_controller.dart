@@ -1218,10 +1218,6 @@ class CaptureController extends ChangeNotifier
   Future<InProgressProcessOutcome>? _lastProcessRequest;
   bool _firstCaptureProcess = false;
 
-  /// Finish through the coordinator and return that exact Process Now response.
-  /// Used by onboarding to avoid attributing an unrelated list refresh to this capture.
-  Future<CreateConversationResponse?> finishCaptureWithResult() async => (await finishCaptureWithOutcome()).response;
-
   /// Finish through the coordinator and return that exact Process Now answer, with why it has no
   /// conversation when it has none (transport, not found, empty). Throws [StateError] when this
   /// finish made no request (a phone Transcribe Later recording).

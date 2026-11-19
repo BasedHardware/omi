@@ -4754,5 +4754,6 @@
     "voiceNoteTooShort": "Voice note too short. Hold to record.",
     "submitAppMissingFields": "Add a name, description, image, category and capability to submit.",
     "appSetupNotFinished": "Setup isn't finished yet. Finish it in your browser, then tap Try Again.",
-    "finishNothingKeptTitle": "Nothing to Keep"
+    "finishNothingKeptTitle": "Nothing to Keep",
+    "submitAppFinishDetails": "Finish the capability and pricing details above to submit."
 }

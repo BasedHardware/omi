@@ -163,12 +163,30 @@ def _enclosing_call(masked: str, index: int) -> tuple[int, int] | None:
     return None
 
 
+def _in_code(text: str, match: re.Match[str]) -> bool:
+    """The match is code, not a comment (a commented-out route is not a route)."""
+    return not mask_code(text)[match.start()].isspace()
+
+
+# A way forward needs something to run: a feedback action's label together with its callback, or a
+# page state's retry callback. A label alone renders nothing (OmiFeedback shows an action only when
+# both are set).
+_FEEDBACK_ACTION = re.compile(r"\bactionLabel\s*:")
+_FEEDBACK_CALLBACK = re.compile(r"\bonAction\s*:")
+_RETRY_CALLBACK = re.compile(r"\bonRetry\s*:")
+
+
 def _generic_without_action(text: str, match: re.Match[str]) -> bool:
     masked = mask_code(text)
+    if masked[match.start()].isspace():
+        return False
     call = _enclosing_call(masked, match.start())
     if call is None:
         return True
-    return "actionLabel:" not in masked[call[0] : call[1]]
+    body = masked[call[0] : call[1]]
+    if _FEEDBACK_ACTION.search(body) and _FEEDBACK_CALLBACK.search(body):
+        return False
+    return not _RETRY_CALLBACK.search(body)
 
 
 def _enclosing_block(masked: str, index: int) -> tuple[int, int] | None:
@@ -284,10 +302,15 @@ RULES: tuple[Rule, ...] = (
     Rule(
         "generic-error",
         re.compile(r"\bsomethingWentWrong\w*\b"),
-        "name the cause, or pass actionLabel: l10n.tryAgain with onAction:",
+        "name the cause, or offer the way forward: actionLabel: with onAction:, or onRetry:",
         accept=_generic_without_action,
     ),
-    Rule("material-page-route", re.compile(r"\bMaterialPageRoute\s*[(<]"), "routeToPage / omiPageRoute"),
+    Rule(
+        "material-page-route",
+        re.compile(r"\bMaterialPageRoute\s*[(<]"),
+        "routeToPage / omiPageRoute",
+        accept=_in_code,
+    ),
     Rule(
         "pop-before-await",
         re.compile(r"\bNavigator\s*\.\s*(?:of\s*\([^)]*\)\s*\.\s*)?pop\s*[(<]"),

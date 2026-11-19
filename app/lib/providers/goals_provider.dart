@@ -264,7 +264,12 @@ class GoalsProvider extends ChangeNotifier {
     notifyListeners();
 
     // Then delete from server
-    final success = await _writes.delete(goalId);
+    bool success;
+    try {
+      success = await _writes.delete(goalId);
+    } catch (_) {
+      success = false; // a malformed answer is a failed delete: the goal comes back (G4)
+    }
     if (!success && removed != null && generation == _sessionGeneration && !_goals.any((g) => g.id == goalId)) {
       _goals.insert(index.clamp(0, _goals.length), removed);
       await _saveToLocalStorage();

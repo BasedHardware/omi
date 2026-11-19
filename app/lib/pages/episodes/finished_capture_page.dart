@@ -110,7 +110,7 @@ class _FinishedCapturePageState extends State<FinishedCapturePage> with WidgetsB
     if (_reading || _opened || _discarded || !mounted) return;
     _reading = true;
     try {
-      final rows = await (widget.fetch ?? () => api.getConversations(limit: 10))();
+      final rows = await (widget.fetch ?? () => api.getConversations(limit: 10, includeDiscarded: true))();
       final found = FinishedCapturePage.match(rows, widget.recordingId);
       if (found != null && mounted && !_opened) {
         final route = ModalRoute.of(context);

@@ -158,6 +158,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     );
     final saved = await applyOmiSetting<int>(
       context,
+      setting: 'mentor_frequency',
       previous: _savedNotificationFrequency,
       next: value,
       show: (frequency) {
@@ -214,6 +215,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   Future<void> _updateDailySummaryEnabled(bool value) async {
     final saved = await applyOmiSetting<bool>(
       context,
+      setting: 'daily_summary_enabled',
       previous: _dailySummaryEnabled,
       next: value,
       show: (enabled) {
@@ -227,6 +229,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   Future<void> _updateDailySummaryHour(int hour) async {
     final saved = await applyOmiSetting<int>(
       context,
+      setting: 'daily_summary_hour',
       previous: _dailySummaryHour,
       next: hour,
       show: (value) {

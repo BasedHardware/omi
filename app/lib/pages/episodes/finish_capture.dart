@@ -61,7 +61,9 @@ Future<FinishOutcome> finishLiveCapture(CaptureProvider provider,
     try {
       // Ending the capture fires the shared finalize hook, which closes the episode.
       final answer = await provider.finishCaptureWithOutcome();
-      outcome = FinishOutcome.fromProcess(answer, heardSomething: true);
+      // A retry re-sends what the page held after a failed Finish; a phone page with no line
+      // showed nothing, so "nothing to process yet" is the honest answer there (C5).
+      outcome = FinishOutcome.fromProcess(answer, heardSomething: hadContent || retry);
     } on FinishMadeNoRequest {
       outcome = const FinishSavedForLater();
     } catch (_) {

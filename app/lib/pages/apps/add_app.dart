@@ -402,7 +402,7 @@ class _AddAppPageState extends State<AddAppPage> {
                         if (!provider.isValid) ...[
                           const SizedBox(height: OmiSpacing.xs),
                           Text(
-                            l10n.submitAppMissingFields,
+                            provider.missingBasics ? l10n.submitAppMissingFields : l10n.submitAppFinishDetails,
                             key: const Key('submit_app_disabled_reason'),
                             textAlign: TextAlign.center,
                             style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
