@@ -251,7 +251,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       FirmwareUpdateFailure.download => context.l10n.firmwareDownloadFailedMessage,
       FirmwareUpdateFailure.install => context.l10n.firmwareUpdateFailedMessage,
       FirmwareUpdateFailure.notInstalled =>
-        context.l10n.firmwareUpdateNotInstalledMessage(observedFirmwareVersion ?? ''),
+        firmwareNotInstalledMessage(context.l10n, widget.device, observedFirmwareVersion ?? ''),
       FirmwareUpdateFailure.noReconnect => context.l10n.firmwareUpdateUnconfirmedMessage,
     };
     return Column(

@@ -15,6 +15,7 @@ import 'package:uuid/uuid.dart';
 import 'package:omi/backend/http/api/device.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/analytics/firmware_update_telemetry.dart';
@@ -32,6 +33,18 @@ enum FirmwareUpdateFailure {
   install,
   notInstalled,
   noReconnect,
+}
+
+/// The `not_installed` failure copy. On CV1 pendants with the stock bootloader the staged image is
+/// erased at boot, so retrying cannot install it and repeated updates are discouraged
+/// (`omi/firmware/docs/cv1-manufacturing-and-field-recovery.md`): CV1 points to support instead.
+String firmwareNotInstalledMessage(AppLocalizations l10n, BtDevice? device, String observedVersion) {
+  final cv1 = device != null &&
+      device.type == DeviceType.omi &&
+      DeviceUtils.isOmiCv1(modelNumber: device.modelNumber, deviceName: device.name);
+  return cv1
+      ? l10n.firmwareUpdateNotInstalledCv1Message(observedVersion)
+      : l10n.firmwareUpdateNotInstalledMessage(observedVersion);
 }
 
 mixin FirmwareMixin<T extends StatefulWidget> on State<T> {

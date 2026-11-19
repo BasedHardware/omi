@@ -9134,7 +9134,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Aquest enregistrament s\'ha pujat però Omi encara està creant la conversa. Si l\'elimines ara i el processament falla, no es podrà recuperar. Vols eliminar-lo igualment?';
+      'Aquest enregistrament ja s\'ha pujat i Omi l\'està processant. Eliminar-lo aquí esborra la còpia del telèfon. Si el processament falla, Omi no ho podrà tornar a provar des d\'aquest telèfon.';
 
   @override
   String get syncCardAllBackedUp => 'Tots els enregistraments sincronitzats';
@@ -15509,6 +15509,11 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'L\'actualització no s\'ha instal·lat. El penjoll continua funcionant amb el firmware actual ($version). Contacta amb el suport en lloc de tornar a provar l\'actualització.';
   }
 
   @override

@@ -9037,7 +9037,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'การบันทึกนี้อัปโหลดแล้วแต่ Omi ยังสร้างบทสนทนาอยู่ หากลบตอนนี้และการประมวลผลล้มเหลว จะกู้คืนไม่ได้ ลบต่อไปหรือไม่?';
+      'การบันทึกนี้อัปโหลดแล้วและ Omi กำลังประมวลผลอยู่ การลบที่นี่จะลบสำเนาบนโทรศัพท์ หากการประมวลผลล้มเหลว Omi จะลองใหม่จากโทรศัพท์เครื่องนี้ไม่ได้';
 
   @override
   String get syncCardAllBackedUp => 'ซิงค์การบันทึกทั้งหมดแล้ว';
@@ -15358,6 +15358,11 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'ติดตั้งอัปเดตไม่สำเร็จ จี้ของคุณยังใช้งานได้ด้วยเฟิร์มแวร์ปัจจุบัน ($version) โปรดติดต่อฝ่ายสนับสนุนแทนการลองอัปเดตซ้ำ';
   }
 
   @override

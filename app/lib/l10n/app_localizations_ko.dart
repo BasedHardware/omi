@@ -8956,7 +8956,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      '이 녹음은 업로드되었지만 Omi가 아직 대화를 만들고 있습니다. 지금 삭제하고 처리가 실패하면 복구할 수 없습니다. 그래도 삭제하시겠습니까?';
+      '이 녹음은 이미 업로드되었고 Omi가 처리 중입니다. 여기서 삭제하면 휴대폰에 있는 사본이 삭제됩니다. 처리에 실패하면 Omi가 이 휴대폰에서 다시 시도할 수 없습니다.';
 
   @override
   String get syncCardAllBackedUp => '모든 녹음이 동기화됨';
@@ -15211,6 +15211,11 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return '업데이트가 설치되지 않았습니다. 펜던트는 현재 펌웨어($version)로 계속 작동합니다. 업데이트를 다시 시도하지 말고 지원팀에 문의해 주세요.';
   }
 
   @override

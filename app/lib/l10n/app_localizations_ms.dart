@@ -9103,7 +9103,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Rakaman ini telah dimuat naik tetapi Omi masih mencipta perbualan. Jika anda padam sekarang dan pemprosesan gagal, ia tidak dapat dipulihkan. Padam juga?';
+      'Rakaman ini sudah dimuat naik dan sedang diproses oleh Omi. Memadamnya di sini membuang salinan pada telefon. Jika pemprosesan gagal, Omi tidak boleh mencuba semula dari telefon ini.';
 
   @override
   String get syncCardAllBackedUp => 'Semua rakaman tersegerak';
@@ -15469,6 +15469,11 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Kemas kini tidak dipasang. Loket anda masih berfungsi dengan perisian tegar semasa ($version). Sila hubungi sokongan dan bukannya mencuba kemas kini sekali lagi.';
   }
 
   @override

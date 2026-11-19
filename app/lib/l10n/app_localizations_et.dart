@@ -9079,7 +9079,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'See salvestis on üles laaditud, kuid Omi loob veel vestlust. Kui kustutad selle nüüd ja töötlemine ebaõnnestub, ei saa seda taastada. Kas kustutada ikkagi?';
+      'See salvestis on juba üles laaditud ja Omi töötleb seda. Siin kustutamine eemaldab telefoni koopia. Kui töötlemine ebaõnnestub, ei saa Omi sellest telefonist uuesti proovida.';
 
   @override
   String get syncCardAllBackedUp => 'Kõik salvestused sünkroonitud';
@@ -15425,6 +15425,11 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Värskendust ei paigaldatud. Sinu ripats töötab edasi praeguse püsivaraga ($version). Võta värskenduse kordamise asemel ühendust toega.';
   }
 
   @override
