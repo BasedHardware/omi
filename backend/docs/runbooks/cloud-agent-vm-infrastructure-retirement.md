@@ -28,11 +28,10 @@ The incident evidence supplied on 2026-08-19 showed:
 Repository review agrees with the mechanism but not with calling sole-source
 attribution proved. Historical revision `874d796552` posts directly to the GCE
 `start` and `reset` endpoints, and current `main` has no start/reset call for
-this fleet. The remaining
-`backend/services/users/agent_vm_account_cleanup.py` path performs fenced
-deletes only. However, an external copy of the same JSON key or an uninspected
-Scheduler target could produce indistinguishable audit entries. The quiet-period
-test below closes that gap before credentials are revoked.
+this fleet. The (since retired) `agent_vm_account_cleanup.py` path performed
+fenced deletes only. However, an external copy of the same JSON key or an
+uninspected Scheduler target could produce indistinguishable audit entries. The
+quiet-period test below closes that gap before credentials are revoked.
 
 The missing bucket is a strong explanation for failed guest health, not yet a
 proved root cause for every VM. The retired provisioner installed a startup
@@ -609,7 +608,69 @@ All counts must be zero. Separately verify that `agent.omi.me` has no DNS
 record, the proxy Helm release is uninstalled, and no start/reset audit entries
 appear after `CUTOVER_UTC`.
 
-After the fleet is empty, open a separate privacy-reviewed change to sweep the
-retired Firestore `agentVm`/migration/late-cleanup state and only then remove
-`agent_vm_account_cleanup.py`. That change is deliberately not part of live
-infrastructure teardown.
+## Phase 4: sweep the retired Firestore state
+
+Run this only after Phase 3 step 10 reports zero instances and zero disks. The
+records below are inert — nothing in `main` reads them — but they keep the
+account-deletion cleanup path alive, so they go before that path is retired.
+
+`backend/scripts/sweep_agent_vm_firestore.py` removes, per target:
+
+| Target | What it deletes |
+| --- | --- |
+| `users` | `users/{uid}.agentVm`, plus the legacy no-writer scalars `restartFailures`, `lastRestartFailureAt`, `lastQueryAt` |
+| `migrations` | every `users/{uid}/agentVmMigrations` document |
+| `markers` | `account_deletions/{uid}.late_agent_vm_cleanup` |
+| `leases` | the standalone `agent_vm_reconciler_leases` collection |
+
+`--project` is required: the run never inherits an ambient project. The client
+is bound to that project through the Firebase app's `projectId` option. The
+printed client project confirms that binding; it does not independently prove
+the operator selected the right project, the credentials' home project, or that
+deployed writers are gone. Verify the intended target and retirement evidence
+separately. A defensive check refuses an unexpected SDK client binding before
+any read or write. Every receipt line names the
+project and separates `queued` batch operations from `committed` ones, so a
+failed batch shows up as `failed_ops`/`failed_batches` and the run exits
+non-zero with `INCOMPLETE` instead of looking successful.
+
+Receipts also report `scan_complete` (the selected query was exhausted) and
+`complete` (exhaustion plus acknowledged commits). Reaching `--limit`, including
+an exact-size cap, leaves the scan incomplete and exits 1. A zero-match capped
+sample is not proof of absence. `TOTAL` covers only the selected targets.
+The cap bounds inspected snapshots, not RPC prefetch or billed reads.
+
+The script is a dry run unless `--apply` is passed, prints aggregate counts
+only (never uids or VM names), and is idempotent. Run it from the backend
+directory with the separately admitted operator's approved ADC configuration
+(for example, `GOOGLE_APPLICATION_CREDENTIALS` or workload identity). This
+standalone script does not load the backend's `SERVICE_ACCOUNT_JSON` itself;
+verify the intended principal and project before scanning:
+
+```bash
+cd backend
+python scripts/sweep_agent_vm_firestore.py --project based-hardware                       # dry run, all targets
+python scripts/sweep_agent_vm_firestore.py --project based-hardware --target users --limit 100  # diagnostic; may exit 1
+python scripts/sweep_agent_vm_firestore.py --project based-hardware --apply               # execute
+```
+
+A run with `failed_batches>0` or `scan_complete=0` is incomplete. Limited runs
+are diagnostic only. Retirement proof requires an unlimited all-four-target
+verification, exit 0, and `scan_complete=1 complete=1` for every target and TOTAL.
+
+Expected dry-run shape at hand-off (2026-11-10): `users` matched 9,366;
+`migrations`, `markers`, and `leases` matched 0. Re-run the dry run after
+`--apply`, without `--limit` or a target subset; every target must report
+`matched=0 failed_batches=0 scan_complete=1 complete=1` (alongside its other counters).
+
+Blast radius: deletes only the four retired record shapes. Migration deletions
+are restricted to the exact `users/{uid}/agentVmMigrations/{document}` path;
+same-named collections under other parents or deeper paths are left untouched.
+No user content, conversation, memory, or account-deletion status/wipe field is
+touched; only its retired `late_agent_vm_cleanup` field is removed. Rollback is not
+possible — the records are not backed up — but they have no reader, so there is
+nothing to restore for.
+
+Only after this sweep reports zero may `agent_vm_account_cleanup.py` and the
+late-cleanup helpers be removed. That removal ships in the same change as this
+script; merge it after the sweep has been applied.

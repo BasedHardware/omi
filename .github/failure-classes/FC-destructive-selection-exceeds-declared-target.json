@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-destructive-selection-exceeds-declared-target",
+  "violated_contract": "A destructive sweep must admit only the exact document paths its operation declares. Membership in a same-named collection group does not establish that the document belongs to the declared parent or depth; deleting every query result can destroy unrelated state.",
+  "canonical_prevention": "Check the complete relative document path before counting a destructive match or queuing a delete. Keep behavioral coverage that mixes valid target paths with root-level, foreign-parent, deeper nested and malformed same-name paths, asserting only the valid targets are matched and written in both dry-run and apply modes.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sweep_agent_vm_firestore.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/scripts/sweep_agent_vm_firestore.py",
+    "backend/docs/runbooks/cloud-agent-vm-infrastructure-retirement.md"
+  ],
+  "status": "open"
+}

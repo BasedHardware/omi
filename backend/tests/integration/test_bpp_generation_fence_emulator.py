@@ -102,7 +102,6 @@ WRITERS = [
     'ownership_cas',
     'account_marker_create',
     'account_marker_complete',
-    'account_marker_late_cleanup',
     'grace_intent',
     'grace_promote',
     'grace_actions_complete',
@@ -144,7 +143,7 @@ def test_actual_writer_rotates_token_in_source_commit_and_revalidates(world, mon
     if writer in {'ownership_cas', 'admission_ownership'}:
         w.source.update({'record_lane_owner': firestore.DELETE_FIELD})
         w.user.update({'private_cloud_sync_enabled': False})
-    if writer in {'account_marker_complete', 'account_marker_late_cleanup'}:
+    if writer == 'account_marker_complete':
         w.client.document(f'account_deletions/{w.uid}').set({'wipe_status': 'cancelled'})
     if writer in {'recording_delete', 'hard_delete', 'sync_merge', 'smart_merge'}:
         w.source.update({'deleted': True, 'sync_merged_into': 'target'})
@@ -237,11 +236,6 @@ def test_actual_writer_rotates_token_in_source_commit_and_revalidates(world, mon
         elif writer == 'account_marker_complete':
             ref = w.client.document(f'account_deletions/{w.uid}')
             assert account_deletion_transitions.mark_wipe_completed(w.client.transaction(), ref)
-            denial = 'account_deleted'
-        elif writer == 'account_marker_late_cleanup':
-            ref = w.client.document(f'account_deletions/{w.uid}')
-            ref.update({'wipe_status': 'pending'})
-            assert account_deletion_transitions.record_late_agent_vm_cleanup(w.client.transaction(), ref, 'vm', 'zone')
             denial = 'account_deleted'
         elif writer.startswith('grace_'):
             result = account_deletion_grace.mark_user_deletion_grace_intent(

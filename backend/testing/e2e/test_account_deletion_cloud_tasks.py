@@ -170,7 +170,6 @@ def _stub_external_deletion_boundaries(monkeypatch) -> None:
     # semantics; creator-app erasure is covered by the focused unit test.
     monkeypatch.setattr(user_data_deletion, "search_apps_db", lambda _uid, my_apps: [])
     monkeypatch.setattr(account_deletion, "delete_user_caller_ids", lambda _uid: None)
-    monkeypatch.setattr(account_deletion, "delete_agent_vm_for_account", lambda _uid: None)
     monkeypatch.setattr(account_deletion, "delete_account_credentials", lambda _uid: None)
 
 

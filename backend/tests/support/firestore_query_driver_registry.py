@@ -536,8 +536,6 @@ _add(
     )
 )
 
-_add(DriverEntry('database.account_deletion_transitions.read_agent_vm_migration_journals', base={'uid': UID}))
-
 _add(
     DriverEntry(
         'database.conversation_deletion_feed.get_deleted_conversations_page',

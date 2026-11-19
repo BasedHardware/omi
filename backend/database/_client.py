@@ -254,7 +254,7 @@ def get_firestore_client() -> Any:
 def _build_customer_firestore_client() -> Any:
     """Identity, subscription, and usage — production customer project.
 
-    Compute-local state (``agentVm``, GCE) keeps using ``get_firestore_client()``
+    Compute-local state (GCE) keeps using ``get_firestore_client()``
     so development Cloud Run ADC can stay on ``based-hardware-dev``.
     """
     if os.environ.get("FIRESTORE_EMULATOR_HOST"):
@@ -297,7 +297,7 @@ def _build_data_plane_firestore_client() -> Any:
     project explicitly so ADC can be pinned to it instead of silently
     resolving to the compute project's empty Firestore.
 
-    Compute-local state (``agentVm``, GCE) must keep using
+    Compute-local state (GCE) must keep using
     ``get_firestore_client()`` directly rather than this seam.
     """
     if os.environ.get("FIRESTORE_EMULATOR_HOST"):

@@ -32,9 +32,7 @@ from database.account_deletion_policy import (
     deletion_wipe_retry_delay,
 )
 from database.account_deletion_transitions import (
-    adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
     mark_wipe_completed as _mark_user_deletion_wipe_completed_txn,
-    record_late_agent_vm_cleanup as _record_late_agent_vm_cleanup_txn,
 )
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.firestore_retry import FIRESTORE_NO_RETRY
@@ -531,7 +529,7 @@ def mark_user_deletion_wipe_started(uid: str, wipe_job_id: str) -> bool:
 
 @cache_writer('deletion_marker_cache')
 def mark_user_deletion_wipe_completed(uid: str) -> bool:
-    """Complete the wipe only if no provider cleanup remains outstanding."""
+    """Mark the background data wipe completed."""
     client = account_deletion_firestore_client()
     return _mark_user_deletion_wipe_completed_txn(
         client.transaction(), account_deletion_document(uid, firestore_client=client)
@@ -549,67 +547,6 @@ def mark_user_deletion_wipe_failed(uid: str):
         },
         merge=True,
     )
-
-
-@cache_writer('deletion_marker_cache')
-def record_late_agent_vm_cleanup(
-    uid: str,
-    vm_name: str,
-    zone: str,
-    expected_instance_id: str | None = None,
-) -> bool:
-    """Persist a late VM only when an admitted deletion owns its cleanup."""
-    client = account_deletion_firestore_client()
-    doc_ref = account_deletion_document(uid, firestore_client=client)
-    return _record_late_agent_vm_cleanup_txn(
-        client.transaction(),
-        doc_ref,
-        vm_name,
-        zone,
-        expected_instance_id,
-    )
-
-
-def get_late_agent_vm_cleanup(uid: str) -> dict[str, str] | None:
-    """Return a late-created VM that must be retried independently of user data."""
-    snapshot = account_deletion_document(uid).get()
-    data = snapshot.to_dict() or {}
-    pending = data.get('late_agent_vm_cleanup') if snapshot.exists else None
-    if not isinstance(pending, dict):
-        return None
-    vm_name = pending.get('vmName')
-    zone = pending.get('zone')
-    if not isinstance(vm_name, str) or not vm_name or not isinstance(zone, str) or not zone:
-        return None
-    result = {'vmName': vm_name, 'zone': zone}
-    expected_instance_id = pending.get('expectedInstanceId')
-    if expected_instance_id is not None:
-        if (
-            not isinstance(expected_instance_id, str)
-            or not expected_instance_id.isascii()
-            or not expected_instance_id.isdigit()
-        ):
-            raise RuntimeError('late Agent VM cleanup instance identity is malformed')
-        result['expectedInstanceId'] = expected_instance_id
-    return result
-
-
-@cache_writer('deletion_marker_cache')
-def adopt_legacy_late_agent_vm_cleanup(uid: str, vm_name: str, zone: str, expected_instance_id: str) -> bool:
-    """CAS-upgrade a pre-instance-ID cleanup record before provider deletion."""
-    client = account_deletion_firestore_client()
-    doc_ref = account_deletion_document(uid, firestore_client=client)
-    return _adopt_legacy_late_agent_vm_cleanup_txn(client.transaction(), doc_ref, vm_name, zone, expected_instance_id)
-
-
-@cache_writer('deletion_marker_cache')
-def clear_late_agent_vm_cleanup(uid: str, vm_name: str) -> None:
-    """Clear a late-VM retry record only after its matching GCE instance is gone."""
-    doc_ref = account_deletion_document(uid)
-    snapshot = doc_ref.get()
-    pending = (snapshot.to_dict() or {}).get('late_agent_vm_cleanup') if snapshot.exists else None
-    if isinstance(pending, dict) and pending.get('vmName') == vm_name:
-        doc_ref.update({'late_agent_vm_cleanup': firestore.DELETE_FIELD})
 
 
 @transactional
@@ -2327,22 +2264,6 @@ def get_user_transcription_preferences(uid: str) -> dict:
     # It includes only transcription startup preferences and language. It does not
     # include entitlement, BYOK, data-protection, or privacy-consent fields.
     return get_or_fetch(_USER_TRANSCRIPTION_PREFS_CACHE, uid, fetch_preferences)
-
-
-def get_agent_vm(uid: str) -> Optional[dict]:
-    """Get the user's agent VM info from Firestore.
-
-    Returns:
-        Dict with VM details (ip, auth_token, status, etc.) or None if no VM.
-    """
-    user_ref = db.collection('users').document(uid)
-    user_doc = user_ref.get()
-
-    if user_doc.exists:
-        user_data = user_doc.to_dict()
-        return user_data.get('agentVm')
-
-    return None
 
 
 def set_user_transcription_preferences(uid: str, single_language_mode: bool = None, vocabulary: list = None) -> None:

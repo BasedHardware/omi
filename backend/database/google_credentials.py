@@ -87,7 +87,7 @@ def customer_entitlement_service_account() -> tuple[Any, str] | None:
     Listen/Python set ``SERVICE_ACCOUNT_JSON`` and pin every Firestore client.
     Development desktop-backend mounts that same SA only at
     ``FIREBASE_AUTH_CREDENTIALS_PATH`` so Cloud Run ADC stays on
-    ``GOOGLE_CLOUD_PROJECT`` (GCE / ``agentVm``). Quota, usage, and
+    ``GOOGLE_CLOUD_PROJECT`` (GCE). Quota, usage, and
     subscription reads must still use the SA's ``project_id``. A keyless
     desktop-backend (neither variable set) pins ADC to
     ``OMI_FIRESTORE_DATA_PLANE_PROJECT`` instead, returning ``(None, project)``.

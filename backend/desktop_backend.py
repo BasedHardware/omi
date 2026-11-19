@@ -49,7 +49,7 @@ from utils.desktop_loop_watchdog import DesktopLoopWatchdog, InFlightRequestsMid
 def _initialize_firebase_admin() -> None:
     """Initialize token verification without selecting the Google data project.
 
-    Development serves production Firebase identities. Compute (GCE / ``agentVm``)
+    Development serves production Firebase identities. Compute (GCE)
     stays on Cloud Run ADC / ``GOOGLE_CLOUD_PROJECT``. Customer entitlements
     (plan, usage, quota) use the mounted Auth SA file's ``project_id`` via
     ``get_customer_firestore_client()`` and must not retarget ADC.
