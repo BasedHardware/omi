@@ -12222,7 +12222,7 @@
     "monthlySwitchDoneTitle": "Сега плаќате месечно",
     "monthlySwitchDoneBody": "Денес платено {price}. Се обновува месечно.",
     "processingDeleteScopeChanged": "Списокот за обработка се промени. Прегледајте го и обидете се повторно.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Ги искористивте {minutes} минути за овој месец",
     "freeCapBody": "Omi сè уште снима. Изберете како да продолжи транскрипцијата.",
     "omiProPlanName": "Omi Pro",
@@ -12250,5 +12250,6 @@
     "onTheWayServerWork": "Работа пријавена од серверот",
     "finishNothingToProcess": "Сè уште нема ништо за обработка.",
     "finishStillProcessing": "Сè уште се обработува. Ќе се појави на почетната.",
-    "finishBackToHome": "Назад кон почетна"
+    "finishBackToHome": "Назад кон почетна",
+    "conversationSummaryWhenItEnds": "Резиме кога ќе заврши овој разговор"
 }

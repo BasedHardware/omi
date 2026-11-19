@@ -93,6 +93,18 @@
   ],
   "dynamic": [
     {
+      "site": "backend/scripts/sweep_stranded_artifact_receipts.py",
+      "expression": "f'{namespace}_artifacts'",
+      "collection_pattern": "batch_pipeline_*_artifacts",
+      "owner": "SCA-2283 margin-40 historical cleanup",
+      "unit": "one capped initial dry run across both artifact namespaces",
+      "reads_per_unit_budget": 10000,
+      "reads_per_day_budget": 10000,
+      "basis": "planning-bound",
+      "source": "SCA-2283 DESIGN: OK approves one initial dry-run pass at up to 10000 reads and ten scanned rows per second. The CLI counts receipt query rows and up to three point reads per eligible signature. Each separately authorized apply chunk requires an explicit run read cap, accounts for four additional reads per selected receipt, and stops on budget, end of scan, erasure cap, or unexpected error. This is a one-time operator tool with no recurring schedule.",
+      "reviewed": "2026-11-19"
+    },
+    {
       "site": "backend/database/jobstore/reconcile.py",
       "expression": "f'{primary.namespace}_{table}'",
       "collection_pattern": "batch_pipeline_*_*",

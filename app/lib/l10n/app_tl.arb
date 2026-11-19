@@ -12222,7 +12222,7 @@
     "monthlySwitchDoneTitle": "Buwanan ka na",
     "monthlySwitchDoneBody": "Nabayaran ang {price} ngayon. Nire-renew buwan-buwan.",
     "processingDeleteScopeChanged": "Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Nagamit mo na ang {minutes} minuto ngayong buwan",
     "freeCapBody": "Nagre-record pa rin ang Omi. Piliin kung paano magpapatuloy ang transcription.",
     "omiProPlanName": "Omi Pro",
@@ -12250,5 +12250,6 @@
     "onTheWayServerWork": "Trabahong iniulat ng server",
     "finishNothingToProcess": "Wala pang ipoproseso.",
     "finishStillProcessing": "Pinoproseso pa. Lalabas ito sa Home.",
-    "finishBackToHome": "Bumalik sa Home"
+    "finishBackToHome": "Bumalik sa Home",
+    "conversationSummaryWhenItEnds": "Buod kapag natapos ang usapang ito"
 }

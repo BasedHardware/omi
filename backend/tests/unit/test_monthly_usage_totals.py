@@ -151,6 +151,25 @@ def test_free_and_paid_allowance_remain_identical_through_real_resolver(monkeypa
     after = subscription.resolve_transcription_allowance('u', subscription=member, byok_active=False)
     assert after.as_dict() == before.as_dict()
     assert after.reason in {'plan_within_allowance', 'plan_allowance_exhausted'}
+    reads = store.reads
+    probe = subscription.resolve_transcription_allowance(
+        'u', subscription=member, byok_active=False, ready_usage_only=True
+    )
+    assert probe == after
+    assert store.reads == reads + 1
+
+
+def test_intake_meter_miss_never_rebuilds_or_scans(monkeypatch):
+    store = seeded_month()
+    store.docs['users/u/monthly_usage_totals/2026-10']['ready'] = False
+    monkeypatch.setattr(user_usage, 'db', store)
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"usage_month_total":100}')
+    rebuild = Mock(side_effect=AssertionError('non-spend probe cannot rebuild'))
+    monkeypatch.setattr(totals, '_rebuild', rebuild)
+
+    assert user_usage.get_ready_monthly_usage_stats_since('u', NOW, NOW.replace(day=1)) is None
+    assert store.reads == 1 and store.writes == 0
+    rebuild.assert_not_called()
 
 
 @pytest.mark.parametrize('once', [False, True])

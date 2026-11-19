@@ -4665,7 +4665,7 @@
     "monthlySwitchDoneTitle": "أصبحت على الدفع الشهري",
     "monthlySwitchDoneBody": "تم دفع {price} اليوم. يتجدد شهريًا.",
     "processingDeleteScopeChanged": "تغيّرت قائمة المعالجة. راجع القائمة وحاول مرة أخرى.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "لقد استخدمت {minutes} دقيقة هذا الشهر",
     "freeCapBody": "لا يزال Omi يسجّل. اختر كيف تواصل التفريغ.",
     "omiProPlanName": "Omi Pro",
@@ -4693,5 +4693,6 @@
     "onTheWayServerWork": "عمل أبلغ عنه الخادم",
     "finishNothingToProcess": "لا يوجد شيء لمعالجته بعد.",
     "finishStillProcessing": "لا تزال المعالجة جارية. ستظهر على الشاشة الرئيسية.",
-    "finishBackToHome": "العودة إلى الرئيسية"
+    "finishBackToHome": "العودة إلى الرئيسية",
+    "conversationSummaryWhenItEnds": "الملخص عند انتهاء هذه المحادثة"
 }

@@ -15532,7 +15532,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15625,4 +15625,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Terug naar Home';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Samenvatting wanneer dit gesprek eindigt';
 }

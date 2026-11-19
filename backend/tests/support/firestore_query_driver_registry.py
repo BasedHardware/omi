@@ -46,7 +46,7 @@ from tests.support.firestore_review_query_drivers import registry_extension as o
 from tests.support.firestore_dream_query_drivers import registry_extension as dream_drivers
 from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRIVER
 from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
-from tests.support.firestore_allowance_hold_drivers import entries as allowance_hold_entries, StoreArgument
+from tests.support.firestore_allowance_hold_drivers import entries as allowance_hold_entries
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
 from tests.support.firestore_home_feed_drivers import entries as home_feed_entries
 from tests.support.firestore_composer_default_context_drivers import entries as composer_default_context_entries
@@ -158,7 +158,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
-    'database.batch_pipeline_conversation_purge_scans._claim': '8bd1a47728de848c4fd6bee2490705b21465536f0b431315a5f0f14bb5851b81',
+    'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
@@ -268,8 +268,9 @@ BODY_DIGEST = {
     'database.jobstore.backfill._pages': 'b4170ee77666433d35e0d46a3ea23eed96930160fca3b84b9ffb4810c321b94f',
     'database.jobstore.backfill.backfill': '4b979526157be71d49595ebc54f6c01eb5fd307279b245e07907a5dc86fe8ad8',
     'database.jobstore.backfill.backfill_table': '4ee7bc177237443422fcd2fbef51e7dde2d6841f20751b26fa6b943d39824343',
-    # Reviewed 2026-11-18: bounded serving rotation; query helper driven below, callbacks add only PG SQL.
-    'database.jobstore.reconcile.process_page': '3566a8c6c32bd741726fab3eb915f2a39a6a5c5dfe3b4c353eadab2ef2425244',
+    # Reviewed 2026-11-15: bounded reconcile-page operator CLI, not a serving caller.
+    'database.jobstore.reconcile._primary_keys': '47158c3d453cda1ca78ea73d191f342a72e677bb2012ac67ee0c172f4e673cc8',
+    'database.jobstore.reconcile.process_page': '0a7c1c343f8a0397e152558629477f9d0127e9e10a73fa829c7863d7209a0eea',
     'database.pinecone_partition_state._uncertain_mutations_are_deletes': '6b08a953074c2ae24cc1cf503ee5ae2e32049b62d3446e11248d5f72253b162d',
     'database.pinecone_partition_state.uncertain_mutations_are_deletes': '49b0052e3a4aeb004ae9680393cd599fe972e1716ec3089a9ac163c445c6d384',
 }
@@ -3307,7 +3308,7 @@ _add(
     DriverEntry(
         'database.monthly_usage_totals.read_monthly_totals',
         base={'uid': UID, 'date': T0},
-        domains={'start_date': [None, T0]},
+        domains={'start_date': [None, T0], 'ready_only': [False, True]},
         setup=_monthly_total_user,
         patchers=(
             _stub('database.monthly_usage_totals.lever_enabled', True),
@@ -4389,57 +4390,21 @@ for _key, _reason in (
         'database.jobstore.backfill.backfill',
         'Lane 12 A6 staging backfill: loops backfill_table per table; no query of its own.',
     ),
+    (
+        'database.jobstore.reconcile._primary_keys',
+        'Bounded reconcile-page operator CLI only, never serving: one batch collection page ordered by '
+        'document id, optional document-id start_after, and explicit limit; bounded RPC with retries disabled. '
+        'No filters or composite index; built-in document-id ordering only.',
+    ),
+    (
+        'database.jobstore.reconcile.process_page',
+        'Bounded reconcile-page operator CLI only: orchestrates the pinned _primary_keys helper for primary '
+        'discovery or a limited PG key page, then exact-key primary get_all rereads. No additional Firestore '
+        'query shape; row/read/statement/deadline budgets and commit-only cursor checked by '
+        'tests/unit/test_jobstore_reconcile.py.',
+    ),
 ):
     _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))
-
-
-# The bounded source page is now reachable from the supervised serving tick,
-# so exercise every table/cursor shape rather than keeping an operator-only skip.
-class _JobstorePageBudget:
-    def __deepcopy__(self, memo):
-        from database.jobstore.reconcile import _Budget, PageCounts
-
-        return _Budget(3, 20, 500, PageCounts())
-
-
-_add(
-    DriverEntry(
-        'database.jobstore.reconcile._primary_keys',
-        base={'primary': StoreArgument('batch_pipeline_prod')},
-        domains={
-            'table': [
-                'jobs',
-                'queues',
-                'owners',
-                'control',
-                'results',
-                'gpus',
-                'intakes',
-                'artifacts',
-                'allowance_holds',
-                'pull_claims',
-                'merge_holds',
-            ],
-            'after': [None, 'cursor'],
-        },
-        neutrals={
-            'limit': (10, 'bounded page size; no filter/index effect'),
-            'budget': (_JobstorePageBudget(), 'RPC timeout/read cap only; fresh budget supplied per trial'),
-        },
-    )
-)
-_add(
-    CoveredByEntry(
-        'database.jobstore.reconcile.process_page',
-        covered_by=('database.jobstore.reconcile._primary_keys',),
-        reason='Serving-hosted bounded rotation/CLI share the driven document-id page. '
-        'Copy-source discovery is SQL; fresh get_all uses exact document references. '
-        'Cursor load/advance callbacks run in the same PG transaction and add no Firestore shape. '
-        'Row/read/SQL/deadline budgets remain tested in test_jobstore_reconcile.py.',
-        expect_observed=False,
-        body_digest=BODY_DIGEST['database.jobstore.reconcile.process_page'],
-    )
-)
 
 
 # Transparent raw-snapshot transport: the callers above continue to own every

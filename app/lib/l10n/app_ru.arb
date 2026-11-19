@@ -4700,7 +4700,7 @@
     "monthlySwitchDoneTitle": "Теперь вы платите ежемесячно",
     "monthlySwitchDoneBody": "Сегодня оплачено {price}. Продлевается ежемесячно.",
     "processingDeleteScopeChanged": "Список обработки изменился. Проверьте его и попробуйте снова.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Вы использовали {minutes} минут этого месяца",
     "freeCapBody": "Omi продолжает запись. Выберите, как продолжить расшифровку.",
     "omiProPlanName": "Omi Pro",
@@ -4728,5 +4728,6 @@
     "onTheWayServerWork": "Работа по данным сервера",
     "finishNothingToProcess": "Пока нечего обрабатывать.",
     "finishStillProcessing": "Ещё обрабатывается. Появится на главной.",
-    "finishBackToHome": "На главную"
+    "finishBackToHome": "На главную",
+    "conversationSummaryWhenItEnds": "Сводка появится, когда разговор закончится"
 }

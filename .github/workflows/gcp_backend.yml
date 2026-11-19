@@ -286,6 +286,7 @@ jobs:
           # Traffic repair changes no source-derived runtime state. It stays a
           # separate recovery path and does not consume a release proof.
           ref: main
+          fetch-depth: 0
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C,
       # plan v2 Phase E). Development keeps its JSON lane.
@@ -311,10 +312,12 @@ jobs:
 
       - name: Restore Cloud Run traffic spec to currently serving revisions
         run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           python3 backend/scripts/repair_cloud_run_traffic.py \
             --project=${{ vars.GCP_PROJECT_ID }} \
             --region=${{ env.REGION }} \
-            --repair
+            --repair \
+            --release-floor-check .github/scripts/verify_backend_release_floor.py
 
       - name: Cloud Run deploy status report
         if: always()
@@ -390,6 +393,8 @@ jobs:
             echo "ERROR: release_sha is not an ancestor of origin/main; only merged code may deploy."
             exit 1
           fi
+
+          python3 .github/scripts/verify_backend_release_floor.py --sha "$DEPLOY_SHA"
 
           if [[ "${SKIP_PROOF:-false}" == "true" ]]; then
             if [[ "$BREAK_GLASS_CONFIRM" != "deploy-without-proof" ]]; then

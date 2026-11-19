@@ -31,6 +31,9 @@ def fresh(row):
 
 
 def summary_eligible(row):
+    if row.get('processing_tier') == 'historical':
+        # Historical rows summarize only through POST .../summary/open (its caps and gates).
+        return False
     return not row.get('v3_derived') or (
         row.get('kind') not in {'media', 'background'}
         and (

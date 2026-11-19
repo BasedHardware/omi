@@ -4,7 +4,7 @@ Production GMP exports each application metric through exactly one of two
 PodMonitoring resources. The existing job retains 15s collection for privacy,
 audio custody/compression guards, record-token guards, freshness timestamps,
 WebSocket HPA gauges, and application metrics read by GMP paging rules. Its
-`-bulk` companion exports the complement at 60s. Development retains its single
+`-bulk` companion exports the complement at 120s. Development retains its single
 15s scrape. Neither application pods nor the local Prometheus configuration
 change. No family, histogram bucket, or application label is removed.
 
@@ -17,7 +17,101 @@ prefer `max without(job)` when deduplicating a counter across old/new jobs;
 wait for an entire query window after old series become stale before comparing
 rates. Do not sum both identities across the cutover and call the result traffic.
 
-## Consumer audit, 2026-11-17
+## 120s bulk follow-up
+
+The November 19 read-only audit reviewed 37 Cloud Monitoring policies, one
+Cloud Monitoring dashboard, 269 Grafana rules, 50 Grafana dashboards, and the
+source alert and dashboard definitions. Fallback and STT routing rules and
+panels use local Prometheus. The four live GMP Firestore rules that query
+caller-attributed reads keep their 15s GKE inputs. The backend Cloud Run
+sidecars use 60s scrapes. For ad-hoc rate queries on the two GMP bulk jobs, use a window of at
+least 8m to include multiple scrapes with room for jitter.
+
+### Release-owner rollout
+
+Confirm both existing bulk endpoints use 60s. Record their live specs and
+target counts. From the release owner’s authorized GKE context, change just
+the interval on the two bulk resources. The JSON Patch test protects against
+overwriting a different live interval.
+
+```bash
+set -euo pipefail
+CONTEXT=gke_based-hardware_us-central1_prod-omi-gke
+for name in prod-omi-backend-listen-bulk prod-omi-pusher-bulk; do
+  kubectl --context "$CONTEXT" -n prod-omi-backend patch podmonitoring "$name" \
+    --type=json -p='[
+      {"op":"test","path":"/spec/endpoints/0/interval","value":"60s"},
+      {"op":"replace","path":"/spec/endpoints/0/interval","value":"120s"}
+    ]'
+done
+```
+
+This change requires no pod roll. If only one patch succeeds, read both live
+intervals before resuming or rolling back. To restore 60s on a changed endpoint,
+swap `60s` and `120s` in the patch. Render subsequent releases with
+`--set-string podMonitoring.bulkInterval=60s` for both charts while rollback is
+in force. Keep the bulk resources and their job names.
+
+Verify `up == 1` for each target and compare
+`count_over_time(up{job=~"prod-omi-(backend-listen|pusher)(-bulk)?"}[30m])` over a
+full new-state window. Expected counts per stable target are about 15 for bulk
+and 120 for primary. Confirm the local STT alerts and dashboards have data and
+the GMP Firestore caller queries still return data at 15s. Compare caller,
+origin and other label coverage at comparable traffic.
+
+### Billing readback
+
+On the November 18 transition day, production billing showed 1.324B samples
+at $71.48, down from 2.277B and $122.93 on November 16. The export totals across
+production and development were $75.08 and $124.96. Pusher had split by the
+start of November 18 UTC. Listen joined by 08:00 UTC. Compare complete days on
+each cadence after export settles.
+
+Run the per-metric attribution query at the UTC midnight ending each day. Run
+it with `attribution_id="__run__"` for the Cloud Run comparison. Use the
+cluster dimension once so namespace attribution does not double the count.
+
+```promql
+sum by (metric_type) (
+  increase(monitoring_googleapis_com:collection_attribution_write_sample_count{
+    attribution_dimension="cluster",
+    attribution_id="prod-omi-gke",
+    metric_type=~"prometheus.googleapis.com/(omi_(fallback_total|stt_cost_routing_(ignored_deaths|settlements)_total|firestore_billed_reads(_by_caller|_by_origin)?_total)/counter|omi_episode_compose_seconds/histogram)"
+  }[24h])
+)
+```
+
+Billed SKU totals come from the billing export. Set `@before_day` and
+`@after_day` to the two complete UTC days being compared.
+
+```sql
+SELECT DATE(usage_start_time) AS day, usage.pricing_unit AS unit,
+  SUM(usage.amount_in_pricing_units) AS billed_samples,
+  ROUND(SUM(cost + IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) AS c), 0)), 2) AS net_usd
+FROM `based-hardware.gcp_billing_export.gcp_billing_export_resource_v1_01B287_9348DC_02D256`
+WHERE DATE(usage_start_time) IN (@before_day, @after_day)
+  AND project.id = 'based-hardware'
+  AND service.description = 'Cloud Monitoring'
+  AND sku.description = 'Prometheus Samples Ingested'
+GROUP BY 1, 2 ORDER BY 1, 2
+```
+
+Over the full 60s window ending November 19 at 10:26 UTC, cluster attribution
+reported 1.172B samples across GKE and Cloud Run. Of these, 330.65M came from
+44 high-volume scalar families seen only on bulk targets in the GKE census.
+Halving their cadence projects about 165M fewer samples and $8.93/day in
+additional savings at the observed $0.054 per million billed samples. The
+model gives about 1.007B samples/day and $54.36/day overall, around $68.57
+below November 16 in production. This uses collection attribution as a billing proxy and
+excludes histogram and shared families from the projected reduction. Compare
+the gathered samples and billing export before claiming savings.
+
+## Initial 60s split
+
+The remaining sections record the original release from one 15s job to two jobs.
+Use the 120s follow-up above when the split already serves.
+
+### Consumer audit, 2026-11-17
 
 Audited source: public Omi main `c94d892461bf` plus this change. Literal metric
 searches covered `backend/charts`, `backend/deploy`, `backend/docs`,
@@ -57,7 +151,7 @@ Do not make eager counters lazy in this change: fallback initialization explicit
 allows `increase()` to see the first burst. An emitter change would also require
 an image rollout on the live audio path and separate review/qualification.
 
-## Sizing and price basis
+### Sizing and price basis
 
 Measurements: 2026-11-17 04:08Z exposition census, with separate histogram-count
 queries at 04:12Z (GMP aliases can collapse `_count` with the `+Inf` bucket in an
@@ -114,7 +208,7 @@ the prior sample bill, but does not prove a hard $60 floor under changing pod
 counts. A lower monthly marginal tier would lower the dollars further.
 **No saving is claimed until a settled billing day.**
 
-## Release-owner apply and rollback
+### Release-owner apply and rollback
 
 No deploy/apply/merge was performed by the implementer. The release owner applies
 only PodMonitoring. Do **not** run a full listen/pusher Helm upgrade to apply this
@@ -133,10 +227,12 @@ kubectl --context "$CONTEXT" -n prod-omi-backend get podmonitoring \
   prod-omi-backend-listen prod-omi-pusher -o json > "$RECORD/before.json"
 helm template prod-omi-backend-listen backend/charts/backend-listen \
   -n prod-omi-backend -f backend/charts/backend-listen/prod_omi_backend_listen_values.yaml \
-  --set-string image.tag=render-only --show-only templates/podmonitoring.yaml > "$RECORD/listen.yaml"
+  --set-string image.tag=render-only --set-string podMonitoring.bulkInterval=60s \
+  --show-only templates/podmonitoring.yaml > "$RECORD/listen.yaml"
 helm template prod-omi-pusher backend/charts/pusher \
   -n prod-omi-backend -f backend/charts/pusher/prod_omi_pusher_values.yaml \
-  --set-string image.tag=render-only --show-only templates/podmonitoring.yaml > "$RECORD/pusher.yaml"
+  --set-string image.tag=render-only --set-string podMonitoring.bulkInterval=60s \
+  --show-only templates/podmonitoring.yaml > "$RECORD/pusher.yaml"
 backend/.venv/bin/python - "$RECORD" <<'PY'
 import copy, json, sys
 from pathlib import Path

@@ -4665,7 +4665,7 @@
     "monthlySwitchDoneTitle": "Teraz platíte mesačne",
     "monthlySwitchDoneBody": "Dnes zaplatené {price}. Obnovuje sa mesačne.",
     "processingDeleteScopeChanged": "Zoznam spracovania sa zmenil. Skontrolujte ho a skúste to znova.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Využili ste tohtomesačných {minutes} minút",
     "freeCapBody": "Omi stále nahráva. Vyberte, ako pokračovať v prepise.",
     "omiProPlanName": "Omi Pro",
@@ -4693,5 +4693,6 @@
     "onTheWayServerWork": "Práca hlásená serverom",
     "finishNothingToProcess": "Zatiaľ nie je čo spracovať.",
     "finishStillProcessing": "Stále sa spracúva. Zobrazí sa na domovskej stránke.",
-    "finishBackToHome": "Späť domov"
+    "finishBackToHome": "Späť domov",
+    "conversationSummaryWhenItEnds": "Zhrnutie po skončení tohto rozhovoru"
 }

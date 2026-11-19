@@ -4700,7 +4700,7 @@
     "monthlySwitchDoneTitle": "Artık aylık ödüyorsunuz",
     "monthlySwitchDoneBody": "Bugün {price} ödendi. Her ay yenilenir.",
     "processingDeleteScopeChanged": "İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Bu ayın {minutes} dakikasını kullandınız",
     "freeCapBody": "Omi kayda devam ediyor. Transkripsiyona nasıl devam edileceğini seçin.",
     "omiProPlanName": "Omi Pro",
@@ -4728,5 +4728,6 @@
     "onTheWayServerWork": "Sunucunun bildirdiği işler",
     "finishNothingToProcess": "Henüz işlenecek bir şey yok.",
     "finishStillProcessing": "Hâlâ işleniyor. Ana sayfada görünecek.",
-    "finishBackToHome": "Ana Sayfaya Dön"
+    "finishBackToHome": "Ana Sayfaya Dön",
+    "conversationSummaryWhenItEnds": "Bu konuşma bittiğinde özet"
 }

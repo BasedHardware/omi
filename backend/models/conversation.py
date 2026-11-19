@@ -526,6 +526,11 @@ class Conversation(BaseModel):
     v3_process_pending: SkipJsonSchema[Optional[bool]] = None
     v3_rewrites: SkipJsonSchema[Optional[int]] = None
     backfilled: SkipJsonSchema[Optional[bool]] = None
+    # Server-authored at create, never changed: old backfill (T1+, config/historical_tier.py)
+    # carries a transcript and deterministic title; its summary runs only on open.
+    processing_tier: Optional[Literal['historical']] = None
+    # Read projection, never stored: open this row through POST .../summary/open.
+    summary_on_open: Optional[bool] = None
 
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
@@ -665,6 +670,9 @@ class Conversation(BaseModel):
             data.pop('processing_deferred', None)
         if self.home_step is None:
             data.pop('home_step', None)
+        for name in ('processing_tier', 'summary_on_open'):
+            if getattr(self, name) is None:
+                data.pop(name, None)
         if info.mode == 'python' and self.owner_recognition_diagnostics:
             excluded = info.exclude or ()
             included = info.include

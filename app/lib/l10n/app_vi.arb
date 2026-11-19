@@ -4665,7 +4665,7 @@
     "monthlySwitchDoneTitle": "Bạn đã chuyển sang trả theo tháng",
     "monthlySwitchDoneBody": "Đã thanh toán {price} hôm nay. Gia hạn hằng tháng.",
     "processingDeleteScopeChanged": "Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Bạn đã dùng hết {minutes} phút của tháng này",
     "freeCapBody": "Omi vẫn đang ghi âm. Chọn cách tiếp tục chép lời.",
     "omiProPlanName": "Omi Pro",
@@ -4693,5 +4693,6 @@
     "onTheWayServerWork": "Công việc do máy chủ báo cáo",
     "finishNothingToProcess": "Chưa có gì để xử lý.",
     "finishStillProcessing": "Vẫn đang xử lý. Nó sẽ xuất hiện ở Trang chủ.",
-    "finishBackToHome": "Về Trang chủ"
+    "finishBackToHome": "Về Trang chủ",
+    "conversationSummaryWhenItEnds": "Bản tóm tắt khi cuộc trò chuyện này kết thúc"
 }
