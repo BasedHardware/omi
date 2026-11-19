@@ -39,6 +39,8 @@ from scripts.runtime_env_validation.common import (
     data_plane_project,
 )
 
+RUNTIME_ENV_COMPOSITES = ('deploy-backend-stack', 'deploy-projection-pump')
+
 
 def _composite_step_active_for_caller(nested_step: ConfigDict, caller_with: ConfigDict) -> bool:
     """Skip composite steps gated on inputs.mode when the caller uses another mode."""
@@ -287,7 +289,8 @@ def _backend_deploy_stack_composite_steps(workflow: ConfigDict, *, workflow_root
         if step is None:
             continue
         uses = step.get('uses')
-        if not isinstance(uses, str) or 'deploy-backend-stack' not in uses:
+        # deploy-projection-pump (SCA-3120) renders the same manifest in its own runtime-env step.
+        if not isinstance(uses, str) or not any(name in uses for name in RUNTIME_ENV_COMPOSITES):
             continue
         action = _load_local_composite_action(uses, workflow_root=workflow_root)
         if action is None:

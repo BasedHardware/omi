@@ -2144,6 +2144,30 @@ overlay:
             value: 'true'
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+      # SCA-3120: dedicated projection pump, prod only (never dev, auto-dev or staging).
+      # Deployed only by gcp_backend.yml cloud_run_service=backend-projection-pump through
+      # .github/actions/deploy-projection-pump; `all` keeps the four services above.
+      # Starts from backend-integration's composed contract (env, secrets incl. the
+      # SONIOX_API_KEY that main.py's validate_streaming_stt_env requires, identity,
+      # forbidden_env, --timeout) and overrides only the keys below. Ships dark: both
+      # batch loops off, so only the unconditional main.py startup tasks run.
+      # Ramp and rollback: docs/listen_pusher_pipeline/changes/2026-11-19-projection-pump-deploy-target.md.
+      backend-projection-pump:
+        derive_from: backend-integration
+        env:
+          # Kill switches stay off on first deploy. Enable the pump on this service only,
+          # never on backend-integration (the selector is service-wide). Rollback: 'false'.
+          BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'false', category: rollout}
+          # Bundle (ii) safe start: one page per tick, 2 s post-work sleep, 8 owner drains.
+          BATCH_PIPELINE_PUMP_SWEEP_PAGES: {value: '1', category: rollout}
+          BATCH_PIPELINE_PUMP_TICK_SECONDS: {value: '2', category: rollout}
+          BATCH_PIPELINE_MAX_OWNER_DRAINS: {value: '8', category: rollout}
+          # Bill this service's Firestore reads to itself, not to backend-integration.
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: backend-projection-pump
+          # Independent language recovery stays on the recovery role (backend-integration) only.
+          BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'false', category: ops_kill}
     jobs:
       notifications-job:
         flags:
