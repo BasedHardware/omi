@@ -44,7 +44,7 @@ class Doc:
     def parent(self):
         return Collection(self.store, self.path.rsplit('/', 1)[0])
 
-    def get(self, field_paths=None, transaction=None):
+    def get(self, field_paths=None, transaction=None, *, timeout=None, retry=None):
         if transaction is not None and getattr(transaction, 'pending', []):
             raise RuntimeError('Firestore transactions must read before writing')
         self.store.reads += 1

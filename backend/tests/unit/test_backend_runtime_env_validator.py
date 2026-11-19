@@ -23,6 +23,12 @@ from scripts.runtime_env_validation.manifest import (
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/validate-backend-runtime-env.py'
 RENDERER_SCRIPT = ROOT / 'scripts/render_backend_runtime_env.py'
+ALLOWANCE_INTAKE_PARK_BY_SERVICE = {
+    'backend': 'false',
+    'backend-sync': 'true',
+    'backend-sync-backfill': 'false',
+    'backend-integration': 'true',
+}
 READINESS_PROPOSAL_ARGS = (
     ' --proposal-output "$FIRESTORE_PROPOSAL_PATH"'
     ' --source-commit "$FIRESTORE_SOURCE_COMMIT"'
@@ -677,10 +683,18 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
-    # Carry each host's explicit ledger bindings.
+    # Carry the role-specific intake switch and explicit ledger bindings.
     payload = re.sub(
         r'("(?P<service>backend(?:-sync|-sync-backfill|-integration)?)":\s*\{.*?"env":\s*\[)',
         lambda match: match.group(1)
+        + '\n        '
+        + json.dumps(
+            {
+                'name': 'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED',
+                'value': ALLOWANCE_INTAKE_PARK_BY_SERVICE[match.group('service')],
+            }
+        )
+        + ','
         + '\n        '
         + json.dumps({'name': 'FIRESTORE_READ_LEDGER', 'value': '1'})
         + ',\n        '
@@ -4046,6 +4060,17 @@ def test_read_lever_unknown_declaration_is_rejected_from_actual_source_files(tmp
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_allowance_intake_parking_is_bound_only_to_upload_roles(environment, monkeypatch):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    state = render_cloud_run_state(config, monkeypatch)
+    rendered = {
+        service: [entry['value'] for entry in target['env'] if entry['name'] == 'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED']
+        for service, target in state['services'].items()
+    }
+    assert rendered == {service: [value] for service, value in ALLOWANCE_INTAKE_PARK_BY_SERVICE.items()}
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_post_seal_controls_are_rendered_on_every_cpu_reader(environment):
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='record_latency_renderer')
@@ -4191,6 +4216,13 @@ def test_control_sync_routing_validates_deployed_values_without_changing_manifes
 
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    # Exercise each validation against the same parsed input without reparsing
+    # the full fleet manifest on every call.
+    monkeypatch.setattr(
+        manifest_validation,
+        '_load_yaml',
+        lambda path: manifest if path == validator.DEFAULT_MANIFEST else validator._load_yaml(path),
+    )
     config = validator._get_env_config(manifest, 'prod')
     original = copy.deepcopy(config)
     overlay = tmp_path / 'routing.env'

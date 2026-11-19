@@ -279,7 +279,7 @@ Stage 1 never deletes or rewrites audio or sidecars. Its adoption proof does not
 license deletion: a local ring receipt, empty index or transport label cannot
 supply server confirmation. The separate [stranded-orphan reclaim](#stranded-orphan-reclaim)
 exception applies only to complete-census, entirely unreferenced audio with both
-clocks older than 45 days, under David’s explicit ruling.
+clocks older than 67 days (`orphanReclaimAgeSeconds`), under David’s explicit ruling.
 
 The ledger's explicit foreground resume/15-minute recovery pass runs only after
 startup admission finishes; headless workers skip it. The shared read-only
@@ -301,8 +301,13 @@ file-bound server receipt for a rowless orphan.
 The local-only classifier assigns working (`.part`, `.torn`, `omibatch*`,
 `omimobilebatch*`), unparseable, owner_unknown, expired or recoverable. A complete
 mono filename and strict complete length-prefixed frames establish capture time
-and duration. Automatic recovery requires a plausible capture time within 28
-days, leaving two days inside the server's 30-day admission window. Older audio
+and duration. Automatic recovery requires a plausible capture time within 58
+days (`orphanRecoveryWindowSeconds`), leaving two days inside the server's 60-day
+production admission window (`serverSyncLookbackSeconds`, mirroring
+`SYNC_BACKFILL_MAX_AGE_SECONDS` since #25677). A dev build against a 30-day dev
+server adopts 30–58-day orphans that the server then refuses; the row stays held
+as `outsideRecoveryWindow` and its audio is retained, so that mismatch only costs
+a refused request. Older audio
 stays on disk. Unknown, missing or foreign owners in any custody source, including legacy
 pending-file/job preferences, prevent
 single-owner proof; at least one index/memory row must prove the current owner.
@@ -336,7 +341,7 @@ stable hash of the original basename, keeping same-second/fractional/collision
 files separate in playback/share caches and upload attempts. Source filenames,
 device and capture time stay intact. Existing rows retain their legacy ids. Recovery publishes `heldRevision` after its batched save so an open
 recordings view refreshes. Manual upload uses the existing ledger/uploader;
-if the server rejects a later attempt after 30 days, the existing
+if the server rejects a later attempt past its lookback, the existing
 `outsideRecoveryWindow` status is persisted, the held row stays visible as
 failed, and every audio byte remains retained until explicit user deletion.
 
@@ -410,7 +415,7 @@ surfaced as its held rows; `owner_unknown` remains an aggregate diagnostic.
 
 David's 2026-11-17 ruling item 2 (recorded in chat in
 `omi-workspace/data/run-2026-11-17-pendant-diag/ruling-2026-11-17-orphans.md`)
-is the authority for the [INV-CAP-1 exception](../../../../product/invariants/pendant-audio-retention.md#explicit-exception-stranded-orphan-audio-older-than-45-days).
+is the authority for the [INV-CAP-1 exception](../../../../product/invariants/pendant-audio-retention.md#explicit-exception-stranded-orphan-audio-older-than-67-days).
 Only `LocalWalSyncImpl`'s `wal_orphan_reclaim.dart` may apply it, foreground-only,
 after admission. Existing paced recovery wakes invoke reclaim after recovery settles;
 there is no startup census, separate timer, uploader or UI.
@@ -419,7 +424,14 @@ A complete #25573 census reserves every file named by every current/backup/tmp/q
 index generation, live/retired/foreign/held memory row, ring checkpoint/download receipt,
 batch journal, native owner receipt and legacy file/job preference. Working `.part`,
 `.torn`, `omibatch` and `omimobilebatch` files stay intact. The filename capture time
-and mtime must both be strictly older than 45 days; ambiguous clocks and files outside
+and mtime must both be strictly older than 67 days: the 60-day server lookback plus the
+7-day `margin_days` of `backend/deploy/storage-lifecycle/retention_contract.json`, so reclaim
+never deletes audio the server would still admit or recovery could still adopt. All three
+ages derive from `serverSyncLookbackSeconds` in `orphan_audio_classifier.dart`, and a test
+fails if the reclaim age is not strictly beyond the recovery window plus that margin. The
+2026-11-17 ruling set 45 days on a 30-day lookback; David's 2026-11-18 decision (item 2,
+`omi-workspace/data/run-2026-11-18-support-packet/decisions.md`) replaces that premise.
+Ambiguous clocks and files outside
 Documents stay intact. The deletion predicate is independent of single-owner adoption
 proof: multiple accounts do not prohibit reclaim, but any account's reference does.
 

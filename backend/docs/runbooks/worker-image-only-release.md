@@ -28,7 +28,7 @@ python3 .github/scripts/worker_image_only.py inventory > worker-baseline.json
 
 The inventory emits only target UID/image/spec hash and shared-image consumer
 bindings, never environment values or a private Deployment snapshot. It reads
-Deployments, StatefulSets, DaemonSets, Jobs and CronJobs in the named namespace,
+Deployments, StatefulSets, DaemonSets, Jobs, CronJobs and HorizontalPodAutoscalers in the named namespace,
 including init containers and suspended record-seal jobs. No new permissions
 are installed: unavailable reads fail closed. Review the inventory against the
 release packet, including `record-seal-worker`, repair/sweeper CronJobs and any
@@ -40,7 +40,7 @@ All discovered sibling templates must remain on their admitted identities,
 images and spec hashes. The worker alone moves. An active T4 fallback or required
 companion must already have the candidate image or this mode refuses before the
 write; a release requiring a joint roll needs a separately admitted carrier.
-Job creation/deletion, autoscaling or a config change may invalidate the packet;
+A config change (other than the tolerated autoscaling and CronJob history below) invalidates the packet;
 refresh and re-admit it instead of retrying blindly. The namespace inventory is
 not a claim about consumers in other namespaces or systems: reconcile those in
 the existing shared-artifact release gate before dispatch.
@@ -71,6 +71,24 @@ Sibling reads and the target patch are not a multi-object transaction: existing
 prod-train serialization remains necessary, and post-roll verification also
 refuses sibling drift. The workflow waits for the existing rollout/status gates,
 then compares the target spec hash and all sibling bindings again.
+
+### Autoscaling and CronJob history (2026-11-19)
+
+Identity hashes exclude `.spec.replicas` only on the two HPA-scaled Deployments (the worker and
+record-seal-worker); the operator-scaled T4 and every other workload keep it bound. The inventory
+omits Jobs whose controller is a CronJob in the same namespace read and whose worker images equal
+that CronJob's jobTemplate (CronJob run history). The CronJob itself stays bound, so
+a jobTemplate or image change still refuses. Everything else still fails closed: any image or
+digest change, a changed object UID, any other spec field, a standalone Job or a Job whose
+controller CronJob is absent. An activated T4 fallback (containers and init containers) is checked
+directly on the early read, the final pre-write read and at verify. The admission dry-run and the CAS write still compare the whole spec, replicas
+included, because they act on the object just read. Receipts written before this change hash the
+full spec and no longer match; take a fresh inventory and forward receipt. A pre-change receipt
+cannot drive the rollback path: to return to its recorded prior digest, dispatch that digest with
+its merged source SHA as a forward preserve-live roll from a fresh inventory (no rollback receipt);
+the image-tree check, source floor and all other gates still apply. The replica exclusion also
+requires exactly one live HPA (minReplicas >= 1) targeting each of the two Deployments in the
+same read; those HPAs are bound by UID and spec hash, so removing or retargeting one refuses.
 
 ## Verification and rollback custody
 
