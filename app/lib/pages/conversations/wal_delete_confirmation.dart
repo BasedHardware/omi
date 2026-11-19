@@ -5,7 +5,7 @@ import 'package:omi/services/wals/wal.dart';
 /// Which confirmation a delete on Offline Sync gets.
 ///
 /// Deleting an uploaded recording that the server has not transcribed also cancels and erases its
-/// server job (`LocalWalSyncImpl.deleteWal`, `DELETE /v2/sync-local-files/{job_id}`), so that
+/// server job (`LocalWalSyncImpl.deleteWal`, `cancelSyncJob`), so that
 /// confirmation says the server copy goes too ([AppLocalizations.deleteFromServerMessage]).
 ///
 /// While the server's owner-cancel kill switch is off ([ServerCancelPause]), the delete still
