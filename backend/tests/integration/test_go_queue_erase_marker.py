@@ -22,7 +22,6 @@ def test_go_queue_erase_receipt_requires_held_due_generation(monkeypatch):
     uid = uuid4().hex
     db = firestore.Client(project=f'demo-erase-{uid[:10]}', credentials=AnonymousCredentials())
     monkeypatch.setattr(receipts, 'account_deletion_firestore_client', lambda: db)
-    monkeypatch.setattr(receipts, 'account_deletion_collection', lambda: db.collection('account_deletions'))
     ref = db.collection('account_deletions').document(uid)
     try:
         ref.set({'wipe_job_id': 'job', 'wipe_status': 'running'})
@@ -46,7 +45,9 @@ def test_go_queue_erase_receipt_requires_held_due_generation(monkeypatch):
         marker = ref.get().to_dict()
         assert marker[receipts.ARMED_AT] <= marker[receipts.RECEIPT_AT] <= marker[receipts.WIPE_AT]
         assert marker[receipts.PATH] == 'workerd'
-        assert receipts.readback(datetime.now(timezone.utc) + timedelta(minutes=16)) == {
+        assert receipts.readback(
+            datetime.now(timezone.utc) + timedelta(minutes=16), db.collection('account_deletions')
+        ) == {
             'met': 1,
             'eligible': 1,
             'overdue_pending': 0,

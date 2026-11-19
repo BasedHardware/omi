@@ -9,7 +9,6 @@ from google.cloud.firestore_v1 import transactional
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database.account_deletion_marker import (
-    account_deletion_collection,
     account_deletion_document,
     account_deletion_firestore_client,
 )
@@ -90,9 +89,8 @@ def summarize(now: datetime, markers) -> dict[str, int]:
     return {'met': good, 'eligible': total, 'overdue_pending': overdue}
 
 
-def readback(now: datetime) -> dict[str, int]:
+def readback(now: datetime, collection) -> dict[str, int]:
     """Read aggregate evidence from the authoritative marker collection."""
-    collection = account_deletion_collection()
     cutoff = now - ERASE_DEADLINE
     recent = (
         collection.where(filter=FieldFilter(ARMED_AT, '>=', now - timedelta(days=7)))

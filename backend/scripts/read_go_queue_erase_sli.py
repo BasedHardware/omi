@@ -3,11 +3,12 @@
 from datetime import datetime, timezone
 import json
 
+from database.account_deletion_marker import account_deletion_collection
 from database.go_queue_erase import readback
 
 
 def main() -> None:
-    result = readback(datetime.now(timezone.utc))
+    result = readback(datetime.now(timezone.utc), account_deletion_collection())
     eligible = result['eligible']
     print(
         json.dumps(
