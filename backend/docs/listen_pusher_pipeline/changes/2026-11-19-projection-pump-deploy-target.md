@@ -30,11 +30,14 @@ change adds the target. It does not run a deploy, and it does not enable the pum
   `--no-allow-unauthenticated` and no invoker binding. It uses the same runtime service account, VPC and
   network flags as `backend-integration`.
   - The new `scripts/verify_projection_pump_shape.py` reads back the shape before any traffic moves:
-    ingress, the public-member IAM check, fixed 4/4, always-allocated CPU, timeout, and the dark env.
+    ingress, the public-member IAM check, fixed 4/4, always-allocated CPU, timeout, and the env.
+    It refuses `BATCH_PIPELINE_SERVING_ENABLED` other than `false` and `OMI_PROCESS_ROLE` other than
+    `projection_pump` unconditionally. The pump flag and the ledger name must match the rendered manifest.
 - **Env.** The manifest declares `backend-projection-pump: derive_from: backend-integration` in
   `deploy/runtime_env/prod.overlay.yaml`. `compose_runtime_env.py` expands it after the base and overlay
   merge, so the pump tracks every later change to integration's prod env.
-  - Overrides: `BATCH_PIPELINE_SERVING_ENABLED=false`, `BATCH_PIPELINE_PROJECTION_PUMP_ENABLED=false`,
+  - Overrides: `OMI_PROCESS_ROLE=projection_pump` (see Startup isolation),
+    `BATCH_PIPELINE_SERVING_ENABLED=false`, `BATCH_PIPELINE_PROJECTION_PUMP_ENABLED=false`,
     `BATCH_PIPELINE_PUMP_SWEEP_PAGES=1`, `BATCH_PIPELINE_PUMP_TICK_SECONDS=2`,
     `BATCH_PIPELINE_MAX_OWNER_DRAINS=8`, `FIRESTORE_READ_LEDGER_SERVICE=backend-projection-pump` and
     `BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED=false`.
@@ -62,6 +65,73 @@ change adds the target. It does not run a deploy, and it does not enable the pum
   - Add `cloud_run.backend-projection-pump` to `ops/prod.yaml` in the first config change after the dark
     deploy has been read back. From then on, the ops file owns the bounds.
 
+## Startup isolation
+
+Without a gate, `main.py` `startup_event` starts every reconciler, refresher and consumer on every process.
+The pump is deployed only when someone selects it, so it can stay on an older SHA than the trains for any
+length of time. An old-code pump instance could then win a deletion, purge or finalization lease.
+
+- **Gate.** `config/process_role.py` reads `OMI_PROCESS_ROLE`, and `startup_event` resolves it first. The
+  set of values is closed:
+  - unset or `all`: today's full startup, in today's order, for every existing service;
+  - `projection_pump`: set only on `backend-projection-pump` in `prod.overlay.yaml`;
+  - any other value: startup fails with `ProcessRoleConfigError`.
+- **Independence.** The role is separate from `OMI_ROLE`, which selects routers, and from the batch kill
+  switches. Turning `BATCH_PIPELINE_PROJECTION_PUMP_ENABLED` off stops the pump loops, but it does not bring
+  the reconcilers back.
+- **Contradictory config fails closed.** Under the pump role, `BATCH_PIPELINE_SERVING_ENABLED=true` fails
+  startup.
+- **Defense in depth.** `_run_fsr_loop` returns `{}` under the pump role before it takes any lease. A later
+  caller therefore cannot bring a reconciler back onto the pump.
+
+What the pump keeps, in startup order:
+
+| Kept | Why |
+| --- | --- |
+| `start_metrics_sidecar_server` | The GMP sidecar scrapes the pump's success and tick gauges from it |
+| `refresh_stt_cap_cohort_forever` | The projector's assignment path consults the STT cap cohort (`projection.py` `cap_dispatch_enabled`); this is a read-only cache poller |
+| `start_serving_from_env()` | Selects the pump loops (`projection_pump`, `drain_upload_holds`, and the outbox supervisor when its switch is on), or nothing while the pump flag is off |
+| `validate_account_deletion_dispatch_configuration`, `validate_streaming_stt_env` | Kept so the pump's env and secret contract is unchanged in this change |
+| `log_executor_health` | Executor saturation is one of the ramp metrics |
+| `retry_settled_composes` | The projector enqueues episode transcript receipts into a process-local queue, and only this task drains it. Skipping it would strand them (10k cap, then drop) |
+
+What the pump skips:
+
+| Skipped | Why |
+| --- | --- |
+| `start_mutations` and the Pinecone shutdown-drain install | The projection path writes no Pinecone vectors |
+| `start_adapters` (messaging) | The pump serves no webhooks and must not run a second `recover_pending` drainer |
+| `live_stt_health.refresh_forever`, `batch_pressure.start_from_env` | Only live-STT paths read them |
+| Held-content cohort refresh | Only the budget-choice HTTP route reads it |
+| Soniox usage poller | It is vendor usage reporting that the projector does not use |
+| Startup and periodic `_run_fsr_loop` reconcilers: pending deletion wipes, listen finalization jobs, stale processing and stale in-progress conversations, abandoned BYOK finalization, conversation batch purges | These are privacy and custody work. An old-SHA pump must never hold their lease |
+| Durable queue-age publisher | Already opt-in per service, and it is leased through `_run_fsr_loop` |
+| `proactive_message_dispatcher` | It forwards Pub/Sub to this process's WebSocket sessions, and the pump has none |
+
+`shutdown_event` is unchanged. On the pump it skips the unset app state, drains an empty Pinecone registry,
+stops a batch-pressure poller that never started, and has no lease token to release.
+`tests/unit/test_process_role_startup.py` pins the exact task sets for the default role, the dark pump and the
+active pump. It also covers unknown roles, serving on the pump, the lease bypass, shutdown and `OMI_ROLE`
+independence.
+
+Not isolated yet:
+
+- **Import-time work** is unchanged on the pump: `validate_stripe_price_ids`, Firebase init and the rollout
+  runtime binding.
+- **The secret set** is unchanged. The pump still inherits integration's secrets, because both startup
+  validators still run. Trimming them is a separate change.
+- **Mounted routers** are unchanged. `OMI_ROLE` is unset, so every router is mounted. Internal ingress and no
+  invoker are the boundary.
+
+**Rollback.** Unset `OMI_PROCESS_ROLE` on the pump through the manifest and a pump deploy. That restores full
+startup, including every reconciler election, so do not leave the service running in that state. Stop the
+pump flag and delete the service instead.
+
+**Owner check before the dark deploy.** The deletion, purge and finalization owners and lead2 are asked to
+confirm that the four train services still cover each of these reconcilers: deletion wipes, listen
+finalization, stale processing and stale in-progress conversations, BYOK abandonment, and batch purges. The
+pump no longer competes for any of them.
+
 ## Ramp plan
 
 | Step | Who expands | Clean metric to hold | Rollback |
@@ -76,10 +146,11 @@ Rollback order at any step: serving sweep back on first, then the pump flag off,
 
 ## Hazards
 
-- **Leader leases on startup.** `main.py` startup tasks run unconditionally, and they are leader-leased.
-  Four pump instances join every lease election, for example `upload_coalescing_scan` once the pump flag runs
-  `drain_upload_holds`. In the dark deploy, verify the lease-contention counters and that lease holders stay on
-  their current services.
+- **Leader leases on startup.** With `OMI_PROCESS_ROLE=projection_pump` the pump joins no FSR reconciler
+  election (see Startup isolation). It still joins the batch leases its own loops take, for example
+  `upload_coalescing_scan` once the pump flag runs `drain_upload_holds`. In the dark deploy, verify that
+  `omi_fsr_leader_lease_total` shows no acquisitions from pump revisions and that lease holders stay on their
+  current services.
 - **Flag flips do not survive a train.** A runtime flip (such as bundle (iii-b)'s `gcloud run services update
   --update-env-vars`) lasts only until the next pump deploy re-renders the manifest value. Put every flip in
   `prod.overlay.yaml`.

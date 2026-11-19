@@ -2150,11 +2150,16 @@ overlay:
       # Starts from backend-integration's composed contract (env, secrets incl. the
       # SONIOX_API_KEY that main.py's validate_streaming_stt_env requires, identity,
       # forbidden_env, --timeout) and overrides only the keys below. Ships dark: both
-      # batch loops off, so only the unconditional main.py startup tasks run.
+      # batch loops off. OMI_PROCESS_ROLE=projection_pump keeps main.py startup to the
+      # pump's set (no FSR reconcilers, messaging or cohort pollers); see config/process_role.py.
       # Ramp and rollback: docs/listen_pusher_pipeline/changes/2026-11-19-projection-pump-deploy-target.md.
       backend-projection-pump:
         derive_from: backend-integration
         env:
+          # Startup isolation, independent of the pump flag: stopping the pump keeps the
+          # reconcilers off. Never unset here while the service runs (unset = full startup).
+          OMI_PROCESS_ROLE:
+            value: projection_pump
           # Kill switches stay off on first deploy. Enable the pump on this service only,
           # never on backend-integration (the selector is service-wide). Rollback: 'false'.
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}

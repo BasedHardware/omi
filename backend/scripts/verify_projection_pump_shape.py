@@ -5,8 +5,9 @@ Offline evaluation of a ``gcloud run services describe --format=json`` document
 and its ``get-iam-policy`` document, written by the deploy-projection-pump
 composite before traffic moves. It fails when the service is reachable from
 outside the VPC, has any invoker, is not fixed at four always-allocated 2 vCPU /
-4Gi instances, or its candidate revision does not carry the dark batch settings the
-rendered runtime manifest declares. It never calls a cloud API itself.
+4Gi instances, or its candidate revision does not carry the projection-pump process role
+and the dark batch settings the rendered runtime manifest declares. It never calls a
+cloud API itself.
 """
 
 from __future__ import annotations
@@ -24,9 +25,11 @@ CPU_LIMIT = '2'
 MEMORY_LIMIT = '4Gi'
 INVOKER_ROLE = 'roles/run.invoker'
 PUBLIC_MEMBERS = frozenset({'allUsers', 'allAuthenticatedUsers'})
-# The pump must never run the serving loops; the pump flag and ledger identity follow the manifest.
-ALWAYS_FALSE_ENV = ('BATCH_PIPELINE_SERVING_ENABLED',)
-MANIFEST_ENV = ('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'FIRESTORE_READ_LEDGER_SERVICE')
+PROCESS_ROLE = 'projection_pump'
+# Unconditional: the pump never runs the serving loops, and its startup is always the pump's
+# isolated set (config/process_role.py). Only the pump flag and ledger identity follow the manifest.
+FIXED_ENV = {'BATCH_PIPELINE_SERVING_ENABLED': 'false', 'OMI_PROCESS_ROLE': PROCESS_ROLE}
+MANIFEST_ENV = ('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'FIRESTORE_READ_LEDGER_SERVICE', 'OMI_PROCESS_ROLE')
 
 
 def _mapping(value: object) -> Mapping[str, Any]:
@@ -106,14 +109,16 @@ def evaluate(
     env = _ingress_env(template_spec)
     if not env:
         errors.append('candidate revision has no unambiguous application container env')
-    for name in ALWAYS_FALSE_ENV:
-        if env.get(name) != 'false':
-            errors.append(f'{name} must be false on {SERVICE}')
+    for name, value in FIXED_ENV.items():
+        if env.get(name) != value:
+            errors.append(f'{name} must be {value!r} on {SERVICE}')
     for name, value in manifest_env.items():
         if env.get(name) != value:
             errors.append(f'{name} must match the rendered manifest value {value!r}')
     if manifest_env.get('FIRESTORE_READ_LEDGER_SERVICE') != SERVICE:
         errors.append(f'rendered FIRESTORE_READ_LEDGER_SERVICE must be {SERVICE}')
+    if manifest_env.get('OMI_PROCESS_ROLE') != PROCESS_ROLE:
+        errors.append(f'rendered OMI_PROCESS_ROLE must be {PROCESS_ROLE}')
     return errors
 
 
@@ -137,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f'ERROR [{SERVICE}]: {error}', file=sys.stderr)
     if not errors:
         print(
-            f'{SERVICE}: internal ingress, no public invoker, fixed {FIXED_INSTANCES}/{FIXED_INSTANCES}, dark contract'
+            f'{SERVICE}: internal ingress, no public invoker, fixed {FIXED_INSTANCES}/{FIXED_INSTANCES}, pump role, dark contract'
         )
     return 1 if errors else 0
 

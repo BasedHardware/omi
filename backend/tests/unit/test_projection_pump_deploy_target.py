@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 import runpy
 import subprocess
 from pathlib import Path
@@ -38,6 +39,7 @@ DARK_OVERRIDES = {
     'BATCH_PIPELINE_PUMP_TICK_SECONDS': '2',
     'BATCH_PIPELINE_MAX_OWNER_DRAINS': '8',
     'FIRESTORE_READ_LEDGER_SERVICE': 'backend-projection-pump',
+    'OMI_PROCESS_ROLE': 'projection_pump',
 }
 
 
@@ -279,6 +281,10 @@ def test_rendered_pump_env_is_dark_and_keeps_only_the_required_secrets(prod_stat
     assert shape.expected_env(state) == {
         'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED': 'false',
         'FIRESTORE_READ_LEDGER_SERVICE': PROJECTION_PUMP,
+        'OMI_PROCESS_ROLE': 'projection_pump',
+    }
+    assert 'OMI_PROCESS_ROLE' not in {
+        entry['name'] for entry in state['services']['backend-integration']['env'] if 'value' in entry
     }
     secret_names = {entry['name'] for entry in pump['env'] if 'value' not in entry}
     integration = state['services']['backend-integration']
@@ -370,6 +376,7 @@ def _live(**changes):
                                 {'name': 'BATCH_PIPELINE_SERVING_ENABLED', 'value': 'false'},
                                 {'name': 'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'value': 'false'},
                                 {'name': 'FIRESTORE_READ_LEDGER_SERVICE', 'value': PROJECTION_PUMP},
+                                {'name': 'OMI_PROCESS_ROLE', 'value': 'projection_pump'},
                                 {'name': 'SONIOX_API_KEY', 'valueFrom': {'secretKeyRef': {'name': 'x'}}},
                             ],
                         },
@@ -384,7 +391,11 @@ def _live(**changes):
     return service
 
 
-MANIFEST_ENV = {'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED': 'false', 'FIRESTORE_READ_LEDGER_SERVICE': PROJECTION_PUMP}
+MANIFEST_ENV = {
+    'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED': 'false',
+    'FIRESTORE_READ_LEDGER_SERVICE': PROJECTION_PUMP,
+    'OMI_PROCESS_ROLE': 'projection_pump',
+}
 PRIVATE = {'bindings': [{'role': 'roles/run.viewer', 'members': ['serviceAccount:x@y.iam.gserviceaccount.com']}]}
 
 
@@ -410,6 +421,14 @@ def _set_env(name, value):
     return mutate
 
 
+def _drop_env(name):
+    def mutate(service):
+        container = service['spec']['template']['spec']['containers'][0]
+        container['env'] = [entry for entry in container['env'] if entry['name'] != name]
+
+    return mutate
+
+
 def _set_limit(name, value):
     return lambda s: s['spec']['template']['spec']['containers'][0]['resources']['limits'].__setitem__(name, value)
 
@@ -427,6 +446,9 @@ def _set_limit(name, value):
         (_set_env('BATCH_PIPELINE_SERVING_ENABLED', 'true'), 'BATCH_PIPELINE_SERVING_ENABLED'),
         (_set_env('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'true'), 'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED'),
         (_set_env('FIRESTORE_READ_LEDGER_SERVICE', 'backend-integration'), 'FIRESTORE_READ_LEDGER_SERVICE'),
+        (_set_env('OMI_PROCESS_ROLE', 'all'), 'OMI_PROCESS_ROLE'),
+        (_set_env('OMI_PROCESS_ROLE', ''), 'OMI_PROCESS_ROLE'),
+        (_drop_env('OMI_PROCESS_ROLE'), 'OMI_PROCESS_ROLE'),
         (lambda s: s['spec']['template']['spec']['containers'].append({'name': 'extra'}), 'application container'),
         (_set_limit('cpu', '1'), 'limits'),
         (_set_limit('memory', '2Gi'), 'limits'),
@@ -455,6 +477,15 @@ def test_shape_readback_refuses_a_manifest_that_names_another_ledger():
     assert any('rendered FIRESTORE_READ_LEDGER_SERVICE' in error for error in _evaluate(service, env=env))
 
 
+def test_shape_readback_refuses_a_manifest_without_the_pump_role():
+    for value in ('', 'all'):
+        env = {**MANIFEST_ENV, 'OMI_PROCESS_ROLE': value}
+        service = _live(m=_set_env('OMI_PROCESS_ROLE', value))
+        errors = _evaluate(service, env=env)
+        assert any('rendered OMI_PROCESS_ROLE' in error for error in errors), errors
+        assert any("OMI_PROCESS_ROLE must be 'projection_pump'" in error for error in errors), errors
+
+
 def test_shape_readback_cli_exit_codes(tmp_path, prod_state):
     state = prod_state
     (tmp_path / 'state.json').write_text(json.dumps(state))
@@ -475,3 +506,24 @@ def test_shape_readback_cli_exit_codes(tmp_path, prod_state):
     assert shape.main(argv) == 1
     (tmp_path / 'state.json').write_text('{}')
     assert shape.main(argv) == 1
+
+
+# --- base revision naming -------------------------------------------------------------------
+
+BASE_REVISION = 'backend-projection-pump-${{ steps.image-tag.outputs.revision_suffix }}-base'
+
+
+def _step_named(name):
+    return next(s for s in PUMP_ACTION['runs']['steps'] if s.get('name') == name)
+
+
+def test_deploy_pin_and_sidecar_steps_name_the_same_base_revision():
+    deploy = _deploy_step()
+    suffix = BASE_REVISION.removeprefix(f'{deploy["with"]["service"]}-')
+    assert deploy['with']['flags'].startswith(f'--revision-suffix={suffix} ')
+    pin = _step_named('Pin a newly created projection pump service to its base revision')
+    assert f'--to-revisions="{BASE_REVISION}=100"' in pin['run']
+    attach = _step_named('Attach revision-aware Managed Prometheus to the projection pump candidate')
+    assert f'--base-revision="{BASE_REVISION}"' in attach['run']
+    text = (ROOT / '.github/actions/deploy-projection-pump/action.yml').read_text()
+    assert set(re.findall(r'backend-projection-pump-\$\{\{[^}]*\}\}-base', text)) == {BASE_REVISION}

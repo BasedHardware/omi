@@ -420,8 +420,9 @@ runs:
         [[ "$actual" == "$expected" ]] || { echo 'Candidate source stamp mismatch: backend-projection-pump' >&2; exit 1; }
 
     # Read back the access and shape this service must never lose: internal ingress, no
-    # allUsers/allAuthenticatedUsers binding, fixed 4/4, CPU always allocated, both loops dark
-    # unless a reviewed manifest change turned them on.
+    # allUsers/allAuthenticatedUsers binding, fixed 4/4, CPU always allocated,
+    # OMI_PROCESS_ROLE=projection_pump and BATCH_PIPELINE_SERVING_ENABLED=false (both refused
+    # unconditionally). Only the pump flag and the ledger name follow the rendered manifest.
     - name: Verify projection pump ingress, invoker and fixed shape
       shell: bash
       env:
