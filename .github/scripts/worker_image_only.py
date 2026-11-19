@@ -29,29 +29,44 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-# Controller-owned fields that change without any release action. HorizontalPodAutoscalers own
-# .spec.replicas on the worker and on record-seal-worker; identity hashes exclude only that field,
-# so image, UID and every other spec change still refuses.
-AUTOSCALED_KINDS = ("Deployment", "StatefulSet")
+# HorizontalPodAutoscalers own .spec.replicas on exactly these Deployments (chart-defined), so
+# identity hashes exclude that one field for them only. Every other workload, including the
+# operator-scaled T4 fallback, keeps its replica count bound; image, UID and any other spec change
+# still refuses.
+HPA_DEPLOYMENTS = frozenset({TARGET, "record-seal-worker"})
 
 
 def identity_spec(obj):
     spec = copy.deepcopy(obj["spec"])
-    if obj["kind"] in AUTOSCALED_KINDS:
+    if obj["kind"] == "Deployment" and obj["metadata"].get("name") in HPA_DEPLOYMENTS:
         spec.pop("replicas", None)
     return spec
 
 
-def cronjob_history(obj, cronjob_uids):
-    """A Job whose controller is a CronJob in the same read is that CronJob's run history.
+def worker_images(spec):
+    return {
+        (field, c.get("name")): c.get("image", "")
+        for field in ("containers", "initContainers")
+        for c in spec.get(field, [])
+        if c.get("image", "").startswith(REPOSITORY)
+    }
+
+
+def cronjob_history(obj, cronjobs):
+    """A Job whose controller is a CronJob in the same read, running that CronJob's current worker
+    images, is that CronJob's run history.
 
     The CronJob itself stays bound (its jobTemplate is hashed), so a template or image change
-    still refuses. Jobs with no controller, or a controller absent from the read, stay bound.
+    still refuses. Jobs with no controller, a controller absent from the read, or worker images
+    that differ from the owner's jobTemplate stay bound.
     """
     if obj["kind"] != "Job":
         return False
     owners = [r for r in obj["metadata"].get("ownerReferences", []) if r.get("controller")]
-    return len(owners) == 1 and owners[0].get("kind") == "CronJob" and owners[0].get("uid") in cronjob_uids
+    if len(owners) != 1 or owners[0].get("kind") != "CronJob" or not owners[0].get("uid"):
+        return False
+    owner = cronjobs.get(owners[0].get("uid"))
+    return owner is not None and worker_images(pod_spec(obj)) == worker_images(pod_spec(owner))
 
 
 def kubectl(*args):
@@ -94,7 +109,7 @@ def target_state(obj):
 
 def consumers(items):
     bindings = []
-    cronjob_uids = {o["metadata"].get("uid") for o in items if o["kind"] == "CronJob"}
+    cronjobs = {o["metadata"]["uid"]: o for o in items if o["kind"] == "CronJob" and o["metadata"].get("uid")}
     for obj in items:
         meta = obj["metadata"]
         require(meta.get("namespace") == NAMESPACE, "consumer outside target namespace")
@@ -105,7 +120,7 @@ def consumers(items):
                 image = container.get("image", "")
                 if image.startswith(REPOSITORY + "@") or image.startswith(REPOSITORY + ":") or image == REPOSITORY:
                     require(IMAGE.fullmatch(image), "shared consumer has a mutable/invalid image")
-                    if cronjob_history(obj, cronjob_uids):
+                    if cronjob_history(obj, cronjobs):
                         continue
                     bindings.append(
                         {
@@ -147,9 +162,11 @@ def require_t4_serves(workloads, image):
     for sibling in workloads:
         if sibling["kind"] == "Deployment" and sibling["metadata"]["name"] == TARGET + "-t4":
             if sibling["spec"].get("replicas", 1) > 0:
+                spec = pod_spec(sibling)
                 require(
-                    all(c["image"] == image for c in pod_spec(sibling)["containers"] if c["name"] == "worker")
-                    and any(c["name"] == "worker" for c in pod_spec(sibling)["containers"]),
+                    all(c["image"] == image for c in spec["containers"] if c["name"] == "worker")
+                    and any(c["name"] == "worker" for c in spec["containers"])
+                    and all(img == image for img in worker_images(spec).values()),
                     "active T4 fallback must already serve the candidate",
                 )
 
@@ -201,7 +218,9 @@ def deploy(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
         "admission dry-run changed runtime configuration",
     )
     # Re-read siblings immediately before the CAS write. They are never mutated here.
-    require(consumers(run("get", RESOURCES, "-o", "json")["items"]) == baseline["consumers"], "consumer drift")
+    final = run("get", RESOURCES, "-o", "json")["items"]
+    require(consumers(final) == baseline["consumers"], "consumer drift")
+    require_t4_serves(final, image)
     result = run("patch", "deployment", TARGET, "--type=json", "-p", json.dumps(patch), "-o", "json")
     require(
         target_state(result)[0] == after and digest(result["spec"]) == exact,

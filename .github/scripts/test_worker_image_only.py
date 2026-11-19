@@ -283,6 +283,9 @@ class PreservationTests(unittest.TestCase):
         return sweeper
 
     def turn_over_jobs(self, sweeper, created, deleted):
+        names = [s["metadata"]["name"] for s in self.cluster.siblings]
+        self.assertIn(deleted, names)
+        self.assertNotIn(created, names)
         self.cluster.siblings = [s for s in self.cluster.siblings if s["metadata"]["name"] != deleted]
         self.cluster.siblings.append(job(created, sweeper))
 
@@ -390,7 +393,71 @@ class PreservationTests(unittest.TestCase):
     def test_t4_fallback_activating_on_old_image_after_roll_fails_closed(self):
         receipt = self.deploy()
         self.cluster.siblings[-1]["spec"]["replicas"] = 1
+        with self.assertRaisesRegex(ValueError, "drift|active T4"):
+            worker.verify(receipt, self.cluster)
+
+    def test_t4_activated_between_early_check_and_final_reread_refuses_before_write(self):
+        # Reads in deploy(): snapshot consumers (1), early T4 check (2), final pre-write reread (3).
+        start = self.cluster.consumer_reads
+        original = Cluster.__call__
+
+        def activate_t4(cluster, *args):
+            if args[0] == "get" and args[1] != "deployment" and cluster.consumer_reads == start + 2:
+                cluster.siblings[-1]["spec"]["replicas"] = 1  # operator scales T4 on the old image
+            return original(cluster, *args)
+
+        self.cluster.__class__ = type("T4Cluster", (Cluster,), {"__call__": activate_t4})
+        with self.assertRaisesRegex(ValueError, "consumer drift|active T4"):
+            self.deploy()
+        self.assertEqual(self.cluster.writes, 0)
+
+    def test_t4_replica_count_stays_bound(self):
+        receipt = self.deploy()
+        self.cluster.siblings[-1]["spec"]["replicas"] = 1
+        worker.pod_spec(self.cluster.siblings[-1])["containers"][0]["image"] = NEW
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+
+    def test_active_t4_init_container_on_old_image_refuses(self):
+        t4 = self.cluster.siblings[-1]
+        t4["spec"]["replicas"] = 1
+        worker.pod_spec(t4)["containers"][0]["image"] = NEW
+        worker.pod_spec(t4)["initContainers"] = [{"name": "warm", "image": OLD}]
+        self.baseline = worker.snapshot(self.cluster)[1]
         with self.assertRaisesRegex(ValueError, "active T4"):
+            self.deploy()
+        self.assertEqual(self.cluster.writes, 0)
+
+    def test_unlisted_deployment_and_statefulset_replicas_stay_bound(self):
+        other = deployment("other-consumer")
+        stateful = deployment("stateful-consumer")
+        stateful["kind"] = "StatefulSet"
+        self.cluster.siblings += [other, stateful]
+        self.baseline = worker.snapshot(self.cluster)[1]
+        receipt = self.deploy()
+        for obj in (other, stateful):
+            obj["spec"]["replicas"] += 1
+            with self.assertRaisesRegex(ValueError, "drift"):
+                worker.verify(receipt, self.cluster)
+            obj["spec"]["replicas"] -= 1
+
+    def test_owned_job_on_a_different_digest_than_its_cronjob_stays_bound(self):
+        sweeper = self.add_sweeper()
+        receipt = self.deploy()
+        stale = job("record-seal-sweeper-7", sweeper)
+        worker.pod_spec(stale)["containers"][0]["image"] = THIRD
+        self.cluster.siblings.append(stale)
+        with self.assertRaisesRegex(ValueError, "drift"):
+            worker.verify(receipt, self.cluster)
+
+    def test_uidless_cronjob_does_not_adopt_uidless_owner_references(self):
+        sweeper = self.add_sweeper()
+        receipt = self.deploy()
+        orphan = job("ghost-1", sweeper)
+        orphan["metadata"]["ownerReferences"][0].pop("uid")
+        self.cluster.siblings += [orphan]
+        self.assertFalse(worker.cronjob_history(orphan, {None: sweeper}))
+        with self.assertRaisesRegex(ValueError, "drift"):
             worker.verify(receipt, self.cluster)
 
     def test_replay_2026_11_14_post_roll_drift_shape_now_verifies(self):
@@ -406,14 +473,17 @@ class PreservationTests(unittest.TestCase):
         self.cluster.target["spec"]["replicas"] = 16
         self.baseline = worker.snapshot(self.cluster)[1]
         receipt = self.deploy()
+        full_after = worker.digest(self.cluster.target["spec"])
+        legacy_consumers = sum(o["metadata"]["name"].startswith("record-seal-") and o["kind"] == "Job" for o in self.cluster.siblings)
         # During the Recreate rollout: the HPA rescales and both CronJobs rotate history.
         self.cluster.target["spec"]["replicas"] = 12
         self.cluster.siblings = [s for s in self.cluster.siblings
                                  if s["metadata"]["name"] not in ("record-seal-repair-29910915", "record-seal-sweeper-29906100")]
         self.cluster.siblings += [job("record-seal-repair-29911290", repair), job("record-seal-sweeper-29911320", sweeper)]
         _, actual = worker.snapshot(self.cluster)
-        legacy_hash = worker.digest(self.cluster.target["spec"])
-        self.assertNotEqual(legacy_hash, receipt["after"]["spec_sha256"])  # the old full-spec hash would drift
+        # The pre-fix full-spec hash and Job binding set both change, which is the 11-14 refusal.
+        self.assertNotEqual(worker.digest(self.cluster.target["spec"]), full_after)
+        self.assertEqual(legacy_consumers, 7)
         worker.verify(receipt, self.cluster)
         self.assertEqual(actual, {"target": receipt["after"], "consumers": receipt["consumers"]})
 
