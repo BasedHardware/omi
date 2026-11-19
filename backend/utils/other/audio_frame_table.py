@@ -204,9 +204,8 @@ def gapped_frames(bucket, blob, uid: str, *, deadline=None, metadata=None) -> tu
     """The writer's own frame positions for one gapped, unframed pack.
 
     ``commit_capture`` names the manifest directory exactly like the media
-    directory, so one prefix listing maps a pack to its own manifest without a
-    per-pack list. A missing or ambiguous manifest is an error: the pack's
-    internal gaps are unknowable without it.
+    directory, so a prefix listing maps a pack to its own manifest. The pack's
+    internal gaps require one unambiguous manifest.
     """
     prefix = f'audio-outbox/{uid}/{media_name(blob.name, uid)}/'
     candidates = []
@@ -220,7 +219,10 @@ def gapped_frames(bucket, blob, uid: str, *, deadline=None, metadata=None) -> tu
                 break
     if len(candidates) != 1:
         raise ValueError('gapped capture has no unique custody manifest')
-    return unframed_frames(bucket, blob, uid, candidates[0].name, deadline=deadline, metadata=metadata)
+    manifest = candidates[0]
+    return unframed_frames(
+        bucket, blob, uid, manifest.name, deadline=deadline, metadata=metadata, listed_manifest=manifest
+    )
 
 
 def receipt_frames(bucket, uid: str, receipt: dict, *, deadline=None) -> tuple[list[dict], int]:

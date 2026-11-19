@@ -3,7 +3,8 @@
 The Nov 15 Pusher image replaced `634484b20ec6` with `0714c5198be8`. Gapped,
 unframed originals began contributing playback entries once the writer's
 manifest proved their frame positions. Each of those manifests needed two
-storage requests per discovery, one for metadata and one for the body.
+storage requests each time inventory discovery or per-pack decoding resolved
+the manifest, one for metadata and one for the body.
 Durable receipt readback and the 300-second refresh interval stayed the same.
 
 ## Readback

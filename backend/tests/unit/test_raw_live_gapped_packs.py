@@ -296,15 +296,16 @@ def test_framed_pack_still_uses_its_declared_frame_schema(remote, monkeypatch, n
 
 
 @pytest.mark.parametrize('mode', ['on', 'off', 'stale', 'missing_metageneration', 'deleted', 'corrupt'])
-def test_gapped_discovery_can_use_versioned_listing_without_skipping_payload_proof(monkeypatch, mode):
+@pytest.mark.parametrize('per_pack', [False, True])
+def test_gapped_manifest_can_use_versioned_listing_without_skipping_payload_proof(monkeypatch, mode, per_pack):
     from unittest.mock import Mock
 
     from google.api_core.exceptions import NotFound, PreconditionFailed
 
-    from utils.other.audio_frame_table import unframed_frames
+    from utils.other.audio_frame_table import gapped_frames, unframed_frames
 
-    path = 'audio-outbox/owner/manifest'
-    media = SimpleNamespace(name='raw-live/owner/pack', generation=9, metadata={'sha256': 'media-digest'})
+    path = 'audio-outbox/owner/pack/manifest'
+    media = SimpleNamespace(name='raw-live/owner/pack/object', generation=9, metadata={'sha256': 'media-digest'})
     table = [
         {'sequence': 0, 'start': 1.0, 'samples': 16, 'gap_before': False},
     ]
@@ -316,7 +317,11 @@ def test_gapped_discovery_can_use_versioned_listing_without_skipping_payload_pro
             'media': {'bucket': 'private-synthetic', 'path': media.name, 'generation': '9', 'sha256': 'media-digest'},
         }
     ).encode()
-    properties = {'encrypted': 'false', 'sha256': hashlib.sha256(manifest).hexdigest()}
+    properties = {
+        'encrypted': 'false',
+        'sha256': hashlib.sha256(manifest).hexdigest(),
+        'format': 'audio-custody-manifest-v1',
+    }
     listed = SimpleNamespace(
         name=path,
         generation=3,
@@ -332,7 +337,9 @@ def test_gapped_discovery_can_use_versioned_listing_without_skipping_payload_pro
         reload=Mock(),
         download_as_bytes=Mock(return_value=manifest),
     )
-    bucket = SimpleNamespace(name='private-synthetic', blob=Mock(return_value=loaded))
+    bucket = SimpleNamespace(
+        name='private-synthetic', blob=Mock(return_value=loaded), list_blobs=Mock(return_value=[listed])
+    )
     if mode == 'stale':
         loaded.download_as_bytes.side_effect = [PreconditionFailed('synthetic stale listing'), manifest]
     if mode == 'deleted':
@@ -341,14 +348,22 @@ def test_gapped_discovery_can_use_versioned_listing_without_skipping_payload_pro
         loaded.download_as_bytes.return_value = b'wrong hash'
     monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', bucket.name)
     monkeypatch.setenv('PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED', 'false' if mode == 'off' else 'true')
+
+    def resolve():
+        if per_pack:
+            return gapped_frames(bucket, media, UID)
+        return unframed_frames(bucket, media, UID, path, listed_manifest=listed)
+
     if mode == 'deleted':
         with pytest.raises(NotFound):
-            unframed_frames(bucket, media, UID, path, listed_manifest=listed)
+            resolve()
     elif mode == 'corrupt':
         with pytest.raises(ValueError, match='checksum mismatch'):
-            unframed_frames(bucket, media, UID, path, listed_manifest=listed)
+            resolve()
     else:
-        assert unframed_frames(bucket, media, UID, path, listed_manifest=listed) == (table, RATE)
+        assert resolve() == (table, RATE)
+    if per_pack:
+        assert bucket.list_blobs.call_args.kwargs['prefix'] == 'audio-outbox/owner/pack/'
     bucket.blob.assert_called_once_with(path)
     conditions = [
         {key: value for key, value in call.kwargs.items() if key.startswith('if_')}
