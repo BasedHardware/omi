@@ -44,7 +44,6 @@ def v3_options(overlay: Any) -> dict[str, Any]:
 def run(root: Path, run_id: str, engine: str) -> dict[str, Any]:
     from testing.pipeline_lab.baseline.build import build_baseline
     from testing.pipeline_lab.seed.corpus import DayWindow, load_start_state
-    from testing.pipeline_lab.stack import LAB_UID
     from testing.pipeline_lab.store import Store, atomic_write_json, ensure_private_dir, read_jsonl
     from testing.pipeline_lab.v3.corpus import read_day_recordings
 

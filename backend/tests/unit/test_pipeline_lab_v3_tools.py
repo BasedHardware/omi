@@ -221,3 +221,60 @@ def test_owner_uid_file_must_be_private(tmp_path):
     assert read_private_value(path) == OWNER
     with pytest.raises(CliError):
         read_private_value(tmp_path / 'missing')
+
+
+def describe(env):
+    return {
+        'metadata': {'name': 'backend-sync'},
+        'spec': {'template': {'spec': {'containers': [{'env': env}]}}},
+        'status': {'traffic': [{'revisionName': 'backend-sync-abc-1', 'percent': 100}]},
+    }
+
+
+def test_filter_live_env_drops_secrets_and_scrubs_owner_uid():
+    from testing.pipeline_lab.stack.runtime_env import filter_live_env
+
+    live = filter_live_env(
+        describe(
+            [
+                {'name': 'MEMORY_MODE', 'value': 'v3'},
+                {'name': 'ADMIN_API_KEY', 'value': 'plain-secret-value'},
+                {'name': 'DB_PASSWORD', 'valueFrom': {'secretKeyRef': {'name': 's', 'key': 'k'}}},
+                {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': f'{OWNER},someone-else'},
+                {'name': 'CAPTURE_JEV_SHADOW_UID_ALLOWLIST', 'value': 'someone-else'},
+                {'name': 'ODD_SETTING', 'value': f'prefix-{OWNER}'},
+                {'name': 'OMI_BACKEND_RELEASE_SHA', 'value': 'a' * 40},
+            ]
+        ),
+        OWNER,
+    )
+    text = json.dumps(live)
+    assert 'plain-secret-value' not in text and OWNER not in text and 'someone-else' not in text
+    assert live['env']['FAIR_USE_EXEMPT_UIDS'] == LAB_UID and live['env']['CAPTURE_JEV_SHADOW_UID_ALLOWLIST'] == ''
+    assert live['env']['ODD_SETTING'] == f'prefix-{LAB_UID}' and live['dropped_secret_or_ref'] == 2
+    assert live['release_sha'] == 'a' * 40 and live['traffic'][0]['percent'] == 100
+    with pytest.raises(ValueError):
+        filter_live_env(describe([]), '')
+
+
+def test_live_env_adds_ops_and_live_only_values(runtime_env):
+    from testing.pipeline_lab.stack.runtime_env import filter_live_env
+
+    live = filter_live_env(
+        describe(
+            [
+                {'name': 'CONVERSATIONS_V3', 'value': 'on'},
+                {'name': 'MEMORY_MODE', 'value': 'v3'},
+                {'name': 'OMI_SHAPED_AGENT_MODE', 'value': 'off'},
+                {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': OWNER},
+                {'name': 'SYNC_TASKS_QUEUE', 'value': 'sync'},
+            ]
+        ),
+        OWNER,
+    )
+    overlay, report = overlay_from_runtime_env(runtime_env, live_env=live)
+    assert overlay['env']['MEMORY_MODE'] == 'v3' and overlay['env']['OMI_SHAPED_AGENT_MODE'] == 'off'
+    assert overlay['env']['FAIR_USE_EXEMPT_UIDS'] == LAB_UID  # the lab uid keeps the owner's membership
+    assert 'SYNC_TASKS_QUEUE' not in overlay['env']  # still lab-owned
+    assert report['live']['added'] == 3 and report['live']['overridden'] == 1
+    assert report['live_names']['overridden'] == ['OMI_SHAPED_AGENT_MODE']

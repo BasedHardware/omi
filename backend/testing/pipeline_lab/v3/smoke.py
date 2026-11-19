@@ -35,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog='python -m testing.pipeline_lab.v3.smoke')
     parser.add_argument('--keep', help='store root to write (default: a fresh temp dir)')
     parser.add_argument('--ref', help='run a pinned arm of this ref (e.g. the production release) instead of in place')
+    parser.add_argument('--overlay', help='use this overlay file instead of building one from the runtime env')
     args = parser.parse_args(argv)
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
@@ -61,7 +62,11 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         report['arm'] = {'sha': arm.get('sha'), 'backend_tree': arm.get('backend_tree')}
         runtime_env = ['--runtime-env', str(Path(arm['path']) / 'backend' / 'deploy' / 'runtime_env.yaml')]
-    code, built = _cli('overlay', 'from-runtime-env', *runtime_env, '--out', str(base / 'overlay.json'))
+    if args.overlay:
+        built = {'service': 'given', 'source': 'file'}
+        (base / 'overlay.json').write_text(Path(args.overlay).read_text())
+    else:
+        code, built = _cli('overlay', 'from-runtime-env', *runtime_env, '--out', str(base / 'overlay.json'))
     report['overlay'] = (
         {k: built.get(k) for k in ('service', 'kept', 'cohorts', 'pinned_static', 'unresolved', 'v3')}
         if built

@@ -108,6 +108,54 @@ def _scalar(entry: Any) -> Optional[str]:
     return None
 
 
+def remap_uid_list(value: str, owner_uid: Optional[str]) -> tuple[str, str]:
+    """``(value, state)``: a uid allow-list reduced to the lab uid when the owner (or the lab uid) is on it."""
+    from testing.pipeline_lab.stack import LAB_UID
+
+    members = [m.strip() for m in value.split(',') if m.strip()]
+    if LAB_UID in members or (owner_uid and owner_uid in members):
+        return LAB_UID, 'owner_member'
+    if owner_uid:
+        return '', 'owner_not_member'
+    return '', 'unresolved' if members else 'empty'
+
+
+def filter_live_env(describe: Mapping[str, Any], owner_uid: str) -> dict[str, Any]:
+    """The non-secret plain env of a Cloud Run service as served, from ``gcloud run services describe
+    --format=json``. Secret-named variables and secret references are dropped here, so their values
+    are never written; uid allow-lists are reduced to the lab uid (owner membership) and any other
+    occurrence of the owner uid is replaced, so no production uid is written either. The revision
+    receiving traffic and its release sha are kept for the record."""
+    from testing.pipeline_lab.stack import LAB_UID
+
+    if not owner_uid:
+        raise ValueError('filter_live_env needs the owner uid to scrub uid allow-lists')
+    spec = ((describe.get('spec') or {}).get('template') or {}).get('spec') or {}
+    env: dict[str, str] = {}
+    dropped = 0
+    for container in spec.get('containers') or []:
+        for entry in container.get('env') or []:
+            name = str(entry.get('name') or '')
+            if not name or 'value' not in entry or SECRETISH.search(name):
+                dropped += 1
+                continue
+            value = str(entry.get('value') or '')
+            if UID_LIST.search(name) and not name.endswith(COHORT_SUFFIXES):
+                value, _ = remap_uid_list(value, owner_uid)
+            env[name] = value.replace(owner_uid, LAB_UID)
+    traffic = [
+        {'revision': t.get('revisionName'), 'percent': t.get('percent')}
+        for t in (describe.get('status') or {}).get('traffic') or []
+    ]
+    return {
+        'service': (describe.get('metadata') or {}).get('name'),
+        'traffic': traffic,
+        'release_sha': env.get('OMI_BACKEND_RELEASE_SHA'),
+        'dropped_secret_or_ref': dropped,
+        'env': env,
+    }
+
+
 def overlay_from_runtime_env(
     runtime_env: Path,
     *,
@@ -115,16 +163,30 @@ def overlay_from_runtime_env(
     service: str = DEFAULT_SERVICE,
     owner_uid: Optional[str] = None,
     name: Optional[str] = None,
+    live_env: Optional[Mapping[str, Any]] = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """``live_env`` (from :func:`filter_live_env`) overlays the served revision's plain values on the
+    runtime env: production also sets ops-file and live-only keys that ``runtime_env.yaml`` lacks
+    (``deploy/ops/prod.yaml``, ``deploy/ops/live_only.yaml``). Every filter below applies to both."""
     """``(overlay, report)``. ``report`` lists what was kept, dropped and left unresolved."""
     import yaml
 
-    from testing.pipeline_lab.stack import LAB_UID
     from testing.pipeline_lab.stack.config import LabStackConfig
     from testing.pipeline_lab.stack.overlay import DEFAULT_ENV
 
     document = yaml.safe_load(Path(runtime_env).read_text(encoding='utf-8'))
     raw = _service_env(document, environment, service)
+    live_report: dict[str, Any] = {}
+    if live_env is not None:
+        live = {str(k): v for k, v in (live_env.get('env') or {}).items()}
+        live_report = {
+            'service': live_env.get('service'),
+            'release_sha': live_env.get('release_sha'),
+            'traffic': live_env.get('traffic'),
+            'added': sorted(k for k in live if k not in raw),
+            'overridden': sorted(k for k in live if k in raw and _scalar(raw[k]) != live[k]),
+        }
+        raw = {**raw, **live}
     lab_owned = set(LabStackConfig().product_env()) | set(DEFAULT_ENV)
     env: dict[str, str] = {}
     cohort_env: dict[str, str] = {}
@@ -133,13 +195,7 @@ def overlay_from_runtime_env(
     for key, entry in sorted(raw.items()):
         value = _scalar(entry)
         if value is not None and UID_LIST.search(key) and not key.endswith(COHORT_SUFFIXES):
-            members = [m.strip() for m in value.split(',') if m.strip()]
-            if owner_uid:
-                env[key] = LAB_UID if owner_uid in members else ''
-                uid_lists[key] = 'owner_member' if owner_uid in members else 'owner_not_member'
-            else:
-                env[key] = ''
-                uid_lists[key] = 'unresolved' if members else 'empty'
+            env[key], uid_lists[key] = remap_uid_list(value, owner_uid)
             continue
         if value is None:
             dropped['not_scalar'].append(key)
@@ -212,6 +268,10 @@ def overlay_from_runtime_env(
         'pinned_static': len(pinned_static),
         'uid_lists': uid_lists,
         'v3': {key: env.get(key, '(unset: code default)') for key in V3_SWITCHES},
+        'live': {
+            k: (len(v) if isinstance(v, list) and k in ('added', 'overridden') else v) for k, v in live_report.items()
+        },
+        'live_names': {k: live_report[k] for k in ('added', 'overridden') if k in live_report},
     }
     if owner_uid:
         import json

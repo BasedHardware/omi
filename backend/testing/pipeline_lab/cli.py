@@ -151,7 +151,18 @@ def build_parser() -> argparse.ArgumentParser:
         '--owner-uid-file',
         help='0600 file holding the owner uid, to resolve cohorts and uid allow-lists (never written)',
     )
+    from_env.add_argument(
+        '--live-env',
+        help='filtered served env (overlay live-env output): adds the ops-file and live-only values production runs with',
+    )
     from_env.add_argument('--out', help='write the overlay here (outside git) instead of stdout')
+    live = overlay_sub.add_parser(
+        'live-env',
+        parents=[common],
+        help='filter `gcloud run services describe --format=json` (stdin) to non-secret plain env, for --live-env',
+    )
+    live.add_argument('--out', required=True, help='write here (outside git)')
+    live.add_argument('--owner-uid-file', required=True, help='0600 file holding the owner uid (scrubs uid lists)')
 
     sub.add_parser('stages', parents=[common], help='stages in order and their registered drivers')
     sub.add_parser('doctor', parents=[common], help='roots, permissions and plugins')
@@ -221,6 +232,8 @@ def dispatch(args: argparse.Namespace, store: Store, registry: Registry, as_json
     if command == 'llm-proxy':
         return _llm_proxy(args, store), 0
     if command == 'overlay':
+        if args.overlay_command == 'live-env':
+            return _overlay_live_env(args), 0
         return _overlay_from_runtime_env(args), 0
     if command == 'stages':
         return registry.describe(), 0
@@ -356,6 +369,26 @@ def _verdicts(args: argparse.Namespace, store: Store) -> tuple[Any, int]:
     return payload, 0
 
 
+def _outside_git(out: Path) -> Path:
+    out = out.expanduser().resolve()
+    if any((parent / '.git').exists() for parent in (out.parent, *out.parent.parents)):
+        raise CliError('overlays are written outside every git worktree')
+    return out
+
+
+def _overlay_live_env(args: argparse.Namespace) -> Any:
+    import json
+    import sys
+
+    from testing.pipeline_lab.stack.runtime_env import filter_live_env
+    from testing.pipeline_lab.store import atomic_write_json
+
+    filtered = filter_live_env(json.loads(sys.stdin.read()), read_private_value(Path(args.owner_uid_file)))
+    out = _outside_git(Path(args.out))
+    atomic_write_json(out, filtered)
+    return {'out': str(out), **{k: v for k, v in filtered.items() if k != 'env'}, 'kept': len(filtered['env'])}
+
+
 def read_private_value(path: Path) -> str:
     """The stripped contents of an owner-only regular file (no link, mode 0600 or tighter)."""
     import os
@@ -388,10 +421,16 @@ def _overlay_from_runtime_env(args: argparse.Namespace) -> Any:
         raise CliError(f'{args.owner_uid_env} is not set')
     if args.owner_uid_file:
         owner_uid = read_private_value(Path(args.owner_uid_file))
+    live_env = None
+    if args.live_env:
+        import json
+
+        live_env = json.loads(Path(args.live_env).read_text(encoding='utf-8'))
     overlay, report = overlay_from_runtime_env(
-        path, environment=args.environment, service=args.service, owner_uid=owner_uid
+        path, environment=args.environment, service=args.service, owner_uid=owner_uid, live_env=live_env
     )
     report.pop('dropped_names', None)
+    report.pop('live_names', None)
     if args.out:
         out = Path(args.out).expanduser().resolve()
         if any((parent / '.git').exists() for parent in (out.parent, *out.parent.parents)):
