@@ -239,8 +239,6 @@ FIELD_SITES = {
         )
     ],
     'utils/conversations/v3/service.py': [
-        # Older provisional cards leave the single live slot without acquiring notes debt.
-        ('reconcile.plan', 'status', "'processing'", ('status',)),
         ('reconcile.plan', 'status', "prior['status']", ('status',)),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
     ],
