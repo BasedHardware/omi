@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import re
 import subprocess
 import sys
 
@@ -683,9 +684,11 @@ class DryRunTests(unittest.TestCase):
         saved = json.loads(self.receipt_path.read_text())
         self.assertEqual(saved, result)
         self.assertEqual(saved["mode"], "dry-run")
-        self.assertTrue(saved["inverse"]["admitted"])
-        self.assertEqual(saved["inverse"]["image"], OLD)
+        self.assertTrue(saved["prior_image_admission"]["admitted"])
+        self.assertTrue(saved["prior_image_admission"]["noop"])
+        self.assertEqual(saved["prior_image_admission"]["image"], OLD)
         self.assertIsNone(saved["forward"])
+        self.assertIsNone(saved["inverse"])
         self.assertNotIn("do-not-print-this", self.output + self.receipt_path.read_text())
 
     def test_forward_and_inverse_dry_run_never_writes(self):
@@ -693,9 +696,9 @@ class DryRunTests(unittest.TestCase):
         self.assert_nothing_written(recorder)
         self.assertTrue(result["forward"]["admitted"])
         self.assertEqual(result["forward"]["after"]["image"], NEW)
-        self.assertTrue(result["inverse"]["admitted"])
-        # The receipt the forward run would write satisfies the rollback precondition offline.
-        self.assertTrue(result["inverse"]["rollback_precondition"])
+        self.assertTrue(result["prior_image_admission"]["admitted"])
+        self.assertTrue(result["forward"]["inverse_restores_before"])
+        self.assertEqual(result["forward"]["would_write_receipt"]["before"], self.baseline["target"])
 
     def test_dry_run_still_refuses_drift_admission_change_and_t4(self):
         self.cluster.target["spec"]["template"]["spec"]["terminationGracePeriodSeconds"] = 30
@@ -734,6 +737,58 @@ class DryRunTests(unittest.TestCase):
                                 env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 1)
         self.assertIn("dry-run mode", result.stderr)
+
+    def test_receipt_bound_inverse_dry_run_after_a_forward_roll_sends_the_real_rollback_cas(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            receipt = worker.deploy(self.baseline, NEW, Path(self.tmp.name) / "forward.json", self.cluster)
+        self.cluster.target["spec"]["replicas"] = 13  # HPA moved after the roll
+        self.baseline = worker.snapshot(self.cluster)[1]
+        self.before = copy.deepcopy(self.cluster.target)
+        writes = self.cluster.writes
+        os.environ[worker.DRY_RUN_ENV] = "1"
+        recorder = Recorder(self.cluster)
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = worker.dry_run(self.baseline, OLD, self.receipt_path, recorder, rollback_receipt=receipt)
+        self.assertEqual(self.cluster.writes, writes)
+        self.assertEqual(self.cluster.target, self.before)
+        self.assertEqual([c for c in recorder.calls if is_write(c)], [])
+        self.assertEqual(result["inverse"]["restores"], receipt["before"])
+        self.assertIn({"op": "test", "path": "/spec/template/spec/containers/0/image", "value": NEW}, result["inverse"]["patch"])
+        forged = {**receipt, "before": {**receipt["before"], "spec_sha256": "forged"}}
+        with self.assertRaisesRegex(ValueError, "rollback"):
+            worker.dry_run(self.baseline, OLD, self.receipt_path, recorder, rollback_receipt=forged)
+        with self.assertRaisesRegex(ValueError, "rollback"):
+            worker.dry_run(self.baseline, NEW, self.receipt_path, recorder, rollback_receipt=receipt)
+        self.assertEqual(self.cluster.writes, writes)
+
+    def test_dry_run_applies_the_required_companion_gate(self):
+        self.cluster.target["metadata"]["annotations"] = {"omi.ai/required-companion-deployment": "record-seal-worker"}
+        self.baseline = worker.snapshot(self.cluster)[1]
+        with self.assertRaisesRegex(ValueError, "required companion"):
+            self.dry_run(NEW)
+        self.assertEqual(self.cluster.writes, 0)
+
+    def test_dry_run_rechecks_t4_on_the_final_read(self):
+        start = self.cluster.consumer_reads
+        original = Cluster.__call__
+
+        def activate_t4(cluster, *args):
+            if args[0] == "get" and args[1] != "deployment" and cluster.consumer_reads == start + 3:
+                cluster.siblings[-1]["spec"]["replicas"] = 1
+            return original(cluster, *args)
+
+        self.cluster.__class__ = type("T4Cluster", (Cluster,), {"__call__": activate_t4})
+        with self.assertRaisesRegex(ValueError, "consumer drift|active T4"):
+            self.dry_run(NEW)
+        self.assertEqual(self.cluster.writes, 0)
+
+    def test_guard_allows_only_reads_and_server_dry_run_patches(self):
+        os.environ[worker.DRY_RUN_ENV] = "1"
+        recorder = Recorder(self.cluster)
+        for verb in ("delete", "apply", "replace", "scale", "create"):
+            with self.subTest(verb=verb), self.assertRaisesRegex(ValueError, "dry-run mode"):
+                worker.guarded(recorder)(verb, "deployment", worker.TARGET, "--dry-run=server")
+        self.assertEqual(recorder.calls, [])
 
     def test_dry_run_command_requires_the_mode_env(self):
         with self.assertRaisesRegex(ValueError, "dry-run"):
@@ -872,8 +927,35 @@ class WorkflowTests(unittest.TestCase):
                      "kubectl replace", "kubectl scale", "kubectl delete", "kubectl create", "rollout restart",
                      "kubectl set ", "kubectl annotate", "kubectl label", "gcloud container images add-tag")
 
+    READ_KUBECTL = re.compile(r"kubectl\b[^\n|;&]*?\b(get|describe|rollout status|auth can-i|config|version|wait|logs|top)\b")
+
+    def writes(self, run):
+        if any(m in run for m in self.WRITE_MARKERS):
+            return True
+        # Fail closed: any kubectl invocation that is not a known read verb counts as a write.
+        for line in run.splitlines():
+            if re.search(r"\bkubectl\b", line) and not self.READ_KUBECTL.search(line):
+                return True
+        return False
+
+    def test_unknown_kubectl_verbs_count_as_writes(self):
+        for run in ("kubectl -n x rollout undo deploy/y", "kubectl patch deploy y", "kubectl cordon n", "kubectl drain n"):
+            self.assertTrue(self.writes(run), run)
+        for run in ("kubectl -n x get deploy y -o json", "kubectl -n x rollout status deploy/y --timeout=1s"):
+            self.assertFalse(self.writes(run), run)
+
+    def test_dry_run_step_runs_only_allowlisted_commands(self):
+        body = self.step("Dry-run worker image preserving live runtime")["run"]
+        allowed = re.compile(r"^(set -euo pipefail|umask 077|echo .*|rollback_args=\(.*\)|if \[\[.*\]\]; then|fi|"
+                             r"python3 \.github/worker-workflow/\.github/scripts/worker_image_only\.py dry-run \\|"
+                             r"--[a-z-]+ .*|\"\$\{rollback_args\[@\]\}\" \\|\{|\}( >> \"\$GITHUB_STEP_SUMMARY\")?|cat .*)$")
+        for line in (l.strip() for l in body.splitlines()):
+            if line:
+                self.assertRegex(line, allowed)
+        self.assertFalse(self.writes(body))
+
     def test_every_write_step_is_excluded_from_dry_run_mode(self):
-        writers = [s for s in self.steps if any(m in s.get("run", "") for m in self.WRITE_MARKERS)]
+        writers = [s for s in self.steps if self.writes(s.get("run", ""))]
         self.assertTrue(writers)
         for step in writers:
             with self.subTest(step=step.get("name")):
@@ -886,7 +968,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(step["if"], "inputs.preserve_live_worker == true && inputs.worker_dry_run == true")
         self.assertEqual(step["env"][worker_env_name()], "1")
         self.assertIn("worker_image_only.py dry-run", step["run"])
-        self.assertFalse(any(m in step["run"] for m in self.WRITE_MARKERS))
+        self.assertFalse(self.writes(step["run"]))
         names = [s.get("name") for s in self.steps]
         for gate in ("Select merged production source and image tag", "Verify serving Firestore indexes", "Verify promoted worker digest"):
             self.assertLess(names.index(gate), names.index(step["name"]))
@@ -905,17 +987,23 @@ class WorkflowTests(unittest.TestCase):
             ("false", digest, "false", "", "batch-pipeline-worker", 1),
             ("true", "", "false", "", "batch-pipeline-worker", 1),       # dry-run never builds or pushes
             ("true", digest, "true", "", "batch-pipeline-worker", 1),    # dry-run must hold the shared lock
-            ("true", digest, "false", "{}", "batch-pipeline-worker", 1),  # no receipt-driven write path
+            ("true", digest, "false", "{}", "batch-pipeline-worker", 0),  # receipt-bound inverse rehearsal
         ):
             with self.subTest(preserve=preserve, image=image, break_glass=break_glass, receipt=receipt):
                 result = subprocess.run(["bash", "-e", "-c", script], capture_output=True,
                     env={"SERVICE": service, "PRESERVE_LIVE": preserve, "LIVE_BASELINE": "{}", "ROLLBACK_RECEIPT": receipt,
                          "SOURCE_REF": "a" * 40, "CANDIDATE_DIGEST": image, "BREAK_GLASS_LOCK": break_glass, "DRY_RUN": "true"})
                 self.assertEqual(result.returncode, expected)
-        result = subprocess.run(["bash", "-e", "-c", script.replace("prod", "development", 1)], capture_output=True,
+        dev = step["run"].replace("${{ github.event.inputs.environment }}", "development").replace("${{ inputs.environment }}", "development")
+        result = subprocess.run(["bash", "-e", "-c", dev], capture_output=True, text=True,
             env={"SERVICE": "batch-pipeline-worker", "PRESERVE_LIVE": "false", "LIVE_BASELINE": "", "ROLLBACK_RECEIPT": "",
-                 "SOURCE_REF": "main", "CANDIDATE_DIGEST": "", "BREAK_GLASS_LOCK": "false", "DRY_RUN": "true"})
+                 "SOURCE_REF": "a" * 40, "CANDIDATE_DIGEST": digest, "BREAK_GLASS_LOCK": "false", "DRY_RUN": "true"})
         self.assertNotEqual(result.returncode, 0)
+        self.assertIn("worker_dry_run requires prod", result.stderr)
+
+    def test_dry_run_notifications_are_marked(self):
+        for name in ("Generate deployment summary", "Notify deployment status on Telegram"):
+            self.assertIn("DRY-RUN (no write)", self.step(name)["with"]["release_version"])
 
     def test_dry_run_keeps_the_shared_prod_train_lock(self):
         group = self.workflow["concurrency"]["group"]

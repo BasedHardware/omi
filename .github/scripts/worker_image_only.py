@@ -36,7 +36,9 @@ def require_dry_run_env():
 def guarded(run):
     def call(*args):
         if dry_run_mode():
-            require(args and args[0] == "get" or "--dry-run=server" in args, "write refused in dry-run mode")
+            read = bool(args) and args[0] == "get"
+            preview = bool(args) and args[0] == "patch" and "--dry-run=server" in args
+            require(read or preview, "write refused in dry-run mode")
         return run(*args)
 
     return call
@@ -286,9 +288,8 @@ def private_json(path, data):
         handle.write("\n")
 
 
-def deploy(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
-    require(not dry_run_mode(), "deploy refused in dry-run mode")
-    run = guarded(run)
+def preflight(baseline, image, run, rollback_receipt=None, allow_same=False):
+    """Every gate the writer applies before its first API write; shared by deploy and dry-run."""
     if rollback_receipt is not None:
         require(
             baseline == {"target": rollback_receipt["after"], "consumers": rollback_receipt["consumers"]},
@@ -297,7 +298,7 @@ def deploy(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
         require(image == rollback_receipt["before"]["image"], "rollback must restore the recorded prior image")
     obj, actual = snapshot(run)
     require(actual == baseline, "target or shared-consumer drift from admitted baseline")
-    patch = patch_for(obj, image)
+    patch_for(obj, image, allow_same=allow_same)
     # Keep existing rollout/report gates satisfiable without silently rolling siblings.
     companion = obj["metadata"].get("annotations", {}).get("omi.ai/required-companion-deployment")
     for binding in actual["consumers"]:
@@ -315,6 +316,13 @@ def deploy(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
     after, _ = target_state(expected)
     if rollback_receipt is not None:
         require(after == rollback_receipt["before"], "rollback must restore the exact recorded prior runtime spec")
+    return obj, actual, index, after, expected
+
+
+def deploy(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
+    require(not dry_run_mode(), "deploy refused in dry-run mode")
+    run = guarded(run)
+    obj, actual, index, after, expected = preflight(baseline, image, run, rollback_receipt)
     receipt = {"before": actual["target"], "after": after, "consumers": actual["consumers"]}
     private_json(receipt_path, receipt)
     # An HPA rescale since the first read bumps resourceVersion; rebuild the CAS patch from a fresh
@@ -362,45 +370,52 @@ def server_preview(run, obj, image, allow_same=False):
     return after, patch
 
 
-def dry_run(baseline, image, receipt_path, run=kubectl):
-    """Prove the preserve-live writer's gates and server admission without any write.
+def dry_run(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
+    """Run every writer gate and the server admission dry-run, without any write.
 
-    Forward (image differs from live): preflight, then a server dry-run of the forward patch, and the
-    rollback precondition checked offline against the receipt the forward run would write.
-    Inverse: a server dry-run of the prior (live) image patch against fresh live state, the same CAS
-    tests (UID, resourceVersion, image) the rollback writer sends. Nothing is ever committed.
+    Without a rollback receipt (before a forward roll):
+      * forward: if ``image`` differs from live, the writer's preflight and a server dry-run of the
+        forward patch; the inverse patch built from that would-be post-roll object must restore the
+        live identity exactly (offline, the server cannot stage two steps);
+      * prior-image admission: a server dry-run of the live (prior) image against fresh live state.
+        This is a no-op patch: it proves admission of the prior spec and the UID/resourceVersion
+        tests, not the rollback CAS, which needs the forward state to exist.
+    With a rollback receipt (after a forward roll): the rollback writer's exact preflight and a
+    server dry-run of the real inverse patch (image test on the forward digest) against live state.
     """
     require_dry_run_env()
     run = guarded(run)
-    obj, actual = snapshot(run)
-    require(actual == baseline, "target or shared-consumer drift from admitted baseline")
-    prior = actual["target"]["image"]
-    require(IMAGE.fullmatch(image), "candidate must be an immutable worker digest")
-    require_t4_serves(run("get", RESOURCES, "-o", "json")["items"], image)
+    _, live = snapshot(run)
+    live_image = live["target"]["image"]
+    same = image == live_image and rollback_receipt is None
+    obj, actual, index, after, expected = preflight(baseline, image, run, rollback_receipt, allow_same=same)
     fresh = run("get", "deployment", TARGET, "-o", "json")
     require(target_state(fresh)[0] == actual["target"], "target drift immediately before dry-run")
-    forward = None
-    if image != prior:
-        after, patch = server_preview(run, fresh, image)
-        receipt = {"before": actual["target"], "after": after, "consumers": actual["consumers"]}
-        # The rollback writer's precondition, evaluated on the state the forward roll would leave.
-        post_roll = {"target": after, "consumers": actual["consumers"]}
-        forward = {"admitted": True, "after": after, "patch": patch, "would_write_receipt": receipt}
-        precondition = post_roll == {"target": receipt["after"], "consumers": receipt["consumers"]} and (
-            receipt["before"]["image"] == prior
-        )
+    result = {"mode": "dry-run", "baseline": actual, "forward": None, "prior_image_admission": None, "inverse": None}
+    if rollback_receipt is not None:
+        identity, patch = server_preview(run, fresh, image)
+        require(identity == rollback_receipt["before"], "inverse dry-run does not restore the recorded prior identity")
+        result["inverse"] = {"admitted": True, "image": image, "patch": patch, "restores": identity,
+                             "cas": "real rollback patch against the post-forward live state"}
     else:
-        precondition = None
-    inverse_identity, inverse_patch = server_preview(run, fresh, prior, allow_same=True)
-    require(inverse_identity == actual["target"], "inverse dry-run does not restore the live identity")
+        if not same:
+            identity, patch = server_preview(run, fresh, image)
+            receipt = {"before": actual["target"], "after": identity, "consumers": actual["consumers"]}
+            # The patch the rollback writer would send from the post-roll object must restore `before`.
+            post_roll = copy.deepcopy(expected)
+            reverse = patch_for(post_roll, live_image)
+            post_roll["spec"]["template"]["spec"]["containers"][index]["image"] = live_image
+            restored = target_state(post_roll)[0]
+            require(restored == receipt["before"], "inverse of the forward patch does not restore the live identity")
+            require(reverse[2]["value"] == image and reverse[3]["value"] == live_image, "inverse patch shape")
+            result["forward"] = {"admitted": True, "after": identity, "patch": patch, "would_write_receipt": receipt,
+                                 "inverse_restores_before": True}
+        identity, patch = server_preview(run, fresh, live_image, allow_same=True)
+        require(identity == actual["target"], "prior-image admission changed the live identity")
+        result["prior_image_admission"] = {"admitted": True, "image": live_image, "patch": patch, "noop": True}
     final = run("get", RESOURCES, "-o", "json")["items"]
     require(bindings(final) == baseline["consumers"], "consumer drift")
-    result = {
-        "mode": "dry-run",
-        "baseline": actual,
-        "forward": forward,
-        "inverse": {"admitted": True, "image": prior, "patch": inverse_patch, "rollback_precondition": precondition},
-    }
+    require_t4_serves(final, image)
     private_json(receipt_path, result)
     print(json.dumps(result), flush=True)
     return result
@@ -424,9 +439,11 @@ def main():
     if args.command == "inventory":
         print(json.dumps(snapshot()[1], indent=2))
     elif args.command == "dry-run":
-        require(args.baseline and args.image and args.receipt and not args.rollback_receipt,
-                "dry-run needs baseline, image and receipt, and takes no rollback receipt")
-        dry_run(json.loads(Path(args.baseline).read_text()), args.image, args.receipt)
+        require(args.baseline and args.image and args.receipt, "dry-run needs baseline, image and receipt")
+        rollback = json.loads(Path(args.rollback_receipt).read_text()) if args.rollback_receipt else None
+        if args.rollback_receipt:
+            require(isinstance(rollback, dict), "rollback receipt must be an object")
+        dry_run(json.loads(Path(args.baseline).read_text()), args.image, args.receipt, rollback_receipt=rollback)
     elif args.command == "deploy":
         require(not dry_run_mode(), "deploy refused in dry-run mode")
         require(args.baseline and args.image and args.receipt, "deploy needs baseline, image and receipt")

@@ -92,23 +92,21 @@ same read; those HPAs are bound by UID and spec hash, so removing or retargeting
 
 ### Dry-run mode (SCA-2944, David 2026-11-19)
 
-`worker_dry_run=true` runs the preserve-live path to its server dry-run and stops. It takes the same
-`prod-train` concurrency group (break-glass is refused), promotes an existing `image_digest` (no
-build or push; the image-tree check still runs) and takes no rollback receipt. The step sets
-`WORKER_IMAGE_ONLY_DRY_RUN=1`; while that is set the helper refuses `deploy` outright and refuses any
-API call other than a read or a `--dry-run=server` patch. The Helm, preserve-live writer, rollout
-and post-roll verify steps all exclude the mode in their `if:`.
+`worker_dry_run=true` runs the preserve-live path to its server dry-run and stops:
+- It takes the same `prod-train` concurrency group; break-glass is refused.
+- It promotes an existing `image_digest`, so there is no build or push. The image-tree check still runs.
+- The step sets `WORKER_IMAGE_ONLY_DRY_RUN=1`. While that is set, the helper refuses `deploy` outright and refuses any API call other than a read or a `--dry-run=server` patch.
+- The Helm, preserve-live writer, rollout and post-roll verify steps all exclude the mode in their `if:`.
+- The deployment summary and Telegram notification carry `DRY-RUN (no write)` as the release version.
 
-The helper's `dry-run` command checks the admitted baseline, the T4 fallback and sibling bindings,
-then server-dry-runs:
+The helper's `dry-run` command runs every writer gate: admitted baseline, required companion, T4 fallback (early and final reads) and sibling bindings. Then:
 
-- the forward patch (live -> `image_digest`) when the digest differs from live, and evaluates the
-  rollback precondition offline against the receipt that forward run would write;
-- the prior-image inverse (the live digest), with the same UID/resourceVersion/image CAS tests the
-  rollback writer sends.
+- **Before a forward roll** (no receipt):
+  - if `image_digest` differs from live, it server-dry-runs the forward patch and checks offline that the inverse patch built from the would-be post-roll object restores the live identity;
+  - it always server-dry-runs the live (prior) image against fresh live state. That is a **no-op patch**: it proves admission of the prior spec and the UID/resourceVersion tests, not the rollback CAS.
+- **After a forward roll** (`worker_rollback_receipt` set, with the rollback input rules): it applies the rollback writer's exact preflight and server-dry-runs the real inverse patch, whose image test is on the forward digest, against post-forward live state. This is the receipt-bound inverse rehearsal.
 
-It writes `worker-dry-run-receipt.json` (identities, hashes and patches only) and prints it to the
-step summary. For Release's prior-image proof, dispatch the prior digest with its merged source:
+It writes `worker-dry-run-receipt.json` (identities, hashes and patches only) and prints it to the step summary. Prior-image proof before the forward roll:
 
 ```bash
 python3 .github/scripts/worker_image_only.py inventory > worker-baseline.json
@@ -119,8 +117,9 @@ gh workflow run gcp_diarizer.yml --ref main \
   -f worker_live_baseline="$(cat worker-baseline.json)"
 ```
 
-The run still needs the prod environment approval; it never changes the cluster.
+To rehearse the real inverse after the forward roll, add `-f worker_rollback_receipt="$(cat worker-image-receipt.json)"` and use a fresh post-roll inventory. Both runs still need the prod environment approval; neither changes the cluster.
 
+## Verification and rollback custody
 
 The workflow logs and step summary contain the safe JSON image diff and rollback
 receipt. Retain the `rollback` object as `worker-image-receipt.json` in the

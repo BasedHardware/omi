@@ -113,12 +113,12 @@ jobs:
             exit 1
           fi
           if [[ "$DRY_RUN" == true ]]; then
-            # A dry-run holds the shared prod-train lock, promotes an existing digest (no build or
-            # push) and has no receipt-driven write path.
+            # A dry-run holds the shared prod-train lock and promotes an existing digest (no build or
+            # push). With a rollback receipt it rehearses the real inverse; the rollback checks below apply.
             [[ "${{ inputs.environment }}" == prod && "$SERVICE" == batch-pipeline-worker && "$PRESERVE_LIVE" == true \
-               && -n "$LIVE_BASELINE" && "$BREAK_GLASS_LOCK" != true && -z "$ROLLBACK_RECEIPT" \
+               && -n "$LIVE_BASELINE" && "$BREAK_GLASS_LOCK" != true \
                && "$CANDIDATE_DIGEST" =~ ^sha256:[abcdef0-9]{64}$ ]] || {
-              echo "worker_dry_run requires prod preserve-live batch-pipeline-worker, the shared lock, an explicit digest and no rollback receipt" >&2
+              echo "worker_dry_run requires prod preserve-live batch-pipeline-worker, the shared lock and an explicit digest" >&2
               exit 1
             }
           fi
@@ -366,17 +366,24 @@ jobs:
         if: inputs.preserve_live_worker == true && inputs.worker_dry_run == true
         env:
           LIVE_BASELINE: ${{ inputs.worker_live_baseline }}
+          ROLLBACK_RECEIPT: ${{ inputs.worker_rollback_receipt }}
           IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
           IMAGE_DIGEST: ${{ steps.promote.outputs.image_digest }}
-          # The helper refuses every non-read API call that is not a server dry-run while this is set.
+          # The helper refuses every API call other than a read or a server dry-run patch while set.
           WORKER_IMAGE_ONLY_DRY_RUN: "1"
         run: |
           set -euo pipefail
           umask 077
           echo "$LIVE_BASELINE" > "$RUNNER_TEMP/worker-live-baseline.json"
+          rollback_args=()
+          if [[ -n "$ROLLBACK_RECEIPT" ]]; then
+            echo "$ROLLBACK_RECEIPT" > "$RUNNER_TEMP/worker-rollback-receipt.json"
+            rollback_args=(--rollback-receipt "$RUNNER_TEMP/worker-rollback-receipt.json")
+          fi
           python3 .github/worker-workflow/.github/scripts/worker_image_only.py dry-run \
             --baseline "$RUNNER_TEMP/worker-live-baseline.json" \
             --image "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}" \
+            "${rollback_args[@]}" \
             --receipt "$RUNNER_TEMP/worker-dry-run-receipt.json" | tee "$RUNNER_TEMP/worker-dry-run.json"
           {
             echo '### Worker preserve-live dry-run receipt (no write)'
@@ -493,7 +500,7 @@ jobs:
         with:
           deployment_tag: ${{ steps.vars.outputs.short_sha || 'unadmitted' }}
           environment: ${{ github.event.inputs.environment }}
-          release_version: ${{ github.event.inputs.release_version }}
+          release_version: ${{ inputs.worker_dry_run == true && 'DRY-RUN (no write)' || github.event.inputs.release_version }}
           status: ${{ job.status }}
           service: ${{ env.SERVICE }}
 
@@ -503,7 +510,7 @@ jobs:
         with:
           deployment_tag: ${{ steps.vars.outputs.short_sha || 'unadmitted' }}
           environment: ${{ github.event.inputs.environment }}
-          release_version: ${{ github.event.inputs.release_version }}
+          release_version: ${{ inputs.worker_dry_run == true && 'DRY-RUN (no write)' || github.event.inputs.release_version }}
           status: ${{ job.status }}
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
