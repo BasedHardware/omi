@@ -237,12 +237,14 @@ def test_actual_writer_rotates_token_in_source_commit_and_revalidates(world, mon
             denial = 'account_deleted'
         elif writer == 'account_marker_complete':
             ref = w.client.document(f'account_deletions/{w.uid}')
-            assert account_deletion_transitions.mark_wipe_completed(w.client.transaction(), ref)
+            assert account_deletion_transitions.mark_wipe_completed(w.client.transaction(), ref, operation_id=writer)
             denial = 'account_deleted'
         elif writer == 'account_marker_late_cleanup':
             ref = w.client.document(f'account_deletions/{w.uid}')
             ref.update({'wipe_status': 'pending'})
-            assert account_deletion_transitions.record_late_agent_vm_cleanup(w.client.transaction(), ref, 'vm', 'zone')
+            assert account_deletion_transitions.record_late_agent_vm_cleanup(
+                w.client.transaction(), ref, 'vm', 'zone', operation_id=writer
+            )
             denial = 'account_deleted'
         elif writer.startswith('grace_'):
             result = account_deletion_grace.mark_user_deletion_grace_intent(
@@ -737,7 +739,21 @@ def test_disabled_writers_stay_visible_to_commit_observer(world, monkeypatch):
 
 
 def test_deletion_worker_transitions_advance_without_rewriting_purge_fields(world):
+    from google.cloud import firestore
+    from database.batch_account_authority import mutate_account_authority
+    from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
+
     w = world
+    marker = w.client.collection('account_deletions').document(w.uid)
+    deletion = ACCOUNT_AUTHORITY_WRITES.labels('account_deletions', 'deletion', 'true')
+    existence = ACCOUNT_AUTHORITY_WRITES.labels('account_deletions', 'existence', 'true')
+    before_deletion, before_existence = deletion._value.get(), existence._value.get()
+
+    @firestore.transactional
+    def create(transaction):
+        return mutate_account_authority(
+            transaction, marker, 'create-marker', {'wipe_status': 'cancelled'}, client=w.client, merge=False
+        )
 
     def assert_epoch(epoch):
         owner = w.token.get().to_dict()
@@ -745,24 +761,71 @@ def test_deletion_worker_transitions_advance_without_rewriting_purge_fields(worl
         assert owner['generation'] == 7
         assert not owner.get('blocked') and not owner.get('purging')
 
-    w.users.mark_user_deletion_wipe_intent(w.uid)
+    assert create(w.client.transaction()).applied
     assert_epoch(8)
-    assert w.users.mark_user_deletion_billing_failed(w.uid, None, 'synthetic failure')
+    assert existence._value.get() == before_existence + 1
+    assert deletion._value.get() == before_deletion
+    w.users.mark_user_deletion_wipe_intent(w.uid)
     assert_epoch(9)
+    assert deletion._value.get() == before_deletion + 1
+    assert existence._value.get() == before_existence + 1
+    assert w.users.mark_user_deletion_billing_failed(w.uid, None, 'synthetic failure')
+    assert_epoch(10)
     assert w.check() == 7
     assert w.users.claim_deletion_wipe_for_task(w.uid) == 'claimed'
-    assert_epoch(10)
+    assert_epoch(11)
     w.users.mark_user_deletion_wipe_running(w.uid)
-    assert_epoch(11)
-    w.users.heartbeat_user_deletion_wipe(w.uid)
-    assert_epoch(11)
-    w.users.mark_user_deletion_auth_deleted(w.uid)
     assert_epoch(12)
-    w.users.mark_user_deletion_wipe_failed(w.uid)
-    marker = w.client.collection('account_deletions').document(w.uid)
-    assert marker.get().to_dict()['wipe_attempts'] == 1
+    w.users.heartbeat_user_deletion_wipe(w.uid)
+    assert_epoch(12)
+    w.users.mark_user_deletion_auth_deleted(w.uid)
     assert_epoch(13)
-    assert w.users.claim_deletion_wipe(w.uid) == w.uid
+    w.users.mark_user_deletion_wipe_failed(w.uid)
+    assert marker.get().to_dict()['wipe_attempts'] == 1
     assert_epoch(14)
-    assert w.users.mark_user_deletion_wipe_completed(w.uid)
+    assert w.users.claim_deletion_wipe(w.uid) == w.uid
     assert_epoch(15)
+    assert w.users.mark_user_deletion_wipe_completed(w.uid)
+    assert_epoch(16)
+
+
+def test_deletion_claim_retries_after_lost_commit_response(world, monkeypatch):
+    from database.batch_account_authority import ACCOUNT_OPERATION_RETENTION
+
+    w = world
+    w.users.mark_user_deletion_wipe_intent(w.uid)
+    claim = w.users._claim_deletion_wipe_task_txn
+    before = datetime.now(timezone.utc)
+
+    def retry_after_commit(transaction, *args, **kwargs):
+        assert claim(transaction, *args, **kwargs) == 'claimed'
+        # Commit succeeded but the response was lost. Rerun the same transaction
+        # function with a new SDK transaction and the original operation ID.
+        return claim(w.client.transaction(), *args, **kwargs)
+
+    monkeypatch.setattr(w.users, '_claim_deletion_wipe_task_txn', retry_after_commit)
+    assert w.users.claim_deletion_wipe_for_task(w.uid) == 'claimed'
+    assert w.token.get().to_dict()['account_epoch'] == 9
+    receipts = [row.to_dict() for row in w.token.collection('account_operations').stream()]
+    assert sorted(receipt['account_epoch'] for receipt in receipts) == [8, 9]
+    claim_receipt = next(receipt for receipt in receipts if receipt['account_epoch'] == 9)
+    assert before <= claim_receipt['expires_at'] - ACCOUNT_OPERATION_RETENTION <= datetime.now(timezone.utc)
+
+
+def test_privacy_writers_refuse_to_recreate_erased_user(world):
+    from database import voice_profiles
+    from database.batch_account_authority import ErasedAccountMutationRefused
+
+    w = world
+    w.privacy.advance_privacy_generation(w.client, w.uid, blocked=True)
+    w.user.delete()
+    for mutate in (
+        lambda: w.users.set_user_private_cloud_sync_enabled(w.uid, True),
+        lambda: w.users.set_data_protection_level(w.uid, 'e2ee'),
+        lambda: voice_profiles.set_voice_profile_settings(w.uid, {'save_other_voice_profiles': False}),
+    ):
+        with pytest.raises(ErasedAccountMutationRefused):
+            mutate()
+        assert not w.user.get().exists
+    assert 'account_epoch' not in w.token.get().to_dict()
+    assert not list(w.token.collection('account_operations').stream())

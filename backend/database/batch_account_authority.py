@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 import hashlib
 from typing import Any
 from uuid import uuid4
@@ -19,6 +20,12 @@ from database.batch_account_authority_schema import (
     USER_COLLECTION,
 )
 from database.batch_pipeline_privacy import privacy_owner_key, privacy_purge_patch
+
+ACCOUNT_OPERATION_RETENTION = timedelta(days=90)
+
+
+class ErasedAccountMutationRefused(RuntimeError):
+    """A privacy writer cannot recreate a permanently erased account."""
 
 
 @dataclass(frozen=True)
@@ -58,8 +65,8 @@ def mutate_account_authority(
     """Write one account authority and its epoch in a single transaction.
 
     The caller allocates the operation ID before opening a retryable transaction.
-    Receipts contain only counters, keyed by a hash of the source family and
-    operation ID. They survive delayed replay after another account mutation.
+    Receipts hold counters and an expiry, keyed by a hash of the source family
+    and operation ID. They handle delayed replay within the retention window.
     The head survives older binaries replacing the parent privacy document.
     """
     family = reference.parent.id
@@ -86,7 +93,7 @@ def mutate_account_authority(
     if validate is not None:
         validate(preimage, previous)
     if family == USER_COLLECTION and data is not None and not preimage.exists and previous.get('blocked'):
-        raise ValueError('permanently erased account cannot be recreated by a privacy writer')
+        raise ErasedAccountMutationRefused('permanently erased account cannot be recreated by a privacy writer')
 
     epochs = (state.get(ACCOUNT_EPOCH, 0), previous.get(ACCOUNT_EPOCH, 0), previous.get('generation', 0))
     if any(type(value) is not int or value < 0 for value in epochs):
@@ -121,11 +128,18 @@ def mutate_account_authority(
         transaction.update(head, {ACCOUNT_EPOCH: epoch})
     else:
         transaction.create(head, {ACCOUNT_EPOCH: epoch})
-    transaction.create(receipt, {ACCOUNT_EPOCH: epoch, 'purge_generation': purge_generation})
+    transaction.create(
+        receipt,
+        {
+            ACCOUNT_EPOCH: epoch,
+            'purge_generation': purge_generation,
+            'expires_at': datetime.now(timezone.utc) + ACCOUNT_OPERATION_RETENTION,
+        },
+    )
     return AccountMutationResult(epoch, purge_generation, True)
 
 
-def write_account_authority(transaction, reference, data, *, preimage=None, merge=None, operation_id=None, client=None):
+def write_account_authority(transaction, reference, data, *, operation_id: str, preimage=None, merge=None, client=None):
     """Route an existing transaction after its other reads have completed."""
     if not account_authority_writer_enabled():
         _write_source(transaction, reference, data, merge)
@@ -133,7 +147,7 @@ def write_account_authority(transaction, reference, data, *, preimage=None, merg
     if client is None:
         client = getattr(transaction, '_client')
     return mutate_account_authority(
-        transaction, reference, operation_id or uuid4().hex, data, client=client, preimage=preimage, merge=merge
+        transaction, reference, operation_id, data, client=client, preimage=preimage, merge=merge
     )
 
 

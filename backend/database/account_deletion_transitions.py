@@ -36,7 +36,7 @@ def read_agent_vm_migration_journals(uid: str) -> list[dict[str, Any]]:
 
 
 @transactional
-def mark_wipe_completed(transaction, doc_ref) -> bool:
+def mark_wipe_completed(transaction, doc_ref, *, operation_id: str) -> bool:
     snapshot = doc_ref.get(transaction=transaction)
     data = (snapshot.to_dict() or {}) if snapshot.exists else {}
     if data.get('late_agent_vm_cleanup'):
@@ -46,6 +46,7 @@ def mark_wipe_completed(transaction, doc_ref) -> bool:
             {'wipe_status': 'failed', 'wipe_failed_at': datetime.now(timezone.utc)},
             merge=True,
             preimage=snapshot,
+            operation_id=operation_id,
         )
         return False
     write_account_authority(
@@ -54,6 +55,7 @@ def mark_wipe_completed(transaction, doc_ref) -> bool:
         {'wipe_status': 'completed', 'wipe_completed_at': datetime.now(timezone.utc)},
         merge=True,
         preimage=snapshot,
+        operation_id=operation_id,
     )
     return True
 
@@ -65,6 +67,8 @@ def record_late_agent_vm_cleanup(
     vm_name: str,
     zone: str,
     expected_instance_id: str | None = None,
+    *,
+    operation_id: str,
 ) -> bool:
     snapshot = doc_ref.get(transaction=transaction)
     raw_status = (snapshot.to_dict() or {}).get('wipe_status') if snapshot.exists else None
@@ -86,6 +90,7 @@ def record_late_agent_vm_cleanup(
         },
         merge=True,
         preimage=snapshot,
+        operation_id=operation_id,
     )
     return True
 

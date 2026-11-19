@@ -23,7 +23,7 @@ from database.account_deletion_marker import (
     account_deletion_collection,
     account_deletion_document,
     account_deletion_firestore_client,
-    get_user_deletion_wipe_status,
+    get_user_deletion_wipe_status as get_user_deletion_wipe_status,
 )
 import database.account_deletion_grace as account_deletion_grace_db
 from database.batch_account_authority import (
@@ -483,6 +483,7 @@ def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) 
                     doc_ref,
                     {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
                     preimage=snapshot,
+                    operation_id=f'wipe-intent-promote:{wipe_job_id}',
                 )
                 return {'wipe_job_id': existing_job_id, 'dispatch_claimed': True}
             if status in {'pending', 'retrying', 'running', 'failed', 'completed'}:
@@ -539,6 +540,7 @@ def _mark_user_deletion_wipe_started_txn(transaction, doc_ref, wipe_job_id: str)
         doc_ref,
         {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
         preimage=snapshot,
+        operation_id=f'wipe-started:{wipe_job_id}',
     )
     return True
 
@@ -555,9 +557,10 @@ def mark_user_deletion_wipe_started(uid: str, wipe_job_id: str) -> bool:
 @cache_writer('deletion_marker_cache')
 def mark_user_deletion_wipe_completed(uid: str) -> bool:
     """Complete the wipe only if no provider cleanup remains outstanding."""
+    operation_id = uuid.uuid4().hex
     client = account_deletion_firestore_client()
     return _mark_user_deletion_wipe_completed_txn(
-        client.transaction(), account_deletion_document(uid, firestore_client=client)
+        client.transaction(), account_deletion_document(uid, firestore_client=client), operation_id=operation_id
     )
 
 
@@ -584,6 +587,7 @@ def record_late_agent_vm_cleanup(
     expected_instance_id: str | None = None,
 ) -> bool:
     """Persist a late VM only when an admitted deletion owns its cleanup."""
+    operation_id = uuid.uuid4().hex
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
     return _record_late_agent_vm_cleanup_txn(
@@ -592,6 +596,7 @@ def record_late_agent_vm_cleanup(
         vm_name,
         zone,
         expected_instance_id,
+        operation_id=operation_id,
     )
 
 
@@ -681,7 +686,9 @@ def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution
 
 
 @transactional
-def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subscription_id: str | None, error: str):
+def _mark_user_deletion_billing_failed_txn(
+    transaction, doc_ref, uid: str, subscription_id: str | None, error: str, *, operation_id: str
+):
     snapshot = doc_ref.get(transaction=transaction)
     if snapshot.exists:
         data = snapshot.to_dict() or {}
@@ -699,6 +706,7 @@ def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subsc
         },
         merge=True,
         preimage=snapshot,
+        operation_id=operation_id,
     )
     return True
 
@@ -710,10 +718,13 @@ def mark_user_deletion_billing_failed(uid: str, subscription_id: str | None, err
     The worker must first verify Firebase Auth still exists. Started wipes may
     park here before Auth deletion; a post-Auth or terminal marker stays fenced.
     """
+    operation_id = uuid.uuid4().hex
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
     transaction = client.transaction()
-    return _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid, subscription_id, error)
+    return _mark_user_deletion_billing_failed_txn(
+        transaction, doc_ref, uid, subscription_id, error, operation_id=operation_id
+    )
 
 
 @cache_writer('deletion_marker_cache')
@@ -858,7 +869,7 @@ def get_pending_deletion_wipes(
 
 @transactional
 def _claim_deletion_wipe_txn(
-    transaction, doc_ref, stale_after: timedelta, running_stale_after: timedelta
+    transaction, doc_ref, stale_after: timedelta, running_stale_after: timedelta, *, operation_id: str
 ) -> str | None:
     """Atomically claim a wipe for re-enqueueing inside a Firestore transaction.
 
@@ -882,12 +893,16 @@ def _claim_deletion_wipe_txn(
         if not deletion_billing_error_is_already_gone(data.get('billing_error')):
             return None
         write_account_authority(
-            transaction, doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now}, preimage=snapshot
+            transaction,
+            doc_ref,
+            {'wipe_status': 'retrying', 'wipe_claimed_at': now},
+            preimage=snapshot,
+            operation_id=operation_id,
         )
         return snapshot.id
     if status == ACCOUNT_DELETION_GRACE_STATUS:
         return account_deletion_grace_db.claim_due_grace_txn(
-            transaction, doc_ref, snapshot.id, data, now, preimage=snapshot
+            transaction, doc_ref, snapshot.id, data, now, preimage=snapshot, operation_id=operation_id
         )
     if status == 'deleting_auth':
         # Recoverable only after the caller verified the Firebase auth user is
@@ -897,7 +912,11 @@ def _claim_deletion_wipe_txn(
         if intent_at and intent_at >= now - stale_after:
             return None
         write_account_authority(
-            transaction, doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now}, preimage=snapshot
+            transaction,
+            doc_ref,
+            {'wipe_status': 'retrying', 'wipe_claimed_at': now},
+            preimage=snapshot,
+            operation_id=operation_id,
         )
         return snapshot.id
     if status == 'pending':
@@ -909,7 +928,11 @@ def _claim_deletion_wipe_txn(
         if queued_at and queued_at >= now - stale_after:
             return None
         write_account_authority(
-            transaction, doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now}, preimage=snapshot
+            transaction,
+            doc_ref,
+            {'wipe_status': 'retrying', 'wipe_claimed_at': now},
+            preimage=snapshot,
+            operation_id=operation_id,
         )
         return snapshot.id
     if status == 'running':
@@ -921,12 +944,20 @@ def _claim_deletion_wipe_txn(
         if running_at and running_at >= now - running_stale_after:
             return None
         write_account_authority(
-            transaction, doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now}, preimage=snapshot
+            transaction,
+            doc_ref,
+            {'wipe_status': 'retrying', 'wipe_claimed_at': now},
+            preimage=snapshot,
+            operation_id=operation_id,
         )
         return snapshot.id
     if status == 'failed':
         write_account_authority(
-            transaction, doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now}, preimage=snapshot
+            transaction,
+            doc_ref,
+            {'wipe_status': 'retrying', 'wipe_claimed_at': now},
+            preimage=snapshot,
+            operation_id=operation_id,
         )
         return snapshot.id
     if status == 'retrying':
@@ -956,14 +987,15 @@ def claim_deletion_wipe(
     another worker already owns a non-stale claim. This prevents the same wipe
     from being re-enqueued concurrently by multiple workers or scheduler runs.
     """
+    operation_id = uuid.uuid4().hex
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
     transaction = client.transaction()
-    return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after)
+    return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after, operation_id=operation_id)
 
 
 @transactional
-def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: timedelta) -> str:
+def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: timedelta, *, operation_id: str) -> str:
     """Claim a Cloud Tasks delivery before running an account-deletion wipe.
 
     The claim intentionally stays in ``retrying`` until the cleanup worker
@@ -995,7 +1027,11 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
     # only recovers historical already-gone billing errors, never an outage.
     if status in ('pending', 'retrying', 'failed', 'running', 'billing_failed', ACCOUNT_DELETION_GRACE_STATUS):
         write_account_authority(
-            transaction, doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now}, preimage=snapshot
+            transaction,
+            doc_ref,
+            {'wipe_status': 'retrying', 'wipe_claimed_at': now},
+            preimage=snapshot,
+            operation_id=operation_id,
         )
         return 'claimed'
 
@@ -1009,10 +1045,11 @@ def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELE
     Returns one of: ``claimed``, ``running``, ``completed``, ``missing``, or
     ``not_actionable``. Only ``claimed`` callers may run the destructive wipe.
     """
+    operation_id = uuid.uuid4().hex
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
     transaction = client.transaction()
-    return _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after)
+    return _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after, operation_id=operation_id)
 
 
 def create_person(uid: str, data: dict):

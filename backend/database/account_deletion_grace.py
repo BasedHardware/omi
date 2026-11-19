@@ -159,7 +159,7 @@ def mark_user_deletion_grace_actions_complete(uid: str, wipe_job_id: str) -> boo
 
 
 @transactional
-def _restore_user_deletion_txn(transaction, doc_ref) -> str:
+def _restore_user_deletion_txn(transaction, doc_ref, *, operation_id: str) -> str:
     snapshot = doc_ref.get(transaction=transaction)
     if not snapshot.exists:
         return 'not_pending'
@@ -177,6 +177,7 @@ def _restore_user_deletion_txn(transaction, doc_ref) -> str:
         doc_ref,
         {'wipe_status': 'cancelled', 'wipe_cancelled_at': now, 'wipe_restored_at': now},
         preimage=snapshot,
+        operation_id=operation_id,
     )
     return 'restored'
 
@@ -184,9 +185,10 @@ def _restore_user_deletion_txn(transaction, doc_ref) -> str:
 @cache_writer('deletion_marker_cache')
 def restore_user_deletion(uid: str) -> str:
     """Cancel a grace-period wipe unless the due-time worker has won the race."""
+    operation_id = uuid.uuid4().hex
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
-    return _restore_user_deletion_txn(client.transaction(), doc_ref)
+    return _restore_user_deletion_txn(client.transaction(), doc_ref, operation_id=operation_id)
 
 
 def grace_wipe_is_due(data: dict, now: datetime) -> bool:
@@ -208,10 +210,16 @@ def pending_grace_wipes(docs, limit: int, now: datetime) -> list[dict]:
     return results
 
 
-def claim_due_grace_txn(transaction, doc_ref, uid: str, data: dict, now: datetime, *, preimage=None) -> str | None:
+def claim_due_grace_txn(
+    transaction, doc_ref, uid: str, data: dict, now: datetime, *, operation_id: str, preimage=None
+) -> str | None:
     if not grace_wipe_is_due(data, now):
         return None
     write_account_authority(
-        transaction, doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now}, preimage=preimage
+        transaction,
+        doc_ref,
+        {'wipe_status': 'retrying', 'wipe_claimed_at': now},
+        preimage=preimage,
+        operation_id=operation_id,
     )
     return uid

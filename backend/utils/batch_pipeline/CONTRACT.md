@@ -741,9 +741,17 @@ permanent blocks and active purges.
 and active purge fields. GPU work, including the `ef42ee8` image, carries this legacy
 generation. The row also publishes `account_epoch`, with a durable head and hashed,
 fixed-size operation receipts in its subcollections. The head and receipts survive
-old root replacement and recursive user erasure. Receipts contain only counters
-and currently have no TTL so a delayed replay cannot reapply a privacy choice.
-Changing receipt retention requires an explicit replay horizon.
+old root replacement and recursive user erasure. Each mutation allocates its
+operation ID before entering the retryable transaction or derives it from a stable
+job ID. Receipts hold counters and `expires_at` with a 90-day replay window.
+The permanent head and privacy owner row do not expire. See the
+[receipt TTL declaration](../../deploy/batch-pipeline/account-privacy-receipt-retention.json).
+
+The customer-data client behind `db` and the explicit data-plane client target
+the same Firestore project and database on the API and worker deployments that
+mount account settings. The standalone desktop service may use a different
+compute project and does not mount those routers. The account epoch transaction
+can increase contention on the owner row during simultaneous privacy changes.
 
 The Commit observer emits `omi_batch_pipeline_account_privacy_writes_total` with
 `writer_class`, `field_group`, and `certified` labels after successful writes. It

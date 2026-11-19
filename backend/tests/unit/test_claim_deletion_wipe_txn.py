@@ -144,7 +144,7 @@ def _run_claim(data, stale_after=timedelta(minutes=10), running_stale_after=user
         def get(self, transaction=None):
             return snapshot
 
-    result = raw_fn(txn, FakeDocRef(), stale_after, running_stale_after)
+    result = raw_fn(txn, FakeDocRef(), stale_after, running_stale_after, operation_id='claim')
     return result, txn._updates
 
 
@@ -153,7 +153,7 @@ def _run_task_claim(data):
     snapshot = _make_snapshot(data)
     doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
     raw_fn = getattr(users_db._claim_deletion_wipe_task_txn, 'to_wrap', users_db._claim_deletion_wipe_task_txn)
-    return raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER), txn._updates
+    return raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER, operation_id='task-claim'), txn._updates
 
 
 def _run_restore(data):
@@ -165,7 +165,7 @@ def _run_restore(data):
         'to_wrap',
         deletion_grace_db._restore_user_deletion_txn,
     )
-    return raw_fn(txn, doc_ref), txn._updates
+    return raw_fn(txn, doc_ref, operation_id='restore'), txn._updates
 
 
 def _run_mark_grace(data, due_at):
@@ -191,7 +191,7 @@ def _run_mark_billing_failed(data):
         def get(self, transaction=None):
             return snapshot
 
-    result = raw_fn(txn, FakeDocRef(), 'uid1', 'sub_123', 'stripe down')
+    result = raw_fn(txn, FakeDocRef(), 'uid1', 'sub_123', 'stripe down', operation_id='billing')
     return result, txn._sets
 
 
@@ -205,7 +205,7 @@ def _run_mark_completed(data):
         def get(self, transaction=None):
             return snapshot
 
-    result = raw_fn(txn, FakeDocRef())
+    result = raw_fn(txn, FakeDocRef(), operation_id='complete')
     return result, txn._sets
 
 
@@ -225,6 +225,7 @@ def _run_record_late_cleanup(data, expected_instance_id='707'):
         'omi-agent-late',
         'us-central1-a',
         expected_instance_id,
+        operation_id='late-cleanup',
     )
     return result, txn._sets
 
@@ -827,7 +828,7 @@ def test_task_delivery_can_retry_transient_billing_failure():
     snapshot = _make_snapshot({'uid': 'uid1', 'wipe_status': 'billing_failed', 'billing_error': 'Stripe timeout'})
     doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
     raw_fn = getattr(users_db._claim_deletion_wipe_task_txn, 'to_wrap', users_db._claim_deletion_wipe_task_txn)
-    assert raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER) == 'claimed'
+    assert raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER, operation_id='task-claim') == 'claimed'
     assert txn._updates[0][1]['wipe_status'] == 'retrying'
 
 
