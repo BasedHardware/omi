@@ -902,8 +902,13 @@ class DryRunTests(unittest.TestCase):
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 found += [f"import {a.name}" for a in node.names if a.name.split(".")[0] not in self.REVIEWED_IMPORTS]
+                # An alias would hide process calls from the attribute check below.
+                found += [f"import {a.name} as {a.asname}" for a in node.names
+                          if a.asname and a.name.split(".")[0] in ("os", "subprocess")]
             elif isinstance(node, ast.ImportFrom):
                 if (node.module or "").split(".")[0] not in self.REVIEWED_IMPORTS:
+                    found.append(f"from {node.module} import")
+                elif (node.module or "").split(".")[0] in ("os", "subprocess"):
                     found.append(f"from {node.module} import")
             elif isinstance(node, ast.Name) and node.id in ("__import__", "eval", "exec", "compile"):
                 found.append(node.id)
@@ -923,7 +928,8 @@ class DryRunTests(unittest.TestCase):
 
     def test_boundary_check_rejects_alternate_clients(self):
         source = Path(worker.__file__).read_text()
-        for extra in ("import urllib3\n", "from kubernetes import client\n", "import importlib\n",
+        for extra in ("import urllib3\n", "from subprocess import run\n", "import subprocess as sp\n",
+                      "from os import system\n", "import os as o\n", "from kubernetes import client\n", "import importlib\n",
                       "def other():\n    return subprocess.run(['kubectl'])\n", "subprocess.Popen(['x'])\n",
                       "def f():\n    os.system('x')\n", "def f():\n    return __import__('socket')\n"):
             with self.subTest(extra=extra):
@@ -1250,13 +1256,14 @@ class WorkflowTests(unittest.TestCase):
 
     # Workflow- and job-level execution context (env, defaults, permissions, container, environment) that
     # applies to every dry-run-reachable step; any edit fails here until reviewed.
-    DRY_RUN_CONTEXT_DIGEST = "9132ad2fb2771bf9f39cd2b05d3753f4bc5f127ab65b6341ccdb73b8f7f703df"
+    DRY_RUN_CONTEXT_DIGEST = "a9cfbb4c845e4e23d7cae5c76d3f1991a55f4205cc7bc1e351819dadc05ccef3"
 
     def context_digest(self):
         context = {
             "workflow": {k: self.workflow.get(k) for k in ("env", "defaults", "permissions", "concurrency")},
             "jobs": {name: {k: job.get(k) for k in ("env", "defaults", "permissions", "container", "services",
-                                                      "environment", "runs-on", "if", "uses")}
+                                                      "environment", "runs-on", "if", "uses", "concurrency",
+                                                      "strategy", "continue-on-error", "needs")}
                      for name, job in self.workflow["jobs"].items()},
         }
         return hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
@@ -1301,6 +1308,9 @@ class WorkflowTests(unittest.TestCase):
 
     def test_dry_run_execution_context_is_reviewed(self):
         self.assertEqual(self.context_digest(), self.DRY_RUN_CONTEXT_DIGEST)
+        # A job-level concurrency block would replace the workflow-level prod-train group for that job.
+        for name, job in self.workflow["jobs"].items():
+            self.assertNotIn("concurrency", job, name)
 
     def test_run_steps_reachable_in_dry_run_mode_are_reviewed(self):
         reachable = {
