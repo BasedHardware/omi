@@ -362,9 +362,12 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     (rows this run already wrote are replanned, their first prior kept), and `undo` is exact from
     either state.
   - Undo: before each commit, the run writes every changed, created or retired row's stored document
-    and claim positions to `conversations_v3_backfill_runs/{run_id}/conversations_v3_rederive_priors` (purged with the account,
-    with a conversation the owner deletes, and after a finished undo; never written for a conversation
-    already deleted or once account deletion began).
+    and claim positions to `conversations_v3_backfill_runs/{run_id}/conversations_v3_rederive_priors` (purged with the account
+    and after a finished undo; never written for a conversation already deleted or once account
+    deletion began). When the owner deletes a stamped conversation or changes its protection level,
+    its priors in every live run are emptied to a `purged` stub, and that run's undo then refuses.
+    Restores are exact apart from the commit hook's `home_source_version` and
+    `home_content_invalidated` stamps.
     `undo --run` takes both builder leases, waits for in-flight notes, then restores each group of
     rows that share a source in one transaction: stored documents back exactly, created rows removed,
     each source's claim list back in its original order. It refuses (`undo.reason`) after the owner

@@ -10,6 +10,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from types import SimpleNamespace
 
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
@@ -606,16 +607,77 @@ async def test_undo_refuses_a_group_too_large_for_one_transaction_before_restori
 
 
 @pytest.mark.asyncio
-async def test_deleting_a_rebuilt_conversation_purges_its_undo_copies(owner, strict, monkeypatch):
+@pytest.mark.parametrize(
+    'reason, refusal', [('deleted', 'owner_deleted_rebuilt_row'), ('protection', 'owner_edited_rebuilt_row')]
+)
+async def test_a_deleted_or_reprotected_conversation_keeps_no_undo_copy(
+    owner, strict, ledger, monkeypatch, reason, refusal
+):
     sources, rows = lunch(count=3)
     owner(*sources, *rows)
     await rederive()
-    ledger_runs = [{'run_id': RUN, 'mode': backfill.LIVE_MODE}, {'run_id': 'legacy', 'mode': 'derive'}]
-    monkeypatch.setattr(runs, 'list_runs', lambda uid, **kw: ledger_runs)
+    after = conversations(strict)
+    monkeypatch.setattr(runs, '_live_run_ids', lambda uid, **kw: [RUN, 'other-live-run'])
     assert {e['id'] for e in priors(strict)} == {'c0', 'c1', 'c2'}
-    survivor = conversations(strict)['c0']
-    runs.purge_conversation_priors(UID, ['c0', *survivor['sync_merged_from']], firestore_client=strict)
-    assert not priors(strict)
+    purged = runs.purge_conversation_priors(
+        UID, ['c0', *after['c0']['sync_merged_from']], reason, firestore_client=strict
+    )
+    # Every copy is emptied (and none is invented in a run that never held one).
+    assert purged == 3 and not priors(strict, 'other-live-run')
+    assert all(set(e) == {'id', 'purged', 'recorded_at'} and e['purged'] == reason for e in priors(strict))
+    # The run can no longer be undone exactly, so it is not undone at all.
+    assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': refusal}
+    assert conversations(strict) == after
+
+
+def test_a_protection_change_empties_undo_copies_of_stamped_rows_before_migrating(monkeypatch):
+    calls = []
+
+    def purge(uid, ids, reason, **kwargs):
+        calls.append((uid, ids, reason))
+        raise RuntimeError('stop before migrating')
+
+    stamped = StrictFirestoreSnapshot({'v3_rederive_live_run': RUN})
+    stamped.id = 'c0'
+    plain = StrictFirestoreSnapshot({'data_protection_level': 'standard'})
+    plain.id = 'c1'
+    client = SimpleNamespace(
+        collection=lambda *a: SimpleNamespace(
+            document=lambda *a: SimpleNamespace(collection=lambda *a: SimpleNamespace(document=lambda cid: cid))
+        ),
+        get_all=lambda refs, field_paths=None: [stamped, plain],
+        batch=lambda: None,
+    )
+    monkeypatch.setattr(backfill.conversations_db, 'db', client)
+    monkeypatch.setattr(runs, 'purge_conversation_priors', purge)
+    with pytest.raises(RuntimeError, match='stop before migrating'):
+        backfill.conversations_db.migrate_conversations_level_batch(UID, ['c0', 'c1'], 'enhanced')
+    assert calls == [(UID, ['c0'], 'protection')]
+
+
+@pytest.mark.asyncio
+async def test_undo_refuses_after_a_protection_change_before_baselines(owner, strict, ledger):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    await rederive()
+    strict.rows[path('c0')]['data_protection_level'] = 'enhanced'
+    assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': 'owner_edited_rebuilt_row'}
+
+
+def test_a_restored_row_is_recognised_despite_the_commit_hook_stamps():
+    raw = {'id': 'c0', 'title': 'Kept', 'home_source_version': 'before'}
+    restored = {'id': 'c0', 'title': 'Kept', 'home_source_version': 'stamped', 'home_content_invalidated': False}
+    assert rederive_store.already_undone(restored, {'raw': raw}, RUN)
+    assert not rederive_store.already_undone({**restored, 'title': 'Other'}, {'raw': raw}, RUN)
+
+
+def test_the_dry_run_reports_a_window_that_would_cross_the_edge(owner, strict):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows, source('r9', UNTIL - timedelta(seconds=60), seconds=120, words=400))
+    est = backfill.estimate_live_partition(
+        UID, {'since': SINCE, 'until': UNTIL}, 'dry-run', now=UNTIL + timedelta(hours=1)
+    )
+    assert est['windows_crossing_edge'] == 1
 
 
 def test_priors_are_never_written_for_a_conversation_the_owner_deleted(strict):

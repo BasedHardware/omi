@@ -972,7 +972,7 @@ def _purge_rederive_priors(uid: str, conversation_ids: list) -> None:
     # Imported on use: only a row a live re-derive stamped has copies in a run ledger.
     from database import conversations_v3_backfill_runs
 
-    conversations_v3_backfill_runs.purge_conversation_priors(uid, conversation_ids)
+    conversations_v3_backfill_runs.purge_conversation_priors(uid, conversation_ids, 'deleted')
 
 
 def delete_conversation_with_sync_sources(

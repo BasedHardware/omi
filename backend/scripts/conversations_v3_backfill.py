@@ -117,6 +117,8 @@ def plan_owner(uid: str, label: str, since: datetime, until: datetime, mode: str
                 'sources_size_limit': totals.get('sources_blocked_size_limit', 0),
                 # Live speech no window claimed: the run makes new cards of it.
                 'sources_unclaimed': totals.get('sources_unclaimed', 0),
+                # Windows the run would refuse to write (rederive_live_boundary): move since/until first.
+                'windows_crossing_edge': totals.get('windows_crossing_edge', 0),
                 'llm_calls': totals.get('outline_calls', 0)
                 + totals.get('notes_calls', 0)
                 + totals.get('short_task_calls', 0),

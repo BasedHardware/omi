@@ -185,15 +185,46 @@ def drop_priors(uid, run_id, conversation_ids, *, firestore_client=None):
     return len(ids)
 
 
-def purge_conversation_priors(uid, conversation_ids, *, firestore_client=None):
-    """A deleted conversation's undo copies go with it, from every live re-derive run of its owner."""
+def _live_run_ids(uid, *, firestore_client=None):
+    """Every live re-derive run of an owner, in id-ordered pages (no cap on how many runs)."""
     client = firestore_client or get_firestore_client()
-    runs = [
-        r['run_id'] for r in list_runs(uid, firestore_client=client) if r.get('mode') == LIVE_MODE and r.get('run_id')
-    ]
+    found, cursor = [], None
+    while True:
+        query = (
+            client.collection('users').document(uid).collection(COLLECTION).order_by('__name__').limit(PRIORS_READ_PAGE)
+        )
+        if cursor is not None:
+            query = query.start_after(cursor)
+        page = list(query.stream())
+        found.extend(doc.id for doc in page if (doc.to_dict() or {}).get('mode') == LIVE_MODE)
+        if len(page) < PRIORS_READ_PAGE:
+            return found
+        cursor = page[-1]
+
+
+def purge_conversation_priors(uid, conversation_ids, reason, *, firestore_client=None):
+    """The owner deleted or re-protected these conversations: no undo copy of them is kept.
+
+    Each existing prior becomes a stub with no content (``purged``: reason), in every live re-derive
+    run of the owner, so that run's undo refuses as a whole rather than restoring around them.
+    """
+    client = firestore_client or get_firestore_client()
+    ids = sorted(set(conversation_ids))
+    runs = _live_run_ids(uid, firestore_client=client)
+
+    @firestore.transactional
+    def purge(tx, run_id, page):
+        coll = _priors(client, uid, run_id)
+        found = [cid for cid in page if coll.document(cid).get(transaction=tx).exists]
+        for cid in found:
+            tx.set(coll.document(cid), {'id': cid, 'purged': reason, 'recorded_at': datetime.now(timezone.utc)})
+        return len(found)
+
+    purged = 0
     for run_id in runs:
-        drop_priors(uid, run_id, conversation_ids, firestore_client=client)
-    return len(runs)
+        for start in range(0, len(ids), PRIORS_PAGE_DOCS):
+            purged += purge(client.transaction(), run_id, ids[start : start + PRIORS_PAGE_DOCS])
+    return purged
 
 
 def list_priors(uid, run_id, *, firestore_client=None):

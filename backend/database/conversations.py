@@ -3028,8 +3028,16 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             'transcript_segments_compressed',
             'manual_speaker_assignments',
             'manual_speaker_assignments_compressed',
+            'v3_rederive_live_run',
         ],
     )
+    doc_snapshots = list(doc_snapshots)
+    stamped = [s.id for s in doc_snapshots if s.exists and (s.to_dict() or {}).get('v3_rederive_live_run')]
+    if stamped:
+        # A live re-derive's undo copies of these rows were stored at the old level; none survive.
+        from database import conversations_v3_backfill_runs
+
+        conversations_v3_backfill_runs.purge_conversation_priors(uid, stamped, 'protection', firestore_client=db)
 
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:

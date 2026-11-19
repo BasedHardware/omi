@@ -19,6 +19,7 @@ from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from utils.conversations.v3 import Conflict, policy
 
@@ -264,6 +265,7 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
 # and what a merge or deletion changes. Undo refuses when any of it moved after the run.
 OWNER_SURFACE_FIELDS = (
     *OWNER_EDIT_FIELDS,
+    'data_protection_level',
     'visibility',
     'is_locked',
     'deleted',
@@ -300,6 +302,8 @@ def owner_changed(row, entry):
         return True
     if row.get('visibility') not in (None, 'private') and row.get('visibility') != raw.get('visibility'):
         return True
+    if row.get('data_protection_level', 'standard') != raw.get('data_protection_level', 'standard'):
+        return True
     return bool(row.get('is_locked')) and not raw.get('is_locked')
 
 
@@ -308,12 +312,31 @@ CHANGED_BEFORE_SETTLE = 'changed_before_settle'
 
 
 def already_undone(row, entry, run_id):
-    """This run's undo already handled the row: restored to its prior, or hidden awaiting erasure."""
+    """This run's undo already handled the row: restored to its prior, or hidden awaiting erasure.
+
+    The Firestore commit hook stamps home feed versions onto every conversation write, so a restored
+    row equals its prior apart from those fields.
+    """
     if row is None:
         return True
     if entry.get('created'):
         return row.get('v3_rederive_live_undone') == run_id
-    return row == entry.get('raw')
+    return _unstamped(row) == _unstamped(entry.get('raw') or {})
+
+
+def _unstamped(row):
+    return {k: v for k, v in row.items() if k not in COMMIT_STAMPED_FIELDS}
+
+
+# A prior the owner's deletion or protection change emptied: the run can no longer be undone exactly.
+PURGED_REASONS = {'deleted': 'owner_deleted_rebuilt_row', 'protection': 'owner_edited_rebuilt_row'}
+
+
+def purged_reason(entries):
+    for entry in entries:
+        if entry.get('purged'):
+            return PURGED_REASONS.get(entry['purged'], 'owner_edited_rebuilt_row')
+    return None
 
 
 def record_baselines(uid, run_id, *, firestore_client=None):
@@ -324,7 +347,11 @@ def record_baselines(uid, run_id, *, firestore_client=None):
     """
     client = firestore_client or store.get_firestore_client()
     coll = store.user_conversations(client, uid)
-    pending = [e for e in runs.list_priors(uid, run_id, firestore_client=client) if not e.get('baseline')]
+    pending = [
+        e
+        for e in runs.list_priors(uid, run_id, firestore_client=client)
+        if not e.get('baseline') and not e.get('purged')
+    ]
     recorded = 0
     for start in range(0, len(pending), runs.PRIORS_PAGE_DOCS):
         page = pending[start : start + runs.PRIORS_PAGE_DOCS]
@@ -365,6 +392,8 @@ def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
     client = firestore_client or store.get_firestore_client()
     coll = store.user_conversations(client, uid)
     deleted = client.collection('users').document(uid).collection('deleted_conversations')
+    if purged_reason(entries):
+        return purged_reason(entries)
     for entry in entries:
         cid = entry['id']
         if deleted.document(cid).get().exists:
@@ -411,6 +440,8 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('lease_lost')
         current = {cid: (snapshot.to_dict() or {}) if snapshot.exists else None for cid, snapshot in docs.items()}
+        if purged_reason(entries):
+            raise Conflict(purged_reason(entries))
         if any(t.exists for t in tombstones.values()):
             raise Conflict('owner_deleted_rebuilt_row')
         by_id = {e['id']: e for e in entries}

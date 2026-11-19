@@ -583,6 +583,12 @@ def estimate_live_partition(uid, partition, run_id, *, now=None):
         'rows_retired_est': max(0, counts.get('rows_eligible', 0) - _adopting(fresh, existing, protected)),
         'protected': sum(v for k, v in counts.items() if k.startswith('protected_')),
         'sources_blocked': sum(v for k, v in counts.items() if k.startswith('sources_blocked_')),
+        # A rebuilt window past the partition's edge blocks the run (rederive_live_boundary).
+        'windows_crossing_edge': sum(
+            1
+            for w in fresh
+            if w['lines'][0]['start'] < partition['since'] or w['lines'][-1]['end'] > partition['until']
+        ),
         'outline_calls': len(groups),
         'notes_calls': 0,
         'agent_notes': 0,
