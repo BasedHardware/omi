@@ -4,8 +4,9 @@ from datetime import timedelta
 
 import pytest
 
-from database import conversations_v3 as store
+from database import conversations_v3 as store, conversations_v3_leases as leases
 from utils.conversations.v3 import Conflict
+from tests.unit.test_conversations_v3_claim_growth import T0, UID, path, strict  # noqa: F401
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, source
 
 C = '/users/u/conversations/'
@@ -57,10 +58,9 @@ def test_a_recording_owned_by_hundreds_of_short_windows_loads():
     assert len(existing) == 450
 
 
-def test_settled_neighbours_do_not_chain_the_closure():
+def neighbours():
     # p is pending; q (10 minutes later, inside p's margin) is settled and claimed by dq; s (15 minutes after
-    # q, outside p's margin but inside q's) is settled and claimed by ds. The old closure queried q's margin too and pulled ds, s, and so on
-    # through the owner's whole contiguous day.
+    # q, outside p's margin but inside q's) is settled and claimed by ds.
     q_at, s_at = AT + timedelta(minutes=10), AT + timedelta(minutes=25)
     rows = {
         C + 'p': source('p', claims=[claim('dp', AT, 10)], v3_pending_since=AT),
@@ -72,9 +72,82 @@ def test_settled_neighbours_do_not_chain_the_closure():
     }
     rows[C + 'q']['claims'] = [claim('dq', q_at, 10)]
     rows[C + 's']['claims'] = [claim('ds', s_at, 10)]
-    recordings, existing, _ = store.load('u', firestore_client=MemoryQuery(rows))
+    return rows
+
+
+def test_settled_neighbours_do_not_chain_the_closure():
+    # The old closure queried q's margin too and pulled ds, s, and so on through the owner's whole day.
+    recordings, existing, _ = store.load('u', firestore_client=MemoryQuery(neighbours()))
     assert set(recordings) == {'p', 'q'}
     assert set(existing) == {'dp', 'dq'}
+
+
+def test_kill_switch_restores_the_time_query_around_every_source(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_CLOSURE_BY_CLAIMS', 'off')
+    recordings, existing, _ = store.load('u', firestore_client=MemoryQuery(neighbours()))
+    assert set(recordings) == {'p', 'q', 's'}
+    assert set(existing) == {'dp', 'dq', 'ds'}
+
+
+def test_overflowing_claim_ids_refuse_before_reading_them(monkeypatch):
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 10)
+    rows = fragmented(11)
+    client = MemoryQuery(rows)
+    reads = []
+    real = MemoryQuery.get_all
+    monkeypatch.setattr(MemoryQuery, 'get_all', lambda self, refs, **kw: reads.append(len(refs)) or real(self, refs))
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        store.load('u', firestore_client=client)
+    assert reads == []
+
+
+def test_claimants_are_read_in_chunks(monkeypatch):
+    monkeypatch.setattr(store, 'CLAIM_READ_CHUNK', 7)
+    reads = []
+    real = MemoryQuery.get_all
+    monkeypatch.setattr(MemoryQuery, 'get_all', lambda self, refs, **kw: reads.append(len(refs)) or real(self, refs))
+    rows = fragmented(20)
+    # Push the claimants out of the pending recording's time window so only the claims path finds them.
+    for i in range(20):
+        rows[C + f'd{i}']['started_at'] += timedelta(hours=3)
+        rows[C + f'd{i}']['finished_at'] += timedelta(hours=3)
+    _, existing, _ = store.load('u', firestore_client=MemoryQuery(rows))
+    assert len(existing) == 20 and reads == [7, 7, 6]
+
+
+def test_commit_batches_stay_under_the_write_cap(strict, monkeypatch):
+    strict.rows[path('r')] = {'id': 'r', 'recording': True, 'v3_pending': True, 'status': 'completed'}
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    commits = []
+    original = store.firestore.transactional
+
+    def transactional(body):
+        wrapped = original(body)
+
+        def run(tx, *args):
+            commits.append(len(args[0]))
+            return wrapped(tx, *args)
+
+        return run
+
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+    # One source update and the lease leave three rows per transaction.
+    monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 5)
+    rows = [
+        {
+            'id': f'c{i}',
+            'status': 'processing',
+            'started_at': T0,
+            'finished_at': T0,
+            'v3_recording_ids': ['r'],
+            'transcript_segments': [{'text': 'short'}],
+        }
+        for i in range(8)
+    ]
+    store.commit_projection(
+        UID, token, {'r': {**strict.rows[path('r')], '_v3_revision': 1}}, {}, rows, [], firestore_client=strict
+    )
+    assert commits == [3, 3, 2]
 
 
 def test_every_claimant_of_a_loaded_recording_is_loaded_by_id():

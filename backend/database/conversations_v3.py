@@ -6,6 +6,7 @@ codec; cached outlines are encrypted. Nothing is cleared after a lost race.
 
 import json
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -26,11 +27,30 @@ from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, 
 logger = logging.getLogger(__name__)
 
 LIMIT = 128
+
+
 # The live closure's derived rows. A pending recording's own claimants are all needed (a replan of the
 # recording must see every row that owns its lines), and one long recording can own hundreds of short
 # windows, so the bound is on rows and on their stored speech rather than a small row count.
-DERIVED_LIMIT = 1024
-DERIVED_BYTES = 16 * 1024 * 1024
+# Both are env-tunable without a roll; CONVERSATIONS_V3_CLOSURE_BY_CLAIMS=off restores the time query around
+# every loaded recording (the closure before claims-driven loading).
+def _env_int(name, default):
+    try:
+        value = int(os.getenv(name, ''))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+DERIVED_LIMIT = _env_int('CONVERSATIONS_V3_DERIVED_LIMIT', 1024)
+DERIVED_BYTES = _env_int('CONVERSATIONS_V3_DERIVED_BYTES', 16 * 1024 * 1024)
+CLAIM_READ_CHUNK = 100
+
+
+def closure_by_claims():
+    return os.getenv('CONVERSATIONS_V3_CLOSURE_BY_CLAIMS', 'on').strip().lower() != 'off'
+
+
 # The backfill holds its own builder lease (and outline cache) so a running backfill never makes the
 # owner's live builder busy; the two passes touch disjoint documents and both are revision-fenced.
 BACKFILL_LEASE = 'backfill-builder'
@@ -256,6 +276,7 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         if opened:
             existing[opened['id']] = opened
     queried = set()
+    by_claims = closure_by_claims()
     loaded_bytes = sum(_encoded_bytes(row.get('transcript_segments') or []) for row in existing.values())
 
     def add(row):
@@ -286,19 +307,25 @@ def load(uid, *, conversation_id=None, firestore_client=None):
             break
         # Every row a loaded recording's claims name owns some of its lines: load those exactly, by id.
         claimed: set[str] = set()
-        for r in fresh:
+        for r in fresh if by_claims else ():
             for c in r.get('claims') or []:
                 cid = c.get('conversation_id') if isinstance(c, dict) else None
                 if isinstance(cid, str) and cid not in existing:
                     claimed.add(cid)
-        for snapshot in client.get_all([coll.document(cid) for cid in sorted(claimed)]) if claimed else ():
-            raw = snapshot.to_dict() or {} if snapshot.exists else {}
-            if raw.get('v3_derived'):
-                row = decode_row(uid, snapshot)
-                if row:
-                    add(row)
-        if len(existing) > DERIVED_LIMIT or loaded_bytes > DERIVED_BYTES:
+        # Refuse before reading when the ids alone overflow, and read in chunks so a byte overflow stops early.
+        if len(existing) + len(claimed) > DERIVED_LIMIT:
             raise Conflict('v3_derived_budget')
+        ordered = sorted(claimed)
+        for start in range(0, len(ordered), CLAIM_READ_CHUNK):
+            chunk = ordered[start : start + CLAIM_READ_CHUNK]
+            for snapshot in client.get_all([coll.document(cid) for cid in chunk]):
+                raw = snapshot.to_dict() or {} if snapshot.exists else {}
+                if raw.get('v3_derived'):
+                    row = decode_row(uid, snapshot)
+                    if row:
+                        add(row)
+            if loaded_bytes > DERIVED_BYTES:
+                raise Conflict('v3_derived_budget')
         # Only a recording that can still be replanned needs its neighbours by time: a pending one (new
         # speech), one an open window holds, or one with speech and no claims. A settled recording's lines
         # all belong to the rows its claims name; a time query around it chained through the owner's whole
@@ -314,7 +341,7 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         intervals = []
         for row in sorted(fresh, key=lambda r: r['started_at']):
             settled = row.get('claims') or not row.get('transcript_segments')
-            if settled and not row.get('v3_pending') and row['id'] not in open_sources:
+            if by_claims and settled and not row.get('v3_pending') and row['id'] not in open_sources:
                 continue
             left = row['started_at'] - timedelta(minutes=20)
             right = min(speech_end(row), datetime.now(timezone.utc) + timedelta(minutes=5)) + timedelta(minutes=20)
@@ -404,6 +431,9 @@ REQUEST_TOO_LARGE = 'Request payload size exceeds the limit'
 # split on whichever fills first, so the source rewrites each batch repeats count against the request.
 BATCH_ROW_BYTES = 2 * 1024 * 1024
 BATCH_WRITE_BYTES = 8 * 1024 * 1024
+# Documents one transaction writes: its rows, every loaded source's claim update and the lease. Kept under
+# Firestore's 500-write commit cap now that a closure can hold hundreds of short windows.
+BATCH_MAX_WRITES = 450
 
 
 def size_error(error):
@@ -664,10 +694,13 @@ def commit_projection(
         return observed
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
+    max_rows = max(1, BATCH_MAX_WRITES - len(recordings) - 1)
     batches, current, size = [], [], 0
     for raw, encoded in zip(rows, prepared):
         amount = len(json.dumps(encoded, default=str).encode())
-        if current and (size + amount > BATCH_ROW_BYTES or fixed + size + amount > BATCH_WRITE_BYTES):
+        if current and (
+            size + amount > BATCH_ROW_BYTES or fixed + size + amount > BATCH_WRITE_BYTES or len(current) >= max_rows
+        ):
             batches.append(current)
             current, size = [], 0
         current.append((raw, encoded))
