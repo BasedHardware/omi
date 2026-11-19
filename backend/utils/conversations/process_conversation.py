@@ -2788,9 +2788,26 @@ def process_conversation(
             link_duplicate_captures(uid, completed)
             dispatch_primary_notes_refresh(uid, completed)
 
+    def persist_with_fences(payload: dict) -> bool:
+        # A capture-group or smart-merge refresh may only land on the revision it reserved.
+        if capture_group_refresh_fence is not None:
+            group_id, group_revision, reservation_id = capture_group_refresh_fence
+            return lifecycle_service.persist_processed_conversation(
+                uid,
+                payload,
+                expected_capture_group=(group_id, group_revision),
+                capture_group_notes_refresh=(group_id, reservation_id),
+            )
+        if smart_merge_refresh is not None:
+            return lifecycle_service.persist_processed_conversation(
+                uid, payload, smart_merge_refresh=smart_merge_refresh
+            )
+        return lifecycle_service.persist_processed_conversation(uid, payload)
+
     if historical_minimum.short_circuits(conversation, trigger):
+        conversation.status = ConversationStatus.completed
         payload = historical_minimum.payload(uid, cast(Conversation, conversation))
-        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
+        persisted = persist_with_fences(payload)
         report_persistence(persisted, derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
         return cast(Conversation, conversation)
     is_initial_creation = _is_ingress_create(conversation)
@@ -3061,20 +3078,8 @@ def process_conversation(
     conversation.summary_retryable = None  # merge-cleared by the payload the same way
     if is_initial_creation:
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
-    elif capture_group_refresh_fence is not None:
-        group_id, group_revision, reservation_id = capture_group_refresh_fence
-        persisted = lifecycle_service.persist_processed_conversation(
-            uid,
-            payload,
-            expected_capture_group=(group_id, group_revision),
-            capture_group_notes_refresh=(group_id, reservation_id),
-        )
-    elif smart_merge_refresh is not None:
-        persisted = lifecycle_service.persist_processed_conversation(
-            uid, payload, smart_merge_refresh=smart_merge_refresh
-        )
     else:
-        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
+        persisted = persist_with_fences(payload)
     if recovery_minimum_fallback or historical or content_excluded or empty_structure_minimum_applied:
         report_persistence(
             persisted,

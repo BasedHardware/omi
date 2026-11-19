@@ -427,6 +427,19 @@ def retires_title_marker(existing: Row, write: Row) -> bool:
     )
 
 
+def _merge_historical(existing: Row, write: Row, current: float) -> None:
+    """A historical row owes no automatic summary; its open-time summary is a delivered one."""
+    write['summary_due_at'] = None
+    if write.get('summary_output_present'):
+        write['summary_completed_at'] = existing.get('summary_completed_at') or current
+        write['summary_title_provenance'] = 'generated'
+        write['summary_blocked_reason'] = None
+        write['summary_processing_lease_until'] = 0
+    elif not existing.get('summary_output_present'):
+        write['summary_blocked_reason'] = 'historical_on_open'
+    return None
+
+
 def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = None) -> Row | None:
     """Inside the existing revision-fenced transaction, before its write."""
     if 'summary_output_present' not in write:
@@ -444,6 +457,11 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
     ):
         waive_short_clip_summary_debt(write, PROCESS_CONTEXT.get())
         return None
+    if write.get('terminal_no_derived_effects') and 'historical' in (
+        write.get('processing_tier'),
+        existing.get('processing_tier'),
+    ):
+        return _merge_historical(existing, write, current)
     if (
         write.get('terminal_no_derived_effects')
         or write.get('deferred')

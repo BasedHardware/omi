@@ -27,7 +27,7 @@ NOW = datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc)
 @pytest.fixture(autouse=True)
 def _tier_on(monkeypatch):
     monkeypatch.delenv(historical_tier.TIER_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(historical_tier.MIN_AGE_ENV, raising=False)
+    monkeypatch.delenv('ENRICHMENT_MAX_AGE_HOURS', raising=False)
 
 
 def test_lane_boundary_is_strictly_older_than_72_hours_on_a_trusted_clock(monkeypatch):

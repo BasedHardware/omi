@@ -1883,7 +1883,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 **({'clock_run': clock_run} if clock_run else {}),
             ),
             created_at=started_at,
-            structured=build_deterministic_minimum_structured(create_memory, uid=uid, provenance=not historical),
+            structured=build_deterministic_minimum_structured(create_memory, uid=uid, historical=historical),
             **create_memory.model_dump(),
         ).model_dump()
         if historical:

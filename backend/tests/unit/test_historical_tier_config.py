@@ -19,7 +19,7 @@ def _clean_env(monkeypatch):
         historical_tier.TIER_ENABLED_ENV,
         historical_tier.OPEN_ENABLED_ENV,
         historical_tier.VECTOR_ENABLED_ENV,
-        historical_tier.MIN_AGE_ENV,
+        'ENRICHMENT_MAX_AGE_HOURS',
         historical_tier.GLOBAL_DAILY_LIMIT_ENV,
     ):
         monkeypatch.delenv(name, raising=False)
@@ -50,11 +50,25 @@ def test_epoch_seconds_and_naive_datetimes_are_utc():
 
 @pytest.mark.parametrize(
     ('raw', 'expected'),
-    [('', HOURS_72), ('3600', HOURS_72), (str(90 * 86400), 60 * 86400), (str(5 * 86400), 5 * 86400), ('x', HOURS_72)],
+    [('', HOURS_72), ('96', 96 * 3600), ('1.5', 5400), ('x', HOURS_72), ('-4', HOURS_72), ('inf', HOURS_72)],
 )
-def test_min_age_is_clamped_between_72_hours_and_60_days(monkeypatch, raw, expected):
-    monkeypatch.setenv(historical_tier.MIN_AGE_ENV, raw)
-    assert historical_tier.min_age_seconds() == expected
+def test_the_tier_boundary_is_the_enrichment_age_gate(monkeypatch, raw, expected):
+    from utils.enrichment import age_gate
+
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', raw)
+    assert historical_tier.min_age_seconds() == expected == age_gate.max_age_seconds()
+
+
+def test_a_moved_gate_moves_the_tier_with_it(monkeypatch):
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '96')
+    assert not historical_tier.applies(NOW - timedelta(hours=80), 'legacy', NOW)
+    assert historical_tier.applies(NOW - timedelta(hours=97), 'legacy', NOW)
+
+
+def test_gate_off_means_no_tier(monkeypatch):
+    # ENRICHMENT_MAX_AGE_HOURS=0 restores automatic summaries for old rows, so nothing is historical.
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
+    assert not historical_tier.applies(NOW - timedelta(days=30), 'legacy', NOW)
 
 
 def test_switches_are_on_unless_set_off(monkeypatch):

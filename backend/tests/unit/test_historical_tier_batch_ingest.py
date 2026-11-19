@@ -26,7 +26,7 @@ from utils.sync import bridge
 @pytest.fixture(autouse=True)
 def _tier_on(monkeypatch):
     monkeypatch.delenv(historical_tier.TIER_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(historical_tier.MIN_AGE_ENV, raising=False)
+    monkeypatch.delenv('ENRICHMENT_MAX_AGE_HOURS', raising=False)
 
 
 def _batch_incoming(age_hours, **item_fields):

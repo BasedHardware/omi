@@ -16,24 +16,29 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
+from config import enrichment as enrichment_config
 from config.refactor_modes import default_on
 
 TIER = 'historical'
 TIER_ENABLED_ENV = 'SYNC_HISTORICAL_TIER_ENABLED'
 OPEN_ENABLED_ENV = 'HISTORICAL_SUMMARY_ON_OPEN_ENABLED'
 VECTOR_ENABLED_ENV = 'HISTORICAL_SUMMARY_VECTOR_ENABLED'
-MIN_AGE_ENV = 'SYNC_HISTORICAL_TIER_MIN_AGE_SECONDS'
 GLOBAL_DAILY_LIMIT_ENV = 'HISTORICAL_SUMMARY_GLOBAL_DAILY_LIMIT'
 
-# Matches the 11-04 enrichment age gate (ENRICHMENT_MAX_AGE_HOURS=72): older
-# backfill already gets no automatic LLM work, so this is the tier boundary.
-DEFAULT_MIN_AGE_SECONDS = 72 * 3600
-MIN_AGE_FLOOR_SECONDS = 72 * 3600
-MIN_AGE_CEILING_SECONDS = 60 * 86400
+# The tier boundary is the 11-04 enrichment age gate itself (ENRICHMENT_MAX_AGE_HOURS,
+# default 72): older rows already get no automatic LLM work. Deriving it keeps
+# the two from drifting apart and stranding rows between them.
+DEFAULT_GATE_HOURS = 72.0
 DEFAULT_GLOBAL_DAILY_LIMIT = 10000
 UNTRUSTED = 'untrusted'
 TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
 BLOCKED_REASON = 'historical_on_open'
+# ``structured.title_provenance`` of a historical row's deterministic title. Like
+# ``server_minimum`` it is a stand-in, not a real title: the open-time summary
+# replaces it and Home's short-fragment rules still apply. Unlike
+# ``server_minimum`` it owes no automatic summary and Home shows the row as ready.
+TITLE_PROVENANCE = 'historical_minimum'
+STAND_IN_TITLE_PROVENANCES = frozenset({'server_minimum', TITLE_PROVENANCE})
 
 
 def tier_enabled() -> bool:
@@ -51,15 +56,16 @@ def vector_enabled() -> bool:
     return default_on(VECTOR_ENABLED_ENV)
 
 
-def min_age_seconds() -> int:
-    raw = os.getenv(MIN_AGE_ENV, '').strip()
+def min_age_seconds() -> float:
+    """The enrichment age gate in seconds, parsed exactly as ``utils.enrichment.age_gate``; 0 is off."""
     try:
-        value = float(raw) if raw else float(DEFAULT_MIN_AGE_SECONDS)
+        hours = float(enrichment_config.max_age_hours())
     except ValueError:
-        return DEFAULT_MIN_AGE_SECONDS
-    if not math.isfinite(value):
-        return DEFAULT_MIN_AGE_SECONDS
-    return int(min(max(value, MIN_AGE_FLOOR_SECONDS), MIN_AGE_CEILING_SECONDS))
+        return DEFAULT_GATE_HOURS * 3600
+    seconds = hours * 3600
+    if hours < 0 or not math.isfinite(seconds):
+        return DEFAULT_GATE_HOURS * 3600
+    return seconds
 
 
 def global_daily_limit() -> int:
@@ -89,13 +95,17 @@ def applies(capture_start: Any, trust: Any, now: Any = None) -> bool:
     """
     if getattr(trust, 'value', trust) == UNTRUSTED:
         return False
+    boundary = min_age_seconds()
+    if boundary <= 0:
+        # The gate is off, so old rows get automatic summaries again: no tier.
+        return False
     started = _epoch(capture_start)
     current = _epoch(now) if now is not None else datetime.now(timezone.utc).timestamp()
     if started is None or current is None:
         return False
     # Strictly older, like the enrichment age gate: a row exactly at the
     # boundary is still enriched there, so it keeps full processing here.
-    return current - started > min_age_seconds()
+    return current - started > boundary
 
 
 def is_historical(row: Any) -> bool:
