@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from config.conversations_v3 import boundary_seconds
-from utils.conversations.v3 import outline
+from utils.conversations.v3 import context, outline
 
 AT = datetime(2026, 11, 19, tzinfo=timezone.utc)
 
@@ -176,10 +176,16 @@ def test_locked_refinement_refuses_a_downgrade_after_source_protection_changes()
 
 def test_outline_prompt_uses_configured_silence_threshold():
     window, _, recordings = _locked_pair()
-    group = {'lines': window['lines'], 'end': recordings['r']['finished_at']}
-    messages = outline.messages(group, timezone.utc, cohesion=True, silence_gap=timedelta(seconds=900))
-    assert '900 seconds of recorded silence' in messages[0][1]
-    assert 'Five minutes of recorded silence' in outline.messages(group, timezone.utc)[0][1]
+    group = {
+        'lines': window['lines'],
+        'end': recordings['r']['finished_at'],
+        'fingerprint': 'synthetic',
+    }
+    configured = outline.messages(group, timezone.utc, cohesion=True, silence_gap=timedelta(seconds=900))
+    baseline = outline.messages(group, timezone.utc, cohesion=True)
+    assert '900 seconds of recorded silence' in configured[0][1]
+    assert 'Five minutes of recorded silence' in baseline[0][1]
+    assert context.cache_key(group, configured) != context.cache_key(group, baseline)
 
 
 def test_provisional_title_and_emoji_are_refreshed_at_lock():
@@ -192,3 +198,22 @@ def test_provisional_title_and_emoji_are_refreshed_at_lock():
     assert row['structured']['title'] == 'Revised'
     assert row['structured']['overview'] == 'Revised preview'
     assert row['structured']['emoji'] == '🌲'
+
+
+def test_preview_anchors_skip_model_sections_without_line_numbers():
+    window, _, _ = _locked_pair()
+    group = {'lines': window['lines']}
+    entries = [
+        {
+            'first_line': 1,
+            'sections': [
+                {'title': 'missing'},
+                {'title': 'unusable', 'first_line': '1'},
+                {'title': 'valid', 'first_line': 2},
+            ],
+        }
+    ]
+    anchors = outline.preview_anchors(group, entries)
+    assert set(anchors) == {'1', '2'}
+    [rebased] = outline.reuse_preview(group, {'entries': entries, 'anchors': anchors})
+    assert rebased['sections'] == [{'title': 'valid', 'first_line': 2}]

@@ -185,7 +185,7 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
             await asyncio.shield(worker)
         raise
     except Exception:
-        if row.get('v3_derived') and row.get('status') != 'in_progress':
+        if row.get('v3_derived') and not needs_open_reconcile(row):
             try:
                 await run_blocking(
                     db_executor,

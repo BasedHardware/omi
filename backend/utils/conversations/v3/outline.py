@@ -164,11 +164,21 @@ def _anchor(line):
     return f"{line['conversation_id']}:{line['start'].isoformat()}"
 
 
+def _section_line(section):
+    value = section.get('first_line') if isinstance(section, dict) else None
+    return value if type(value) is int else None
+
+
 def preview_anchors(group, entries):
     """Keep stable coordinates for each selected topic or section, without storing more speech."""
     lines = group['lines']
     indexes = {entry['first_line'] for entry in entries}
-    indexes.update(section['first_line'] for entry in entries for section in entry.get('sections') or ())
+    indexes.update(
+        index
+        for entry in entries
+        for section in entry.get('sections') or ()
+        if (index := _section_line(section)) is not None
+    )
     return {str(index): _anchor(lines[index - 1]) for index in indexes if 1 <= index <= len(lines)}
 
 
@@ -183,7 +193,8 @@ def reuse_preview(group, preview):
             continue
         sections = []
         for section in entry.get('sections') or ():
-            position = moved.get(section['first_line'])
+            index = _section_line(section)
+            position = moved.get(index) if index is not None else None
             if position is not None and position >= first:
                 sections.append({**section, 'first_line': position})
         entries.append({**entry, 'first_line': first, 'sections': sections})

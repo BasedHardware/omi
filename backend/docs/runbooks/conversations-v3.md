@@ -76,6 +76,10 @@ controls when a card locks and owes notes (120–3600 seconds). Both default to
 default, the existing summary-open path and explicit End bypass the lock timer.
 Setting both values back to 300 or disabling cohesion restores the prior
 timing; provisional rows remain reachable for the builder to finish.
+A lock delay shorter than the silence threshold can finalize an initial card
+while later speech still belongs to the same outline stretch. Later speech
+gets its own continuation. Reconciliation can merge settled cards when the
+outline and the loaded source claims cover the complete merge.
 
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product

@@ -910,6 +910,7 @@ async def test_configured_preview_reuses_outline_at_lock(builder, monkeypatch):
 
     inputs[1] = {preview['id']: preview}
     inputs[2] = committed[-1][5]
+    raw['transcript_segments'].append({'text': 'revised tail', 'start': 11, 'end': 12})
     monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '301')
     await service.reconcile('synthetic')
     (locked,) = committed[-1][4]
@@ -969,7 +970,14 @@ async def test_multiple_previews_defer_topic_lock_and_owe_no_notes(builder, monk
             {'text': 'second ' * 310, 'start': 20, 'end': 30},
         ],
     )
-    inputs = [{'r': raw}, {}, []]
+    legacy = {
+        'id': 'legacy',
+        'status': 'in_progress',
+        'started_at': start,
+        'finished_at': start + timedelta(seconds=10),
+        'v3_recording_ids': ['r'],
+    }
+    inputs = [{'r': raw}, {'legacy': legacy}, []]
     monkeypatch.setattr(store, 'load', lambda *a, **kw: inputs)
 
     def two_topics(uid, prompt):
@@ -979,6 +987,7 @@ async def test_multiple_previews_defer_topic_lock_and_owe_no_notes(builder, monk
     monkeypatch.setattr(service.models, 'outline', two_topics)
     await service.reconcile('synthetic')
     first, second = committed[-1][4]
+    assert first['id'] == 'legacy'
     assert first['status'] == 'processing' and second['status'] == 'in_progress'
     assert all(row['v3_unlocked'] and not row.get('v3_process_pending') for row in (first, second))
     assert all(not row['title_locked'] for row in (first, second))
@@ -1012,7 +1021,38 @@ async def test_scoped_open_keeps_other_provisional_outlines(builder, monkeypatch
 
     inputs[0] = {'older': recordings['older']}
     inputs[1] = {earlier['id']: earlier}
-    inputs[2] = cache
+    finished = {'fingerprint': 'finished-other-stretch', 'entries': []}
+    inputs[2] = [finished, *cache]
     await service.reconcile('synthetic', on_open=True, conversation_id=earlier['id'])
     assert len(messages) == 2
     assert cache[-1] in committed[-1][5] and other['v3_unlocked']
+    assert finished in committed[-1][5]
+
+
+@pytest.mark.asyncio
+async def test_configured_reconcile_retains_existing_notes_after_late_speech(builder, monkeypatch):
+    committed, _ = builder
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '301')
+    start = datetime.now(timezone.utc) - timedelta(minutes=10)
+    end = start + timedelta(seconds=30)
+    original = {'id': 'first', 'text': 'first ' * 310, 'start': 0, 'end': 10}
+    appended = {'id': 'late', 'text': 'late ' * 120, 'start': 15, 'end': 30}
+    raw = source(started_at=start, finished_at=end, transcript_segments=[original, appended])
+    prior = {
+        'id': 'card',
+        'status': 'completed',
+        'started_at': start,
+        'finished_at': end,
+        'v3_derived': True,
+        'v3_recording_ids': ['r'],
+        'v3_rewrites': 0,
+        'structured': {'title': 'Original'},
+        'summary_covers_through': end,
+        'transcript_segments': [original],
+    }
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': raw}, {'card': prior}, []))
+    assert await service.reconcile('synthetic') == 'committed'
+    (row,) = committed[-1][4]
+    assert row['id'] == 'card' and len(row['transcript_segments']) == 2
+    assert row['v3_rewrites'] == 0 and not row.get('v3_process_pending')
+    assert row['summary_covers_through'] == end

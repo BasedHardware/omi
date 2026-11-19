@@ -237,9 +237,6 @@ async def reconcile(
         saved = {row['fingerprint']: row for row in cached}
         previews = {row['preview_key']: row for row in cached if 'preview_key' in row}
         outlines, cache = [], []
-        if custom_timing and on_open:
-            scoped = {f"{silence_seconds}:{group['key']}" for group in groups}
-            cache.extend(row for key, row in previews.items() if key not in scoped)
         background = await run_blocking(db_executor, context.outline_sources, uid, groups)
         for group in groups:
             await run_blocking(db_executor, leases.renew, uid, key, token)
@@ -318,6 +315,13 @@ async def reconcile(
                 if preview_key and not group['finished'] and not any(e.get('_outline_failed') for e in entries):
                     preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
                 cache.append({'fingerprint': fingerprint, 'entries': entries, **preview_fields})
+
+        if custom_timing and on_open:
+            scoped = {f"{silence_seconds}:{group['key']}" for group in groups}
+            replaced = {row['fingerprint'] for row in cache}
+            cache = [
+                row for row in cached if row.get('preview_key') not in scoped and row['fingerprint'] not in replaced
+            ] + cache
 
         preferred = conversation_id if on_open and custom_timing else None
         refine_locked = (

@@ -601,3 +601,34 @@ def test_on_open_summary_commit_finalizes_provisional_snapshot(strict):
     row = strict.rows[card]
     assert row['status'] == 'completed' and row['v3_open_locked'] and not row['v3_unlocked']
     assert row['summary_covers_through'] == AT and row['v3_process_pending']
+
+
+@pytest.mark.asyncio
+async def test_open_notes_failure_keeps_an_older_preview_live(strict, monkeypatch):
+    card = R[:-1] + ('card',)
+    row = {
+        'id': 'card',
+        'v3_derived': True,
+        'v3_unlocked': True,
+        'status': 'processing',
+        'tile_state': 'live',
+        'finished_at': AT,
+        'transcript_segments': [{'text': 'word ' * 300}],
+    }
+    strict.rows[card] = row
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(store, 'decode_row', lambda uid, snap: snap.to_dict())
+    monkeypatch.setattr(writers, 'fail_processing', lambda *a, **kw: pytest.fail('unlocked card marked terminal'))
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    def fail(*args):
+        raise RuntimeError('synthetic model failure')
+
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(summary, 'write', fail)
+    token = await summary.prepare('synthetic', row)
+    frames = [frame async for frame in summary.stream('synthetic', row, token=token)]
+    assert frames[-1].startswith('error: ')
+    assert strict.rows[card]['tile_state'] == 'live'
