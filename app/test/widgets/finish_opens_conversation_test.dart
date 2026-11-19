@@ -481,6 +481,24 @@ void main() {
       expect(FinishedCapturePage.match(rows, 'rec-1'), isNull);
     });
 
+    test('lineage requires explicit completed status even after caching', () {
+      for (final status in ['processing', 'in_progress', 'failed', 'future_status', null]) {
+        final json = _row('derived-transcript', extra: {
+          'v3_derived': true,
+          'v3_recording_ids': ['rec-1'],
+        });
+        if (status == null) {
+          json.remove('status');
+        } else {
+          json['status'] = status;
+        }
+        final row = ServerConversation.fromJson(json);
+        expect(FinishedCapturePage.match([row], 'rec-1'), isNull, reason: 'status=$status');
+        final cached = ServerConversation.fromJson(row.toJson());
+        expect(FinishedCapturePage.match([cached], 'rec-1'), isNull, reason: 'cached status=$status');
+      }
+    });
+
     test('of several conversations from one recording it opens the newest, the top Home row', () {
       final rows = [
         _derived('first', 'rec-1', createdAt: '2026-11-18T22:00:09Z'),

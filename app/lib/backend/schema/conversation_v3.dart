@@ -96,7 +96,9 @@ class ConversationV3Fields {
   /// The server's proof that this transcript was derived from recordings.
   final bool derived;
 
-  /// The recordings that contributed speech, including sources without playable audio.
+  /// The sources of a wire row explicitly marked completed, including sources without playable audio.
+  ///
+  /// A missing or unfamiliar status otherwise normalizes to completed in the app and cache.
   final List<String> recordingIds;
 
   static const _keys = [
@@ -127,8 +129,9 @@ class ConversationV3Fields {
       summaryCoversThrough: covers is String ? DateTime.tryParse(covers) : null,
       recording: json['recording'] == true,
       derived: json['v3_derived'] == true,
-      recordingIds:
-          recordingIds is List ? recordingIds.whereType<String>().where((id) => id.isNotEmpty).toList() : const [],
+      recordingIds: json['status'] == 'completed' && recordingIds is List
+          ? recordingIds.whereType<String>().where((id) => id.isNotEmpty).toList()
+          : const [],
     );
   }
 
