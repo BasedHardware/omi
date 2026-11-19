@@ -127,6 +127,7 @@ class AttemptTrace:
     """Ordered attempt trace for one logical gateway invocation."""
 
     attempts: list[ProviderAttempt] = field(default_factory=list)
+    keyed: bool = False
 
     def record(
         self,

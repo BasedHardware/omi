@@ -30,7 +30,11 @@ from llm_gateway.gateway.errors import (
     GatewayProviderFailureError,
     GatewayProviderRequestRejectedError,
 )
-from llm_gateway.gateway.metrics import FLEX_FIRST_TOTAL, LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL
+from llm_gateway.gateway.metrics import (
+    FLEX_FIRST_TOTAL,
+    KEYED_PROVIDER_ATTEMPTS_TOTAL,
+    LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL,
+)
 from llm_gateway.gateway.providers import (
     ChatCompletionProvider,
     EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR,
@@ -740,6 +744,8 @@ async def _attempt_provider(
         if flex_attempt:
             provider_request['service_tier'] = 'flex'
             timeout_ms = flex_first_timeout_ms(route.lane_id, timeout_ms)
+        if attempt_trace is not None and attempt_trace.keyed:
+            KEYED_PROVIDER_ATTEMPTS_TOTAL.inc()
         try:
             response = await provider.create_chat_completion(
                 provider_request,

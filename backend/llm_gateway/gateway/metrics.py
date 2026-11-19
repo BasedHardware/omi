@@ -98,6 +98,10 @@ ACCOUNTING_EVENTS_TOTAL = Counter(
     ['api_surface', 'provider', 'payer', 'usage_status', 'cost_status', 'delivery'],
 )
 
+KEYED_PROVIDER_ATTEMPTS_TOTAL = Counter(
+    'llm_gateway_keyed_provider_attempts_total',
+    'Keyed provider attempts before dispatch',
+)
 KEYED_ACCOUNTING_DELIVERY_TOTAL = Counter(
     'llm_gateway_keyed_accounting_delivery_total',
     'Accounting event delivery for keyed chat provider attempts',

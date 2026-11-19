@@ -130,7 +130,7 @@ async def _create_chat_completion(
     is_streaming = False
     request_id = keyed_request[0] if keyed_request else request_id_for(request)
     accounting_context: AccountingContext | None = None
-    attempt_trace = AttemptTrace()
+    attempt_trace = AttemptTrace(keyed=keyed_request is not None)
     try:
         if request_body is None:
             request_body = await _request_json(request)
