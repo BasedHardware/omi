@@ -99,6 +99,8 @@ run_proof "summary task recovery, concurrency and expiry" \
   "$PYTHON" -m pytest \
   tests/integration/test_summary_task_promotion_emulator.py \
   tests/integration/test_candidate_accept_expiry_emulator.py -q
+run_proof "desktop screen sync frame request delivery, expiry and quota" \
+  "$PYTHON" -m pytest -q tests/integration/test_screen_sync_frame_queue_emulator.py
 
 # Silent receipts can become ready at assignment; keep the paginated follow-up
 # and mixed-completion read guards in the hosted emulator acceptance suite.

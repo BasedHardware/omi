@@ -10345,7 +10345,7 @@
     "deleteFromServerMessage": "Ovaj snimak je otpremljen, ali još nije transkribovan. Brisanjem se trajno briše i kopija na Omi serverima, pa nikada neće biti transkribovan. Ovo se ne može poništiti.",
     "deletedRecordingAlreadyTranscribed": "Već je transkribovan. Obrišite njegov razgovor da ga uklonite.",
     "deleteWhileProcessingTitle": "Još se obrađuje",
-    "deleteWhileProcessingMessage": "Ovaj snimak je otpremljen, ali Omi još kreira razgovor. Ako ga sada izbrišete i obrada ne uspije, ne može se vratiti. Svejedno izbrisati?",
+    "deleteWhileProcessingMessage": "Ovaj snimak je već otpremljen i Omi ga obrađuje. Brisanje ovdje uklanja kopiju s telefona. Ako obrada ne uspije, Omi neće moći ponovo pokušati s ovog telefona.",
     "syncCardAllBackedUp": "Sve snimke su sinkronizovane",
     "syncCardReadyCount": "{count, plural, one{1 snimak spreman za sinkronizaciju} few{{count} snimka spremna za sinkronizaciju} other{{count} snimaka spremno za sinkronizaciju}}",
     "syncCardProcessing": "Obrada u Omi…",
@@ -12210,6 +12210,7 @@
     "hasLinkedTasksLabel": "Ima povezane zadatke",
     "hasTasksFilter": "Sa zadacima",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "Ažuriranje se nije instaliralo. Vaš privjesak i dalje radi na trenutnom firmveru ({version}). Kontaktirajte podršku umjesto ponovnog pokušaja ažuriranja.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -12246,5 +12247,8 @@
     "downloadNow": "Preuzmi sada",
     "onWifiLater": "Kasnije na Wi-Fi",
     "conversationWritingSummary": "Pišemo vaš sažetak…",
-    "onTheWayServerWork": "Rad prijavljen sa servera"
+    "onTheWayServerWork": "Rad prijavljen sa servera",
+    "finishNothingToProcess": "Još nema ništa za obradu.",
+    "finishStillProcessing": "Još se obrađuje. Pojavit će se na početnoj.",
+    "finishBackToHome": "Nazad na početnu"
 }

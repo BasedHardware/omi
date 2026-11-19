@@ -69,6 +69,26 @@
       "basis": "planning-bound",
       "source": "backend/docs/runbooks/conversations-v3.md; one builder per active minute plus conversation summary leases, 10000 active owners planning cap",
       "reviewed": "2026-11-16"
+    },
+    {
+      "collection": "conversations_v3_backfill_runs",
+      "owner": "lane/conversations-v3",
+      "unit": "operator backfill run (one owner, one window)",
+      "reads_per_unit_budget": 2000,
+      "reads_per_day_budget": 40000,
+      "basis": "planning-bound",
+      "source": "backend/utils/conversations/v3/backfill.py: about 6 ledger reads per partition step (a 2-day owner plans about 20 partitions plus drain continuations) and the operator script's 30 s status poll for up to 6 hours; planning cap 20 operator runs per day. Revisit before any fleet-wide use.",
+      "reviewed": "2026-11-18"
+    },
+    {
+      "collection": "conversations_v3_backfill_starts",
+      "owner": "lane/conversations-v3",
+      "unit": "conversations-v3 sweep tick",
+      "reads_per_unit_budget": 21,
+      "reads_per_day_budget": 6100,
+      "basis": "planning-bound",
+      "source": "backend/utils/conversations/v3/backfill.py start_planned: one bounded collection-group list (at most 20 start markers under users/{uid}) per five-minute sweep, 288 ticks per day; the collection is empty except between an operator plan and the next tick.",
+      "reviewed": "2026-11-18"
     }
   ],
   "dynamic": [

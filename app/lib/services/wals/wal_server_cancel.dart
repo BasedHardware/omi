@@ -152,6 +152,7 @@ extension _WalServerCancel on LocalWalSyncImpl {
   /// Asks the server about due tombstones. [only] forces one job now (the delete that wrote it).
   Future<_ServerCancelPass> _drainServerCancels(int generation, {String? only}) => _serverCancelLocked(() async {
         final tombstones = await _serverCancelStore.load();
+        await ServerCancelPause.instance.load();
         if (tombstones.isEmpty) return const _ServerCancelPass({}, {});
         final owner = _currentWalOwnerUid();
         final nowSecs = _now().millisecondsSinceEpoch ~/ 1000;
@@ -179,6 +180,11 @@ extension _WalServerCancel on LocalWalSyncImpl {
           asked++;
           final result = await (_serverCancelOverride ?? cancelSyncJob)(tombstone.jobId);
           answered[tombstone.jobId] = result;
+          if (result.outcome == SyncJobCancelOutcome.paused) {
+            await ServerCancelPause.instance.pause();
+          } else if (result.serverAnswered) {
+            await ServerCancelPause.instance.clear();
+          }
           if (result.fenced && !tombstone.fenced) await _returnCancelledSiblings(tombstone.jobId, generation);
           if (result.settled) {
             changed = true;

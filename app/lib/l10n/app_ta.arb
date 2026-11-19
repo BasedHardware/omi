@@ -10345,7 +10345,7 @@
     "deleteFromServerMessage": "இந்தப் பதிவு பதிவேற்றப்பட்டது, ஆனால் இன்னும் எழுத்துப்படியாக்கப்படவில்லை. இதை நீக்கினால் Omi சேவையகங்களில் உள்ள நகலும் நிரந்தரமாக அழிக்கப்படும், எனவே இது ஒருபோதும் எழுத்துப்படியாக்கப்படாது. இதைச் செயல்தவிர்க்க முடியாது.",
     "deletedRecordingAlreadyTranscribed": "ஏற்கனவே எழுத்துப்படியாக்கப்பட்டது. அதை அகற்ற அதன் உரையாடலை நீக்கவும்.",
     "deleteWhileProcessingTitle": "இன்னும் செயலாக்கப்படுகிறது",
-    "deleteWhileProcessingMessage": "இந்தப் பதிவு பதிவேற்றப்பட்டது, ஆனால் Omi இன்னும் உரையாடலை உருவாக்குகிறது. இப்போது நீக்கி செயலாக்கம் தோல்வியடைந்தால், மீட்டெடுக்க முடியாது. அப்படியும் நீக்கவா?",
+    "deleteWhileProcessingMessage": "இந்தப் பதிவு ஏற்கனவே பதிவேற்றப்பட்டது, Omi அதைச் செயலாக்குகிறது. இங்கே நீக்கினால் ஃபோனில் உள்ள நகல் நீக்கப்படும். செயலாக்கம் தோல்வியடைந்தால், Omi இந்த ஃபோனிலிருந்து மீண்டும் முயற்சிக்க முடியாது.",
     "syncCardAllBackedUp": "எல்லா பதிவுகளும் ஒத்திசைக்கப்பட்டன",
     "syncCardReadyCount": "{count, plural, one{1 பதிவு ஒத்திசைக்கத் தயார்} other{{count} பதிவுகள் ஒத்திசைக்கத் தயார்}}",
     "syncCardProcessing": "Omi-யில் செயலாக்கப்படுகிறது…",
@@ -12210,6 +12210,7 @@
     "hasLinkedTasksLabel": "இணைக்கப்பட்ட பணிகள் உள்ளன",
     "hasTasksFilter": "பணிகள் உள்ளவை",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "புதுப்பிப்பு நிறுவப்படவில்லை. உங்கள் பதக்கம் தற்போதைய ஃபர்ம்வேரில் ({version}) தொடர்ந்து இயங்குகிறது. புதுப்பிப்பை மீண்டும் முயற்சிப்பதற்குப் பதிலாக ஆதரவைத் தொடர்பு கொள்ளவும்.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -12246,5 +12247,8 @@
     "downloadNow": "இப்போது பதிவிறக்கு",
     "onWifiLater": "பின்னர் Wi-Fi இல்",
     "conversationWritingSummary": "உங்கள் சுருக்கம் எழுதப்படுகிறது…",
-    "onTheWayServerWork": "சேவையகம் தெரிவித்த பணி"
+    "onTheWayServerWork": "சேவையகம் தெரிவித்த பணி",
+    "finishNothingToProcess": "இன்னும் செயலாக்க எதுவும் இல்லை.",
+    "finishStillProcessing": "இன்னும் செயலாக்கப்படுகிறது. இது முகப்பில் தோன்றும்.",
+    "finishBackToHome": "முகப்புக்குத் திரும்பு"
 }

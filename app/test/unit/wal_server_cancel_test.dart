@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/server_cancel_pause.dart';
 import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -118,6 +119,8 @@ void main() {
           SyncJobCancelOutcome.notCancellable);
       expect(await outcome(409, '{"detail":"Account busy"}'), SyncJobCancelOutcome.retryLater);
       expect(await outcome(404, ''), SyncJobCancelOutcome.notFound);
+      expect(await outcome(503, '{"code":"sync_job_cancel_disabled","detail":"sync_job_cancel_disabled"}'),
+          SyncJobCancelOutcome.paused);
       for (final status in [429, 500, 503]) {
         expect(await outcome(status, ''), SyncJobCancelOutcome.retryLater, reason: '$status');
       }
@@ -285,6 +288,33 @@ void main() {
     expect((await sync.deleteWal(wal))?.outcome, SyncJobCancelOutcome.retryLater);
     expect(sync.testWals, [wal]);
     expect(File('${dir.path}/a.bin').existsSync(), isTrue);
+    await sync.stop();
+  });
+
+  test('the server kill switch pauses the erase copy until the endpoint answers again', () async {
+    ServerCancelPause.instance.reset();
+    ServerCancelPause.instance.now = () => now;
+    addTearDown(ServerCancelPause.instance.reset);
+    final store = _MemoryStore();
+    var answer = const SyncJobCancelResult(SyncJobCancelOutcome.paused);
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now, persistWals: (_) async {}, serverCancelStore: store, serverCancel: (_) async => answer);
+    final wal = await uploaded('a');
+    sync.testWals = [wal];
+    expect((await sync.deleteWal(wal))?.outcome, SyncJobCancelOutcome.paused);
+    expect(ServerCancelPause.instance.paused, isTrue);
+    expect(store.rows.single.jobId, 'bp_job', reason: 'a paused cancel is retried once the switch is back on');
+    // An outage says nothing about the switch.
+    answer = const SyncJobCancelResult(SyncJobCancelOutcome.retryLater);
+    now = now.add(const Duration(minutes: 10));
+    await sync.reconcileUploadedWals();
+    expect(ServerCancelPause.instance.paused, isTrue);
+    // The endpoint answers again: the switch is on, and the erase copy returns.
+    answer = const SyncJobCancelResult(SyncJobCancelOutcome.cancelled);
+    now = now.add(const Duration(hours: 7));
+    await sync.reconcileUploadedWals();
+    expect(ServerCancelPause.instance.paused, isFalse);
+    expect(store.rows, isEmpty);
     await sync.stop();
   });
 

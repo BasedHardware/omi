@@ -2926,7 +2926,7 @@
     "deleteFromServerMessage": "Цей запис завантажено, але ще не розшифровано. Видалення також назавжди зітре копію на серверах Omi, тож його ніколи не буде розшифровано. Цю дію не можна скасувати.",
     "deletedRecordingAlreadyTranscribed": "Уже розшифровано. Щоб прибрати запис, видаліть його розмову.",
     "deleteWhileProcessingTitle": "Ще обробляється",
-    "deleteWhileProcessingMessage": "Цей запис завантажено, але Omi ще створює розмову. Якщо видалити його зараз і обробка не вдасться, відновити буде неможливо. Усе одно видалити?",
+    "deleteWhileProcessingMessage": "Цей запис уже завантажено, і Omi його обробляє. Видалення тут прибирає копію на телефоні. Якщо обробка не вдасться, Omi не зможе повторити спробу з цього телефона.",
     "syncCardAllBackedUp": "Усі записи синхронізовано",
     "syncCardReadyCount": "{count, plural, one{1 запис готовий до синхронізації} few{{count} записи готові до синхронізації} many{{count} записів готові до синхронізації} other{{count} запису готові до синхронізації}}",
     "syncCardProcessing": "Обробка в Omi…",
@@ -4653,6 +4653,7 @@
     "hasLinkedTasksLabel": "Є пов’язані завдання",
     "hasTasksFilter": "Із завданнями",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "Оновлення не встановилося. Ваш кулон і далі працює на поточній прошивці ({version}). Будь ласка, зверніться до підтримки, а не повторюйте оновлення.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4689,5 +4690,8 @@
     "downloadNow": "Завантажити зараз",
     "onWifiLater": "Пізніше через Wi-Fi",
     "conversationWritingSummary": "Пишемо ваш підсумок…",
-    "onTheWayServerWork": "Робота за даними сервера"
+    "onTheWayServerWork": "Робота за даними сервера",
+    "finishNothingToProcess": "Поки що нічого обробляти.",
+    "finishStillProcessing": "Ще обробляється. З'явиться на головній.",
+    "finishBackToHome": "На головну"
 }

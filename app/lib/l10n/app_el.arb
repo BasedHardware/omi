@@ -2926,7 +2926,7 @@
     "deleteFromServerMessage": "Αυτή η εγγραφή έχει μεταφορτωθεί αλλά δεν έχει μεταγραφεί ακόμη. Η διαγραφή της σβήνει οριστικά και το αντίγραφο στους διακομιστές της Omi, ώστε να μη μεταγραφεί ποτέ. Αυτή η ενέργεια δεν αναιρείται.",
     "deletedRecordingAlreadyTranscribed": "Έχει ήδη μεταγραφεί. Διαγράψτε τη συνομιλία της για να την αφαιρέσετε.",
     "deleteWhileProcessingTitle": "Συνεχίζεται η επεξεργασία",
-    "deleteWhileProcessingMessage": "Αυτή η ηχογράφηση μεταφορτώθηκε, αλλά το Omi δημιουργεί ακόμη τη συνομιλία. Αν τη διαγράψετε τώρα και η επεξεργασία αποτύχει, δεν θα μπορεί να ανακτηθεί. Διαγραφή ούτως ή άλλως;",
+    "deleteWhileProcessingMessage": "Αυτή η εγγραφή έχει ήδη μεταφορτωθεί και το Omi την επεξεργάζεται. Η διαγραφή εδώ αφαιρεί το αντίγραφο του τηλεφώνου. Αν η επεξεργασία αποτύχει, το Omi δεν θα μπορεί να ξαναδοκιμάσει από αυτό το τηλέφωνο.",
     "syncCardAllBackedUp": "Όλες οι ηχογραφήσεις συγχρονίστηκαν",
     "syncCardReadyCount": "{count, plural, one{1 ηχογράφηση έτοιμη για συγχρονισμό} other{{count} ηχογραφήσεις έτοιμες για συγχρονισμό}}",
     "syncCardProcessing": "Επεξεργασία στο Omi…",
@@ -4653,6 +4653,7 @@
     "hasLinkedTasksLabel": "Έχει συνδεδεμένες εργασίες",
     "hasTasksFilter": "Με εργασίες",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "Η ενημέρωση δεν εγκαταστάθηκε. Το μενταγιόν σας συνεχίζει να λειτουργεί με το τρέχον υλικολογισμικό ({version}). Επικοινωνήστε με την υποστήριξη αντί να δοκιμάσετε ξανά την ενημέρωση.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4689,5 +4690,8 @@
     "downloadNow": "Λήψη τώρα",
     "onWifiLater": "Αργότερα μέσω Wi-Fi",
     "conversationWritingSummary": "Γράφεται η σύνοψή σας…",
-    "onTheWayServerWork": "Εργασία που αναφέρει ο διακομιστής"
+    "onTheWayServerWork": "Εργασία που αναφέρει ο διακομιστής",
+    "finishNothingToProcess": "Δεν υπάρχει ακόμα κάτι για επεξεργασία.",
+    "finishStillProcessing": "Ακόμα σε επεξεργασία. Θα εμφανιστεί στην Αρχική.",
+    "finishBackToHome": "Πίσω στην Αρχική"
 }

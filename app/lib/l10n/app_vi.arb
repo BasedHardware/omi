@@ -2926,7 +2926,7 @@
     "deleteFromServerMessage": "Bản ghi này đã được tải lên nhưng chưa được chép lời. Xóa bản ghi cũng sẽ xóa vĩnh viễn bản sao trên máy chủ của Omi, nên nó sẽ không bao giờ được chép lời. Không thể hoàn tác thao tác này.",
     "deletedRecordingAlreadyTranscribed": "Đã được chép lời. Hãy xóa cuộc trò chuyện của nó để gỡ bỏ.",
     "deleteWhileProcessingTitle": "Vẫn đang xử lý",
-    "deleteWhileProcessingMessage": "Bản ghi này đã được tải lên nhưng Omi vẫn đang tạo cuộc trò chuyện. Nếu bạn xóa ngay bây giờ và quá trình xử lý thất bại, sẽ không thể khôi phục. Vẫn xóa?",
+    "deleteWhileProcessingMessage": "Bản ghi này đã được tải lên và Omi đang xử lý. Xóa ở đây sẽ xóa bản sao trên điện thoại. Nếu xử lý thất bại, Omi không thể thử lại từ điện thoại này.",
     "syncCardAllBackedUp": "Tất cả bản ghi đã đồng bộ",
     "syncCardReadyCount": "{count, plural, other{{count} bản ghi sẵn sàng để đồng bộ}}",
     "syncCardProcessing": "Đang xử lý trên Omi…",
@@ -4653,6 +4653,7 @@
     "hasLinkedTasksLabel": "Có nhiệm vụ được liên kết",
     "hasTasksFilter": "Có nhiệm vụ",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "Bản cập nhật chưa được cài đặt. Mặt dây của bạn vẫn hoạt động với firmware hiện tại ({version}). Vui lòng liên hệ hỗ trợ thay vì thử cập nhật lại.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4689,5 +4690,8 @@
     "downloadNow": "Tải ngay",
     "onWifiLater": "Sau, qua Wi-Fi",
     "conversationWritingSummary": "Đang viết bản tóm tắt của bạn…",
-    "onTheWayServerWork": "Công việc do máy chủ báo cáo"
+    "onTheWayServerWork": "Công việc do máy chủ báo cáo",
+    "finishNothingToProcess": "Chưa có gì để xử lý.",
+    "finishStillProcessing": "Vẫn đang xử lý. Nó sẽ xuất hiện ở Trang chủ.",
+    "finishBackToHome": "Về Trang chủ"
 }

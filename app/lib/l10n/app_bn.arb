@@ -10345,7 +10345,7 @@
     "deleteFromServerMessage": "এই রেকর্ডিংটি আপলোড হয়েছে কিন্তু এখনও ট্রান্সক্রাইব হয়নি। এটি মুছলে Omi-র সার্ভারের কপিটিও স্থায়ীভাবে মুছে যাবে, তাই এটি আর কখনও ট্রান্সক্রাইব হবে না। এটি পূর্বাবস্থায় ফেরানো যাবে না।",
     "deletedRecordingAlreadyTranscribed": "ইতিমধ্যে ট্রান্সক্রাইব হয়েছে। সরাতে এর কথোপকথনটি মুছুন।",
     "deleteWhileProcessingTitle": "এখনও প্রক্রিয়াধীন",
-    "deleteWhileProcessingMessage": "এই রেকর্ডিংটি আপলোড হয়েছে কিন্তু Omi এখনও কথোপকথন তৈরি করছে। এখন মুছে ফেললে এবং প্রক্রিয়া ব্যর্থ হলে এটি আর পুনরুদ্ধার করা যাবে না। তবুও মুছবেন?",
+    "deleteWhileProcessingMessage": "এই রেকর্ডিংটি ইতিমধ্যে আপলোড হয়েছে এবং Omi এটি প্রক্রিয়া করছে। এখানে মুছলে ফোনের কপিটি মুছে যাবে। প্রক্রিয়াকরণ ব্যর্থ হলে Omi এই ফোন থেকে আবার চেষ্টা করতে পারবে না।",
     "syncCardAllBackedUp": "সব রেকর্ডিং সিঙ্ক হয়েছে",
     "syncCardReadyCount": "{count, plural, one{1টি রেকর্ডিং সিঙ্কের জন্য প্রস্তুত} other{{count}টি রেকর্ডিং সিঙ্কের জন্য প্রস্তুত}}",
     "syncCardProcessing": "Omi-তে প্রক্রিয়াজাত হচ্ছে…",
@@ -12210,6 +12210,7 @@
     "hasLinkedTasksLabel": "সংযুক্ত কাজ আছে",
     "hasTasksFilter": "কাজ আছে",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "আপডেটটি ইনস্টল হয়নি। আপনার পেনড্যান্ট বর্তমান ফার্মওয়্যারে ({version}) কাজ করছে। আপডেট আবার চেষ্টা না করে সাপোর্টের সাথে যোগাযোগ করুন।",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -12246,5 +12247,8 @@
     "downloadNow": "এখনই ডাউনলোড করুন",
     "onWifiLater": "পরে Wi-Fi-তে",
     "conversationWritingSummary": "আপনার সারাংশ লেখা হচ্ছে…",
-    "onTheWayServerWork": "সার্ভারের জানানো কাজ"
+    "onTheWayServerWork": "সার্ভারের জানানো কাজ",
+    "finishNothingToProcess": "এখনও প্রক্রিয়া করার কিছু নেই।",
+    "finishStillProcessing": "এখনও প্রক্রিয়া চলছে। এটি হোমে দেখা যাবে।",
+    "finishBackToHome": "হোমে ফিরে যান"
 }

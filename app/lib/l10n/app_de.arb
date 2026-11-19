@@ -2917,7 +2917,7 @@
     "deleteFromServerMessage": "Diese Aufnahme wurde hochgeladen, aber noch nicht transkribiert. Beim Löschen wird auch die Kopie auf den Omi-Servern endgültig entfernt, sodass sie nie transkribiert wird. Dies kann nicht rückgängig gemacht werden.",
     "deletedRecordingAlreadyTranscribed": "Bereits transkribiert. Lösche die zugehörige Konversation, um sie zu entfernen.",
     "deleteWhileProcessingTitle": "Wird noch verarbeitet",
-    "deleteWhileProcessingMessage": "Diese Aufnahme wurde hochgeladen, aber Omi erstellt die Konversation noch. Wenn du sie jetzt löschst und die Verarbeitung fehlschlägt, kann sie nicht wiederhergestellt werden. Trotzdem löschen?",
+    "deleteWhileProcessingMessage": "Diese Aufnahme ist bereits hochgeladen und wird von Omi verarbeitet. Löschen entfernt hier die Kopie auf dem Telefon. Wenn die Verarbeitung fehlschlägt, kann Omi es von diesem Telefon aus nicht erneut versuchen.",
     "syncCardAllBackedUp": "Alle Aufnahmen synchronisiert",
     "syncCardReadyCount": "{count, plural, one{1 Aufnahme bereit zur Synchronisierung} other{{count} Aufnahmen bereit zur Synchronisierung}}",
     "syncCardProcessing": "Wird in Omi verarbeitet…",
@@ -4653,6 +4653,7 @@
     "hasLinkedTasksLabel": "Hat verknüpfte Aufgaben",
     "hasTasksFilter": "Mit Aufgaben",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "Das Update wurde nicht installiert. Dein Anhänger funktioniert weiter mit der aktuellen Firmware ({version}). Bitte wende dich an den Support, statt das Update erneut zu versuchen.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4689,5 +4690,8 @@
     "downloadNow": "Jetzt laden",
     "onWifiLater": "Später über WLAN",
     "conversationWritingSummary": "Deine Zusammenfassung wird geschrieben…",
-    "onTheWayServerWork": "Vom Server gemeldete Arbeit"
+    "onTheWayServerWork": "Vom Server gemeldete Arbeit",
+    "finishNothingToProcess": "Noch nichts zu verarbeiten.",
+    "finishStillProcessing": "Wird noch verarbeitet. Es erscheint auf der Startseite.",
+    "finishBackToHome": "Zur Startseite"
 }

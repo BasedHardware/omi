@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/pages/conversations/wal_server_delete_copy.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
@@ -29,6 +28,7 @@ import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 import 'widgets/too_old_recording_help.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
+import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
 
 Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
   return Padding(
@@ -157,8 +157,8 @@ class WalListItem extends StatelessWidget {
             direction:
                 displayState == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
             confirmDismiss: (direction) {
-              final copy = walDeleteConfirmationCopy(context.l10n, [wal],
-                  localTitle: context.l10n.deleteRecording, localMessage: context.l10n.thisCannotBeUndone);
+              final copy =
+                  walDeleteConfirmation(context.l10n, [wal], notUploadedMessage: context.l10n.thisCannotBeUndone);
               return showOmiConfirm(
                 context,
                 title: copy.title,

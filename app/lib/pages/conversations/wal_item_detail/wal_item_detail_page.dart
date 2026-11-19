@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/pages/conversations/wal_server_delete_copy.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -13,6 +12,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/widgets/waveform_section.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
 
 class WalItemDetailPage extends StatefulWidget {
   final Wal wal;
@@ -572,8 +572,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   void _showDeleteDialog(BuildContext context) async {
-    final copy = walDeleteConfirmationCopy(context.l10n, [widget.wal],
-        localTitle: context.l10n.deleteRecording, localMessage: context.l10n.deleteRecordingConfirmation);
+    final copy =
+        walDeleteConfirmation(context.l10n, [widget.wal], notUploadedMessage: context.l10n.deleteRecordingConfirmation);
     final confirmed = await showOmiConfirm(
       context,
       title: copy.title,

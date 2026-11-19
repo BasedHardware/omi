@@ -2961,7 +2961,7 @@
     "deleteFromServerMessage": "Эта запись загружена, но ещё не расшифрована. При удалении копия на серверах Omi тоже будет безвозвратно стёрта, поэтому запись никогда не будет расшифрована. Это действие нельзя отменить.",
     "deletedRecordingAlreadyTranscribed": "Уже расшифровано. Чтобы убрать запись, удалите её разговор.",
     "deleteWhileProcessingTitle": "Ещё обрабатывается",
-    "deleteWhileProcessingMessage": "Эта запись загружена, но Omi ещё создаёт разговор. Если удалить её сейчас и обработка не удастся, восстановить будет невозможно. Всё равно удалить?",
+    "deleteWhileProcessingMessage": "Эта запись уже загружена, и Omi её обрабатывает. Удаление здесь убирает копию на телефоне. Если обработка не удастся, Omi не сможет повторить попытку с этого телефона.",
     "syncCardAllBackedUp": "Все записи синхронизированы",
     "syncCardReadyCount": "{count, plural, one{1 запись готова к синхронизации} few{{count} записи готовы к синхронизации} many{{count} записей готовы к синхронизации} other{{count} записи готовы к синхронизации}}",
     "syncCardProcessing": "Обработка в Omi…",
@@ -4688,6 +4688,7 @@
     "hasLinkedTasksLabel": "Есть связанные задачи",
     "hasTasksFilter": "С задачами",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "Обновление не установилось. Ваш кулон продолжает работать на текущей прошивке ({version}). Пожалуйста, обратитесь в поддержку, а не повторяйте обновление.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4724,5 +4725,8 @@
     "downloadNow": "Скачать сейчас",
     "onWifiLater": "Позже по Wi-Fi",
     "conversationWritingSummary": "Пишем ваше резюме…",
-    "onTheWayServerWork": "Работа по данным сервера"
+    "onTheWayServerWork": "Работа по данным сервера",
+    "finishNothingToProcess": "Пока нечего обрабатывать.",
+    "finishStillProcessing": "Ещё обрабатывается. Появится на главной.",
+    "finishBackToHome": "На главную"
 }

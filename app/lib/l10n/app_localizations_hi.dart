@@ -9078,7 +9078,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'यह रिकॉर्डिंग अपलोड हो गई है लेकिन Omi अभी भी बातचीत बना रहा है। यदि आप इसे अभी हटाते हैं और प्रोसेसिंग विफल होती है, तो इसे पुनर्प्राप्त नहीं किया जा सकेगा। फिर भी हटाएँ?';
+      'यह रिकॉर्डिंग पहले ही अपलोड हो चुकी है और Omi इसे प्रोसेस कर रहा है। यहाँ डिलीट करने से फ़ोन की कॉपी हट जाएगी। अगर प्रोसेसिंग विफल हुई, तो Omi इस फ़ोन से दोबारा कोशिश नहीं कर पाएगा।';
 
   @override
   String get syncCardAllBackedUp => 'सभी रिकॉर्डिंग सिंक हो गईं';
@@ -15429,6 +15429,11 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'अपडेट इंस्टॉल नहीं हुआ। आपका पेंडेंट मौजूदा फ़र्मवेयर ($version) पर काम कर रहा है। अपडेट दोबारा आज़माने के बजाय कृपया सपोर्ट से संपर्क करें।';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15554,4 +15559,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'सर्वर द्वारा बताया गया काम';
+
+  @override
+  String get finishNothingToProcess => 'अभी प्रोसेस करने के लिए कुछ नहीं है।';
+
+  @override
+  String get finishStillProcessing => 'अभी प्रोसेस हो रहा है। यह होम पर दिखेगा।';
+
+  @override
+  String get finishBackToHome => 'होम पर वापस जाएं';
 }

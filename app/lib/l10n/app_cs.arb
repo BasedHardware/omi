@@ -2917,7 +2917,7 @@
     "deleteFromServerMessage": "Tento záznam je nahraný, ale ještě nebyl přepsán. Smazáním se trvale vymaže i kopie na serverech Omi, takže nikdy nebude přepsán. Tuto akci nelze vrátit zpět.",
     "deletedRecordingAlreadyTranscribed": "Už byl přepsán. Chcete-li ho odstranit, smažte jeho konverzaci.",
     "deleteWhileProcessingTitle": "Stále se zpracovává",
-    "deleteWhileProcessingMessage": "Tato nahrávka je nahraná, ale Omi stále vytváří konverzaci. Pokud ji nyní smažete a zpracování selže, nepůjde obnovit. Přesto smazat?",
+    "deleteWhileProcessingMessage": "Tento záznam je už nahraný a Omi ho zpracovává. Smazáním zde odstraníte kopii v telefonu. Pokud zpracování selže, Omi to z tohoto telefonu nebude moct zkusit znovu.",
     "syncCardAllBackedUp": "Všechny nahrávky synchronizovány",
     "syncCardReadyCount": "{count, plural, one{1 nahrávka připravená k synchronizaci} few{{count} nahrávky připravené k synchronizaci} many{{count} nahrávky připravené k synchronizaci} other{{count} nahrávek připravených k synchronizaci}}",
     "syncCardProcessing": "Zpracování v Omi…",
@@ -4653,6 +4653,7 @@
     "hasLinkedTasksLabel": "Má propojené úkoly",
     "hasTasksFilter": "S úkoly",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "Aktualizace se nenainstalovala. Přívěsek dál funguje na současném firmwaru ({version}). Místo opakování aktualizace prosím kontaktujte podporu.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4689,5 +4690,8 @@
     "downloadNow": "Stáhnout nyní",
     "onWifiLater": "Později přes Wi-Fi",
     "conversationWritingSummary": "Píšeme vaše shrnutí…",
-    "onTheWayServerWork": "Práce hlášená serverem"
+    "onTheWayServerWork": "Práce hlášená serverem",
+    "finishNothingToProcess": "Zatím není co zpracovat.",
+    "finishStillProcessing": "Stále se zpracovává. Objeví se na domovské stránce.",
+    "finishBackToHome": "Zpět domů"
 }

@@ -10345,7 +10345,7 @@
     "deleteFromServerMessage": "Оваа снимка е прикачена, но сè уште не е транскрибирана. Со бришењето трајно се брише и копијата на серверите на Omi, па никогаш нема да биде транскрибирана. Ова не може да се врати.",
     "deletedRecordingAlreadyTranscribed": "Веќе е транскрибирана. Избришете го нејзиниот разговор за да ја отстраните.",
     "deleteWhileProcessingTitle": "Сè уште се обработува",
-    "deleteWhileProcessingMessage": "Оваа снимка е поставена, но Omi сè уште го создава разговорот. Ако ја избришете сега и обработката не успее, не може да се врати. Сепак да се избрише?",
+    "deleteWhileProcessingMessage": "Оваа снимка е веќе поставена и Omi ја обработува. Бришењето тука ја отстранува копијата на телефонот. Ако обработката не успее, Omi нема да може повторно да проба од овој телефон.",
     "syncCardAllBackedUp": "Сите снимки се синхронизирани",
     "syncCardReadyCount": "{count, plural, one{1 снимка спремна за синхронизација} other{{count} снимки спремни за синхронизација}}",
     "syncCardProcessing": "Се обработува во Omi…",
@@ -12210,6 +12210,7 @@
     "hasLinkedTasksLabel": "Има поврзани задачи",
     "hasTasksFilter": "Со задачи",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "Ажурирањето не се инсталираше. Вашиот приврзок и понатаму работи на тековниот фирмвер ({version}). Контактирајте ја поддршката наместо повторно да го пробувате ажурирањето.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -12246,5 +12247,8 @@
     "downloadNow": "Преземи сега",
     "onWifiLater": "Подоцна на Wi-Fi",
     "conversationWritingSummary": "Го пишуваме вашето резиме…",
-    "onTheWayServerWork": "Работа пријавена од серверот"
+    "onTheWayServerWork": "Работа пријавена од серверот",
+    "finishNothingToProcess": "Сè уште нема ништо за обработка.",
+    "finishStillProcessing": "Сè уште се обработува. Ќе се појави на почетната.",
+    "finishBackToHome": "Назад кон почетна"
 }

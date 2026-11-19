@@ -8964,7 +8964,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteWhileProcessingTitle => 'まだ処理中です';
 
   @override
-  String get deleteWhileProcessingMessage => 'この録音はアップロード済みですが、Omi はまだ会話を作成しています。今削除して処理が失敗すると復元できません。それでも削除しますか？';
+  String get deleteWhileProcessingMessage =>
+      'この録音はすでにアップロード済みで、Omi が処理中です。ここで削除するとスマートフォン上のコピーが消えます。処理に失敗した場合、Omi はこのスマートフォンから再試行できません。';
 
   @override
   String get syncCardAllBackedUp => 'すべての録音を同期済み';
@@ -15217,6 +15218,11 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'アップデートはインストールされませんでした。ペンダントは現在のファームウェア（$version）で引き続き使えます。アップデートを繰り返さず、サポートにお問い合わせください。';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15342,4 +15348,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'サーバーが報告した処理';
+
+  @override
+  String get finishNothingToProcess => 'まだ処理するものがありません。';
+
+  @override
+  String get finishStillProcessing => 'まだ処理中です。ホームに表示されます。';
+
+  @override
+  String get finishBackToHome => 'ホームに戻る';
 }

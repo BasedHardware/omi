@@ -9144,7 +9144,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'ఈ రికార్డింగ్ అప్‌లోడ్ అయింది కానీ Omi ఇంకా సంభాషణను సృష్టిస్తోంది. ఇప్పుడు తొలగిస్తే మరియు ప్రాసెసింగ్ విఫలమైతే, దాన్ని తిరిగి పొందలేరు. అయినా తొలగించాలా?';
+      'ఈ రికార్డింగ్ ఇప్పటికే అప్‌లోడ్ అయింది, Omi దాన్ని ప్రాసెస్ చేస్తోంది. ఇక్కడ తొలగిస్తే ఫోన్‌లోని కాపీ తొలగిపోతుంది. ప్రాసెసింగ్ విఫలమైతే, Omi ఈ ఫోన్ నుండి మళ్లీ ప్రయత్నించలేదు.';
 
   @override
   String get syncCardAllBackedUp => 'అన్ని రికార్డింగ్‌లు సింక్ అయ్యాయి';
@@ -15509,6 +15509,11 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'అప్‌డేట్ ఇన్‌స్టాల్ కాలేదు. మీ పెండెంట్ ప్రస్తుత ఫర్మ్‌వేర్‌తో ($version) పనిచేస్తూనే ఉంది. అప్‌డేట్‌ను మళ్లీ ప్రయత్నించకుండా దయచేసి సపోర్ట్‌ను సంప్రదించండి.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15634,4 +15639,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'సర్వర్ నివేదించిన పని';
+
+  @override
+  String get finishNothingToProcess => 'ఇంకా ప్రాసెస్ చేయడానికి ఏమీ లేదు.';
+
+  @override
+  String get finishStillProcessing => 'ఇంకా ప్రాసెస్ అవుతోంది. ఇది హోమ్‌లో కనిపిస్తుంది.';
+
+  @override
+  String get finishBackToHome => 'హోమ్‌కు తిరిగి వెళ్లండి';
 }

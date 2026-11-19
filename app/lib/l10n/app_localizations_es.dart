@@ -9121,7 +9121,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Esta grabación se subió, pero Omi todavía está creando la conversación. Si la eliminas ahora y el procesamiento falla, no se podrá recuperar. ¿Eliminar de todos modos?';
+      'Esta grabación ya se subió y Omi la está procesando. Eliminarla aquí borra la copia del teléfono. Si el procesamiento falla, Omi no podrá reintentarlo desde este teléfono.';
 
   @override
   String get syncCardAllBackedUp => 'Todas las grabaciones sincronizadas';
@@ -15489,6 +15489,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'La actualización no se instaló. Tu colgante sigue funcionando con el firmware actual ($version). Contacta con soporte en lugar de volver a intentar la actualización.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15614,4 +15619,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Trabajo indicado por el servidor';
+
+  @override
+  String get finishNothingToProcess => 'Todavía no hay nada que procesar.';
+
+  @override
+  String get finishStillProcessing => 'Todavía se está procesando. Aparecerá en Inicio.';
+
+  @override
+  String get finishBackToHome => 'Volver a Inicio';
 }

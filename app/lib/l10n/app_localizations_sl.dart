@@ -9115,7 +9115,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Ta posnetek je naložen, vendar Omi še ustvarja pogovor. Če ga zdaj izbrišete in obdelava ne uspe, ga ne bo mogoče obnoviti. Vseeno izbrišem?';
+      'Ta posnetek je že naložen in ga Omi obdeluje. Brisanje tukaj odstrani kopijo v telefonu. Če obdelava ne uspe, Omi ne bo mogel znova poskusiti iz tega telefona.';
 
   @override
   String get syncCardAllBackedUp => 'Vsi posnetki sinhronizirani';
@@ -15474,6 +15474,11 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Posodobitev se ni namestila. Obesek še naprej deluje s trenutno vdelano programsko opremo ($version). Namesto ponovnega poskusa posodobitve se obrnite na podporo.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15599,4 +15604,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Delo, ki ga poroča strežnik';
+
+  @override
+  String get finishNothingToProcess => 'Še ni ničesar za obdelavo.';
+
+  @override
+  String get finishStillProcessing => 'Še v obdelavi. Prikazalo se bo na začetni strani.';
+
+  @override
+  String get finishBackToHome => 'Nazaj na začetno';
 }

@@ -2926,7 +2926,7 @@
     "deleteFromServerMessage": "Den här inspelningen är uppladdad men har inte transkriberats än. Om du raderar den tas även kopian på Omis servrar bort permanent, så den transkriberas aldrig. Detta kan inte ångras.",
     "deletedRecordingAlreadyTranscribed": "Redan transkriberad. Radera dess konversation för att ta bort den.",
     "deleteWhileProcessingTitle": "Bearbetas fortfarande",
-    "deleteWhileProcessingMessage": "Den här inspelningen har laddats upp men Omi skapar fortfarande konversationen. Om du tar bort den nu och bearbetningen misslyckas kan den inte återställas. Ta bort ändå?",
+    "deleteWhileProcessingMessage": "Den här inspelningen är redan uppladdad och Omi bearbetar den. Att radera den här tar bort kopian på telefonen. Om bearbetningen misslyckas kan Omi inte försöka igen från den här telefonen.",
     "syncCardAllBackedUp": "Alla inspelningar synkroniserade",
     "syncCardReadyCount": "{count, plural, one{1 inspelning redo att synkroniseras} other{{count} inspelningar redo att synkroniseras}}",
     "syncCardProcessing": "Bearbetar i Omi…",
@@ -4653,6 +4653,7 @@
     "hasLinkedTasksLabel": "Har länkade uppgifter",
     "hasTasksFilter": "Med uppgifter",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "Uppdateringen installerades inte. Ditt hänge fungerar fortfarande med den nuvarande firmwaren ({version}). Kontakta supporten i stället för att försöka uppdatera igen.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4689,5 +4690,8 @@
     "downloadNow": "Ladda ned nu",
     "onWifiLater": "Senare via Wi-Fi",
     "conversationWritingSummary": "Skriver din sammanfattning…",
-    "onTheWayServerWork": "Arbete rapporterat av servern"
+    "onTheWayServerWork": "Arbete rapporterat av servern",
+    "finishNothingToProcess": "Inget att bearbeta än.",
+    "finishStillProcessing": "Bearbetas fortfarande. Den visas på Hem.",
+    "finishBackToHome": "Tillbaka till Hem"
 }

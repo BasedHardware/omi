@@ -2917,7 +2917,7 @@
     "deleteFromServerMessage": "تم رفع هذا التسجيل ولكن لم يتم تحويله إلى نص بعد. حذفه يمسح أيضًا نسخته على خوادم Omi نهائيًا، فلن يتم تحويله إلى نص أبدًا. لا يمكن التراجع عن ذلك.",
     "deletedRecordingAlreadyTranscribed": "تم تحويله إلى نص بالفعل. احذف محادثته لإزالته.",
     "deleteWhileProcessingTitle": "لا تزال قيد المعالجة",
-    "deleteWhileProcessingMessage": "تم رفع هذا التسجيل لكن Omi لا يزال ينشئ المحادثة. إذا حذفته الآن وفشلت المعالجة، فلن يمكن استرداده. هل تريد الحذف على أي حال؟",
+    "deleteWhileProcessingMessage": "تم رفع هذا التسجيل بالفعل ويعالجه Omi الآن. الحذف هنا يزيل النسخة الموجودة على الهاتف. إذا فشلت المعالجة، فلن يتمكن Omi من إعادة المحاولة من هذا الهاتف.",
     "syncCardAllBackedUp": "تمت مزامنة كل التسجيلات",
     "syncCardReadyCount": "{count, plural, zero{لا توجد تسجيلات جاهزة للمزامنة} one{تسجيل واحد جاهز للمزامنة} two{تسجيلان جاهزان للمزامنة} few{{count} تسجيلات جاهزة للمزامنة} many{{count} تسجيلًا جاهزة للمزامنة} other{{count} تسجيل جاهز للمزامنة}}",
     "syncCardProcessing": "جارٍ المعالجة على Omi…",
@@ -4653,6 +4653,7 @@
     "hasLinkedTasksLabel": "توجد مهام مرتبطة",
     "hasTasksFilter": "بها مهام",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "لم يتم تثبيت التحديث. لا تزال قلادتك تعمل على البرنامج الثابت الحالي ({version}). يرجى التواصل مع الدعم بدلاً من إعادة محاولة التحديث.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4689,5 +4690,8 @@
     "downloadNow": "التنزيل الآن",
     "onWifiLater": "لاحقًا عبر Wi-Fi",
     "conversationWritingSummary": "جارٍ كتابة ملخصك…",
-    "onTheWayServerWork": "عمل أبلغ عنه الخادم"
+    "onTheWayServerWork": "عمل أبلغ عنه الخادم",
+    "finishNothingToProcess": "لا يوجد شيء لمعالجته بعد.",
+    "finishStillProcessing": "لا تزال المعالجة جارية. ستظهر على الشاشة الرئيسية.",
+    "finishBackToHome": "العودة إلى الرئيسية"
 }

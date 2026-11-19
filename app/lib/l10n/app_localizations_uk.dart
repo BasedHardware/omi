@@ -9109,7 +9109,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Цей запис завантажено, але Omi ще створює розмову. Якщо видалити його зараз і обробка не вдасться, відновити буде неможливо. Усе одно видалити?';
+      'Цей запис уже завантажено, і Omi його обробляє. Видалення тут прибирає копію на телефоні. Якщо обробка не вдасться, Omi не зможе повторити спробу з цього телефона.';
 
   @override
   String get syncCardAllBackedUp => 'Усі записи синхронізовано';
@@ -15479,6 +15479,11 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Оновлення не встановилося. Ваш кулон і далі працює на поточній прошивці ($version). Будь ласка, зверніться до підтримки, а не повторюйте оновлення.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15604,4 +15609,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Робота за даними сервера';
+
+  @override
+  String get finishNothingToProcess => 'Поки що нічого обробляти.';
+
+  @override
+  String get finishStillProcessing => 'Ще обробляється. З\'явиться на головній.';
+
+  @override
+  String get finishBackToHome => 'На головну';
 }

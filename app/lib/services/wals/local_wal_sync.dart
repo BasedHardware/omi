@@ -38,6 +38,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/http/api/sync_job_cancel.dart';
+import 'package:omi/services/wals/server_cancel_pause.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';

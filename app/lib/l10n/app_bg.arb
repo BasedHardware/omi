@@ -2917,7 +2917,7 @@
     "deleteFromServerMessage": "Този запис е качен, но все още не е транскрибиран. Изтриването му окончателно премахва и копието на сървърите на Omi, така че никога няма да бъде транскрибиран. Това не може да бъде отменено.",
     "deletedRecordingAlreadyTranscribed": "Вече е транскрибиран. Изтрийте разговора му, за да го премахнете.",
     "deleteWhileProcessingTitle": "Все още се обработва",
-    "deleteWhileProcessingMessage": "Този запис е качен, но Omi още създава разговора. Ако го изтриете сега и обработката се провали, той не може да бъде възстановен. Изтриване въпреки това?",
+    "deleteWhileProcessingMessage": "Този запис вече е качен и Omi го обработва. Изтриването тук премахва копието на телефона. Ако обработката се провали, Omi няма да може да опита отново от този телефон.",
     "syncCardAllBackedUp": "Всички записи са синхронизирани",
     "syncCardReadyCount": "{count, plural, one{1 запис, готов за синхронизация} other{{count} записа, готови за синхронизация}}",
     "syncCardProcessing": "Обработка в Omi…",
@@ -4653,6 +4653,7 @@
     "hasLinkedTasksLabel": "Има свързани задачи",
     "hasTasksFilter": "Със задачи",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "Актуализацията не се инсталира. Висулката ви продължава да работи с текущия фърмуер ({version}). Моля, свържете се с поддръжката, вместо да опитвате актуализацията отново.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4689,5 +4690,8 @@
     "downloadNow": "Изтегляне сега",
     "onWifiLater": "По-късно през Wi-Fi",
     "conversationWritingSummary": "Пишем вашето резюме…",
-    "onTheWayServerWork": "Работа, отчетена от сървъра"
+    "onTheWayServerWork": "Работа, отчетена от сървъра",
+    "finishNothingToProcess": "Все още няма какво да се обработи.",
+    "finishStillProcessing": "Все още се обработва. Ще се появи на началния екран.",
+    "finishBackToHome": "Към началото"
 }

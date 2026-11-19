@@ -2961,7 +2961,7 @@
     "deleteFromServerMessage": "Esta gravação foi enviada, mas ainda não foi transcrita. Excluí-la também apaga permanentemente a cópia nos servidores do Omi, então ela nunca será transcrita. Isso não pode ser desfeito.",
     "deletedRecordingAlreadyTranscribed": "Já foi transcrita. Exclua a conversa dela para removê-la.",
     "deleteWhileProcessingTitle": "Ainda processando",
-    "deleteWhileProcessingMessage": "Esta gravação foi enviada, mas o Omi ainda está criando a conversa. Se você excluí-la agora e o processamento falhar, não será possível recuperá-la. Excluir mesmo assim?",
+    "deleteWhileProcessingMessage": "Esta gravação já foi enviada e o Omi está processando. Excluí-la aqui remove a cópia do telefone. Se o processamento falhar, o Omi não poderá tentar de novo a partir deste telefone.",
     "syncCardAllBackedUp": "Todas as gravações sincronizadas",
     "syncCardReadyCount": "{count, plural, one{1 gravação pronta para sincronizar} other{{count} gravações prontas para sincronizar}}",
     "syncCardProcessing": "Processando no Omi…",
@@ -4688,6 +4688,7 @@
     "hasLinkedTasksLabel": "Tem tarefas vinculadas",
     "hasTasksFilter": "Com tarefas",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "A atualização não foi instalada. Seu pingente continua funcionando com o firmware atual ({version}). Entre em contato com o suporte em vez de tentar a atualização de novo.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4724,5 +4725,8 @@
     "downloadNow": "Baixar agora",
     "onWifiLater": "Depois no Wi-Fi",
     "conversationWritingSummary": "Escrevendo seu resumo…",
-    "onTheWayServerWork": "Trabalho informado pelo servidor"
+    "onTheWayServerWork": "Trabalho informado pelo servidor",
+    "finishNothingToProcess": "Ainda não há nada para processar.",
+    "finishStillProcessing": "Ainda a processar. Vai aparecer no Início.",
+    "finishBackToHome": "Voltar ao Início"
 }

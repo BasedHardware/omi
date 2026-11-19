@@ -9098,7 +9098,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Den här inspelningen har laddats upp men Omi skapar fortfarande konversationen. Om du tar bort den nu och bearbetningen misslyckas kan den inte återställas. Ta bort ändå?';
+      'Den här inspelningen är redan uppladdad och Omi bearbetar den. Att radera den här tar bort kopian på telefonen. Om bearbetningen misslyckas kan Omi inte försöka igen från den här telefonen.';
 
   @override
   String get syncCardAllBackedUp => 'Alla inspelningar synkroniserade';
@@ -15454,6 +15454,11 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Uppdateringen installerades inte. Ditt hänge fungerar fortfarande med den nuvarande firmwaren ($version). Kontakta supporten i stället för att försöka uppdatera igen.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15579,4 +15584,13 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Arbete rapporterat av servern';
+
+  @override
+  String get finishNothingToProcess => 'Inget att bearbeta än.';
+
+  @override
+  String get finishStillProcessing => 'Bearbetas fortfarande. Den visas på Hem.';
+
+  @override
+  String get finishBackToHome => 'Tillbaka till Hem';
 }

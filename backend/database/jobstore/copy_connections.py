@@ -31,9 +31,11 @@ def copy_pools(host: str, database: str, user: str) -> CopyPools:
     target = (host, database, user)
     with _lock:
         if _pools is None:
-            connect = connection.iam_connector(*target)
+            connect = connection.iam_connector(*target, setup_timeout_s=5.0)
             _pools = CopyPools(
-                target, connection.Pool('', size=2, connect=connect), connection.Pool('', size=1, connect=connect)
+                target,
+                connection.Pool('', size=2, connect=connect),
+                connection.Pool('', size=1, connect=connection.iam_connector(*target)),
             )
         elif _pools.target != target:
             raise RuntimeError('jobstore copy target changed within a process; restart required')

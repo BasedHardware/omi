@@ -9177,7 +9177,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Cet enregistrement a été envoyé mais Omi crée encore la conversation. Si vous le supprimez maintenant et que le traitement échoue, il sera irrécupérable. Supprimer quand même ?';
+      'Cet enregistrement est déjà envoyé et Omi le traite. Le supprimer ici retire la copie du téléphone. Si le traitement échoue, Omi ne pourra pas réessayer depuis ce téléphone.';
 
   @override
   String get syncCardAllBackedUp => 'Tous les enregistrements synchronisés';
@@ -15572,6 +15572,11 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'La mise à jour ne s\'est pas installée. Votre pendentif fonctionne toujours avec son firmware actuel ($version). Contactez l\'assistance plutôt que de relancer la mise à jour.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15698,4 +15703,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Traitement signalé par le serveur';
+
+  @override
+  String get finishNothingToProcess => 'Rien à traiter pour l\'instant.';
+
+  @override
+  String get finishStillProcessing => 'Traitement en cours. Elle apparaîtra sur l\'accueil.';
+
+  @override
+  String get finishBackToHome => 'Retour à l\'accueil';
 }

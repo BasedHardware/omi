@@ -2926,7 +2926,7 @@
     "deleteFromServerMessage": "यह रिकॉर्डिंग अपलोड हो गई है लेकिन अभी तक ट्रांसक्राइब नहीं हुई है। इसे हटाने से Omi के सर्वर पर मौजूद कॉपी भी हमेशा के लिए मिट जाएगी, इसलिए यह कभी ट्रांसक्राइब नहीं होगी। इसे पूर्ववत नहीं किया जा सकता।",
     "deletedRecordingAlreadyTranscribed": "पहले ही ट्रांसक्राइब हो चुकी है। इसे हटाने के लिए इसकी बातचीत हटाएं।",
     "deleteWhileProcessingTitle": "अभी प्रोसेस हो रहा है",
-    "deleteWhileProcessingMessage": "यह रिकॉर्डिंग अपलोड हो गई है लेकिन Omi अभी भी बातचीत बना रहा है। यदि आप इसे अभी हटाते हैं और प्रोसेसिंग विफल होती है, तो इसे पुनर्प्राप्त नहीं किया जा सकेगा। फिर भी हटाएँ?",
+    "deleteWhileProcessingMessage": "यह रिकॉर्डिंग पहले ही अपलोड हो चुकी है और Omi इसे प्रोसेस कर रहा है। यहाँ डिलीट करने से फ़ोन की कॉपी हट जाएगी। अगर प्रोसेसिंग विफल हुई, तो Omi इस फ़ोन से दोबारा कोशिश नहीं कर पाएगा।",
     "syncCardAllBackedUp": "सभी रिकॉर्डिंग सिंक हो गईं",
     "syncCardReadyCount": "{count, plural, one{1 रिकॉर्डिंग सिंक के लिए तैयार} other{{count} रिकॉर्डिंग सिंक के लिए तैयार}}",
     "syncCardProcessing": "Omi पर प्रोसेस हो रहा है…",
@@ -4653,6 +4653,7 @@
     "hasLinkedTasksLabel": "लिंक किए गए कार्य हैं",
     "hasTasksFilter": "कार्य वाले",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "अपडेट इंस्टॉल नहीं हुआ। आपका पेंडेंट मौजूदा फ़र्मवेयर ({version}) पर काम कर रहा है। अपडेट दोबारा आज़माने के बजाय कृपया सपोर्ट से संपर्क करें।",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4689,5 +4690,8 @@
     "downloadNow": "अभी डाउनलोड करें",
     "onWifiLater": "बाद में Wi-Fi पर",
     "conversationWritingSummary": "आपका सारांश लिखा जा रहा है…",
-    "onTheWayServerWork": "सर्वर द्वारा बताया गया काम"
+    "onTheWayServerWork": "सर्वर द्वारा बताया गया काम",
+    "finishNothingToProcess": "अभी प्रोसेस करने के लिए कुछ नहीं है।",
+    "finishStillProcessing": "अभी प्रोसेस हो रहा है। यह होम पर दिखेगा।",
+    "finishBackToHome": "होम पर वापस जाएं"
 }

@@ -29,6 +29,7 @@ import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 import 'widgets/too_old_recording_help.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
+import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
 
 /// The Manage Storage clear actions, each paired with the storage re-read.
 ///
@@ -573,8 +574,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 ? DismissDirection.none
                 : DismissDirection.endToStart,
             confirmDismiss: (direction) async {
-              final copy = walDeleteConfirmationCopy(context.l10n, block.wals,
-                  localTitle: context.l10n.deleteRecording, localMessage: context.l10n.thisCannotBeUndone);
+              final copy =
+                  walDeleteConfirmation(context.l10n, block.wals, notUploadedMessage: context.l10n.thisCannotBeUndone);
               final confirmed = await showOmiConfirm(
                 context,
                 title: copy.title,

@@ -10345,7 +10345,7 @@
     "deleteFromServerMessage": "ఈ రికార్డింగ్ అప్‌లోడ్ అయింది కానీ ఇంకా ట్రాన్స్‌క్రైబ్ కాలేదు. దీన్ని తొలగిస్తే Omi సర్వర్లలోని కాపీ కూడా శాశ్వతంగా తొలగించబడుతుంది, కాబట్టి ఇది ఎప్పటికీ ట్రాన్స్‌క్రైబ్ కాదు. దీన్ని రద్దు చేయలేరు.",
     "deletedRecordingAlreadyTranscribed": "ఇప్పటికే ట్రాన్స్‌క్రైబ్ అయింది. దీన్ని తీసివేయడానికి దాని సంభాషణను తొలగించండి.",
     "deleteWhileProcessingTitle": "ఇంకా ప్రాసెస్ అవుతోంది",
-    "deleteWhileProcessingMessage": "ఈ రికార్డింగ్ అప్‌లోడ్ అయింది కానీ Omi ఇంకా సంభాషణను సృష్టిస్తోంది. ఇప్పుడు తొలగిస్తే మరియు ప్రాసెసింగ్ విఫలమైతే, దాన్ని తిరిగి పొందలేరు. అయినా తొలగించాలా?",
+    "deleteWhileProcessingMessage": "ఈ రికార్డింగ్ ఇప్పటికే అప్‌లోడ్ అయింది, Omi దాన్ని ప్రాసెస్ చేస్తోంది. ఇక్కడ తొలగిస్తే ఫోన్‌లోని కాపీ తొలగిపోతుంది. ప్రాసెసింగ్ విఫలమైతే, Omi ఈ ఫోన్ నుండి మళ్లీ ప్రయత్నించలేదు.",
     "syncCardAllBackedUp": "అన్ని రికార్డింగ్‌లు సింక్ అయ్యాయి",
     "syncCardReadyCount": "{count, plural, one{1 రికార్డింగ్ సింక్‌కు సిద్ధంగా ఉంది} other{{count} రికార్డింగ్‌లు సింక్‌కు సిద్ధంగా ఉన్నాయి}}",
     "syncCardProcessing": "Omiలో ప్రాసెస్ అవుతోంది…",
@@ -12210,6 +12210,7 @@
     "hasLinkedTasksLabel": "లింక్ చేసిన పనులు ఉన్నాయి",
     "hasTasksFilter": "పనులు ఉన్నాయి",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "అప్‌డేట్ ఇన్‌స్టాల్ కాలేదు. మీ పెండెంట్ ప్రస్తుత ఫర్మ్‌వేర్‌తో ({version}) పనిచేస్తూనే ఉంది. అప్‌డేట్‌ను మళ్లీ ప్రయత్నించకుండా దయచేసి సపోర్ట్‌ను సంప్రదించండి.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -12246,5 +12247,8 @@
     "downloadNow": "ఇప్పుడే డౌన్‌లోడ్ చేయండి",
     "onWifiLater": "తర్వాత Wi-Fiలో",
     "conversationWritingSummary": "మీ సారాంశం రాస్తున్నాం…",
-    "onTheWayServerWork": "సర్వర్ నివేదించిన పని"
+    "onTheWayServerWork": "సర్వర్ నివేదించిన పని",
+    "finishNothingToProcess": "ఇంకా ప్రాసెస్ చేయడానికి ఏమీ లేదు.",
+    "finishStillProcessing": "ఇంకా ప్రాసెస్ అవుతోంది. ఇది హోమ్‌లో కనిపిస్తుంది.",
+    "finishBackToHome": "హోమ్‌కు తిరిగి వెళ్లండి"
 }

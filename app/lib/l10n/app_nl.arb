@@ -2926,7 +2926,7 @@
     "deleteFromServerMessage": "Deze opname is geüpload maar nog niet getranscribeerd. Als je hem verwijdert, wordt ook de kopie op de servers van Omi definitief gewist, zodat hij nooit wordt getranscribeerd. Dit kan niet ongedaan worden gemaakt.",
     "deletedRecordingAlreadyTranscribed": "Al getranscribeerd. Verwijder het bijbehorende gesprek om het te verwijderen.",
     "deleteWhileProcessingTitle": "Nog bezig met verwerken",
-    "deleteWhileProcessingMessage": "Deze opname is geüpload maar Omi maakt het gesprek nog aan. Als je hem nu verwijdert en de verwerking mislukt, kan hij niet worden hersteld. Toch verwijderen?",
+    "deleteWhileProcessingMessage": "Deze opname is al geüpload en Omi verwerkt hem. Hier verwijderen wist de kopie op de telefoon. Als de verwerking mislukt, kan Omi het niet opnieuw proberen vanaf deze telefoon.",
     "syncCardAllBackedUp": "Alle opnames gesynchroniseerd",
     "syncCardReadyCount": "{count, plural, one{1 opname klaar om te synchroniseren} other{{count} opnames klaar om te synchroniseren}}",
     "syncCardProcessing": "Verwerken bij Omi…",
@@ -4653,6 +4653,7 @@
     "hasLinkedTasksLabel": "Bevat gekoppelde taken",
     "hasTasksFilter": "Met taken",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "De update is niet geïnstalleerd. Je hanger werkt nog steeds op de huidige firmware ({version}). Neem contact op met support in plaats van de update opnieuw te proberen.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4689,5 +4690,8 @@
     "downloadNow": "Nu downloaden",
     "onWifiLater": "Later via wifi",
     "conversationWritingSummary": "Je samenvatting wordt geschreven…",
-    "onTheWayServerWork": "Door de server gemeld werk"
+    "onTheWayServerWork": "Door de server gemeld werk",
+    "finishNothingToProcess": "Nog niets om te verwerken.",
+    "finishStillProcessing": "Wordt nog verwerkt. Het verschijnt op Home.",
+    "finishBackToHome": "Terug naar Home"
 }

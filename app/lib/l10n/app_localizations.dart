@@ -16941,10 +16941,10 @@ abstract class AppLocalizations {
   /// **'Still Processing'**
   String get deleteWhileProcessingTitle;
 
-  /// No description provided for @deleteWhileProcessingMessage.
+  /// Delete confirmation for an uploaded recording whose server job has not finished, shown only while the server's owner-cancel switch is off (otherwise deleteFromServerMessage applies). Deleting removes the phone copy; the server keeps processing for now, and if that job fails the app has no local file to re-upload from.
   ///
   /// In en, this message translates to:
-  /// **'This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can\'t be recovered. Delete anyway?'**
+  /// **'This recording is already uploaded and Omi is processing it. Deleting it here removes the phone\'s copy. If processing fails, Omi can\'t retry from this phone.'**
   String get deleteWhileProcessingMessage;
 
   /// No description provided for @syncCardAllBackedUp.
@@ -27105,6 +27105,12 @@ abstract class AppLocalizations {
   /// **'The update didn\'t install. Your pendant is still on {version}. Please try again.'**
   String firmwareUpdateNotInstalledMessage(String version);
 
+  /// CV1 pendant: firmware update finished transferring but the pendant reconnected on its old version. Retrying is discouraged on affected units, so point to support.
+  ///
+  /// In en, this message translates to:
+  /// **'The update didn\'t install. Your pendant still works on its current firmware ({version}). Please contact support rather than retrying the update.'**
+  String firmwareUpdateNotInstalledCv1Message(String version);
+
   /// No description provided for @firmwareUpdateUnconfirmedMessage.
   ///
   /// In en, this message translates to:
@@ -27326,6 +27332,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Server-reported work'**
   String get onTheWayServerWork;
+
+  /// Brief notice after tapping Finish on the live capture page when nothing was heard since the last conversation, so no conversation is made.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to process yet.'**
+  String get finishNothingToProcess;
+
+  /// Shown on the page Finish opens when the conversation has not arrived after a long wait; it will show up on Home by itself.
+  ///
+  /// In en, this message translates to:
+  /// **'Still processing. It will appear on Home.'**
+  String get finishStillProcessing;
+
+  /// Button that leaves the processing page for the Home conversation list.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to Home'**
+  String get finishBackToHome;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -9091,7 +9091,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Tato nahrávka je nahraná, ale Omi stále vytváří konverzaci. Pokud ji nyní smažete a zpracování selže, nepůjde obnovit. Přesto smazat?';
+      'Tento záznam je už nahraný a Omi ho zpracovává. Smazáním zde odstraníte kopii v telefonu. Pokud zpracování selže, Omi to z tohoto telefonu nebude moct zkusit znovu.';
 
   @override
   String get syncCardAllBackedUp => 'Všechny nahrávky synchronizovány';
@@ -15445,6 +15445,11 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Aktualizace se nenainstalovala. Přívěsek dál funguje na současném firmwaru ($version). Místo opakování aktualizace prosím kontaktujte podporu.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15570,4 +15575,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Práce hlášená serverem';
+
+  @override
+  String get finishNothingToProcess => 'Zatím není co zpracovat.';
+
+  @override
+  String get finishStillProcessing => 'Stále se zpracovává. Objeví se na domovské stránce.';
+
+  @override
+  String get finishBackToHome => 'Zpět domů';
 }

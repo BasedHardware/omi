@@ -10345,7 +10345,7 @@
     "deleteFromServerMessage": "Овај снимак је отпремљен, али још није транскрибован. Брисањем се трајно брише и копија на Omi серверима, па никада неће бити транскрибован. Ово се не може опозвати.",
     "deletedRecordingAlreadyTranscribed": "Већ је транскрибован. Обришите његов разговор да бисте га уклонили.",
     "deleteWhileProcessingTitle": "Још се обрађује",
-    "deleteWhileProcessingMessage": "Овај снимак је отпремљен, али Omi још прави разговор. Ако га сада обришете и обрада не успе, неће моћи да се врати. Свеједно обрисати?",
+    "deleteWhileProcessingMessage": "Овај снимак је већ отпремљен и Omi га обрађује. Брисање овде уклања копију са телефона. Ако обрада не успе, Omi неће моћи поново да покуша са овог телефона.",
     "syncCardAllBackedUp": "Сви снимци синхронизовани",
     "syncCardReadyCount": "{count, plural, one{1 снимак спреман за синхронизацију} few{{count} снимка спремна за синхронизацију} other{{count} снимака спремно за синхронизацију}}",
     "syncCardProcessing": "Обрада у Omi…",
@@ -12210,6 +12210,7 @@
     "hasLinkedTasksLabel": "Има повезане задатке",
     "hasTasksFilter": "Са задацима",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "Ажурирање није инсталирано. Ваш привезак и даље ради на тренутном фирмверу ({version}). Уместо поновног покушаја ажурирања обратите се подршци.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -12246,5 +12247,8 @@
     "downloadNow": "Преузми сада",
     "onWifiLater": "Касније на Wi-Fi",
     "conversationWritingSummary": "Пишемо ваш сажетак…",
-    "onTheWayServerWork": "Рад који је пријавио сервер"
+    "onTheWayServerWork": "Рад који је пријавио сервер",
+    "finishNothingToProcess": "Још нема ничега за обраду.",
+    "finishStillProcessing": "Још се обрађује. Појавиће се на почетној.",
+    "finishBackToHome": "Назад на почетну"
 }
