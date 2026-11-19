@@ -13,7 +13,7 @@ from config.refactor_modes import default_on
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.credentials import CredentialContext
 from llm_gateway.gateway.idempotency_store import IdempotencyError, Operation, Store, StoredResponse
-from utils.executors import db_executor, run_blocking
+from utils.executors import ExecutorSaturatedError, gateway_idempotency_executor, run_blocking
 
 HEADER = 'idempotency-key'
 ACK_HEADER = 'X-Omi-Idempotency-Key'
@@ -47,14 +47,16 @@ async def _request_body(request: Request) -> dict[str, Any]:
         body = json.loads(raw)
     except (ValueError, RecursionError) as exc:
         raise IdempotencyError(400, 'idempotency_invalid_body') from exc
-    if not isinstance(body, dict) or body.get('stream') is True:
+    if not isinstance(body, dict) or body.get('stream', False) is not False:
         raise IdempotencyError(400, 'idempotency_nonstreaming_object_required')
     return body
 
 
 async def _storage(fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     try:
-        return await run_blocking(db_executor, fn, *args, **kwargs)
+        return await run_blocking(gateway_idempotency_executor, fn, *args, **kwargs)
+    except ExecutorSaturatedError as exc:
+        raise IdempotencyError(503, 'idempotency_store_busy', retry_after='2') from exc
     except IdempotencyError:
         raise
     except Exception as exc:
@@ -65,9 +67,8 @@ async def _storage(fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
 def _claim(
     operation: Operation, body: dict[str, Any], credentials: CredentialContext
 ) -> tuple[Store, StoredResponse | None]:
-    digest = operation.fingerprint(body, credentials)
     store = Store(operation)
-    return store, store.claim_or_replay(digest)
+    return store, store.claim_or_replay(Operation.canonical_request(body, credentials))
 
 
 def _error(exc: IdempotencyError, method: str) -> JSONResponse:
@@ -76,6 +77,10 @@ def _error(exc: IdempotencyError, method: str) -> JSONResponse:
     if exc.retry_after:
         headers['Retry-After'] = exc.retry_after
     return JSONResponse({'error': {'code': exc.code, 'message': exc.code}}, status_code=exc.status, headers=headers)
+
+
+def reject_ordinary_post() -> JSONResponse:
+    return _error(IdempotencyError(400, 'idempotency_operations_route_required'), 'post')
 
 
 def _replay(key: str, response: StoredResponse) -> Response:
@@ -99,6 +104,10 @@ async def complete(
         if len(values) != 1:
             raise IdempotencyError(400, 'idempotency_invalid_key')
         key = _key(values[0])
+        if (caller.usage_feature or '').startswith('proactivity_v2_') or any(
+            header.startswith('x-omi-proactivity-') for header in request.headers
+        ):
+            raise IdempotencyError(400, 'idempotency_proactivity_unsupported')
         operation = Operation.for_caller(caller, key)
         body = await _request_body(request)
         store, replay = await _storage(_claim, operation, body, credentials)

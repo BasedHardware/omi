@@ -89,7 +89,7 @@ async def create_chat_completion(
     provider_registry: ProviderRegistry = Depends(get_provider_registry),
 ) -> Response:
     if idempotency.HEADER in request.headers:
-        return await create_keyed_chat_completion(request, caller, config, provider_registry)
+        return idempotency.reject_ordinary_post()
     return await _create_chat_completion(request, caller, config, provider_registry)
 
 

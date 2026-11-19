@@ -23,7 +23,7 @@ from llm_gateway.main import app
 from llm_gateway.routers import dependencies, openai_compatible
 
 pytestmark = pytest.mark.integration
-POST = '/v1/chat/completions'
+POST = '/v1/chat/completions/operations'
 BODY = {'model': 'omi:auto:conv-structure', 'messages': [{'role': 'user', 'content': 'synthetic prompt'}]}
 
 
@@ -34,7 +34,7 @@ def db(monkeypatch) -> Iterator[firestore.Client]:
         pytest.skip('requires Firestore emulator')
     assert urlsplit('http://' + endpoint).hostname in {'127.0.0.1', 'localhost', '::1'}
     client = firestore.Client(project='demo-gateway-idempotency', credentials=AnonymousCredentials())
-    monkeypatch.setattr(idempotency_store, 'account_deletion_firestore_client', lambda *, firestore_client=None: client)
+    monkeypatch.setattr(idempotency_store, '_customer_firestore_client', lambda: client)
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'test-gateway-service-token')
     monkeypatch.delenv('LLM_GATEWAY_IDEMPOTENCY_ENABLED', raising=False)
     yield client
@@ -52,7 +52,7 @@ def headers():
 
 
 def lookup(headers):
-    return f'{POST}/operations/{headers["Idempotency-Key"]}'
+    return f'{POST}/{headers["Idempotency-Key"]}'
 
 
 def use_providers(monkeypatch, provider, fallback=None):
@@ -84,7 +84,7 @@ def test_replay_and_lookup_use_one_dispatch_across_clients(db, headers, monkeypa
     monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', lambda ctx, trace: traces.append((ctx, trace)))
 
     with TestClient(app) as client, TestClient(app) as other, ThreadPoolExecutor() as workers:
-        first = workers.submit(client.post, f'{POST}/operations', json=BODY, headers=headers)
+        first = workers.submit(client.post, POST, json=BODY, headers=headers)
         try:
             assert entered.wait(10)
             pending = other.post(POST, json=BODY, headers=headers)
@@ -116,7 +116,15 @@ def test_replay_and_lookup_use_one_dispatch_across_clients(db, headers, monkeypa
     assert context.idempotency_scope == claims[0].id == results[0].id
     claim = claims[0].to_dict()
     result = results[0].to_dict()
-    assert set(claim) == {'state', 'fingerprint', 'claim_token', 'started_at', 'expires_at', 'result_expires_at'}
+    assert set(claim) == {
+        'state',
+        'fingerprint',
+        'key_version',
+        'claim_token',
+        'started_at',
+        'expires_at',
+        'result_expires_at',
+    }
     assert claim['expires_at'] - claim['started_at'] == timedelta(days=30)
     assert result['expires_at'] == claim['result_expires_at']
     assert timedelta(hours=24) <= result['expires_at'] - claim['started_at'] < timedelta(hours=24, minutes=1)
@@ -229,15 +237,15 @@ def test_deletion_started_during_dispatch_prevents_settlement(db, headers, monke
 def test_claim_expiry_does_not_renew_or_allow_a_stale_settlement(db, headers):
     operation = idempotency_store.Operation(headers['X-Omi-User-Uid'], uuid4().hex)
     original = idempotency_store.Store(operation, client=db)
-    fingerprint = 'test-fingerprint'
+    canonical = b'test-request'
     response = idempotency_store.StoredResponse(200, b'{}')
-    assert original.claim_or_replay(fingerprint) is None
+    assert original.claim_or_replay(canonical) is None
     expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
     original.claim.update({'expires_at': expires_at})
     replacement = idempotency_store.Store(operation, client=db)
 
     for invoke in (
-        lambda: replacement.claim_or_replay(fingerprint),
+        lambda: replacement.claim_or_replay(canonical),
         replacement.lookup,
         lambda: original.finish(response),
     ):
@@ -247,7 +255,7 @@ def test_claim_expiry_does_not_renew_or_allow_a_stale_settlement(db, headers):
 
     # The emulator does not run the Firestore TTL sweeper. Model its deletion.
     original.claim.delete()
-    assert replacement.claim_or_replay(fingerprint) is None
+    assert replacement.claim_or_replay(canonical) is None
     with pytest.raises(idempotency_store.IdempotencyError, match='idempotency_indeterminate'):
         original.finish(response)
     replacement.finish(response)
@@ -262,7 +270,7 @@ def test_concurrent_fresh_claims_have_one_winner(db, headers):
     def compete(store):
         start.wait()
         try:
-            assert store.claim_or_replay('same-fingerprint') is None
+            assert store.claim_or_replay(b'same-request') is None
         except idempotency_store.IdempotencyError as exc:
             assert exc.status == 409
             return exc.code
@@ -271,3 +279,55 @@ def test_concurrent_fresh_claims_have_one_winner(db, headers):
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = [pool.submit(compete, store) for store in stores]
         assert sorted(future.result(timeout=20) for future in futures) == ['claimed', 'idempotency_pending']
+
+
+@pytest.mark.parametrize('marker', [{'X-Omi-Llm-Feature': 'proactivity_v2_memory'}, {'X-Omi-Proactivity-Item': ''}])
+@pytest.mark.parametrize('marked_first', [False, True])
+def test_proactivity_is_rejected_before_claim_or_replay(db, headers, monkeypatch, marker, marked_first):
+    provider = FakeChatCompletionProvider()
+    use_providers(monkeypatch, provider)
+    with TestClient(app) as client:
+        if not marked_first:
+            assert client.post(POST, json=BODY, headers=headers).status_code == 200
+        rejected = client.post(POST, json=BODY, headers={**headers, **marker})
+        assert rejected.status_code == 400
+        assert rejected.json()['error']['code'] == 'idempotency_proactivity_unsupported'
+        if marked_first:
+            assert list(docs(db, headers, idempotency_store.CLAIMS).stream()) == []
+            assert not provider.calls
+            assert client.post(POST, json={**BODY, 'stream': False}, headers=headers).status_code == 200
+        assert len(provider.calls) == 1
+
+
+def test_rotation_preserves_replay_across_mixed_replicas(db, headers, monkeypatch):
+    provider = FakeChatCompletionProvider()
+    use_providers(monkeypatch, provider)
+    old_secret, new_secret = 'old-test-secret-' * 3, 'new-test-secret-' * 3
+    active, secondary = idempotency_store.ACTIVE_SECRET_ENV, idempotency_store.SECONDARY_SECRET_ENV
+    monkeypatch.delenv(active, raising=False)
+    monkeypatch.setenv('ENCRYPTION_SECRET', old_secret)
+    monkeypatch.setenv(secondary, new_secret)
+    with TestClient(app) as client:
+        old_result = client.post(POST, json=BODY, headers=headers)
+        assert old_result.status_code == 200
+        (old_claim,) = docs(db, headers, idempotency_store.CLAIMS).stream()
+
+        monkeypatch.setenv(active, new_secret)
+        monkeypatch.setenv(secondary, old_secret)
+        assert client.post(POST, json=BODY, headers=headers).content == old_result.content
+        assert client.get(lookup(headers), headers=headers).content == old_result.content
+        assert client.post(POST, json={**BODY, 'temperature': 0.8}, headers=headers).status_code == 409
+        fresh = {**headers, 'Idempotency-Key': str(uuid4())}
+        new_result = client.post(POST, json=BODY, headers=fresh)
+        assert new_result.status_code == 200
+        versions = {doc.get('key_version') for doc in docs(db, headers, idempotency_store.CLAIMS).stream()}
+        assert old_claim.get('key_version') in versions and len(versions) == 2
+
+        monkeypatch.delenv(active)
+        monkeypatch.setenv(secondary, new_secret)
+        assert client.post(POST, json=BODY, headers=fresh).content == new_result.content
+        assert client.get(lookup(fresh), headers=fresh).content == new_result.content
+        monkeypatch.delenv(secondary)
+        assert client.post(POST, json=BODY, headers=fresh).status_code == 503
+        assert client.get(lookup(fresh), headers=fresh).status_code == 503
+        assert len(provider.calls) == 2

@@ -114,6 +114,18 @@ env:
         name: prod-omi-backend-secrets
         key: ENCRYPTION_SECRET
         optional: true
+  - name: LLM_GATEWAY_IDEMPOTENCY_ENCRYPTION_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-llm-gateway-idempotency-keys
+        key: active
+        optional: true
+  - name: LLM_GATEWAY_IDEMPOTENCY_SECONDARY_ENCRYPTION_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-llm-gateway-idempotency-keys
+        key: secondary
+        optional: true
   - name: LLM_GATEWAY_ALLOWED_CALLERS
     value: "backend,omi-web,omi-admin-dashboard"
   - name: OPENAI_API_KEY
@@ -141,6 +153,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: METRICS_SECRET
+  - name: LLM_GATEWAY_IDEMPOTENCY_CUSTOMER_PROJECT
+    value: "based-hardware"
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
   - name: GCP_LOCATION

@@ -9,11 +9,13 @@ import os
 from typing import Any
 from uuid import uuid4
 
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from google.api_core.exceptions import AlreadyExists
 from google.cloud import firestore
 
-from database.account_deletion_marker import account_deletion_document, account_deletion_firestore_client
+from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.credentials import CredentialContext
@@ -24,6 +26,9 @@ CLAIM_TTL = timedelta(days=30)
 RESULT_TTL = timedelta(hours=24)
 PENDING_WINDOW = timedelta(minutes=5)
 MAX_RESULT_BYTES = 256 * 1024
+DATA_PLANE_ENV = 'LLM_GATEWAY_IDEMPOTENCY_CUSTOMER_PROJECT'
+ACTIVE_SECRET_ENV = 'LLM_GATEWAY_IDEMPOTENCY_ENCRYPTION_SECRET'
+SECONDARY_SECRET_ENV = 'LLM_GATEWAY_IDEMPOTENCY_SECONDARY_ENCRYPTION_SECRET'
 
 
 class IdempotencyError(Exception):
@@ -49,11 +54,12 @@ class Operation:
         scope = json.dumps([caller.name, owner, caller.tenant_id, key], separators=(',', ':'))
         return cls(owner, hashlib.sha256(scope.encode()).hexdigest())
 
-    def fingerprint(self, body: dict[str, Any], credentials: CredentialContext) -> str:
+    @staticmethod
+    def canonical_request(body: dict[str, Any], credentials: CredentialContext) -> bytes:
         # The provider keys and request body live only in memory. A keyed digest
         # keeps anyone reading the claim from testing candidate prompt text.
         try:
-            canonical = json.dumps(
+            return json.dumps(
                 [body, credentials.source.value, credentials.forwarded_provider_keys],
                 sort_keys=True,
                 separators=(',', ':'),
@@ -61,7 +67,6 @@ class Operation:
             ).encode()
         except (ValueError, RecursionError) as exc:
             raise IdempotencyError(400, 'idempotency_invalid_body') from exc
-        return hmac.digest(_key(self.owner, b'fingerprint'), canonical, 'sha256').hex()
 
 
 @dataclass(frozen=True)
@@ -70,18 +75,55 @@ class StoredResponse:
     body: bytes
 
 
-def _key(owner: str, purpose: bytes) -> bytes:
-    # Resolve only on keyed calls. Unkeyed deployments have no encryption dependency.
-    from utils.encryption import derive_key
+def _customer_firestore_client() -> Any:
+    project = os.getenv(DATA_PLANE_ENV, '').strip()
+    if not project:
+        raise IdempotencyError(503, 'idempotency_store_unavailable')
+    from database._client import get_pinned_data_plane_firestore_client
 
-    return hmac.digest(derive_key(owner), b'llm-gateway-idempotency-v1/' + purpose, 'sha256')
+    client = get_pinned_data_plane_firestore_client(project)
+    if client.project != project:
+        raise IdempotencyError(503, 'idempotency_store_unavailable')
+    return client
+
+
+def _version(secret: bytes) -> str:
+    return hmac.digest(secret, b'llm-gateway-idempotency-v1/key-version', 'sha256')[:16].hex()
+
+
+class _KeyRing:
+    def __init__(self, owner: str):
+        active = os.getenv(ACTIVE_SECRET_ENV, os.getenv('ENCRYPTION_SECRET', '')).encode()
+        secondary = os.getenv(SECONDARY_SECRET_ENV, '').encode()
+        if len(active) < 32 or (secondary and len(secondary) < 32):
+            raise IdempotencyError(503, 'idempotency_store_unavailable')
+        self.owner = owner
+        self.active_version = _version(active)
+        self._secrets = {self.active_version: active}
+        if secondary:
+            self._secrets[_version(secondary)] = secondary
+
+    def key(self, version: str, purpose: bytes) -> bytes:
+        secret = self._secrets.get(version)
+        if secret is None:
+            raise IdempotencyError(503, 'idempotency_store_unavailable')
+        return HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=self.owner.encode(),
+            info=b'llm-gateway-idempotency-v1/' + purpose,
+        ).derive(secret)
+
+    def fingerprint(self, version: str, canonical: bytes) -> str:
+        return hmac.digest(self.key(version, b'fingerprint'), canonical, 'sha256').hex()
 
 
 class Store:
     def __init__(self, operation: Operation, *, client: Any = None):
         self.operation = operation
         self.claim_token = uuid4().hex
-        self.client = account_deletion_firestore_client(firestore_client=client)
+        self.client = client if client is not None else _customer_firestore_client()
+        self.keys = _KeyRing(operation.owner)
         user = self.client.collection('users').document(operation.owner)
         self.claim = user.collection(CLAIMS).document(operation.document_id)
         self.result = user.collection(RESULTS).document(operation.document_id)
@@ -95,17 +137,18 @@ class Store:
         if account_deletion_blocks_access(status):
             raise IdempotencyError(403, 'idempotency_owner_unavailable')
 
-    def _read(self, transaction: Any, fingerprint: str | None, *, create: bool = False) -> StoredResponse | None:
+    def _read(self, transaction: Any, canonical: bytes | None, *, create: bool = False) -> StoredResponse | None:
         self._fence(transaction)
         snapshot = self.claim.get(transaction=transaction, timeout=5)
         now = datetime.now(timezone.utc)
         if not snapshot.exists:
-            if not create:
+            if not create or canonical is None:
                 raise IdempotencyError(404, 'idempotency_not_found')
             transaction.create(
                 self.claim,
                 {
-                    'fingerprint': fingerprint,
+                    'fingerprint': self.keys.fingerprint(self.keys.active_version, canonical),
+                    'key_version': self.keys.active_version,
                     'claim_token': self.claim_token,
                     'state': 'pending',
                     'started_at': now,
@@ -117,7 +160,10 @@ class Store:
         claim = snapshot.to_dict() or {}
         if now >= claim['expires_at']:
             raise IdempotencyError(410, 'idempotency_expired')
-        if fingerprint is not None and not hmac.compare_digest(claim['fingerprint'], fingerprint):
+        version = claim['key_version']
+        if canonical is not None and not hmac.compare_digest(
+            claim['fingerprint'], self.keys.fingerprint(version, canonical)
+        ):
             raise IdempotencyError(409, 'idempotency_conflict')
         if claim['state'] == 'pending' and now < claim['started_at'] + PENDING_WINDOW:
             raise IdempotencyError(409, 'idempotency_pending', retry_after='2')
@@ -130,18 +176,18 @@ class Store:
         if response is None:
             raise IdempotencyError(503, 'idempotency_store_unavailable')
         packed = response['sealed']
-        plaintext = AESGCM(_key(self.operation.owner, b'result')).decrypt(
+        plaintext = AESGCM(self.keys.key(version, b'result')).decrypt(
             packed[:12], packed[12:], self.operation.document_id.encode()
         )
         return StoredResponse(int.from_bytes(plaintext[:2], 'big'), plaintext[2:])
 
-    def claim_or_replay(self, fingerprint: str) -> StoredResponse | None:
+    def claim_or_replay(self, canonical: bytes) -> StoredResponse | None:
         run = firestore.transactional(self._read)
         try:
-            return run(self.client.transaction(), fingerprint, create=True)
+            return run(self.client.transaction(), canonical, create=True)
         except AlreadyExists:
             # A concurrently created claim can surface as a failed create precondition.
-            return run(self.client.transaction(read_only=True), fingerprint)
+            return run(self.client.transaction(read_only=True), canonical)
 
     def lookup(self) -> StoredResponse:
         run = firestore.transactional(self._read)
@@ -151,13 +197,7 @@ class Store:
         return response
 
     def finish(self, response: StoredResponse | None) -> None:
-        sealed = None
-        if response is not None and len(response.body) <= MAX_RESULT_BYTES:
-            nonce = os.urandom(12)
-            plaintext = response.status.to_bytes(2, 'big') + response.body
-            sealed = nonce + AESGCM(_key(self.operation.owner, b'result')).encrypt(
-                nonce, plaintext, self.operation.document_id.encode()
-            )
+        oversized = response is not None and len(response.body) > MAX_RESULT_BYTES
 
         @firestore.transactional
         def settle(transaction: Any) -> None:
@@ -168,13 +208,18 @@ class Store:
                 raise IdempotencyError(409, 'idempotency_indeterminate')
             if now >= claim['expires_at']:
                 raise IdempotencyError(410, 'idempotency_expired')
-            if sealed is None:
+            if response is None or oversized:
                 transaction.update(self.claim, {'state': 'indeterminate'})
                 return
+            nonce = os.urandom(12)
+            plaintext = response.status.to_bytes(2, 'big') + response.body
+            sealed = nonce + AESGCM(self.keys.key(claim['key_version'], b'result')).encrypt(
+                nonce, plaintext, self.operation.document_id.encode()
+            )
             expires_at = min(now + RESULT_TTL, claim['expires_at'])
             transaction.create(self.result, {'sealed': sealed, 'expires_at': expires_at})
             transaction.update(self.claim, {'state': 'committed', 'result_expires_at': expires_at})
 
         settle(self.client.transaction())
-        if sealed is None and response is not None:
+        if oversized:
             raise IdempotencyError(409, 'idempotency_indeterminate')

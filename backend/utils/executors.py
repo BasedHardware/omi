@@ -303,6 +303,9 @@ record_barrier_executor = MonitoredThreadPoolExecutor(
     wait_on_saturation=True,
     thread_name_prefix="record-barrier",
 )
+gateway_idempotency_executor = MonitoredThreadPoolExecutor(
+    name="gateway_idempotency", max_workers=8, max_queue_size=8, thread_name_prefix="gateway-idempotency"
+)
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
 # Batch policy HTTP leaves only; coordinators stay in async Pump code.
 admission_executor = MonitoredThreadPoolExecutor(name="admission", max_workers=4, thread_name_prefix="admission")
@@ -376,6 +379,7 @@ _ALL_EXECUTORS = [
     free_allowance_executor,
     read_cache_shadow_executor,
     record_barrier_executor,
+    gateway_idempotency_executor,
     llm_executor,
     stripe_executor,
     admission_executor,
