@@ -31,7 +31,9 @@ _LIVE_INPUT_SCOPE = (
 
 
 def _live_scope(row):
-    return {key: row.get(key) for key in _LIVE_INPUT_SCOPE}
+    # Older fingerprints omit this input entirely and must miss even when a
+    # previously applied correction has since been removed.
+    return {**{key: row.get(key) for key in _LIVE_INPUT_SCOPE}, 'user_corrections': row.get('user_corrections') or []}
 
 
 def _live_summary_fingerprint(row):

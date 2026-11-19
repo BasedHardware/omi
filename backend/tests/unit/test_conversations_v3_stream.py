@@ -653,22 +653,43 @@ async def test_live_catchup_concurrent_taps_reuse_input_and_same_clock_edits_ref
     replay = await catchup_frames()
     assert len(replay) == 1 and replay[0].startswith('done:') and len(calls) == 1
 
+    # A correction to the owner's notes instructions also invalidates a recap
+    # even with identical transcript text and coverage.
+    catchup['user_corrections'] = [{'correction': 'Use the revised project name'}]
+    catchup['_test_revision'] += 1
+    assert summary.writers.read_live_summary('synthetic', catchup) is None
+    assert (await catchup_frames())[-1].startswith('done:') and len(calls) == 2
+
     # Word/clock thresholds alone cannot see this correction.
     catchup['transcript_segments'][0]['text'] = 'corrected ' * 300
     catchup['_test_revision'] += 1
     changed = await catchup_frames()
-    assert changed[-1].startswith('done:') and len(calls) == 2
+    assert changed[-1].startswith('done:') and len(calls) == 3
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'change', ['strict_append', 'equal_boundary', 'overlap', 'correction', 'removed', 'replaced', 'ended']
+    'change',
+    [
+        'strict_append',
+        'equal_boundary',
+        'owner_correction_append',
+        'overlap',
+        'correction',
+        'removed',
+        'replaced',
+        'ended',
+    ],
 )
 async def test_live_catchup_publishes_only_to_the_still_eligible_covered_input(catchup, monkeypatch, change):
     def model(uid, row, emit):
         emit('Uncommitted preview fragment')
         catchup['_test_revision'] += 1
-        if change in {'strict_append', 'equal_boundary', 'overlap'}:
+        if change == 'owner_correction_append':
+            catchup['user_corrections'] = [{'correction': 'Use the revised project name'}]
+            catchup['transcript_segments'].append({'text': 'New tail', 'start': 11.0, 'end': 20.0})
+            catchup['finished_at'] = AT + timedelta(seconds=20)
+        elif change in {'strict_append', 'equal_boundary', 'overlap'}:
             start = {'strict_append': 11.0, 'equal_boundary': 10.0, 'overlap': 9.5}[change]
             catchup['transcript_segments'].append({'text': 'New tail', 'start': start, 'end': 20.0})
             catchup['finished_at'] = AT + timedelta(seconds=20)
