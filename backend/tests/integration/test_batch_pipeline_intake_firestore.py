@@ -41,6 +41,8 @@ async def test_accepted_upload_drains_after_rollback_with_encrypted_context_and_
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
+    # Synthetic captures sit at fixed old clocks; this proof pins full processing, not the historical tier.
+    monkeypatch.setenv('SYNC_HISTORICAL_TIER_ENABLED', 'false')
     client = firestore.Client(project=f'demo-pr1-a-intake-{uuid4().hex[:8]}', credentials=AnonymousCredentials())
     store = FirestoreStore(f'batch_pipeline_test_{uuid4().hex}', firestore_client=client)
     uid = f'synthetic-intake-{uuid4().hex}'

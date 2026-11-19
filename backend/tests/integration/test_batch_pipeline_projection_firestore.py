@@ -44,6 +44,8 @@ def lane(monkeypatch):
     monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
     monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
+    # Synthetic captures sit at 1970 clocks; these proofs pin full processing, not the historical tier.
+    monkeypatch.setenv('SYNC_HISTORICAL_TIER_ENABLED', 'false')
     client = firestore.Client(project=f'demo-pr1-c-{uuid4().hex[:12]}', credentials=AnonymousCredentials())
     store = FirestoreStore(f'batch_pipeline_test_{uuid4().hex}', firestore_client=client)
     uid = f'synthetic-projection-{uuid4().hex}'
