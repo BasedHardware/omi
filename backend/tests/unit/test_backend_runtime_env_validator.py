@@ -663,6 +663,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         r'\n        {"name": "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED", "value": "true"},'
         r'\n        {"name": "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
+        r'\n        {"name": "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
         flags=re.DOTALL,
@@ -2089,6 +2090,7 @@ def missing_gateway_cloud_run_state():
     'missing',
     [
         None,
+        'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
         'BATCH_INPUT_EXPIRING_ENABLED',
         'BATCH_HELD_DEAD_LETTER_ENABLED',
         'SYNC_LINEAGE_LIVE_DEDUPE_ENABLED',

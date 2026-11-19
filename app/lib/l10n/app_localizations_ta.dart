@@ -9156,7 +9156,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'இந்தப் பதிவு பதிவேற்றப்பட்டது, ஆனால் Omi இன்னும் உரையாடலை உருவாக்குகிறது. இப்போது நீக்கி செயலாக்கம் தோல்வியடைந்தால், மீட்டெடுக்க முடியாது. அப்படியும் நீக்கவா?';
+      'இந்தப் பதிவு ஏற்கனவே பதிவேற்றப்பட்டது, Omi அதைச் செயலாக்குகிறது. இங்கே நீக்கினால் ஃபோனில் உள்ள நகல் நீக்கப்படும். செயலாக்கம் தோல்வியடைந்தால், Omi இந்த ஃபோனிலிருந்து மீண்டும் முயற்சிக்க முடியாது.';
 
   @override
   String get syncCardAllBackedUp => 'எல்லா பதிவுகளும் ஒத்திசைக்கப்பட்டன';
@@ -15535,6 +15535,11 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'புதுப்பிப்பு நிறுவப்படவில்லை. உங்கள் பதக்கம் தற்போதைய ஃபர்ம்வேரில் ($version) தொடர்ந்து இயங்குகிறது. புதுப்பிப்பை மீண்டும் முயற்சிப்பதற்குப் பதிலாக ஆதரவைத் தொடர்பு கொள்ளவும்.';
   }
 
   @override

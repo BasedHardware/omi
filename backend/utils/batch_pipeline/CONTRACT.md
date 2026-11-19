@@ -726,3 +726,44 @@ metadata attestation. Count overflow, queue expiry and unsettled/metadata deadli
 all keep the producer token fenced. The queue holds no extra drain slot or PCM
 copy. The 256 entries cover eight default 32-drain budgets for scale-down bursts;
 this is a bounded admission choice, not a measured fleet burst guarantee.
+
+## Atomic account authority writes
+
+Account protection, migration, cloud-sync consent, deletion-marker transitions,
+and physical user-root deletion write the account epoch in the same customer-plane
+transaction as the source change. The protection and migration-start writers also
+begin the legacy generation's purge in that transaction. Existing cleanup consumes
+the exact generation and finishes only that purge. Restorable deletion markers
+use the existing access policy. Restore and billing failure preserve independent
+permanent blocks and active purges.
+
+`batch_pipeline_privacy/{owner_key}` retains the legacy generation, sticky block,
+and active purge fields. GPU work, including the `ef42ee8` image, carries this legacy
+generation. The row also publishes `account_epoch`, with a durable head and hashed,
+fixed-size operation receipts in its subcollections. The head and receipts survive
+old root replacement and recursive user erasure. Each mutation allocates its
+operation ID before entering the retryable transaction or derives it from a stable
+job ID. Receipts hold counters and `expires_at` with a 90-day replay window.
+The permanent head and privacy owner row do not expire. See the
+[receipt TTL declaration](../../deploy/batch-pipeline/account-privacy-receipt-retention.json).
+
+The customer-data client behind `db` and the explicit data-plane client target
+the same Firestore project and database on the API and worker deployments that
+mount account settings. The standalone desktop service may use a different
+compute project and does not mount those routers. The account epoch transaction
+can increase contention on the owner row during simultaneous privacy changes.
+
+The Commit observer emits `omi_batch_pipeline_account_privacy_writes_total` with
+`writer_class`, `field_group`, and `certified` labels after successful writes. It
+checks the matching source, owner patch, head and operation receipt in the same
+transaction. It performs zero reads. A classified root upsert can report
+uncertified when the interceptor cannot prove existence from its write precondition.
+The source ratchet lists these legacy metadata constructors and synthetic tools
+individually. Old binaries and clients outside the SDK interceptor provide no
+counter evidence. The live reader and its existing invalidation token remain
+authoritative in mixed or partially covered fleets.
+
+Set `BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED=false` on writer-bearing services to
+restore legacy routing. Use `true` or unset to restore the atomic route. Commit
+observation and the masked legacy generation patch apply in both modes. An off
+interval is a coverage gap for any future account-epoch reader qualification.

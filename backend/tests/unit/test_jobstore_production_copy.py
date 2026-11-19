@@ -151,7 +151,7 @@ def test_factory_admits_lazy_production_handle_without_admitting_namespace_rows(
     primary, _, _ = production
     dials = []
 
-    def connector(*args, **kwargs):
+    def connector(*args):
         def dial():
             dials.append(args)
             pytest.fail('lazy production factory attempted a connection')

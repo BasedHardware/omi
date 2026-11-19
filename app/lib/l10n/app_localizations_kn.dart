@@ -9116,7 +9116,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'ಈ ರೆಕಾರ್ಡಿಂಗ್ ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ ಆದರೆ Omi ಇನ್ನೂ ಸಂಭಾಷಣೆ ರಚಿಸುತ್ತಿದೆ. ಈಗ ಅಳಿಸಿ ಪ್ರಕ್ರಿಯೆ ವಿಫಲವಾದರೆ ಮರುಪಡೆಯಲಾಗದು. ಹೇಗಿದ್ದರೂ ಅಳಿಸಬೇಕೆ?';
+      'ಈ ರೆಕಾರ್ಡಿಂಗ್ ಈಗಾಗಲೇ ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ ಮತ್ತು Omi ಅದನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುತ್ತಿದೆ. ಇಲ್ಲಿ ಅಳಿಸಿದರೆ ಫೋನ್‌ನಲ್ಲಿರುವ ಪ್ರತಿ ತೆಗೆದುಹಾಕಲ್ಪಡುತ್ತದೆ. ಪ್ರಕ್ರಿಯೆ ವಿಫಲವಾದರೆ, Omi ಈ ಫೋನ್‌ನಿಂದ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.';
 
   @override
   String get syncCardAllBackedUp => 'ಎಲ್ಲಾ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್ ಆಗಿವೆ';
@@ -15483,6 +15483,11 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'ಅಪ್‌ಡೇಟ್ ಇನ್‌ಸ್ಟಾಲ್ ಆಗಲಿಲ್ಲ. ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್‌ನಲ್ಲಿ ($version) ಕೆಲಸ ಮಾಡುತ್ತಿದೆ. ಅಪ್‌ಡೇಟ್ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸುವ ಬದಲು ಬೆಂಬಲವನ್ನು ಸಂಪರ್ಕಿಸಿ.';
   }
 
   @override

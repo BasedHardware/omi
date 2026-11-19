@@ -9094,7 +9094,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Bu kayıt yüklendi ancak Omi hâlâ konuşmayı oluşturuyor. Şimdi silerseniz ve işleme başarısız olursa kurtarılamaz. Yine de silinsin mi?';
+      'Bu kayıt zaten yüklendi ve Omi onu işliyor. Burada silmek telefondaki kopyayı kaldırır. İşleme başarısız olursa Omi bu telefondan yeniden deneyemez.';
 
   @override
   String get syncCardAllBackedUp => 'Tüm kayıtlar eşitlendi';
@@ -15443,6 +15443,11 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Güncelleme yüklenmedi. Kolyeniz mevcut yazılımıyla ($version) çalışmaya devam ediyor. Güncellemeyi yeniden denemek yerine lütfen destekle iletişime geçin.';
   }
 
   @override

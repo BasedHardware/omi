@@ -9073,7 +9073,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Táto nahrávka je nahraná, ale Omi ešte vytvára konverzáciu. Ak ju teraz odstránite a spracovanie zlyhá, nebude sa dať obnoviť. Napriek tomu odstrániť?';
+      'Tento záznam je už nahraný a Omi ho spracováva. Odstránením tu vymažete kópiu v telefóne. Ak spracovanie zlyhá, Omi to z tohto telefónu nebude môcť skúsiť znova.';
 
   @override
   String get syncCardAllBackedUp => 'Všetky nahrávky synchronizované';
@@ -15428,6 +15428,11 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Aktualizácia sa nenainštalovala. Prívesok naďalej funguje na súčasnom firmvéri ($version). Namiesto opakovania aktualizácie kontaktujte podporu.';
   }
 
   @override

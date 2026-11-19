@@ -9106,7 +9106,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Deze opname is geüpload maar Omi maakt het gesprek nog aan. Als je hem nu verwijdert en de verwerking mislukt, kan hij niet worden hersteld. Toch verwijderen?';
+      'Deze opname is al geüpload en Omi verwerkt hem. Hier verwijderen wist de kopie op de telefoon. Als de verwerking mislukt, kan Omi het niet opnieuw proberen vanaf deze telefoon.';
 
   @override
   String get syncCardAllBackedUp => 'Alle opnames gesynchroniseerd';
@@ -15471,6 +15471,11 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'De update is niet geïnstalleerd. Je hanger werkt nog steeds op de huidige firmware ($version). Neem contact op met support in plaats van de update opnieuw te proberen.';
   }
 
   @override
