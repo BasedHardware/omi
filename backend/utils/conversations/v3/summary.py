@@ -93,7 +93,10 @@ async def prepare(uid, row, *, live=False):
 async def stream(uid: str, row: dict[str, Any], *, token=None, live=False):
     cached = await run_blocking(db_executor, writers.read_live_summary, uid, row, exact=True) if live else None
     is_fresh = bool(cached) if live else fresh(row)
-    if is_fresh or not summary_eligible(row) or (live and token is None):
+    if live and token is None and not is_fresh and summary_eligible(row):
+        yield 'error: {"detail":"live_recap_unavailable"}\n\n'
+        return
+    if is_fresh or not summary_eligible(row):
         if token:
             await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
         yield done((cached or {}) if live else row)
@@ -138,11 +141,13 @@ async def stream(uid: str, row: dict[str, Any], *, token=None, live=False):
             if cached:
                 yield done(cached)
                 return
-            if not summary_eligible(decoded) or (
-                decoded.get('uses_custom_stt') != row.get('uses_custom_stt')
-                and await run_blocking(db_executor, paid_notes_refused, uid, decoded)
-            ):
+            if not summary_eligible(decoded):
                 yield done({})
+                return
+            if decoded.get('uses_custom_stt') != row.get('uses_custom_stt') and await run_blocking(
+                db_executor, paid_notes_refused, uid, decoded
+            ):
+                yield 'error: {"detail":"live_recap_unavailable"}\n\n'
                 return
         row = decoded
         if row.get('recording') or row.get('is_locked'):

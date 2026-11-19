@@ -84,6 +84,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   int _requestEpoch = 0;
   int _observedOpen = 0;
   bool _attemptedLiveRecap = false;
+  bool _recapUnavailable = false;
   List<Object>? _requestSpeech;
   double _requestBoundary = 0;
   ({DateTime through, String markdown})? _liveResult;
@@ -106,6 +107,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
       _sections.clear();
       _ownerUid = SharedPreferencesUtil().uid;
       _attemptedLiveRecap = false;
+      _recapUnavailable = false;
       _liveResult = null;
       _liveRequestFailed = false;
       _phase = _Phase.writing;
@@ -270,8 +272,13 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
         }, onError: (Object _) => keep()));
       case SummaryInProgress():
         _startPolling();
-      case SummaryFailed():
-        _fail();
+      case SummaryFailed(:final detail):
+        if (liveCatchup && detail == 'live_recap_unavailable') {
+          _recapUnavailable = true;
+          _finish();
+        } else {
+          _fail();
+        }
     }
   }
 
@@ -518,6 +525,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
     final c = widget.conversation;
     return _ownerUid.isNotEmpty &&
         widget.detailHydrated &&
+        !_recapUnavailable &&
         _canShowLiveContent &&
         c.v3?.kind != 'media' &&
         c.v3?.kind != 'background' &&
@@ -579,7 +587,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
                     size: OmiButtonSize.compact,
                   ),
                 if (_liveRequestFailed) Text(context.l10n.somethingWentWrong, style: style),
-                if (summary == null && !waiting && !_enoughTranscript)
+                if (summary == null && !waiting && (!_enoughTranscript || _recapUnavailable))
                   if (transcript.isEmpty)
                     Text(context.l10n.conversationSummaryWhenItEnds, style: style)
                   else ...[

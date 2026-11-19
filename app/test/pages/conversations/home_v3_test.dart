@@ -313,6 +313,12 @@ class _Home {
   List<TranscriptSegment> detailSegments = _liveSoFar;
   Completer<void>? detailBarrier;
   bool detailFails = false;
+  bool detailDenied = false;
+
+  Future<({ServerConversation? item, bool ok, bool inaccessible})> detailResult(String id) async {
+    final item = await detailRead(id);
+    return (item: detailDenied ? null : item, ok: item != null, inaccessible: detailDenied);
+  }
 
   Future<ServerConversation?> detailRead(String id) async {
     detailReads++;
@@ -450,10 +456,10 @@ Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
             ),
           ),
           ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
-            create: (_) => ConversationDetailProvider(fetchConversation: (id) async => home.detailRead(id)),
+            create: (_) => ConversationDetailProvider(fetchConversationResult: home.detailResult),
             update: (_, app, conversations, previous) =>
                 (previous?..setProviders(app, conversations)) ??
-                ConversationDetailProvider(fetchConversation: (id) async => home.detailRead(id)),
+                ConversationDetailProvider(fetchConversationResult: home.detailResult),
           ),
         ],
         child: MaterialApp(
@@ -698,6 +704,25 @@ void main() {
     await tester.pump();
     await tester.pump();
   }
+
+  testWidgets('a denied live detail refresh removes a visible recap', (tester) async {
+    final home = await _pumpHome(tester, v3: true);
+    home.detailSegments = recapSpeech;
+    LiveSummarySection.debugStream =
+        (_) => Stream.value(SummaryDone(Structured('Recap', 'Visible before denial.'), _now));
+    addTearDown(() => LiveSummarySection.debugStream = null);
+    await tester.tap(find.text('Launch checklist'));
+    await settleDetailTab(tester);
+    await tester.tap(find.text('Summary'));
+    await settleDetailTab(tester);
+    expect(find.textContaining('Visible before denial.'), findsOneWidget);
+    home.detailDenied = true;
+    await tester.pump(const Duration(seconds: 15));
+    await settleDetailTab(tester);
+    expect(find.textContaining('Visible before denial.'), findsNothing);
+    expect(find.byKey(const Key('live_summary_catch_up')), findsNothing);
+    await _dispose(tester, home);
+  });
 
   testWidgets('the first settled Summary tap can use its pending initial hydration once', (tester) async {
     final home = await _pumpHome(tester, v3: true);

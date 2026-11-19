@@ -106,6 +106,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
               !discarded &&
               context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false) &&
               LiveSummarySection.wants(conversation);
+          if (liveWanted && provider.detailAccessUnavailable) return const SizedBox.shrink();
           // Base the surrounding tab state on the summary the user is actually looking at
           // (the displayed source chip), not the canonical server selection.
           final summarySelection = provider.getDisplayedSummarySelection();

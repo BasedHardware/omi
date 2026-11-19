@@ -713,8 +713,8 @@ async def test_denied_live_catchup_never_acquires_a_lease_or_uses_old_notes(catc
     monkeypatch.setattr(leases, 'acquire', lambda *a: pytest.fail('denied catch-up acquired a writer'))
     monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('denied catch-up ran the notes model'))
     (frame,) = await catchup_frames()
-    assert frame.startswith('done:')
-    assert json.loads(base64.b64decode(frame[6:].strip()))['structured'] == {}
+    assert frame.startswith('error:')
+    assert json.loads(frame[6:].strip()) == {'detail': 'live_recap_unavailable'}
 
 
 @pytest.mark.asyncio

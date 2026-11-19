@@ -342,6 +342,23 @@ void main() {
       unawaited(events.close());
     });
 
+    testWidgets('a policy refusal shows recent speech without offering a paid retry', (tester) async {
+      final conversation = _conversation(state: ConversationTileState.live, speech: enoughSpeech);
+      await tester.pumpWidget(liveSnapshot(LiveSummarySection(
+        conversation: conversation,
+        open: 1,
+        stream: (_) => Stream.value(const SummaryFailed('live_recap_unavailable')),
+        refresh: () async => false,
+        onActiveChanged: (_) {},
+      )));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const Key('live_summary_recent_transcript')), findsOneWidget);
+      expect(find.byKey(const Key('live_summary_catch_up')), findsNothing);
+      expect(find.text('Try again'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
+
     testWidgets('authoritative correction at the same clock removes the interim preview', (tester) async {
       final events = StreamController<SummaryStreamEvent>();
       final through = DateTime(2026, 11, 16, 9, 20);
