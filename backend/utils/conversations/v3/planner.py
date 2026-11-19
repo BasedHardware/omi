@@ -214,6 +214,18 @@ def _unowned_spans(start, end, occupied):
         yield cursor, end
 
 
+def nonoverlapping_pieces(pieces):
+    result = []
+    occupied = {}
+    for piece in pieces:
+        key = piece['recording_id'], piece['audio_file_id']
+        spans = occupied.setdefault(key, [])
+        for start, end in list(_unowned_spans(piece['start'], piece['end'], spans)):
+            result.append({**piece, 'start': start, 'end': end})
+            spans.append((start, end))
+    return result
+
+
 def is_unlocked(row):
     return row.get('status') == 'in_progress' or bool(row.get('v3_unlocked'))
 
@@ -221,7 +233,7 @@ def is_unlocked(row):
 def build(uid, window, recordings, existing=None, *, allocated=None):
     lines = window['lines']
     start, end = lines[0]['start'], max(line['end'] for line in lines)
-    if existing and not is_unlocked(existing):
+    if existing and (not is_unlocked(existing) or window.get('_held_provisional')):
         start, end = existing['started_at'], existing['finished_at']
     cid = existing['id'] if existing else str(uuid5(NAMESPACE_URL, f'v3:{uid}:{start.isoformat()}'))
     first = recordings[lines[0]['conversation_id']]
@@ -239,7 +251,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         left, right = min(l['start'] for l in owned), max(l['end'] for l in owned)
         occupied = published.get(rid, {})
         held = [(c['start'], c['end']) for c in recording.get('claims') or [] if c['conversation_id'] == cid]
-        if retained and held:
+        if (retained or window.get('_held_provisional')) and held:
             spans = sorted(set(held))
         else:
             blocked_claims = [*occupied.get('claims', ()), *(allocated or {}).get(rid, ())]
@@ -296,9 +308,11 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
 
         segments = old_segments + [s for s in segments if not already_present(s)]
         segments.sort(key=lambda s: s['start'])
-        for piece in existing.get('recording_pieces') or []:
-            if piece not in pieces:
-                pieces.append(piece)
+        previous_pieces = existing.get('recording_pieces') or []
+        if existing.get('v3_refined'):
+            pieces = nonoverlapping_pieces([*previous_pieces, *pieces])
+        else:
+            pieces.extend(piece for piece in previous_pieces if piece not in pieces)
         known_files = {af['id'] for af in files}
         files.extend(af for af in existing.get('audio_files') or [] if af['id'] not in known_files)
     title = (
@@ -411,7 +425,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         dict.fromkeys([*(existing or {}).get('v3_recording_ids', []), *row['v3_recording_ids']])
     )
     row['_v3_claims'] = claims
-    if retained:
+    if retained or window.get('_held_provisional'):
         for rid in row['v3_recording_ids']:
             if rid not in claims:
                 held = {
@@ -445,9 +459,28 @@ def _contains_line(row, line, spans):
     )
 
 
-def preserve_finished_windows(planned, existing, recordings=None):
+def preserve_finished_windows(planned, existing, recordings=None, *, protect_provisional=False):
     """Late speech cannot move a published finished conversation's boundaries."""
-    finished = [r for r in existing.values() if not is_unlocked(r) and r.get('started_at') and r.get('finished_at')]
+    finished = [
+        row
+        for row in existing.values()
+        if not is_unlocked(row)
+        and row.get('started_at')
+        and row.get('finished_at')
+        and not row.get('v3_claims_transferred_to')
+    ]
+    # When an updated outline joins multiple provisional owners, retain their
+    # custody independently until lock and ordinary merge-only refinement.
+    provisional = set()
+    if protect_provisional:
+        open_rows = [row for row in existing.values() if row.get('v3_unlocked') and not row.get('deleted')]
+        for window in planned:
+            left = window['lines'][0]['start']
+            right = max(line['end'] for line in window['lines'])
+            overlaps = [row for row in open_rows if left < row['finished_at'] and row['started_at'] < right]
+            if len(overlaps) > 1:
+                provisional.update(row['id'] for row in overlaps)
+        finished.extend(row for row in open_rows if row['id'] in provisional)
     protected = {r['id'] for r in finished}
     published_ids = set()
     claims_by_recording = {}
@@ -492,7 +525,8 @@ def preserve_finished_windows(planned, existing, recordings=None):
                     {
                         **window,
                         'lines': [],
-                        'finished': True,
+                        'finished': owner['id'] not in provisional,
+                        '_held_provisional': owner['id'] in provisional,
                         'manual_end': False,
                         'title': owner.get('structured', {}).get('title', ''),
                         'kind': owner.get('outline_kind') or owner.get('kind', 'conversation'),
@@ -502,6 +536,7 @@ def preserve_finished_windows(planned, existing, recordings=None):
                 )
                 target.pop('_stretch_words', None)
                 target['lines'].append(line)
+                target['finished'] = target['finished'] or window['finished']
                 if line is window['lines'][-1] and window.get('manual_end'):
                     target['manual_end'] = True
             else:

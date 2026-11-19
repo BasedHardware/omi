@@ -44,3 +44,111 @@ def test_gap_and_lock_deadlines_are_independent():
         [member], now + timedelta(seconds=600), silence_gap=timedelta(seconds=900), lock_delay=timedelta(seconds=3600)
     )
     assert ready['outline_ready'] and not ready['finished']
+
+
+def _locked_pair():
+    from utils.conversations.v3 import planner
+
+    left, right = AT, AT + timedelta(seconds=30)
+    middle, end = AT + timedelta(seconds=10), AT + timedelta(seconds=20)
+    segments = [
+        {'id': 'a', 'start': 0, 'end': 20, 'text': 'first synthetic segment'},
+        {'id': 'b', 'start': 10, 'end': 30, 'text': 'second synthetic segment'},
+    ]
+    recording = {
+        'id': 'r',
+        'started_at': left,
+        'finished_at': right,
+        'transcript_segments': segments,
+        'audio_files': [{'id': 'audio', 'duration': 30}],
+    }
+    group = outline.stretches([recording], right + timedelta(minutes=10))[0]
+    first, second = group['lines']
+    window = {'kind': 'conversation', 'finished': True, 'lines': [first, second], 'line': ''}
+    older = {
+        'id': 'early',
+        'status': 'completed',
+        'v3_derived': True,
+        'v3_recording_ids': ['r'],
+        'started_at': left,
+        'finished_at': end,
+        'summary_covers_through': end,
+        'kind': 'conversation',
+        'transcript_segments': [segments[0]],
+        'structured': {'title': 'Early', 'sections': [{'heading': 'A', 'body_markdown': 'First'}]},
+        'recording_pieces': [{'recording_id': 'r', 'audio_file_id': 'audio', 'start': 0, 'end': 20}],
+        'title_locked': True,
+    }
+    later = {
+        **older,
+        'id': 'late',
+        'started_at': middle,
+        'finished_at': right,
+        'summary_covers_through': right,
+        'transcript_segments': [{**segments[1], 'start': 0, 'end': 20}],
+        'structured': {'title': 'Late', 'overview': 'Recap', 'sections': [{'heading': 'B', 'body_markdown': 'Second'}]},
+        'recording_pieces': [{'recording_id': 'r', 'audio_file_id': 'audio', 'start': 10, 'end': 30}],
+    }
+    recording['claims'] = [
+        {'conversation_id': row['id'], 'start': row['started_at'], 'end': row['finished_at']} for row in (older, later)
+    ]
+    assert planner.is_unlocked(older) is False
+    return window, {'late': later, 'early': older}, {'r': recording}
+
+
+def test_locked_refinement_keeps_earliest_id_notes_and_single_copy_of_audio():
+    from utils.conversations.v3 import planner, refinement
+
+    window, existing, recordings = _locked_pair()
+    _, merged = refinement.candidate([window], existing, recordings)
+    assert merged['id'] == 'early'
+    assert merged['_v3_absorbed'] == ['late']
+    assert merged['summary_covers_through'] == merged['finished_at'] == existing['late']['finished_at']
+    assert [section['heading'] for section in merged['structured']['sections']] == ['A', 'Late', 'B']
+    assert merged['_v3_claims'] == {'r': [{'start': AT, 'end': AT + timedelta(seconds=30)}]}
+    assert [(piece['start'], piece['end']) for piece in merged['recording_pieces']] == [(0, 20), (20, 30)]
+
+    recorded_claims = [{'conversation_id': 'early', **claim} for claim in merged['_v3_claims']['r']]
+    recordings['r']['claims'] = recorded_claims
+    existing = {'early': merged, 'late': {**existing['late'], 'deleted': True, 'v3_claims_transferred_to': 'early'}}
+    split = [{**window, 'lines': [line]} for line in window['lines']]
+    retained = planner.preserve_finished_windows(split, existing, recordings)
+    assert [piece['existing_id'] for piece in retained] == ['early']
+    rebuilt = planner.build('synthetic', retained[0], recordings, merged)
+    assert rebuilt['recording_pieces'] == merged['recording_pieces']
+
+
+@pytest.mark.parametrize('field', ['manual_end', 'v3_open_locked', 'v3_unlocked', 'v3_process_pending'])
+def test_locked_refinement_respects_finalization_barriers(field):
+    from utils.conversations.v3 import refinement
+
+    window, existing, recordings = _locked_pair()
+    existing['late'][field] = True
+    assert refinement.candidate([window], existing, recordings) is None
+
+
+def test_locked_refinement_does_not_join_distinct_planned_stretches():
+    from utils.conversations.v3 import refinement
+
+    window, existing, recordings = _locked_pair()
+    split = [{**window, 'lines': [line]} for line in window['lines']]
+    assert refinement.candidate(split, existing, recordings) is None
+
+
+def test_joining_provisional_cards_preserves_their_claims_until_lock():
+    from utils.conversations.v3 import planner
+
+    window, existing, recordings = _locked_pair()
+    for row in existing.values():
+        row['v3_unlocked'] = True
+    window['finished'] = False
+    preview = planner.preserve_finished_windows([window], existing, recordings, protect_provisional=True)
+    assert [piece['existing_id'] for piece in preview] == ['early', 'late']
+    assert not any(piece['finished'] for piece in preview)
+    for piece in preview:
+        row = planner.build('synthetic', piece, recordings, existing[piece['existing_id']])
+        assert row['_v3_claims']['r'] == [
+            {'start': claim['start'], 'end': claim['end']}
+            for claim in recordings['r']['claims']
+            if claim['conversation_id'] == row['id']
+        ]

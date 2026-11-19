@@ -528,3 +528,48 @@ def test_terminal_failure_counter_counts_committed_transitions_once(strict):
     assert writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
     assert not writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
     assert metrics.TERMINAL_FAILURES.labels('processing')._value.get() == before + 1
+
+
+def test_locked_refinement_commits_redirect_and_transferred_claims_together(strict):
+    older, later = R[:-1] + ('older',), R[:-1] + ('later',)
+    end = AT + timedelta(seconds=30)
+    midpoint = AT + timedelta(seconds=10)
+    old_claims = [
+        {'conversation_id': 'older', 'start': AT, 'end': midpoint},
+        {'conversation_id': 'later', 'start': midpoint, 'end': end},
+    ]
+    strict.rows[R] = {'recording': True, 'claims': old_claims, 'v3_pending': True}
+    strict.rows[older] = {'id': 'older', 'status': 'completed', 'v3_derived': True}
+    strict.rows[later] = {'id': 'later', 'status': 'completed', 'v3_derived': True, 'sync_content_revision': 3}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    source = {'id': 'r', **strict.rows[R], '_v3_revision': 1}
+    existing = {path[-1]: {**strict.rows[path], '_v3_revision': 1} for path in (older, later)}
+    survivor = {
+        **existing['older'],
+        'started_at': AT,
+        'finished_at': end,
+        'v3_recording_ids': ['r'],
+        '_v3_absorbed': ['later'],
+        '_v3_claims': {'r': [{'start': AT, 'end': midpoint}, {'start': midpoint, 'end': end}]},
+    }
+    strict.rows[later]['_test_revision'] = 2
+    with pytest.raises(store.Conflict, match='source_changed'):
+        store.commit_projection('synthetic', token, {'r': source}, existing, [survivor], [], firestore_client=strict)
+    assert strict.rows[R]['claims'] == old_claims
+    assert 'deleted' not in strict.rows[later]
+
+    existing['later']['_v3_revision'] = 2
+    tombstone = ('users', 'synthetic', 'deleted_conversations', 'later')
+    strict.rows[tombstone] = {'conversation_id': 'later'}
+    with pytest.raises(store.Conflict, match='target_deleted'):
+        store.commit_projection('synthetic', token, {'r': source}, existing, [survivor], [], firestore_client=strict)
+    assert strict.rows[R]['claims'] == old_claims
+    del strict.rows[tombstone]
+
+    store.commit_projection('synthetic', token, {'r': source}, existing, [survivor], [], firestore_client=strict)
+    assert strict.rows[older]['finished_at'] == end
+    assert '_v3_absorbed' not in strict.rows[older]
+    assert strict.rows[later]['deleted'] and strict.rows[later]['home_hidden']
+    assert strict.rows[later]['sync_merged_into'] == strict.rows[later]['v3_claims_transferred_to'] == 'older'
+    assert strict.rows[later]['sync_content_revision'] == 4
+    assert strict.rows[R]['claims'] == [{**claim, 'conversation_id': 'older'} for claim in old_claims]

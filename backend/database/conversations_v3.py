@@ -562,6 +562,18 @@ def commit_projection(
     open_ids = [r['id'] for r in rows if r['status'] == 'in_progress' and not r.get('deleted')]
     if len(open_ids) > 1:
         raise Conflict('multiple_open_conversations')
+    # One merge per pass, with all donor redirects in the survivor's batch.
+    all_absorbed = [cid for row in rows for cid in row.get('_v3_absorbed', ())]
+    if all_absorbed:
+        planned_ids = {row['id'] for row in rows}
+        if (
+            key != 'builder'
+            or remove
+            or not set(all_absorbed) <= existing.keys() - planned_ids
+            or len(all_absorbed) != len(set(all_absorbed))
+            or len(recordings) + len(all_absorbed) + 2 > BATCH_MAX_WRITES
+        ):
+            raise Conflict('source_changed')
     failure_transitions = {
         r['id']: r.get('v3_process_failed') and not (existing.get(r['id']) or {}).get('v3_process_failed') for r in rows
     }
@@ -618,12 +630,13 @@ def commit_projection(
                     raise Conflict('source_changed')
                 moved.add(rid)
             observed[rid] = current or {}
-        for row in batch_rows:
+        absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
+        for cid in [*(row['id'] for row in batch_rows), *absorbed]:
             tombstone = (
                 client.collection('users')
                 .document(uid)
                 .collection('deleted_conversations')
-                .document(row['id'])
+                .document(cid)
                 .get(transaction=tx)
             )
             if tombstone.exists:
@@ -646,14 +659,27 @@ def commit_projection(
             if raw.get('deleted'):
                 continue
             tx.set(coll.document(row['id']), row)
+        for cid, survivor in absorbed.items():
+            tx.update(
+                coll.document(cid),
+                {
+                    'deleted': True,
+                    'discarded': True,
+                    'home_hidden': True,
+                    'summary_due_at': None,
+                    'sync_merged_into': survivor,
+                    'v3_claims_transferred_to': survivor,
+                    'sync_content_revision': int(existing[cid].get('sync_content_revision') or 0) + 1,
+                },
+            )
         if final:
             for cid in remove:
                 tx.delete(coll.document(cid))
+        replaced = {r['id'] for r in batch_rows} | set(absorbed) | (set(remove) if final else set())
         for rid, recording in recordings.items():
             if recording.get('deleted') or recording.get('sync_merged_into'):
                 tx.update(coll.document(rid), {'v3_pending': False, 'v3_pending_since': None})
                 continue
-            replaced = {r['id'] for r in batch_rows} | (set(remove) if final else set())
             if rid in moved:
                 # Merge onto the re-read document; never write the stale snapshot's view of a live source.
                 claims = [c for c in observed[rid].get('claims') or [] if c['conversation_id'] not in replaced]
@@ -721,6 +747,12 @@ def commit_projection(
         unlocked = {r['id'] for r in batch_rows if r.get('v3_unlocked') and not r.get('deleted')}
         if unlocked or lease.get('unlocked_ids'):
             previous_unlocked = set(lease.get('unlocked_ids') or ()) - {r['id'] for r in batch_rows}
+            if key == 'builder' and clear_pending:
+                # The full builder load follows every indexed ID. Drop entries
+                # whose row is gone or settled, while a scoped open leaves them alone.
+                previous_unlocked.intersection_update(
+                    cid for cid, row in existing.items() if row.get('v3_unlocked') and not row.get('deleted')
+                )
             lease_update['unlocked_ids'] = sorted(previous_unlocked | unlocked)
         staged['lease'] = (lease, lease_update)
         tx.update(held, lease_update)
@@ -728,7 +760,7 @@ def commit_projection(
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
     # The final batch also deletes a re-derive's retired copies.
-    max_rows = max(1, BATCH_MAX_WRITES - len(recordings) - len(remove) - 1)
+    max_rows = max(1, BATCH_MAX_WRITES - len(recordings) - len(remove) - len(all_absorbed) - 1)
     batches, current, size = [], [], 0
     for raw, encoded in zip(rows, prepared):
         amount = len(json.dumps(encoded, default=str).encode())

@@ -160,7 +160,7 @@ def wanted(groups, cache):
     ]
 
 
-def messages(group, tz, *, cohesion=False):
+def messages(group, tz, *, cohesion=False, silence_gap=SILENCE):
     lines = group['lines']
     if cohesion:
         labels = outline_speaker_labels([line['segment'] for line in lines])
@@ -175,8 +175,11 @@ def messages(group, tz, *, cohesion=False):
         f"[L{i} {line['start'].astimezone(tz):%H:%M}] {label}: {line['text']}"
         for i, (line, label) in enumerate(zip(lines, labels), 1)
     )
+    prompt = SYSTEM_PROMPT
+    if silence_gap != SILENCE:
+        prompt = prompt.replace('Five minutes', f'{int(silence_gap.total_seconds())} seconds', 1)
     return [
-        ('system', SYSTEM_PROMPT + correction),
+        ('system', prompt + correction),
         (
             'human',
             f"Stretch {lines[0]['start'].astimezone(tz):%H:%M} to {group['end'].astimezone(tz):%H:%M}.\n\nTranscript:\n{text}",

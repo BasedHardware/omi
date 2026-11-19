@@ -887,3 +887,47 @@ async def test_configured_lock_is_bypassed_by_open_and_manual_end(builder, monke
     assert not row.get('v3_unlocked')
     assert row['v3_process_pending']
     assert row['manual_end'] is not on_open
+
+
+@pytest.mark.asyncio
+async def test_configured_preview_reuses_outline_at_lock(builder, monkeypatch):
+    committed, messages = builder
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    start = datetime.now(timezone.utc) - timedelta(minutes=10)
+    end = start + timedelta(seconds=10)
+    raw = source(
+        started_at=start,
+        finished_at=end,
+        transcript_segments=[{'text': 'synthetic ' * 310, 'start': 0, 'end': 10}],
+    )
+    inputs = [{'r': raw}, {}, []]
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: inputs)
+    await service.reconcile('synthetic')
+    (preview,) = committed[-1][4]
+    assert preview['v3_unlocked'] and not preview.get('v3_process_pending')
+    assert preview['structured']['title'] == 'A plan'
+    assert preview['tile_state'] == 'live' and len(messages) == 1
+
+    inputs[1] = {preview['id']: preview}
+    inputs[2] = committed[-1][5]
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '301')
+    await service.reconcile('synthetic')
+    (locked,) = committed[-1][4]
+    assert locked['id'] == preview['id'] and not locked.get('v3_unlocked')
+    assert locked['v3_process_pending'] and len(messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_configured_reconcile_refines_locked_cards_without_new_notes(builder, monkeypatch):
+    from tests.unit.test_conversations_v3_lock_timing import _locked_pair
+
+    committed, _ = builder
+    _window, existing, recordings = _locked_pair()
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    recordings['r'].update(recording=True, status='completed', v3_pending=True)
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: (recordings, existing, []))
+    assert await service.reconcile('synthetic') == 'committed'
+    (row,) = committed[0][4]
+    assert row['id'] == 'early' and row['_v3_absorbed'] == ['late']
+    assert row['summary_covers_through'] == row['finished_at']
+    assert not row.get('v3_process_pending')

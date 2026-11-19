@@ -25,7 +25,7 @@ from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
-from utils.conversations.v3 import Conflict, outline, planner, models, metrics, policy, visibility, context
+from utils.conversations.v3 import Conflict, outline, planner, models, metrics, policy, visibility, context, refinement
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
 
@@ -129,7 +129,7 @@ def recording_short_path(fn):
     return guarded
 
 
-def _match(window, existing, used):
+def _match(window, existing, used, *, preferred=None):
     start, end = window['lines'][0]['start'], window['lines'][-1]['end']
     published = window.get('_published_ids', ())
     candidates = [
@@ -144,7 +144,7 @@ def _match(window, existing, used):
     ]
     # Published claimants are assigned by the planner. Time matching is the fallback
     # for live rows, legacy rows without claims or playback, and deletion tombstones.
-    return min(candidates, key=lambda r: r['started_at']) if candidates else None
+    return min(candidates, key=lambda r: (r['id'] != preferred, r['started_at'])) if candidates else None
 
 
 def _backfill_runs(window, recordings):
@@ -215,7 +215,7 @@ async def reconcile(
         now = datetime.now(timezone.utc)
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
         cohesion = stretch_cohesion_enabled()
-        silence_seconds, lock_seconds = boundary_seconds(cohesion=cohesion)
+        silence_seconds, lock_seconds = boundary_seconds(cohesion=cohesion and not derive)
         custom_timing = (silence_seconds, lock_seconds) != (DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS)
         silence_gap, lock_delay = timedelta(seconds=silence_seconds), timedelta(seconds=lock_seconds)
         groups = outline.stretches(eligible, now, silence_gap=silence_gap, lock_delay=lock_delay)
@@ -239,7 +239,7 @@ async def reconcile(
         background = await run_blocking(db_executor, context.outline_sources, uid, groups)
         for group in groups:
             await run_blocking(db_executor, leases.renew, uid, key, token)
-            messages = outline.messages(group, timezone.utc, cohesion=cohesion)
+            messages = outline.messages(group, timezone.utc, cohesion=cohesion, silence_gap=silence_gap)
             messages.append(
                 (
                     'human',
@@ -289,19 +289,39 @@ async def reconcile(
             if group['outline_ready'] or on_open:
                 cache.append({'fingerprint': fingerprint, 'entries': entries})
 
+        preferred = conversation_id if on_open and custom_timing else None
+
         async def plan():
-            windows = planner.preserve_finished_windows(
-                planner.windows(
-                    groups, outlines, cohesion=cohesion, silence_gap=silence_gap, defer_topic_lock=custom_timing
-                ),
-                existing,
-                recordings,
+            proposed = planner.windows(
+                groups, outlines, cohesion=cohesion, silence_gap=silence_gap, defer_topic_lock=custom_timing
             )
+            merge = (
+                refinement.candidate(proposed, existing, recordings)
+                if custom_timing and not (derive or on_open)
+                else None
+            )
+            absorbed = set()
+            if merge is not None:
+                index, merged = merge
+                absorbed = {merged['id'], *merged['_v3_absorbed']}
+                remaining = proposed[:index] + proposed[index + 1 :]
+                windows = planner.preserve_finished_windows(
+                    remaining, existing, recordings, protect_provisional=custom_timing
+                )
+                if absorbed.intersection(window.get('existing_id') for window in windows):
+                    merge = None
+                    absorbed.clear()
+            if merge is None:
+                windows = planner.preserve_finished_windows(
+                    proposed, existing, recordings, protect_provisional=custom_timing
+                )
             # A retained finished conversation owns its id by claim evidence; a fresh window that sorts
             # before it (late speech overlapping its start) must not time-match the same id. Two planned
             # rows with one id each re-add the source's held claims, doubling them every pass until the
             # recording outgrows Firestore's 1 MiB document limit (document_too_large).
-            rows, used = [], {window['existing_id'] for window in windows if window.get('existing_id')}
+            rows = []
+            used = absorbed | {window['existing_id'] for window in windows if window.get('existing_id')}
+            used.update(row['id'] for row in existing.values() if row.get('v3_claims_transferred_to'))
             taken = set()
             allocated = {}
             await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
@@ -309,12 +329,15 @@ async def reconcile(
                 # An affirmative transcription failure is terminal even before the silence deadline.
                 if any(policy.transcription_failed(recordings[line['conversation_id']]) for line in window['lines']):
                     window['finished'] = True
-                prior = existing.get(window.get('existing_id')) or _match(window, existing, used)
+                prior = existing.get(window.get('existing_id')) or _match(window, existing, used, preferred=preferred)
                 if prior:
                     used.add(prior['id'])
-                if on_open and prior and prior['id'] == conversation_id and custom_timing:
+                opening = on_open and prior and prior['id'] == conversation_id and custom_timing
+                if opening:
                     window['finished'] = True
                 row = planner.build(uid, window, recordings, prior, allocated=allocated)
+                if opening and prior and planner.is_unlocked(prior):
+                    row['v3_open_locked'] = True
                 row.pop('v3_unlocked', None)
                 if custom_timing and not window['finished']:
                     row['v3_unlocked'] = True
@@ -432,6 +455,8 @@ async def reconcile(
                 # expose their outline and have no notes obligation until their own deadline.
                 for row in provisional[:-1]:
                     row['status'] = 'processing'
+            if merge is not None:
+                rows.append(merge[1])
             return rows
 
         rows = await plan()
