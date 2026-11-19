@@ -5,27 +5,34 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
-	"os"
 	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
+	"github.com/BasedHardware/omi/backend-go/internal/platform/pgtest"
 )
 
-func testStore(t *testing.T) (context.Context, *Store) {
-	t.Helper()
-	db := os.Getenv("QUEUE_TEST_DATABASE_URL")
-	if db == "" {
-		t.Skip("set QUEUE_TEST_DATABASE_URL to a disposable Postgres database")
+const kindDemo = "demo"
+
+func testKinds() []Kind {
+	return []Kind{{Name: kindDemo, Formats: []int{1}, Steps: []string{"start", "late"}, Causes: testCauses()}}
+}
+
+func testConfig() Config {
+	return Config{
+		Lease: time.Minute, Workers: 8, MaxAttempts: 3, DeterministicMax: 2, ReconcileMax: 3,
+		GateTimeout: time.Hour, GateAbandoned: testGateAbandoned, Backoff: time.Second, BudgetDelay: time.Hour,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+}
+
+// openStore opens a store on url with its schema applied.
+func openStore(t *testing.T, url string, cfg Config, kinds []Kind) *Store {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	s, err := Open(ctx, db, Config{
-		Lease: time.Minute, Workers: 8, MaxAttempts: 3, DeterministicMax: 2,
-		GateTimeout: time.Hour, GateAbandoned: testGateAbandoned, Causes: testCauses(), Backoff: time.Second, BudgetDelay: time.Hour,
-	}, nil, clock.System{})
+	s, err := Open(ctx, url, cfg, kinds, nil, clock.System{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,10 +40,20 @@ func testStore(t *testing.T) (context.Context, *Store) {
 	if err := s.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.pool.Exec(ctx, "TRUNCATE queue_tenants,queue_erasure CASCADE"); err != nil {
-		t.Fatal(err)
-	}
-	return ctx, s
+	return s
+}
+
+// testStore gives the test its own database, so tests share no rows and no advisory locks.
+func testStore(t *testing.T) (context.Context, *Store) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	return ctx, openStore(t, pgtest.New(t), testConfig(), testKinds())
+}
+
+// demo returns a plain job of the test kind.
+func demo(key, tenant string) NewJob {
+	return NewJob{Key: key, Tenant: tenant, Kind: kindDemo, Format: 1, Step: "start"}
 }
 
 func enqueue(t *testing.T, ctx context.Context, s *Store, n NewJob) Job {
@@ -48,22 +65,31 @@ func enqueue(t *testing.T, ctx context.Context, s *Store, n NewJob) Job {
 	return j
 }
 
+// everything is the supported set of a replica that runs every declared kind.
+func everything(s *Store) supported { return s.kinds.pairs(s.kinds.names()) }
+
+func tryClaim(ctx context.Context, s *Store) (*Run, error) {
+	r, err := s.claim(ctx, claimRequest{can: everything(s)})
+	if r != nil {
+		r.handler = terminalHandler{}
+	}
+	return r, err
+}
+
 func claim(t *testing.T, ctx context.Context, s *Store) *Run {
 	t.Helper()
-	r, err := s.claim(ctx, claimRequest{})
+	r, err := tryClaim(ctx, s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.handler = terminalHandler{}
 	return r
 }
 
+// terminalHandler accepts every exhaustion, like a kind with nothing to reconcile.
 type terminalHandler struct{}
 
-func (terminalHandler) Work(context.Context, *Run) Outcome { return Done() }
-func (terminalHandler) Exhausted(_ context.Context, _ *Run, cause Cause, _ bool) Outcome {
-	return Fail(cause)
-}
+func (terminalHandler) Work(context.Context, *Run) Outcome               { return Done() }
+func (terminalHandler) Exhausted(context.Context, *Reconcile) Resolution { return Park() }
 
 func apply(t *testing.T, r *Run, o Outcome) {
 	t.Helper()
@@ -82,6 +108,7 @@ lease_until=clock_timestamp()-interval '1 ms' WHERE job_key=$1`, id)
 }
 
 func TestEnqueueIdempotencyProperty(t *testing.T) {
+	t.Parallel()
 	ctx, s := testStore(t)
 	random := rand.New(rand.NewPCG(3100, 1))
 	seen := map[string]string{}
@@ -91,7 +118,7 @@ func TestEnqueueIdempotencyProperty(t *testing.T) {
 		if _, exists := seen[id]; !exists {
 			seen[id] = input
 		}
-		j := enqueue(t, ctx, s, NewJob{Key: id, Tenant: "tenant", Kind: "demo", Step: "start", Meta: []byte(input)})
+		j := enqueue(t, ctx, s, withMeta(demo(id, "tenant"), input))
 		if j.Key != id || string(j.Meta) != seen[id] {
 			t.Fatalf("key %s lost its original input", id)
 		}
@@ -103,6 +130,7 @@ func TestEnqueueIdempotencyProperty(t *testing.T) {
 }
 
 func TestOrderedLaneProperty(t *testing.T) {
+	t.Parallel()
 	ctx, s := testStore(t)
 	random := rand.New(rand.NewPCG(3100, 2))
 	const n = 40
@@ -119,7 +147,7 @@ func TestOrderedLaneProperty(t *testing.T) {
 	}
 	for _, i := range random.Perm(n) {
 		u := ordered[i]
-		enqueue(t, ctx, s, NewJob{Key: u.key, Tenant: "tenant", Kind: "demo", Step: "start", OrderKey: &orderKey, OrderAt: u.order})
+		enqueue(t, ctx, s, inLane(demo(u.key, "tenant"), orderKey, u.order))
 	}
 	slices.SortFunc(ordered, func(a, b unit) int {
 		if a.order.Before(b.order) {
@@ -138,10 +166,10 @@ func TestOrderedLaneProperty(t *testing.T) {
 	})
 	for _, want := range ordered {
 		r := claim(t, ctx, s)
-		if r.Job.Key != want.key {
-			t.Fatalf("claimed %s, wanted %s", r.Job.Key, want.key)
+		if r.job.Key != want.key {
+			t.Fatalf("claimed %s, wanted %s", r.job.Key, want.key)
 		}
-		if _, err := s.claim(ctx, claimRequest{}); !errors.Is(err, ErrAbsent) {
+		if _, err := tryClaim(ctx, s); !errors.Is(err, ErrAbsent) {
 			t.Fatalf("successor escaped lease: %v", err)
 		}
 		apply(t, r, Done())
@@ -149,10 +177,11 @@ func TestOrderedLaneProperty(t *testing.T) {
 }
 
 func TestSingleLeaseProperty(t *testing.T) {
+	t.Parallel()
 	ctx, s := testStore(t)
 	for trial := range 10 {
 		id := fmt.Sprint(trial)
-		enqueue(t, ctx, s, NewJob{Key: id, Tenant: "tenant", Kind: "demo", Step: "start"})
+		enqueue(t, ctx, s, demo(id, "tenant"))
 		start := make(chan struct{})
 		type result struct {
 			r   *Run
@@ -163,7 +192,7 @@ func TestSingleLeaseProperty(t *testing.T) {
 		for range cap(claims) {
 			wg.Go(func() {
 				<-start
-				r, err := s.claim(ctx, claimRequest{})
+				r, err := tryClaim(ctx, s)
 				claims <- result{r, err}
 			})
 		}
@@ -185,13 +214,13 @@ func TestSingleLeaseProperty(t *testing.T) {
 		}
 		due(t, ctx, s, id)
 		next := claim(t, ctx, s)
-		if next.Job.Token <= old.Job.Token || next.Job.Attempts != 2 {
+		if next.job.Token <= old.job.Token || next.job.Attempts != 2 {
 			t.Fatal("takeover lost fencing or attempt accounting")
 		}
 		if err := old.Save(ctx, "late", []byte("42")); !errors.Is(err, ErrLease) {
 			t.Fatalf("stale save: %v", err)
 		}
-		if err := old.Guard(ctx, func(context.Context) error { t.Error("stale effect"); return nil }); !errors.Is(err, ErrLease) {
+		if err := old.Guard(ctx, func(context.Context, Guarded) error { t.Error("stale effect"); return nil }); !errors.Is(err, ErrLease) {
 			t.Fatalf("stale effect guard: %v", err)
 		}
 		apply(t, next, Done())
@@ -199,23 +228,24 @@ func TestSingleLeaseProperty(t *testing.T) {
 }
 
 func TestAttemptAccountingProperty(t *testing.T) {
+	t.Parallel()
 	ctx, s := testStore(t)
 	random := rand.New(rand.NewPCG(3100, 3))
 	for trial := range 8 {
 		id := fmt.Sprint(trial)
-		enqueue(t, ctx, s, NewJob{Key: id, Tenant: "tenant", Kind: "demo", Step: "start", BudgetAllowed: true})
+		enqueue(t, ctx, s, budgeted(demo(id, "tenant")))
 		var consumed int
 		for consumed < s.cfg.MaxAttempts {
 			r := claim(t, ctx, s)
-			if r.Job.Attempts != consumed+1 {
-				t.Fatalf("want claim %d, got %d", consumed+1, r.Job.Attempts)
+			if r.job.Attempts != consumed+1 {
+				t.Fatalf("want claim %d, got %d", consumed+1, r.job.Attempts)
 			}
 			for range random.IntN(4) {
 				apply(t, r, Yield(Cause("recordownercontention"), time.Hour))
 				due(t, ctx, s, id)
 				r = claim(t, ctx, s)
-				if r.Job.Attempts != consumed+1 {
-					t.Fatalf("yield consumed an attempt: %d", r.Job.Attempts)
+				if r.job.Attempts != consumed+1 {
+					t.Fatalf("yield consumed an attempt: %d", r.job.Attempts)
 				}
 			}
 			consumed++
@@ -230,13 +260,13 @@ func TestAttemptAccountingProperty(t *testing.T) {
 		}
 
 		due(t, ctx, s, id)
-		if _, claimErr := s.claim(ctx, claimRequest{}); !errors.Is(claimErr, errRescheduled) {
+		if _, claimErr := tryClaim(ctx, s); !errors.Is(claimErr, errRescheduled) {
 			t.Fatalf("due park was not redriven: %v", claimErr)
 		}
 		for i := 1; i <= s.cfg.DeterministicMax; i++ {
 			r := claim(t, ctx, s)
-			if r.Job.Attempts != i || r.Job.DeterministicAttempts != i-1 || r.Job.BudgetRequeues != 1 {
-				t.Fatalf("wrong budget after requeue: %+v", r.Job)
+			if r.job.Attempts != i || r.job.DeterministicAttempts != i-1 || r.job.BudgetRequeues != 1 {
+				t.Fatalf("wrong budget after requeue: %+v", r.job)
 			}
 			apply(t, r, Fail(Cause("vendorrejected")))
 			if i < s.cfg.DeterministicMax {
@@ -251,7 +281,7 @@ func TestAttemptAccountingProperty(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := claim(t, ctx, s)
-		if r.Job.Attempts != 1 || r.Job.DeterministicAttempts != 0 || r.Job.BudgetRequeues != 1 {
+		if r.job.Attempts != 1 || r.job.DeterministicAttempts != 0 || r.job.BudgetRequeues != 1 {
 			t.Fatal("redrive reset the wrong counters")
 		}
 		apply(t, r, Done())
@@ -259,50 +289,50 @@ func TestAttemptAccountingProperty(t *testing.T) {
 }
 
 func TestFairnessAndOrderedHold(t *testing.T) {
+	t.Parallel()
 	ctx, s := testStore(t)
 	owner := "big"
 	for i := range 70 {
-		enqueue(t, ctx, s, NewJob{Key: fmt.Sprintf("big-%02d", i), Tenant: owner, Kind: "demo", Step: "start",
-			OrderKey: &owner, OrderAt: time.Unix(int64(i), 0)})
+		enqueue(t, ctx, s, inLane(demo(fmt.Sprintf("big-%02d", i), owner), owner, time.Unix(int64(i), 0)))
 	}
 	head := claim(t, ctx, s)
 	apply(t, head, Retry(Cause("transport"), time.Hour))
 	// This unit was admitted after selecting the prior head.
-	enqueue(t, ctx, s, NewJob{Key: "earlier", Tenant: owner, Kind: "demo", Step: "start",
-		OrderKey: &owner, OrderAt: time.Unix(-1, 0)})
-	enqueue(t, ctx, s, NewJob{Key: "other", Tenant: "other", Kind: "demo", Step: "start"})
+	enqueue(t, ctx, s, inLane(demo("earlier", owner), owner, time.Unix(-1, 0)))
+	enqueue(t, ctx, s, demo("other", "other"))
 	r := claim(t, ctx, s)
-	if r.Job.Key != "other" {
-		t.Fatalf("other tenant starved by held lane: %s", r.Job.Key)
+	if r.job.Key != "other" {
+		t.Fatalf("other tenant starved by held lane: %s", r.job.Key)
 	}
 	apply(t, r, Done())
-	if _, err := s.claim(ctx, claimRequest{}); !errors.Is(err, ErrAbsent) {
+	if _, err := tryClaim(ctx, s); !errors.Is(err, ErrAbsent) {
 		t.Fatalf("held lane unexpectedly ready: %v", err)
 	}
 
-	due(t, ctx, s, head.Job.Key)
+	due(t, ctx, s, head.job.Key)
 	r = claim(t, ctx, s)
-	if r.Job.Key != head.Job.Key {
+	if r.job.Key != head.job.Key {
 		t.Fatal("retrying head lost lane to a late earlier unit")
 	}
 	apply(t, r, Fail(Cause("vendorrejected")))
-	due(t, ctx, s, r.Job.Key)
+	due(t, ctx, s, r.job.Key)
 	r = claim(t, ctx, s)
 	apply(t, r, Fail(Cause("vendorrejected")))
 	r = claim(t, ctx, s)
-	if r.Job.Key != "earlier" {
-		t.Fatalf("park did not release lane: %s", r.Job.Key)
+	if r.job.Key != "earlier" {
+		t.Fatalf("park did not release lane: %s", r.job.Key)
 	}
 }
 
 func TestEraseBarrier(t *testing.T) {
+	t.Parallel()
 	ctx, s := testStore(t)
-	enqueue(t, ctx, s, NewJob{Key: "job", Tenant: "tenant", Kind: "demo", Step: "start"})
+	enqueue(t, ctx, s, demo("job", "tenant"))
 	r := claim(t, ctx, s)
 	running, release, erased := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	effectResult, eraseResult := make(chan error, 1), make(chan error, 1)
 	go func() {
-		effectResult <- r.Guard(ctx, func(context.Context) error { close(running); <-release; return nil })
+		effectResult <- r.Guard(ctx, func(context.Context, Guarded) error { close(running); <-release; return nil })
 	}()
 	<-running
 	go func() { eraseResult <- s.Erase(ctx, "tenant", func() error { close(erased); return nil }) }()
@@ -321,17 +351,18 @@ func TestEraseBarrier(t *testing.T) {
 	if _, err := s.Get(ctx, "job"); !errors.Is(err, ErrAbsent) {
 		t.Fatalf("job survived erase: %v", err)
 	}
-	if _, err := s.Enqueue(ctx, NewJob{Key: "new", Tenant: "tenant"}); !errors.Is(err, ErrErased) {
+	if _, err := s.Enqueue(ctx, demo("new", "tenant")); !errors.Is(err, ErrErased) {
 		t.Fatalf("admitted erased tenant: %v", err)
 	}
-	if err := r.Guard(ctx, func(context.Context) error { t.Fatal("erased run reached external operation"); return nil }); !errors.Is(err, ErrLease) {
+	if err := r.Guard(ctx, func(context.Context, Guarded) error { t.Fatal("erased run reached external operation"); return nil }); !errors.Is(err, ErrLease) {
 		t.Fatalf("erased guard: %v", err)
 	}
 }
 
 func TestGuardReadsLeaseAfterWaitingForErase(t *testing.T) {
+	t.Parallel()
 	ctx, s := testStore(t)
-	enqueue(t, ctx, s, NewJob{Key: "job", Tenant: "tenant", Kind: "demo", Step: "start"})
+	enqueue(t, ctx, s, demo("job", "tenant"))
 	r := claim(t, ctx, s)
 	gate, remove := make(chan struct{}), make(chan struct{})
 	eraseResult := make(chan error, 1)
@@ -354,7 +385,7 @@ func TestGuardReadsLeaseAfterWaitingForErase(t *testing.T) {
 	}
 	guardResult := make(chan error, 1)
 	go func() {
-		guardResult <- r.Guard(ctx, func(context.Context) error { t.Error("outdated snapshot reached effect"); return nil })
+		guardResult <- r.Guard(ctx, func(context.Context, Guarded) error { t.Error("outdated snapshot reached effect"); return nil })
 	}()
 	var waiting bool
 	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline) && !waiting; {
@@ -384,10 +415,30 @@ func TestGuardReadsLeaseAfterWaitingForErase(t *testing.T) {
 
 const testGateAbandoned Cause = "gate_abandoned"
 
-// testCauses registers the causes these tests return, as a kind would.
+// testCauses declares the causes these tests return, as a kind would.
 func testCauses() []Cause {
 	return []Cause{
 		"transport", "ratelimited", "vendorunavailable", "vendorrejected", "versionconflict",
 		"recordownercontention", "accountdeleting",
 	}
+}
+
+func withMeta(n NewJob, meta string) NewJob {
+	n.Meta = []byte(meta)
+	return n
+}
+
+func inLane(n NewJob, lane string, at time.Time) NewJob {
+	n.OrderKey, n.OrderAt = &lane, at
+	return n
+}
+
+func budgeted(n NewJob) NewJob {
+	n.BudgetAllowed = true
+	return n
+}
+
+func gated(n NewJob) NewJob {
+	n.Gated = true
+	return n
 }

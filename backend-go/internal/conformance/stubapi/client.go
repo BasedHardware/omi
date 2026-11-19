@@ -111,6 +111,8 @@ type Fault struct {
 	Cause  queue.Cause
 	Delay  time.Duration
 	Status int
+	// HoldTenant makes a yield keep the whole tenant off the schedule for Delay.
+	HoldTenant bool
 }
 
 func (f *Fault) Error() string { return string(f.Cause) }
@@ -121,6 +123,9 @@ func (f *Fault) Outcome() queue.Outcome {
 	case Transient:
 		return queue.Retry(f.Cause, f.Delay)
 	case Yielded:
+		if f.HoldTenant {
+			return queue.Hold(f.Cause, f.Delay)
+		}
 		return queue.Yield(f.Cause, f.Delay)
 	case Fenced:
 		return queue.Fence(f.Cause)
@@ -319,28 +324,33 @@ func Input(job queue.Job, step, input string) VendorInput {
 	}
 }
 
-// AccountCheck is what CheckAccount hands to the handler through Run.Preflight.
-type AccountCheck struct {
-	Account Account
-	Fault   *Fault
-}
-
-// CheckAccount is the queue's preflight: a user being deleted is put off before any lease.
-func (c *Client) CheckAccount(ctx context.Context, j queue.Job) (time.Duration, any) {
-	a, f := c.Account(ctx, j.Tenant)
-	check := AccountCheck{Account: a, Fault: f}
-	if a.Deleting || (f != nil && f.Cause == CauseAccountDeleting) {
-		return time.Second, check
-	}
-	return 0, check
+// Guarder is the part of a claim that runs guarded calls: a queue.Run or a queue.Reconcile.
+type Guarder interface {
+	Guard(ctx context.Context, fn func(context.Context, queue.Guarded) error) error
 }
 
 // Guard runs a remote call under the queue's guard and keeps its typed fault.
-func Guard(ctx context.Context, r *queue.Run, fn func(context.Context) *Fault) error {
-	return r.Guard(ctx, func(ctx context.Context) error {
+func Guard(ctx context.Context, r Guarder, fn func(context.Context) *Fault) error {
+	return r.Guard(ctx, func(ctx context.Context, _ queue.Guarded) error {
 		if f := fn(ctx); f != nil {
 			return f
 		}
 		return nil
 	})
+}
+
+// Resolution maps any error from a reconciliation step to a queue resolution. The original
+// terminal intent is kept until the external document is updated, fenced or found complete.
+func Resolution(err error) queue.Resolution {
+	if errors.Is(err, queue.ErrLease) || errors.Is(err, context.Canceled) {
+		return queue.Dropped()
+	}
+	fault, ok := errors.AsType[*Fault](err)
+	if !ok {
+		return queue.Later(CauseTransport, 0)
+	}
+	if fault.Result == Fenced {
+		return queue.Fenced(fault.Cause)
+	}
+	return queue.Later(fault.Cause, fault.Delay)
 }

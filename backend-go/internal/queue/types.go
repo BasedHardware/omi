@@ -1,14 +1,16 @@
 // Package queue is a durable, fenced job queue on Postgres.
 //
-// It knows nothing about any job kind. A kind supplies a handler and its own vocabulary of
-// causes; the queue supplies idempotent enqueue, leases with fencing tokens, ordered lanes,
-// retries against a durable attempt budget, parking, timers and tenant erasure.
+// It knows nothing about any job kind. A kind declares itself (its name, formats, steps and
+// causes) and supplies a handler; the queue supplies idempotent enqueue, leases with fencing
+// tokens, ordered lanes, retries against a durable attempt budget, parking, timers and
+// tenant erasure.
 package queue
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -40,7 +42,7 @@ func States() []State {
 // Cause is a machine-readable reason attached to a retry, a yield, a park or a completion.
 //
 // The queue owns the few causes below. Every other cause belongs to the kind that returns
-// it and must be listed in Config.Causes: a cause that is not listed is recorded as
+// it and must be listed in that Kind's Causes: a cause that is not listed is recorded as
 // CauseUnknown, so "unknown" in a metric always means a programming error.
 type Cause string
 
@@ -50,9 +52,12 @@ const (
 	CauseNone Cause = "none"
 	// CauseLeaseExpired means the last allowed attempt died while holding the lease.
 	CauseLeaseExpired Cause = "lease_expired"
-	// CauseKindUnregistered means no handler is registered for the job's kind.
-	CauseKindUnregistered Cause = "kind_unregistered"
-	// CauseUnknown replaces a cause that no kind registered.
+	// CauseHandlerPanic means a handler panicked or returned no outcome. It is retried.
+	CauseHandlerPanic Cause = "handler_panic"
+	// CauseReconcileExhausted means reconciling a terminal state kept failing. The job is
+	// parked with its checkpoint and its original intent kept, for an operator to redrive.
+	CauseReconcileExhausted Cause = "reconcile_exhausted"
+	// CauseUnknown replaces a cause that no kind declared.
 	CauseUnknown Cause = "unknown"
 )
 
@@ -82,10 +87,16 @@ var (
 	ErrLease = errors.New("queue: lease lost")
 	// ErrState means the job is not in a state that allows the operation.
 	ErrState = errors.New("queue: job state conflict")
-	// ErrDeferred means the claim was put off by the preflight check or a busy lock.
+	// ErrDeferred means the claim was put off by a busy lock.
 	ErrDeferred = errors.New("queue: claim deferred")
 	// ErrCapacity means too many resumes are already scheduled on this replica.
 	ErrCapacity = errors.New("queue: live resume capacity exhausted")
+	// ErrStopped means the workers are shutting down and accepted nothing.
+	ErrStopped = errors.New("queue: workers stopped")
+	// ErrUndeclared means a kind, format, step or handler was used that no Kind declares.
+	ErrUndeclared = errors.New("queue: not declared by any kind")
+	// ErrConfig means the queue's configuration or kind declarations are invalid.
+	ErrConfig = errors.New("queue: invalid configuration")
 
 	errRescheduled = errors.New("queue: job rescheduled")
 )
@@ -99,14 +110,18 @@ type Job struct {
 	Tenant string
 	// Kind selects the handler.
 	Kind string
+	// Format is the version of Meta and Checkpoint, fixed at enqueue.
+	Format int
 	// Subject is what the job is about, for example a conversation id.
 	Subject string
 	State   State
-	// Step is the kind's own progress marker.
+	// Step is the kind's own progress marker, one of the kind's declared steps.
 	Step string
 	// Attempts counts claims, including claims by workers that later died.
 	Attempts              int
 	DeterministicAttempts int
+	// ReconcileAttempts counts failed tries at reconciling a terminal state.
+	ReconcileAttempts int
 	// BudgetRequeues counts automatic requeues spent over the job's lifetime.
 	BudgetRequeues int
 	// Token is the fencing token of the latest claim. It only grows.
@@ -119,14 +134,17 @@ type Job struct {
 	UpdatedAt time.Time
 	// RunAt is when the job was asked to start.
 	RunAt time.Time
-	// Meta is the kind's immutable input, fixed by the first enqueue.
+	// Meta is the kind's immutable input, fixed by the first enqueue: identifiers and
+	// references, never the payload itself.
 	Meta json.RawMessage
-	// Checkpoint is the kind's saved progress.
+	// Checkpoint is the kind's saved progress: receipts and references, never the payload.
 	Checkpoint json.RawMessage
 	// Gated is true for a job that runs only when a caller presents a secret.
 	Gated bool
 	// Initializing is true until admission finishes binding the job to its subject.
 	Initializing bool
+	// Ordered is true for a job in an ordered lane.
+	Ordered bool
 
 	budgetAllowed   bool
 	intent          *Cause
@@ -135,26 +153,44 @@ type Job struct {
 
 // NewJob is a request to enqueue.
 type NewJob struct {
-	Key     string
-	Tenant  string
-	Kind    string
+	Key    string
+	Tenant string
+	Kind   string
+	// Format is the version of Meta, one of the kind's declared formats.
+	Format  int
 	Subject string
 	// Step is the kind's starting step.
 	Step string
 	Meta json.RawMessage
-	// Gated makes the job wait for Workers.Resume with a secret before each run.
+	// Gated makes the job wait for Workers.Resume with a secret before each run. A gated
+	// job cannot be ordered.
 	Gated bool
 	// Initializing holds the job back until Scope.Activate, so admission can bind it first.
 	Initializing bool
 	// BudgetAllowed opts the job into the single automatic requeue after exhaustion.
 	BudgetAllowed bool
-	// OrderKey puts the job in an ordered lane: jobs of one kind and key run one at a time.
+	// OrderKey puts the job in an ordered lane: one tenant's jobs of one kind and key run
+	// one at a time.
 	OrderKey *string
 	// OrderAt and SortKey order a lane, then Key breaks ties. SortKey defaults to Key.
 	OrderAt time.Time
 	SortKey string
 	// RunAt delays the job. Zero means now.
 	RunAt time.Time
+}
+
+// Kind declares a job kind. Everything a kind adds to the queue's vocabulary is here, so
+// adding a kind is one declaration and one handler, with no edit to the queue.
+type Kind struct {
+	// Name is the kind's name in job rows and metric labels.
+	Name string
+	// Formats lists the Meta and Checkpoint versions this binary can run. A job in a format
+	// that is not listed is left for a replica that lists it.
+	Formats []int
+	// Steps lists every step the kind's jobs can be at.
+	Steps []string
+	// Causes lists every cause the kind's handler can return.
+	Causes []Cause
 }
 
 // Config is the queue's policy. Every duration and limit a rule needs is here.
@@ -173,22 +209,50 @@ type Config struct {
 	MaxAttempts int
 	// DeterministicMax bounds deterministic failures per job.
 	DeterministicMax int
+	// ReconcileMax bounds failed tries at reconciling a terminal state before the job is
+	// parked for an operator.
+	ReconcileMax int
 	// Workers is the number of jobs one replica runs at once.
 	Workers int
-	// Causes is every cause the registered kinds may return.
-	Causes []Cause
 }
 
-// Handler is a job kind.
+// Validate reports the first setting that would make the queue misbehave.
+func (c Config) Validate() error {
+	checks := []struct {
+		ok   bool
+		what string
+	}{
+		{c.Lease > 0, "Lease must be positive"},
+		{c.Backoff > 0, "Backoff must be positive"},
+		{c.BudgetDelay >= 0, "BudgetDelay must not be negative"},
+		{c.GateTimeout > 0, "GateTimeout must be positive"},
+		{c.GateAbandoned != "", "GateAbandoned must name a cause"},
+		{c.MaxAttempts >= 1, "MaxAttempts must be at least 1"},
+		{c.DeterministicMax >= 1, "DeterministicMax must be at least 1"},
+		{c.ReconcileMax >= 1, "ReconcileMax must be at least 1"},
+		{c.Workers >= 1, "Workers must be at least 1"},
+	}
+	for _, check := range checks {
+		if !check.ok {
+			return fmt.Errorf("%w: %s", ErrConfig, check.what)
+		}
+	}
+	return nil
+}
+
+// Handler is a job kind's behaviour.
 type Handler interface {
-	// Work advances the job and returns what happened. It must be safe to repeat.
+	// Work advances the job and returns what happened. It must be safe to repeat. A gated
+	// job always arrives with its secret, unless it is still initializing.
 	Work(ctx context.Context, r *Run) Outcome
 	// Exhausted runs after the attempt budget is spent and a terminal intent is recorded.
-	// It reconciles any external terminal state and returns the final outcome.
-	Exhausted(ctx context.Context, r *Run, cause Cause, transient bool) Outcome
+	// It starts no new work: it finds out what already happened outside the queue, finishes
+	// recording it, and returns the final resolution.
+	Exhausted(ctx context.Context, r *Reconcile) Resolution
 }
 
-// Observer receives the queue's events for metrics. Implementations must not block.
+// Observer receives the queue's events for metrics. Implementations must not block. Every
+// kind, step and cause it receives is declared, or is the literal "unknown".
 type Observer interface {
 	// Outcome records a terminal result.
 	Outcome(kind string, outcome Terminal, cause Cause)
@@ -201,8 +265,3 @@ type Observer interface {
 	// Step records how long a named step took.
 	Step(kind, step string, duration time.Duration)
 }
-
-// Preflight can put off a candidate before a lease is issued, for example while its tenant
-// is being deleted. It runs with the tenant and candidate locked and must never call back
-// into the Store. data is handed to the handler through Run.Preflight.
-type Preflight func(ctx context.Context, job Job) (deferFor time.Duration, data any)

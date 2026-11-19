@@ -11,14 +11,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BasedHardware/omi/backend-go/internal/batchunit"
 	"github.com/BasedHardware/omi/backend-go/internal/conformance/finalization"
 	wire "github.com/BasedHardware/omi/backend-go/internal/conformance/stubapi"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
 
-var kinds = [...]string{finalization.Kind, batchunit.Kind}
-var steps = [...]string{"load", "transcript", "discard", "notes", "persist", "claim", "memories", "vector", "integrations", "complete", "speech"}
+// timedSteps are the steps the kit expects a duration histogram for. A kind may declare a
+// step it never times, such as the reference kind's final "stored".
+var timedSteps = map[string]struct{}{
+	"load": {}, "transcript": {}, "discard": {}, "notes": {}, "persist": {}, "claim": {}, "memories": {},
+	"vector": {}, "integrations": {}, "complete": {}, "speech": {},
+}
 var bounds = [...]float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300}
 
 type histogram struct {
@@ -31,24 +34,42 @@ type metrics struct {
 	mu         sync.Mutex
 	counters   map[string]uint64
 	histograms map[string]histogram
+	// offContract marks the declared causes the kit's closed label list does not know.
+	offContract map[queue.Cause]bool
 }
 
-func newMetrics(registered []queue.Cause) *metrics {
-	m := &metrics{counters: make(map[string]uint64), histograms: make(map[string]histogram)}
-	causes := slices.Concat([]queue.Cause{
-		queue.CauseNone, queue.CauseLeaseExpired, queue.CauseKindUnregistered, queue.CauseUnknown,
-	}, registered)
-	for _, k := range kinds {
+// kitCauses is the conformance kit's closed list of cause labels. The foundation declares
+// more (the queue's own, and the reference kind's); see offContract.
+func kitCauses() map[queue.Cause]bool {
+	known := make(map[queue.Cause]bool)
+	own := []queue.Cause{queue.CauseNone, queue.CauseLeaseExpired, queue.CauseUnknown}
+	for _, c := range slices.Concat(own, wire.Causes(), finalization.Causes()) {
+		known[c] = true
+	}
+	return known
+}
+
+// declare creates a zero series for every declared kind, step and cause, so a series that
+// never fired still reports 0 and one that is missing is a bug.
+func (m *metrics) declare(causes []queue.Cause) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	kit := kitCauses()
+	m.offContract = make(map[queue.Cause]bool, len(causes))
+	for _, c := range causes {
+		m.offContract[c] = !kit[c]
+	}
+	for _, k := range kinds() {
 		for _, c := range causes {
 			for _, o := range queue.Terminals() {
-				m.counters[outcomeKey(k, o, c)] = 0
+				m.counters[outcomeKey(k.Name, o, c)] = 0
 			}
-			m.counters[retryKey(k, c)] = 0
-			m.counters[yieldKey(k, c)] = 0
+			m.counters[retryKey(k.Name, c)] = 0
+			m.counters[yieldKey(k.Name, c)] = 0
 		}
-		for _, s := range steps {
-			if (k == batchunit.Kind) == (s == "speech") {
-				m.histograms[stepKey(k, s)] = histogram{}
+		for _, s := range k.Steps {
+			if _, timed := timedSteps[s]; timed {
+				m.histograms[stepKey(k.Name, s)] = histogram{}
 			}
 		}
 	}
@@ -64,7 +85,6 @@ func newMetrics(registered []queue.Cause) *metrics {
 		m.counters[dedupeKey(f, false)] = 0
 		m.counters[dedupeKey(f, true)] = 0
 	}
-	return m
 }
 
 func outcomeKey(k string, o queue.Terminal, c queue.Cause) string {
@@ -141,15 +161,20 @@ func (a *api) prometheus(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// offContract reports a series whose cause is outside the conformance kit's closed list.
-// The foundation adds causes the kit does not know (a kind with no handler, a corrupted
-// batch input). They are counted like any other, and written only once they are above
-// zero, so the kit's closed-label check stays meaningful: seeing one is itself a finding.
+// hidden reports a zero series whose cause is outside the conformance kit's closed list.
+// The foundation declares causes the kit does not know (a handler panic, an exhausted
+// reconciliation, a corrupted batch input). They are counted like any other and written
+// only once they are above zero, so the kit's closed-label check stays meaningful: seeing
+// one is itself a finding.
 //
-// CLEANUP-NOTE: remove with the kit; the real metrics endpoint lists every registered cause.
-func offContract(key string) bool {
-	return strings.Contains(key, `cause="`+string(queue.CauseKindUnregistered)+`"`) ||
-		strings.Contains(key, `cause="`+string(batchunit.CauseInputUnreadable)+`"`)
+// CLEANUP-NOTE: remove with the kit; the real metrics endpoint lists every declared cause.
+func (m *metrics) hidden(key string) bool {
+	for cause, off := range m.offContract {
+		if off && strings.Contains(key, `cause="`+string(cause)+`"`) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *metrics) write(b *strings.Builder) {
@@ -162,7 +187,7 @@ func (m *metrics) write(b *strings.Builder) {
 	sort.Strings(keys)
 	last := ""
 	for _, k := range keys {
-		if m.counters[k] == 0 && offContract(k) {
+		if m.counters[k] == 0 && m.hidden(k) {
 			continue
 		}
 		name, _, _ := strings.Cut(k, "{")

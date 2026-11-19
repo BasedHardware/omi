@@ -14,3 +14,11 @@ The finalization handler reconciles a terminal intent before the queue parks it.
 | Steps 6–10 and F8 fencing | `test_fanout_commit_wins_at_final_attempt`, `test_webhook_delivery_progress_and_final_drop`, `test_rate_limited_webhook_and_vector_are_best_effort`, `test_erase_across_replicas_and_delete_fence` |
 | F5 and F6 pending, transient, deterministic | Public `test_one_retry`, system `test_pending_yields_and_account_marker`, and wire fault classification tests |
 | F7 and F9 dead letter and one budget requeue | `test_budget_exhaustion_and_revision_rules`, `test_encoded_paths_and_bad_ciphertext` |
+
+## Queue API it uses
+
+`Work` returns a `queue.Outcome`; `Exhausted` gets a `queue.Reconcile` and returns a
+`queue.Resolution`. The account check runs inside a guard at the start of `Work` and holds the
+whole tenant while its owner is being deleted. The batch cases use `internal/batchunit` with the
+adapters in `internal/conformance/stubapi` and the kit's payload tables in
+`internal/conformance/kitstore`.

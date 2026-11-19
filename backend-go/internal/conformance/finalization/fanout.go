@@ -20,7 +20,7 @@ type progress struct {
 func (f *flow) progress() progress {
 	var p progress
 	// A checkpoint that does not decode is treated as no progress: every effect is idempotent.
-	if err := json.Unmarshal(f.r.Job.Checkpoint, &p); err != nil {
+	if err := json.Unmarshal(f.r.Job().Checkpoint, &p); err != nil {
 		p = progress{}
 	}
 	if p.Apps == nil {
@@ -60,7 +60,7 @@ func (f *flow) memories(text string, p *progress) error {
 		return err
 	}
 	defer f.r.Observe("memories")()
-	j := f.r.Job
+	j := f.r.Job()
 	in := wire.Input(j, "memories", text)
 	if err := f.extract(in); err != nil {
 		return err
@@ -103,7 +103,7 @@ func (f *flow) extract(in wire.VendorInput) error {
 	protection := f.doc.Protection
 	if protection == "enhanced" {
 		for i, text := range memories {
-			memories[i], err = f.Codec.Seal(f.r.Job.Tenant, []byte(text))
+			memories[i], err = f.Codec.Seal(f.r.Job().Tenant, []byte(text))
 			if err != nil {
 				return unreadable()
 			}
@@ -132,7 +132,7 @@ func (f *flow) vector(p *progress) error {
 	if f.doc.Structured != nil {
 		overview = f.doc.Structured.Overview
 	}
-	e := wire.EffectFor(f.r.Job, f.meta.Revision)
+	e := wire.EffectFor(f.r.Job(), f.meta.Revision)
 	err := wire.Guard(f.ctx, f.r, func(ctx context.Context) *wire.Fault {
 		return f.Wire.Vector(ctx, e, overview)
 	})
@@ -143,7 +143,7 @@ func (f *flow) vector(p *progress) error {
 		}
 		p.VectorFailed = true
 		if f.Warn != nil {
-			f.Warn(wire.Digest(f.r.Job.Key)[:16], CauseVectorFailed)
+			f.Warn(wire.Digest(f.r.Job().Key)[:16], CauseVectorFailed)
 		}
 	}
 	p.VectorDone = true
@@ -174,10 +174,10 @@ func (f *flow) finishFanout(p progress) error {
 
 func (f *flow) integrate(p *progress) error {
 	defer f.r.Observe("integrations")()
-	e := wire.EffectFor(f.r.Job, f.meta.Revision)
+	e := wire.EffectFor(f.r.Job(), f.meta.Revision)
 	for _, app := range f.account.Apps {
 		// Store only opaque receipt IDs. App identifiers are sink routing data.
-		id := wire.ID("app-receipt", f.r.Job.Key, app)
+		id := wire.ID("app-receipt", f.r.Job().Key, app)
 		if _, ok := p.Apps[id]; ok {
 			f.Wire.Dedupe(wire.Integration, true)
 			continue
@@ -200,18 +200,30 @@ func (f *flow) integrate(p *progress) error {
 	return nil
 }
 
+// completion is the cause a finished job records: none, or the best-effort step it lost.
+func (f *flow) completion() queue.Cause {
+	p := f.progress()
+	for _, dropped := range p.Apps {
+		if dropped {
+			return wire.CauseIntegrationDropped
+		}
+	}
+	if p.VectorFailed {
+		return CauseVectorFailed
+	}
+	return queue.CauseNone
+}
+
 func (f *flow) success() queue.Outcome {
 	if err := f.r.SetStep(f.ctx, "complete"); err != nil {
 		return wire.Outcome(err)
 	}
-	p := f.progress()
-	for _, dropped := range p.Apps {
-		if dropped {
-			return queue.DoneWith(wire.CauseIntegrationDropped)
-		}
+	return queue.DoneWith(f.completion())
+}
+
+func (f *flow) resolved() queue.Resolution {
+	if err := f.r.SetStep(f.ctx, "complete"); err != nil {
+		return wire.Resolution(err)
 	}
-	if p.VectorFailed {
-		return queue.DoneWith(CauseVectorFailed)
-	}
-	return queue.Done()
+	return queue.ResolvedWith(f.completion())
 }

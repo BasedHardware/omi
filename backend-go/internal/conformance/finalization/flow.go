@@ -2,8 +2,10 @@ package finalization
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
+	"time"
 	"unicode"
 
 	wire "github.com/BasedHardware/omi/backend-go/internal/conformance/stubapi"
@@ -12,12 +14,29 @@ import (
 
 func revisionString(n int64) string { return strconv.FormatInt(n, 10) }
 
+// claimed is what the flow needs from a claim. Work gets a queue.Run and Exhausted a
+// queue.Reconcile; both satisfy it.
+type claimed interface {
+	wire.Guarder
+	Job() queue.Job
+	Secret() string
+	FinalAttempt() bool
+	Observe(step string) func()
+	Save(ctx context.Context, step string, checkpoint json.RawMessage) error
+	SetStep(ctx context.Context, step string) error
+}
+
+// reconciling adapts a queue.Reconcile: a reconciliation always runs after the last attempt.
+type reconciling struct{ *queue.Reconcile }
+
+func (reconciling) FinalAttempt() bool { return true }
+
 type flow struct {
 	*Service
 	// ctx is the handler's context for this one run. The flow is created and dropped inside
 	// a single Work or Exhausted call, so it never outlives the call it belongs to.
 	ctx          context.Context
-	r            *queue.Run
+	r            claimed
 	meta         Metadata
 	doc          wire.Document
 	account      wire.Account
@@ -26,23 +45,38 @@ type flow struct {
 	inputText    string
 }
 
-func (s *Service) run(ctx context.Context, r *queue.Run) *flow {
-	return &flow{Service: s, ctx: ctx, r: r, meta: Meta(r.Job)}
+func (s *Service) run(ctx context.Context, r claimed) *flow {
+	return &flow{Service: s, ctx: ctx, r: r, meta: Meta(r.Job())}
+}
+
+// loadAccount reads the owner's account. An owner being deleted holds the whole tenant, so
+// nothing is done for it and its other jobs are not tried one by one.
+func (f *flow) loadAccount() error {
+	return wire.Guard(f.ctx, f.r, func(ctx context.Context) *wire.Fault {
+		account, fault := f.Wire.Account(ctx, f.r.Job().Tenant)
+		deleting := account.Deleting || (fault != nil && fault.Cause == wire.CauseAccountDeleting)
+		if deleting {
+			return &wire.Fault{Result: wire.Yielded, Cause: wire.CauseAccountDeleting, Delay: time.Second, HoldTenant: true}
+		}
+		if fault != nil {
+			return fault
+		}
+		f.account = account
+		return nil
+	})
 }
 
 func (s *Service) Work(ctx context.Context, r *queue.Run) queue.Outcome {
 	f := s.run(ctx, r)
-	check := accountCheck(r)
-	if check.Fault != nil {
-		return check.Fault.Outcome()
+	if err := f.loadAccount(); err != nil {
+		return wire.Outcome(err)
 	}
-	f.account = check.Account
 	if err := f.load(); err != nil {
 		return wire.Outcome(err)
 	}
 
 	if !f.bound(f.doc) {
-		if !r.Job.Initializing || f.unavailable(f.doc) || f.doc.Discarded ||
+		if !r.Job().Initializing || f.unavailable(f.doc) || f.doc.Discarded ||
 			canBind(f.doc, f.meta.Trigger, f.meta.Revision) != "" {
 			return queue.Fence(wire.CauseConversationFenced)
 		}
@@ -53,7 +87,7 @@ func (s *Service) Work(ctx context.Context, r *queue.Run) queue.Outcome {
 			if f.unavailable(d) || d.Discarded || canBind(d, f.meta.Trigger, f.meta.Revision) != "" {
 				return nil, conversationFence()
 			}
-			return binding(r.Job.Key, f.meta.Revision), nil
+			return binding(r.Job().Key, f.meta.Revision), nil
 		})
 		if err != nil {
 			return wire.Outcome(err)
@@ -62,8 +96,8 @@ func (s *Service) Work(ctx context.Context, r *queue.Run) queue.Outcome {
 	if f.unavailable(f.doc) {
 		return queue.Fence(wire.CauseConversationFenced)
 	}
-	if r.Job.Initializing {
-		if f.account.OwnKey && !r.Job.Gated {
+	if r.Job().Initializing {
+		if f.account.OwnKey && !r.Job().Gated {
 			return queue.BlockForSecret()
 		}
 		return queue.Activate()
@@ -71,15 +105,15 @@ func (s *Service) Work(ctx context.Context, r *queue.Run) queue.Outcome {
 	if f.finished() {
 		return f.success()
 	}
-	if f.account.OwnKey || r.Job.Gated {
-		if r.Secret == "" {
+	if f.account.OwnKey || r.Job().Gated {
+		if r.Secret() == "" {
 			return queue.BlockForSecret()
 		}
 		if !f.account.OwnKey {
 			// A previously own-key job cannot switch to platform credentials.
 			return queue.Fail(wire.CauseVendorRejected)
 		}
-		f.vendorKey = r.Secret
+		f.vendorKey = r.Secret()
 	} else {
 		f.vendorKey = "platform"
 	}
@@ -114,13 +148,13 @@ func (s *Service) Work(ctx context.Context, r *queue.Run) queue.Outcome {
 func (f *flow) load() error {
 	defer f.r.Observe("load")()
 	return wire.Guard(f.ctx, f.r, func(ctx context.Context) (fault *wire.Fault) {
-		f.doc, fault = f.Wire.Document(ctx, f.r.Job.Tenant, f.r.Job.Subject)
+		f.doc, fault = f.Wire.Document(ctx, f.r.Job().Tenant, f.r.Job().Subject)
 		return
 	})
 }
 
 func (f *flow) bound(d wire.Document) bool {
-	return d.Job == f.r.Job.Key && d.Revision == f.meta.Revision
+	return d.Job == f.r.Job().Key && d.Revision == f.meta.Revision
 }
 
 func (f *flow) unavailable(d wire.Document) bool {
@@ -147,7 +181,7 @@ func unreadable() *wire.Fault {
 }
 
 func (f *flow) patch(build func(wire.Document) (wire.Patch, *wire.Fault)) error {
-	j := f.r.Job
+	j := f.r.Job()
 	return wire.Guard(f.ctx, f.r, func(ctx context.Context) *wire.Fault {
 		for range 4 {
 			p, err := build(f.doc)
@@ -195,7 +229,7 @@ func (f *flow) reopen() error {
 func (f *flow) transcript() (input string, words int, err error) {
 	decoded := func() (string, error) {
 		defer f.r.Observe("transcript")()
-		return f.Codec.DecodeText(f.r.Job.Tenant, f.doc.Transcript)
+		return f.Codec.DecodeText(f.r.Job().Tenant, f.doc.Transcript)
 	}
 	input, err = decoded()
 	if err != nil {
@@ -218,7 +252,7 @@ func (f *flow) transcript() (input string, words int, err error) {
 }
 
 func (f *flow) notes(text string, words int) error {
-	j := f.r.Job
+	j := f.r.Job()
 	discard := words < f.account.MinWords
 	input := wire.Input(j, "notes", text)
 	var notes wire.NotesOutput
@@ -260,7 +294,7 @@ func (f *flow) notes(text string, words int) error {
 
 func (f *flow) sameInput(d wire.Document, in wire.VendorInput) *wire.Fault {
 	if f.inputVersion != d.Version {
-		input, err := f.Codec.DecodeText(f.r.Job.Tenant, d.Transcript)
+		input, err := f.Codec.DecodeText(f.r.Job().Tenant, d.Transcript)
 		if err != nil {
 			return unreadable()
 		}
@@ -331,43 +365,43 @@ func (f *flow) canFanout(d wire.Document) *wire.Fault {
 	return nil
 }
 
-func (s *Service) Exhausted(ctx context.Context, r *queue.Run, cause queue.Cause, transient bool) queue.Outcome {
+func (s *Service) Exhausted(ctx context.Context, rc *queue.Reconcile) queue.Resolution {
+	r := reconciling{rc}
+	cause, transient := rc.Cause(), rc.Transient()
 	f := s.run(ctx, r)
 	if err := f.load(); err != nil {
-		return reconcileError(err)
+		return wire.Resolution(err)
 	}
 	if f.unavailable(f.doc) {
-		return queue.Fence(wire.CauseConversationFenced)
+		return queue.Fenced(wire.CauseConversationFenced)
 	}
 	if !f.bound(f.doc) {
-		if r.Job.Initializing {
-			return queue.Fail(cause)
+		if r.Job().Initializing {
+			return queue.Park()
 		}
-		return queue.Fence(wire.CauseConversationFenced)
+		return queue.Fenced(wire.CauseConversationFenced)
 	}
 	if f.finished() {
-		return f.success()
+		return f.resolved()
 	}
-	if cause == queue.CauseLeaseExpired && (!r.Job.Gated || r.Secret != "") && f.doc.FanoutState == "claimed" &&
-		(r.Job.Step == "integrations" || r.Job.Step == "complete") {
-		check := accountCheck(r)
-		if check.Fault == nil {
-			f.account = check.Account
+	if cause == queue.CauseLeaseExpired && (!r.Job().Gated || r.Secret() != "") && f.doc.FanoutState == "claimed" &&
+		(r.Job().Step == "integrations" || r.Job().Step == "complete") {
+		if f.loadAccount() == nil {
 			err := f.finishFanout(f.progress())
 			if err == nil || f.finished() {
-				return f.success()
+				return f.resolved()
 			}
 			var fault *wire.Fault
 			if errors.As(err, &fault) && (fault.Result == wire.Fenced || fault.Result == wire.Yielded) {
-				return fault.Outcome()
+				return wire.Resolution(err)
 			}
 			if errors.Is(err, queue.ErrLease) || errors.Is(err, context.Canceled) {
-				return queue.Abort()
+				return queue.Dropped()
 			}
 		}
 	}
-	if r.WillBudgetRequeue() {
-		return queue.Fail(cause)
+	if rc.WillBudgetRequeue() {
+		return queue.Park()
 	}
 	if f.doc.Status == "processing" {
 		err := f.patch(func(d wire.Document) (wire.Patch, *wire.Fault) {
@@ -384,37 +418,11 @@ func (s *Service) Exhausted(ctx context.Context, r *queue.Run, cause queue.Cause
 			return p, nil
 		})
 		if err != nil {
-			return reconcileError(err)
+			return wire.Resolution(err)
 		}
 		if f.finished() {
-			return f.success()
+			return f.resolved()
 		}
 	}
-	return queue.Fail(cause)
-}
-
-// Reconcile errors preserve the original terminal intent until the external
-// document is updated, fenced, or found already complete.
-func reconcileError(err error) queue.Outcome {
-	fault, ok := errors.AsType[*wire.Fault](err)
-	if !ok {
-		return wire.Outcome(err)
-	}
-	switch fault.Result {
-	case wire.Fenced, wire.Yielded:
-		return fault.Outcome()
-	case wire.Succeeded, wire.Transient, wire.Deterministic, wire.Dropped:
-		return queue.Retry(fault.Cause, fault.Delay)
-	}
-	return queue.Retry(fault.Cause, fault.Delay)
-}
-
-// accountCheck returns what the queue's preflight learned, or the zero check when the
-// preflight did not run for this claim.
-func accountCheck(r *queue.Run) wire.AccountCheck {
-	check, ok := r.Preflight.(wire.AccountCheck)
-	if !ok {
-		return wire.AccountCheck{}
-	}
-	return check
+	return queue.Park()
 }

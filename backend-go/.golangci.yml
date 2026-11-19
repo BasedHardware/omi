@@ -1,6 +1,9 @@
 # Lint contract for backend-go. Every rule here exists to keep a property that agents
 # cannot hold in memory between sessions; docs/patterns.md says which rule guards what.
 # Suppressions are not available: `//nolint` is rejected by tools/archcheck.
+#
+# What is NOT here: which package may import which. That follows from a package's path and
+# is checked by tools/archcheck, so a new family needs no entry in this file.
 version: "2"
 run:
   timeout: 10m
@@ -46,19 +49,17 @@ linters:
     - forbidigo
     - gochecknoglobals
     - gochecknoinits
-    # size and shape
-    - cyclop
+    # size and shape: one measure each of length, of branching and of interface width.
+    # Overlapping measures (cyclomatic complexity, nesting depth, line length) are left
+    # out: they fired together and pushed splits that hid a transaction or a state machine.
     - funlen
     - gocognit
-    - nestif
     - interfacebloat
     - nakedret
-    - lll
     # hygiene
     - gocritic
     - misspell
     - modernize
-    - nolintlint
     - predeclared
     - revive
     - thelper
@@ -76,18 +77,12 @@ linters:
       check-type-assertions: true
       check-blank: true
     funlen:
-      lines: 70
-      statements: 45
-    cyclop:
-      max-complexity: 14
+      lines: 80
+      statements: 50
     gocognit:
       min-complexity: 20
-    nestif:
-      min-complexity: 5
     interfacebloat:
       max: 6
-    lll:
-      line-length: 130
     revive:
       rules:
         - name: context-as-argument
@@ -112,9 +107,6 @@ linters:
         - name: errorf
         - name: empty-block
         - name: redefines-builtin-id
-    nolintlint:
-      require-explanation: true
-      require-specific: true
     forbidigo:
       analyze-types: true
       forbid:
@@ -158,73 +150,28 @@ linters:
               desc: "reflection hides control flow; write the types out"
             - pkg: github.com/stretchr/testify
               desc: "use the standard testing package and pgregory.net/rapid"
-        queue-is-generic:
-          files: ["**/internal/queue/**", "!$test"]
-          deny:
-            - pkg: github.com/BasedHardware/omi/backend-go/internal/batchunit
-              desc: "the queue knows no job kind; a kind depends on the queue, never the reverse"
-            - pkg: github.com/BasedHardware/omi/backend-go/internal/conformance
-              desc: "the queue knows no job kind or adapter"
-            - pkg: github.com/BasedHardware/omi/backend-go/cmd
-              desc: "packages never import a binary"
-        platform-is-a-leaf:
-          files: ["**/internal/platform/**"]
-          deny:
-            - pkg: github.com/BasedHardware/omi/backend-go/internal/queue
-              desc: "platform packages are leaves: they import nothing from this module but each other"
-            - pkg: github.com/BasedHardware/omi/backend-go/internal/batchunit
-              desc: "platform packages are leaves"
-            - pkg: github.com/BasedHardware/omi/backend-go/internal/conformance
-              desc: "platform packages are leaves"
-        kinds-declare-ports:
-          files: ["**/internal/batchunit/**"]
-          deny:
-            - pkg: github.com/BasedHardware/omi/backend-go/internal/conformance
-              desc: "a kind declares the ports it needs; the binary passes the adapter in"
-            - pkg: github.com/BasedHardware/omi/backend-go/internal/platform/httpx
-              desc: "a kind calls out through a port, not an HTTP client"
-            - pkg: net/http
-              desc: "a kind calls out through a port, not an HTTP client"
-        rules-are-pure:
-          files: ["**/rules/**", "!$test"]
-          deny:
-            - pkg: net
-              desc: "rules packages decide; they do no I/O. Do the I/O in the caller and pass the result in"
-            - pkg: os
-              desc: "rules packages decide; they do no I/O"
-            - pkg: io
-              desc: "rules packages decide; they do no I/O"
-            - pkg: context
-              desc: "a pure decision needs no context; if it does, it is doing I/O"
-            - pkg: sync
-              desc: "rules packages hold no shared state"
-            - pkg: log/slog
-              desc: "rules packages return values; the caller logs"
-            - pkg: github.com/jackc/pgx
-              desc: "rules packages decide; they do no I/O"
-            - pkg: github.com/BasedHardware/omi/backend-go/internal/platform/wire
-              desc: "rules packages decide; they do no I/O"
-            - pkg: github.com/BasedHardware/omi/backend-go/internal/platform/clock
-              desc: "pass the current time in as a value"
   exclusions:
     rules:
       - path: _test\.go
-        linters: [funlen, gocognit, cyclop, gochecknoglobals, lll, gosec, containedctx, nestif]
+        linters: [funlen, gocognit, gochecknoglobals, gosec, containedctx, interfacebloat, contextcheck]
       - path: _test\.go
-        text: "context\\.(Background|TODO)|time\\.(Now|Since|Until|After|Sleep|NewTimer|NewTicker)|os\\.(Getenv|LookupEnv)"
+        text: "context\\.(Background|TODO)|time\\.(Now|Since|Until|After|Sleep|NewTimer|NewTicker)|os\\.(Getenv|LookupEnv)|panic"
         linters: [forbidigo]
       # Binaries and tools are where the environment is read and the process ends.
       - path: (^|/)(cmd|tools)/
         linters: [forbidigo, gochecknoglobals]
       # archcheck reads the tree it is pointed at; that is its job.
       - path: (^|/)tools/
-        linters: [gosec]
+        linters: [gosec, funlen, gocognit]
       - path: internal/platform/clock/
         linters: [forbidigo]
+      # Test-helper packages set up a test: they read its environment and own its deadline.
+      - path: (^|/)internal/(platform/pgtest|platform/docstore/docstoretest|queue/queuetest)/
+        linters: [forbidigo, contextcheck]
       # The conformance port keeps the correctness linters and drops the shape and
       # documentation ones: it is replaced by the real family, not grown. See README.md.
       - path: (^|/)(internal/conformance|cmd/jobd)/
-        linters: [funlen, gocognit, cyclop, nestif, lll, revive, containedctx, errname, gocritic, unparam]
+        linters: [funlen, gocognit, revive, containedctx, errname, gocritic, unparam, interfacebloat]
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

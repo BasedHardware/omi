@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"os"
-	"slices"
 	"strconv"
 	"time"
 
@@ -56,12 +55,16 @@ func loadConfig() (config, error) {
 		v.set(n)
 	}
 	c.GateAbandoned = finalization.CauseBYOKAbandoned
-	c.Causes = allCauses()
+	// The kit has no setting for this. Twenty tries with capped backoff outlast every
+	// outage the kit injects and still end.
+	c.ReconcileMax = reconcileMax
 	return c, nil
 }
 
-// allCauses is every cause any registered kind or adapter can return. The queue records
-// anything else as "unknown", and the metrics endpoint reports a zero for each of these.
-func allCauses() []queue.Cause {
-	return slices.Concat(wire.Causes(), finalization.Causes(), batchunit.Causes())
+const reconcileMax = 20
+
+// kinds declares every kind this binary admits or runs, each with the causes of the
+// adapters it is wired to. This is the one place a new kind is added.
+func kinds() []queue.Kind {
+	return []queue.Kind{finalization.Declaration(wire.Causes()...), batchunit.Declaration(wire.Causes()...)}
 }

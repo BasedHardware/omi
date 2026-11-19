@@ -13,19 +13,27 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// InTx runs fn in a transaction. It commits when fn returns nil and rolls back otherwise.
-// A rollback failure is joined to fn's error, never dropped.
-func InTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) error {
+// InTx runs fn in a transaction. It commits when fn returns nil and rolls back otherwise,
+// including when fn panics. A rollback failure is joined to fn's error, never dropped.
+func InTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) (err error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}
+	committed := false
+	// Registered before fn runs, so a panic in fn cannot return an open transaction to the pool.
+	defer func() {
+		if !committed {
+			err = errors.Join(err, rollback(ctx, tx))
+		}
+	}()
 	if err := fn(tx); err != nil {
-		return errors.Join(err, rollback(ctx, tx))
+		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
+	committed = true
 	return nil
 }
 

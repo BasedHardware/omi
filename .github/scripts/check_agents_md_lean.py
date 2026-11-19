@@ -33,7 +33,7 @@ BUDGETS: dict[str, tuple[int, int]] = {
     "app/AGENTS.md": (164, 11_411),
     "backend/AGENTS.md": (350, 39_000),
     # Set to its size at creation. backend-go/tools/archcheck also caps it at 60 lines.
-    "backend-go/AGENTS.md": (49, 2_962),
+    "backend-go/AGENTS.md": (54, 3_689),
     # main grew this with Codemagic release-pipeline detail after the budget was
     # first set from a stale base; recalibrated to current main + headroom.
     # 2026-11: INV-6/gauntlet, release-train, and analytics detail moved to

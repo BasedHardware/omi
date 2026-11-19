@@ -5,45 +5,50 @@ New backend runtime code is written here, in Go. This file is a map. The rules a
 
 ## Where things are
 
-| Path | What it is |
-| --- | --- |
-| `internal/queue` | The durable job queue. Knows no job kind. Start with its README. |
-| `internal/queue/rules` | The queue's decisions as pure functions. The model for every `rules` package. |
-| `internal/batchunit` | **The reference job kind. Copy its shape for a new kind.** |
-| `internal/platform/*` | Shared leaves: `clock`, `pg`, `httpx`, `crypt`. They import nothing else from this module. |
-| `internal/conformance/*` | A ported flow and a stub adapter that let the conformance kit drive the queue. Not a style reference; being replaced. |
-| `cmd/jobd` | The reference binary. The only place that reads the environment and wires dependencies. |
-| `tools/archcheck` | Structural rules a linter cannot express. |
+| Path | What it is | It may import |
+| --- | --- | --- |
+| `internal/queue` | The durable job queue. Knows no job kind. Start with its README. | platform |
+| `internal/<family>` | A job kind or domain family. **`internal/batchunit` is the reference: copy its shape.** | its own subtree, `internal/queue`, platform `clock` and `crypt` |
+| `internal/<family>/rules`, `internal/queue/rules` | Decisions as pure functions. | a short list of the standard library |
+| `internal/adapters/<name>` | Implements a family's ports against a real system. **`batchdocs` is the reference.** | platform, queue, families |
+| `internal/platform/*` | Shared helpers: `clock`, `pg`, `httpx`, `crypt`, `docstore`, and test helpers. | platform |
+| `cmd/<binary>` | Reads the environment and wires adapters into families. Nothing else does. | anything |
+| `internal/conformance/*`, `cmd/jobd` | A ported flow and stub adapter that let the conformance kit drive the queue. Not a style reference. | |
+| `tools/archcheck` | The structural rules. A package's path gives it its role; no list to edit. | standard library |
 
-## Before you write code
+## Adding a job kind
 
-1. Read the README of the package you are changing, then the test it names for the rule you touch.
-2. A new job kind is three files, like `internal/batchunit`: types and pure decisions, ports, a thin
-   service. Decisions go in pure functions; I/O goes behind a port the binary passes in.
-3. Run `make check`. It must pass before you push. There is no way to silence a finding:
-   fix the code, or change the rule in `.golangci.yml` in its own reviewed change.
+1. Create `internal/<family>` with three files like `batchunit`: `unit.go` (declaration, types,
+   pure decisions), `ports.go` (what it needs from outside), `service.go` (admission and handler).
+2. Write its adapters under `internal/adapters/`, and add one entry to `kinds()` and one to the
+   handler map in the binary. Nothing in the queue or the lint config changes.
+3. Test the handler on real workers with `internal/queue/queuetest`, and list each rule with its
+   test in the package README.
 
 ## The rules you will hit first
 
-- **No hidden inputs.** No `time.Now`, `os.Getenv`, globals, `init`, or `context.Background` outside
-  `cmd/`. Take a `clock.Clock`, a typed config value, and the caller's context.
-- **Closed sets are types.** A set of states, outcomes or causes is a named type with listed
-  constants. Switches over it must be exhaustive.
-- **Errors are values you handle.** Every error is checked and wrapped with what you were doing.
-  Never log remote text, identifiers of users or conversations, keys, or payloads.
-- **Plain SQL, typed rows.** No ORM, no query builder, no `SELECT *`. Schema changes are new files in
-  a package's `migrations/`.
-- **External calls are guarded and idempotent.** A worker calls out through `Run.Guard`, with a
-  stable request id, so a retry is charged once and an erased tenant sees nothing after the erase.
-- **Tests ship with the code.** Pure rules get table tests; anything touching Postgres gets a test
-  against a real database (`QUEUE_TEST_DATABASE_URL`). A fix ships with a test that fails without it.
-- **Files stay under 500 lines**, functions under 70. Split by responsibility, not by size alone.
+- **A family does no I/O.** Every call that leaves the process is a port method that takes a
+  `queue.Guarded` (worker) or `queue.Admitting` (admission). You get one only inside `Run.Guard`
+  or `Store.Tenant`, and cannot make or store one.
+- **A paid or external call uses `g.Operation(step)` as its identity** so a retry is charged once
+  and its result can be recovered. **A store of tenant data is written through
+  `docstore.Fenced`**, so a write for an account being deleted is refused by the store itself.
+- **A job row holds references and receipts, never payload.** Logs and metrics hold closed
+  causes and durations, never ids of users or conversations, keys, or remote text.
+- **No hidden inputs.** No `time.Now`, `os.Getenv`, globals, `init`, or `context.Background`
+  outside `cmd/`. Take a `clock.Clock`, a typed config value, and the caller's context.
+- **Closed sets are types** with exhaustive switches. Steps and causes are declared in the
+  kind's `Declaration`; an undeclared one is refused or recorded as `unknown`.
+- **Plain SQL, typed rows.** No ORM. A schema change is a new numbered file in `migrations/`.
+- **Tests ship with the code** and run against real Postgres and the Firestore emulator. There
+  is no fake queue and no database fake. A fix ships with a test that fails without it.
+- **Nothing silences a check.** Fix the code, or change the rule in its own reviewed change.
 
 ## Commands
 
 | Command | Does |
 | --- | --- |
-| `make check` | vet, lint, structural rules, tests with the race detector |
-| `make test QUEUE_TEST_DATABASE_URL=postgres://...` | includes the Postgres integration tests |
-| `make test-public KIT=/path/to/kit` | the conformance kit's public suite against `bin/jobd` |
-| `make fmt` | format |
+| `make check` | vet, lint, structural rules, every test with the race detector. Starts its own Postgres and Firestore emulator; fails if Postgres is missing. |
+| `make quick` | The tests that need no database, for a fast loop. Not a substitute. |
+| `make test-public KIT=/path/to/kit` | The conformance kit's public suite against `bin/jobd`. |
+| `make fmt` | Format. |

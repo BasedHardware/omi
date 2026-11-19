@@ -14,6 +14,7 @@ import (
 
 	"github.com/BasedHardware/omi/backend-go/internal/batchunit"
 	"github.com/BasedHardware/omi/backend-go/internal/conformance/finalization"
+	"github.com/BasedHardware/omi/backend-go/internal/conformance/kitstore"
 	wire "github.com/BasedHardware/omi/backend-go/internal/conformance/stubapi"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
@@ -54,16 +55,25 @@ func command(args []string) error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	m := newMetrics(cfg.Causes)
 	dbCtx, end := context.WithTimeout(ctx, 20*time.Second)
 	defer end()
-	store, err := queue.Open(dbCtx, cfg.database, cfg.Config, m, clock.System{})
+	m := &metrics{counters: make(map[string]uint64), histograms: make(map[string]histogram)}
+	store, err := queue.Open(dbCtx, cfg.database, cfg.Config, kinds(), m, clock.System{})
+	if errors.Is(err, queue.ErrConfig) {
+		return errors.New("invalid queue configuration")
+	}
 	if err != nil {
 		return errors.New("database connection failed")
 	}
 	defer store.Close()
+	m.declare(store.Causes())
+	kit, err := kitstore.Open(dbCtx, cfg.database)
+	if err != nil {
+		return errors.New("database connection failed")
+	}
+	defer kit.Close()
 	if args[0] == "migrate" {
-		if err := store.Migrate(dbCtx); err != nil {
+		if err := errors.Join(store.Migrate(dbCtx), kit.Migrate(dbCtx)); err != nil {
 			return errors.New("database migration failed")
 		}
 		return nil
@@ -74,10 +84,10 @@ func command(args []string) error {
 	if store.Ready(dbCtx) != nil {
 		return errors.New("database migrations required")
 	}
-	return serve(ctx, cfg, store, m)
+	return serve(ctx, cfg, store, kit, m)
 }
 
-func serve(ctx context.Context, cfg config, store *queue.Store, m *metrics) error {
+func serve(ctx context.Context, cfg config, store *queue.Store, kit *kitstore.Store, m *metrics) error {
 	client, err := wire.New(cfg.stub, cfg.Workers, m, clock.System{})
 	if err != nil {
 		return err
@@ -94,15 +104,18 @@ func serve(ctx context.Context, cfg config, store *queue.Store, m *metrics) erro
 			slog.Warn("best effort step failed", "job", hash, "cause", cause)
 		}}
 	units := &batchunit.Service{
-		Store: store, Speech: client, Accounts: wire.BatchAccounts{Client: client},
-		Observer: wire.BatchObserver{Client: client}, Keys: wire.BatchKey, Fallback: wire.CauseTransport,
+		Queue: store, Speech: wire.BatchSpeech{Client: client, Inputs: kit}, Results: wire.BatchResults{Store: kit},
+		Accounts: wire.BatchAccounts{Client: client}, Observer: wire.BatchObserver{Client: client}, Keys: wire.BatchKey,
 	}
-	workers := queue.Start(ctx, store, map[string]queue.Handler{
+	workers, err := queue.Start(ctx, store, map[string]queue.Handler{
 		finalization.Kind: final, batchunit.Kind: units,
-	}, client.CheckAccount, reportQueueError)
+	}, reportQueueError)
+	if err != nil {
+		return errors.New("invalid worker registration")
+	}
 	defer workers.Stop()
 
-	api := &api{store: store, workers: workers, client: client, final: final, units: units, metrics: m}
+	api := &api{store: store, workers: workers, client: client, final: final, units: units, kit: kit, metrics: m}
 	server := &http.Server{Handler: api.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second,
 		WriteTimeout: 90 * time.Second, IdleTimeout: 75 * time.Second, MaxHeaderBytes: 32 << 10,
 		BaseContext: func(net.Listener) context.Context { return ctx },

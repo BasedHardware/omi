@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/BasedHardware/omi/backend-go/internal/batchunit"
 	"github.com/BasedHardware/omi/backend-go/internal/conformance/finalization"
+	"github.com/BasedHardware/omi/backend-go/internal/conformance/kitstore"
 	wire "github.com/BasedHardware/omi/backend-go/internal/conformance/stubapi"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
@@ -22,6 +24,7 @@ type api struct {
 	client  *wire.Client
 	final   *finalization.Service
 	units   *batchunit.Service
+	kit     *kitstore.Store
 	metrics *metrics
 }
 
@@ -145,17 +148,36 @@ func (a *api) admit(w http.ResponseWriter, r *http.Request) {
 	respond(w, 202, jobID{id})
 }
 
+// unitWire is the kit's JSON shape for a batch unit. The kit sends the input inline; the
+// kind takes a reference, so the input is put in the kit store first and the unit points at it.
+type unitWire struct {
+	ID      string    `json:"unit_id"`
+	Input   *string   `json:"input"`
+	OrderAt time.Time `json:"order_at"`
+	RunAt   time.Time `json:"run_at"`
+}
+
 func (a *api) batch(w http.ResponseWriter, r *http.Request) {
-	var data batchunit.Unit
+	var data unitWire
 	if !decode(w, r, &data) {
 		return
 	}
 	owner := r.PathValue("owner")
-	if data.Validate() != nil || !validID(owner) || !validID(data.ID) {
+	if data.Input == nil || data.OrderAt.IsZero() || !validID(owner) || !validID(data.ID) {
 		refusal(w, 400, "invalid_request")
 		return
 	}
-	j, err := a.units.Admit(r.Context(), owner, data)
+	ref := wire.BatchKey(owner, data.ID)
+	ctx := r.Context()
+	err := a.store.Tenant(ctx, owner, func(sc *queue.Scope) error {
+		return a.kit.PutInput(ctx, sc.Admitting(), ref, *data.Input)
+	})
+	if err != nil {
+		routeError(w, err, "")
+		return
+	}
+	unit := batchunit.Unit{ID: data.ID, Source: batchunit.Source{Ref: ref, Version: 1}, OrderAt: data.OrderAt, RunAt: data.RunAt}
+	j, err := a.units.Admit(ctx, owner, unit)
 	if err != nil {
 		routeError(w, err, "")
 		return
@@ -196,17 +218,29 @@ func toWire(j queue.Job) jobWire {
 	}
 }
 
-func jobView(j queue.Job) any {
+// jobView is the kit's view of a job. For a batch unit it carries the transcription, read
+// from the kit store: the job row itself holds only the receipt.
+func (a *api) jobView(ctx context.Context, j queue.Job) (any, error) {
 	if j.Kind == finalization.Kind {
 		return struct {
 			jobWire
 			finalization.Metadata
-		}{toWire(j), finalization.Meta(j)}
+		}{toWire(j), finalization.Meta(j)}, nil
 	}
-	return struct {
+	view := struct {
 		jobWire
-		Result json.RawMessage `json:"result"`
-	}{toWire(j), j.Checkpoint}
+		Result *string `json:"result"`
+	}{jobWire: toWire(j)}
+	if receipt, ok := batchunit.Stored(j.Checkpoint); ok {
+		text, err := a.kit.Result(ctx, receipt.Result)
+		if err != nil && !errors.Is(err, kitstore.ErrAbsent) {
+			return nil, err
+		}
+		if err == nil {
+			view.Result = &text
+		}
+	}
+	return view, nil
 }
 
 func (a *api) get(w http.ResponseWriter, r *http.Request) {
@@ -215,7 +249,12 @@ func (a *api) get(w http.ResponseWriter, r *http.Request) {
 		routeError(w, err, "")
 		return
 	}
-	respond(w, 200, jobView(j))
+	view, err := a.jobView(r.Context(), j)
+	if err != nil {
+		unavailable(w)
+		return
+	}
+	respond(w, 200, view)
 }
 
 func (a *api) resume(w http.ResponseWriter, r *http.Request) {
@@ -239,7 +278,12 @@ func (a *api) parked(w http.ResponseWriter, r *http.Request) {
 	}
 	result := make([]any, 0, len(jobs))
 	for _, j := range jobs {
-		result = append(result, jobView(j))
+		view, err := a.jobView(r.Context(), j)
+		if err != nil {
+			unavailable(w)
+			return
+		}
+		result = append(result, view)
 	}
 	respond(w, 200, result)
 }
@@ -261,6 +305,9 @@ func (a *api) erase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := a.store.Erase(ctx, uid, func() error {
+		if err := a.kit.Erase(ctx, uid); err != nil {
+			return err
+		}
 		if fault := a.client.Erase(ctx, uid); fault != nil {
 			return fault
 		}

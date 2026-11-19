@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,7 +18,12 @@ type Scope struct {
 	store  *Store
 	conn   *pgxpool.Conn
 	tenant string
+	open   *atomic.Bool
 }
+
+// Admitting returns the proof that a call runs inside this scope, for a port method that
+// reaches outside the process during admission.
+func (sc *Scope) Admitting() Admitting { return Admitting{open: sc.open, tenant: sc.tenant} }
 
 // Tenant runs fn while holding the tenant's shared erasure barrier. It returns ErrErased
 // for a tenant that was erased.
@@ -36,7 +42,7 @@ func (s *Store) Tenant(ctx context.Context, tenant string, fn func(*Scope) error
 	})
 }
 
-func (s *Store) withTenant(ctx context.Context, tenant string, exclusive bool, fn func(*Scope) error) error {
+func (s *Store) withTenant(ctx context.Context, tenant string, exclusive bool, fn func(*Scope) error) (err error) {
 	conn, err := s.pool.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire connection: %w", err)
@@ -46,11 +52,16 @@ func (s *Store) withTenant(ctx context.Context, tenant string, exclusive bool, f
 	if exclusive {
 		lock = "pg_advisory_lock"
 	}
-	if _, err := conn.Exec(ctx, "SELECT "+lock+"("+tenantLock+")", tenant); err != nil {
+	if _, lockErr := conn.Exec(ctx, "SELECT "+lock+"("+tenantLock+")", tenant); lockErr != nil {
 		// The lock state of this session is unknown: do not return it to the pool.
-		return errors.Join(fmt.Errorf("tenant lock: %w", err), discard(ctx, conn))
+		return errors.Join(fmt.Errorf("tenant lock: %w", lockErr), discard(ctx, conn))
 	}
-	return errors.Join(fn(&Scope{s, conn, tenant}), unlock(ctx, conn))
+	// Registered before fn runs, so the lock is dropped even if fn panics.
+	defer func() { err = errors.Join(err, unlock(ctx, conn)) }()
+	open := &atomic.Bool{}
+	open.Store(true)
+	defer open.Store(false)
+	return fn(&Scope{store: s, conn: conn, tenant: tenant, open: open})
 }
 
 // unlock releases every session lock on conn. It runs after the caller's context may be
@@ -60,7 +71,9 @@ func unlock(ctx context.Context, conn *pgxpool.Conn) error {
 	cleanup, cancel := pg.Cleanup(ctx, 2*time.Second)
 	defer cancel()
 	if _, err := conn.Exec(cleanup, "SELECT pg_advisory_unlock_all()"); err != nil {
-		return discard(ctx, conn)
+		// Closing the connection releases the locks server-side. The unlock failure is
+		// still returned: the caller must not report a clean finish.
+		return errors.Join(fmt.Errorf("release session locks: %w", err), discard(ctx, conn))
 	}
 	return nil
 }
@@ -104,28 +117,26 @@ const insertJob = `WITH tenant AS (
  INSERT INTO queue_lanes(uid,kind,order_key) SELECT $2,$3,$9::text WHERE $9 IS NOT NULL
  ON CONFLICT DO NOTHING
 ), j AS (
- INSERT INTO queue_jobs(job_key,uid,kind,subject,meta,budget_allowed,gated,initializing,order_key,
-                        order_at,order_sub_us,order_sort,state,step,ready_at,run_at,blocked_since)
- SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17
+ INSERT INTO queue_jobs AS q (job_key,uid,kind,subject,meta,budget_allowed,gated,initializing,order_key,
+                        order_at,order_sub_us,order_sort,state,step,ready_at,run_at,blocked_since,format)
+ SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
  ON CONFLICT DO NOTHING
- RETURNING job_key,uid,kind,subject,meta,checkpoint,gated,initializing,state,step,attempts,
-           deterministic_attempts,budget_allowed,budget_requeues,lease_token,reason,outcome,
-           created_at,updated_at,run_at,intent,intent_transient
+ RETURNING ` + rawColumns + `
 )
 SELECT ` + columns + " FROM j"
 
 // Enqueue inserts n and reports whether it was new. An existing key returns the first
 // job unchanged: the first enqueue fixes the job's input.
 func (sc *Scope) Enqueue(ctx context.Context, n NewJob) (Job, bool, error) {
-	if n.Tenant != sc.tenant {
-		return Job{}, false, ErrState
+	if err := sc.admissible(n); err != nil {
+		return Job{}, false, err
 	}
 	now := sc.store.clock.Now()
 	n = withDefaults(n, now)
 	state, due, since := initialSchedule(n, now, sc.store.cfg.GateTimeout)
 	j, err := scan(sc.conn.QueryRow(ctx, insertJob, n.Key, n.Tenant, n.Kind, n.Subject, n.Meta, n.BudgetAllowed,
 		n.Gated, n.Initializing, n.OrderKey, n.OrderAt, n.OrderAt.Nanosecond()%1000, n.SortKey, state, n.Step,
-		due, n.RunAt, since))
+		due, n.RunAt, since, n.Format))
 	if errors.Is(err, ErrAbsent) {
 		existing, getErr := sc.Get(ctx, n.Key)
 		return existing, false, getErr
@@ -135,6 +146,24 @@ func (sc *Scope) Enqueue(ctx context.Context, n NewJob) (Job, bool, error) {
 	}
 	sc.store.signal()
 	return j, true, nil
+}
+
+// admissible rejects a job this binary has no declaration for, before it reaches the table:
+// an undeclared kind, format or step would otherwise sit in the queue with no replica able
+// to run it.
+func (sc *Scope) admissible(n NewJob) error {
+	kinds := sc.store.kinds
+	switch {
+	case n.Tenant != sc.tenant || n.Key == "":
+		return ErrState
+	case !kinds.runs(n.Kind, n.Format):
+		return fmt.Errorf("%w: kind %q format %d", ErrUndeclared, n.Kind, n.Format)
+	case !kinds.hasStep(n.Kind, n.Step):
+		return fmt.Errorf("%w: step %q of kind %q", ErrUndeclared, n.Step, n.Kind)
+	case n.Gated && n.OrderKey != nil:
+		return fmt.Errorf("%w: a gated job cannot be in an ordered lane", ErrState)
+	}
+	return nil
 }
 
 func withDefaults(n NewJob, now time.Time) NewJob {

@@ -2,8 +2,6 @@ package queue
 
 import (
 	"context"
-	"embed"
-	"errors"
 	"fmt"
 	"time"
 
@@ -14,11 +12,7 @@ import (
 	"github.com/BasedHardware/omi/backend-go/internal/platform/pg"
 )
 
-//go:embed migrations/*.sql
-var migrations embed.FS
-
 const (
-	migrationLock = 6617271580795099302
 	// The three advisory-lock namespaces. Tenant before job, always, to avoid deadlock.
 	tenantLock  = "hashtextextended($1,447119)"
 	jobLock     = "hashtextextended($2,447120)"
@@ -35,7 +29,7 @@ type Store struct {
 	pool      *pgxpool.Pool
 	heartbeat *pgxpool.Pool
 	cfg       Config
-	causes    map[Cause]struct{}
+	kinds     registry
 	observer  Observer
 	clock     clock.Clock
 	// wake tells one idle dispatcher that work may be claimable now.
@@ -44,9 +38,22 @@ type Store struct {
 	rescan chan struct{}
 }
 
-// Open connects two bounded pools: one for work and a small one reserved for lease
-// renewals, so a saturated work pool can never starve the heartbeats that keep leases alive.
-func Open(ctx context.Context, url string, cfg Config, observer Observer, c clock.Clock) (*Store, error) {
+// Open validates the policy and the kind declarations, then connects two bounded pools: one
+// for work and a small one reserved for lease renewals, so a saturated work pool can never
+// starve the heartbeats that keep leases alive.
+func Open(
+	ctx context.Context, url string, cfg Config, kinds []Kind, observer Observer, c clock.Clock,
+) (*Store, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	declared, err := newRegistry(cfg, kinds)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil {
+		return nil, fmt.Errorf("%w: a clock is required", ErrConfig)
+	}
 	main, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		return nil, fmt.Errorf("parse database url: %w", err)
@@ -72,7 +79,7 @@ func Open(ctx context.Context, url string, cfg Config, observer Observer, c cloc
 		observer = silent{}
 	}
 	store := &Store{
-		pool: pool, heartbeat: heartbeat, cfg: cfg, causes: causeSet(cfg), observer: observer,
+		pool: pool, heartbeat: heartbeat, cfg: cfg, kinds: declared, observer: observer,
 		clock: c, wake: make(chan struct{}, 1), rescan: make(chan struct{}, 1),
 	}
 	if err := pool.Ping(ctx); err != nil {
@@ -82,30 +89,10 @@ func Open(ctx context.Context, url string, cfg Config, observer Observer, c cloc
 	return store, nil
 }
 
-func causeSet(cfg Config) map[Cause]struct{} {
-	own := []Cause{CauseNone, CauseLeaseExpired, CauseKindUnregistered, CauseUnknown, cfg.GateAbandoned}
-	set := make(map[Cause]struct{}, len(own)+len(cfg.Causes))
-	for _, c := range own {
-		set[c] = struct{}{}
-	}
-	for _, c := range cfg.Causes {
-		set[c] = struct{}{}
-	}
-	return set
-}
-
-// known returns c if a kind registered it, otherwise CauseUnknown.
-func (s *Store) known(c Cause) Cause {
-	if _, ok := s.causes[c]; ok {
-		return c
-	}
-	return CauseUnknown
-}
-
 // Causes lists every cause this store accepts, for metrics that must report zeros.
 func (s *Store) Causes() []Cause {
-	out := make([]Cause, 0, len(s.causes))
-	for c := range s.causes {
+	out := make([]Cause, 0, len(s.kinds.causes))
+	for c := range s.kinds.causes {
 		out = append(out, c)
 	}
 	return out
@@ -128,83 +115,28 @@ func (s *Store) Ping(ctx context.Context) error {
 	return nil
 }
 
-// Migrate applies the embedded SQL files that are not yet recorded, under one lock, in one
-// transaction. It is safe to run from several replicas at once.
-func (s *Store) Migrate(ctx context.Context) error {
-	files, err := migrations.ReadDir("migrations")
-	if err != nil {
-		return fmt.Errorf("read migrations: %w", err)
-	}
-	return pg.InTx(ctx, s.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", int64(migrationLock)); err != nil {
-			return fmt.Errorf("migration lock: %w", err)
-		}
-		if _, err := tx.Exec(ctx, "CREATE TABLE IF NOT EXISTS queue_schema (version text PRIMARY KEY)"); err != nil {
-			return fmt.Errorf("schema table: %w", err)
-		}
-		for _, file := range files {
-			if err := applyMigration(ctx, tx, file.Name()); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-func applyMigration(ctx context.Context, tx pgx.Tx, name string) error {
-	var applied bool
-	err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM queue_schema WHERE version=$1)", name).Scan(&applied)
-	if err != nil {
-		return fmt.Errorf("check %s: %w", name, err)
-	}
-	if applied {
-		return nil
-	}
-	sql, err := migrations.ReadFile("migrations/" + name)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", name, err)
-	}
-	if _, err := tx.Exec(ctx, string(sql)); err != nil {
-		return fmt.Errorf("apply %s: %w", name, err)
-	}
-	if _, err := tx.Exec(ctx, "INSERT INTO queue_schema VALUES ($1)", name); err != nil {
-		return fmt.Errorf("record %s: %w", name, err)
-	}
-	return nil
-}
-
-// Ready reports whether every migration embedded in this binary has been applied.
-func (s *Store) Ready(ctx context.Context) error {
-	files, err := migrations.ReadDir("migrations")
-	if err != nil {
-		return fmt.Errorf("read migrations: %w", err)
-	}
-	versions := make([]string, len(files))
-	for i, file := range files {
-		versions[i] = file.Name()
-	}
-	var count int
-	err = s.pool.QueryRow(ctx, "SELECT count(*) FROM queue_schema WHERE version=ANY($1)", versions).Scan(&count)
-	if err != nil {
-		return fmt.Errorf("read schema versions: %w", err)
-	}
-	if count != len(versions) {
-		return errors.New("queue: apply all embedded migrations before starting workers")
-	}
-	return nil
-}
-
 // columns is the one projection of a job row. scan reads exactly these, in this order.
-const columns = `j.job_key,j.uid,j.kind,j.subject,j.meta,j.checkpoint,j.gated,j.initializing,
-j.state,j.step,j.attempts,j.deterministic_attempts,j.budget_allowed,j.budget_requeues,j.lease_token,
-j.reason,j.outcome,j.created_at,j.updated_at,j.run_at,j.intent,j.intent_transient`
+const columns = `j.job_key,j.uid,j.kind,j.format,j.subject,j.meta,j.checkpoint,j.gated,j.initializing,
+j.state,j.step,j.attempts,j.deterministic_attempts,j.reconcile_attempts,j.budget_allowed,j.budget_requeues,
+j.lease_token,j.reason,j.outcome,j.created_at,j.updated_at,j.run_at,j.intent,j.intent_transient,
+(j.order_key IS NOT NULL)`
 
-func scan(row pgx.Row) (Job, error) {
+// rawColumns is the same projection for a subquery or RETURNING list aliased q, keeping
+// order_key so the outer query can derive Ordered from it.
+const rawColumns = `q.job_key,q.uid,q.kind,q.format,q.subject,q.meta,q.checkpoint,q.gated,q.initializing,
+q.state,q.step,q.attempts,q.deterministic_attempts,q.reconcile_attempts,q.budget_allowed,q.budget_requeues,
+q.lease_token,q.reason,q.outcome,q.created_at,q.updated_at,q.run_at,q.intent,q.intent_transient,q.order_key`
+
+func scan(row pgx.Row, extra ...any) (Job, error) {
 	var j Job
-	err := row.Scan(&j.Key, &j.Tenant, &j.Kind, &j.Subject, &j.Meta, &j.Checkpoint, &j.Gated, &j.Initializing,
-		&j.State, &j.Step, &j.Attempts, &j.DeterministicAttempts, &j.budgetAllowed, &j.BudgetRequeues, &j.Token,
-		&j.Reason, &j.Outcome, &j.CreatedAt, &j.UpdatedAt, &j.RunAt, &j.intent, &j.intentTransient)
-	if errors.Is(err, pgx.ErrNoRows) {
+	dest := append([]any{
+		&j.Key, &j.Tenant, &j.Kind, &j.Format, &j.Subject, &j.Meta, &j.Checkpoint, &j.Gated, &j.Initializing,
+		&j.State, &j.Step, &j.Attempts, &j.DeterministicAttempts, &j.ReconcileAttempts, &j.budgetAllowed,
+		&j.BudgetRequeues, &j.Token, &j.Reason, &j.Outcome, &j.CreatedAt, &j.UpdatedAt, &j.RunAt, &j.intent,
+		&j.intentTransient, &j.Ordered,
+	}, extra...)
+	err := row.Scan(dest...)
+	if isNoRows(err) {
 		return Job{}, ErrAbsent
 	}
 	if err != nil {
@@ -245,21 +177,36 @@ func (s *Store) signal() {
 	}
 }
 
-// nextDue returns the earliest time any job becomes claimable, or zero when none is scheduled.
-func (s *Store) nextDue(ctx context.Context) (time.Time, error) {
-	var due *time.Time
-	err := s.pool.QueryRow(ctx, "SELECT min(ready_at) FROM queue_jobs WHERE ready_at IS NOT NULL").Scan(&due)
+// schedule is what the watcher needs to choose its sleep.
+type schedule struct {
+	// next is the earliest future due time among jobs this replica can run; zero if none.
+	next time.Time
+	// overdue is true when such a job is already due and was not claimed.
+	overdue bool
+}
+
+// nextDue reads the schedule for the kinds this replica runs. Both halves are single index
+// probes on queue_jobs_next_due.
+func (s *Store) nextDue(ctx context.Context, can supported) (schedule, error) {
+	var (
+		next *time.Time
+		out  schedule
+	)
+	err := s.pool.QueryRow(ctx, `SELECT
+ (SELECT ready_at FROM queue_jobs WHERE ready_at > clock_timestamp() AND kind=ANY($1) ORDER BY ready_at LIMIT 1),
+ EXISTS(SELECT 1 FROM queue_jobs WHERE ready_at <= clock_timestamp() AND kind=ANY($1))`, can.kinds).Scan(&next, &out.overdue)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("next due: %w", err)
+		return schedule{}, fmt.Errorf("next due: %w", err)
 	}
-	if due == nil {
-		return time.Time{}, nil
+	if next != nil {
+		out.next = *next
 	}
-	return *due, nil
+	return out, nil
 }
 
 // Redrive returns a parked job to its schedule with its attempt counters reset. The
-// lifetime budget-requeue count and the checkpoint are kept.
+// lifetime budget-requeue count and the checkpoint are kept. A job parked while
+// reconciling keeps its intent, so it resumes the reconciliation.
 func (s *Store) Redrive(ctx context.Context, key string) error {
 	j, err := s.Get(ctx, key)
 	if err != nil {
@@ -267,11 +214,12 @@ func (s *Store) Redrive(ctx context.Context, key string) error {
 	}
 	return s.Tenant(ctx, j.Tenant, func(sc *Scope) error {
 		tag, err := sc.conn.Exec(ctx, `UPDATE queue_jobs SET
-state=CASE WHEN gated AND NOT initializing THEN 'blocked' ELSE 'ready' END,
-ready_at=clock_timestamp()+CASE WHEN gated AND NOT initializing THEN $2*interval '1 microsecond' ELSE interval '0' END,
-blocked_since=CASE WHEN gated AND NOT initializing THEN clock_timestamp() END,
-run_at=clock_timestamp(),attempts=0,deterministic_attempts=0,
-reason=NULL,outcome=NULL,intent=NULL,intent_transient=false,updated_at=clock_timestamp()
+state=CASE WHEN gated AND NOT initializing AND intent IS NULL THEN 'blocked' ELSE 'ready' END,
+ready_at=clock_timestamp()+CASE WHEN gated AND NOT initializing AND intent IS NULL
+  THEN $2*interval '1 microsecond' ELSE interval '0' END,
+blocked_since=CASE WHEN gated AND NOT initializing AND intent IS NULL THEN clock_timestamp() END,
+run_at=clock_timestamp(),attempts=0,deterministic_attempts=0,reconcile_attempts=0,
+reason=NULL,outcome=NULL,updated_at=clock_timestamp()
 WHERE job_key=$1 AND state='parked'`, key, s.cfg.GateTimeout.Microseconds())
 		if err != nil {
 			return fmt.Errorf("redrive: %w", err)
@@ -312,6 +260,27 @@ FROM queue_jobs GROUP BY state`)
 		return nil, 0, fmt.Errorf("stats: %w", err)
 	}
 	return counts, oldest, nil
+}
+
+// Stranded reports due jobs that no kind declared to this store can run: their kind or
+// format is unknown to this binary. During a rolling deployment a small number is normal on
+// the old replicas. A number that stays above zero on every replica means jobs nobody runs.
+// It returns the count and the seconds the oldest has been due.
+func (s *Store) Stranded(ctx context.Context) (int64, float64, error) {
+	can := s.kinds.pairs(s.kinds.names())
+	var (
+		count  int64
+		oldest float64
+	)
+	err := s.pool.QueryRow(ctx, `SELECT count(*),
+COALESCE(max(extract(epoch FROM clock_timestamp()-ready_at)),0)::float8
+FROM queue_jobs WHERE ready_at <= clock_timestamp()
+ AND (kind,format) NOT IN (SELECT k,f FROM unnest($1::text[],$2::int[]) AS s(k,f))`,
+		can.kinds, can.formats).Scan(&count, &oldest)
+	if err != nil {
+		return 0, 0, fmt.Errorf("stranded: %w", err)
+	}
+	return count, oldest, nil
 }
 
 // silent is the Observer used when the caller passes none.

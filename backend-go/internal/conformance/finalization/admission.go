@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 
 	wire "github.com/BasedHardware/omi/backend-go/internal/conformance/stubapi"
@@ -102,6 +103,21 @@ func Causes() []queue.Cause {
 	return []queue.Cause{CauseTranscriptUnreadable, CauseVectorFailed, CauseBYOKAbandoned}
 }
 
+// Format is the version of the job's stored metadata and checkpoint.
+const Format = 1
+
+// Steps lists every step a finalization job can be at or time.
+func Steps() []string {
+	return []string{
+		"load", "transcript", "discard", "notes", "persist", "claim", "memories", "vector", "integrations", "complete",
+	}
+}
+
+// Declaration is the kind's entry in the queue's registry.
+func Declaration(adapterCauses ...queue.Cause) queue.Kind {
+	return queue.Kind{Name: Kind, Formats: []int{Format}, Steps: Steps(), Causes: slices.Concat(Causes(), adapterCauses)}
+}
+
 type Service struct {
 	Store *queue.Store
 	Wire  *wire.Client
@@ -166,7 +182,7 @@ func (s *Service) Admit(ctx context.Context, cid string, a Admission) (string, e
 				return err
 			}
 			if _, _, err := sc.Enqueue(ctx, queue.NewJob{
-				Key: id, Tenant: a.UID, Kind: Kind, Subject: cid, Step: "load", Meta: meta,
+				Key: id, Tenant: a.UID, Kind: Kind, Format: Format, Subject: cid, Step: "load", Meta: meta,
 				Gated: account.OwnKey, Initializing: true, BudgetAllowed: true, RunAt: a.RunAt,
 			}); err != nil {
 				return err

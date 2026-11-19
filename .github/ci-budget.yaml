@@ -92,7 +92,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "New 2026-11-19: make check for backend-go (vet, lint, structural rules, race tests with Postgres 16); runs only when backend-go/ changes; 5-minute placeholder until observed",
+      "rationale": "New 2026-11-19: make check for backend-go (vet, lint, structural rules, race tests with Postgres 16 and the Firestore emulator); runs only when backend-go/ changes; 5-minute placeholder until observed",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {

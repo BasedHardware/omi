@@ -1,7 +1,8 @@
 name: Backend Go Checks
 
-# Runs `make check` for backend-go: vet, the lint contract, the structural rules and the
-# tests with the race detector, including the queue's integration tests against Postgres 16.
+# Runs `make check` for backend-go: vet, the lint contract, the structural rules and every test
+# with the race detector, against Postgres 16 and the Firestore emulator. Neither set of tests
+# may skip here. Also refuses an edit to a migration that already exists on the base branch.
 on:
   # Nightly calls run this same job against one immutable main snapshot.
   workflow_call:
@@ -58,11 +59,25 @@ jobs:
         with:
           ref: ${{ inputs.nightly_main_sha || github.sha }}
           persist-credentials: false
+          # The frozen-migrations step compares against the base branch.
+          fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
           go-version-file: backend-go/go.mod
           cache-dependency-path: backend-go/go.sum
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install firebase-tools
+        run: npm install -g firebase-tools@15
+      - name: Applied migrations are not edited
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: ./scripts/migrations-frozen.sh "$BASE_SHA"
       - name: make check
         env:
-          QUEUE_TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:5432/postgres?sslmode=disable
-        run: make check QUEUE_TEST_DATABASE_URL="$QUEUE_TEST_DATABASE_URL"
+          TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:5432/postgres?sslmode=disable
+          TEST_FIRESTORE_REQUIRED: "1"
+        run: make check
