@@ -58,6 +58,10 @@ def _references(data: dict) -> set[str]:
     return {uri for uri in (data.get('audio_uri'), result.get('result_uri'), data.get('uri')) if uri}
 
 
+def result_document(client: Any, namespace: str, segment_id: str) -> Any:
+    return client.collection(f'{namespace}_results').document(segment_id)
+
+
 def _delete_job(
     client: Any,
     namespace: str,
@@ -82,7 +86,7 @@ def _delete_job(
         if not job:
             return
         key = job['owner_key']
-        result_ref = client.collection(f'{namespace}_results').document(snapshot.id)
+        result_ref = result_document(client, namespace, snapshot.id)
         result = result_ref.get(transaction=transaction).to_dict() or {}
         if retain_ordering and not result:
             result = (job.get('source_alias_fallback') or {}).get('log_slot') or {}
@@ -138,7 +142,8 @@ def _erase_artifact(
     delete_uri: Callable[[str, str], None],
     fence: Callable[[Any], None] | None = None,
     client: Any = None,
-) -> None:
+) -> bool:
+    """Erase an artifact, returning whether its upload receipt had to stay."""
     # The default deleter enforces the requested owner's configured storage
     # prefix before any metadata repair. A foreign URI raises, so the purge
     # cannot acknowledge erasure or transfer deletion authority to that row.
@@ -174,6 +179,7 @@ def _erase_artifact(
             raise ValueError('a fenced artifact erase needs the client that owns the row')
         fenced(client.transaction())
     mirror_refresh(namespace, [('artifacts', snapshot.id)])
+    return pending
 
 
 def purge_batch_owner(
@@ -256,7 +262,7 @@ def purge_batch_owner(
                     data = snapshot.to_dict() or {}
                     result = {}
                     if table == 'jobs':
-                        result_ref = client.collection(f'{namespace}_results').document(snapshot.id)
+                        result_ref = result_document(client, namespace, snapshot.id)
                         result = result_ref.get().to_dict() or {}
                     matched = _belongs(
                         {**data, 'projection': result.get('projection') or data.get('projection')}, conversation_id

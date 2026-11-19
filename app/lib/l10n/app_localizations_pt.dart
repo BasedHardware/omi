@@ -15588,4 +15588,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Trabalho informado pelo servidor';
+
+  @override
+  String get finishNothingToProcess => 'Ainda não há nada para processar.';
+
+  @override
+  String get finishStillProcessing => 'Ainda a processar. Vai aparecer no Início.';
+
+  @override
+  String get finishBackToHome => 'Voltar ao Início';
 }

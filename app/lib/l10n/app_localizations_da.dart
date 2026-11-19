@@ -15551,4 +15551,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Arbejde rapporteret af serveren';
+
+  @override
+  String get finishNothingToProcess => 'Intet at behandle endnu.';
+
+  @override
+  String get finishStillProcessing => 'Behandles stadig. Den vises på Hjem.';
+
+  @override
+  String get finishBackToHome => 'Tilbage til Hjem';
 }

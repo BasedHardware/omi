@@ -4686,5 +4686,8 @@
     "downloadNow": "Last ned nå",
     "onWifiLater": "Senere på Wi-Fi",
     "conversationWritingSummary": "Skriver sammendraget ditt…",
-    "onTheWayServerWork": "Arbeid rapportert av serveren"
+    "onTheWayServerWork": "Arbeid rapportert av serveren",
+    "finishNothingToProcess": "Ingenting å behandle ennå.",
+    "finishStillProcessing": "Behandles fortsatt. Den vises på Hjem.",
+    "finishBackToHome": "Tilbake til Hjem"
 }

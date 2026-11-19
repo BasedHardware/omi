@@ -4686,5 +4686,8 @@
     "downloadNow": "Tải ngay",
     "onWifiLater": "Sau, qua Wi-Fi",
     "conversationWritingSummary": "Đang viết bản tóm tắt của bạn…",
-    "onTheWayServerWork": "Công việc do máy chủ báo cáo"
+    "onTheWayServerWork": "Công việc do máy chủ báo cáo",
+    "finishNothingToProcess": "Chưa có gì để xử lý.",
+    "finishStillProcessing": "Vẫn đang xử lý. Nó sẽ xuất hiện ở Trang chủ.",
+    "finishBackToHome": "Về Trang chủ"
 }

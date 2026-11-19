@@ -15448,4 +15448,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'עבודה שדווחה מהשרת';
+
+  @override
+  String get finishNothingToProcess => 'עדיין אין מה לעבד.';
+
+  @override
+  String get finishStillProcessing => 'עדיין בעיבוד. זה יופיע במסך הבית.';
+
+  @override
+  String get finishBackToHome => 'חזרה למסך הבית';
 }

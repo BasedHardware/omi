@@ -12243,5 +12243,8 @@
     "downloadNow": "Prenesi zdaj",
     "onWifiLater": "Pozneje prek Wi-Fi",
     "conversationWritingSummary": "Pišemo vaš povzetek…",
-    "onTheWayServerWork": "Delo, ki ga poroča strežnik"
+    "onTheWayServerWork": "Delo, ki ga poroča strežnik",
+    "finishNothingToProcess": "Še ni ničesar za obdelavo.",
+    "finishStillProcessing": "Še v obdelavi. Prikazalo se bo na začetni strani.",
+    "finishBackToHome": "Nazaj na začetno"
 }

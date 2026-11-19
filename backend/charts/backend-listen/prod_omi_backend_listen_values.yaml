@@ -101,6 +101,22 @@ envFrom:
 privateEnv: {}
 
 env:
+  - name: OMI_DEPLOYMENT
+    value: "prod"
+  - name: FIRESTORE_DATABASE_ID
+    value: "(default)"
+  - name: JOBSTORE_PG_HOST
+    value: "172.25.29.2"
+  - name: JOBSTORE_PG_DATABASE
+    value: "jobstore_prod"
+  - name: JOBSTORE_PG_USER
+    value: "backend-listen-runtime@based-hardware.iam"
+  - name: JOBSTORE_SHADOW_NAMESPACES
+    value: "batch_pipeline_prod"
+  - name: JOBSTORE_PRODUCTION_MIRROR
+    value: "off"
+  - name: BATCH_JOBSTORE_MODE
+    value: "firestore"
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED
     value: "false"
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT
@@ -204,7 +220,7 @@ env:
   - name: MEDIA_NOISE_MODE_SERVE_PERCENT
     value: "0"
   - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED
-    value: "false"
+    value: "true"
   - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS
     value: "24"
   - name: DEMAND_PROCESSING_ENABLED
@@ -276,6 +292,12 @@ env:
     value: "true"
   - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
     value: "true"
+  - name: CONVERSATIONS_V3_RECORDING_ROTATION
+    value: "off"
+  - name: CONVERSATIONS_V3_ROTATION_MIN_SECONDS
+    value: "180"
+  - name: CONVERSATIONS_V3_ROTATION_MAX_SECONDS
+    value: "300"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
