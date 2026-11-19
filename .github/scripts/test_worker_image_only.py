@@ -705,6 +705,7 @@ class DryRunTests(unittest.TestCase):
         self.assertTrue(result["forward"]["inverse_restores_before"])
         self.assertEqual(result["forward"]["would_write_receipt"]["before"], self.baseline["target"])
         # The inverse is built from the server's admitted preview object, not a local copy.
+        self.assertIn("rebuilds", result["forward"]["inverse_patch_note"])
         inverse = result["forward"]["inverse_patch"]
         self.assertEqual([op["value"] for op in inverse[2:]], [NEW, OLD])
         self.assertEqual(inverse[0]["value"], self.baseline["target"]["uid"])
@@ -913,9 +914,25 @@ class DryRunTests(unittest.TestCase):
             elif isinstance(node, ast.Name) and node.id in ("__import__", "eval", "exec", "compile", "getattr", "vars",
                                                               "globals", "locals", "setattr"):
                 found.append(node.id)
+        # Inside kubectl(), exactly one call is allowed: the guarded subprocess.run of a kubectl argv.
         allowed = set()
-        for function in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "kubectl"):
-            allowed |= {id(n) for n in ast.walk(function)}
+        kubectl_functions = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "kubectl"]
+        for function in kubectl_functions:
+            runs = [n for n in ast.walk(function) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+                    and n.value.id == "subprocess"]
+            calls = [n for n in ast.walk(function) if isinstance(n, ast.Call) and n.func in runs]
+            ok = (len(runs) == 1 and runs[0].attr == "run" and len(calls) == 1 and calls[0].args
+                  and isinstance(calls[0].args[0], ast.List) and isinstance(calls[0].args[0].elts[0], ast.Constant)
+                  and calls[0].args[0].elts[0].value == "kubectl")
+            first = function.body[0] if function.body else None
+            guard = (isinstance(first, ast.Expr) and isinstance(first.value, ast.Call)
+                     and getattr(first.value.func, "id", None) == "require_dry_run_allows")
+            if ok and guard:
+                allowed.add(id(runs[0]))
+            else:
+                found.append("kubectl() must first call require_dry_run_allows, then exactly one subprocess.run(['kubectl', ...])")
+        if len(kubectl_functions) != 1:
+            found.append("exactly one kubectl() definition")
         parents = {id(child): parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
         for node in ast.walk(tree):
             if not (isinstance(node, ast.Name) and node.id in ("os", "subprocess")):
@@ -932,6 +949,16 @@ class DryRunTests(unittest.TestCase):
 
     def test_kubectl_is_the_only_process_or_network_boundary(self):
         self.assertEqual(self.boundary_violations(Path(worker.__file__).read_text()), [])
+
+    def test_boundary_check_rejects_extra_calls_inside_kubectl(self):
+        source = Path(worker.__file__).read_text()
+        anchor = "    require_dry_run_allows(args)\n    result = subprocess.run("
+        self.assertEqual(source.count(anchor), 1)
+        for extra in ("    subprocess.Popen(['kubectl', 'delete'])\n", "    subprocess.run(['kubectl', 'delete'])\n"):
+            with self.subTest(extra=extra):
+                bad = source.replace(anchor, anchor.replace("    result", extra + "    result"))
+                self.assertTrue(self.boundary_violations(bad))
+        self.assertTrue(self.boundary_violations(source.replace("    require_dry_run_allows(args)\n    result", "    result")))
 
     def test_boundary_check_rejects_alternate_clients(self):
         source = Path(worker.__file__).read_text()
@@ -1186,7 +1213,7 @@ class WorkflowTests(unittest.TestCase):
 
     # One argument: a bare word, an env expansion, or a double-quoted string of literals and env
     # expansions. No shell separators, pipes, command substitution or backticks anywhere.
-    _ARG = r'(?:(?:[^;&|`$()\'"\s]|\$\{?[A-Z_]+\}?)+|"(?:[^"`$\\;&|()]|\$\{?[A-Z_]+\}?)*")'
+    _ARG = r'(?:(?:[^;&|`$()<>\\\'"\s]|\$\{?[A-Z_]+\}?)+|"(?:[^"`$\\;&|()]|\$\{?[A-Z_]+\}?)*")'
     DRY_RUN_STEP_LINE = re.compile(
         r"^(?:set -euo pipefail|umask 077|fi|\{|\}(?: >> \"\$GITHUB_STEP_SUMMARY\")?|rollback_args=\(\)"
         r"|rollback_args=\(--rollback-receipt " + _ARG + r"\)"
@@ -1252,7 +1279,7 @@ class WorkflowTests(unittest.TestCase):
         ("deploy", 3, "Select merged production source and image tag"): "22f8a15c2be33be8006fc5a2a8d85f4365193ad0d5f53bcd858cb7567dae70a5",
         ("deploy", 7, "Resolve deployment target"): "70e03ebe8dfbbf768522c6bc295b2c93c160c8e9346d29e3946a3afe55df14b5",
         ("deploy", 11, None): "b887a196f21fac03886c7dfbfae52c6b842028be839d6f96d5f07d74ba87c79c",  # gcloud auth configure-docker
-        ("deploy", 13, "Verify promoted worker digest"): "2a66d2bad4547cd05d49759e0ce8f883c186f80ee07855ceed3750359379acb7",
+        ("deploy", 13, "Verify promoted worker digest"): "cdc8a53e12e5dc8956abc88a2c11185c6a908728d7bb8a8965d018a6d3d536d1",
         ("deploy", 16, "Dry-run worker image preserving live runtime"): "344ade981770f2dbfb00d02bca7c30a8cf24000b144de5410256f0ac44f5a40e",
     }
 
@@ -1265,14 +1292,14 @@ class WorkflowTests(unittest.TestCase):
 
     # Workflow- and job-level execution context (env, defaults, permissions, container, environment) that
     # applies to every dry-run-reachable step; any edit fails here until reviewed.
-    DRY_RUN_CONTEXT_DIGEST = "a9cfbb4c845e4e23d7cae5c76d3f1991a55f4205cc7bc1e351819dadc05ccef3"
+    DRY_RUN_CONTEXT_DIGEST = "8882f0924ea82e37d94e3cb2b7e9f68a6bb37272f3d393b13b91b89a32f7f591"
 
     def context_digest(self):
         context = {
             "workflow": {k: self.workflow.get(k) for k in ("env", "defaults", "permissions", "concurrency")},
             "jobs": {name: {k: job.get(k) for k in ("env", "defaults", "permissions", "container", "services",
                                                       "environment", "runs-on", "if", "uses", "concurrency",
-                                                      "strategy", "continue-on-error", "needs")}
+                                                      "strategy", "continue-on-error", "needs", "timeout-minutes")}
                      for name, job in self.workflow["jobs"].items()},
         }
         return hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
@@ -1401,11 +1428,20 @@ class WorkflowTests(unittest.TestCase):
             self.assertLess(names.index(gate), names.index(step["name"]))
         self.assertNotIn("continue-on-error", step)
 
+    INPUTS_DIGEST = "dd3e92856902855affec400dd6e2022ad8e3a07154dcacdfe4c630417efbc6eb"
+
+    def test_registry_read_reachable_in_dry_run_is_time_bounded(self):
+        # The mode holds prod-train; a hung registry read must not hold it for the whole job cap.
+        step = self.step("Verify promoted worker digest")
+        self.assertLessEqual(step.get("timeout-minutes", 999), 10)
+
     def test_dry_run_input_is_declared_and_validated(self):
         inputs = self.workflow[True]["workflow_dispatch"]["inputs"] if True in self.workflow else self.workflow["on"]["workflow_dispatch"]["inputs"]
         self.assertEqual(inputs["worker_dry_run"]["type"], "boolean")
         self.assertFalse(inputs["worker_dry_run"]["default"])
         self.assertLessEqual(len(inputs), 10)  # GitHub's workflow_dispatch input limit
+        # Every input's declaration (type, default, required, options) is reviewed with this mode.
+        self.assertEqual(hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest(), self.INPUTS_DIGEST)
         step = self.step("Validate Environment Input")
         script = step["run"].replace("${{ github.event.inputs.environment }}", "prod").replace("${{ inputs.environment }}", "prod")
         digest = "sha256:" + "1" * 64

@@ -306,6 +306,8 @@ jobs:
       - name: Verify promoted worker digest
         id: promote
         if: github.event.inputs.image_digest != ''
+        # Reachable in worker_dry_run mode, which holds prod-train: bound the registry read.
+        timeout-minutes: 5
         env:
           IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
           IMAGE_DIGEST: ${{ github.event.inputs.image_digest }}

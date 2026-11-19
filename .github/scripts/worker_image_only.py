@@ -438,7 +438,9 @@ def dry_run(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
             except ValueError as exc:
                 raise ValueError(f"inverse would refuse after the forward roll: {exc}") from None
             result["forward"] = {"admitted": True, "after": identity, "patch": patch, "would_write_receipt": receipt,
-                                 "inverse_patch": reverse, "inverse_restores_before": inverse_restores_before}
+                                 "inverse_patch": reverse, "inverse_restores_before": inverse_restores_before,
+                                 "inverse_patch_note": "identity and shape check only, not replayable: the rollback "
+                                                       "writer rebuilds the CAS patch from the post-forward live object"}
         identity, patch, _ = server_preview(run, fresh, live_image, allow_same=True)
         require(identity == actual["target"], "prior-image admission changed the live identity")
         result["prior_image_admission"] = {"admitted": True, "image": live_image, "patch": patch, "noop": True}
