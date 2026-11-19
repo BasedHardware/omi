@@ -41,7 +41,7 @@ def test_outline_labels_are_stretch_local_and_abstentions_share_one_label(monkey
         'S2',
         'S?',
         'S1',
-        'S?',
+        'Omi',
         'Synthetic contact',
         'ME',
     ]
@@ -60,7 +60,8 @@ def test_six_short_topics_fold_into_one_visible_517_word_card():
     row = planner.build('synthetic', window, {'r': raw})
     assert not row['home_hidden']
     assert planner.word_count(window['lines']) == 517
-    assert len(row['structured']['sections']) >= 5
+    assert len(row['structured']['sections']) == 5
+    assert all(section['heading'] != row['structured']['title'] for section in row['structured']['sections'])
 
 
 def test_silence_does_not_pool_word_eligibility():
@@ -98,3 +99,41 @@ def test_cap_does_not_pool_word_eligibility(monkeypatch):
         planner.build('synthetic', window, {'r': raw})['home_hidden_reason'] == 'below_word_minimum'
         for window in windows
     )
+
+
+def test_short_media_and_recognized_background_keep_their_visibility_policy():
+    raw = recording([segment(0, 10), segment(2, 320), segment(4, 10), segment(6, 20)], _v3_wearer_recognized=True)
+    groups = outline.stretches([raw], AT + timedelta(minutes=10))
+    entries = [[{**entry(1), 'kind': 'media'}, entry(2), {**entry(3), 'kind': 'background'}, entry(4)]]
+    windows = planner.windows(groups, entries, cohesion=True)
+    rows = [planner.build('synthetic', window, {'r': raw}) for window in windows]
+    assert [row['home_hidden_reason'] for row in rows] == [
+        'media',
+        'conversation',
+        'background_wearer_recognized',
+        'conversation',
+    ]
+    assert [len(row['transcript_segments']) for row in rows] == [1, 1, 1, 1]
+    assert planner.word_count(windows[-1]['lines']) == 20
+    assert not rows[-1]['home_hidden']
+
+
+def test_late_fragment_does_not_borrow_words_from_a_published_claim():
+    initial = recording([segment(0, 480)])
+    now = AT + timedelta(minutes=10)
+    initial_groups = outline.stretches([initial], now)
+    (initial_window,) = planner.windows(initial_groups, [[entry(1)]], cohesion=True)
+    prior = planner.build('synthetic', initial_window, {'r': initial})
+    raw = {
+        **initial,
+        'transcript_segments': [*initial['transcript_segments'], segment(2, 37)],
+        'claims': [{'conversation_id': prior['id'], **claim} for claim in prior['_v3_claims']['r']],
+    }
+    groups = outline.stretches([raw], now)
+    planned = planner.windows(groups, [[entry(1), entry(2)]], cohesion=True)
+    windows = planner.preserve_finished_windows(planned, {prior['id']: prior}, {'r': raw})
+    kept, late = windows
+    assert kept['existing_id'] == prior['id']
+    row = planner.build('synthetic', late, {'r': raw})
+    assert row['home_hidden_reason'] == 'below_word_minimum'
+    assert row['_v3_claims']['r'] == [{'start': AT + timedelta(seconds=2), 'end': AT + timedelta(seconds=3)}]

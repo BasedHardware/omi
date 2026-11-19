@@ -8,6 +8,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 
+from utils.speakers.display import outline_speaker_labels
+
 
 def utc(value):
     if isinstance(value, str):
@@ -159,12 +161,10 @@ def wanted(groups, cache):
 def messages(group, tz, *, cohesion=False):
     lines = group['lines']
     if cohesion:
-        from utils.speakers.display import outline_speaker_labels
-
         labels = outline_speaker_labels([line['segment'] for line in lines])
         correction = (
             '\nS1, S2 and so on are diarization labels, not names. S? marks unassigned speech. '
-            'S? can refer to different people and does not by itself mark a change of people.'
+            'S? can refer to different people and does not by itself mark a change of people. Omi denotes the assistant.'
         )
     else:
         labels = [line['speaker'] for line in lines]

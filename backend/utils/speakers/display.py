@@ -54,11 +54,12 @@ def outline_speaker_labels(segments: Sequence[Mapping[str, Any]]) -> list[str]:
             labels.append('ME')
         elif name := segment.get('person_name'):
             labels.append(str(name))
+        elif key == 'speaker_99' or speaker_id == OMI_SPEAKER_ID_SENTINEL:
+            labels.append('Omi')
         elif (
             (not key and speaker_id is None)
-            or key in {'speaker', 'unknown', 'unknown speaker', 'unassigned', 's?', 'speaker_99'}
+            or key in {'speaker', 'unknown', 'unknown speaker', 'unassigned', 's?'}
             or key.startswith(('batch_unassigned_', 'unassigned_', 'abstain_', 'abstained_'))
-            or speaker_id == OMI_SPEAKER_ID_SENTINEL
         ):
             labels.append('S?')
         else:

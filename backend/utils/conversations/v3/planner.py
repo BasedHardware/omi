@@ -8,6 +8,7 @@ from copy import deepcopy
 from datetime import timedelta
 from uuid import NAMESPACE_URL, uuid5
 from difflib import SequenceMatcher
+from itertools import groupby
 from typing import Any
 
 CAP = timedelta(hours=2)
@@ -42,10 +43,11 @@ def _as_sections(entries: list[dict[str, Any]], *, primary: dict[str, Any] | Non
     first = entries[0]
     # Participating speech determines the card when it shares a stretch with passive audio.
     priority = {'conversation': 0, 'voice_work': 1}
+    keep_later_primary_section = primary is None
     primary = primary or min(entries, key=lambda entry: priority.get(entry['kind'], 2))
     sections = []
     for entry in entries:
-        if entry is not first or entry is not primary:
+        if entry is not primary or (keep_later_primary_section and entry is not first):
             sections.append({'first_line': entry['first_line'], 'title': entry['title']})
         sections.extend(entry.get('sections') or [])
     return [
@@ -60,16 +62,11 @@ def _as_sections(entries: list[dict[str, Any]], *, primary: dict[str, Any] | Non
     ]
 
 
-def _fold_short_topics(lines: list, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _fold_participating_topics(entries, counts):
     buckets: list[list[dict[str, Any]]] = []
     leading = []
-    counts = {}
-    for index, entry in enumerate(entries):
-        start = entry['first_line'] - 1
-        end = entries[index + 1]['first_line'] - 1 if index + 1 < len(entries) else len(lines)
-        words = word_count(lines[start:end])
-        counts[entry['first_line']] = words
-        if words >= visibility.MIN_HOME_WORDS:
+    for entry in entries:
+        if counts[entry['first_line']] >= visibility.MIN_HOME_WORDS:
             buckets.append([*leading, entry])
             leading = []
         elif buckets:
@@ -78,22 +75,28 @@ def _fold_short_topics(lines: list, entries: list[dict[str, Any]]) -> list[dict[
             leading.append(entry)
     if leading:
         buckets.append(leading)
-    folded = []
     for bucket in buckets:
         if len(bucket) == 1:
-            folded.append(bucket[0])
-            continue
-        # Use the adjacent substantive topic as the heading when both have the same participation.
-        primary = max(
-            bucket,
-            key=lambda entry: (entry['kind'] in {'conversation', 'voice_work'}, counts[entry['first_line']]),
-        )
-        folded.extend(_as_sections(bucket, primary=primary))
-    return folded
+            yield bucket[0]
+        else:
+            primary = max(bucket, key=lambda entry: counts[entry['first_line']])
+            yield _as_sections(bucket, primary=primary)[0]
+
+
+def _fold_short_topics(lines: list, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    starts = [entry['first_line'] - 1 for entry in entries]
+    counts = {start + 1: word_count(lines[start:end]) for start, end in zip(starts, starts[1:] + [len(lines)])}
+    result = []
+    # Media and background retain their independent Home visibility and wearer evidence.
+    for participating, topics in groupby(entries, key=lambda entry: entry['kind'] in {'conversation', 'voice_work'}):
+        result.extend(_fold_participating_topics(topics, counts) if participating else topics)
+    return result
 
 
 def _cohesive_groups(groups, outlines) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
     for group, entries in zip(groups, outlines):
+        if not entries:
+            continue
         manual = group.get('manual_end') or group.get('after_manual_end')
         cut_points = [entry['first_line'] - 1 for entry in entries]
         cut_points.extend(
@@ -444,6 +447,7 @@ def preserve_finished_windows(planned, existing, recordings=None):
     fresh_metadata = {'_published': published, '_published_ids': published_ids}
     for window in planned:
         gaps = []
+        had_owner = False
         for line in window['lines']:
             claims = claims_by_recording.get(line['conversation_id'])
             owner = next(
@@ -451,8 +455,11 @@ def preserve_finished_windows(planned, existing, recordings=None):
                 None,
             )
             if owner:
+                had_owner = True
                 if gaps and not window.get('_keep_unmatched_together'):
-                    fresh.append({**window, **fresh_metadata, 'lines': gaps, 'manual_end': False})
+                    fragment = {**window, **fresh_metadata, 'lines': gaps, 'manual_end': False}
+                    fragment.pop('_stretch_words', None)
+                    fresh.append(fragment)
                     gaps = []
                 target = retained.setdefault(
                     owner['id'],
@@ -474,12 +481,14 @@ def preserve_finished_windows(planned, existing, recordings=None):
             else:
                 gaps.append(line)
         if gaps:
-            fresh.append(
-                {
-                    **window,
-                    **fresh_metadata,
-                    'lines': gaps,
-                    'manual_end': bool(window.get('manual_end') and gaps[-1] is window['lines'][-1]),
-                }
-            )
+            fragment = {
+                **window,
+                **fresh_metadata,
+                'lines': gaps,
+                'manual_end': bool(window.get('manual_end') and gaps[-1] is window['lines'][-1]),
+            }
+            if had_owner:
+                # Published speech cannot qualify a new piece that contains only the unmatched lines.
+                fragment.pop('_stretch_words', None)
+            fresh.append(fragment)
     return sorted([*retained.values(), *fresh], key=lambda w: w['lines'][0]['start'])
