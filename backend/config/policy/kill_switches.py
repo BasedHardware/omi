@@ -56,6 +56,7 @@ KILL_SWITCHES = {
     'CAPTURE_RETRY_CAP_ENFORCED': False,
     'BATCH_HELD_REDRIVE_COUNTER_ENABLED': True,
     'BATCH_HELD_REDRIVE_BUDGET_ENABLED': False,
+    'BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED': True,
 }
 DISABLE_ONLY_SWITCHES = frozenset({'BATCH_PIPELINE_LEADER_LEASE_ENABLED'})
 # Trimmed, case-insensitive true means on; never use the capture-coverage
