@@ -62,6 +62,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/conversation_summary_stream.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart' show Wal;
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -314,6 +315,7 @@ class _Home {
   Completer<void>? detailBarrier;
   bool detailFails = false;
   bool detailDenied = false;
+  bool detailHidden = false;
 
   Future<({ServerConversation? item, bool ok, bool inaccessible})> detailResult(String id) async {
     final item = await detailRead(id);
@@ -327,7 +329,7 @@ class _Home {
     return _conversation('live-1', _now.subtract(const Duration(minutes: 20)), 'Launch checklist',
         lastSpeech: _now.subtract(const Duration(minutes: 9)),
         segments: detailSegments,
-        v3: ConversationV3Fields(kind: 'conversation', tileState: detailState));
+        v3: ConversationV3Fields(kind: 'conversation', tileState: detailState, homeHidden: detailHidden));
   }
 
   /// False once the conversation in progress has closed.
@@ -729,57 +731,69 @@ void main() {
     final hydrate = Completer<void>();
     home.detailBarrier = hydrate;
     home.detailSegments = recapSpeech;
-    var opens = 0;
-    LiveSummarySection.debugStream = (_) {
-      opens++;
+    final requests = <LiveRecapRequest>[];
+    int opens() => requests.length;
+    LiveSummarySection.debugLiveStream = (_, recap) {
+      requests.add(recap);
       return Stream.value(const SummaryFailed('synthetic'));
     };
-    addTearDown(() => LiveSummarySection.debugStream = null);
+    addTearDown(() => LiveSummarySection.debugLiveStream = null);
 
     await tester.tap(find.text('Launch checklist'));
     await settleDetailTab(tester);
-    expect(opens, 0);
+    expect(opens(), 0);
     await tester.tap(find.text('Summary'));
     await tester.pump(const Duration(milliseconds: 100));
-    expect(opens, 0, reason: 'the tab has not settled');
+    expect(opens(), 0, reason: 'the tab has not settled');
     await settleDetailTab(tester);
-    expect(opens, 0, reason: 'initial authoritative data has not arrived');
+    expect(opens(), 0, reason: 'initial authoritative data has not arrived');
     hydrate.complete();
     await settleDetailTab(tester);
-    expect(opens, 1);
+    expect(opens(), 1);
+    await tester.tap(find.byKey(const Key('live_summary_catch_up')));
+    await settleDetailTab(tester);
+    expect(opens(), 2, reason: 'a retry in the same continuous visit is a new request');
+    expect(requests.first.intervalId, requests[1].intervalId);
+    expect(requests.first.requestId, isNot(requests[1].requestId));
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump(const Duration(seconds: 15));
     await settleDetailTab(tester);
-    expect(opens, 1, reason: 'resume and periodic refresh cannot spend');
+    expect(opens(), 2, reason: 'resume and periodic refresh cannot spend');
     await tester.tap(find.text('Transcript'));
     await settleDetailTab(tester);
     await tester.tap(find.text('Summary'));
     await settleDetailTab(tester);
-    expect(opens, 1, reason: 'an attempted recap does not auto-retry');
+    expect(opens(), 2, reason: 'an attempted recap does not auto-retry');
     await tester.tap(find.byKey(const Key('live_summary_catch_up')));
     await settleDetailTab(tester);
-    expect(opens, 2, reason: 'explicit retry is allowed');
+    expect(opens(), 3, reason: 'explicit retry is allowed');
+    expect(
+        requests.map((r) => r.trigger), [LiveRecapTrigger.firstOpen, LiveRecapTrigger.retry, LiveRecapTrigger.retry]);
+    expect(requests[1].intervalId, isNot(requests.last.intervalId));
+    expect(requests.map((r) => r.requestId).toSet(), hasLength(3));
     await _dispose(tester, home);
   });
 
   testWidgets('live recap refresh requires uninterrupted foreground Summary viewing and new speech', (tester) async {
     final home = await _pumpHome(tester, v3: true);
     home.detailSegments = recapSpeech;
-    var opens = 0;
-    LiveSummarySection.debugStream = (_) {
-      opens++;
-      return Stream.value(SummaryDone(Structured('Recap', 'Recap $opens'), _now.subtract(const Duration(minutes: 19))));
+    final requests = <LiveRecapRequest>[];
+    int opens() => requests.length;
+    LiveSummarySection.debugLiveStream = (_, recap) {
+      requests.add(recap);
+      return Stream.value(
+          SummaryDone(Structured('Recap', 'Recap ${opens()}'), _now.subtract(const Duration(minutes: 19))));
     };
-    addTearDown(() => LiveSummarySection.debugStream = null);
+    addTearDown(() => LiveSummarySection.debugLiveStream = null);
     await tester.tap(find.text('Launch checklist'));
     await settleDetailTab(tester);
     await tester.tap(find.text('Summary'));
     await settleDetailTab(tester);
-    expect(opens, 1);
+    expect(opens(), 1);
     await tester.pump(const Duration(minutes: 5));
     await settleDetailTab(tester);
-    expect(opens, 1, reason: 'unchanged transcript');
+    expect(opens(), 1, reason: 'unchanged transcript');
     home.detailSegments = [
       ...recapSpeech,
       TranscriptSegment(
@@ -817,13 +831,77 @@ void main() {
     await settleDetailTab(tester);
     await tester.pump(const Duration(minutes: 4, seconds: 58));
     await settleDetailTab(tester);
-    expect(opens, 1, reason: 'each interruption resets the five-minute interval');
+    expect(opens(), 1, reason: 'each interruption resets the five-minute interval');
     await tester.pump(const Duration(seconds: 3));
     await settleDetailTab(tester);
-    expect(opens, 2);
+    expect(opens(), 2);
     await tester.pump(const Duration(minutes: 5));
     await settleDetailTab(tester);
-    expect(opens, 2, reason: 'no duplicate generation');
+    expect(opens(), 2, reason: 'no duplicate generation');
+    expect(requests.map((r) => r.trigger), [LiveRecapTrigger.firstOpen, LiveRecapTrigger.timedRefresh]);
+    expect(requests.first.intervalId, isNot(requests.last.intervalId));
+    expect(requests.first.requestId, isNot(requests.last.requestId));
+    final uuidV4 = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$');
+    for (final request in requests) {
+      expect(request.requestId, matches(uuidV4));
+      expect(request.intervalId, matches(uuidV4));
+    }
+    await _dispose(tester, home);
+  });
+
+  testWidgets('hidden or ineligible live detail cancels the interval before any timed request', (tester) async {
+    final home = await _pumpHome(tester, v3: true);
+    home.detailSegments = recapSpeech;
+    final requests = <LiveRecapRequest>[];
+    LiveSummarySection.debugLiveStream = (_, recap) {
+      requests.add(recap);
+      return Stream.value(
+          SummaryDone(Structured('Recap', 'Visible recap.'), _now.subtract(const Duration(minutes: 19))));
+    };
+    addTearDown(() => LiveSummarySection.debugLiveStream = null);
+    await tester.tap(find.text('Launch checklist'));
+    await settleDetailTab(tester);
+    await tester.tap(find.text('Summary'));
+    await settleDetailTab(tester);
+    expect(requests, hasLength(1));
+
+    await tester.pump(const Duration(minutes: 4));
+    home.detailHidden = true;
+    await tester.pump(const Duration(seconds: 15));
+    await settleDetailTab(tester);
+    await tester.pump(const Duration(minutes: 6));
+    await settleDetailTab(tester);
+    expect(requests, hasLength(1));
+
+    home.detailHidden = false;
+    home.detailSegments = _liveSoFar;
+    await tester.pump(const Duration(seconds: 15));
+    await settleDetailTab(tester);
+    await tester.pump(const Duration(minutes: 6));
+    await settleDetailTab(tester);
+    expect(requests, hasLength(1), reason: 'short speech never starts an interval');
+    home.detailSegments = [
+      ...recapSpeech,
+      TranscriptSegment(
+          id: 'new',
+          text: 'New eligible speech.',
+          start: 661,
+          end: 664,
+          speaker: 'SPEAKER_00',
+          isUser: true,
+          personId: null,
+          translations: []),
+    ];
+    await tester.pump(const Duration(seconds: 15));
+    await settleDetailTab(tester);
+    await tester.pump(const Duration(minutes: 4, seconds: 58));
+    await settleDetailTab(tester);
+    expect(requests, hasLength(1));
+    await tester.pump(const Duration(seconds: 3));
+    await settleDetailTab(tester);
+    expect(requests, hasLength(2));
+    expect(requests.last.trigger, LiveRecapTrigger.timedRefresh);
+    expect(requests.last.intervalId, isNot(requests.first.intervalId));
     await _dispose(tester, home);
   });
 

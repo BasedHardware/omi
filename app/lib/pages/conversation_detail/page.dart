@@ -10,12 +10,14 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
+import 'package:omi/pages/conversation_detail/widgets/live_summary_section.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/pages/episodes/live_transcript_view.dart' show LivePreviewTail;
@@ -177,6 +179,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   bool _tabDragStartedOnTranscript = false;
   bool _initialLiveHydrationFinished = false;
   Timer? _liveSummaryTimer;
+  String? _liveSummaryInterval;
   int _liveSummaryTick = 0;
   int _summaryOpen = 0;
   int _claimedSummaryOpen = 0;
@@ -321,6 +324,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         !c.isLocked &&
         !c.discarded &&
         c.v3?.homeHidden != true &&
+        LiveSummarySection.speechEligible(c) &&
         _detailProvider.hasHydratedDetail(c.id) &&
         _summaryTabIsVisible();
   }
@@ -329,8 +333,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     if (!_viewingLiveSummary) {
       _liveSummaryTimer?.cancel();
       _liveSummaryTimer = null;
+      _liveSummaryInterval = null;
       return;
     }
+    _liveSummaryInterval ??= const Uuid().v4();
     _liveSummaryTimer ??= Timer.periodic(const Duration(minutes: 5), (_) {
       if (_viewingLiveSummary) {
         setState(() => _liveSummaryTick++);
@@ -339,6 +345,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       }
     });
   }
+
+  String? _liveSummaryIntervalForDispatch() => _viewingLiveSummary ? _liveSummaryInterval : null;
 
   bool _claimSummaryOpen(int open) {
     if (open != _summaryOpen || open <= _claimedSummaryOpen) return false;
@@ -1546,6 +1554,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                               liveSummaryTick: _liveSummaryTick,
                               claimLiveSummaryOpen: _claimSummaryOpen,
                               isLiveSummaryVisible: _summaryTabIsVisible,
+                              liveSummaryInterval: _liveSummaryIntervalForDispatch,
                               onOpenSource: (id) {
                                 final segments = detailProvider.conversation.transcriptSegments;
                                 final segment = segments.where((segment) => segment.id == id).firstOrNull;

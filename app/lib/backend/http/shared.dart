@@ -1113,6 +1113,17 @@ Stream<String> _streamErrorOrThrow(http.StreamedResponse response) async* {
       }
       return;
     }
+    if (errorResponse.statusCode == 404) {
+      try {
+        final error = jsonDecode(errorResponse.body);
+        if (error is Map && error['detail'] == 'live_recap_unavailable') {
+          throw const ChatStreamException(ChatStreamFailureClass.server,
+              statusCode: 404, detail: 'live_recap_unavailable');
+        }
+      } on FormatException {
+        // Other 404 responses keep the normal streaming failure classification.
+      }
+    }
     throw ChatStreamException(ChatStreamFailureClass.server, statusCode: errorResponse.statusCode);
   } catch (e) {
     throw e is ChatStreamException ? e : _classifyStreamError(e);

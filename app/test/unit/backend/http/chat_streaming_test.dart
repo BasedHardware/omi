@@ -20,6 +20,11 @@ import 'package:omi/services/auth_service.dart';
 
 void main() {
   const messagesUrl = 'http://127.0.0.1:9/v2/messages';
+  const recapProof = (
+    trigger: LiveRecapTrigger.firstOpen,
+    requestId: '89abcde0-0000-4000-8000-000000000000',
+    intervalId: 'deafbee0-0000-4000-8000-000000000000',
+  );
 
   setUpAll(() async {
     Env.init(const _EnvFields());
@@ -51,12 +56,48 @@ void main() {
       return sse(const [], status: 404);
     });
     expect(
-      await streamConversationSummary('conversation', liveCatchup: true, seams: transport).toList(),
+      await streamConversationSummary('conversation', recap: recapProof, canDispatch: () => true, seams: transport)
+          .toList(),
       [isA<SummaryFailed>()],
     );
     expect(paths, ['/v1/conversations/conversation/summary/live-catchup/stream']);
     await streamConversationSummary('conversation', seams: transport).toList();
     expect(paths.last, '/v1/conversations/conversation/summary/stream');
+  });
+
+  test('live recap sends proof once per logical request and recognizes only typed denial', () async {
+    final requests = <http.BaseRequest>[];
+    const recap = (
+      trigger: LiveRecapTrigger.timedRefresh,
+      requestId: '89abcde0-0000-4000-8000-000000000000',
+      intervalId: 'deafbee0-0000-4000-8000-000000000000',
+    );
+    final auth = AuthService.forTesting(tokenGateway: _Gateway(), refreshDelay: (_) async {});
+    final transport = ApiStreamingSeams(
+      headers: (request) async => {...request.headers, 'Authorization': 'Bearer token'},
+      auth: auth,
+      transport: (request) async {
+        requests.add(request);
+        return requests.length == 1
+            ? sse(const [], status: 401)
+            : http.StreamedResponse(
+                Stream.value(utf8.encode('{"detail":"live_recap_unavailable"}')),
+                404,
+              );
+      },
+    );
+    final events =
+        await streamConversationSummary('conversation', recap: recap, canDispatch: () => true, seams: transport)
+            .toList();
+    expect(events.single, isA<SummaryFailed>().having((e) => e.detail, 'detail', 'live_recap_unavailable'));
+    expect(requests, hasLength(2));
+    for (final request in requests) {
+      expect(request.headers['X-Omi-Recap-Trigger'], 'timed_refresh');
+      expect(request.headers['X-Omi-Recap-Request'], recap.requestId);
+      expect(request.headers['X-Omi-Recap-Interval'], recap.intervalId);
+      expect(request.headers['X-Omi-Recap-Foreground'], 'true');
+      expect(request.headers['X-Omi-Recap-Speech-Eligible'], 'true');
+    }
   });
 
   test('live catch-up refuses stale dispatch after asynchronous header preparation', () async {
@@ -75,7 +116,7 @@ void main() {
     expect(
       await streamConversationSummary(
         'conversation',
-        liveCatchup: true,
+        recap: recapProof,
         seams: transport,
         canDispatch: () => stillCurrent,
       ).toList(),
@@ -104,7 +145,7 @@ void main() {
     expect(
       await streamConversationSummary(
         'conversation',
-        liveCatchup: true,
+        recap: recapProof,
         seams: transport,
         canDispatch: () => stillCurrent,
       ).toList(),

@@ -38,6 +38,7 @@ class SummaryTab extends StatefulWidget {
   final int liveSummaryTick;
   final bool Function(int)? claimLiveSummaryOpen;
   final bool Function()? isLiveSummaryVisible;
+  final String? Function()? liveSummaryInterval;
   final ValueChanged<String>? onOpenSource;
   final String searchQuery;
   final int currentResultIndex;
@@ -58,6 +59,7 @@ class SummaryTab extends StatefulWidget {
       this.liveSummaryTick = 0,
       this.claimLiveSummaryOpen,
       this.isLiveSummaryVisible,
+      this.liveSummaryInterval,
       this.onOpenSource,
       this.searchQuery = '',
       this.currentResultIndex = -1,
@@ -162,6 +164,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                             conversation: conversation,
                             open: widget.liveSummaryOpen,
                             refreshTick: widget.liveSummaryTick,
+                            liveInterval: widget.liveSummaryInterval,
                             claimOpen: widget.claimLiveSummaryOpen,
                             detailHydrated: provider.hasHydratedDetail(conversation.id),
                             detailReadFailed: provider.detailLoad == ConversationDetailLoad.failed,

@@ -30,6 +30,8 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 import '../helpers/sfpro_font_fixtures.dart';
 
+String _testRecapInterval() => 'deafbee0-0000-4000-8000-000000000000';
+
 ServerConversation _conversation({
   ConversationTileState? state,
   DateTime? covers,
@@ -310,6 +312,7 @@ void main() {
         translations: [],
       ));
       Future<void> show(int tick) => tester.pumpWidget(liveSnapshot(LiveSummarySection(
+            liveInterval: _testRecapInterval,
             refreshTick: tick,
             conversation: conversation,
             open: 1,
@@ -357,20 +360,82 @@ void main() {
       unawaited(events.close());
     });
 
-    testWidgets('a policy refusal shows recent speech without offering a paid retry', (tester) async {
-      final conversation = _conversation(state: ConversationTileState.live, speech: enoughSpeech);
+    testWidgets('disposing Summary cancels the in-flight live recap subscription', (tester) async {
+      var canceled = false;
+      final events = StreamController<SummaryStreamEvent>(onCancel: () => canceled = true);
       await tester.pumpWidget(liveSnapshot(LiveSummarySection(
-        conversation: conversation,
+        conversation: _conversation(state: ConversationTileState.live, speech: enoughSpeech),
+        liveInterval: _testRecapInterval,
         open: 1,
-        stream: (_) => Stream.value(const SummaryFailed('live_recap_unavailable')),
+        stream: (_) => events.stream,
         refresh: () async => false,
         onActiveChanged: (_) {},
       )));
       await tester.pump();
+      expect(events.hasListener, isTrue);
+      await tester.pumpWidget(const SizedBox());
+      expect(canceled, isTrue);
+      unawaited(events.close());
+    });
+
+    testWidgets('redacted live detail cannot render a legacy structured recap', (tester) async {
+      final row = ServerConversation.fromJson({
+        ..._conversation(state: ConversationTileState.live, speech: enoughSpeech).toJson(),
+        'structured': {'title': 'Legacy', 'overview': 'The legacy paid body.'},
+        'summary_covers_through': DateTime(2026, 11, 16, 9).toIso8601String(),
+      });
+      expect(row.v3?.summaryCoversThrough, isNotNull);
+      expect(row.v3?.liveSummary, isNull);
+      await tester.pumpWidget(liveSnapshot(LiveSummarySection(
+        conversation: row,
+        liveInterval: _testRecapInterval,
+        stream: (_) => throw StateError('Redacted preview reads must be passive'),
+        refresh: () async => false,
+        onActiveChanged: (_) {},
+      )));
       await tester.pump();
+      expect(find.textContaining('The legacy paid body.'), findsNothing);
+      expect(find.byKey(const Key('live_summary_coverage')), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a policy refusal removes a saved recap and disables retry or another timer', (tester) async {
+      final through = DateTime(2026, 11, 16, 9);
+      final conversation = ServerConversation.fromJson({
+        ..._conversation(state: ConversationTileState.live, speech: enoughSpeech).toJson(),
+        'live_summary': {
+          'structured': {'title': 'Launch', 'overview': 'The saved body.'},
+          'summary_covers_through': through.toIso8601String(),
+        },
+      });
+      var opens = 0;
+      Future<void> show(int tick) => tester.pumpWidget(liveSnapshot(LiveSummarySection(
+            conversation: conversation,
+            liveInterval: _testRecapInterval,
+            open: 1,
+            refreshTick: tick,
+            stream: (_) {
+              opens++;
+              return Stream.value(const SummaryFailed('live_recap_unavailable'));
+            },
+            refresh: () async => false,
+            onActiveChanged: (_) {},
+          )));
+      await show(0);
+      await tester.pump();
+      expect(find.textContaining('The saved body.'), findsOneWidget);
+      expect(opens, 0, reason: 'a saved recap suppresses first-open spend');
+      await show(1);
+      await tester.pump();
+      await tester.pump();
+      expect(opens, 1);
+      expect(find.textContaining('The saved body.'), findsNothing);
+      expect(find.byKey(const Key('live_summary_coverage')), findsNothing);
       expect(find.byKey(const Key('live_summary_recent_transcript')), findsOneWidget);
       expect(find.byKey(const Key('live_summary_catch_up')), findsNothing);
-      expect(find.text('Try again'), findsNothing);
+      await show(2);
+      await tester.pump();
+      expect(opens, 1);
       await tester.pumpWidget(const SizedBox());
     });
 
@@ -383,6 +448,7 @@ void main() {
         rebuild = setState;
         return CustomScrollView(slivers: [
           LiveSummarySection(
+            liveInterval: _testRecapInterval,
             conversation: conversation,
             open: 1,
             stream: (_) => events.stream,
@@ -441,6 +507,7 @@ void main() {
       final through = DateTime(2026, 11, 16, 9, 20);
       var opens = 0;
       await tester.pumpWidget(_sliver(LiveSummarySection(
+        liveInterval: _testRecapInterval,
         conversation: _conversation(state: ConversationTileState.live, latestSpeech: through, speech: enoughSpeech),
         open: 1,
         stream: (_) {
@@ -467,6 +534,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(liveSnapshot(LiveSummarySection(
+        liveInterval: _testRecapInterval,
         conversation: _conversation(
           state: ConversationTileState.live,
           speech: 'Sam will send the updated launch checklist after lunch.',
@@ -494,6 +562,7 @@ void main() {
         rebuild = setState;
         return CustomScrollView(slivers: [
           LiveSummarySection(
+            liveInterval: _testRecapInterval,
             conversation: conversation,
             stream: (_) {
               opens++;
@@ -539,6 +608,7 @@ void main() {
       var refreshes = 0;
       final active = <bool>[];
       await tester.pumpWidget(_sliver(LiveSummarySection(
+        liveInterval: _testRecapInterval,
         conversation: _conversation(state: ConversationTileState.writing),
         stream: (_) => events.stream,
         refresh: () async {
@@ -575,6 +645,7 @@ void main() {
         rebuild = setState;
         return CustomScrollView(slivers: [
           LiveSummarySection(
+            liveInterval: _testRecapInterval,
             conversation: conversation,
             stream: (_) => Stream.value(const SummaryInProgress()),
             refresh: () async {
@@ -602,6 +673,7 @@ void main() {
     testWidgets('polling gives up after its window', (tester) async {
       var refreshes = 0;
       await tester.pumpWidget(_sliver(LiveSummarySection(
+        liveInterval: _testRecapInterval,
         conversation: _conversation(state: ConversationTileState.writing),
         stream: (_) => Stream.value(const SummaryInProgress()),
         refresh: () async {
@@ -623,6 +695,7 @@ void main() {
 
     testWidgets('a summary that arrives whole stays up when the follow-up read fails', (tester) async {
       await tester.pumpWidget(_sliver(LiveSummarySection(
+        liveInterval: _testRecapInterval,
         conversation: _conversation(state: ConversationTileState.writing),
         stream: (_) => Stream.value(SummaryDone(Structured('Planning', 'You set the launch for Thursday.'), null)),
         refresh: () async => false,
@@ -637,6 +710,7 @@ void main() {
     testWidgets('a failure with no stored summary offers to try again', (tester) async {
       var opens = 0;
       await tester.pumpWidget(_sliver(LiveSummarySection(
+        liveInterval: _testRecapInterval,
         conversation: _conversation(state: ConversationTileState.writing),
         stream: (_) {
           opens++;
@@ -660,6 +734,7 @@ void main() {
     testWidgets('a failure with an older summary stored steps aside', (tester) async {
       final active = <bool>[];
       await tester.pumpWidget(_sliver(LiveSummarySection(
+        liveInterval: _testRecapInterval,
         conversation: _conversation(state: ConversationTileState.writing, covers: DateTime.utc(2026, 11, 16, 9)),
         stream: (_) => Stream.value(const SummaryFailed('server')),
         refresh: () async => true,

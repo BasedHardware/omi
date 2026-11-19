@@ -4,6 +4,7 @@ import 'package:clock/clock.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/conversations_v3.dart';
 import 'package:omi/backend/preferences.dart';
@@ -34,6 +35,7 @@ class LiveSummarySection extends StatefulWidget {
     this.stream,
     this.open = 0,
     this.refreshTick = 0,
+    this.liveInterval,
     this.claimOpen,
     this.detailHydrated = true,
     this.detailReadFailed = false,
@@ -52,6 +54,7 @@ class LiveSummarySection extends StatefulWidget {
   final SummaryStreamOpener? stream;
   final int open;
   final int refreshTick;
+  final String? Function()? liveInterval;
   final bool Function(int)? claimOpen;
   final bool detailHydrated;
   final bool detailReadFailed;
@@ -60,6 +63,23 @@ class LiveSummarySection extends StatefulWidget {
   /// Test seam for the page-level section, which the summary tab builds without a [stream].
   @visibleForTesting
   static SummaryStreamOpener? debugStream;
+
+  @visibleForTesting
+  static Stream<SummaryStreamEvent> Function(String, LiveRecapRequest)? debugLiveStream;
+
+  static final _words = RegExp(r'\S+');
+
+  static bool speechEligible(ServerConversation conversation) {
+    final kind = conversation.v3?.kind;
+    if (kind == 'media' || kind == 'background' || conversation.v3?.recording == true) return false;
+    var words = 0;
+    for (final segment in conversation.transcriptSegments) {
+      words += _words.allMatches(segment.text).length;
+      if (words >= 300) return true;
+    }
+    return false;
+  }
+
   final Duration pollInterval;
   final Duration pollFor;
 
@@ -90,6 +110,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   bool _recapUnavailable = false;
   List<Object>? _requestSpeech;
   double _requestBoundary = 0;
+  String? _requestInterval;
   ({DateTime through, String markdown})? _liveResult;
   String? _openedId;
   late String _ownerUid;
@@ -144,6 +165,11 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
       }
       if (_phase == _Phase.polling && _landed(widget.conversation)) _finish();
     }
+    if (_requestInterval != null && _requestInterval != _interval) {
+      _stopRequest();
+      _sections.clear();
+      _phase = _Phase.live;
+    }
     _observeSummaryOpen();
     if (widget.refreshTick != oldWidget.refreshTick) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -164,7 +190,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
           final coveredSeconds = through.difference(start).inMicroseconds / 1e6;
           if (!c.transcriptSegments.any((s) => s.end > coveredSeconds && s.text.trim().isNotEmpty)) return;
         }
-        _catchUp();
+        _catchUp(LiveRecapTrigger.timedRefresh);
       });
     }
   }
@@ -175,7 +201,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
     _observedOpen = open;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || widget.open != open || !(widget.claimOpen?.call(open) ?? true)) return;
-      if (!_attemptedLiveRecap && _summary == null) _catchUp();
+      if (!_attemptedLiveRecap && _summary == null) _catchUp(LiveRecapTrigger.firstOpen);
     });
   }
 
@@ -213,11 +239,13 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
     _startStream();
   }
 
-  void _startStream({bool liveCatchup = false}) {
+  void _startStream({LiveRecapRequest? recap}) {
+    final liveCatchup = recap != null;
     _stopRequest();
     final request = _requestEpoch;
     final cancel = _cancel = Completer<void>();
     _requestSpeech = liveCatchup ? _speechSnapshot(widget.conversation) : null;
+    _requestInterval = recap?.intervalId;
     if (liveCatchup) {
       final c = widget.conversation;
       final start = c.startedAt;
@@ -231,15 +259,18 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
         request == _requestEpoch &&
         _ownerUid.isNotEmpty &&
         _currentLiveTarget &&
-        _canShowLiveContent &&
+        recap?.intervalId == _interval &&
+        _canCatchUp &&
         _coveredSpeechUnchanged(widget.conversation);
     _liveSummaryAtRequest = liveCatchup ? _summary : null;
     _coveredAtOpen = widget.conversation.v3?.summaryCoversThrough;
     final open = widget.stream ??
-        LiveSummarySection.debugStream ??
+        (recap != null && LiveSummarySection.debugLiveStream != null
+            ? (String id) => LiveSummarySection.debugLiveStream!(id, recap)
+            : LiveSummarySection.debugStream) ??
         (String id) => streamConversationSummary(
               id,
-              liveCatchup: liveCatchup,
+              recap: recap,
               cancelSignal: cancel.future,
               canDispatch: liveCatchup ? liveTarget : null,
             );
@@ -259,15 +290,19 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
     );
   }
 
-  void _catchUp() {
+  String? get _interval => widget.liveInterval?.call();
+
+  void _catchUp(LiveRecapTrigger trigger) {
     if (!_currentLiveTarget || _phase != _Phase.live || !_canCatchUp) return;
+    final interval = _interval;
+    if (interval == null) return;
     setState(() {
       _attemptedLiveRecap = true;
       _sections.clear();
       _liveRequestFailed = false;
       _phase = _Phase.writing;
     });
-    _startStream(liveCatchup: true);
+    _startStream(recap: (trigger: trigger, requestId: const Uuid().v4(), intervalId: interval));
   }
 
   void _onEvent(SummaryStreamEvent event, {required bool liveCatchup}) {
@@ -302,6 +337,8 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
       case SummaryFailed(:final detail):
         if (liveCatchup && detail == 'live_recap_unavailable') {
           _recapUnavailable = true;
+          _liveResult = null;
+          _sections.clear();
           _finish();
         } else {
           _fail();
@@ -404,6 +441,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   void _stopRequest() {
     _requestEpoch++;
     _requestSpeech = null;
+    _requestInterval = null;
     _cancel?.complete();
     _cancel = null;
     _poll?.cancel();
@@ -487,20 +525,15 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   }
 
   ({DateTime through, String markdown})? get _storedSummary {
-    final c = widget.conversation;
-    if (!_canShowLiveContent) return null;
-    final through = c.v3?.summaryCoversThrough;
-    final live = c.v3?.liveSummary;
-    if (live != null && (through == null || !live.coversThrough.isBefore(through))) {
-      final markdown = _markdown(live.structured);
-      if (markdown.isNotEmpty) return (through: live.coversThrough, markdown: markdown);
-    }
-    final markdown = _markdown(c.structured);
-    return through == null || markdown.isEmpty ? null : (through: through, markdown: markdown);
+    if (!widget.detailHydrated || !_canShowLiveContent) return null;
+    final live = widget.conversation.v3?.liveSummary;
+    if (live == null) return null;
+    final markdown = _markdown(live.structured);
+    return markdown.isEmpty ? null : (through: live.coversThrough, markdown: markdown);
   }
 
   ({DateTime through, String markdown})? get _summary {
-    if (!_canShowLiveContent) return null;
+    if (_recapUnavailable || !widget.detailHydrated || !_canShowLiveContent) return null;
     final stored = _storedSummary;
     final result = _liveResult;
     return result != null && (stored == null || !result.through.isBefore(stored.through)) ? result : stored;
@@ -508,6 +541,8 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
 
   bool get _currentLiveTarget =>
       mounted &&
+      (WidgetsBinding.instance.lifecycleState == null ||
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) &&
       widget.conversation.id == _openedId &&
       _ownerUid == SharedPreferencesUtil().uid &&
       _isLive(widget.conversation) &&
@@ -537,27 +572,10 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
           (segment.id, segment.text, segment.start, segment.end, segment.speaker, segment.isUser, segment.personId),
       ];
 
-  static final _words = RegExp(r'\S+');
+  bool get _enoughTranscript => LiveSummarySection.speechEligible(widget.conversation);
 
-  bool get _enoughTranscript {
-    var words = 0;
-    for (final segment in widget.conversation.transcriptSegments) {
-      words += _words.allMatches(segment.text).length;
-      if (words >= 300) return true;
-    }
-    return false;
-  }
-
-  bool get _canCatchUp {
-    final c = widget.conversation;
-    return _ownerUid.isNotEmpty &&
-        widget.detailHydrated &&
-        !_recapUnavailable &&
-        _canShowLiveContent &&
-        c.v3?.kind != 'media' &&
-        c.v3?.kind != 'background' &&
-        _enoughTranscript;
-  }
+  bool get _canCatchUp =>
+      _ownerUid.isNotEmpty && widget.detailHydrated && !_recapUnavailable && _canShowLiveContent && _enoughTranscript;
 
   Widget _buildLive(BuildContext context) {
     if (_ownerUid != SharedPreferencesUtil().uid || !_canShowLiveContent) {
@@ -603,7 +621,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
                   OmiButton.secondary(
                     key: const Key('live_summary_catch_up'),
                     label: context.l10n.tryAgain,
-                    onPressed: _catchUp,
+                    onPressed: () => _catchUp(LiveRecapTrigger.retry),
                     size: OmiButtonSize.compact,
                   ),
                 if (widget.detailReadFailed && !widget.detailHydrated)
