@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/BasedHardware/omi/backend-go/internal/integrationfanout"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
@@ -22,26 +23,41 @@ type storedReceipt struct {
 	Delivered bool `firestore:"delivered"`
 }
 
-// Read returns the terminal disposition if a receipt exists and checks the owner fence.
-func (s Receipts) Read(ctx context.Context, g queue.Guarded, id integrationfanout.Receipt) (integrationfanout.Disposition, error) {
-	ref, err := receiptRef(g.Tenant(), id)
-	if err != nil {
-		return 0, storeError(err)
+// Read returns the terminal dispositions for a batch and checks the owner fence.
+func (s Receipts) Read(ctx context.Context, g queue.Guarded, ids []integrationfanout.Receipt) (map[integrationfanout.Receipt]integrationfanout.Disposition, error) {
+	refs := make([]docstore.Ref, len(ids))
+	for i, id := range ids {
+		ref, err := receiptRef(g.Tenant(), id)
+		if err != nil {
+			return nil, storeError(err)
+		}
+		refs[i] = ref
 	}
-	var disposition integrationfanout.Disposition
-	err = s.Store.Fenced(ctx, g, g.Tenant(), func(tx *docstore.Tx) error {
+	var dispositions map[integrationfanout.Receipt]integrationfanout.Disposition
+	err := s.Store.Fenced(ctx, g, g.Tenant(), func(tx *docstore.Tx) error {
+		var readErr error
+		dispositions, readErr = readReceipts(tx, ids, refs)
+		return readErr
+	})
+	return dispositions, storeError(err)
+}
+
+func readReceipts(tx *docstore.Tx, ids []integrationfanout.Receipt, refs []docstore.Ref) (map[integrationfanout.Receipt]integrationfanout.Disposition, error) {
+	dispositions := make(map[integrationfanout.Receipt]integrationfanout.Disposition)
+	for i, ref := range refs {
 		var receipt storedReceipt
-		found, getErr := tx.Get(ref, &receipt)
-		disposition = 0
+		found, err := tx.Get(ref, &receipt)
+		if err != nil {
+			return nil, err
+		}
 		if found {
-			disposition = integrationfanout.Rejected
+			dispositions[ids[i]] = integrationfanout.Rejected
 			if receipt.Delivered {
-				disposition = integrationfanout.Accepted
+				dispositions[ids[i]] = integrationfanout.Accepted
 			}
 		}
-		return getErr
-	})
-	return disposition, storeError(err)
+	}
+	return dispositions, nil
 }
 
 // Record writes the first terminal disposition and preserves it on replay.
@@ -65,7 +81,7 @@ func (s Receipts) Record(ctx context.Context, g queue.Guarded, id integrationfan
 }
 
 func receiptRef(owner string, id integrationfanout.Receipt) (docstore.Ref, error) {
-	if id.ConversationID == "" || id.Revision < 0 {
+	if id.ConversationID == "" || id.Revision <= 0 {
 		return docstore.Ref{}, docstore.ErrPath
 	}
 	hash := sha256.Sum256([]byte(strconv.Quote(id.ConversationID) + ":" + strconv.FormatInt(id.Revision, 10) + ":" + id.AppID))
@@ -77,9 +93,11 @@ func storeError(err error) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, docstore.ErrOwnerDeleting):
-		return queue.Classify(err, queue.Hold(integrationfanout.CauseDeleting, 0))
+		return queue.Classify(err, queue.Hold(integrationfanout.CauseDeleting, time.Minute))
 	case errors.Is(err, docstore.ErrPath):
 		return queue.Classify(err, queue.Fail(integrationfanout.CauseInvalid))
+	case errors.Is(err, docstore.ErrExists), errors.Is(err, docstore.ErrOwnerMismatch):
+		return queue.Classify(err, queue.Fail(integrationfanout.CauseStore))
 	}
 	if call, ok := errors.AsType[*docstore.CallError](err); ok && call.Kind == docstore.KindRejected {
 		return queue.Classify(err, queue.Fail(integrationfanout.CauseStore))

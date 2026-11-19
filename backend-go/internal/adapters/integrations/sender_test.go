@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -35,7 +36,8 @@ func TestSenderPreservesWireContractAndRefusesRedirect(t *testing.T) {
 			t.Error(err)
 		}
 		if r.Method != http.MethodPost || r.URL.Query().Get("token") != "a+b" ||
-			r.URL.Query().Get("uid") != "owner+test&1" || r.Header.Get(idempotencyHeader) != "python-fanout" ||
+			r.URL.Query().Get("uid") != "owner+test&1" || r.Header.Get(appKeyHeader) != "python-fanout" ||
+			r.Header.Get(devKeyHeader) != "" || r.URL.RawQuery != "z=a%20b&token=a%2Bb&z=a+b&uid=owner%2Btest%261" ||
 			r.Header.Get("Content-Type") != "application/json" || r.Header.Get("X-Plugin-Signature") != "signed" ||
 			string(body) != `{"transcript_segments":[]}` {
 			t.Error("wire contract changed")
@@ -44,8 +46,8 @@ func TestSenderPreservesWireContractAndRefusesRedirect(t *testing.T) {
 	}))
 	defer server.Close()
 	d := integrationfanout.Delivery{
-		URL: server.URL + "/created?token=a%2Bb&uid=other", Body: []byte(`{"transcript_segments":[]}`),
-		IdempotencyKey: "python-fanout", Headers: map[string]string{"X-Plugin-Signature": "signed"},
+		AppID: "app", URL: server.URL + "/created?z=a%20b&token=a%2Bb&%75id=other&z=a+b#fragment", Body: []byte(`{"transcript_segments":[]}`),
+		IdempotencyKey: "python-fanout", Headers: map[string]string{"X-Plugin-Signature": "signed", devKeyHeader: "ignored"},
 	}
 	g := queue.GuardedForTest(t, "owner+test&1", "job")
 	got, err := testSender(t, server, time.Second).Send(t.Context(), g, d)
@@ -76,10 +78,13 @@ func TestSenderTimesOutBeforeHeadersButAcceptsWithoutWaitingForBody(t *testing.T
 		"/slow": integrationfanout.Transient, "/accepted": integrationfanout.Accepted,
 	} {
 		got, err := s.Send(t.Context(), g, integrationfanout.Delivery{
-			URL: server.URL + path, Body: []byte(`{}`), IdempotencyKey: "key",
+			AppID: "app", URL: server.URL + path, Body: []byte(`{}`), IdempotencyKey: "key",
 		})
 		if err != nil || got.Disposition != want {
 			t.Errorf("%s: got %+v, %v, want %v", path, got, err, want)
+		}
+		if path == "/slow" && got.Failure != integrationfanout.Timeout {
+			t.Errorf("timeout cause: %v", got.Failure)
 		}
 	}
 }
@@ -106,5 +111,84 @@ func TestSenderRefusesPrivateAddressesAndInvalidGuards(t *testing.T) {
 	ips := []netip.Addr{netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("::ffff:127.0.0.1")}
 	if err := validateAddresses(ips); !errors.Is(err, errUnsafeAddress) {
 		t.Fatalf("mixed public/private answers: %v", err)
+	}
+}
+
+func TestDeveloperWebhookKeepsBasicAuthAndUsesDeveloperKey(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, password, ok := r.BasicAuth()
+		if !ok || user != "user" || password != "p@ss" ||
+			r.Header.Get(appKeyHeader) != "" || r.Header.Get(devKeyHeader) != "developer-key" ||
+			r.URL.RawQuery != "z=one%20two&uid=owner" || r.URL.Fragment != "" {
+			t.Error("developer webhook request changed")
+		}
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	}))
+	defer server.Close()
+	d := integrationfanout.Delivery{
+		URL:  strings.Replace(server.URL, "://", "://user:p%40ss@", 1) + "?z=one%20two#discard",
+		Body: []byte(`{}`), IdempotencyKey: "developer-key", Headers: map[string]string{appKeyHeader: "ignored"},
+	}
+	got, err := testSender(t, server, time.Second).Send(t.Context(), queue.GuardedForTest(t, "owner", "job"), d)
+	if err != nil || got.Disposition != integrationfanout.Transient || got.Status != http.StatusTemporaryRedirect {
+		t.Fatalf("developer redirect: %+v, %v", got, err)
+	}
+}
+
+func TestSenderClassifiesReceiverStatusAndHonorsRetryAfter(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		status    int
+		app       integrationfanout.Disposition
+		developer integrationfanout.Disposition
+	}{
+		{"accepted", http.StatusAccepted, integrationfanout.Accepted, integrationfanout.Accepted},
+		{"redirect", http.StatusTemporaryRedirect, integrationfanout.Rejected, integrationfanout.Transient},
+		{"bad request", http.StatusBadRequest, integrationfanout.Rejected, integrationfanout.Rejected},
+		{"request timeout", http.StatusRequestTimeout, integrationfanout.Transient, integrationfanout.Transient},
+		{"too early", http.StatusTooEarly, integrationfanout.Transient, integrationfanout.Rejected},
+		{"rate limit", http.StatusTooManyRequests, integrationfanout.Transient, integrationfanout.Transient},
+		{"unavailable", http.StatusServiceUnavailable, integrationfanout.Transient, integrationfanout.Transient},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for developer, want := range map[bool]integrationfanout.Disposition{false: tc.app, true: tc.developer} {
+				got := resultForStatus(tc.status, "7", developer, time.Time{})
+				var delay time.Duration
+				if want == integrationfanout.Transient {
+					delay = 7 * time.Second
+				}
+				if got.Status != tc.status || got.Disposition != want || got.RetryAfter != delay {
+					t.Errorf("developer=%v: got %+v, want disposition %v and delay %v", developer, got, want, delay)
+				}
+			}
+		})
+	}
+
+}
+
+func TestSenderKeepsAcceptanceWhenAppMessageIsInvalidOrOversized(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := `{"message":42}`
+		if r.URL.Path == "/large" {
+			body = `{"message":"` + strings.Repeat("x", responseLimit) + `"}`
+		}
+		if _, err := io.WriteString(w, body); err != nil {
+			return // The bounded reader may close the connection before the write completes.
+		}
+	}))
+	defer server.Close()
+	g := queue.GuardedForTest(t, "owner", "job")
+	s := testSender(t, server, time.Second)
+	for _, path := range []string{"/invalid", "/large"} {
+		got, err := s.Send(t.Context(), g, integrationfanout.Delivery{
+			AppID: "app", URL: server.URL + path, Body: []byte(`{}`), IdempotencyKey: "key",
+		})
+		if err != nil || got.Disposition != integrationfanout.Accepted || got.Message != "" {
+			t.Errorf("%s: disposition=%v message length=%d err=%v", path, got.Disposition, len(got.Message), err)
+		}
 	}
 }

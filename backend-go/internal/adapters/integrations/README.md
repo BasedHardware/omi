@@ -1,24 +1,29 @@
 # Created-conversation integrations
 
-The adapter sends the finalized revision to marketplace app callbacks and the owner's
-developer webhook. `integrationfanout.Service` runs from the calling finalization job.
-The receiver sees the existing JSON projection, an escaped `uid` query parameter and
-`X-Omi-Idempotency-Key`. Successful status headers acknowledge delivery immediately.
+The adapter posts the finalized conversation to marketplace apps and the developer webhook.
+Apps receive `X-Omi-Idempotency-Key` and the developer webhook receives `Idempotency-Key`.
+See [the finalization ports](../../integrationfanout/README.md) for target resolution and
+the outcome contract for webhook health, usage, app messages and developer DLQ.
 
 Receipts live at `users/{owner}/integration_delivery_receipts/{hash}`. The hash covers
 conversation ID, revision and destination ID. Each receipt stores only a delivered flag.
-The owner deletion marker is checked in the receipt lookup before each send and again in
-the receipt transaction. The queue guard serializes a canonical job with its takeovers and
-queue-level account erasure. Once the receiver accepts, the delivered receipt skips the
-request on later attempts. If the response or receipt is lost after the receiver acts, the
-retry depends on the receiver honoring the same idempotency key.
+One guarded Firestore transaction looks up the batch and checks the deletion marker.
+Each terminal result writes its receipt in a separate fenced transaction. After a
+transient result that needs no receipt write, a marker-only transaction gates the next
+send. An already settled batch uses one transaction. The queue guard serializes the
+canonical job with its takeovers and queue-level account erasure.
+
+The adapter treats a 2xx as acceptance even if the response body is unreadable. It skips the
+request after a terminal receipt is committed. If the response or receipt is lost after the
+receiver acts, the retry depends on the receiver honoring the same outbound key.
 
 | Delivery rule | Test |
 | --- | --- |
-| Eligible destinations are deduplicated. Successful and terminally rejected receivers are skipped on retry. A new revision sends again with a fresh key. | `TestFanoutRetriesOnlyUnsettledReceiversAndIsRevisionScoped` |
-| A receiving app's 4xx, including 429, ends that app's delivery while the rest of the fanout continues. A 5xx retries within the job budget. | `TestFanoutRetriesOnlyUnsettledReceiversAndIsRevisionScoped`, `TestFanoutDropsTransientDeliveryOnFinalAttempt` |
-| The job finishes with a delivery-drop cause after a destination spends its retry budget. | `TestFanoutDropsTransientDeliveryOnFinalAttempt` |
-| A locked or discarded conversation produces no callbacks. A deleting owner produces no callbacks or new receipts. | `TestFanoutSkipsLockedAndDiscardedConversationsAndHoldsDeletingOwner`, `TestReceiptPreservesAcceptanceAndRefusesDeletion` |
-| The receiver gets the JSON payload, owner, optional app headers and stable fanout key. Redirects are terminal. | `TestSenderPreservesWireContractAndRefusesRedirect` |
-| Slow receivers time out before acknowledgement. Once a 2xx arrives, the response body cannot cause redelivery. | `TestSenderTimesOutBeforeHeadersButAcceptsWithoutWaitingForBody` |
-| A live guard is required. The production sender validates every resolved address and dials only validated addresses directly. | `TestSenderRefusesPrivateAddressesAndInvalidGuards` |
+| Destinations are deduplicated. Settled receivers are skipped on retry. A new revision derives a fresh key from the same persisted key. | `TestFanoutRetriesOnlyUnsettledReceiversAndIsRevisionScoped` |
+| Apps retry 408, 425, 429 and 5xx. Developer webhooks retry redirects at the original destination, 408, 429 and 5xx. Other 4xx responses are terminal. Transient responses honor Retry-After. | `TestSenderClassifiesReceiverStatusAndHonorsRetryAfter`, `TestFanoutUsesRetryAfterFromReceiver` |
+| A transient delivery gets a terminal dropped receipt on the job's final attempt. | `TestFanoutDropsTransientDeliveryOnFinalAttempt` |
+| A deleting owner is held for a minute. The batch lookup, marker refresh and receipt transaction reject a deleting owner. | `TestFanoutSkipsLockedAndDiscardedConversationsAndHoldsDeletingOwner`, `TestFanoutReportsTransientAttemptAndRechecksDeletionBeforeNextSend`, `TestReceiptPreservesAcceptanceAndRefusesDeletion` |
+| Apps and developer webhooks receive their respective headers. Replacing uid preserves unrelated query bytes, fragments are stripped, and URL Basic Auth is preserved. Redirects are never followed. | `TestSenderPreservesWireContractAndRefusesRedirect`, `TestDeveloperWebhookKeepsBasicAuthAndUsesDeveloperKey` |
+| A slow receiver times out before acknowledgement. A 2xx remains accepted when the bounded response read times out, cannot parse a message, or exceeds the body cap. | `TestSenderTimesOutBeforeHeadersButAcceptsWithoutWaitingForBody`, `TestSenderKeepsAcceptanceWhenAppMessageIsInvalidOrOversized` |
+| The production sender requires a live guard, validates every resolved address and dials only validated addresses directly. | `TestSenderRefusesPrivateAddressesAndInvalidGuards` |
+| Rejected store calls, receipt conflicts and owner mismatches use the deterministic attempt budget. Transient and unclassified store failures use the transient budget. | `TestReceiptErrorsUseDeterministicOrTransientBudget` |
