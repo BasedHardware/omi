@@ -178,7 +178,7 @@ names look secret are redacted in `run.json`. `model_config.stt` picks the casse
 `transcribe` stage plays: `{"adapter": "prerecorded"|"parakeet_batch", "provider", "model",
 "language", "vocabulary", "sync_mode": "span"|"exact"}`.
 
-`overlay from-runtime-env [--service backend-listen] [--owner-uid-env VAR] --out FILE`
+`overlay from-runtime-env [--service backend-sync] [--owner-uid-env VAR] --out FILE`
 builds an overlay from the ref's `deploy/runtime_env.yaml` production profile: the lab
 clears the process env, so without it every flag takes its code default.
 
@@ -221,7 +221,7 @@ python -m testing.pipeline_lab corpus add-day --snapshot "$SNAPSHOT_DIR" --date 
     --audio-dir "$AUDIO_DIR" --json
 
 # 2. Production flags at the ref under test (owner uid only resolves partial cohorts; never written)
-python -m testing.pipeline_lab overlay from-runtime-env --service backend-listen \
+python -m testing.pipeline_lab overlay from-runtime-env --service backend-sync \
     --owner-uid-env OWNER_UID --out "$OMI_PIPELINE_LAB_ROOT/overlays/prod.json" --json
 
 # 3. Local stack: Firestore + Auth emulators, Redis, Typesense (dev-up ports 8085/9099/6380/8108)

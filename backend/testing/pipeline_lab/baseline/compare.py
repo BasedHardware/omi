@@ -45,6 +45,8 @@ COMPARED_FIELDS = (
     'memories',
     'notifications',
     'segments',
+    'hidden',
+    'kind',
 )
 
 
@@ -164,6 +166,9 @@ def comparable(conversation: Mapping[str, Any] | None) -> dict[str, Any] | None:
         'memories': sorted(item['key'] for item in conversation.get('memories') or []),
         'notifications': len(conversation.get('notifications') or []),
         'segments': len(conversation.get('segments') or []),
+        # v3: what the phone's Home shows. Classic rows carry no ``v3`` block, so both sides agree.
+        'hidden': not (conversation.get('v3') or {}).get('visible', True),
+        'kind': (conversation.get('v3') or {}).get('kind') or '',
     }
 
 

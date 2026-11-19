@@ -144,6 +144,45 @@ def _schema_from_request(body: dict[str, Any]) -> tuple[Optional[dict], Optional
     return None, None, 'text'
 
 
+V3_OUTLINE_MARK = "You outline one stretch of a person's day"
+V3_SHORT_TASKS_MARK = 'Return JSON {"action_items": [...]}'
+_OUTLINE_LINE = re.compile(r'^\[L(\d+) \d\d:\d\d\] [^:]+: (.*)$', re.MULTILINE)
+TOPIC_SWITCH = 'switching topics'
+
+
+def scripted_reply(prompt: str) -> Optional[str]:
+    """Answers for prompts whose reply format is fixed by product code rather than a schema.
+
+    - the conversations-v3 outline (``utils/conversations/v3/outline.SYSTEM_PROMPT``): one
+      conversation per stretch, plus a new one at every line containing ``switching topics``
+      (so tests can force a split), titled from the line's words;
+    - v3 short-clip tasks (``models.short_tasks``): ``{"action_items": []}``.
+    """
+    if V3_OUTLINE_MARK in prompt:
+        lines = [(int(n), text) for n, text in _OUTLINE_LINE.findall(prompt)]
+        firsts = [1] + [n for n, text in lines if n > 1 and TOPIC_SWITCH in text.lower()]
+        conversations = []
+        for first in firsts:
+            text = next((t for n, t in lines if n == first), 'synthetic stretch')
+            title = ' '.join(_words(text)[:5]).title() or 'Synthetic Stretch'
+            conversations.append(
+                {
+                    'first_line': first,
+                    'title': title,
+                    'line': f'You talked about {title.lower()}.',
+                    'kind': 'conversation',
+                    'people': [],
+                    'emoji': '🧪',
+                    'sections': [{'first_line': first, 'title': title}],
+                    'resumes_previous': False,
+                }
+            )
+        return json.dumps({'conversations': conversations})
+    if V3_SHORT_TASKS_MARK in prompt:
+        return json.dumps({'action_items': []})
+    return None
+
+
 def _tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
@@ -213,6 +252,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _reply(self, body: dict[str, Any]) -> tuple[str, Optional[str], str]:
         messages = body.get('messages') or []
+        scripted = scripted_reply(_prompt_text(messages) + str(body.get('system') or ''))
+        if scripted is not None:
+            return scripted, None, 'json'
         schema, tool, mode = _schema_from_request(body)
         seed = _seed_text(messages)
         if mode == 'text':

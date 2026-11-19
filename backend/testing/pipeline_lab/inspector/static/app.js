@@ -320,6 +320,7 @@
         overlay.length ? h('div', { class: 'pop' }, h('table', null, overlay.map(([k, v]) => h('tr', null, h('td', null, k), h('td', null, v))))) : null),
       run.stt ? h('span', { class: 'item', title: 'where the transcripts came from' }, h('span', { class: 'label' }, 'stt'), h('code', null, run.stt)) : null,
       run.engine === 'fake' ? h('span', { class: 'chip badge-warn', title: 'Plumbing check: a stand-in replaced the product pipeline' }, 'engine: fake') : null,
+      run.pipeline === 'v3' ? h('span', { class: 'chip', title: 'Conversations v3: the day\'s recordings were fed to the real v3 builder, which planned these conversations. Production is its v3 result for the day.' }, 'pipeline: v3') : null,
       h('span', { class: 'item spend', title: 'spend vs cap' }, h('span', { class: 'label' }, 'spend'), h('span', { class: 'num' }, usd(run.spend_usd) + ' / ' + usd(run.budget_usd)), h('span', { class: 'meter' + (spendPct > 80 ? ' hot' : '') }, h('i', { style: 'width:' + spendPct.toFixed(1) + '%' }))),
       h('span', { class: 'item' }, h('span', { class: 'label' }, 'wall'), h('span', { class: 'num' }, dur(run.wall_seconds))),
       run.status && run.status !== 'complete' ? h('span', { class: 'chip badge-warn' }, run.status) : null,
@@ -376,10 +377,10 @@
       const st = place(c.started_at, c.finished_at);
       if (!st) return null;
       const status = prod ? (c.status === 'missing' ? 'missing' : '') : c.status;
-      const cls = ['tl-block', prod ? 'prod' : 'r', c.discarded ? 'discarded' : '', status ? STATUS_CLASS[status] : ''].join(' ');
+      const cls = ['tl-block', prod ? 'prod' : 'r', c.discarded ? 'discarded' : '', c.hidden ? 'offhome' : '', status ? STATUS_CLASS[status] : ''].join(' ');
       const twinIds = prod ? [c.id] : (c.baseline || []).map((b) => b && b.id);
       const href = prod ? (c.status === 'missing' ? convHref(runId, { kind: 'production', id: c.id }) : null) : convHref(runId, c);
-      const title = clock(c.started_at) + '–' + clock(c.finished_at) + '  ' + (c.title || (c.discarded ? '(discarded)' : '(untitled)')) + (status ? '  · ' + status : '');
+      const title = clock(c.started_at) + '–' + clock(c.finished_at) + '  ' + (c.title || (c.discarded ? '(discarded)' : '(untitled)')) + (status ? '  · ' + status : '') + (c.hidden ? '  · not on Home' + (c.hidden_reason ? ' (' + c.hidden_reason.replace(/_/g, ' ') + ')' : '') : '');
       return h('button', {
         class: cls, style: st, title, type: 'button',
         dataset: { twins: twinIds.filter(Boolean).join(' '), id: c.id, side: prod ? 'p' : 'r' },
@@ -409,7 +410,8 @@
         h('span', null, h('i', { style: 'background:var(--new)' }), 'new'),
         h('span', null, h('i', { style: 'background:var(--flipped)' }), 'discard flipped'),
         h('span', null, h('i', { style: 'background:var(--missing)' }), 'missing in replay'),
-        h('span', null, h('i', { style: 'background:var(--gap)' }), 'no audio / unknown')));
+        h('span', null, h('i', { style: 'background:var(--gap)' }), 'no audio / unknown'),
+        ov.run.pipeline === 'v3' ? h('span', null, h('i', { class: 'offhome-key' }), 'not on Home (v3)') : null));
   }
 
   function highlightTwins(el, on) {
@@ -428,10 +430,13 @@
     ['pushes', 'Has pushes', (r) => r.counts.pushes > 0],
   ];
 
+  const HOME_FILTER = ['home', 'On Home', (r) => r.hidden === false];
+  function filtersFor(ov) { return ov.run.pipeline === 'v3' ? [HOME_FILTER].concat(FILTERS) : FILTERS; }
+
   function visibleRows(ov) {
     const q = state.search.trim().toLowerCase();
     return ov.conversations.filter((r) => {
-      for (const [key, , test] of FILTERS) if (state.filters[key] && !test(r)) return false;
+      for (const [key, , test] of filtersFor(ov)) if (state.filters[key] && !test(r)) return false;
       if (q && !((r.title || '') + ' ' + (r.baseline || []).map((b) => b && b.title).join(' ') + ' ' + r.status).toLowerCase().includes(q)) return false;
       return true;
     });
@@ -440,7 +445,7 @@
   function conversationList(ov, runId) {
     const listEl = h('ul', { class: 'convlist card', role: 'listbox', 'aria-label': 'Conversations' });
     const statEl = h('p', { class: 'statline' });
-    const filterBtns = FILTERS.map(([key, label, test]) => h('button', {
+    const filterBtns = filtersFor(ov).map(([key, label, test]) => h('button', {
       type: 'button', class: 'filter' + (state.filters[key] ? ' on' : ''), 'aria-pressed': String(!!state.filters[key]),
       onclick: (e) => { state.filters[key] = !state.filters[key]; store.set('filters', state.filters); e.currentTarget.classList.toggle('on', state.filters[key]); e.currentTarget.setAttribute('aria-pressed', String(state.filters[key])); fill(); },
     }, label, h('span', { class: 'n' }, ov.conversations.filter(test).length)));
@@ -472,7 +477,7 @@
     for (let i = 0; i < (r.verdicts.good || 0); i++) marks.push(h('i', { class: 'good' }));
     for (let i = 0; i < (r.verdicts.bad || 0); i++) marks.push(h('i', { class: 'bad' }));
     return h('li', { role: 'option' }, h('a', {
-      class: 'crow' + (r.discarded ? ' discarded' : '') + (r.kind === 'production' ? ' missing' : ''),
+      class: 'crow' + (r.discarded ? ' discarded' : '') + (r.hidden ? ' offhome' : '') + (r.kind === 'production' ? ' missing' : ''),
       href: convHref(runId, r), dataset: { key: convKey(r) },
       onclick: () => { state.selected.set(runId, convKey(r)); },
     },
@@ -481,11 +486,13 @@
     h('span', { class: 'title' }, r.emoji ? h('span', { class: 'emoji', 'aria-hidden': 'true' }, r.emoji) : null,
       h('span', { class: 't' }, title || (r.discarded ? 'Discarded' : 'Untitled')),
       r.discarded ? h('span', { class: 'why' }, [title ? 'discarded' : '', r.discard_reason ? r.discard_reason.replace(/_/g, ' ') : ''].filter(Boolean).join(' · ')) : null,
-      r.status === 'changed' && r.reasons.length ? h('span', { class: 'why' }, r.reasons.join(' · ')) : null),
+      r.status === 'changed' && r.reasons.length ? h('span', { class: 'why' }, r.reasons.join(' · ')) : null,
+      r.hidden ? h('span', { class: 'why', title: 'v3 kept it off the phone\'s Home list' }, 'not on Home' + (r.hidden_reason ? ' · ' + r.hidden_reason.replace(/_/g, ' ') : '')) : null),
     h('span', { class: 'counts' },
       r.counts.tasks ? h('span', { class: 'chip count', title: 'tasks' }, r.counts.tasks + ' task' + (r.counts.tasks === 1 ? '' : 's')) : null,
       r.counts.memories ? h('span', { class: 'chip count', title: 'memories' }, r.counts.memories + ' mem') : null,
-      r.counts.pushes ? h('span', { class: 'chip count', title: 'would-have-fired pushes' }, r.counts.pushes + ' push' + (r.counts.pushes === 1 ? '' : 'es')) : null),
+      r.counts.pushes ? h('span', { class: 'chip count', title: 'would-have-fired pushes' }, r.counts.pushes + ' push' + (r.counts.pushes === 1 ? '' : 'es')) : null,
+      r.recordings > 1 ? h('span', { class: 'chip count', title: 'recordings this v3 conversation was planned over' }, r.recordings + ' rec') : null),
     h('span', { class: 'stat' }, marks.length ? h('span', { class: 'vdots', title: 'verdicts' }, marks) : null, statusChip(r.status))));
   }
 
@@ -773,11 +780,37 @@
         conv.language ? h('span', { class: 'item' }, h('span', { class: 'label' }, 'lang'), conv.language) : null,
         conv.discarded ? h('span', { class: 'chip' }, 'discarded' + (conv.discard_reason ? ' · ' + conv.discard_reason.replace(/_/g, ' ') : '')) : null,
         detail.replay && detail.baseline && detail.baseline.discarded !== detail.replay.discarded ? h('span', { class: 'chip st-flipped' }, 'production ' + (detail.baseline.discarded ? 'discarded' : 'kept') + ' it') : null,
-        detail.reasons && detail.reasons.length ? h('span', { class: 'item' }, h('span', { class: 'label' }, 'differs'), detail.reasons.join(' · ')) : null));
+        detail.reasons && detail.reasons.length ? h('span', { class: 'item' }, h('span', { class: 'label' }, 'differs'), detail.reasons.join(' · ')) : null,
+        v3Meta(conv, detail)));
 
     const ctx = { runId: route.runId, cid, detail };
     return h('div', { class: 'page conv' }, header, notices,
       h('div', { class: 'conv-grid' }, leftColumn(ctx), rightColumn(ctx)));
+  }
+
+  function homeText(v) {
+    if (!v) return '';
+    return v.visible ? 'on Home' : 'not on Home' + (v.home_hidden_reason ? ' · ' + v.home_hidden_reason.replace(/_/g, ' ') : '');
+  }
+
+  function v3Meta(conv, detail) {
+    const v = conv.v3;
+    if (!v) return null;
+    const other = detail.replay && detail.baseline && detail.baseline.v3 ? detail.baseline.v3 : null;
+    const recs = conv.recordings || [];
+    return [
+      h('span', { class: 'chip' + (v.visible ? '' : ' offhome'), title: 'What the phone\'s Home list does with this v3 conversation' }, homeText(v)),
+      other && other.visible !== v.visible ? h('span', { class: 'chip st-flipped', title: 'vs production' }, 'production: ' + homeText(other)) : null,
+      v.kind ? h('span', { class: 'item' }, h('span', { class: 'label' }, 'kind'), v.kind.replace(/_/g, ' '), other && other.kind && other.kind !== v.kind ? h('span', { class: 'vsprod' }, ' (production: ' + other.kind.replace(/_/g, ' ') + ')') : null) : null,
+      recs.length ? h('details', { class: 'inline item' }, h('summary', null, h('span', { class: 'label' }, 'recordings'), ' ' + recs.length + ' ▾'), h('div', { class: 'pop' }, h('ul', null, recs.map((x) => h('li', null, h('code', null, x)))))) : null,
+      v.process_failed ? h('span', { class: 'chip badge-warn' }, 'notes failed' + (v.process_failure_reason ? ' · ' + v.process_failure_reason : '')) : null,
+      v.backfilled ? h('span', { class: 'chip', title: 'Production made this row in a backfill pass, not live' }, 'backfilled') : null,
+    ];
+  }
+
+  function sectionsView(sections) {
+    if (!sections || !sections.length) return null;
+    return h('div', { class: 'sections' }, sections.map((x) => h('div', { class: 'section' }, h('div', { class: 'sh' }, x.heading || x.title || ''), x.body_markdown ? h('div', { class: 'sb' }, x.body_markdown) : null)));
   }
 
   function signed(seconds) { return (seconds >= 0 ? '+' : '−') + dur(Math.abs(seconds)); }
@@ -971,14 +1004,16 @@
         : h('div', { class: 'side new' }, h('span', { class: 'label' }, 'Replay'),
           h('div', { class: 't' }, b ? diffSide(b.title || '', (r && r.title) || '', 'new') : (r && r.title) || ''),
           h('div', { class: 'ov' }, b ? diffSide(b.overview || '', (r && r.overview) || '', 'new') : (r && r.overview) || ''),
-          r ? h('div', { class: 'kv' }, r.category ? h('span', null, 'category: ' + r.category) : null, (r.events || []).length ? h('span', null, r.events.length + ' event(s)') : null) : null))
+          r ? sectionsView(r.sections) : null,
+          r ? h('div', { class: 'kv' }, r.category ? h('span', null, 'category: ' + r.category) : null, (r.events || []).length ? h('span', null, r.events.length + ' event(s)') : null, (r.participants || []).length ? h('span', null, 'people: ' + r.participants.map((x) => x.name || x).join(', ')) : null) : null))
       : sideNone('Replay', 'Not produced by the replay.');
     const prodSide = d.baseline
       ? (d.baseline.discarded && !(b && b.title) ? sideNone('Production', 'Discarded' + (d.baseline.discard_reason ? ' (' + d.baseline.discard_reason.replace(/_/g, ' ') + ')' : '') + ' — no summary.')
         : h('div', { class: 'side old' }, h('span', { class: 'label' }, 'Production'),
           h('div', { class: 't' }, r && d.replay ? diffSide((b && b.title) || '', r.title || '', 'old') : (b && b.title) || ''),
           h('div', { class: 'ov' }, r && d.replay ? diffSide((b && b.overview) || '', r.overview || '', 'old') : (b && b.overview) || ''),
-          b ? h('div', { class: 'kv' }, b.category ? h('span', null, 'category: ' + b.category) : null) : null))
+          b ? sectionsView(b.sections) : null,
+          b ? h('div', { class: 'kv' }, b.category ? h('span', null, 'category: ' + b.category) : null, (b.participants || []).length ? h('span', null, 'people: ' + b.participants.map((x) => x.name || x).join(', ')) : null) : null))
       : sideNone('Production', 'No production conversation (new in the replay).');
     const item = h('div', { class: 'item' },
       h('div', { class: 'item-top' }, h('span', { class: 'txt' }, h('span', { class: 'label' }, d.replay && d.baseline ? 'Replay beside production' : 'Summary'), d.replay && d.baseline && d.reasons.includes('summary') ? h('span', { class: 'vsprod' }, '  · differs vs production') : null), key ? verdictControls(target, verdictFor(target, d.verdicts)) : null),

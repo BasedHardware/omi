@@ -39,14 +39,17 @@ environments:
 def test_overlay_from_runtime_env_keeps_flags_drops_secrets_and_pins_cohorts(tmp_path):
     path = tmp_path / 'runtime_env.yaml'
     path.write_text(RUNTIME_ENV)
-    overlay, report = overlay_from_runtime_env(path)
+    overlay, report = overlay_from_runtime_env(path, service='backend-listen')
     assert overlay['env'] == {'NOTES_MODE': 'serve', 'OMI_SHAPED_AGENT_MODE': 'on', 'SOME_FLAG_ENABLED': 'true'}
-    assert overlay['serving'] == {'FULL': True, 'HALF': False, 'NONE': False}
+    cohorts = {k: overlay['serving'][k] for k in ('FULL', 'HALF', 'NONE')}
+    assert cohorts == {'FULL': True, 'HALF': False, 'NONE': False}
+    # *_MODE env without cohort env is pinned too (uid-independent), so no decision stays unpinned
+    assert overlay['serving']['NOTES_MODE'] is True and report['pinned_static'] == 2
     assert report['unresolved'] == ['HALF']
     assert report['dropped'] == {'secret': 1, 'endpoint': 1, 'lab_owned': 1, 'not_scalar': 1}
     Overlay.from_mapping(overlay)  # the one schema
-    resolved, report = overlay_from_runtime_env(path, owner_uid='synthetic-owner-uid')
-    assert set(resolved['serving']) == {'FULL', 'HALF', 'NONE'} and report['unresolved'] == []
+    resolved, report = overlay_from_runtime_env(path, service='backend-listen', owner_uid='synthetic-owner-uid')
+    assert {'FULL', 'HALF', 'NONE'} <= set(resolved['serving']) and report['unresolved'] == []
     assert resolved['serving']['FULL'] is True and resolved['serving']['NONE'] is False
     assert 'synthetic-owner-uid' not in json.dumps(resolved)
 

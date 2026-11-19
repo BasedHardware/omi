@@ -7,6 +7,10 @@ first chain stage a run reaches executes ``chain.entry`` once (in the pinned arm
 process for in-place and test runs); every chain stage then reports its own status and
 counts from the files that execution wrote.
 
+Under conversations v3 (``v3/select.py``: the overlay turns v3 on and the corpus day has v3
+recordings, or ``model_config.pipeline`` says so) the same composite runs ``v3.entry``
+instead: recordings feed the real v3 builder, and these stages report on its conversations.
+
 Not cacheable: the effect is emulator state plus run files. Re-running is cheap because
 unchanged LLM calls are served from the proxy cache (DESIGN L6).
 """
@@ -45,13 +49,21 @@ def stage_summary(stage: str, run_dir: Path) -> tuple[dict[str, Any], list[str]]
             warnings.append(
                 f'{len(failed)} of {len(chain.get("conversations") or [])} conversations failed to finalize'
             )
+        entry = read_json(run_dir / 'chain_entry.json') or {}
         out = {
             'conversations': len(conversations),
             'discarded': len(conversations) - len(kept),
             'failed': len(failed),
-            'engine': (read_json(run_dir / 'chain_entry.json') or {}).get('engine'),
-            'transcripts': (read_json(run_dir / 'chain_entry.json') or {}).get('transcripts'),
+            'engine': entry.get('engine'),
+            'pipeline': entry.get('pipeline', 'classic'),
+            'transcripts': entry.get('transcripts'),
         }
+        if entry.get('pipeline') == 'v3':
+            out['v3'] = {
+                'visible': sum(1 for c in conversations if (c.get('v3') or {}).get('visible')),
+                'recordings': (entry.get('plan') or {}).get('arrivals'),
+                'driver': (entry.get('driver') or {}).get('counts'),
+            }
     elif stage == 'notes':
         titled = sum(1 for c in kept if (c.get('structured') or {}).get('title'))
         out = {'kept': len(kept), 'titled': titled}
@@ -102,8 +114,14 @@ class ChainComposite:
         ctx.env['OMI_PIPELINE_LAB_OVERLAY_JSON'] = json.dumps(ctx.overlay or {})
         ctx.env['OMI_PIPELINE_LAB_ROOT'] = str(ctx.store.root)
         ctx.env['OMI_PIPELINE_LAB_LLM_PROXY_URL'] = ctx.llm_proxy_url
+        from testing.pipeline_lab.v3.corpus import day_has_v3
+        from testing.pipeline_lab.v3.select import entry_module, select_pipeline
+
+        pipeline, reason = select_pipeline(ctx.overlay or {}, day_has_v3=day_has_v3(ctx.store, ctx.day.day_id))
+        ctx.run_extra['pipeline'] = pipeline
+        ctx.run_extra['pipeline_reason'] = reason
         code = ctx.run_module(
-            ENTRY_MODULE, ['--root', str(ctx.store.root), '--run', ctx.run_id, '--engine', ctx.engine]
+            entry_module(pipeline), ['--root', str(ctx.store.root), '--run', ctx.run_id, '--engine', ctx.engine]
         )
         summary = read_json(ctx.run_dir / 'chain_entry.json')
         if code != 0 or summary is None:

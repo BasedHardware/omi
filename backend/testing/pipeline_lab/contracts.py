@@ -456,6 +456,11 @@ class ConversationRecord(Record):
     notifications: list[Notification] = field(default_factory=list)
     llm_call_ids: list[str] = field(default_factory=list)
     evaluable: Evaluable = field(default_factory=Evaluable)
+    # Conversations v3: the source recordings a window was planned over (in order) and what the
+    # phone's Home reads (visible, home_hidden_reason, kind, tile_state, notes state). ``None``
+    # on classic rows. Pairing with production is by shared recording (``v3/export.py``).
+    recordings: Optional[list[str]] = None
+    v3: Optional[dict[str, Any]] = None
     extra: dict[str, Any] = _extra()
 
 

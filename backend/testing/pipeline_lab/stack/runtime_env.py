@@ -13,6 +13,21 @@ of one service at the ref under test and returns an overlay in the one schema
   decision is the product's own ``serving_for`` against the production env; without it,
   100 % cohorts pin ``true``, empty ones ``false`` and partial ones ``false`` and are listed
   as ``unresolved`` so the lead can decide.
+- every other serve decision the ref's code makes (``serving_for('<NAME>', ...)`` literals and
+  ``*_MODE`` env) is pinned too: with no cohort env it is uid-independent, so the pin is the
+  product's own answer for any uid and ``decisions.jsonl`` shows no ``unpinned`` rows;
+- uid allow-lists (``*_UID_ALLOWLIST``, ``*_UIDS``, ``*_UID``): with the owner uid, the owner's
+  membership is carried over to the lab uid (the value becomes ``local-dev-user`` or empty);
+  without it the list is emptied and listed in ``unresolved``. A production uid never reaches
+  the overlay (checked).
+
+**Service.** ``backend-sync`` is the default: the v3 reconcile task targets the host of
+``SYNC_TASKS_HANDLER_URL`` (``utils/conversations/v3/triggers.task_base``), which is
+backend-sync, and that task runs the outline, the planner, the notes drain
+(``process_conversation`` for each v3 conversation: memories, tasks, pushes) and the
+conversation-created fanout. The recording intake (``mark_new``, ``recording_short_path``)
+runs where captures finalize, but reads only the admission switches, which every service
+carries identically (``deploy/compose_runtime_env._apply_conversations_v3_stage``).
 
 Nothing here reaches the network or writes the uid anywhere.
 """
@@ -29,7 +44,37 @@ ENDPOINTISH = re.compile(
     r'_QUEUE|_QUEUES|_TOPIC|_SUBSCRIPTION|_SERVICE_ACCOUNT|_DATASET|_INSTANCE|_LOCATION)$'
 )
 COHORT_SUFFIXES = ('_SERVE_PERCENT', '_SERVE_UID_SHA256S')
-DEFAULT_SERVICE = 'backend-listen'
+DEFAULT_SERVICE = 'backend-sync'
+UID_LIST = re.compile(r'(_UID_ALLOWLIST|_ALLOWLIST_UIDS|_UIDS|_UID)$')
+SERVING_LITERAL = re.compile(r"serving_for\(\s*['\"]([A-Z][A-Z0-9_]+)['\"]")
+V3_SWITCHES = (
+    'CONVERSATIONS_V3',
+    'CONVERSATIONS_V3_STAGE',
+    'CONVERSATIONS_V3_RECORDING_ROTATION',
+    'CONVERSATIONS_V3_ROTATION_MIN_SECONDS',
+    'CONVERSATIONS_V3_ROTATION_MAX_SECONDS',
+    'CONVERSATIONS_V3_BACKFILL',
+    'CONVERSATIONS_V3_UID_ALLOWLIST',
+    'OMI_SHAPED_AGENT_MODE',
+    'NOTES_PACKET_V2_MODE',
+    'OCCASION_CONVERSATIONS_ENABLED',
+)
+
+
+def static_mode_names(backend: Path) -> set[str]:
+    """Serve-mode names the ref's product code passes to ``serving_for`` as literals."""
+    names: set[str] = set()
+    for path in Path(backend).rglob('*.py'):
+        parts = path.relative_to(backend).parts
+        if parts and parts[0] in {'tests', 'testing', '.venv', 'scripts'}:
+            continue
+        try:
+            text = path.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError):
+            continue
+        if 'serving_for' in text:
+            names.update(SERVING_LITERAL.findall(text))
+    return names
 
 
 def _service_env(document: Mapping[str, Any], environment: str, service: str) -> dict[str, Any]:
@@ -67,6 +112,7 @@ def overlay_from_runtime_env(
     """``(overlay, report)``. ``report`` lists what was kept, dropped and left unresolved."""
     import yaml
 
+    from testing.pipeline_lab.stack import LAB_UID
     from testing.pipeline_lab.stack.config import LabStackConfig
     from testing.pipeline_lab.stack.overlay import DEFAULT_ENV
 
@@ -76,8 +122,18 @@ def overlay_from_runtime_env(
     env: dict[str, str] = {}
     cohort_env: dict[str, str] = {}
     dropped: dict[str, list[str]] = {'secret': [], 'endpoint': [], 'lab_owned': [], 'not_scalar': []}
+    uid_lists: dict[str, str] = {}
     for key, entry in sorted(raw.items()):
         value = _scalar(entry)
+        if value is not None and UID_LIST.search(key) and not key.endswith(COHORT_SUFFIXES):
+            members = [m.strip() for m in value.split(',') if m.strip()]
+            if owner_uid:
+                env[key] = LAB_UID if owner_uid in members else ''
+                uid_lists[key] = 'owner_member' if owner_uid in members else 'owner_not_member'
+            else:
+                env[key] = ''
+                uid_lists[key] = 'unresolved' if members else 'empty'
+            continue
         if value is None:
             dropped['not_scalar'].append(key)
         elif key.endswith(COHORT_SUFFIXES):
@@ -116,6 +172,19 @@ def overlay_from_runtime_env(
                 serving[mode] = False
                 if percent > 0 or digests:
                     unresolved.append(mode)
+    pinned_static: list[str] = []
+    backend = Path(runtime_env).resolve().parents[1]
+    static = static_mode_names(backend) if (backend / 'config' / 'refactor_modes.py').is_file() else set()
+    static.update(key for key in env if key.endswith('_MODE'))
+    if static - set(serving):
+        from config.refactor_modes import serving_for as product_serving_for
+
+        production = {**env, **cohort_env}
+        for mode in sorted(static - set(serving)):
+            # No cohort env for this name: the answer is the same for every uid.
+            serving[mode] = bool(product_serving_for(mode, owner_uid or 'pipeline-lab-probe', environ=production))
+            pinned_static.append(mode)
+    unresolved.extend(f'uid_list:{key}' for key, state in sorted(uid_lists.items()) if state == 'unresolved')
     overlay = {
         'name': name or f'runtime-env:{environment}:{service}',
         'env': env,
@@ -133,5 +202,13 @@ def overlay_from_runtime_env(
         'unresolved': unresolved,
         'dropped': {k: len(v) for k, v in dropped.items()},
         'dropped_names': dropped,
+        'pinned_static': len(pinned_static),
+        'uid_lists': uid_lists,
+        'v3': {key: env.get(key, '(unset: code default)') for key in V3_SWITCHES},
     }
+    if owner_uid:
+        import json
+
+        if owner_uid in json.dumps(overlay):
+            raise ValueError('the owner uid survived into the overlay')
     return overlay, report

@@ -37,6 +37,7 @@ from testing.pipeline_lab.contracts import AudioIndexEntry, CorpusDay, parse_tim
 from testing.pipeline_lab.day.outputs import contract_daily_summary
 from testing.pipeline_lab.stack import LAB_UID
 from testing.pipeline_lab.store import Store, atomic_write_bytes, read_json, safe_segment
+from testing.pipeline_lab.v3.corpus import has_v3_export, v3_corpus
 
 AUDIO_EXTENSIONS = {'.wav': 'pcm_s16le', '.m4a': 'aac', '.aac': 'aac', '.opus': 'opus', '.ogg': 'opus', '.bin': 'opus'}
 START_STATE_ENTITIES = ('conversations', 'memories', 'action_items', 'people', 'goals', 'daily_summaries', 'meetings')
@@ -213,6 +214,21 @@ def add_day(
     lanes = {str(r.get('id')): classify_lane(r)['lane'] for r in day_rows}
     for row in normalized:
         row['lane'] = lanes.get(row['id'], row.get('lane'))
+    v3_meta = None
+    v3_blobs: dict[str, bytes] = {}
+    if has_v3_export(Path(snapshot_dir).expanduser()):
+        v3_blobs, prior_recordings, v3_meta = v3_corpus(
+            Path(snapshot_dir).expanduser(),
+            contains=window.contains,
+            day_start=window.start,
+            remap=remap,
+            memories=remap(raw['memories']),
+            action_items=remap(raw['action_items']),
+            people=people,
+            legacy_day_rows=day_rows,
+        )
+        known = {str(row.get('id')) for row in state.conversations}
+        state.conversations.extend(row for row in prior_recordings if str(row.get('id')) not in known)
     summary_row = next((r for r in reader.daily_summaries() if r.get('date') == date), None)
     daily_summary = contract_daily_summary(rewrite(dict(summary_row)) if summary_row else None)
 
@@ -237,6 +253,7 @@ def add_day(
     }
     for entity in START_STATE_ENTITIES:
         blobs[f'start_state/{entity}.jsonl'] = _jsonl(getattr(state, entity))
+    blobs.update(v3_blobs)
     if daily_summary is not None:
         blobs['baseline/daily_summary.json'] = json.dumps(daily_summary, ensure_ascii=False).encode()
     for name, body in blobs.items():
@@ -270,6 +287,7 @@ def add_day(
             'start_state': 'approximate',
             'start_state_report': state.report.as_dict(),
             'added_at': utc_iso(),
+            'v3': v3_meta,
             'warnings': warnings,
         },
     )
@@ -284,6 +302,7 @@ def add_day(
         'action_items': len(action_items),
         'daily_summary': daily_summary is not None,
         'audio_files': audio_files,
+        'v3': v3_meta,
         'start_state': state.report.as_dict()['kept'],
         'coverage': timeline['coverage'],
         'warnings': warnings,

@@ -539,3 +539,12 @@ textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong);
   .vtable .when, .vtable .runcol { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+
+/* conversations v3: rows the phone's Home list does not show */
+.tl-block.offhome { opacity: .42; }
+.tl-legend i.offhome-key { background: var(--block-replay); opacity: .42; }
+.crow.offhome .t { opacity: .7; }
+.chip.offhome { opacity: .8; border-style: dashed; }
+.sections { margin-top: 6px; display: grid; gap: 6px; }
+.sections .sh { font-weight: 600; }
+.sections .sb { white-space: pre-wrap; opacity: .9; }

@@ -234,6 +234,17 @@ def _push_text(item: Mapping[str, Any]) -> str:
     return f"{item.get('title') or ''} {item.get('body') or ''}"
 
 
+def pipeline_of(run: Optional[Mapping[str, Any]]) -> str:
+    """``v3`` for a conversations-v3 run (``run.json`` ``pipeline``), else ``classic``."""
+    return 'v3' if (run or {}).get('pipeline') == 'v3' else 'classic'
+
+
+def home_hidden(conversation: Optional[Mapping[str, Any]]) -> Optional[bool]:
+    """v3 only: hidden from the phone's Home list. ``None`` for classic rows."""
+    block = (conversation or {}).get('v3')
+    return None if not isinstance(block, Mapping) else not block.get('visible', True)
+
+
 def baseline_ids_of(conversation: Mapping[str, Any]) -> list[str]:
     ids = conversation.get('baseline_ids')
     if isinstance(ids, list) and ids:
@@ -262,6 +273,8 @@ def diff_reasons(replay: Mapping[str, Any], baseline: Mapping[str, Any], *, shar
         reasons.append('summary')
     if normalize_text(transcript_text(replay)) != normalize_text(transcript_text(baseline)):
         reasons.append('transcript')
+    if home_hidden(replay) is not None and home_hidden(replay) != home_hidden(baseline):
+        reasons.append('home')
     for name, key_of in (('tasks', task_key), ('memories', memory_key), ('pushes', notification_key)):
         field = {'tasks': 'action_items', 'memories': 'memories', 'pushes': 'notifications'}[name]
         left = sorted(key_of(i) for i in replay.get(field) or [])
@@ -393,8 +406,10 @@ class Reader:
     def baseline(self, day_id: str, name: str) -> list[dict[str, Any]]:
         return [r for r in self._jsonl('corpus', safe_id(day_id, 'day id'), 'baseline', name) if isinstance(r, dict)]
 
-    def baseline_conversations(self, day_id: str) -> list[dict[str, Any]]:
-        rows = self.baseline(day_id, 'conversations.jsonl')
+    def baseline_conversations(self, day_id: str, pipeline: Optional[str] = None) -> list[dict[str, Any]]:
+        """Production conversations of the day; for a v3 run, production's v3 conversations."""
+        name = 'v3_conversations.jsonl' if pipeline == 'v3' else 'conversations.jsonl'
+        rows = self.baseline(day_id, name)
         rows.sort(key=lambda c: (c.get('started_at') or '', c.get('id') or ''))
         return rows
 
@@ -447,7 +462,7 @@ class Reader:
         without one (older runs, the synthetic sample) fall back to the local pairing below.
         """
         replay = self.conversations(run['run_id'])
-        baseline = self.baseline_conversations(run['day_id'])
+        baseline = self.baseline_conversations(run['day_id'], pipeline_of(run))
         by_id = {b['id']: b for b in baseline if b.get('id')}
         view = self.baseline_view(run['run_id'])
         if view is not None:
@@ -473,7 +488,7 @@ class Reader:
         if start is None:
             return None
         end = end or start
-        own = {conv.get('id'), *baseline_ids_of(conv)}
+        own = {conv.get('id'), *baseline_ids_of(conv), *(conv.get('recordings') or [])}
         best, best_score = None, (False, 0.0)
         for entry in self.audio_index(day_id):
             a, b = parse_utc(entry.get('start')), parse_utc(entry.get('end'))
@@ -556,6 +571,8 @@ _FIELD_REASONS = {
     'action_items': 'tasks',
     'memories': 'memories',
     'notifications': 'pushes',
+    'hidden': 'home',
+    'kind': 'home',
 }
 
 

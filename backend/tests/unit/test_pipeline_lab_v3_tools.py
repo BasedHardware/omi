@@ -1,0 +1,207 @@
+"""v3 lane tools: the production overlay for the v3 path and the read-only v3 exporter (synthetic only)."""
+
+import json
+from datetime import datetime, timezone
+import pytest
+
+from testing.pipeline_lab.stack import LAB_UID
+from testing.pipeline_lab.stack.overlay import Overlay
+from testing.pipeline_lab.stack.runtime_env import DEFAULT_SERVICE, overlay_from_runtime_env, static_mode_names
+from testing.pipeline_lab.v3 import prod_export
+
+OWNER = 'synthetic-owner-uid-0001'
+
+RUNTIME_ENV = f"""
+schema_version: 2
+environments:
+  prod:
+    cloud_run:
+      services:
+        backend-sync:
+          env:
+            CONVERSATIONS_V3: {{value: 'on', category: ops_kill}}
+            CONVERSATIONS_V3_STAGE: {{value: beta, category: rollout}}
+            CONVERSATIONS_V3_TASKS_QUEUE: {{value: conversations-v3, category: reliability}}
+            OMI_SHAPED_AGENT_MODE: {{value: 'on', category: rollout}}
+            DREAM_AGENT_UID_ALLOWLIST: {{value: '{OWNER},someone-else', category: rollout}}
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {{value: 'someone-else', category: rollout}}
+            DREAM_AGENT_CANARY_UID: {{value: '', category: rollout}}
+"""
+
+
+@pytest.fixture()
+def runtime_env(tmp_path):
+    backend = tmp_path / 'backend'
+    (backend / 'deploy').mkdir(parents=True)
+    (backend / 'config').mkdir()
+    (backend / 'config' / 'refactor_modes.py').write_text('# marker: a backend checkout\n')
+    (backend / 'utils').mkdir()
+    (backend / 'utils' / 'thing.py').write_text(
+        "from config.refactor_modes import serving_for\n"
+        "def f(uid):\n    return serving_for('NOTES_PACKET_V2_MODE', uid) or serving_for(\"LIFECYCLE_V2_MODE\", uid)\n"
+    )
+    (backend / 'tests').mkdir()
+    (backend / 'tests' / 't.py').write_text("serving_for('TEST_ONLY_MODE', 'u')\n")
+    path = backend / 'deploy' / 'runtime_env.yaml'
+    path.write_text(RUNTIME_ENV)
+    return path
+
+
+def test_default_service_is_backend_sync_and_v3_switches_are_reported(runtime_env):
+    assert DEFAULT_SERVICE == 'backend-sync'
+    overlay, report = overlay_from_runtime_env(runtime_env)
+    assert report['service'] == 'backend-sync'
+    assert overlay['env']['CONVERSATIONS_V3'] == 'on' and overlay['env']['CONVERSATIONS_V3_STAGE'] == 'beta'
+    assert 'CONVERSATIONS_V3_TASKS_QUEUE' not in overlay['env']  # endpoints and queues stay lab-owned
+    assert report['v3']['CONVERSATIONS_V3_RECORDING_ROTATION'] == '(unset: code default)'
+    Overlay.from_mapping(overlay)
+
+
+def test_every_static_serve_decision_is_pinned(runtime_env):
+    assert static_mode_names(runtime_env.parents[1]) == {'NOTES_PACKET_V2_MODE', 'LIFECYCLE_V2_MODE'}
+    overlay, report = overlay_from_runtime_env(runtime_env)
+    assert {'NOTES_PACKET_V2_MODE', 'LIFECYCLE_V2_MODE'} <= set(overlay['serving'])
+    assert overlay['serving']['NOTES_PACKET_V2_MODE'] is False  # unset mode: shadow, no cohort -> nobody
+    assert report['pinned_static'] >= 2
+
+
+def test_uid_allow_lists_carry_owner_membership_to_the_lab_uid(runtime_env):
+    overlay, report = overlay_from_runtime_env(runtime_env, owner_uid=OWNER)
+    assert overlay['env']['DREAM_AGENT_UID_ALLOWLIST'] == LAB_UID
+    assert overlay['env']['SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST'] == ''
+    assert report['uid_lists']['DREAM_AGENT_UID_ALLOWLIST'] == 'owner_member'
+    assert OWNER not in json.dumps(overlay) and 'someone-else' not in json.dumps(overlay)
+    anonymous, report = overlay_from_runtime_env(runtime_env)
+    assert anonymous['env']['DREAM_AGENT_UID_ALLOWLIST'] == ''
+    assert 'uid_list:DREAM_AGENT_UID_ALLOWLIST' in report['unresolved']
+    assert OWNER not in json.dumps(anonymous)
+
+
+# ---- read-only exporter -------------------------------------------------------------------
+
+
+class Snap:
+    def __init__(self, doc_id, data, exists=True):
+        self.id = doc_id
+        self._data = data
+        self.exists = exists
+        self.create_time = datetime(2026, 3, 14, 9, tzinfo=timezone.utc)
+        self.update_time = datetime(2026, 3, 14, 10, tzinfo=timezone.utc)
+
+    def to_dict(self):
+        return dict(self._data)
+
+
+class Query:
+    def __init__(self, docs):
+        self.docs = docs
+        self.after = None
+        self.cap = None
+
+    def where(self, **kwargs):
+        return self
+
+    def order_by(self, *args, **kwargs):
+        return self
+
+    def limit(self, n):
+        self.cap = n
+        return self
+
+    def start_after(self, doc):
+        self.after = doc
+        return self
+
+    def stream(self):
+        start = self.docs.index(self.after) + 1 if self.after else 0
+        return iter(self.docs[start : start + self.cap])
+
+
+class Client:
+    def __init__(self, conversations, leases):
+        self.conversations, self.leases = conversations, leases
+
+    def collection(self, name):
+        return self
+
+    def document(self, name):
+        return self
+
+    def where(self, **kwargs):  # the conversations query
+        return Query(self.conversations).where()
+
+    def stream(self):  # the lease collection
+        return iter(self.leases)
+
+
+def test_export_classifies_pages_and_keeps_document_times(tmp_path, monkeypatch):
+    snapshot = tmp_path / 'snap'
+    snapshot.mkdir()
+    (snapshot / 'manifest.json').write_text(
+        json.dumps({'window': {'start': '2026-03-14T00:00:00+00:00', 'end': '2026-03-15T00:00:00+00:00'}})
+    )
+    docs = [Snap(f'rec-{i}', {'recording': True, 'started_at': '2026-03-14T09:00:00+00:00'}) for i in range(3)]
+    docs += [Snap('v3-1', {'v3_derived': True}), Snap('legacy-1', {'source': 'omi'})]
+    leases = [Snap('builder', {'token': 'secret-token', 'open_id': 'v3-1', 'until': None})]
+    monkeypatch.setattr(
+        prod_export, 'decode', lambda uid, snap: {**snap.to_dict(), 'id': snap.id, '_create_time': snap.create_time}
+    )
+    monkeypatch.setattr(prod_export, 'PAGE', 2)
+    out = snapshot / 'v3'
+    out.mkdir()
+    manifest = prod_export.export('uid', Client(docs, leases), snapshot, out)
+    assert manifest['counts'] == {'recordings': 3, 'derived': 1, 'other': 1, 'leases': 1, 'unreadable': 0}
+    lease = json.loads((out / 'leases.jsonl').read_text())
+    assert 'token' not in lease and lease['open_id'] == 'v3-1' and lease['_key'] == 'builder'
+    first = json.loads((out / 'recordings.jsonl').read_text().splitlines()[0])
+    assert first['_create_time'].startswith('2026-03-14T09')
+    assert oct((out / 'recordings.jsonl').stat().st_mode & 0o777) == '0o600'
+    assert 'uid' not in json.dumps(manifest['window'])
+
+
+def test_decode_falls_back_to_raw_without_speech(monkeypatch):
+    import types
+
+    fake_store = types.ModuleType('database.conversations_v3')
+
+    def broken(uid, snapshot):
+        raise ValueError('bad blob')
+
+    fake_store.decode_row = broken
+    monkeypatch.setitem(__import__('sys').modules, 'database.conversations_v3', fake_store)
+    import database
+
+    monkeypatch.setattr(database, 'conversations_v3', fake_store, raising=False)
+    row = prod_export.decode('uid', Snap('r', {'recording': True, 'transcript_segments': b'zz'}))
+    assert row['_export_unreadable'] == 'ValueError' and 'transcript_segments' not in row and row['id'] == 'r'
+
+
+def test_read_only_fence_refuses_firestore_and_redis_writes():
+    from google.cloud.firestore_v1 import document
+
+    with prod_export.read_only_fence():
+        with pytest.raises(prod_export.WriteRefused):
+            document.DocumentReference.set(object(), {'a': 1})
+        import redis
+
+        with pytest.raises(prod_export.WriteRefused):
+            redis.Redis.execute_command(object(), 'SET', 'k', 'v')
+    assert document.DocumentReference.set is not None
+
+
+def test_output_and_guard_are_refused_outside_the_rules(tmp_path):
+    with pytest.raises(SystemExit):
+        prod_export.resolve_output(tmp_path / 'snap')  # not under /Volumes/Ephemeral
+    snap = tmp_path / 'snap'
+    snap.mkdir()
+    (snap / 'manifest.json').write_text('{}')
+    with pytest.raises(SystemExit):
+        prod_export.resolve_output(tmp_path / 'elsewhere', allowed_root=tmp_path.parent)  # no manifest
+    out = prod_export.resolve_output(snap, allowed_root=tmp_path.parent)
+    assert out == snap.resolve() / 'v3' and oct(out.stat().st_mode & 0o777) == '0o700'
+    guard = tmp_path / 'guard.py'
+    guard.write_text('def owner_uid(path):\n    return "x"\n')
+    with pytest.raises(SystemExit):
+        prod_export.load_guard(guard)  # no load_secret
+    guard.write_text('def owner_uid(path):\n    return "x"\n\ndef load_secret(path):\n    return None\n')
+    assert prod_export.load_guard(guard).owner_uid('f') == 'x'

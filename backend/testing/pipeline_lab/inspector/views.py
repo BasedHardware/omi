@@ -20,11 +20,13 @@ from testing.pipeline_lab.inspector.reader import (
     boundary_key,
     conversation_pairs,
     daily_summary_key,
+    home_hidden,
     day_window,
     memory_key,
     new_verdict_id,
     notification_key,
     pair_items,
+    pipeline_of,
     safe_id,
     seconds_between,
     speaker_key,
@@ -55,6 +57,20 @@ def _brief(conv: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
         'title': structured.get('title') or '',
         'emoji': structured.get('emoji') or '',
         'discarded': bool(conv.get('discarded')),
+        **_v3_brief(conv),
+    }
+
+
+def _v3_brief(conv: Mapping[str, Any]) -> dict[str, Any]:
+    """v3 rows: Home visibility, its reason, the outline kind and how many recordings fed it."""
+    block = conv.get('v3')
+    if not isinstance(block, Mapping):
+        return {}
+    return {
+        'hidden': home_hidden(conv),
+        'hidden_reason': block.get('home_hidden_reason'),
+        'v3_kind': block.get('kind'),
+        'recordings': len(conv.get('recordings') or []),
     }
 
 
@@ -78,6 +94,7 @@ def run_summary(reader: Reader, run: Mapping[str, Any]) -> dict[str, Any]:
     }
     out['stt'] = run.get('stt')
     out['engine'] = run.get('chain_engine')
+    out['pipeline'] = pipeline_of(run)
     out['date'] = day.get('date')
     out['timezone'] = day.get('timezone')
     out['wall_seconds'] = seconds_between(run.get('started_at'), run.get('finished_at'))
@@ -173,7 +190,7 @@ def run_overview(reader: Reader, run_id: str) -> dict[str, Any]:
                 status_of_baseline.setdefault(twin['id'], row['status'])
     production = [
         {**(_brief(b) or {}), 'status': status_of_baseline.get(b.get('id'), 'missing')}
-        for b in reader.baseline_conversations(run['day_id'])
+        for b in reader.baseline_conversations(run['day_id'], pipeline_of(run))
     ]
     coverage = day.get('coverage') or {}
     statuses: dict[str, int] = {}
@@ -254,7 +271,7 @@ def _item_keys(conv: Optional[Mapping[str, Any]]) -> Optional[dict[str, str]]:
 def conversation_detail(reader: Reader, run_id: str, conversation_id: str) -> dict[str, Any]:
     run = reader.run(run_id)
     conv = reader.conversation(run_id, conversation_id)
-    by_id = {b['id']: b for b in reader.baseline_conversations(run['day_id']) if b.get('id')}
+    by_id = {b['id']: b for b in reader.baseline_conversations(run['day_id'], pipeline_of(run)) if b.get('id')}
     twins = [by_id[b] for b in baseline_ids_of(conv) if b in by_id]
     twin = _merge_twins(twins)
     pairing = reader.pairing(run)
@@ -281,7 +298,10 @@ def production_detail(reader: Reader, run_id: str, baseline_id: str) -> dict[str
     """A production conversation the replay did not reproduce (status ``missing``)."""
     run = reader.run(run_id)
     safe_id(baseline_id)
-    twin = next((b for b in reader.baseline_conversations(run['day_id']) if b.get('id') == baseline_id), None)
+    twin = next(
+        (b for b in reader.baseline_conversations(run['day_id'], pipeline_of(run)) if b.get('id') == baseline_id),
+        None,
+    )
     if twin is None:
         raise NotFound('production conversation not found')
     index = _verdict_index(reader, run['day_id'])
@@ -331,6 +351,11 @@ def _merge_twins(twins: list[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
             'notifications': [i for t in twins for i in t.get('notifications') or []],
         }
     )
+    if any(t.get('recordings') for t in twins):
+        merged['recordings'] = list(dict.fromkeys(r for t in twins for r in t.get('recordings') or []))
+        structured['sections'] = [x for t in twins for x in (t.get('structured') or {}).get('sections') or []]
+        if isinstance(first.get('v3'), Mapping):
+            merged['v3'] = {**first['v3'], 'visible': any((t.get('v3') or {}).get('visible') for t in twins)}
     return merged
 
 
@@ -346,6 +371,7 @@ def baseline_view(reader: Reader, day_id: str) -> dict[str, Any]:
     return {
         'day': reader.corpus_day(day_id),
         'conversations': reader.baseline_conversations(day_id),
+        'v3_conversations': reader.baseline_conversations(day_id, 'v3'),
         'memories': reader.baseline(day_id, 'memories.jsonl'),
         'action_items': reader.baseline(day_id, 'action_items.jsonl'),
         'notifications': reader.baseline(day_id, 'notifications.jsonl'),
@@ -400,7 +426,7 @@ def locate_item(
     if not conversation_id:
         raise BadRequest('conversation_id is required for this item kind')
     safe_id(conversation_id)
-    baseline = {b['id']: b for b in reader.baseline_conversations(day_id) if b.get('id')}
+    baseline = {b['id']: b for b in reader.baseline_conversations(day_id, pipeline_of(run)) if b.get('id')}
     try:
         conv: Optional[Mapping[str, Any]] = reader.conversation(run['run_id'], conversation_id)
     except NotFound:

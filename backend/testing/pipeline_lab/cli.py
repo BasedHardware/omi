@@ -139,7 +139,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     from_env.add_argument('--runtime-env', help='runtime_env.yaml (default: backend/deploy/runtime_env.yaml here)')
     from_env.add_argument('--environment', default='prod')
-    from_env.add_argument('--service', default='backend-listen', help='gke or cloud_run service whose env to use')
+    from_env.add_argument(
+        '--service',
+        default='backend-sync',
+        help='gke or cloud_run service whose env to use (backend-sync runs the v3 reconcile and notes)',
+    )
     from_env.add_argument(
         '--owner-uid-env', help='name of an env var holding the owner uid, to resolve partial cohorts (never written)'
     )
