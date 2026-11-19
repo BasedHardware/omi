@@ -37,7 +37,7 @@ def test_readback_counts_overdue_and_late_generations():
 def test_only_committed_erase_unlocks_wipe(monkeypatch, error, enabled, expected, failure):
     observed = []
 
-    def record(uid, job_id, claim, step, path=None):
+    def record(uid, job_id, claim, step, path=None, *, expires=None):
         assert (uid, job_id, claim) == ('tenant', 'job', receipts.claim_fingerprint('token'))
         observed.append(step)
         return {receipts.CLAIM_EXPIRES_AT: datetime.now(timezone.utc) + timedelta(seconds=10)}
@@ -56,37 +56,85 @@ def test_only_committed_erase_unlocks_wipe(monkeypatch, error, enabled, expected
     monkeypatch.setattr(erase, '_erase_at_postgres', recovery)
     if failure:
         with pytest.raises(failure):
-            erase.require_committed_erase('tenant', 'job', 'token', lambda: None, lambda _inflight: None)
+            erase.require_committed_erase(
+                'tenant', 'job', 'token', lambda: datetime.now(timezone.utc), lambda _inflight: None
+            )
     else:
-        erase.require_committed_erase('tenant', 'job', 'token', lambda: None, lambda _inflight: None)
+        erase.require_committed_erase(
+            'tenant', 'job', 'token', lambda: datetime.now(timezone.utc), lambda _inflight: None
+        )
     assert observed == expected
 
 
 def test_older_receipt_is_reused_under_new_claim(monkeypatch):
     observed = []
 
-    def record(uid, job_id, claim, step):
+    def record(uid, job_id, claim, step, *, expires=None):
         assert claim == receipts.claim_fingerprint('new-token')
         observed.append(step)
         return {receipts.RECEIPT_AT: datetime.now(timezone.utc)}
 
     monkeypatch.setattr(receipts, 'record', record)
-    erase.require_committed_erase('tenant', 'job', 'new-token', lambda: None, lambda _inflight: None)
+    erase.require_committed_erase(
+        'tenant', 'job', 'new-token', lambda: datetime.now(timezone.utc), lambda _inflight: None
+    )
     assert observed == ['arm', 'wipe']
 
 
-def test_workerd_certificate_failure_cannot_authorize_recovery():
-    import ssl
+@pytest.mark.parametrize(
+    ('failure', 'during_tls', 'expected'),
+    [
+        (ConnectionRefusedError(), False, erase.EraseUnavailable),
+        (erase.ssl.SSLCertVerificationError('bad certificate'), True, erase.EraseRejected),
+        (TimeoutError(), True, erase.EraseRejected),
+    ],
+)
+def test_worker_transport_distinguishes_tcp_availability_from_tls_trust(monkeypatch, failure, during_tls, expected):
+    from unittest.mock import MagicMock
 
-    import httpx
+    monkeypatch.setenv('GO_QUEUE_ERASE_URL', 'https://worker.example/internal/v1/tenant-erase')
+    monkeypatch.setenv('GO_QUEUE_ERASE_AUDIENCE', 'worker')
+    monkeypatch.setattr(erase, '_oidc_token', lambda _: 'token')
+    connect = MagicMock(side_effect=None if during_tls else failure)
+    monkeypatch.setattr(erase.socket, 'create_connection', connect)
+    context = MagicMock()
+    context.wrap_socket.side_effect = failure
+    monkeypatch.setattr(erase.ssl, 'create_default_context', lambda: context)
 
-    error = httpx.ConnectError('connection rejected')
-    error.__cause__ = ssl.SSLCertVerificationError('bad certificate')
-    assert not erase._is_network_unavailable(error)
-    assert not erase._is_network_unavailable(httpx.ConnectTimeout('ambiguous handshake timeout'))
-    assert erase._is_network_unavailable(httpx.ReadTimeout('timed out after establishing TLS'))
+    with pytest.raises(expected):
+        erase._erase_at_worker('tenant', 'job', 'claim')
 
 
 def test_recovery_is_off_without_a_database_binding(monkeypatch):
     monkeypatch.delenv('GO_QUEUE_ERASE_RECOVERY_DATABASE_URL', raising=False)
     assert erase._erase_at_postgres('tenant', datetime.now(timezone.utc)) is False
+
+
+@pytest.mark.asyncio
+async def test_recovery_closes_connection_before_cancelling_stalled_sql(monkeypatch):
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+
+    import psycopg
+
+    connection = MagicMock()
+    connection.set_isolation_level = AsyncMock()
+    connection.close = AsyncMock()
+    connection.commit = AsyncMock()
+    started = asyncio.Event()
+
+    async def stall(*args):
+        started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            connection.close.assert_awaited_once()
+            raise
+
+    connection.execute = stall
+    monkeypatch.setattr(psycopg.AsyncConnection, 'connect', AsyncMock(return_value=connection))
+    with pytest.raises(erase.EraseUnavailable):
+        await erase._recover_erase('test-only', 'queue', 'tenant', datetime.now(timezone.utc) + timedelta(seconds=1))
+
+    assert started.is_set()
+    connection.commit.assert_not_awaited()

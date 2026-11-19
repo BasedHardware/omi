@@ -13,13 +13,13 @@ from config.firestore_read_levers import lever_enabled
 import uuid
 from database.fsr_read_cache import cache_writer, cached_read, memo, plane_id, ttl, user_snapshot, writing
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, NotRequired, Optional, TypedDict
+from typing import Any, Literal, Optional, TypedDict
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
 from ._client import get_data_plane_firestore_client
-from database.go_queue_erase import ARMED_AT, RECEIPT_AT, mark_wipe_running, running_stale_window
+from database.go_queue_erase import ARMED_AT, mark_wipe_running, running_stale_window
 from database.account_deletion_marker import (
     account_deletion_collection,
     account_deletion_document,
@@ -85,7 +85,6 @@ ONBOARDING_ADMISSION_TTL = timedelta(minutes=20)
 class DeletionWipeTaskResolution(TypedDict):
     outcome: Literal['resolved', 'missing', 'ambiguous', 'completed', 'not_actionable']
     uid: str | None
-    go_queue_erase_armed: NotRequired[bool]
 
 
 class DeletionWipeIntent(TypedDict):
@@ -419,11 +418,13 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
 
 
 @cache_writer('deletion_marker_cache')
-def mark_user_deletion_wipe_running(uid: str, job_id: str | None = None, claim: str | None = None) -> bool:
+def mark_user_deletion_wipe_running(
+    uid: str, job_id: str | None = None, claim: str | None = None, *, required: bool = False
+) -> bool:
     """Read the current erase requirement and invalidate the previous attempt before running."""
     client = account_deletion_firestore_client()
     ref = account_deletion_document(uid, firestore_client=client)
-    return mark_wipe_running(client.transaction(), ref, job_id, claim, uuid.uuid4().hex)
+    return mark_wipe_running(client.transaction(), ref, job_id, claim, uuid.uuid4().hex, required)
 
 
 @transactional
@@ -672,8 +673,6 @@ def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution
         return {'outcome': 'completed', 'uid': None}
     if status in _DELETION_WIPE_TERMINAL_STATUSES:
         return {'outcome': 'not_actionable', 'uid': None}
-    if marker.get(ARMED_AT) is not None and marker.get(RECEIPT_AT) is None:
-        return {'outcome': 'resolved', 'uid': doc.id, 'go_queue_erase_armed': True}
     return {'outcome': 'resolved', 'uid': doc.id}
 
 

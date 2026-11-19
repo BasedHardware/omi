@@ -23,25 +23,31 @@ def test_go_queue_erase_receipt_requires_held_due_generation(monkeypatch):
     db = firestore.Client(project=f'demo-erase-{uid[:10]}', credentials=AnonymousCredentials())
     monkeypatch.setattr(receipts, 'account_deletion_firestore_client', lambda: db)
     ref = db.collection('account_deletions').document(uid)
+
+    def arm(claim: str, duration: timedelta = receipts.ERASE_GRANT_DURATION):
+        return receipts.record(uid, 'job', claim, 'arm', expires=datetime.now(timezone.utc) + duration)
+
     try:
         ref.set({'wipe_job_id': 'job', 'wipe_status': 'running', receipts.CLAIM: 'claim'})
         with pytest.raises(LegalHoldAuthorityUnavailable):
-            receipts.record(uid, 'job', 'claim', 'arm')
+            arm('claim')
         acquire_destructive_operation(
             uid, kind='account_deletion', token=f'account-deletion:{uid}', firestore_client=db
         )
         ref.update({'wipe_due_at': datetime.now(timezone.utc) + timedelta(days=1)})
         with pytest.raises(RuntimeError, match='due wipe generation'):
-            receipts.record(uid, 'job', 'claim', 'arm')
+            arm('claim')
         ref.update({'wipe_due_at': datetime.now(timezone.utc) - timedelta(days=1)})
-        receipts.record(uid, 'job', 'claim', 'arm')
+        with pytest.raises(RuntimeError, match='expired before arming'):
+            arm('claim', -timedelta(seconds=1))
+        arm('claim')
         with pytest.raises(RuntimeError, match='claim changed'):
             receipts.record(uid, 'job', 'old-claim', 'receipt', 'workerd')
         with pytest.raises(RuntimeError, match='receipt missing'):
             receipts.record(uid, 'job', 'claim', 'wipe')
         receipts.record(uid, 'job', 'claim', 'receipt', 'workerd')
         ref.update({receipts.CLAIM: 'new-claim', receipts.CLAIM_EXPIRES_AT: None})
-        receipts.record(uid, 'job', 'new-claim', 'arm')
+        arm('new-claim')
         receipts.record(uid, 'job', 'new-claim', 'wipe')
         marker = ref.get().to_dict()
         assert marker[receipts.ARMED_AT] <= marker[receipts.RECEIPT_AT] <= marker[receipts.WIPE_AT]
@@ -53,5 +59,26 @@ def test_go_queue_erase_receipt_requires_held_due_generation(monkeypatch):
             'eligible': 1,
             'overdue_pending': 0,
         }
+    finally:
+        db.close()
+
+
+def test_enabled_billing_retry_preserves_known_wipe_order():
+    host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
+    if urlsplit(f'//{host}').hostname not in {'localhost', '127.0.0.1', '::1'}:
+        pytest.fail('requires loopback Firestore emulator')
+    uid = uuid4().hex
+    db = firestore.Client(project=f'demo-erase-{uid[:10]}', credentials=AnonymousCredentials())
+    try:
+        ref = db.collection('account_deletions').document(uid)
+        ref.set({'wipe_job_id': 'job', 'wipe_status': 'retrying'})
+        assert not receipts.mark_wipe_running(db.transaction(), ref, 'job', 'first', 'first-attempt', True)
+        ref.update({'wipe_status': 'retrying'})
+        assert not receipts.mark_wipe_running(db.transaction(), ref, 'job', 'second', 'second-attempt', True)
+        assert receipts.ORDER_UNKNOWN not in ref.get().to_dict()
+
+        ref.update({'wipe_status': 'retrying', receipts.PROTECTED_ATTEMPT: False})
+        assert not receipts.mark_wipe_running(db.transaction(), ref, 'job', 'legacy', 'legacy-attempt', True)
+        assert ref.get().to_dict()[receipts.ORDER_UNKNOWN] is True
     finally:
         db.close()

@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import transactional
-from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database.account_deletion_marker import (
     account_deletion_document,
@@ -23,6 +22,8 @@ WIPE_AT = 'go_queue_erase_wipe_started_at'
 CLAIM = 'go_queue_erase_claim'
 CLAIM_EXPIRES_AT = 'go_queue_erase_claim_expires_at'
 ERASE_LEASE_SECONDS = 180
+ERASE_GRANT_DURATION = timedelta(seconds=25)
+PROTECTED_ATTEMPT = 'go_queue_erase_protected_attempt'
 PATH = 'go_queue_erase_path'
 ORDER_UNKNOWN = 'go_queue_erase_prior_wipe_unknown'
 Step = Literal['arm', 'verify', 'receipt', 'wipe']
@@ -39,7 +40,7 @@ def claim_fingerprint(token: str) -> str:
 
 
 @transactional
-def mark_wipe_running(transaction, ref, job_id: str | None, claim: str | None, operation_id: str):
+def mark_wipe_running(transaction, ref, job_id: str | None, claim: str | None, operation_id: str, required: bool):
     snapshot = ref.get(transaction=transaction)
     marker = (snapshot.to_dict() or {}) if snapshot.exists else {}
     armed = marker.get(ARMED_AT) is not None
@@ -50,16 +51,22 @@ def mark_wipe_running(transaction, ref, job_id: str | None, claim: str | None, o
     if armed and claim is None:
         raise RuntimeError('armed Go queue erase requires a durable task claim')
     fields: dict[str, Any] = {'wipe_status': 'running', 'wipe_running_at': datetime.now(timezone.utc)}
-    if marker.get('wipe_running_at') and not armed:
-        fields[ORDER_UNKNOWN] = True
-    if claim is not None:
+    if required or armed:
+        if marker.get('wipe_running_at') and not armed and marker.get(PROTECTED_ATTEMPT) is not True:
+            fields[ORDER_UNKNOWN] = True
+        fields[PROTECTED_ATTEMPT] = True
+    elif marker.get(PROTECTED_ATTEMPT) is True:
+        fields[PROTECTED_ATTEMPT] = False
+    if claim is not None and (required or armed):
         fields.update({CLAIM: claim, CLAIM_EXPIRES_AT: None})
     write_account_authority(transaction, ref, fields, merge=True, preimage=snapshot, operation_id=operation_id)
     return armed
 
 
 @transactional
-def _record(transaction, client, ref, uid: str, job_id: str, claim: str, step: Step, path: str | None):
+def _record(
+    transaction, client, ref, uid: str, job_id: str, claim: str, step: Step, path: str | None, expires: datetime | None
+):
     assert_destructive_operation_transaction(
         transaction, client, uid=uid, kind='account_deletion', token=f'account-deletion:{uid}'
     )
@@ -80,7 +87,10 @@ def _record(transaction, client, ref, uid: str, job_id: str, claim: str, step: S
     if step == 'arm':
         if marker.get(RECEIPT_AT) is not None:
             return marker
-        fields: dict[str, Any] = {CLAIM_EXPIRES_AT: datetime.now(timezone.utc) + timedelta(seconds=25)}
+        now = datetime.now(timezone.utc)
+        if expires is None or not now < expires <= now + ERASE_GRANT_DURATION:
+            raise RuntimeError('Go queue erase claim expired before arming')
+        fields: dict[str, Any] = {CLAIM_EXPIRES_AT: expires}
         if marker.get(ARMED_AT) is None:
             fields.update({ARMED_AT: firestore.SERVER_TIMESTAMP, RECEIPT_AT: None})
             if isinstance(marker.get('wipe_auth_deleted_at'), datetime):
@@ -102,10 +112,10 @@ def _record(transaction, client, ref, uid: str, job_id: str, claim: str, step: S
     return marker
 
 
-def record(uid: str, job_id: str, claim: str, step: Step, path: str | None = None):
+def record(uid: str, job_id: str, claim: str, step: Step, path: str | None = None, *, expires: datetime | None = None):
     client = account_deletion_firestore_client()
     ref = account_deletion_document(uid, firestore_client=client)
-    return _record(client.transaction(), client, ref, uid, job_id, claim, step, path)
+    return _record(client.transaction(), client, ref, uid, job_id, claim, step, path, expires)
 
 
 def summarize(now: datetime, markers) -> dict[str, int]:
@@ -136,6 +146,8 @@ def summarize(now: datetime, markers) -> dict[str, int]:
 
 def readback(now: datetime, collection) -> dict[str, int]:
     """Read aggregate evidence from the authoritative marker collection."""
+    from google.cloud.firestore_v1.base_query import FieldFilter
+
     cutoff = now - ERASE_DEADLINE
     recent = (
         collection.where(filter=FieldFilter(ARMED_AT, '>=', now - timedelta(days=7)))

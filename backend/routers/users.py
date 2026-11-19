@@ -35,7 +35,6 @@ from database import (
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from database._client import get_customer_firestore_client
 from database.go_queue_erase import ERASE_LEASE_SECONDS
-from services.users.go_queue_erase import go_queue_erase_required
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
 from services.users.data_export_response import DataExportStreamingResponse
@@ -361,9 +360,7 @@ async def run_account_deletion_wipe(
         )
 
     lock_key = f'account-deletion:{uid}'
-    short_lease = go_queue_erase_required() or resolution.get('go_queue_erase_armed') is True
-    lease_args = (ERASE_LEASE_SECONDS,) if short_lease else ()
-    lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key, *lease_args)
+    lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key, ERASE_LEASE_SECONDS)
     if not lock_token:
         logger.warning(f'account_deletion handler: run-lock held for {uid}, deferring')
         return JSONResponse(status_code=409, content={'status': 'locked'})
@@ -381,14 +378,7 @@ async def run_account_deletion_wipe(
 
         max_attempts = get_account_deletion_tasks_max_attempts()
         terminal = task_authentication.retry_count >= max_attempts - 1
-        if short_lease:
-            ok = await run_deletion_wipe_with_lease(
-                uid, task_authentication.retry_count, terminal, lock_token, wipe_job_id, short_lease=True
-            )
-        else:
-            ok = await run_deletion_wipe_with_lease(
-                uid, task_authentication.retry_count, terminal, lock_token, wipe_job_id
-            )
+        ok = await run_deletion_wipe_with_lease(uid, task_authentication.retry_count, terminal, lock_token, wipe_job_id)
         if ok:
             return JSONResponse(status_code=200, content={'status': 'done'})
 

@@ -2,7 +2,8 @@
 
 import asyncio
 from collections.abc import Callable
-import errno
+import http.client
+import json
 import socket
 import ssl
 from datetime import datetime, timezone
@@ -10,8 +11,6 @@ import logging
 import os
 from functools import partial
 from urllib.parse import urlsplit
-
-import httpx
 
 from database import go_queue_erase as receipt
 
@@ -65,53 +64,50 @@ def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
     except Exception:
         raise EraseRejected('Go queue erase workload identity unavailable') from None
     try:
-        response = httpx.post(
-            endpoint,
-            headers={'Authorization': f'Bearer {token}'},
-            json={'tenant': uid, 'wipe_job_id': job_id, 'claim': claim},
-            timeout=httpx.Timeout(8, connect=2),
-            follow_redirects=False,
-            trust_env=False,
-        )
-    except httpx.RequestError as error:
-        if _is_network_unavailable(error):
-            raise EraseUnavailable('Go queue erase request unavailable') from None
-        raise EraseRejected('untrusted or invalid Go queue erase transport') from None
-    if response.status_code in (408, 429, 502, 503, 504):
+        raw = socket.create_connection((parsed.hostname, parsed.port or 443), timeout=2)
+    except socket.gaierror as error:
+        if error.errno != socket.EAI_AGAIN:
+            raise EraseRejected('invalid Go queue erase host') from None
+        raise EraseUnavailable('Go queue erase host temporarily unavailable') from None
+    except OSError:
+        raise EraseUnavailable('Go queue erase TCP connection unavailable') from None
+    with raw:
+        try:
+            secured = ssl.create_default_context().wrap_socket(raw, server_hostname=parsed.hostname)
+        except OSError:
+            raise EraseRejected('Go queue erase TLS handshake failed') from None
+        with secured:
+            secured.settimeout(5)
+            connection = http.client.HTTPSConnection(parsed.hostname, parsed.port)
+            connection.sock = secured
+            try:
+                connection.request(
+                    'POST',
+                    parsed.path,
+                    body=json.dumps({'tenant': uid, 'wipe_job_id': job_id, 'claim': claim}),
+                    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+                )
+                with connection.getresponse() as response:
+                    status = response.status
+                    body = response.read(2049) if status == 200 else b''
+            except ssl.SSLError:
+                raise EraseRejected('Go queue erase TLS session failed') from None
+            except OSError:
+                raise EraseUnavailable('Go queue erase HTTPS request unavailable') from None
+            except http.client.HTTPException:
+                raise EraseRejected('invalid Go queue erase HTTP response') from None
+            finally:
+                connection.close()
+    if status in (408, 429, 502, 503, 504):
         raise EraseUnavailable('Go queue erase service unavailable')
-    if response.status_code != 200:
+    if status != 200 or len(body) > 2048:
         raise EraseRejected('Go queue erase request rejected')
     try:
-        data = response.json()
+        data = json.loads(body)
     except ValueError:
         raise EraseRejected('invalid Go queue erase receipt') from None
     if data != {'wipe_job_id': job_id, 'claim': claim}:
         raise EraseRejected('mismatched Go queue erase receipt')
-
-
-def _is_network_unavailable(error: httpx.RequestError) -> bool:
-    """Only known network availability failures can authorize fallback."""
-    if isinstance(error, httpx.ConnectTimeout):
-        return False
-    if isinstance(error, httpx.TimeoutException):
-        return True
-    current = error.__cause__
-    while current is not None:
-        if isinstance(current, ssl.SSLError):
-            return False
-        if isinstance(current, socket.gaierror):
-            return current.errno == socket.EAI_AGAIN
-        if isinstance(current, OSError) and current.errno in {
-            errno.ECONNREFUSED,
-            errno.ECONNRESET,
-            errno.EHOSTUNREACH,
-            errno.ENETUNREACH,
-            errno.ETIMEDOUT,
-            errno.EPIPE,
-        }:
-            return True
-        current = current.__cause__
-    return False
 
 
 async def _recover_erase(dsn: str, schema: str, uid: str, expires: datetime) -> None:
@@ -122,21 +118,33 @@ async def _recover_erase(dsn: str, schema: str, uid: str, expires: datetime) -> 
         remaining = (expires - datetime.now(timezone.utc)).total_seconds()
         if remaining <= 0:
             raise EraseUnavailable('Go queue erase recovery grant expired')
-        async with asyncio.timeout(min(10, remaining)):
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + min(10, remaining)
+        async with asyncio.timeout_at(deadline):
             connection = await psycopg.AsyncConnection.connect(
                 dsn,
                 sslmode='verify-full',
                 connect_timeout=3,
                 options='-c statement_timeout=6000 -c lock_timeout=4000',
             )
-            try:
-                await connection.set_isolation_level(psycopg.IsolationLevel.READ_COMMITTED)
-                await connection.execute(
-                    sql.SQL('SELECT {}.queue_erase_tenant(%s)').format(sql.Identifier(schema)), (uid,)
-                )
-                await connection.commit()
-            finally:
-                await connection.close()
+
+        async def commit_erase() -> None:
+            await connection.set_isolation_level(psycopg.IsolationLevel.READ_COMMITTED)
+            await connection.execute(sql.SQL('SELECT {}.queue_erase_tenant(%s)').format(sql.Identifier(schema)), (uid,))
+            await connection.commit()
+
+        operation = asyncio.create_task(commit_erase())
+        try:
+            done, _ = await asyncio.wait({operation}, timeout=max(0, deadline - loop.time()))
+            if not done:
+                raise TimeoutError
+            operation.result()
+        finally:
+            # Close the wire before cancellation, so psycopg cannot wait on a stalled server.
+            await connection.close()
+            if not operation.done():
+                operation.cancel()
+                await asyncio.gather(operation, return_exceptions=True)
     except psycopg.errors.InsufficientPrivilege:
         raise EraseRejected('Go queue erase recovery permission denied') from None
     except (psycopg.Error, TimeoutError):
@@ -155,11 +163,10 @@ def _erase_at_postgres(uid: str, expires: datetime) -> bool:
 
 
 def require_committed_erase(
-    uid: str, job_id: str, token: str, owns_claim: Callable[[], None], remote_inflight: Callable[[bool], None]
+    uid: str, job_id: str, token: str, owns_claim: Callable[[], datetime], remote_inflight: Callable[[bool], None]
 ) -> None:
     claim = receipt.claim_fingerprint(token)
-    owns_claim()
-    marker = receipt.record(uid, job_id, claim, 'arm')
+    marker = receipt.record(uid, job_id, claim, 'arm', expires=owns_claim())
     try:
         if marker.get(receipt.RECEIPT_AT) is None:
             remote_inflight(True)
