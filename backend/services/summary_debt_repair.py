@@ -31,6 +31,7 @@ from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPri
 from utils.conversations import summary_delivery as delivery
 from utils.sync import reprocess
 from utils.enrichment.age_gate import expired, max_age_seconds
+from utils.observability.reasons import ReasonFamily, SummaryRepairDiscoveryOutcome as DiscoveryOutcome, reason_label
 
 Row = dict[str, Any]
 _scan_clock = time.monotonic
@@ -158,7 +159,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
         progress = {'newest': cursor if cursor.get('pending') is None else None}
     attempts = 0
     owner_attempts: dict[str, int] = {}
-    phase_counts: dict[str, Counter[str]] = {}
+    phase_counts: dict[str, Counter[DiscoveryOutcome]] = {}
     overdue = 0
     oldest = 0.0
     phases = ('near_expiry', 'newest') if window else ('newest',)
@@ -183,7 +184,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
             and _scan_clock() < scan_deadline
         ):
             limit = min(page_target, REPAIR_QUERY_PAGE_LIMIT, REPAIR_SCAN_LIMIT - counts['scanned'])
-            observed['queries'] += 1
+            observed[DiscoveryOutcome.QUERIES] += 1
             try:
                 page = due_conversations(now=current, phase=phase, limit=limit, after=walk, firestore_client=client)
             except FailedPrecondition:
@@ -193,12 +194,12 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 # progress and publishes this tick's counts. No alternate query.
                 logger.warning('event=summary_debt_repair_newest_index_unavailable outcome=error')
                 counts['errors'] += 1
-                observed['query_error'] += 1
+                observed[DiscoveryOutcome.QUERY_ERROR] += 1
                 break
             # Count every returned document, including a fetched tail left for
             # next tick. No later RPC starts once attempts/time are exhausted.
             counts['scanned'] += len(page)
-            observed['fetched'] += len(page)
+            observed[DiscoveryOutcome.FETCHED] += len(page)
             exhausted = len(page) < limit
             for snapshot in page:
                 if attempts >= REPAIR_ADMISSION_LIMIT or _scan_clock() >= scan_deadline:
@@ -206,24 +207,24 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                     break
                 previous = last
                 last = snapshot
-                observed['examined'] += 1
+                observed[DiscoveryOutcome.EXAMINED] += 1
                 row: Row = snapshot.to_dict() or {}
                 if delivery.refusal(row):
-                    observed['row_refused'] += 1
+                    observed[DiscoveryOutcome.ROW_REFUSED] += 1
                     continue
                 parts = snapshot.reference.path.split('/')
                 if (len(parts) != 4) or (parts[0] != 'users') or (parts[2] != 'conversations'):
-                    observed['invalid_path'] += 1
+                    observed[DiscoveryOutcome.INVALID_PATH] += 1
                     continue
                 if account_deletion_blocks_user_work(parts[1]):
-                    observed['account_deletion_blocked'] += 1
+                    observed[DiscoveryOutcome.ACCOUNT_DELETION_BLOCKED] += 1
                     continue
 
                 if expired(
                     {'first_pending_at': row.get('summary_first_pending_at')}, row.get('created_at'), now=current
                 ):
                     counts['expired_seen'] += 1
-                    observed['expired'] += 1
+                    observed[DiscoveryOutcome.EXPIRED] += 1
                     continue
                 overdue += 1
                 oldest = max(oldest, current - row['summary_due_at'])
@@ -231,25 +232,25 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                     # Discovery progress is independent of admission. Keep the
                     # conversation's durable due debt for a later pass/wrap;
                     # pinning this cursor here can hide every later owner.
-                    observed['owner_deferred'] += 1
+                    observed[DiscoveryOutcome.OWNER_DEFERRED] += 1
                     continue
                 if _scan_clock() >= scan_deadline:
                     last = previous
                     interrupted = True
                     break
                 attempts += 1
-                observed['attempted'] += 1
+                observed[DiscoveryOutcome.ATTEMPTED] += 1
                 owner_attempts[parts[1]] = owner_attempts.get(parts[1], 0) + 1
                 try:
                     admitted = int(redrive(client, parts[1], parts[3], now=current))
-                    observed['admitted' if admitted else 'not_admitted'] += 1
+                    observed[DiscoveryOutcome.ADMITTED if admitted else DiscoveryOutcome.NOT_ADMITTED] += 1
                     counts['admitted'] += admitted
                     if phase == 'near_expiry':
                         counts['near_expiry_admitted'] += admitted
                 except Exception:
                     # Existing sweep owns retry. Do not print document contents/errors.
                     counts['errors'] += 1
-                    observed['redrive_error'] += 1
+                    observed[DiscoveryOutcome.REDRIVE_ERROR] += 1
             # Every examined row advances discovery, including owner deferrals.
             # Fetched rows left unexamined by admission/time limits do not.
             # Use the last examined row, never a previous phase's page tail
@@ -304,7 +305,10 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     delivery.REPAIR.labels(outcome='expired_seen').inc(counts['expired_seen'])
     delivery.REPAIR.labels(outcome='near_expiry_admitted').inc(counts['near_expiry_admitted'])
     for phase, observed in phase_counts.items():
-        observed['unexamined'] = observed['fetched'] - observed['examined']
+        observed[DiscoveryOutcome.UNEXAMINED] = observed[DiscoveryOutcome.FETCHED] - observed[DiscoveryOutcome.EXAMINED]
         for outcome, value in observed.items():
-            delivery.REPAIR_DISCOVERY.labels(phase=phase, outcome=outcome).inc(value)
+            delivery.REPAIR_DISCOVERY.labels(
+                phase=phase,
+                outcome=reason_label(ReasonFamily.SUMMARY_REPAIR_DISCOVERY, outcome, DiscoveryOutcome),
+            ).inc(value)
     return counts
