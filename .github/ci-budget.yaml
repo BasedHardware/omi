@@ -85,14 +85,33 @@
     "backend-go-checks.yml/check": {
       "budget_p50_minutes": 5,
       "display_name": "check",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 3,
+      "if": "${{ !cancelled() && (github.event_name != 'push' || inputs.nightly_main_sha != '' || needs.port-tasks.outputs.go_changed == 'true') }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "port-tasks",
+      "owner": "CI maintainers",
+      "rationale": "SCA-3180: retain a 5-minute Go-check budget, account for the existing pinned nightly, and allow one extra PR run from the port script path. Main pushes select Go checks only when Go paths or the workflow change.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-go-checks.yml/port-tasks": {
+      "budget_p50_minutes": 5,
+      "display_name": "port-tasks",
       "expected_runs_class": "unsampled-pr-sentinel",
       "expected_runs_per_day": 1,
-      "if": null,
+      "if": "inputs.nightly_main_sha == ''",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "New 2026-11-19: make check for backend-go (vet, lint, structural rules, race tests with Postgres 16 and the Firestore emulator); runs only when backend-go/ changes; 5-minute placeholder until observed",
+      "rationale": "SCA-3180: one forecast PR run per day for a checkout and focused Python tests. Main pushes also inspect merge metadata with read-only access. The job stays off the pinned nightly.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3603,21 +3622,19 @@
     "backend-go-checks.yml": {
       "name": "Backend Go Checks",
       "owner": "CI maintainers",
-      "rationale": "Path-selected checks for the Go backend foundation (backend-go/)",
+      "rationale": "SCA-3180: path-selected PR validation and read-only port task drafts on main pushes.",
       "triggers": {
         "pull_request": {
           "paths": [
             "backend-go/**",
+            ".github/scripts/go_port_tasks.py",
+            ".github/scripts/test_go_port_tasks.py",
             ".github/workflows/backend-go-checks.yml"
           ]
         },
         "push": {
           "branches": [
             "main"
-          ],
-          "paths": [
-            "backend-go/**",
-            ".github/workflows/backend-go-checks.yml"
           ]
         },
         "workflow_call": {
