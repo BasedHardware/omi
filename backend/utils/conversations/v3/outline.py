@@ -134,12 +134,17 @@ def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE):
         group['end'] = max(group['end'], line['end'])
     if groups and cut is not None and cut <= now:
         groups[-1]['manual_end'] = True
-    for group in groups:
-        continues = any(
+    for index, group in enumerate(groups):
+        # A later stretch begins only after recorded silence or a manual cut, so only the last one can
+        # still be open. Page continuation and future-dated speech must not also hold an earlier one
+        # open: two open stretches never commit (multiple_open_conversations parks the owner).
+        later = index + 1 < len(groups)
+        continues = not later and any(
             r.get('_v3_page_continues') and r['id'] == group['lines'][-1]['conversation_id'] for r in members
         )
         age = now - group['end']
-        group['finished'] = (age >= lock_delay and not continues) or group['manual_end']
+        group['locked'] = (age >= lock_delay and not continues) or group['manual_end']
+        group['finished'] = later or group['locked']
         group['outline_ready'] = group['finished'] or (age >= silence_gap and not continues)
         group['fingerprint'] = hashlib.sha256(
             json.dumps(

@@ -151,7 +151,7 @@ def test_joining_provisional_cards_preserves_their_claims_until_lock():
     window['finished'] = False
     preview = planner.preserve_finished_windows([window], existing, recordings, protect_provisional=True)
     assert [piece['existing_id'] for piece in preview] == ['early', 'late']
-    assert not any(piece['finished'] for piece in preview)
+    assert [piece['finished'] for piece in preview] == [True, False]
     for piece in preview:
         row = planner.build('synthetic', piece, recordings, existing[piece['existing_id']])
         assert row['_v3_claims']['r'] == [

@@ -134,6 +134,7 @@ def _cohesive_groups(groups, outlines) -> Iterator[tuple[dict[str, Any], list[di
                 'manual_end': bool(last and group.get('manual_end')),
                 '_keep_unmatched_together': bool(manual),
                 'finished': group['finished'] or not last,
+                'locked': group.get('locked', group['finished']) or not last,
                 '_stretch_words': word_count(part),
             }
             yield bounded, _as_sections(topics) if manual else _fold_short_topics(part, topics)
@@ -167,12 +168,10 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                         or group.get('manual_end')
                         or group.get('after_manual_end')
                     ),
-                    'finished': (
-                        group['finished']
-                        or (not defer_topic_lock and end < len(group['lines']))
-                        or part_index < len(capped) - 1
-                    ),
+                    'finished': (group['finished'] or end < len(group['lines']) or part_index < len(capped) - 1),
                 }
+                if defer_topic_lock and not group.get('locked', group['finished']) and part_index == len(capped) - 1:
+                    candidate['_defer_lock'] = True
                 if cohesion:
                     candidate['_stretch_words'] = group['_stretch_words']
                     candidate['_stretch_partition'] = first_result
@@ -195,6 +194,8 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                     prior['lines'].extend(part)
                     prior['finished'] = candidate['finished']
                     prior['manual_end'] = candidate['manual_end']
+                    if defer_topic_lock:
+                        prior['_defer_lock'] = candidate.get('_defer_lock', False)
                 else:
                     result.append(candidate)
     return result
@@ -340,7 +341,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         recordings,
         {line['conversation_id'] for line in lines},
         words=words,
-        finished=window['finished'],
+        finished=window['finished'] and not window.get('_title_preview'),
         manual_end=manual_end,
     )
     row: dict[str, Any] = {
@@ -403,7 +404,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
                 and kind not in {'media', 'background'}
             )
         ),
-        'tile_state': 'writing' if window['finished'] else 'live',
+        'tile_state': 'writing' if window['finished'] and not window.get('_title_preview') else 'live',
         'v3_recording_ids': list(dict.fromkeys(l['conversation_id'] for l in lines)),
         'transcript_segments': segments,
         'recording_pieces': pieces,
@@ -511,7 +512,7 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
     published_partitions = set()
     fresh_metadata = {'_published': published, '_published_ids': published_ids}
     for window in planned:
-        gaps = []
+        gaps, pieces = [], []
         partition = window.get('_stretch_partition')
         for line in window['lines']:
             claims = claims_by_recording.get(line['conversation_id'])
@@ -525,7 +526,7 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
                     published_partitions.add(partition)
             if owner:
                 if gaps and not window.get('_keep_unmatched_together'):
-                    fresh.append({**window, **fresh_metadata, 'lines': gaps, 'manual_end': False})
+                    pieces.append({**window, **fresh_metadata, 'lines': gaps, 'manual_end': False})
                     gaps = []
                 target = retained.setdefault(
                     owner['id'],
@@ -534,6 +535,7 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
                         'lines': [],
                         'finished': owner['id'] not in provisional,
                         '_held_provisional': owner['id'] in provisional,
+                        '_defer_lock': owner['id'] in provisional and window.get('_defer_lock', False),
                         'manual_end': False,
                         'title': owner.get('structured', {}).get('title', ''),
                         'kind': owner.get('outline_kind') or owner.get('kind', 'conversation'),
@@ -544,12 +546,14 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
                 target.pop('_stretch_words', None)
                 target['lines'].append(line)
                 target['finished'] = target['finished'] or window['finished']
+                if not window.get('_defer_lock'):
+                    target['_defer_lock'] = False
                 if line is window['lines'][-1] and window.get('manual_end'):
                     target['manual_end'] = True
             else:
                 gaps.append(line)
         if gaps:
-            fresh.append(
+            pieces.append(
                 {
                     **window,
                     **fresh_metadata,
@@ -557,8 +561,18 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
                     'manual_end': bool(window.get('manual_end') and gaps[-1] is window['lines'][-1]),
                 }
             )
+        # Published speech follows every fragment but the last, so only the last can be the open edge.
+        # Several open fragments never commit (multiple_open_conversations parks the owner), and the
+        # fragments, their lines and their time matching stay exactly as a finished window splits.
+        for piece in pieces[:-1]:
+            piece['finished'] = True
+        fresh.extend(pieces)
     # Even a separate fresh topic in the same stretch cannot qualify on published speech.
     for window in fresh:
         if window.get('_stretch_partition') in published_partitions:
             window.pop('_stretch_words', None)
-    return sorted([*retained.values(), *fresh], key=lambda w: w['lines'][0]['start'])
+    windows = sorted([*retained.values(), *fresh], key=lambda w: w['lines'][0]['start'])
+    open_windows = [window for window in windows if not window['finished']]
+    for window in open_windows[:-1]:
+        window['finished'] = True
+    return windows

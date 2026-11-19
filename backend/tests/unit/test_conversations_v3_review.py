@@ -967,6 +967,32 @@ def test_builder_loads_indexed_provisional_card_without_pending_audio(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_one_hour_lock_leaves_only_the_last_stretch_open(builder, monkeypatch):
+    committed, _ = builder
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    start = datetime.now(timezone.utc) - timedelta(seconds=490)
+    raw = source(
+        started_at=start,
+        finished_at=start + timedelta(seconds=490),
+        transcript_segments=[
+            {'text': 'first ' * 310, 'start': 0, 'end': 10},
+            {'text': 'second ' * 310, 'start': 480, 'end': 490},
+        ],
+    )
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': raw}, {}, []))
+    wakes = []
+    monkeypatch.setattr(service, 'enqueue', lambda uid, *, at: wakes.append(at))
+
+    assert await service.reconcile('synthetic') == 'committed'
+    first, second = committed[-1][4]
+    assert [first['status'], second['status']] == ['processing', 'in_progress']
+    assert all(row['v3_unlocked'] and not row.get('v3_process_pending') for row in (first, second))
+    assert first['structured']['title']
+    assert first['_v3_preview_due_at'] == start + timedelta(seconds=3610)
+    assert first['_v3_preview_due_at'] in wakes
+
+
+@pytest.mark.asyncio
 async def test_multiple_previews_defer_topic_lock_and_owe_no_notes(builder, monkeypatch):
     committed, messages = builder
     monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')

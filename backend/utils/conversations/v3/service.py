@@ -283,7 +283,7 @@ async def reconcile(
                     content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
                     try:
                         entries = outline.parse(content, group)
-                        if preview_key and not group['finished']:
+                        if preview_key and not group['locked']:
                             preview_fields = {
                                 'preview_key': preview_key,
                                 'anchors': outline.preview_anchors(group, entries),
@@ -324,7 +324,7 @@ async def reconcile(
                 ]
             outlines.append(entries)
             if group['outline_ready'] or on_open or preview is not None:
-                if preview_key and not group['finished'] and not any(e.get('_outline_failed') for e in entries):
+                if preview_key and not group['locked'] and not any(e.get('_outline_failed') for e in entries):
                     preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
                 cache.append({'fingerprint': fingerprint, 'entries': entries, **preview_fields})
 
@@ -383,10 +383,18 @@ async def reconcile(
             await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
             for window in windows:
                 # An affirmative transcription failure is terminal even before the silence deadline.
-                if any(policy.transcription_failed(recordings[line['conversation_id']]) for line in window['lines']):
+                transcription_failed = any(
+                    policy.transcription_failed(recordings[line['conversation_id']]) for line in window['lines']
+                )
+                if transcription_failed:
                     window['finished'] = True
                 # A preview cannot take over a locked card by time matching alone.
-                excluded = used if window['finished'] else used | locked_ids
+                deferred_lock = (
+                    custom_timing
+                    and not transcription_failed
+                    and (not window['finished'] or window.get('_defer_lock', False))
+                )
+                excluded = used | locked_ids if deferred_lock else used
                 prior = existing.get(window.get('existing_id')) or _match(
                     window, existing, excluded, preferred=preferred
                 )
@@ -395,13 +403,14 @@ async def reconcile(
                 opening = on_open and prior and prior['id'] == conversation_id and custom_timing
                 if opening:
                     window['finished'] = True
-                if custom_timing and not window['finished']:
+                    deferred_lock = False
+                if deferred_lock:
                     window['_title_preview'] = True
                 row = planner.build(uid, window, recordings, prior, allocated=allocated)
                 if opening and prior and planner.is_unlocked(prior):
                     row['v3_open_locked'] = True
                 row.pop('v3_unlocked', None)
-                if custom_timing and not window['finished']:
+                if deferred_lock:
                     row['v3_unlocked'] = True
                     row['_v3_preview_due_at'] = max(row['finished_at'] + lock_delay, now + RACE_RETRY)
                 published_ids = window.get('_published_ids', ())
@@ -433,7 +442,7 @@ async def reconcile(
                     continue
                 before = sum(len(s.get('text', '').split()) for s in (prior or {}).get('transcript_segments') or [])
                 new_words = max(0, sum(len(s.get('text', '').split()) for s in row['transcript_segments']) - before)
-                ended = window['finished']
+                ended = window['finished'] and not deferred_lock
                 was_ended = prior and not planner.is_unlocked(prior)
                 promoted = bool(
                     prior
@@ -470,9 +479,6 @@ async def reconcile(
                 if prior is not None and was_ended and not rewrite and not promoted:
                     row['status'] = prior['status']
                     row['tile_state'] = prior.get('tile_state', 'done')
-                transcription_failed = any(
-                    policy.transcription_failed(recordings[l['conversation_id']]) for l in window['lines']
-                )
                 waiting = not transcription_failed and any(
                     policy.transcription_pending(recordings[l['conversation_id']]) for l in window['lines']
                 )
@@ -516,12 +522,6 @@ async def reconcile(
                 rows.append(row)
                 for rid, claims in row['_v3_claims'].items():
                     allocated.setdefault(rid, []).extend((claim['start'], claim['end']) for claim in claims)
-            if custom_timing:
-                provisional = [row for row in rows if row.get('v3_unlocked')]
-                # The lease carries a single current live ID. Older provisional cards still
-                # expose their outline and have no notes obligation until their own deadline.
-                for row in provisional[:-1]:
-                    row['status'] = 'processing'
             if merge is not None:
                 rows.append(merge[1])
             return rows
@@ -578,7 +578,7 @@ async def reconcile(
             metrics.RACES.labels('source_moved').inc()
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RACE_RETRY)
         for group in groups if not derive else ():
-            if not group['finished']:
+            if not (group['locked'] if custom_timing else group['finished']):
                 # A different minute than the currently executing task avoids
                 # Cloud Tasks' completed-name dedupe swallowing the continuation.
                 delay = lock_delay if group['outline_ready'] else min(silence_gap, lock_delay)
