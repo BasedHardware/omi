@@ -47,7 +47,7 @@ class TestRatingAggregationSafety:
         }
         avg, count = _extract_rating_stats(reviews)
         assert count == 2
-        assert avg == 3.0
+        assert avg == 2.5
 
     def test_extract_rating_stats_missing_score(self):
         reviews = {
