@@ -1387,7 +1387,9 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
                 return False
         return True
 
-    assert kept('privacy_negative_lookup_total')
+    for name in ('privacy_negative_lookup_total', 'omi_batch_projection_native_audio_prefetch_total'):
+        assert kept(name), name
+    assert not kept('omi_batch_projection_native_audio_prefetch_unreviewed_total')
     # Pre-unit holds and strict election must survive every later drop rule.
     for name in (
         'omi_batch_upload_coalescing_total',
