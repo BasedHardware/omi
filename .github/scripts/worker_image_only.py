@@ -20,17 +20,18 @@ RESOURCES = "deployments,statefulsets,daemonsets,jobs,cronjobs,horizontalpodauto
 IMAGE = re.compile(re.escape(REPOSITORY) + r"@sha256:[a-f0-9]{64}\Z")
 
 
-# Set only by the workflow's dry-run step. While set, every non-read API call that is not a
-# server dry-run is refused before it reaches kubectl, and the deploy command refuses outright.
+# Set only by the workflow's dry-run step. While set to any value, every non-read API call that is
+# not a server dry-run is refused before it reaches kubectl, and the deploy command refuses outright.
+# The dry-run command itself requires the exact value "1".
 DRY_RUN_ENV = "WORKER_IMAGE_ONLY_DRY_RUN"
 
 
 def dry_run_mode():
-    return os.environ.get(DRY_RUN_ENV) == "1"
+    return DRY_RUN_ENV in os.environ
 
 
 def require_dry_run_env():
-    require(dry_run_mode(), f"dry-run command requires {DRY_RUN_ENV}=1")
+    require(os.environ.get(DRY_RUN_ENV) == "1", f"dry-run command requires {DRY_RUN_ENV}=1")
 
 
 def guarded(run):
@@ -360,7 +361,7 @@ def deploy(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
 
 
 def server_preview(run, obj, image, allow_same=False):
-    """Server dry-run of the image patch against obj; returns (expected identity, admitted)."""
+    """Server dry-run of the image patch against obj; returns (expected identity, patch, admitted object)."""
     _, index = target_state(obj)
     patch = patch_for(obj, image, allow_same=allow_same)
     expected = copy.deepcopy(obj)
@@ -371,7 +372,7 @@ def server_preview(run, obj, image, allow_same=False):
         target_state(preview)[0] == after and digest(preview["spec"]) == digest(expected["spec"]),
         "admission dry-run changed runtime configuration",
     )
-    return after, patch
+    return after, patch, preview
 
 
 def dry_run(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
@@ -397,21 +398,26 @@ def dry_run(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
     require(target_state(fresh)[0] == actual["target"], "target drift immediately before dry-run")
     result = {"mode": "dry-run", "baseline": actual, "forward": None, "prior_image_admission": None, "inverse": None}
     if rollback_receipt is not None:
-        identity, patch = server_preview(run, fresh, image)
+        identity, patch, _ = server_preview(run, fresh, image)
         require(identity == rollback_receipt["before"], "inverse dry-run does not restore the recorded prior identity")
         result["inverse"] = {"admitted": True, "image": image, "patch": patch, "restores": identity,
                              "cas": "real rollback patch against the post-forward live state"}
     else:
         if not same:
-            identity, patch = server_preview(run, fresh, image)
-            receipt = {"before": actual["target"], "after": identity, "consumers": actual["consumers"]}
-            # The patch the rollback writer would send from the post-roll object must restore `before`.
-            post_roll = copy.deepcopy(expected)
+            identity, patch, admitted = server_preview(run, fresh, image)
+            require(identity == after, "forward preview identity differs from the writer's expected identity")
+            # The same receipt deploy() would write: both identities from preflight's single read.
+            receipt = {"before": actual["target"], "after": after, "consumers": actual["consumers"]}
+            # The inverse the rollback writer would send is built from the server's admitted post-roll
+            # object (not a local copy), and applying it to that object must restore `before` exactly.
+            post_roll = copy.deepcopy(admitted)
             reverse = patch_for(post_roll, live_image)
-            post_roll["spec"]["template"]["spec"]["containers"][index]["image"] = live_image
+            require(reverse[0]["value"] == actual["target"]["uid"] and reverse[2]["value"] == image
+                    and reverse[3]["value"] == live_image, "inverse patch shape")
+            post_roll["spec"]["template"]["spec"]["containers"][target_state(post_roll)[1]]["image"] = live_image
             restored = target_state(post_roll)[0]
-            require(restored == receipt["before"], "inverse of the forward patch does not restore the live identity")
-            require(reverse[2]["value"] == image and reverse[3]["value"] == live_image, "inverse patch shape")
+            inverse_restores_before = restored == receipt["before"]
+            require(inverse_restores_before, "inverse of the forward patch does not restore the live identity")
             # The rollback writer's sibling gates run against the prior image; siblings never move, so
             # a gate that the forward passes only on the candidate (active T4, companion) blocks the inverse.
             try:
@@ -420,8 +426,8 @@ def dry_run(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
             except ValueError as exc:
                 raise ValueError(f"inverse would refuse after the forward roll: {exc}") from None
             result["forward"] = {"admitted": True, "after": identity, "patch": patch, "would_write_receipt": receipt,
-                                 "inverse_restores_before": True}
-        identity, patch = server_preview(run, fresh, live_image, allow_same=True)
+                                 "inverse_patch": reverse, "inverse_restores_before": inverse_restores_before}
+        identity, patch, _ = server_preview(run, fresh, live_image, allow_same=True)
         require(identity == actual["target"], "prior-image admission changed the live identity")
         result["prior_image_admission"] = {"admitted": True, "image": live_image, "patch": patch, "noop": True}
     final = run("get", RESOURCES, "-o", "json")["items"]

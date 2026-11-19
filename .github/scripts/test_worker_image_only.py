@@ -701,6 +701,39 @@ class DryRunTests(unittest.TestCase):
         self.assertTrue(result["prior_image_admission"]["admitted"])
         self.assertTrue(result["forward"]["inverse_restores_before"])
         self.assertEqual(result["forward"]["would_write_receipt"]["before"], self.baseline["target"])
+        # The inverse is built from the server's admitted preview object, not a local copy.
+        inverse = result["forward"]["inverse_patch"]
+        self.assertEqual([op["value"] for op in inverse[2:]], [NEW, OLD])
+        self.assertEqual(inverse[0]["value"], self.baseline["target"]["uid"])
+
+    def test_forward_inverse_check_uses_the_server_preview(self):
+        # A preview whose post-roll object would not restore the live identity must refuse, which a check
+        # on a local copy of the live object could never detect.
+        original = worker.target_state
+        calls = []
+
+        def target_state(obj):
+            state, index = original(obj)
+            if obj.get("_preview"):
+                calls.append(1)
+                if len(calls) > 1:  # the post-roll object, after the inverse image is restored
+                    state = dict(state, spec_sha256="0" * 64)
+            return state, index
+
+        cluster_call = Cluster.__call__
+
+        def mark(cluster, *args):
+            out = cluster_call(cluster, *args)
+            if args[0] == "patch" and "--dry-run=server" in args and json.loads(args[args.index("-p") + 1])[3]["value"] == NEW:
+                out = copy.deepcopy(out)
+                out["_preview"] = True
+            return out
+
+        self.cluster.__class__ = type("PreviewCluster", (Cluster,), {"__call__": mark})
+        with mock.patch.object(worker, "target_state", target_state):
+            with self.assertRaisesRegex(ValueError, "inverse of the forward patch does not restore"):
+                self.dry_run(NEW)
+        self.assertEqual(self.cluster.writes, 0)
 
     def test_dry_run_still_refuses_drift_admission_change_and_t4(self):
         self.cluster.target["spec"]["template"]["spec"]["terminationGracePeriodSeconds"] = 30
@@ -831,6 +864,18 @@ class DryRunTests(unittest.TestCase):
         os.environ[worker.DRY_RUN_ENV] = "1"
         worker.require_dry_run_env()
 
+    def test_any_value_of_the_mode_env_guards_writes(self):
+        for value in ("true", "0", ""):
+            with self.subTest(value=value):
+                os.environ[worker.DRY_RUN_ENV] = value
+                with self.assertRaisesRegex(ValueError, "dry-run mode"):
+                    worker.deploy(self.baseline, NEW, self.receipt_path, self.cluster)
+                with self.assertRaisesRegex(ValueError, "dry-run mode"):
+                    worker.guarded(self.cluster)("delete", "deployment", worker.TARGET)
+                with self.assertRaisesRegex(ValueError, "dry-run"):
+                    worker.require_dry_run_env()
+        self.assertEqual(self.cluster.writes, 0)
+
 
 def worker_env_name():
     return worker.DRY_RUN_ENV
@@ -959,11 +1004,20 @@ class WorkflowTests(unittest.TestCase):
     # --- dry-run mode (SCA-2944; David 2026-11-19) -------------------------------------------
 
     WRITE_MARKERS = ("worker_image_only.py deploy", "helm ", "docker push", "docker build ", "docker tag ", "docker buildx build",
-                     "gsutil", "gcloud container images delete", "gcloud artifacts", "gcloud container clusters",
-                     "gcloud run", "gcloud compute", "gcloud iam", "gcloud projects", "gcloud secrets", "gcloud firestore",
-                     "kubectl patch", "kubectl apply",
+                     "gsutil", "kubectl patch", "kubectl apply",
                      "kubectl replace", "kubectl scale", "kubectl delete", "kubectl create", "rollout restart",
-                     "kubectl set ", "kubectl annotate", "kubectl label", "gcloud container images add-tag")
+                     "kubectl set ", "kubectl annotate", "kubectl label")
+
+    # A gcloud segment is a read only when it is `gcloud <groups> <read verb>`, with up to three plain group
+    # words and none of them a mutating verb; any other gcloud invocation counts as a write (fail closed).
+    GCLOUD_READ = re.compile(r"(?:^|\s)gcloud((?:\s+[a-z][a-z0-9-]*){0,3}?)\s+"
+                             r"(describe|list|configure-docker|get-credentials|print-access-token|get-value)(?=\s|$)")
+    GCLOUD_MUTATING_WORDS = {"create", "delete", "update", "deploy", "cp", "rm", "mv", "add", "remove", "set", "publish",
+                             "pause", "resume", "resize", "import", "export", "patch", "replace", "add-tag", "untag"}
+
+    def gcloud_segment_reads(self, segment):
+        match = self.GCLOUD_READ.search(segment)
+        return bool(match) and not (set(match.group(1).split()) & self.GCLOUD_MUTATING_WORDS)
 
     # A kubectl segment is a read only when its verb (the first non-flag word after kubectl) is one of these.
     READ_VERBS = {"get", "describe", "auth", "config", "version", "wait", "logs", "top"}
@@ -984,6 +1038,9 @@ class WorkflowTests(unittest.TestCase):
             if word == "rollout":
                 rest = after[after.index("rollout") + 1:]
                 return bool(rest) and rest[0] == "status"
+            if word == "auth":
+                rest = after[after.index("auth") + 1:]
+                return bool(rest) and rest[0] in ("can-i", "whoami")
             return word in self.READ_VERBS
         return False
 
@@ -994,6 +1051,8 @@ class WorkflowTests(unittest.TestCase):
         for segment in re.split(r"&&|\|\||;|\||\$\(|`|\n", run):
             if re.search(r"(^|\s)kubectl(\s|$)", segment) and not self.kubectl_segment_reads(segment.strip().strip('"')):
                 return True
+            if re.search(r"(^|\s)gcloud(\s|$)", segment) and not self.gcloud_segment_reads(segment.strip().strip('"')):
+                return True
         return False
 
     def test_unknown_kubectl_verbs_count_as_writes(self):
@@ -1001,14 +1060,42 @@ class WorkflowTests(unittest.TestCase):
                     "kubectl get pods; kubectl rollout undo deploy/x", "kubectl get deploy x && kubectl cordon n",
                     "x=$(kubectl -n ns scale deploy/y --replicas=0)", "docker build -t i .", "docker tag a b"):
             self.assertTrue(self.writes(run), run)
-        for run in ("kubectl -n x get deploy y -o json", "kubectl -n x rollout status deploy/y --timeout=1s"):
+        for run in ("kubectl -n x get deploy y -o json", "kubectl -n x rollout status deploy/y --timeout=1s",
+                    "kubectl auth can-i patch deploy"):
             self.assertFalse(self.writes(run), run)
+        self.assertTrue(self.writes("kubectl auth reconcile -f rbac.yaml"))
+
+    def test_unknown_gcloud_verbs_count_as_writes(self):
+        for run in ("gcloud dns record-sets create x", "gcloud pubsub topics publish t --message m",
+                    "x=$(gcloud scheduler jobs pause j)", "gcloud storage cp a gs://b"):
+            self.assertTrue(self.writes(run), run)
+        for run in ("gcloud auth configure-docker", "image_digest=\"$(gcloud container images describe \"$image\" --format='value(x)')\"",
+                    "gcloud run services list --region r"):
+            self.assertFalse(self.writes(run), run)
+
+    # One argument: a bare word, an env expansion, or a double-quoted string of literals and env
+    # expansions. No shell separators, pipes, command substitution or backticks anywhere.
+    _ARG = r'(?:(?:[^;&|`$()\'"\s]|\$\{?[A-Z_]+\}?)+|"(?:[^"`$\\;&|()]|\$\{?[A-Z_]+\}?)*")'
+    DRY_RUN_STEP_LINE = re.compile(
+        r"^(?:set -euo pipefail|umask 077|fi|\{|\}(?: >> \"\$GITHUB_STEP_SUMMARY\")?|rollback_args=\(\)"
+        r"|rollback_args=\(--rollback-receipt " + _ARG + r"\)"
+        r"|if \[\[ -n " + _ARG + r" \]\]; then"
+        r"|echo " + _ARG + r" > " + _ARG
+        + r"|echo '[^']*'"
+        r"|cat " + _ARG
+        + r"|python3 \.github/worker-workflow/\.github/scripts/worker_image_only\.py dry-run \\"
+        r"|\"\$\{rollback_args\[@\]\}\" \\"
+        r"|--[a-z-]+ " + _ARG + r"(?: \\| \| tee " + _ARG + r")"
+        r")$")
+
+    def test_dry_run_step_allowlist_rejects_chained_commands(self):
+        for line in ("echo x; python3 evil.py", "cat a && python3 evil.py", "--receipt r | sh", "echo $(python3 evil.py)",
+                     "echo `id`"):
+            self.assertIsNone(self.DRY_RUN_STEP_LINE.match(line), line)
 
     def test_dry_run_step_runs_only_allowlisted_commands(self):
         body = self.step("Dry-run worker image preserving live runtime")["run"]
-        allowed = re.compile(r"^(set -euo pipefail|umask 077|echo .*|rollback_args=\(.*\)|if \[\[.*\]\]; then|fi|"
-                             r"python3 \.github/worker-workflow/\.github/scripts/worker_image_only\.py dry-run \\|"
-                             r"--[a-z-]+ .*|\"\$\{rollback_args\[@\]\}\" \\|\{|\}( >> \"\$GITHUB_STEP_SUMMARY\")?|cat .*)$")
+        allowed = self.DRY_RUN_STEP_LINE
         for line in (l.strip() for l in body.splitlines()):
             if line:
                 self.assertRegex(line, allowed)
