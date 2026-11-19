@@ -113,6 +113,8 @@ def ready_followup_privacy_ids(segment, binding, job, entry):
 
 
 class ProjectionSession:
+    capture_followup_privacy = False
+
     def __init__(
         self,
         store: ProjectionStore,
@@ -147,7 +149,6 @@ class ProjectionSession:
         self._privacy_refusal_transaction = None
         self._privacy_replay_transaction = None
         self._privacy_fence_ids: set[str] | None = None
-        self.capture_followup_privacy = False
         self.followup_privacy_proof: FollowupPrivacyProof | None = None
         self._followup_privacy_failed = False
 
@@ -234,8 +235,9 @@ class ProjectionSession:
                 # A tombstone refuses before any row is read; the refusing id
                 # (possibly a redirect survivor) still counts against the budget.
                 checked.add(error.conversation_id)
-            self._followup_privacy_failed = True
-            self.followup_privacy_proof = None
+            if versions is not None:
+                self._followup_privacy_failed = True
+                self.followup_privacy_proof = None
             raise
         else:
             if versions is not None:
