@@ -449,10 +449,10 @@ def background_wipe_user_data(
             short_lease.set()
 
             def owns_erase_claim() -> None:
-                heartbeat()
-                assert_destructive_gate_still_ours(uid, 'account_deletion', token=deletion_gate_token)
                 if not renew_job_run_lock(deletion_gate_token, token, go_erase_db.ERASE_LEASE_SECONDS):
                     raise RuntimeError('Go queue erase wipe claim lost')
+                heartbeat()
+                assert_destructive_gate_still_ours(uid, 'account_deletion', token=deletion_gate_token)
 
             def set_erase_inflight(inflight: bool) -> None:
                 nonlocal preserve_erase_gate

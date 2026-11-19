@@ -2654,11 +2654,16 @@ def test_required_lake_step_failure_retries(monkeypatch, step):
         account_deletion.destroy_owner_lake_keys.assert_not_called()
 
 
-@pytest.mark.parametrize('workerd_down', [False, True])
-def test_go_queue_erase_gates_data_wipe_after_billing(monkeypatch, workerd_down):
+@pytest.mark.parametrize(
+    ('workerd_down', 'already_armed'),
+    [(False, False), (True, False), (True, True)],
+)
+def test_go_queue_erase_gates_data_wipe_after_billing(monkeypatch, workerd_down, already_armed):
     _stub_wipe_steps_after_billing(monkeypatch)
     seen = []
-    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'true')
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'false' if already_armed else 'true')
+    if already_armed:
+        monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', lambda *args: True)
     monkeypatch.setattr(account_deletion, 'renew_job_run_lock', lambda _key, _token, *_ttl: True)
     monkeypatch.setattr(account_deletion, 'assert_destructive_gate_still_ours', MagicMock())
     monkeypatch.setattr(
