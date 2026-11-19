@@ -14,7 +14,7 @@ from unittest.mock import Mock
 
 import httpx
 import pytest
-from langchain_openai import ChatOpenAI
+from langchain_core.outputs import LLMResult
 from openai import APITimeoutError
 
 import database.conversations as conversations_db
@@ -488,45 +488,32 @@ def test_timeout_then_success_writes_loops_cards_and_usage_once(pass_env, monkey
     monkeypatch.setattr(db, 'upsert_loop', upsert)
     monkeypatch.setattr(db, 'set_cards', set_cards)
     monkeypatch.setenv('OPEN_LOOPS_CARD_POLISH_ENABLED', 'off')
-    requests = []
     write_usage = Mock()
+    usage_callback = LLMUsageCallback(flush_fn=write_usage)
+    timeout = APITimeoutError(request=httpx.Request('POST', 'https://example.com'))
+    result = LLMResult(
+        generations=[],
+        llm_output={'model_name': 'test-model', 'token_usage': {'prompt_tokens': 20, 'completion_tokens': 10}},
+    )
+    llm = Mock()
 
-    def respond(request):
-        requests.append(json.loads(request.content))
-        if len(requests) == 1:
-            raise httpx.ReadTimeout('first attempt timed out', request=request)
-        return httpx.Response(
-            200,
-            json={
-                'model': 'test-model',
-                'choices': [
-                    {
-                        'message': {'role': 'assistant', 'content': json.dumps(_model_says_maya_due_soon())},
-                        'finish_reason': 'stop',
-                    }
-                ],
-                'usage': {'prompt_tokens': 20, 'completion_tokens': 10, 'total_tokens': 30},
-            },
-        )
+    def invoke(messages):
+        if llm.invoke.call_count == 1:
+            usage_callback.on_llm_error(timeout)
+            raise timeout
+        usage_callback.on_llm_end(result)
+        return SimpleNamespace(content=json.dumps(_model_says_maya_due_soon()))
 
-    with httpx.Client(transport=httpx.MockTransport(respond)) as http_client:
+    llm.invoke.side_effect = invoke
+    get_llm = Mock(return_value=llm)
+    monkeypatch.setattr(daily, 'get_llm', get_llm)
 
-        def get_llm(feature, **options):
-            assert feature == 'open_loop_daily'
-            assert options == {'request_timeout': 15.0, 'max_retries': 0}
-            return ChatOpenAI(
-                model='test-model',
-                http_client=http_client,
-                callbacks=[LLMUsageCallback(flush_fn=write_usage)],
-                **options,
-            )
+    assert _run(pass_env, None) == daily.RAN
+    assert _run(pass_env, None) == daily.SKIPPED_ALREADY_RAN
 
-        monkeypatch.setattr(daily, 'get_llm', get_llm)
-        assert _run(pass_env, None) == daily.RAN
-        assert _run(pass_env, None) == daily.SKIPPED_ALREADY_RAN
-
-    assert len(requests) == 2
-    assert requests[0] == requests[1]
+    get_llm.assert_called_once_with('open_loop_daily', request_timeout=15.0, max_retries=0)
+    assert llm.invoke.call_count == 2
+    assert llm.invoke.call_args_list[0] == llm.invoke.call_args_list[1]
     claim.assert_called_once()
     upsert.assert_called_once()
     set_cards.assert_called_once()
