@@ -8,7 +8,7 @@ from google.api_core.exceptions import GoogleAPICallError
 
 from database import conversation_batch_purge_jobs as jobs
 from database.batch_pipeline_privacy import privacy_owner_key
-from database.batch_pipeline_purge import _references
+from database.batch_pipeline_purge import row_references
 from database.batch_pipeline_reads import ReadOnlySnapshot
 from utils.batch_pipeline.retention import BATCH_OBJECT_BUCKET_ENV, batch_object_address, delete_batch_object
 
@@ -50,7 +50,7 @@ def signature(snapshot, now):
     ):
         return 'ambiguous', None
     try:
-        uris = _references(data)
+        uris = row_references(data)
         if len(uris) > 1:
             return 'ambiguous', None
         allowed = {value for name in BATCH_OBJECT_BUCKET_ENV if (value := os.getenv(name, '').strip())}
@@ -107,7 +107,7 @@ def erase(client, receipt, tombstone_version, storage_client):
         valid, version = proof(client, current, identity, transaction=transaction)
         if not valid or version != tombstone_version:
             return False
-        for uri in sorted(_references(current.to_dict())):
+        for uri in sorted(row_references(current.to_dict())):
             delete_batch_object(identity[0], uri, storage_client=storage_client, timeout=5, resolve_generation=True)
         api.commit(
             request={
