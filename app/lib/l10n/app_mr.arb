@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "थेट भाग · {duration}",
     "deviceCatchingUp": "मागे राहिलेले आणत आहे",
     "deviceCatchingUpProgress": "{done}/{total} मिनिटे",
-    "deviceRecently": "अलीकडे",
-    "deviceDisconnectedFor": "{duration} डिस्कनेक्ट",
     "deviceControls": "नियंत्रणे",
     "homeBackgroundLine": "तसेच: {items}",
     "deviceOnboardingPressButtonTitle": "तुमच्या Omi चे बटण दाबा",
@@ -12248,5 +12246,7 @@
     "finishNothingToProcess": "अजून प्रक्रिया करण्यासाठी काहीही नाही.",
     "finishStillProcessing": "अजून प्रक्रिया सुरू आहे. हे होमवर दिसेल.",
     "finishBackToHome": "होमवर परत जा",
-    "conversationSummaryWhenItEnds": "हे संभाषण संपल्यावर सारांश"
+    "conversationSummaryWhenItEnds": "हे संभाषण संपल्यावर सारांश",
+    "deviceUploadsWaitingOnServer": "सर्व्हरवर प्रतीक्षेत असलेले अपलोड",
+    "deviceUploadsWaitingOnServerSubtitle": "तुमचा ऑडिओ तुमच्या डिव्हाइसवर किंवा फोनवर सुरक्षित आहे"
 }

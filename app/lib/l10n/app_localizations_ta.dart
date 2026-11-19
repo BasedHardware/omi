@@ -14591,14 +14591,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'சமீபத்தில்';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration இணைப்பு துண்டிக்கப்பட்டது';
-  }
-
-  @override
   String get deviceControls => 'கட்டுப்பாடுகள்';
 
   @override
@@ -15681,4 +15673,11 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'இந்த உரையாடல் முடிந்ததும் சுருக்கம்';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'சேவையகத்தில் காத்திருக்கும் பதிவேற்றங்கள்';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle =>
+      'உங்கள் ஆடியோ உங்கள் சாதனத்தில் அல்லது தொலைபேசியில் பாதுகாப்பாக உள்ளது';
 }

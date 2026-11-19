@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Live-episode · {duration}",
     "deviceCatchingUp": "Inhalen",
     "deviceCatchingUpProgress": "{done} van {total} min",
-    "deviceRecently": "Recent",
-    "deviceDisconnectedFor": "{duration} niet verbonden",
     "deviceControls": "Bediening",
     "homeBackgroundLine": "Ook: {items}",
     "deviceOnboardingPressButtonTitle": "Druk op de knop van je Omi",
@@ -4691,5 +4689,7 @@
     "finishNothingToProcess": "Nog niets om te verwerken.",
     "finishStillProcessing": "Wordt nog verwerkt. Het verschijnt op Home.",
     "finishBackToHome": "Terug naar Home",
-    "conversationSummaryWhenItEnds": "Samenvatting wanneer dit gesprek eindigt"
+    "conversationSummaryWhenItEnds": "Samenvatting wanneer dit gesprek eindigt",
+    "deviceUploadsWaitingOnServer": "Uploads die op de server wachten",
+    "deviceUploadsWaitingOnServerSubtitle": "Je audio is veilig op je apparaat of telefoon"
 }

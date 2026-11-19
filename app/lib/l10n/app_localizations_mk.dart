@@ -14555,14 +14555,6 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Неодамна';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Исклучено $duration';
-  }
-
-  @override
   String get deviceControls => 'Контроли';
 
   @override
@@ -15642,4 +15634,10 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Резиме кога ќе заврши овој разговор';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Подигнувања што чекаат на серверот';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Вашето аудио е безбедно на вашиот уред или телефон';
 }

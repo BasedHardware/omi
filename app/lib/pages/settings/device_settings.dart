@@ -647,7 +647,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             batteryLevel: connected == null ? 0 : provider.batteryLevel,
             isCharging: connected != null && provider.isCharging,
           ),
-          DeviceRecentlyGroup(load: provider.disconnectHistory),
           if (deviceStreaming && canPause) ...[
             DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture)),
             gap,
@@ -730,7 +729,9 @@ extension _DeviceLiveSections on _DeviceSettingsState {
               Widget stalledDetails() => OmiSettingsGroup(children: [
                     OmiSettingsRow(
                       key: const Key('device_stalled_upload_details'),
-                      title: l10n.transcriptionUnavailable,
+                      // The audio is kept locally; only the server's acceptance is outstanding.
+                      title: l10n.deviceUploadsWaitingOnServer,
+                      subtitle: l10n.deviceUploadsWaitingOnServerSubtitle,
                       onTap: () => openOfflineSyncDetails(context, context.read<SyncProvider>()),
                     ),
                   ]);

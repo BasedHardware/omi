@@ -14265,14 +14265,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => '最近';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '断开连接 $duration';
-  }
-
-  @override
   String get deviceControls => '控制';
 
   @override
@@ -15326,4 +15318,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => '对话结束后生成摘要';
+
+  @override
+  String get deviceUploadsWaitingOnServer => '上传内容正在等待服务器处理';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => '您的音频安全保存在您的设备或手机上';
 }

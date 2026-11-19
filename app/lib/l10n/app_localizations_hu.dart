@@ -14549,14 +14549,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Nemrég';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration szétkapcsolva';
-  }
-
-  @override
   String get deviceControls => 'Vezérlők';
 
   @override
@@ -15636,4 +15628,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Összefoglaló, amikor ez a beszélgetés véget ér';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Feltöltések várakoznak a szerveren';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'A hanganyagod biztonságban van az eszközödön vagy telefonodon';
 }

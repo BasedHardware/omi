@@ -4413,8 +4413,6 @@
     "deviceLiveEpisode": "Tiešraides epizode · {duration}",
     "deviceCatchingUp": "Panāk",
     "deviceCatchingUpProgress": "{done} no {total} min",
-    "deviceRecently": "Nesen",
-    "deviceDisconnectedFor": "Atvienots {duration}",
     "deviceControls": "Vadīklas",
     "homeBackgroundLine": "Arī: {items}",
     "deviceOnboardingPressButtonTitle": "Nospiediet Omi pogu",
@@ -4691,5 +4689,7 @@
     "finishNothingToProcess": "Pagaidām nav ko apstrādāt.",
     "finishStillProcessing": "Joprojām tiek apstrādāts. Tas parādīsies sākumlapā.",
     "finishBackToHome": "Atpakaļ uz sākumu",
-    "conversationSummaryWhenItEnds": "Kopsavilkums, kad šī saruna beigsies"
+    "conversationSummaryWhenItEnds": "Kopsavilkums, kad šī saruna beigsies",
+    "deviceUploadsWaitingOnServer": "Augšupielādes gaida serverī",
+    "deviceUploadsWaitingOnServerSubtitle": "Jūsu audio ir droši jūsu ierīcē vai tālrunī"
 }

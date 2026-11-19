@@ -11836,8 +11836,6 @@
     "deviceLiveEpisode": "Епизода уживо · {duration}",
     "deviceCatchingUp": "Сустиже",
     "deviceCatchingUpProgress": "{done} од {total} мин",
-    "deviceRecently": "Недавно",
-    "deviceDisconnectedFor": "Без везе {duration}",
     "deviceControls": "Контроле",
     "homeBackgroundLine": "Такође: {items}",
     "deviceOnboardingPressButtonTitle": "Pritisnite dugme na Omiju",
@@ -12248,5 +12246,7 @@
     "finishNothingToProcess": "Још нема ничега за обраду.",
     "finishStillProcessing": "Још се обрађује. Појавиће се на почетној.",
     "finishBackToHome": "Назад на почетну",
-    "conversationSummaryWhenItEnds": "Резиме када се овај разговор заврши"
+    "conversationSummaryWhenItEnds": "Резиме када се овај разговор заврши",
+    "deviceUploadsWaitingOnServer": "Отпремања која чекају на серверу",
+    "deviceUploadsWaitingOnServerSubtitle": "Ваш звук је безбедан на вашем уређају или телефону"
 }
