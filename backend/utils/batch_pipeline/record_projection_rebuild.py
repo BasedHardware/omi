@@ -25,7 +25,7 @@ def projection_owner_gone(uid: str, conversation_id: str) -> bool:
     return not doc.exists
 
 
-def projected_chunks(uid, cid, chunks, *, validate_raw=False, diagnostics=None):
+def projected_chunks(uid, cid, chunks, *, validate_raw=False, diagnostics=None, reuse_manifest_bodies=True):
     if not audio_archive.admitted(uid, 'READ'):
         return chunks
     if validate_raw:
@@ -33,7 +33,9 @@ def projected_chunks(uid, cid, chunks, *, validate_raw=False, diagnostics=None):
         if diagnostics is not None:
             diagnostics['samples'] = sum(item['span']['samples'] for item in raw)
         return sorted([*chunks, *raw], key=lambda chunk: chunk['timestamp'])
-    packs = storage.list_packs(storage.get_private_cloud_sync_bucket(), uid, cid)
+    packs = storage.list_packs(
+        storage.get_private_cloud_sync_bucket(), uid, cid, reuse_manifest_bodies=reuse_manifest_bodies
+    )
     return sorted([*chunks, *raw_audio_read.uncovered_raw_packs(packs, chunks)], key=lambda chunk: chunk['timestamp'])
 
 
@@ -49,7 +51,7 @@ def discover(uid, cid, *, strict_raw=False, fallback=None, validate_raw=False, d
         listed = (
             projected_chunks(uid, cid, chunks, validate_raw=True, diagnostics=diagnostics)
             if validate_raw
-            else projected_chunks(uid, cid, chunks)
+            else projected_chunks(uid, cid, chunks, reuse_manifest_bodies=not strict_raw)
         )
     except Exception:
         if strict_raw:

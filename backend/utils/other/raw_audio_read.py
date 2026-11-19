@@ -33,7 +33,7 @@ from utils.other.audio_raw_read_metrics import (
     log_failure,
     exclude,
 )
-from config.refactor_modes import raw_live_gapped_packs_enabled
+from config.refactor_modes import inventory_manifest_body_cache_enabled, raw_live_gapped_packs_enabled
 
 _index_lock = threading.Lock()
 _indexes: dict[tuple, tuple[float, list]] = {}
@@ -91,7 +91,16 @@ def _gap_count_matches(frames: list[dict], gap_count: int) -> bool:
 
 
 def list_packs(
-    bucket, uid: str, conversation_id: str, *, fresh=False, deadline=None, timeout=10, max_count=10000, strict=False
+    bucket,
+    uid: str,
+    conversation_id: str,
+    *,
+    fresh=False,
+    deadline=None,
+    timeout=10,
+    max_count=10000,
+    strict=False,
+    reuse_manifest_bodies=False,
 ):
     key = (getattr(bucket, 'name', ''), uid, conversation_id)
     with _index_lock:
@@ -100,6 +109,13 @@ def list_packs(
             return cached[1]
     packs = []
     gapped_enabled = raw_live_gapped_packs_enabled()
+    reuse_manifest_bodies = (
+        reuse_manifest_bodies
+        and not fresh
+        and not strict
+        and deadline is None
+        and inventory_manifest_body_cache_enabled()
+    )
     manifests = None
     for index, blob in enumerate(
         bucket.list_blobs(
@@ -170,7 +186,9 @@ def list_packs(
                     if strict:
                         raise ValueError('raw capture has no unique custody manifest')
                     continue
-                frames, rate = unframed_frames(bucket, blob, uid, manifest.name, deadline=deadline)
+                frames, rate = unframed_frames(
+                    bucket, blob, uid, manifest.name, deadline=deadline, reuse_inventory_body=reuse_manifest_bodies
+                )
                 if not _gap_count_matches(frames, int(metadata['gap_count'])):
                     raise CoverageMismatch('capture gap count differs from frame table')
                 packs.extend(entries(frames, rate, source, allow_empty=True))

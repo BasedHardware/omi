@@ -7,15 +7,22 @@ PCM concatenation, never elapsed wall time. A media upload alone is not proof.
 import hashlib
 import json
 import math
+import threading
 import time
 from typing import Any
 
+from cachetools import TTLCache
+from google.api_core.exceptions import PreconditionFailed
+
+from config.record_wal_storage import private_archive_bucket
 from utils import encryption
 from utils.pusher_audio_window import AUDIO_TIMELINE_CONTINUITY_TOLERANCE
 
 FRAME_SCHEMA = 'audio_frames_v1'
 MAX_FRAMES = 4096
 MAX_MANIFEST_BYTES = 4 * 1024 * 1024
+_inventory_bodies = TTLCache(maxsize=8 * 1024 * 1024, ttl=120, getsizeof=lambda body: len(body) + 256)
+_inventory_lock = threading.Lock()
 
 
 def validate_frames(frames: list[dict], sample_rate: int, *, allow_empty: bool = False) -> int:
@@ -71,7 +78,15 @@ def resampled_samples(samples: int, rate: int, output_rate: int = 16000) -> int:
 
 
 def _manifest(
-    bucket, uid: str, path: str, generation=None, digest=None, *, deadline=None, require_frame_schema=True
+    bucket,
+    uid: str,
+    path: str,
+    generation=None,
+    digest=None,
+    *,
+    deadline=None,
+    require_frame_schema=True,
+    reuse_inventory_body=False,
 ) -> dict:
     if not path.startswith(f'audio-outbox/{uid}/'):
         raise ValueError('frame manifest owner mismatch')
@@ -82,12 +97,46 @@ def _manifest(
         raise ValueError('frame manifest requires generation')
     if blob.size is None or blob.size > MAX_MANIFEST_BYTES:
         raise ValueError('frame manifest exceeds read bound')
-    raw = blob.download_as_bytes(if_generation_match=pinned, timeout=io_timeout(deadline), retry=None)
+    metadata = blob.metadata or {}
+    metageneration = getattr(blob, 'metageneration', None)
+    cache_key = None
+    cached_body = None
+    if (
+        reuse_inventory_body
+        and generation is None
+        and bucket.name == private_archive_bucket()
+        and type(metageneration) is int
+        and metageneration > 0
+        and metadata.get('sha256')
+    ):
+        # The live reload above opened the current object without a version selector.
+        # A cache hit therefore still requires a successful current-object read.
+        cache_key = (bucket.name, uid, path, pinned, metageneration, metadata['sha256'], metadata.get('encrypted'))
+        with _inventory_lock:
+            cached_body = _inventory_bodies.get(cache_key)
+    if cached_body is None:
+        try:
+            encoded = blob.download_as_bytes(
+                if_generation_match=pinned,
+                **({'if_metageneration_match': metageneration} if cache_key is not None else {}),
+                timeout=io_timeout(deadline),
+                retry=None,
+            )
+        except PreconditionFailed:
+            if cache_key is None:
+                raise
+            # A concurrent metadata edit makes this body ineligible for the cache.
+            return _manifest(
+                bucket, uid, path, generation, digest, deadline=deadline, require_frame_schema=require_frame_schema
+            )
+    else:
+        encoded = cached_body
+    raw = encoded
     if len(raw) > MAX_MANIFEST_BYTES:
         raise ValueError('frame manifest exceeds read bound')
-    if (blob.metadata or {}).get('encrypted') == 'true':
+    if metadata.get('encrypted') == 'true':
         raw = encryption.decrypt_audio_file(raw, uid)
-    if hashlib.sha256(raw).hexdigest() != (digest or (blob.metadata or {}).get('sha256')):
+    if hashlib.sha256(raw).hexdigest() != (digest or metadata.get('sha256')):
         raise ValueError('frame manifest checksum mismatch')
     manifest = json.loads(raw)
     if manifest['schema'] != 'audio_custody_v1':
@@ -98,6 +147,9 @@ def _manifest(
         validate_frames(manifest['frames'], int(manifest['capture']['sample_rate']))
     else:
         validate_frames(manifest['frames'], int(manifest['capture']['sample_rate']), allow_empty=True)
+    if cache_key is not None and cached_body is None:
+        with _inventory_lock:
+            _inventory_bodies[cache_key] = encoded
     return manifest
 
 
@@ -116,7 +168,7 @@ def committed_frames(bucket, blob, uid: str, *, deadline=None) -> tuple[list[dic
 
 
 def unframed_frames(
-    bucket, blob, uid: str, manifest_path: str, *, deadline=None, metadata=None
+    bucket, blob, uid: str, manifest_path: str, *, deadline=None, metadata=None, reuse_inventory_body=False
 ) -> tuple[list[dict], int]:
     """Frame positions for a pack whose writer did not declare a frame schema.
 
@@ -127,7 +179,14 @@ def unframed_frames(
     pack's internal gap positions.
     """
     metadata = metadata if metadata is not None else (blob.metadata or {})
-    manifest = _manifest(bucket, uid, manifest_path, deadline=deadline, require_frame_schema=False)
+    manifest = _manifest(
+        bucket,
+        uid,
+        manifest_path,
+        deadline=deadline,
+        require_frame_schema=False,
+        reuse_inventory_body=reuse_inventory_body,
+    )
     if manifest['media'] != {
         'bucket': bucket.name,
         'path': blob.name,
