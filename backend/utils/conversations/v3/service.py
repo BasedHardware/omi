@@ -235,6 +235,7 @@ async def reconcile(
                 return 'stored'
         # Keep a bounded cache; every fingerprint is checked even for finished stretches.
         saved = {row['fingerprint']: row for row in cached}
+        previews = {row['preview_key']: row for row in cached if 'preview_key' in row}
         outlines, cache = [], []
         background = await run_blocking(db_executor, context.outline_sources, uid, groups)
         for group in groups:
@@ -254,8 +255,14 @@ async def reconcile(
                 messages.append(('human', 'Preceding conversation: ' + previous['title'] + '\n' + previous['line']))
             fingerprint = context.cache_key(group, messages)
             hit = saved.get(fingerprint)
+            preview_key = f"{silence_seconds}:{group['key']}" if custom_timing else None
+            preview = previews.get(preview_key) if preview_key else None
+            preview_fields = {}
             if hit:
                 entries = hit['entries']
+                report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
+            elif preview is not None:
+                entries = outline.reuse_preview(group, preview)
                 report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
             elif group['outline_ready'] or on_open:
                 if await run_blocking(db_executor, store.outline_attempt, uid, token, fingerprint, **keyed):
@@ -264,7 +271,21 @@ async def reconcile(
                     content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
                     try:
                         entries = outline.parse(content, group)
-                        await run_blocking(db_executor, store.save_outline, uid, token, fingerprint, entries, **keyed)
+                        if preview_key and not group['finished']:
+                            preview_fields = {
+                                'preview_key': preview_key,
+                                'anchors': outline.preview_anchors(group, entries),
+                            }
+                        await run_blocking(
+                            db_executor,
+                            store.save_outline,
+                            uid,
+                            token,
+                            fingerprint,
+                            entries,
+                            **keyed,
+                            **({'preview': preview_fields} if preview_fields else {}),
+                        )
                     except (ValueError, KeyError, TypeError):
                         entries = outline.fallback(group)
                         entries = [{**entry, '_outline_failed': True} for entry in entries]
@@ -286,20 +307,23 @@ async def reconcile(
                     }
                 ]
             outlines.append(entries)
-            if group['outline_ready'] or on_open:
-                cache.append({'fingerprint': fingerprint, 'entries': entries})
+            if group['outline_ready'] or on_open or preview is not None:
+                if preview_key and not group['finished'] and not any(e.get('_outline_failed') for e in entries):
+                    preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
+                cache.append({'fingerprint': fingerprint, 'entries': entries, **preview_fields})
 
         preferred = conversation_id if on_open and custom_timing else None
+        refine_locked = (
+            custom_timing
+            and not (derive or on_open)
+            and not any(row.get('v3_pending') and row.get('v3_manual_end') for row in eligible)
+        )
 
         async def plan():
             proposed = planner.windows(
                 groups, outlines, cohesion=cohesion, silence_gap=silence_gap, defer_topic_lock=custom_timing
             )
-            merge = (
-                refinement.candidate(proposed, existing, recordings)
-                if custom_timing and not (derive or on_open)
-                else None
-            )
+            merge = refinement.candidate(proposed, existing, recordings) if refine_locked else None
             reserved = set()
             candidates = proposed
             if merge is not None:
@@ -337,6 +361,8 @@ async def reconcile(
                 opening = on_open and prior and prior['id'] == conversation_id and custom_timing
                 if opening:
                     window['finished'] = True
+                if custom_timing and not window['finished']:
+                    window['_title_preview'] = True
                 row = planner.build(uid, window, recordings, prior, allocated=allocated)
                 if opening and prior and planner.is_unlocked(prior):
                     row['v3_open_locked'] = True

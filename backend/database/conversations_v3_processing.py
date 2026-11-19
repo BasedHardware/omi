@@ -44,25 +44,29 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
         if current.get('title_locked'):
             patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
             patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
-        settled = current.get('v3_derived') and current.get('status') != 'in_progress'
+        # The scoped reconcile may time out while its outline is still running.
+        # Explicit Open can still finish this exact snapshot in the existing notes commit.
+        open_lock = (
+            {'status': 'completed', 'v3_unlocked': False, 'v3_open_locked': True, 'v3_process_pending': True}
+            if current.get('v3_derived') and current.get('v3_unlocked')
+            else {}
+        )
+        settled = current.get('v3_derived') and (bool(open_lock) or current.get('status') != 'in_progress')
         # On-open notes are a notes write too: a row whose background notes failed and the user then
         # opened owes the same single created delivery once it is visible and completed.
         armed = bool(
             settled
             and policy.created_eligible(
-                {**current, 'v3_notes_written': True, 'v3_process_failed': False, 'tile_state': 'done'}
+                {**current, **open_lock, 'v3_notes_written': True, 'v3_process_failed': False, 'tile_state': 'done'}
             )
         )
         tx.update(
             ref,
             {
                 **patch,
+                **open_lock,
                 'summary_covers_through': covers,
-                **(
-                    {'tile_state': 'done', 'v3_process_failed': False, 'summary_retryable': False}
-                    if current.get('v3_derived') and current.get('status') != 'in_progress'
-                    else {}
-                ),
+                **({'tile_state': 'done', 'v3_process_failed': False, 'summary_retryable': False} if settled else {}),
                 **(
                     {'title_locked': True}
                     if current.get('v3_derived') and not current.get('home_hidden') and patch['structured'].get('title')

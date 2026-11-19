@@ -160,6 +160,41 @@ def wanted(groups, cache):
     ]
 
 
+def _anchor(line):
+    return f"{line['conversation_id']}:{line['start'].isoformat()}"
+
+
+def preview_anchors(group, entries):
+    """Keep stable coordinates for each selected topic or section, without storing more speech."""
+    lines = group['lines']
+    indexes = {entry['first_line'] for entry in entries}
+    indexes.update(section['first_line'] for entry in entries for section in entry.get('sections') or ())
+    return {str(index): _anchor(lines[index - 1]) for index in indexes if 1 <= index <= len(lines)}
+
+
+def reuse_preview(group, preview):
+    """Rebase the existing outline when revisions or late speech change line numbers."""
+    positions = {_anchor(line): index for index, line in enumerate(group['lines'], 1)}
+    moved = {int(index): positions.get(anchor) for index, anchor in preview['anchors'].items()}
+    entries = []
+    for entry in preview['entries']:
+        first = 1 if not entries else moved.get(entry['first_line'])
+        if first is None or (entries and first <= entries[-1]['first_line']):
+            continue
+        sections = []
+        for section in entry.get('sections') or ():
+            position = moved.get(section['first_line'])
+            if position is not None and position >= first:
+                sections.append({**section, 'first_line': position})
+        entries.append({**entry, 'first_line': first, 'sections': sections})
+    # Drop rebased sections that now belong to a different topic.
+    for entry, following in zip(entries, entries[1:]):
+        entry['sections'] = [
+            section for section in entry['sections'] if section['first_line'] < following['first_line']
+        ]
+    return entries
+
+
 def messages(group, tz, *, cohesion=False, silence_gap=SILENCE):
     lines = group['lines']
     if cohesion:

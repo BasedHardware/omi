@@ -196,6 +196,12 @@ FIELD_SITES = {
                 'v3_process_pending',
             ),
         ),
+        (
+            'store_summary.persist',
+            'status',
+            "'completed'",
+            ('status', 'v3_open_locked', 'v3_process_pending', 'v3_unlocked'),
+        ),
     ],
     'utils/conversations/v3/planner.py': [
         (

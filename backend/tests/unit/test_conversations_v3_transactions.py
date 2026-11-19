@@ -573,3 +573,31 @@ def test_locked_refinement_commits_redirect_and_transferred_claims_together(stri
     assert strict.rows[later]['sync_merged_into'] == strict.rows[later]['v3_claims_transferred_to'] == 'older'
     assert strict.rows[later]['sync_content_revision'] == 4
     assert strict.rows[R]['claims'] == [{**claim, 'conversation_id': 'older'} for claim in old_claims]
+
+
+def test_full_builder_prunes_stale_provisional_lease_ids(strict):
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    strict.rows[L]['unlocked_ids'] = ['settled', 'live', 'missing']
+    live, settled = R[:-1] + ('live',), R[:-1] + ('settled',)
+    strict.rows[live] = {'id': 'live', 'v3_unlocked': True, 'status': 'processing'}
+    strict.rows[settled] = {'id': 'settled', 'v3_unlocked': False, 'status': 'completed'}
+    existing = {path[-1]: {**strict.rows[path], '_v3_revision': 1} for path in (live, settled)}
+    new = {'id': 'new', 'v3_unlocked': True, 'status': 'in_progress'}
+    store.commit_projection('synthetic', token, {}, existing, [new], [], firestore_client=strict)
+    assert strict.rows[L]['unlocked_ids'] == ['live', 'new']
+
+
+def test_on_open_summary_commit_finalizes_provisional_snapshot(strict):
+    card = R[:-1] + ('card',)
+    strict.rows[card] = {
+        'id': 'card',
+        'v3_derived': True,
+        'v3_unlocked': True,
+        'status': 'in_progress',
+        'finished_at': AT,
+    }
+    token = leases.acquire('synthetic', 'summary-card', firestore_client=strict)
+    writers.store_summary('synthetic', 'card', token, 1, {'title': 'Synthetic'}, AT, firestore_client=strict)
+    row = strict.rows[card]
+    assert row['status'] == 'completed' and row['v3_open_locked'] and not row['v3_unlocked']
+    assert row['summary_covers_through'] == AT and row['v3_process_pending']

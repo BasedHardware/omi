@@ -21,6 +21,7 @@ from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.encryption import encrypt, decrypt
+from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
 from utils.conversations.v3 import Conflict, policy
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 
@@ -171,7 +172,7 @@ def adoptable(uid, ids, *, firestore_client=None):
     return found
 
 
-def save_outline(uid, token, fingerprint, entries, *, key='builder', firestore_client=None):
+def save_outline(uid, token, fingerprint, entries, *, key='builder', preview=None, firestore_client=None):
     """Keep a paid outline even when this pass's projection commit later conflicts."""
     client = firestore_client or get_firestore_client()
     ref = leases.lease_ref(client, uid, key)
@@ -185,7 +186,7 @@ def save_outline(uid, token, fingerprint, entries, *, key='builder', firestore_c
             raise Conflict('lease_lost')
         cache = json.loads(decrypt(row['outline_cache'], uid)) if row.get('outline_cache') else []
         cache = [c for c in cache if c.get('fingerprint') != fingerprint]
-        cache.append({'fingerprint': fingerprint, 'entries': entries})
+        cache.append({'fingerprint': fingerprint, 'entries': entries, **(preview or {})})
         tx.update(ref, {'outline_cache': encrypt(json.dumps(cache[-128:], default=str), uid)})
 
     save(client.transaction())
@@ -232,8 +233,6 @@ def load(uid, *, conversation_id=None, firestore_client=None):
     if account_deletion_blocks_user_work(uid):
         raise Conflict('account_deletion')
     coll = user_conversations(client, uid)
-    from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
-
     silence_gap = timedelta(seconds=boundary_seconds(cohesion=stretch_cohesion_enabled())[0])
     margin = max(timedelta(minutes=20), silence_gap)
     opened = decode_row(uid, coll.document(conversation_id).get()) if conversation_id else None
@@ -409,8 +408,6 @@ def _mark_successor_pending(coll, recordings):
     cap = latest.get(policy.ROTATION_CAP_FIELD)
     if latest.get('_v3_page_continues') or type(cap) not in (int, float) or not 0 < cap <= 3600:
         return
-    from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
-
     silence_gap = timedelta(seconds=boundary_seconds(cohesion=stretch_cohesion_enabled())[0])
     end, now = speech_end(latest), datetime.now(timezone.utc)
     query = (

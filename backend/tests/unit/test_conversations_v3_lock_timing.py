@@ -172,3 +172,23 @@ def test_locked_refinement_refuses_a_downgrade_after_source_protection_changes()
     window, existing, recordings = _locked_pair()
     recordings['r']['data_protection_level'] = 'enhanced'
     assert refinement.candidate([window], existing, recordings) is None
+
+
+def test_outline_prompt_uses_configured_silence_threshold():
+    window, _, recordings = _locked_pair()
+    group = {'lines': window['lines'], 'end': recordings['r']['finished_at']}
+    messages = outline.messages(group, timezone.utc, cohesion=True, silence_gap=timedelta(seconds=900))
+    assert '900 seconds of recorded silence' in messages[0][1]
+    assert 'Five minutes of recorded silence' in outline.messages(group, timezone.utc)[0][1]
+
+
+def test_provisional_title_and_emoji_are_refreshed_at_lock():
+    from utils.conversations.v3 import planner
+
+    window, existing, recordings = _locked_pair()
+    window.update(title='Revised', line='Revised preview', emoji='🌲')
+    prior = {**existing['early'], 'v3_unlocked': True}
+    row = planner.build('synthetic', window, recordings, prior)
+    assert row['structured']['title'] == 'Revised'
+    assert row['structured']['overview'] == 'Revised preview'
+    assert row['structured']['emoji'] == '🌲'

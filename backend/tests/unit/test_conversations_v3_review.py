@@ -931,3 +931,64 @@ async def test_configured_reconcile_refines_locked_cards_without_new_notes(build
     assert row['id'] == 'early' and row['_v3_absorbed'] == ['late']
     assert row['summary_covers_through'] == row['finished_at']
     assert not row.get('v3_process_pending')
+
+
+def test_builder_loads_indexed_provisional_card_without_pending_audio(monkeypatch):
+    prefix = '/users/synthetic/'
+    rows = {
+        prefix + 'conversation_v3_leases/builder': {'unlocked_ids': ['older', 'removed']},
+        prefix
+        + 'conversations/older': {
+            'id': 'older',
+            'v3_derived': True,
+            'v3_unlocked': True,
+            'status': 'processing',
+            'started_at': AT,
+            'finished_at': AT + timedelta(seconds=10),
+            'v3_recording_ids': ['r'],
+        },
+        prefix + 'conversations/r': source(v3_pending=False),
+    }
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
+    monkeypatch.setattr(store, 'decode_row', lambda uid, snap: snap.to_dict() if snap.exists else None)
+    monkeypatch.setattr(store, 'recording_input', lambda uid, snap: snap.to_dict() if snap.exists else None)
+    recordings, existing, _ = store.load('synthetic', firestore_client=MemoryQuery(rows))
+    assert set(existing) == {'older'} and set(recordings) == {'r'}
+
+
+@pytest.mark.asyncio
+async def test_multiple_previews_defer_topic_lock_and_owe_no_notes(builder, monkeypatch):
+    committed, messages = builder
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    start = datetime.now(timezone.utc) - timedelta(minutes=12)
+    raw = source(
+        started_at=start,
+        finished_at=start + timedelta(seconds=30),
+        transcript_segments=[
+            {'text': 'first ' * 310, 'start': 0, 'end': 10},
+            {'text': 'second ' * 310, 'start': 20, 'end': 30},
+        ],
+    )
+    inputs = [{'r': raw}, {}, []]
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: inputs)
+
+    def two_topics(uid, prompt):
+        messages.append(prompt)
+        return '{"conversations":[{"first_line":1,"title":"First","line":"One","kind":"conversation"},{"first_line":2,"title":"Second","line":"Two","kind":"conversation"}]}'
+
+    monkeypatch.setattr(service.models, 'outline', two_topics)
+    await service.reconcile('synthetic')
+    first, second = committed[-1][4]
+    assert first['status'] == 'processing' and second['status'] == 'in_progress'
+    assert all(row['v3_unlocked'] and not row.get('v3_process_pending') for row in (first, second))
+    assert all(not row['title_locked'] for row in (first, second))
+    assert len(messages) == 1
+
+    inputs[1] = {row['id']: row for row in (first, second)}
+    inputs[2] = committed[-1][5]
+    raw['transcript_segments'].insert(1, {'text': 'late inserted speech', 'start': 12, 'end': 14})
+    await service.reconcile('synthetic')
+    new_first, new_second = committed[-1][4]
+    assert [row['structured']['title'] for row in (new_first, new_second)] == ['First', 'Second']
+    assert len(new_first['transcript_segments']) == 2 and len(new_second['transcript_segments']) == 1
+    assert len(messages) == 1

@@ -35,8 +35,6 @@ def needs_open_reconcile(row):
 
 
 def summary_eligible(row):
-    if row.get('v3_unlocked'):
-        return False
     if row.get('processing_tier') == 'historical':
         # Historical rows summarize only through POST .../summary/open (its caps and gates).
         return False
@@ -61,7 +59,7 @@ def write(uid, row, emit):
 
     with generated_compute_scope(uid), models.notes_mode(uid, foreground=True, emit=emit):
         structured, _discarded = _get_structured(uid, row.get('language') or 'en', Conversation(**row))
-    if row.get('title_locked'):
+    if row.get('title_locked') or (row.get('v3_unlocked') and (row.get('structured') or {}).get('title')):
         structured.title = (row.get('structured') or {}).get('title', '')
         structured.emoji = (row.get('structured') or {}).get('emoji', '💬')
     # Stream final sections too when the existing notes writer returned a cache
@@ -109,6 +107,7 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
         yield done(row)
         return
     cid = row['id']
+    fallback_open = bool(row.get('v3_unlocked'))
     loop = asyncio.get_running_loop()
     queue = asyncio.Queue(maxsize=128)
     sent = set()
@@ -137,6 +136,9 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
         if row.get('recording') or row.get('is_locked'):
             yield 'error: {"detail":"Conversation not available"}\n\n'
             return
+        if fallback_open and (fresh(row) or not summary_eligible(row)):
+            yield done(row)
+            return
         # run_blocking is awaited by a tracked task and never holds a DB worker
         # while waiting on a model. Request cancellation cannot authorize a write.
         from utils.executors import start_background_task
@@ -164,7 +166,7 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
             structured,
             row.get('finished_at'),
         )
-        if armed:
+        if armed or fallback_open:
             await _wake_created(uid)
         for section in structured.get('sections') or []:
             text = (

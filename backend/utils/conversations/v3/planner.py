@@ -315,8 +315,12 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
             pieces.extend(piece for piece in previous_pieces if piece not in pieces)
         known_files = {af['id'] for af in files}
         files.extend(af for af in existing.get('audio_files') or [] if af['id'] not in known_files)
-    title = (
-        (existing or {}).get('structured', {}).get('title') if (existing or {}).get('title_locked') else window['title']
+    prior = existing or {}
+    structured = prior.get('structured', {})
+    preview = bool(window.get('_title_preview') or prior.get('v3_unlocked'))
+    title_locked = bool(prior.get('title_locked') and (not preview or prior.get('user_title')))
+    title = (prior.get('user_title') if preview else None) or (
+        structured.get('title') if title_locked else window['title']
     )
     manual_end = bool(window.get('manual_end') or (existing or {}).get('manual_end'))
     outline_kind = window.get('outline_kind', window['kind'])
@@ -391,8 +395,13 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         'home_hidden_reason': reason,
         'home_hidden': hidden,
         'title_locked': bool(
-            (existing or {}).get('title_locked')
-            or (title and (not hidden or not window['finished']) and kind not in {'media', 'background'})
+            title_locked
+            or (
+                not window.get('_title_preview')
+                and title
+                and (not hidden or not window['finished'])
+                and kind not in {'media', 'background'}
+            )
         ),
         'tile_state': 'writing' if window['finished'] else 'live',
         'v3_recording_ids': list(dict.fromkeys(l['conversation_id'] for l in lines)),
@@ -402,12 +411,8 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         'structured': {
             **(existing or {}).get('structured', {}),
             'title': title or '',
-            'overview': (existing or {}).get('structured', {}).get('overview') or window['line'],
-            'emoji': (
-                (existing or {}).get('structured', {}).get('emoji')
-                if (existing or {}).get('title_locked')
-                else window.get('emoji', '💬')
-            ),
+            'overview': (window['line'] if preview else structured.get('overview')) or window['line'],
+            'emoji': structured.get('emoji') if title_locked else window.get('emoji', '💬'),
         },
     }
     if not (existing or {}).get('summary_covers_through'):
