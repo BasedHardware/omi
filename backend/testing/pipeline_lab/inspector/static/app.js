@@ -154,13 +154,12 @@
     overview: new Map(),
     dayPanel: new Map(),
     detail: new Map(),
-    filters: store.get('filters', { changed: false, discarded: false, verdict: false, pushes: false }),
+    dayFilter: null,
     search: '',
     selected: new Map(), // run -> conversation key selected on the day page
     tab: store.get('tab', 'summary'),
     trMode: 'replay',
     follow: store.get('follow', true),
-    fit: store.get('fit', 'day'),
     rate: store.get('rate', 1),
     route: null,
     targets: [], // verdict targets on the current page, in focus order for the open tab
@@ -233,12 +232,14 @@
     state.route = route;
     state.targets = [];
     const app = $('#app');
+    if (route.runId) state.lastRun = route.runId;
+    setNav(route);
+    app.classList.add('loading');
     try {
       const runs = await loadRuns();
       if (token !== state.renderToken) return;
       updateRunSelect(runs, route.runId);
-      $('#nav-day').classList.toggle('on', route.view === 'day' || route.view === 'conv');
-      $('#nav-verdicts').classList.toggle('on', route.view === 'verdicts');
+      setNav(route);
       let view;
       if (route.view === 'home') {
         if (runs.length) { location.replace('#/run/' + encodeURIComponent(runs[0].run_id)); return; }
@@ -247,6 +248,7 @@
       else if (route.view === 'conv') view = await convPage(route, token);
       else view = await verdictsPage(token);
       if (token !== state.renderToken || !view) return;
+      app.classList.remove('loading');
       app.replaceChildren(view);
       if (route.view === 'day') {
         restoreSelection(route.runId, prev);
@@ -256,16 +258,30 @@
       if (route.view === 'conv') focusTarget(0, false);
     } catch (err) {
       if (token !== state.renderToken) return;
+      app.classList.remove('loading');
       app.replaceChildren(h('p', { class: 'empty error' }, 'Could not load: ' + err.message));
     }
   }
 
+  /* Nav state is a pure function of the route (and the last run seen), set before anything loads, so
+     Day / Verdicts always show where you are and Day always leads back to the day you came from. */
+  function dayHref(route, lastRun, runs) {
+    const runId = (route && route.runId) || (lastRun && (!runs || runs.some((r) => r.run_id === lastRun)) ? lastRun : runs && runs[0] && runs[0].run_id);
+    return runId ? '#/run/' + encodeURIComponent(runId) : '#/';
+  }
+  function setNav(route) {
+    const day = $('#nav-day'), verdicts = $('#nav-verdicts');
+    const onDay = route.view === 'day' || route.view === 'conv';
+    day.classList.toggle('on', onDay);
+    verdicts.classList.toggle('on', route.view === 'verdicts');
+    if (onDay) day.setAttribute('aria-current', 'page'); else day.removeAttribute('aria-current');
+    if (route.view === 'verdicts') verdicts.setAttribute('aria-current', 'page'); else verdicts.removeAttribute('aria-current');
+    day.setAttribute('href', dayHref(route, state.lastRun, state.runs));
+  }
   function updateRunSelect(runs, current) {
     const sel = $('#run-select');
     const runId = current || (state.lastRun && runs.some((r) => r.run_id === state.lastRun) ? state.lastRun : runs[0] && runs[0].run_id);
-    if (current) state.lastRun = current;
     sel.replaceChildren(...runs.map((r) => h('option', { value: r.run_id, selected: r.run_id === runId }, (r.date || r.day_id) + ' · ' + shortRef(r) + ' · ' + r.run_id)));
-    $('#nav-day').setAttribute('href', runId ? '#/run/' + encodeURIComponent(runId) : '#/');
   }
   $('#run-select').addEventListener('change', (e) => { location.hash = '#/run/' + encodeURIComponent(e.target.value); });
 
@@ -283,17 +299,46 @@
 
   // ---------------------------------------------------------------- day page
 
-  const STATUS_CLASS = { same: 'st-same', changed: 'st-changed', new: 'st-new', missing: 'st-missing', merged: 'st-merged', 'discard flipped': 'st-flipped' };
+  /* Group kinds from baseline/compare.py. A conversation's status word is its group's kind. */
+  const KIND_LABEL = {
+    same: 'same', cosmetic: 'cosmetic only', content: 'changed', changed: 'changed', merge: 'merged', split: 'split',
+    regroup: 'regrouped', new: 'new', missing: 'missing', merged: 'merged', 'discard flipped': 'discard flipped',
+  };
+  const KIND_TITLE = {
+    same: 'Same as production', cosmetic: 'Only emoji, category, hidden reason or punctuation differ', content: 'Title, overview, tasks, memories, pushes, events, edges or Home differ',
+    merge: 'Several production conversations became one replay conversation', split: 'One production conversation became several replay conversations',
+    regroup: 'Production and replay cut this stretch into different conversations', new: 'Only the replay has this', missing: 'Only production has this',
+  };
+  const STATUS_CLASS = {
+    same: 'st-same', cosmetic: 'st-same', changed: 'st-changed', content: 'st-changed', new: 'st-new', missing: 'st-missing',
+    merge: 'st-merged', split: 'st-merged', regroup: 'st-merged', merged: 'st-merged', 'discard flipped': 'st-flipped',
+  };
   function statusChip(status, withVs) {
-    return h('span', { class: 'chip ' + (STATUS_CLASS[status] || '') }, status, withVs && status !== 'same' && status !== 'new' ? h('span', { class: 'vsprod' }, ' vs production') : null);
+    return h('span', { class: 'chip ' + (STATUS_CLASS[status] || ''), title: KIND_TITLE[status] || '' }, KIND_LABEL[status] || status,
+      withVs && status !== 'same' && status !== 'new' ? h('span', { class: 'vsprod' }, ' vs production') : null);
+  }
+
+  /* Home hidden reasons in plain words (v3 home_hidden_reason, classic discard reasons). */
+  const REASON_WORDS = {
+    below_word_minimum: 'too short', media: 'media playing', background_wearer_recognized: 'background, wearer not talking',
+    background: 'background', discarded: 'discarded', hidden: 'hidden', conversation: 'hidden',
+  };
+  function reasonWords(reason) { return REASON_WORDS[reason] || String(reason || 'hidden').replace(/_/g, ' '); }
+
+  function dayFilter() {
+    if (!state.dayFilter) state.dayFilter = Object.assign({ tag: null, view: 'worth', sort: 'time' }, store.get('dayFilter', {}));
+    return state.dayFilter;
   }
 
   async function dayPage(route, token) {
     const ov = await loadOverview(route.runId, true);
     if (token !== state.renderToken) return null;
     TZ = ov.day.timezone || 'UTC';
-    const panel = h('aside', { class: 'day-panel' }, h('div', { class: 'card' }, h('p', { class: 'empty' }, 'Loading day panel…')));
-    const page = h('div', { class: 'page day' }, dayHeader(ov), timeline(ov, route.runId), h('div', { class: 'day-grid' }, conversationList(ov, route.runId), panel));
+    if (!ov.groups) return h('p', { class: 'empty error' }, 'This server runs older inspector code than this page. Restart the inspector server to load the new day view.');
+    const panel = h('aside', { class: 'day-panel', 'aria-label': 'Day panel' }, h('div', { class: 'card' }, h('p', { class: 'empty' }, 'Loading day panel…')));
+    const page = h('div', { class: 'page day' + (store.get('panel', true) ? '' : ' panel-closed') });
+    const body = dayBody(ov, route.runId, page);
+    page.append(dayHeader(ov), body.digest, h('div', { class: 'day-grid' }, body.list, panel));
     loadDayPanel(route.runId, panel);
     return page;
   }
@@ -308,250 +353,285 @@
     return out;
   }
 
+  function audioBadge(cov) {
+    const gaps = cov.gaps && cov.gaps.length ? ' · ' + cov.gaps.length + ' gap' + (cov.gaps.length === 1 ? '' : 's') : '';
+    if (!cov.with_audio) return h('span', { class: 'chip', title: 'No audio files are in this corpus day, so the player is off. Transcripts came from storage.' }, 'no audio loaded' + gaps);
+    return h('span', { class: 'chip', title: (cov.audio_seconds ? dur(cov.audio_seconds) + ' of audio. ' : '') + 'Conversations with an audio clip / all conversations of the day.' },
+      'audio ' + cov.with_audio + '/' + (cov.conversations || 0) + gaps);
+  }
+
   function dayHeader(ov) {
     const run = ov.run;
     const cov = ov.day.coverage || {};
     const overlay = flatten(run.overlay);
     const spendPct = run.budget_usd ? Math.min(100, (100 * (run.spend_usd || 0)) / run.budget_usd) : 0;
     const items = [
-      h('span', { class: 'item', title: 'ref under test' + (run.commit ? ' · ' + run.commit : '') }, h('span', { class: 'label' }, 'ref'), h('code', null, run.ref || '—'), run.commit ? h('code', { class: 'muted' }, String(run.commit).slice(0, 7)) : null),
-      h('details', { class: 'inline item' },
-        h('summary', null, h('span', { class: 'label' }, 'overlay'), ' ', overlay.length ? overlay.length + ' setting' + (overlay.length === 1 ? '' : 's') + ' ▾' : 'none'),
-        overlay.length ? h('div', { class: 'pop' }, h('table', null, overlay.map(([k, v]) => h('tr', null, h('td', null, k), h('td', null, v))))) : null),
-      run.stt ? h('span', { class: 'item', title: 'where the transcripts came from' }, h('span', { class: 'label' }, 'stt'), h('code', null, run.stt)) : null,
+      h('span', { class: 'item', title: 'ref under test' + (run.commit ? ' · ' + run.commit : '') }, h('span', { class: 'label' }, 'ref'), h('code', null, shortRef(run))),
+      run.pipeline === 'v3' ? h('span', { class: 'chip', title: 'Conversations v3: the day\'s recordings were fed to the real v3 builder. Production is its v3 result for the day.' }, 'pipeline v3') : null,
+      run.stt ? h('span', { class: 'item', title: 'where the transcripts came from' }, h('span', { class: 'label' }, 'stt'), run.stt) : null,
       run.engine === 'fake' ? h('span', { class: 'chip badge-warn', title: 'Plumbing check: a stand-in replaced the product pipeline' }, 'engine: fake') : null,
-      run.pipeline === 'v3' ? h('span', { class: 'chip', title: 'Conversations v3: the day\'s recordings were fed to the real v3 builder, which planned these conversations. Production is its v3 result for the day.' }, 'pipeline: v3') : null,
       h('span', { class: 'item spend', title: 'spend vs cap' }, h('span', { class: 'label' }, 'spend'), h('span', { class: 'num' }, usd(run.spend_usd) + ' / ' + usd(run.budget_usd)), h('span', { class: 'meter' + (spendPct > 80 ? ' hot' : '') }, h('i', { style: 'width:' + spendPct.toFixed(1) + '%' }))),
       h('span', { class: 'item' }, h('span', { class: 'label' }, 'wall'), h('span', { class: 'num' }, dur(run.wall_seconds))),
       run.status && run.status !== 'complete' ? h('span', { class: 'chip badge-warn' }, run.status) : null,
       run.start_state === 'approximate' ? h('span', { class: 'chip badge-warn', title: 'Start state comes from a snapshot taken after the day began' }, 'start state: approximate') : null,
-      h('span', { class: 'chip', title: (cov.audio_seconds ? dur(cov.audio_seconds) + ' of audio. ' : '') + 'Grey bands on the timeline are gaps with unknown audio.' },
-        'audio ' + (cov.with_audio !== undefined ? cov.with_audio + '/' + (cov.conversations || 0) : '?') + (cov.gaps && cov.gaps.length ? ' · ' + cov.gaps.length + ' gap' + (cov.gaps.length === 1 ? '' : 's') : '')),
-      (run.warnings || []).length ? h('details', { class: 'inline item' }, h('summary', null, (run.warnings.length) + ' warning' + (run.warnings.length === 1 ? '' : 's') + ' ▾'), h('div', { class: 'pop' }, h('ul', null, run.warnings.map((w) => h('li', null, w))))) : null,
+      audioBadge(cov),
+      h('details', { class: 'inline item' },
+        h('summary', null, h('span', { class: 'label' }, 'overlay'), ' ', overlay.length ? overlay.length + ' ▾' : 'none'),
+        overlay.length ? h('div', { class: 'pop' }, h('table', null, overlay.map(([k, v]) => h('tr', null, h('td', null, k), h('td', null, v))))) : null),
+      (run.warnings || []).length ? h('details', { class: 'inline item warn' }, h('summary', null, run.warnings.length + ' warning' + (run.warnings.length === 1 ? '' : 's') + ' ▾'), h('div', { class: 'pop' }, h('ul', null, run.warnings.map((w) => h('li', null, w))))) : null,
     ];
     return h('div', { class: 'day-head' },
       h('h1', null, longDate(ov.day.date), h('span', { class: 'tz' }, ov.day.timezone || 'UTC')),
       h('div', { class: 'meta' }, items));
   }
 
-  function windowOf(ov) {
-    const w = ov.day.window;
-    let start = w ? ms(w.start) : NaN, end = w ? ms(w.end) : NaN;
-    if (isNaN(start)) {
-      const all = ov.timeline.replay.concat(ov.timeline.production).map((c) => ms(c.started_at)).filter((x) => !isNaN(x));
-      start = all.length ? Math.min(...all) : Date.now();
-      end = start + 86400000;
-    }
-    if (state.fit === 'active') {
-      const rows = ov.timeline.replay.concat(ov.timeline.production);
-      const s = rows.map((c) => ms(c.started_at)).filter((x) => !isNaN(x));
-      const e = rows.map((c) => ms(c.finished_at)).filter((x) => !isNaN(x));
-      if (s.length) {
-        const hour = 3600000;
-        const a = Math.max(start, Math.floor((Math.min(...s) - start) / hour) * hour + start);
-        const b = Math.min(end, Math.ceil((Math.max(...e) - start) / hour) * hour + start);
-        if (b > a) return { start: a, end: b, full: [start, end] };
-      }
-    }
-    return { start, end, full: [start, end] };
-  }
-
-  function timeline(ov, runId) {
-    const win = windowOf(ov);
-    const span = win.end - win.start;
-    const pct = (t) => ((t - win.start) / span) * 100;
-    const place = (s, e) => {
-      const a = Math.max(win.start, ms(s)), b = Math.min(win.end, isNaN(ms(e)) ? ms(s) : ms(e));
-      if (isNaN(a) || b < win.start || a > win.end) return null;
-      return 'left:' + pct(a).toFixed(3) + '%;width:' + Math.max(0, pct(b) - pct(a)).toFixed(3) + '%';
-    };
-    const hours = [];
-    for (let t = win.start; t <= win.end + 1; t += 3600000) hours.push(t);
-    const axis = h('div', { class: 'tl-axis' }, hours.map((t, i) => {
-      const major = (Math.round((t - win.full[0]) / 3600000)) % 3 === 0;
-      return h('span', { class: major ? '' : 'minor', style: 'left:' + pct(t).toFixed(3) + '%' }, i === hours.length - 1 && t >= win.end ? '' : clock(new Date(t).toISOString()));
-    }));
-    const gaps = (ov.timeline.gaps || []).map((g) => { const st = place(g.start, g.end); return st ? h('div', { class: 'tl-gap', style: st, title: 'Gap: ' + (g.kind || 'unknown') + ' audio, ' + clock(g.start) + '–' + clock(g.end) }) : null; });
-    const grid = () => hours.slice(1, -1).map((t) => h('div', { class: 'tl-hour', style: 'left:' + pct(t).toFixed(3) + '%' }));
-    const blocks = (rows, prod) => rows.map((c) => {
-      const st = place(c.started_at, c.finished_at);
-      if (!st) return null;
-      const status = prod ? (c.status === 'missing' ? 'missing' : '') : c.status;
-      const cls = ['tl-block', prod ? 'prod' : 'r', c.discarded ? 'discarded' : '', c.hidden ? 'offhome' : '', status ? STATUS_CLASS[status] : ''].join(' ');
-      const twinIds = prod ? [c.id] : (c.baseline || []).map((b) => b && b.id);
-      const href = prod ? (c.status === 'missing' ? convHref(runId, { kind: 'production', id: c.id }) : null) : convHref(runId, c);
-      const title = clock(c.started_at) + '–' + clock(c.finished_at) + '  ' + (c.title || (c.discarded ? '(discarded)' : '(untitled)')) + (status ? '  · ' + status : '') + (c.hidden ? '  · not on Home' + (c.hidden_reason ? ' (' + c.hidden_reason.replace(/_/g, ' ') + ')' : '') : '');
-      return h('button', {
-        class: cls, style: st, title, type: 'button',
-        dataset: { twins: twinIds.filter(Boolean).join(' '), id: c.id, side: prod ? 'p' : 'r' },
-        onclick: () => {
-          if (href) location.hash = href;
-          else {
-            const owner = ov.conversations.find((r) => r.kind === 'replay' && (r.baseline || []).some((b) => b && b.id === c.id));
-            if (owner) location.hash = convHref(runId, owner);
-          }
-        },
-        onmouseenter: (e) => highlightTwins(e.currentTarget, true),
-        onmouseleave: (e) => highlightTwins(e.currentTarget, false),
-      });
-    });
-    const fitToggle = h('span', { class: 'seg-toggle', role: 'group', 'aria-label': 'Timeline range' },
-      ['day', 'active'].map((f) => h('button', { type: 'button', class: state.fit === f ? 'on' : '', onclick: () => { state.fit = f; store.set('fit', f); render(); } }, f === 'day' ? '24 h' : 'Active hours')));
-    return h('section', { class: 'card timeline', 'aria-label': 'Timeline' },
-      h('div', { class: 'tl-head' }, h('span', { class: 'label' }, 'Timeline'), fitToggle),
-      h('div', { class: 'tl-grid' },
-        h('span'), axis,
-        h('span', { class: 'tl-rowlabel' }, 'Replay'), h('div', { class: 'tl-track' }, gaps, grid(), blocks(ov.timeline.replay, false)),
-        h('span', { class: 'tl-rowlabel' }, 'Production'), h('div', { class: 'tl-track' }, gaps.map((g) => g && g.cloneNode()), grid(), blocks(ov.timeline.production, true))),
-      h('div', { class: 'tl-legend' },
-        h('span', null, h('i', { style: 'background:var(--block-replay)' }), 'kept'),
-        h('span', null, h('i', { style: 'background:repeating-linear-gradient(135deg,var(--block-prod) 0 2px,transparent 2px 5px);box-shadow:inset 0 0 0 1px var(--block-prod)' }), 'discarded'),
-        h('span', null, h('i', { style: 'background:var(--changed)' }), 'changed'),
-        h('span', null, h('i', { style: 'background:var(--new)' }), 'new'),
-        h('span', null, h('i', { style: 'background:var(--flipped)' }), 'discard flipped'),
-        h('span', null, h('i', { style: 'background:var(--missing)' }), 'missing in replay'),
-        h('span', null, h('i', { style: 'background:var(--gap)' }), 'no audio / unknown'),
-        ov.run.pipeline === 'v3' ? h('span', null, h('i', { class: 'offhome-key' }), 'not on Home (v3)') : null));
-  }
-
-  function highlightTwins(el, on) {
-    const ids = (el.dataset.twins || '').split(' ').filter(Boolean);
-    if (el.dataset.side === 'r') {
-      $$('.tl-block.prod').forEach((b) => b.classList.toggle('hl', on && ids.includes(b.dataset.id)));
-    } else {
-      $$('.tl-block.r').forEach((b) => b.classList.toggle('hl', on && (b.dataset.twins || '').split(' ').includes(el.dataset.id)));
-    }
-  }
-
-  const FILTERS = [
-    ['changed', 'Changed', (r) => r.status !== 'same'],
-    ['discarded', 'Discarded', (r) => r.discarded],
-    ['verdict', 'Has verdict', (r) => (r.verdicts.good || 0) + (r.verdicts.bad || 0) > 0],
-    ['pushes', 'Has pushes', (r) => r.counts.pushes > 0],
+  /* The "What changed" lines. Every chip number is digest.tags[tag]: the count of groups with that tag,
+     which is exactly what the list shows when the chip is on. */
+  const DIGEST = [
+    ['home', 'Home', (d) => ['production ', h('b', null, d.home.production), ' → replay ', h('b', null, d.home.replay), ' on Home'],
+      [['home_dropped', 'dropped off Home', 'bad'], ['home_added', 'newly on Home', 'good'], ['home_both', 'on Home in both', '']]],
+    ['grouping', 'Grouping', (d) => ['production ', h('b', null, d.conversations.production), ' → replay ', h('b', null, d.conversations.replay), ' conversations'],
+      [['merge', 'merged'], ['split', 'split'], ['regroup', 'regrouped'], ['new', 'new'], ['missing', 'missing'], ['boundary', 'edges moved']]],
+    ['content', 'Content', () => [],
+      [['summary', 'summary rewritten'], ['events', 'events differ'], ['tasks', 'tasks differ'], ['memories', 'memories differ'], ['pushes', 'pushes differ'], ['transcript', 'transcript differs'], ['discard', 'discard flipped']]],
+    ['cosmetic', 'Cosmetic', () => [h('span', { class: 'faint' }, 'not counted as changed')],
+      [['cosmetic', 'emoji / category / punctuation only'], ['same', 'identical']]],
   ];
+  const TAG_LABEL = Object.fromEntries(DIGEST.flatMap((line) => line[3].map(([tag, label]) => [tag, label])));
+  TAG_LABEL.worth = 'worth a look';
 
-  const HOME_FILTER = ['home', 'On Home', (r) => r.hidden === false];
-  function filtersFor(ov) { return ov.run.pipeline === 'v3' ? [HOME_FILTER].concat(FILTERS) : FILTERS; }
+  function groupOpen(runId, g) { return convHref(runId, g.open); }
+  function groupTitles(g) { return g.production.concat(g.replay).map((c) => (c.title || '') + ' ' + (c.emoji || '')).join(' ') + ' ' + g.change; }
 
-  function visibleRows(ov) {
+  function visibleGroups(ov) {
+    const f = dayFilter();
     const q = state.search.trim().toLowerCase();
-    return ov.conversations.filter((r) => {
-      for (const [key, , test] of filtersFor(ov)) if (state.filters[key] && !test(r)) return false;
-      if (q && !((r.title || '') + ' ' + (r.baseline || []).map((b) => b && b.title).join(' ') + ' ' + r.status).toLowerCase().includes(q)) return false;
-      return true;
-    });
+    let groups = ov.groups.filter((g) => (f.tag ? g.tags.includes(f.tag) : f.view === 'all' || g.tags.includes('worth')));
+    if (q) groups = groups.filter((g) => groupTitles(g).toLowerCase().includes(q));
+    if (f.sort === 'diff') groups = groups.slice().sort((a, b) => b.score - a.score || (a.started_at || '').localeCompare(b.started_at || ''));
+    return groups;
   }
 
-  function conversationList(ov, runId) {
-    const listEl = h('ul', { class: 'convlist card', role: 'listbox', 'aria-label': 'Conversations' });
-    const statEl = h('p', { class: 'statline' });
-    const filterBtns = filtersFor(ov).map(([key, label, test]) => h('button', {
-      type: 'button', class: 'filter' + (state.filters[key] ? ' on' : ''), 'aria-pressed': String(!!state.filters[key]),
-      onclick: (e) => { state.filters[key] = !state.filters[key]; store.set('filters', state.filters); e.currentTarget.classList.toggle('on', state.filters[key]); e.currentTarget.setAttribute('aria-pressed', String(state.filters[key])); fill(); },
-    }, label, h('span', { class: 'n' }, ov.conversations.filter(test).length)));
-    const search = h('input', { class: 'search', id: 'conv-search', type: 'search', placeholder: 'Filter by title or status  ( / )', value: state.search, 'aria-label': 'Filter conversations',
+  /* Conversations in list order, for j/k on the conversation page. */
+  function openables(ov) {
+    const out = [];
+    for (const g of visibleGroups(ov)) {
+      if (g.replay.length) for (const c of g.replay) out.push({ kind: 'replay', id: c.id, group: g.id });
+      else out.push({ kind: 'production', id: g.production[0].id, group: g.id });
+    }
+    return out;
+  }
+
+  function dayBody(ov, runId, page) {
+    const f = dayFilter();
+    const d = ov.digest;
+    const save = () => store.set('dayFilter', { view: f.view, sort: f.sort });
+    const chipEls = [];
+    const digest = h('section', { class: 'card digest', 'aria-label': 'What changed' },
+      h('div', { class: 'dg-head' }, h('span', { class: 'label' }, 'What changed'), h('span', { class: 'faint' }, d.groups + ' pairing groups · every number filters the list')),
+      DIGEST.map(([key, label, lead, chips]) => h('div', { class: 'dg-line dg-' + key },
+        h('span', { class: 'dg-label' }, label),
+        h('span', { class: 'dg-lead' }, lead(d)),
+        h('span', { class: 'dg-chips' }, chips.map(([tag, text, tone]) => {
+          if ((tag === 'discard' || tag === 'regroup') && !d.tags[tag]) return null;
+          const btn = h('button', {
+            type: 'button', class: 'dchip' + (tone ? ' ' + tone : '') + (d.tags[tag] ? '' : ' zero'), dataset: { tag }, 'aria-pressed': 'false',
+            onclick: () => { f.tag = f.tag === tag ? null : tag; fill(); },
+          }, h('b', null, d.tags[tag] || 0), ' ', text);
+          chipEls.push(btn);
+          return btn;
+        })))));
+
+    const viewToggle = h('span', { class: 'seg-toggle', role: 'group', 'aria-label': 'View' },
+      [['worth', 'Worth a look', d.tags.worth], ['all', 'Everything', d.groups]].map(([v, text, n]) => h('button', {
+        type: 'button', dataset: { view: v }, title: v === 'worth' ? 'Home flips, grouping changes and substantive content changes' : 'Every group, cosmetic and identical ones included',
+        onclick: () => { f.view = v; f.tag = null; save(); fill(); },
+      }, text, h('span', { class: 'n' }, n))));
+    const sortToggle = h('span', { class: 'seg-toggle', role: 'group', 'aria-label': 'Sort' },
+      [['time', 'Time'], ['diff', 'Most different']].map(([v, text]) => h('button', {
+        type: 'button', dataset: { sort: v }, title: v === 'diff' ? 'Home flip, then grouping change, then size of the title / overview edit, then item counts' : 'Time of day',
+        onclick: () => { f.sort = v; save(); fill(); },
+      }, text)));
+    const search = h('input', { class: 'search', id: 'conv-search', type: 'search', placeholder: 'Filter by title  ( / )', value: state.search, 'aria-label': 'Filter conversations',
       oninput: (e) => { state.search = e.target.value; fill(); },
       onkeydown: (e) => { if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.target.blur(); } } });
+    const panelBtn = h('button', { type: 'button', class: 'btn panel-btn', title: 'Show or hide the day panel (daily summary, goals, memories, pushes)',
+      onclick: () => { const open = page.classList.toggle('panel-closed') === false; store.set('panel', open); } }, 'Day panel');
+    const statEl = h('p', { class: 'statline' });
+    const listEl = h('div', { class: 'pl-body', role: 'listbox', 'aria-label': 'Conversations, production beside replay' });
+    const head = h('div', { class: 'pl-head' },
+      h('span', { class: 'pl-side' }, 'Production', h('small', null, 'what the phone got')),
+      h('span', { class: 'pl-gut', title: 'Time runs down. Left lane production, right lane replay; a filled block is on Home.' }, 'time'),
+      h('span', { class: 'pl-side' }, 'Replay', h('small', null, shortRef(ov.run))));
 
     function fill() {
-      const rows = visibleRows(ov);
-      const st = ov.statuses || {};
-      const replayed = ov.conversations.filter((r) => r.kind === 'replay').length;
+      const groups = visibleGroups(ov);
+      for (const btn of chipEls) { const on = f.tag === btn.dataset.tag; btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', String(on)); }
+      $$('button', viewToggle).forEach((b) => b.classList.toggle('on', !f.tag && b.dataset.view === f.view));
+      $$('button', sortToggle).forEach((b) => b.classList.toggle('on', b.dataset.sort === f.sort));
       statEl.replaceChildren();
-      append(statEl, [
-        h('b', null, replayed), ' replayed', ' · ', h('b', null, st.changed || 0), ' changed', ' · ', h('b', null, st.new || 0), ' new', ' · ',
-        h('b', null, st.missing || 0), ' missing', ' · ', h('b', null, st['discard flipped'] || 0), ' discard flipped', ' · ', h('b', null, st.same || 0), ' same',
-        st.merged ? [' · ', h('b', null, st.merged), ' merged into a replay conversation'] : null,
-        rows.length !== ov.conversations.length ? h('span', null, '  — showing ' + rows.length) : null]);
-      listEl.replaceChildren(...(rows.length ? rows.map((r) => convRow(r, runId)) : [h('li', { class: 'empty' }, 'No conversations match.')]));
+      const what = f.tag ? TAG_LABEL[f.tag] : f.view === 'worth' ? 'worth a look' : 'all groups';
+      append(statEl, [h('b', null, groups.length), ' group' + (groups.length === 1 ? '' : 's') + ' · ' + what,
+        state.search.trim() ? ' · matching “' + state.search.trim() + '”' : null,
+        f.tag ? [' · ', h('button', { type: 'button', class: 'linkish', onclick: () => { f.tag = null; fill(); } }, 'clear filter')] : null]);
+      listEl.replaceChildren(...(groups.length ? groupRows(groups, ov, runId, f.sort === 'time') : [h('p', { class: 'empty' }, 'Nothing here.')]));
       const sel = state.selected.get(runId);
       if (sel) markSelected(sel, false);
     }
     fill();
-    return h('section', { 'aria-label': 'Conversations' }, h('div', { class: 'toolbar' }, search, filterBtns), statEl, listEl);
+    const list = h('section', { class: 'paired', 'aria-label': 'Conversations' },
+      h('div', { class: 'toolbar' }, viewToggle, sortToggle, search, h('span', { class: 'spacer' }), panelBtn), statEl, h('div', { class: 'card pl' }, head, listEl));
+    return { digest, list };
   }
 
-  function convRow(r, runId) {
-    const b = (r.baseline || [])[0];
-    const title = r.title || (b && b.title) || '';
+  const hourOf = (iso) => (iso ? fmt({ hour: '2-digit', hourCycle: 'h23' }).format(new Date(iso)) : '');
+
+  function groupRows(groups, ov, runId, timeOrder) {
+    const out = [];
+    // A gap is worth a tick only when some audio exists and the gap is shorter than half a day.
+    const cov = ov.day.coverage || {};
+    const gaps = cov.with_audio ? ((ov.timeline && ov.timeline.gaps) || []).filter((x) => ms(x.end) - ms(x.start) < 43200000) : [];
+    let prevEnd = null, prevHour = null;
+    for (const g of groups) {
+      if (timeOrder) {
+        const hour = hourOf(g.started_at);
+        const quiet = prevEnd ? (ms(g.started_at) - ms(prevEnd)) / 1000 : 0;
+        const between = prevEnd ? gaps.filter((x) => ms(x.end) > ms(prevEnd) && ms(x.start) < ms(g.started_at)) : [];
+        if (hour !== prevHour || quiet >= 1800 || between.length) {
+          out.push(h('div', { class: 'tick', 'aria-hidden': 'true' },
+            h('span', { class: 'tick-label' }, hour !== prevHour ? hour + ':00' : clock(g.started_at)),
+            quiet >= 1200 ? h('span', { class: 'tick-quiet' }, dur(quiet) + ' quiet') : null,
+            between.length ? h('span', { class: 'tick-gap' }, 'no audio ' + between.map((x) => clock(x.start) + '–' + clock(x.end)).join(', ')) : null));
+          prevHour = hour;
+        }
+        if (!prevEnd || ms(g.finished_at) > ms(prevEnd)) prevEnd = g.finished_at;
+      }
+      out.push(groupRow(g, runId));
+    }
+    return out;
+  }
+
+  function lanes(g) {
+    const a = ms(g.started_at), b = ms(g.finished_at);
+    const span = Math.max(1, b - a);
+    const blocks = (cells) => cells.map((c) => {
+      const top = Math.max(0, ((ms(c.started_at) - a) / span) * 100);
+      const height = Math.max(4, ((ms(c.finished_at || c.started_at) - ms(c.started_at)) / span) * 100);
+      return h('i', { class: c.home ? 'on' : '', style: 'top:' + top.toFixed(1) + '%;height:' + Math.min(100 - top, height).toFixed(1) + '%', title: clock(c.started_at) + '–' + clock(c.finished_at) + (c.home ? ' · on Home' : ' · hidden') });
+    });
+    return h('span', { class: 'lanes' }, h('span', { class: 'lane' }, blocks(g.production)), h('span', { class: 'lane' }, blocks(g.replay)));
+  }
+
+  function homeState(c) {
+    if (c.home) return h('span', { class: 'home-pill', title: 'Visible on the phone\'s Home list' }, 'HOME');
+    return h('span', { class: 'hidden-note', title: 'Not on Home: ' + (c.home_reason || 'hidden') }, 'hidden · ' + reasonWords(c.home_reason));
+  }
+
+  function cell(c, href, runId) {
+    const counts = [];
+    if (c.counts.tasks) counts.push(c.counts.tasks + ' task' + (c.counts.tasks === 1 ? '' : 's'));
+    if (c.counts.memories) counts.push(c.counts.memories + ' mem');
+    if (c.counts.pushes) counts.push(c.counts.pushes + ' push' + (c.counts.pushes === 1 ? '' : 'es'));
+    if (c.recordings > 1) counts.push(c.recordings + ' rec');
     const marks = [];
-    for (let i = 0; i < (r.verdicts.good || 0); i++) marks.push(h('i', { class: 'good' }));
-    for (let i = 0; i < (r.verdicts.bad || 0); i++) marks.push(h('i', { class: 'bad' }));
-    return h('li', { role: 'option' }, h('a', {
-      class: 'crow' + (r.discarded ? ' discarded' : '') + (r.hidden ? ' offhome' : '') + (r.kind === 'production' ? ' missing' : ''),
-      href: convHref(runId, r), dataset: { key: convKey(r) },
-      onclick: () => { state.selected.set(runId, convKey(r)); },
+    for (let i = 0; i < (c.verdicts.good || 0); i++) marks.push(h('i', { class: 'good' }));
+    for (let i = 0; i < (c.verdicts.bad || 0); i++) marks.push(h('i', { class: 'bad' }));
+    return h('a', { class: 'cell' + (c.home ? ' home' : ' off'), href, dataset: { key: (c.side === 'production' ? 'p:' : 'c:') + c.id },
+      onclick: (e) => { e.stopPropagation(); state.selected.set(runId, 'c:' + c.id); } },
+    h('span', { class: 'c-top' }, h('time', { class: 'ts' }, clock(c.started_at)), h('span', { class: 'dur' }, dur(c.duration)), homeState(c),
+      marks.length ? h('span', { class: 'vdots', title: 'verdicts' }, marks) : null),
+    h('span', { class: 'c-title' }, c.emoji ? h('span', { class: 'emoji', 'aria-hidden': 'true' }, c.emoji) : null,
+      h('span', { class: 't' }, c.title || (c.discarded ? 'Discarded' : 'Untitled'))),
+    counts.length || c.backfilled ? h('span', { class: 'c-counts' }, counts.join(' · '), c.backfilled ? h('span', { class: 'faint', title: 'Production made this row in a backfill pass, not live' }, (counts.length ? ' · ' : '') + 'backfilled') : null) : null);
+  }
+
+  function groupRow(g, runId) {
+    const open = groupOpen(runId, g);
+    const flip = g.tags.includes('home_dropped') ? ' flip-drop' : g.tags.includes('home_added') ? ' flip-add' : '';
+    const quiet = g.kind === 'same' || g.kind === 'cosmetic';
+    return h('div', {
+      class: 'grp k-' + g.kind + flip + (quiet ? ' quiet' : ''), role: 'option', dataset: { key: 'g:' + g.id, gid: g.id },
+      onclick: (e) => { if (e.target.closest('a')) return; state.selected.set(runId, 'g:' + g.id); location.hash = open; },
     },
-    h('time', { class: 'ts' }, clock(r.started_at)),
-    h('span', { class: 'dur' }, dur(r.duration)),
-    h('span', { class: 'title' }, r.emoji ? h('span', { class: 'emoji', 'aria-hidden': 'true' }, r.emoji) : null,
-      h('span', { class: 't' }, title || (r.discarded ? 'Discarded' : 'Untitled')),
-      r.discarded ? h('span', { class: 'why' }, [title ? 'discarded' : '', r.discard_reason ? r.discard_reason.replace(/_/g, ' ') : ''].filter(Boolean).join(' · ')) : null,
-      r.status === 'changed' && r.reasons.length ? h('span', { class: 'why' }, r.reasons.join(' · ')) : null,
-      r.hidden ? h('span', { class: 'why', title: 'v3 kept it off the phone\'s Home list' }, 'not on Home' + (r.hidden_reason ? ' · ' + r.hidden_reason.replace(/_/g, ' ') : '')) : null),
-    h('span', { class: 'counts' },
-      r.counts.tasks ? h('span', { class: 'chip count', title: 'tasks' }, r.counts.tasks + ' task' + (r.counts.tasks === 1 ? '' : 's')) : null,
-      r.counts.memories ? h('span', { class: 'chip count', title: 'memories' }, r.counts.memories + ' mem') : null,
-      r.counts.pushes ? h('span', { class: 'chip count', title: 'would-have-fired pushes' }, r.counts.pushes + ' push' + (r.counts.pushes === 1 ? '' : 'es')) : null,
-      r.recordings > 1 ? h('span', { class: 'chip count', title: 'recordings this v3 conversation was planned over' }, r.recordings + ' rec') : null),
-    h('span', { class: 'stat' }, marks.length ? h('span', { class: 'vdots', title: 'verdicts' }, marks) : null, statusChip(r.status))));
+    h('div', { class: 'side prod' }, g.production.length ? g.production.map((c) => cell(c, open, runId)) : h('span', { class: 'cell empty' }, 'not in production')),
+    h('div', { class: 'gut' }, h('span', { class: 'mk', title: KIND_TITLE[g.kind] || g.kind }, g.marker), lanes(g)),
+    h('div', { class: 'side rep' },
+      g.replay.length ? g.replay.map((c) => cell(c, convHref(runId, { kind: 'replay', id: c.id }), runId)) : h('span', { class: 'cell empty' }, 'not in replay'),
+      h('span', { class: 'change' + (quiet ? ' cosm' : '') }, g.change)));
   }
 
   function markSelected(key, scroll) {
-    $$('.crow.sel').forEach((el) => el.classList.remove('sel'));
-    $$('.tl-block.sel').forEach((el) => el.classList.remove('sel'));
-    const el = $('.crow[data-key="' + CSS.escape(key) + '"]');
+    $$('.grp.sel').forEach((el) => el.classList.remove('sel'));
+    let el = null;
+    if (key.startsWith('g:')) el = $('.grp[data-key="' + CSS.escape(key) + '"]');
+    else {
+      const cellEl = $('.cell[data-key="' + CSS.escape(key) + '"]') || $('.cell[data-key="' + CSS.escape('p:' + key.slice(2)) + '"]');
+      el = cellEl && cellEl.closest('.grp');
+    }
     if (el) {
       el.classList.add('sel');
       if (scroll) el.scrollIntoView({ block: 'nearest' });
     }
-    const id = key.slice(2);
-    const blk = $('.tl-block[data-side="' + (key[0] === 'p' ? 'p' : 'r') + '"][data-id="' + CSS.escape(id) + '"]');
-    if (blk) blk.classList.add('sel');
   }
 
   function restoreSelection(runId, prev) {
-    const ov = state.overview.get(runId);
-    if (!ov) return;
     let key = state.selected.get(runId);
-    if (prev && prev.view === 'conv' && prev.runId === runId) key = (prev.kind === 'production' ? 'p:' : 'c:') + prev.id;
+    if (prev && prev.view === 'conv' && prev.runId === runId) key = 'c:' + prev.id;
     if (!key) return;
     state.selected.set(runId, key);
     markSelected(key, true);
   }
 
   function moveSelection(delta) {
-    const route = state.route;
-    const ov = state.overview.get(route.runId);
-    if (!ov) return;
-    const rows = visibleRows(ov);
-    if (!rows.length) return;
-    const cur = state.selected.get(route.runId);
-    let idx = rows.findIndex((r) => convKey(r) === cur);
-    idx = idx < 0 ? (delta > 0 ? 0 : rows.length - 1) : Math.max(0, Math.min(rows.length - 1, idx + delta));
-    state.selected.set(route.runId, convKey(rows[idx]));
-    markSelected(convKey(rows[idx]), true);
+    const els = $$('.grp');
+    if (!els.length) return;
+    let idx = els.findIndex((el) => el.classList.contains('sel'));
+    idx = idx < 0 ? (delta > 0 ? 0 : els.length - 1) : Math.max(0, Math.min(els.length - 1, idx + delta));
+    state.selected.set(state.route.runId, els[idx].dataset.key);
+    markSelected(els[idx].dataset.key, true);
+  }
+
+  function openSelection() {
+    const el = $('.grp.sel');
+    if (!el) return false;
+    const ov = state.overview.get(state.route.runId);
+    const g = ov && ov.groups.find((x) => x.id === el.dataset.gid);
+    if (g) location.hash = groupOpen(state.route.runId, g);
+    return !!g;
   }
 
   async function loadDayPanel(runId, panel) {
     try {
       if (!state.dayPanel.has(runId)) state.dayPanel.set(runId, await getJSON('/api/runs/' + encodeURIComponent(runId) + '/day'));
       const d = state.dayPanel.get(runId);
-      panel.replaceChildren(dailySummaryCard(d, runId), goalsCard(d.goals), memoryDeltaCard(d.memory_delta), pushLogCard(d.notifications));
+      panel.replaceChildren(dailySummaryCard(d, runId), goalsCard(d), memoryDeltaCard(d.memory_delta), pushLogCard(d.notifications));
     } catch (err) {
       panel.replaceChildren(h('div', { class: 'card' }, h('p', { class: 'error' }, 'Day panel: ' + err.message)));
     }
   }
 
-  function summarySide(label, value, other, side) {
-    if (!value) return h('div', { class: 'side none' }, h('span', { class: 'label' }, label), 'none');
+  function highlightText(x) {
+    if (!x || typeof x !== 'object') return String(x);
+    return [x.emoji, x.topic].filter(Boolean).join(' ') + (x.summary ? (x.topic ? ' — ' : '') + x.summary : '');
+  }
+
+  function summarySide(label, value, other, side, failure) {
+    if (!value) {
+      if (failure) return h('div', { class: 'side none failed' }, h('span', { class: 'label' }, label), h('span', { class: 'error' }, 'Failed'), h('div', { class: 'sub' }, failure));
+      return h('div', { class: 'side none' }, h('span', { class: 'label' }, label), 'none');
+    }
     const o = other || { title: '', overview: '', highlights: [] };
     const hasOther = !!other;
+    const otherTexts = (o.highlights || []).map(highlightText);
     return h('div', { class: 'side ' + side },
       h('span', { class: 'label' }, label),
       value.title ? h('div', { class: 't' }, hasOther ? diffSide(side === 'new' ? o.title : value.title, side === 'new' ? value.title : o.title, side) : value.title) : null,
       value.overview ? h('p', null, hasOther ? diffSide(side === 'new' ? o.overview : value.overview, side === 'new' ? value.overview : o.overview, side) : value.overview) : null,
-      value.highlights && value.highlights.length ? h('ul', null, value.highlights.map((x) => h('li', { class: hasOther && !(o.highlights || []).includes(x) ? (side === 'new' ? 'hl-new' : 'hl-old') : '' }, hasOther && !(o.highlights || []).includes(x) ? h(side === 'new' ? 'ins' : 'del', null, x) : x))) : null);
+      value.highlights && value.highlights.length ? h('ul', { class: 'highlights' }, value.highlights.map((x) => {
+        const text = highlightText(x);
+        const only = hasOther && !otherTexts.includes(text);
+        return h('li', null, only ? h(side === 'new' ? 'ins' : 'del', null, text) : text);
+      })) : null);
   }
 
   function dailySummaryCard(d, runId) {
@@ -560,23 +640,41 @@
     const v = target ? verdictFor(target, ds.verdicts || []) : null;
     return h('section', { class: 'card' },
       h('div', { class: 'section-title' }, 'Daily summary', h('span', { class: 'spacer' }), target ? verdictControls(target, v) : null),
-      h('div', { class: 'pair-cols stacked' }, summarySide('Replay', ds.replay, ds.baseline, 'new'), summarySide('Production', ds.baseline, ds.replay, 'old')),
+      h('div', { class: 'pair-cols stacked' }, summarySide('Replay', ds.replay, ds.baseline, 'new', ds.replay_failure), summarySide('Production', ds.baseline, ds.replay, 'old')),
       v && v.note ? h('div', { class: 'item' }, h('div', { class: 'note-line' }, v.note)) : null);
   }
 
-  function goalsCard(goals) {
-    const num = (x) => (typeof x === 'number' ? (x <= 1 && x > 0 && !Number.isInteger(x) ? Math.round(x * 100) + '%' : String(x)) : '—');
-    return h('section', { class: 'card' }, h('div', { class: 'section-title' }, 'Goals', h('span', { class: 'label' }, goals.length || '')),
-      goals.length ? goals.map((g) => {
-        const target = typeof g.target === 'number' && g.target > 0 ? g.target : 1;
-        const before = typeof g.progress_before === 'number' ? Math.min(100, (100 * g.progress_before) / target) : 0;
-        const after = typeof g.progress_after === 'number' ? Math.min(100, (100 * g.progress_after) / target) : before;
-        return h('div', { class: 'goal' },
-          h('span', null, g.title || g.name || JSON.stringify(g)),
-          h('span', { class: 'num' }, num(g.progress_before) + ' → ' + num(g.progress_after) + (typeof g.target === 'number' && g.target !== 1 ? ' / ' + g.target : '')),
-          h('div', { class: 'bar' }, h('i', { class: 'after', style: 'width:' + after + '%' }), h('i', { class: 'before', style: 'width:' + before + '%' })),
-          g.note ? h('span', { class: 'note' }, g.note) : null);
-      }) : h('p', { class: 'pane-note' }, 'No goal changes.'));
+  const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+  const plain = new Intl.NumberFormat('en', { maximumFractionDigits: 2 });
+  function goalNum(x, g) {
+    if (typeof x !== 'number') return '—';
+    const unit = (g.unit || '').toLowerCase();
+    if (g.target === 1 && x >= 0 && x <= 1 && !unit) return Math.round(x * 100) + '%';
+    const n = Math.abs(x) >= 10000 ? compact.format(x) : plain.format(x);
+    if (unit === 'dollars' || unit === 'usd' || unit === '$') return '$' + n;
+    if (unit === 'percent' || unit === '%') return n + '%';
+    return unit ? n + ' ' + unit : n;
+  }
+
+  function goalsCard(d) {
+    const goals = d.goals || [];
+    const changed = goals.filter((g) => g && g.changed);
+    const showAll = !!state.allGoals;
+    const shown = showAll ? goals : changed;
+    const card = h('section', { class: 'card' }, h('div', { class: 'section-title' }, 'Goals', h('span', { class: 'label' }, changed.length + ' changed of ' + goals.length),
+      h('span', { class: 'spacer' }),
+      goals.length && goals.length !== changed.length ? h('button', { type: 'button', class: 'linkish', onclick: () => { state.allGoals = !showAll; card.replaceWith(goalsCard(d)); } }, showAll ? 'changed only' : 'show all') : null));
+    if (!shown.length) { card.append(h('p', { class: 'pane-note' }, goals.length ? 'No goal moved during the replayed day.' : 'No goals.')); return card; }
+    for (const g of shown) {
+      const target = typeof g.target === 'number' && g.target > 0 ? g.target : null;
+      const pct = (x) => (target && typeof x === 'number' ? Math.min(100, (100 * x) / target) : 0);
+      card.append(h('div', { class: 'goal' + (g.changed ? '' : ' still') },
+        h('span', null, g.title || g.name || 'Goal'),
+        h('span', { class: 'num' }, goalNum(g.progress_before, g) + ' → ' + goalNum(g.progress_after, g) + (target && target !== 1 ? ' of ' + goalNum(target, g) : '')),
+        target ? h('div', { class: 'bar' }, h('i', { class: 'after', style: 'width:' + pct(g.progress_after) + '%' }), h('i', { class: 'before', style: 'width:' + pct(g.progress_before) + '%' })) : null,
+        g.note ? h('span', { class: 'note' }, g.note) : null));
+    }
+    return card;
   }
 
   function memText(m) { return typeof m === 'string' ? m : (m && (m.content || m.text)) || JSON.stringify(m); }
@@ -745,10 +843,11 @@
     const ov = await ovP;
     if (token !== state.renderToken) return null;
     TZ = ov.day.timezone || 'UTC';
-    state.selected.set(route.runId, (route.kind === 'production' ? 'p:' : 'c:') + route.id);
-    let rows = visibleRows(ov);
-    let idx = rows.findIndex((r) => convKey(r) === state.selected.get(route.runId));
-    if (idx < 0) { rows = ov.conversations; idx = rows.findIndex((r) => convKey(r) === state.selected.get(route.runId)); }
+    state.selected.set(route.runId, 'c:' + route.id);
+    const same = (r) => r.kind === route.kind && r.id === route.id;
+    let rows = ov.groups ? openables(ov) : [];
+    let idx = rows.findIndex(same);
+    if (idx < 0 && ov.groups) { const all = Object.assign({}, dayFilter()); state.dayFilter = Object.assign({}, all, { tag: null, view: 'all' }); rows = openables(ov); state.dayFilter = all; idx = rows.findIndex(same); }
     const prev = idx > 0 ? rows[idx - 1] : null, next = idx >= 0 && idx < rows.length - 1 ? rows[idx + 1] : null;
     state.nav = { prev, next };
     for (const n of [next, prev]) if (n) loadDetail(route.runId, n.kind, n.id).catch(() => {});
@@ -759,9 +858,9 @@
     const notices = [];
     if (conv.evaluable && conv.evaluable.boundaries === false) notices.push(h('div', { class: 'notice' }, 'Boundaries unevaluable here' + (conv.evaluable.reason ? ': ' + conv.evaluable.reason : '') + '.'));
     if (detail.kind === 'production') notices.push(h('div', { class: 'notice info' }, 'Production had this conversation; the replay did not produce it. Everything below is production only.'));
-    if ((detail.baselines || []).length > 1) notices.push(h('div', { class: 'notice info' }, 'The replay merged ' + detail.baselines.length + ' production conversations: ' + detail.baselines.map((b) => clock(b.started_at) + ' ' + (b.title || 'untitled')).join(' · ') + '.'));
-    const siblings = detail.replay && detail.baseline ? ov.conversations.filter((r) => r.kind === 'replay' && r.id !== cid && (r.baseline || []).some((b) => b && b.id === detail.baseline.id)) : [];
-    if (siblings.length) notices.push(h('div', { class: 'notice info' }, 'The replay split this production conversation; also see ', siblings.map((r, i) => [i ? ', ' : '', h('a', { href: convHref(route.runId, r) }, clock(r.started_at) + ' ' + (r.title || 'untitled'))]), '.'));
+    if ((detail.baselines || []).length > 1) notices.push(h('div', { class: 'notice info' }, 'The replay merged ' + detail.baselines.length + ' production conversations into this one: ' + detail.baselines.map((b) => clock(b.started_at) + ' ' + (b.title || 'untitled')).join(' · ') + '. Production below is those, joined.'));
+    const siblings = detail.siblings || [];
+    if (siblings.length) notices.push(h('div', { class: 'notice info' }, 'Same pairing group (' + (KIND_LABEL[(detail.group || {}).kind] || '') + '); the replay also made ', siblings.map((r, i) => [i ? ', ' : '', h('a', { href: convHref(route.runId, { kind: 'replay', id: r.id }) }, clock(r.started_at) + ' ' + (r.title || 'untitled'))]), '.'));
     if (detail.baseline && detail.replay) {
       const ds = (ms(detail.replay.started_at) - ms(detail.baseline.started_at)) / 1000, de = (ms(detail.replay.finished_at) - ms(detail.baseline.finished_at)) / 1000;
       if (Math.abs(ds) > 30 || Math.abs(de) > 30) notices.push(h('div', { class: 'notice info' }, 'Boundary vs production: start ' + signed(ds) + ', end ' + signed(de) + ' (production ' + clock(detail.baseline.started_at) + '–' + clock(detail.baseline.finished_at) + ').'));
@@ -775,18 +874,32 @@
         h('a', { class: 'btn', href: next ? convHref(route.runId, next) : null, 'aria-disabled': next ? null : 'true', title: 'Next (j)' }, '↓ j'),
         idx >= 0 ? h('span', { class: 'num' }, (idx + 1) + '/' + rows.length) : null),
       h('h1', null, s.emoji ? h('span', { 'aria-hidden': 'true' }, s.emoji) : null, s.title ? s.title : h('span', { class: 'untitled' }, conv.discarded ? 'Discarded conversation' : 'Untitled'), statusChip(detail.status, true)),
+      homeBar(detail),
       h('div', { class: 'meta' },
         h('span', { class: 'item num' }, clock(conv.started_at) + '–' + clock(conv.finished_at) + ' · ' + dur((ms(conv.finished_at) - ms(conv.started_at)) / 1000)),
         conv.lane ? h('span', { class: 'item' }, h('span', { class: 'label' }, 'lane'), conv.lane) : null,
         conv.language ? h('span', { class: 'item' }, h('span', { class: 'label' }, 'lang'), conv.language) : null,
         conv.discarded ? h('span', { class: 'chip' }, 'discarded' + (conv.discard_reason ? ' · ' + conv.discard_reason.replace(/_/g, ' ') : '')) : null,
         detail.replay && detail.baseline && detail.baseline.discarded !== detail.replay.discarded ? h('span', { class: 'chip st-flipped' }, 'production ' + (detail.baseline.discarded ? 'discarded' : 'kept') + ' it') : null,
-        detail.reasons && detail.reasons.length ? h('span', { class: 'item' }, h('span', { class: 'label' }, 'differs'), detail.reasons.join(' · ')) : null,
+        detail.group ? h('span', { class: 'item' }, h('span', { class: 'label' }, 'what changed'), detail.group.change) : null,
         v3Meta(conv, detail)));
 
     const ctx = { runId: route.runId, cid, detail };
     return h('div', { class: 'page conv' }, header, notices,
       h('div', { class: 'conv-grid' }, leftColumn(ctx), rightColumn(ctx)));
+  }
+
+  /* Home state of both sides, side by side, at the top of the conversation page. */
+  function homeBar(detail) {
+    const hm = detail.home || {};
+    const side = (label, rows, empty) => h('div', { class: 'hb-side' }, h('span', { class: 'label' }, label),
+      rows && rows.length ? rows.map((x) => h('div', { class: 'hb-row' + (x.home ? ' home' : ' off') }, x.home ? h('span', { class: 'home-pill' }, 'HOME') : h('span', { class: 'hidden-note' }, 'hidden · ' + reasonWords(x.home_reason)),
+        rows.length > 1 ? h('span', { class: 'hb-t' }, clock(x.started_at) + ' ' + (x.title || 'untitled')) : null)) : h('div', { class: 'hb-row none' }, empty));
+    const flip = detail.group && (detail.group.tags || []).find((t) => t === 'home_dropped' || t === 'home_added');
+    return h('div', { class: 'homebar' + (flip ? ' flip-' + (flip === 'home_dropped' ? 'drop' : 'add') : '') },
+      side('Production', hm.production, 'not in production'),
+      h('span', { class: 'hb-mid', title: detail.group ? KIND_TITLE[detail.group.kind] : '' }, detail.group ? detail.group.marker : ''),
+      side('Replay', hm.replay ? [hm.replay] : [], 'not in replay'));
   }
 
   function homeText(v) {
@@ -800,8 +913,6 @@
     const other = detail.replay && detail.baseline && detail.baseline.v3 ? detail.baseline.v3 : null;
     const recs = conv.recordings || [];
     return [
-      h('span', { class: 'chip' + (v.visible ? '' : ' offhome'), title: 'What the phone\'s Home list does with this v3 conversation' }, homeText(v)),
-      other && other.visible !== v.visible ? h('span', { class: 'chip st-flipped', title: 'vs production' }, 'production: ' + homeText(other)) : null,
       v.kind ? h('span', { class: 'item' }, h('span', { class: 'label' }, 'kind'), v.kind.replace(/_/g, ' '), other && other.kind && other.kind !== v.kind ? h('span', { class: 'vsprod' }, ' (production: ' + other.kind.replace(/_/g, ' ') + ')') : null) : null,
       recs.length ? h('details', { class: 'inline item' }, h('summary', null, h('span', { class: 'label' }, 'recordings'), ' ' + recs.length + ' ▾'), h('div', { class: 'pop' }, h('ul', null, recs.map((x) => h('li', null, h('code', null, x)))))) : null,
       v.process_failed ? h('span', { class: 'chip badge-warn' }, 'notes failed' + (v.process_failure_reason ? ' · ' + v.process_failure_reason : '')) : null,
@@ -964,7 +1075,7 @@
     };
     if (!d.replay) { counts.tasks = pairs.tasks.length; counts.memories = pairs.memories.length; counts.pushes = pairs.pushes.length; }
     const differs = {
-      summary: (d.reasons || []).includes('summary'),
+      summary: ((d.compare && d.compare.fields) || []).some((f) => f.class === 'substantive' && ['title', 'overview', 'events', 'home', 'boundary'].includes(f.field)),
       tasks: pairs.tasks.some((p) => p.state !== 'same'),
       memories: pairs.memories.some((p) => p.state !== 'same'),
       pushes: pairs.pushes.some((p) => p.state !== 'same'),
@@ -1017,8 +1128,11 @@
           b ? h('div', { class: 'kv' }, b.category ? h('span', null, 'category: ' + b.category) : null, (b.participants || []).length ? h('span', null, 'people: ' + b.participants.map((x) => x.name || x).join(', ')) : null) : null))
       : sideNone('Production', 'No production conversation (new in the replay).');
     const item = h('div', { class: 'item' },
-      h('div', { class: 'item-top' }, h('span', { class: 'txt' }, h('span', { class: 'label' }, d.replay && d.baseline ? 'Replay beside production' : 'Summary'), d.replay && d.baseline && d.reasons.includes('summary') ? h('span', { class: 'vsprod' }, '  · differs vs production') : null), key ? verdictControls(target, verdictFor(target, d.verdicts)) : null),
-      h('div', { class: 'summary-grid', style: 'margin-top:8px' }, replaySide, prodSide));
+      h('div', { class: 'item-top' }, h('span', { class: 'txt' }, h('span', { class: 'label' }, d.replay && d.baseline ? 'Every compared field' : 'Summary'), d.group ? h('span', { class: 'vsprod' }, '  · ' + d.group.change + ' (vs production)') : null), key ? verdictControls(target, verdictFor(target, d.verdicts)) : null),
+      d.replay && d.baseline ? fieldTable(d) : null,
+      h('details', { class: 'sum-more', open: !(d.replay && d.baseline) },
+        h('summary', null, 'Full summaries side by side'),
+        h('div', { class: 'summary-grid', style: 'margin-top:8px' }, replaySide, prodSide)));
     const cur = verdictFor(target, d.verdicts);
     if (cur && cur.note) item.append(h('div', { class: 'note-line' }, cur.note));
     if (key) vt(item, target, 'summary');
@@ -1026,6 +1140,49 @@
     const events = ((r && r.events) || []).concat([]);
     if (events.length) pane.append(h('div', { class: 'item' }, h('span', { class: 'label' }, 'Events'), h('ul', null, events.map((e) => h('li', null, e.title || e.description || JSON.stringify(e))))));
     return pane;
+  }
+
+  const FIELD_LABEL = {
+    home: 'On Home', home_reason: 'Hidden reason', discarded: 'Discarded', boundary: 'Time', title: 'Title', overview: 'Overview', emoji: 'Emoji',
+    category: 'Category', events: 'Events', tasks: 'Tasks', memories: 'Memories', pushes: 'Pushes', transcript: 'Transcript',
+  };
+  function fieldValue(name, v) {
+    if (v === null || v === undefined) return '—';
+    if (name === 'home') return v ? 'HOME' : 'hidden';
+    if (name === 'home_reason') return v ? reasonWords(v) : '—';
+    if (name === 'discarded') return v ? 'yes' : 'no';
+    if (name === 'boundary') return clock(v[0]) + '–' + clock(v[1]) + ' · ' + dur((ms(v[1]) - ms(v[0])) / 1000);
+    if (name === 'transcript') return v + ' words';
+    if (name === 'events' || name === 'tasks' || name === 'memories' || name === 'pushes') return String(v);
+    return v === '' ? '(empty)' : String(v);
+  }
+  /* Every field the compare looked at, unchanged ones dimmed, so a "changed" is never invisible. */
+  function fieldTable(d) {
+    const rows = (d.compare && d.compare.fields) || [];
+    const order = ['home', 'title', 'overview', 'emoji', 'category', 'events', 'tasks', 'memories', 'pushes', 'boundary', 'transcript', 'home_reason', 'discarded'];
+    const sorted = rows.slice().sort((a, b) => order.indexOf(a.field) - order.indexOf(b.field));
+    return h('table', { class: 'fields' },
+      h('thead', null, h('tr', null, h('th', null, 'Field'), h('th', null, 'Replay'), h('th', null, 'Production'), h('th', null, ''))),
+      h('tbody', null, sorted.map((f) => {
+        const text = f.field === 'title' || f.field === 'overview';
+        const changed = f.class !== 'same';
+        const r = fieldValue(f.field, f.replay), p = fieldValue(f.field, f.production);
+        return h('tr', { class: 'f-' + f.class },
+          h('th', { scope: 'row' }, FIELD_LABEL[f.field] || f.field),
+          h('td', { class: f.field === 'emoji' ? 'emo' : '' }, text && changed ? diffSide(p, r, 'new') : r),
+          h('td', { class: f.field === 'emoji' ? 'emo' : '' }, text && changed ? diffSide(p, r, 'old') : p),
+          h('td', { class: 'fc' }, f.class === 'same' ? 'same' : f.class === 'cosmetic' ? 'cosmetic' : fieldNote(f)));
+      })));
+  }
+  function fieldNote(f) {
+    const x = f.detail || {};
+    if (x.what === 'rewritten') return 'rewritten';
+    if (x.what === 'edited') return x.words_changed + ' word' + (x.words_changed === 1 ? '' : 's');
+    if (x.what === 'added') return 'now on Home';
+    if (x.what === 'dropped') return 'dropped off Home';
+    if (x.added !== undefined) return ['+' + x.added, '−' + x.removed, x.edited ? x.edited + ' reworded' : null].filter(Boolean).join(' ');
+    if (x.start_shift_s !== undefined) return 'edges moved';
+    return 'differs';
   }
 
   const ITEM_SPEC = {
@@ -1127,8 +1284,8 @@
     return h('div', null, head, h('div', { class: 'card' }, h('table', { class: 'vtable' },
       h('thead', null, h('tr', null, h('th', null, 'Mark'), h('th', null, 'Kind'), h('th', null, 'Item'), h('th', null, 'Note'), h('th', { class: 'runcol' }, 'Run'), h('th', { class: 'when' }, 'When'))),
       h('tbody', null, rows.map((v) => {
-        const href = v.conversation_id ? '#/run/' + encodeURIComponent(v.run_id) + '/c/' + encodeURIComponent(v.conversation_id) : '#/run/' + encodeURIComponent(v.run_id);
-        return h('tr', null,
+        const href = verdictHref(v);
+        return h('tr', { class: 'vrow', onclick: (e) => { if (!e.target.closest('a')) location.hash = href; } },
           h('td', null, h('span', { class: 'mark ' + v.mark }, v.mark === 'good' ? '👍 good' : '👎 bad')),
           h('td', null, (v.item_kind || '').replace('_', ' ')),
           h('td', { class: 'what' }, h('a', { href }, snapshotText(v.item_snapshot) || v.item_key), v.item_snapshot && v.item_snapshot.side === 'production' ? h('span', { class: 'vsprod' }, '  production side') : null),
@@ -1136,6 +1293,15 @@
           h('td', { class: 'runcol' }, h('code', null, v.ref || ''), h('div', { class: 'vsprod' }, v.run_id)),
           h('td', { class: 'when' }, v.at ? tz.format(new Date(v.at)) : ''));
       })))));
+  }
+
+  /* The server resolves where a verdict's item lives in its run (v.open); a production id is not a
+     replay file in a v3 run, so the link must not be built from conversation_id. */
+  function verdictHref(v) {
+    const o = v.open;
+    if (o && o.kind === 'replay') return '#/run/' + encodeURIComponent(o.run_id) + '/c/' + encodeURIComponent(o.id);
+    if (o && o.kind === 'production') return '#/run/' + encodeURIComponent(o.run_id) + '/p/' + encodeURIComponent(o.id);
+    return '#/run/' + encodeURIComponent(v.run_id);
   }
 
   function snapshotText(snap) {
@@ -1162,9 +1328,7 @@
     if (route.view === 'day') {
       if (key === 'j' || key === 'k') { e.preventDefault(); moveSelection(key === 'j' ? 1 : -1); }
       else if (key === 'Enter' || key === 'o') {
-        const sel = state.selected.get(route.runId);
-        const el = sel && $('.crow[data-key="' + CSS.escape(sel) + '"]');
-        if (el) { e.preventDefault(); location.hash = el.getAttribute('href'); }
+        if (openSelection()) e.preventDefault();
       } else if (key === '/') { e.preventDefault(); const s = $('#conv-search'); if (s) { s.focus(); s.select(); } }
       return;
     }

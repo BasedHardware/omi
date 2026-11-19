@@ -257,7 +257,7 @@ class InspectorHandler(BaseHTTPRequestHandler):
             rows = reader.verdicts(latest=query.get('history') != '1', **filters)
             rows.sort(key=lambda r: r.get('at') or '', reverse=True)
             if rest == ['verdicts']:
-                return self._json({'verdicts': rows})
+                return self._json({'verdicts': [views.with_open_link(reader, r) for r in rows]})
             if rest[1] == 'export':
                 body = ''.join(json.dumps(r, ensure_ascii=False, sort_keys=True) + '\n' for r in rows).encode('utf-8')
                 return self._send(

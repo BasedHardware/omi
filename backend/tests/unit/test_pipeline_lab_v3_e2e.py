@@ -119,7 +119,9 @@ def test_v3_day_runs_by_default_when_the_overlay_turns_v3_on(lab, capsys):
         rows = {tuple(sorted(b['id'] for b in r['baseline'] if b)): r for r in overview['conversations']}
         festival = rows[('v3-festival',)]
         assert festival['hidden'] is False and festival['recordings'] == 1
-        assert {p['id'] for p in overview['timeline']['production']} == {'v3-seeds', 'v3-water', 'v3-festival'}
+        assert {c['id'] for g in overview['groups'] for c in g['production']} == {'v3-seeds', 'v3-water', 'v3-festival'}
+        merge = next(g for g in overview['groups'] if g['kind'] == 'merge')
+        assert [c['id'] for c in merge['production']] == ['v3-seeds', 'v3-water'] and merge['marker'] == '⇉'
         status, detail = get(port, f'/api/runs/{run["run_id"]}/conversations/{festival["id"]}')
         assert status == 200 and detail['baseline']['id'] == 'v3-festival'
         assert detail['baseline']['structured']['sections'] and detail['replay']['recordings'] == ['rec-c']

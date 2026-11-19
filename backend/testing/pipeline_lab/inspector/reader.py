@@ -4,10 +4,9 @@ Reads the store contract's JSON layout; ids, content keys and item kinds come fr
 ``store`` (the single source). Every id that becomes a path is checked
 against the contract's id pattern and every resolved path must stay inside its root.
 
-Pairing replay with production: a replay conversation names its production twin in ``baseline_id``
-(or, optionally, several in ``baseline_ids`` when the replay merged them). Production conversations no
-replay conversation claims are ``missing``. Item lists (tasks, memories, pushes) pair by stable
-content key first, then by word overlap, so the UI can show a word diff for near matches.
+Pairing, grouping and change classification come from ``baseline/compare.py`` (:meth:`Reader.comparison`).
+Item lists (tasks, memories, pushes) on the conversation page pair by stable content key first, then by
+word overlap, so the UI can show a word diff for near matches; that is presentation only.
 """
 
 from __future__ import annotations
@@ -22,13 +21,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Optional
 
+from testing.pipeline_lab.baseline import compare
 from testing.pipeline_lab.contracts import ITEM_KINDS, content_key, normalize_text  # noqa: F401 - re-exported
 from testing.pipeline_lab.contracts import MARKS as CONTRACT_MARKS
 from testing.pipeline_lab.store import SEGMENT_PATTERN, StoreRefused, safe_segment
 
 ID_PATTERN = SEGMENT_PATTERN
 MARKS = tuple(m for m in CONTRACT_MARKS if m != 'clear')  # marks the UI counts; ``clear`` withdraws one
-BOUNDARY_TOLERANCE_S = 30.0
 NEAR_MATCH = 0.45
 MAX_NOTE_CHARS = 4000
 
@@ -253,45 +252,6 @@ def baseline_ids_of(conversation: Mapping[str, Any]) -> list[str]:
     return [single] if isinstance(single, str) and single else []
 
 
-def diff_reasons(replay: Mapping[str, Any], baseline: Mapping[str, Any], *, shared: bool = False) -> list[str]:
-    """What differs between a replay conversation and its production twin (empty = same)."""
-    reasons = []
-    if bool(replay.get('discarded')) != bool(baseline.get('discarded')):
-        reasons.append('discard')
-    start = seconds_between(baseline.get('started_at'), replay.get('started_at'))
-    end = seconds_between(baseline.get('finished_at'), replay.get('finished_at'))
-    if (
-        shared
-        or len(baseline_ids_of(replay)) > 1
-        or start is None
-        or end is None
-        or abs(start) > BOUNDARY_TOLERANCE_S
-        or abs(end) > BOUNDARY_TOLERANCE_S
-    ):
-        reasons.append('boundary')
-    if summary_key(replay.get('structured')) != summary_key(baseline.get('structured')):
-        reasons.append('summary')
-    if normalize_text(transcript_text(replay)) != normalize_text(transcript_text(baseline)):
-        reasons.append('transcript')
-    if home_hidden(replay) is not None and home_hidden(replay) != home_hidden(baseline):
-        reasons.append('home')
-    for name, key_of in (('tasks', task_key), ('memories', memory_key), ('pushes', notification_key)):
-        field = {'tasks': 'action_items', 'memories': 'memories', 'pushes': 'notifications'}[name]
-        left = sorted(key_of(i) for i in replay.get(field) or [])
-        right = sorted(key_of(i) for i in baseline.get(field) or [])
-        if left != right:
-            reasons.append(name)
-    return reasons
-
-
-def status_of(reasons: list[str], has_baseline: bool) -> str:
-    if not has_baseline:
-        return 'new'
-    if 'discard' in reasons:
-        return 'discard flipped'
-    return 'changed' if reasons else 'same'
-
-
 def conversation_pairs(replay: Mapping[str, Any], baseline: Optional[Mapping[str, Any]]) -> dict[str, Any]:
     """Every diff-ready pair the conversation page renders, in one object agents can read too."""
     replay = replay or {}
@@ -358,6 +318,7 @@ class Reader:
         self.root = Path(root).expanduser().resolve()
         self.verdicts_root = Path(verdicts_root).expanduser()
         self._cache = _FileCache()
+        self._computed: dict[str, tuple[Any, dict[str, Any]]] = {}
 
     # -- raw reads
 
@@ -455,33 +416,27 @@ class Reader:
         data = self._json('runs', safe_id(run_id, 'run id'), 'baseline.json')
         return data if isinstance(data, dict) and isinstance(data.get('conversations'), list) else None
 
-    def pairing(self, run: Mapping[str, Any]) -> dict[str, Any]:
-        """Replay conversations with their production twins, statuses and the missing production rows.
+    def comparison(self, run: Mapping[str, Any]) -> dict[str, Any]:
+        """Pairs, groups and the digest for a run: ``baseline/compare.py``'s view (RULINGS 10).
 
-        Pairs, statuses and reasons come from the run's ``baseline.json`` (RULINGS 10). Runs written
-        without one (older runs, the synthetic sample) fall back to the local pairing below.
+        ``baseline.json`` is used when it was written by the current compare (``version`` 2 and
+        it covers every replay conversation); otherwise (older runs, the synthetic sample) the same
+        :func:`compare.baseline_view` runs here over the run's files, so there is one implementation.
         """
-        replay = self.conversations(run['run_id'])
-        baseline = self.baseline_conversations(run['day_id'], pipeline_of(run))
-        by_id = {b['id']: b for b in baseline if b.get('id')}
-        view = self.baseline_view(run['run_id'])
-        if view is not None:
-            return _pairing_from_view(view, replay, baseline, by_id)
-        claims: dict[str, int] = {}
-        for conv in replay:
-            for bid in baseline_ids_of(conv):
-                claims[bid] = claims.get(bid, 0) + 1
-        rows = []
-        for conv in replay:
-            twins = [by_id[b] for b in baseline_ids_of(conv) if b in by_id]
-            twin = twins[0] if twins else None
-            shared = bool(twin and claims.get(twin['id'], 0) > 1)
-            reasons = diff_reasons(conv, twin, shared=shared) if twin else []
-            rows.append(
-                {'replay': conv, 'baseline': twin, 'status': status_of(reasons, twin is not None), 'reasons': reasons}
-            )
-        missing = [b for b in baseline if b.get('id') not in claims]
-        return {'rows': rows, 'missing': missing, 'by_id': by_id}
+        run_id = run['run_id']
+        replay = self.conversations(run_id)
+        production = self.baseline_conversations(run['day_id'], pipeline_of(run))
+        view = self.baseline_view(run_id)
+        if view is not None and view.get('version') == compare.VERSION and isinstance(view.get('groups'), list):
+            listed = {i for g in view['groups'] for i in g.get('replay') or []}
+            if listed == {c['id'] for c in replay}:
+                return view
+        stamp = (run_id, tuple((c['id'], c.get('finished_at')) for c in replay), len(production))
+        cached = self._computed.get(run_id)
+        if cached is None or cached[0] != stamp:
+            cached = (stamp, compare.baseline_view(replay, production))
+            self._computed[run_id] = cached
+        return cached[1]
 
     def audio_for(self, day_id: str, conv: Mapping[str, Any]) -> Optional[dict[str, Any]]:
         start, end = parse_utc(conv.get('started_at')), parse_utc(conv.get('finished_at'))
@@ -556,60 +511,6 @@ class Reader:
         finally:
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)
-
-
-# chain ``baseline.json`` changed_fields -> the inspector's reason chips
-_FIELD_REASONS = {
-    'discarded': 'discard',
-    'boundary': 'boundary',
-    'transcript': 'transcript',
-    'segments': 'transcript',
-    'title': 'summary',
-    'overview': 'summary',
-    'emoji': 'summary',
-    'category': 'summary',
-    'action_items': 'tasks',
-    'memories': 'memories',
-    'notifications': 'pushes',
-    'hidden': 'home',
-    'kind': 'home',
-}
-
-
-def _pairing_from_view(
-    view: Mapping[str, Any], replay: list[dict[str, Any]], baseline: list[dict[str, Any]], by_id: dict[str, Any]
-) -> dict[str, Any]:
-    replay_by_id = {c['id']: c for c in replay}
-    rows, claimed = [], set()
-    for entry in view.get('conversations') or []:
-        rid, bid = entry.get('replay_id'), entry.get('baseline_id')
-        conv = replay_by_id.get(rid) if rid else None
-        if conv is None:
-            continue  # production-only rows come back as ``missing`` below
-        if bid:
-            claimed.add(bid)
-        reasons: list[str] = []
-        for name in entry.get('changed_fields') or []:
-            reason = _FIELD_REASONS.get(name, name)
-            if reason not in reasons:
-                reasons.append(reason)
-        rows.append(
-            {
-                'replay': conv,
-                'baseline': by_id.get(bid) if bid else None,
-                'status': entry.get('status'),
-                'reasons': reasons,
-            }
-        )
-    listed = {row['replay']['id'] for row in rows}
-    for conv in replay:  # a conversation written after baseline.json: show it rather than hide it
-        if conv['id'] not in listed:
-            rows.append({'replay': conv, 'baseline': None, 'status': 'new', 'reasons': []})
-    for conv in replay:
-        claimed.update(baseline_ids_of(conv))
-    rows.sort(key=lambda r: (r['replay'].get('started_at') or '', r['replay'].get('id')))
-    missing = [b for b in baseline if b.get('id') not in claimed]
-    return {'rows': rows, 'missing': missing, 'by_id': by_id}
 
 
 def _verdict_target(row: Mapping[str, Any]) -> tuple:

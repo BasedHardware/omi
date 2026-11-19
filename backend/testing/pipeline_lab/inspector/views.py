@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
+from testing.pipeline_lab.baseline import compare
 from testing.pipeline_lab.inspector.reader import (
     ITEM_KINDS,
     MARKS,
@@ -20,8 +21,8 @@ from testing.pipeline_lab.inspector.reader import (
     boundary_key,
     conversation_pairs,
     daily_summary_key,
-    home_hidden,
     day_window,
+    home_hidden,
     memory_key,
     new_verdict_id,
     notification_key,
@@ -110,13 +111,10 @@ def runs_list(reader: Reader) -> list[dict[str, Any]]:
             continue
         summary = run_summary(reader, run)
         try:
-            pairing = reader.pairing(run)
-            statuses: dict[str, int] = {}
-            for row in pairing['rows']:
-                statuses[row['status']] = statuses.get(row['status'], 0) + 1
-            statuses['missing'] = len(pairing['missing'])
-            summary['statuses'] = statuses
-            summary['conversations'] = len(pairing['rows'])
+            view = reader.comparison(run)
+            summary['statuses'] = dict(view['digest']['kinds'])
+            summary['conversations'] = view['digest']['conversations']['replay']
+            summary['worth'] = view['digest']['tags']['worth']
         except NotFound:
             summary['statuses'] = {}
         rows.append(summary)
@@ -139,75 +137,79 @@ def _verdicts_for(index: Mapping[Optional[str], list], *ids: Optional[str]) -> l
     return out
 
 
+def _cell(conv: Mapping[str, Any], side: str, verdicts: Mapping[Optional[str], list]) -> dict[str, Any]:
+    """One conversation as a cell of the paired day list."""
+    marks = _verdicts_for(verdicts, conv.get('id'), *baseline_ids_of(conv))
+    block = conv.get('v3') if isinstance(conv.get('v3'), Mapping) else {}
+    return {
+        **(_brief(conv) or {}),
+        'side': side,
+        'duration': seconds_between(conv.get('started_at'), conv.get('finished_at')),
+        'discard_reason': conv.get('discard_reason'),
+        'home': compare.on_home(conv),
+        'home_reason': compare.home_reason(conv),
+        'counts': _counts(conv),
+        'backfilled': bool(block.get('backfilled')),
+        'evaluable': conv.get('evaluable') or {'boundaries': True, 'reason': ''},
+        'verdicts': {m: sum(1 for v in marks if v.get('mark') == m) for m in MARKS},
+    }
+
+
+def _status_of(group: Mapping[str, Any]) -> str:
+    """The one status word a conversation shows: its group's kind (``content`` reads as ``changed``)."""
+    return 'changed' if group['kind'] == 'content' else group['kind']
+
+
 def run_overview(reader: Reader, run_id: str) -> dict[str, Any]:
-    """Day page: header facts, the two timeline rows and the conversation list (missing rows included)."""
+    """Day page: header facts, the digest, the paired groups, and a flat conversation list for agents.
+
+    Every count comes from ``compare``'s digest, which counts groups per tag; the UI filters groups
+    by the same tags, so a chip's number is always the number of rows it shows.
+    """
     run = reader.run(run_id)
     day = reader.corpus_day(run['day_id'])
-    pairing = reader.pairing(run)
+    view = reader.comparison(run)
     verdicts = _verdict_index(reader, run['day_id'])
-    rows = []
-    for row in pairing['rows']:
-        conv = row['replay']
-        twins = [pairing['by_id'][b] for b in baseline_ids_of(conv) if b in pairing['by_id']]
-        marks = _verdicts_for(verdicts, conv.get('id'), *baseline_ids_of(conv))
-        rows.append(
+    replay_by_id = {c['id']: c for c in reader.conversations(run_id)}
+    prod_by_id = {b['id']: b for b in reader.baseline_conversations(run['day_id'], pipeline_of(run)) if b.get('id')}
+    groups, flat = [], []
+    for group in view['groups']:
+        left = [_cell(prod_by_id[i], 'production', verdicts) for i in group['production'] if i in prod_by_id]
+        right = [_cell(replay_by_id[i], 'replay', verdicts) for i in group['replay'] if i in replay_by_id]
+        open_ = {'kind': 'replay', 'id': right[0]['id']} if right else {'kind': 'production', 'id': left[0]['id']}
+        groups.append(
             {
-                **(_brief(conv) or {}),
-                'kind': 'replay',
-                'lane': conv.get('lane'),
-                'duration': seconds_between(conv.get('started_at'), conv.get('finished_at')),
-                'discard_reason': conv.get('discard_reason'),
-                'status': row['status'],
-                'reasons': row['reasons'],
-                'counts': _counts(conv),
-                'baseline': [_brief(t) for t in twins],
-                'evaluable': conv.get('evaluable') or {'boundaries': True, 'reason': ''},
-                'verdicts': {m: sum(1 for v in marks if v.get('mark') == m) for m in MARKS},
+                key: group.get(key)
+                for key in ('id', 'kind', 'marker', 'change', 'score', 'tags', 'home', 'started_at', 'finished_at')
             }
+            | {'substantive': group.get('substantive') or [], 'cosmetic': group.get('cosmetic') or []}
+            | {'production': left, 'replay': right, 'open': open_}
         )
-    for conv in pairing['missing']:
-        marks = _verdicts_for(verdicts, conv.get('id'), *baseline_ids_of(conv))
-        rows.append(
-            {
-                **(_brief(conv) or {}),
-                'kind': 'production',
-                'lane': conv.get('lane'),
-                'duration': seconds_between(conv.get('started_at'), conv.get('finished_at')),
-                'discard_reason': conv.get('discard_reason'),
-                'status': 'missing',
-                'reasons': [],
-                'counts': _counts(conv),
-                'baseline': [_brief(conv)],
-                'evaluable': conv.get('evaluable') or {'boundaries': True, 'reason': ''},
-                'verdicts': {m: sum(1 for v in marks if v.get('mark') == m) for m in MARKS},
-            }
-        )
-    rows.sort(key=lambda r: (r.get('started_at') or '', r['kind'] != 'replay'))
-    status_of_baseline: dict[str, str] = {}
-    for row in rows:
-        for twin in row['baseline']:
-            if twin and twin.get('id'):
-                status_of_baseline.setdefault(twin['id'], row['status'])
-    # v3: production rows that share recordings with a replay conversation but are not its pair
-    # (baseline.json's pairing). A paired production row takes its pair's status.
-    paired = {
-        str(row['baseline']['id']): row['status'] for row in pairing['rows'] if (row.get('baseline') or {}).get('id')
-    }
-    merged = {bid for bid in status_of_baseline if bid not in paired} if pipeline_of(run) == 'v3' else set()
-    status_of_baseline.update(paired)
-    production = [
-        {
-            **(_brief(b) or {}),
-            'status': 'merged' if b.get('id') in merged else status_of_baseline.get(b.get('id'), 'missing'),
-        }
-        for b in reader.baseline_conversations(run['day_id'], pipeline_of(run))
-    ]
+        status = _status_of(group)
+        for cell in right:
+            flat.append(
+                {
+                    **cell,
+                    'kind': 'replay',
+                    'group': group['id'],
+                    'status': status,
+                    'change': group['change'],
+                    'baseline': [_brief(prod_by_id[i]) for i in group['production'] if i in prod_by_id],
+                }
+            )
+        if not right:
+            for cell in left:
+                flat.append(
+                    {
+                        **cell,
+                        'kind': 'production',
+                        'group': group['id'],
+                        'status': status,
+                        'change': group['change'],
+                        'baseline': [_brief(prod_by_id[cell['id']])],
+                    }
+                )
     coverage = day.get('coverage') or {}
-    statuses: dict[str, int] = {}
-    for row in rows:
-        statuses[row['status']] = statuses.get(row['status'], 0) + 1
-    if merged:
-        statuses['merged'] = sum(1 for b in production if b['status'] == 'merged')
     return {
         'run': {**run_summary(reader, run), 'overlay': run.get('overlay') or {}, 'warnings': run.get('warnings') or []},
         'run_detail': {k: run.get(k) for k in ('timings', 'stages')},
@@ -218,10 +220,23 @@ def run_overview(reader: Reader, run_id: str) -> dict[str, Any]:
             'window': day_window(day.get('date'), day.get('timezone')),
             'coverage': coverage,
         },
-        'statuses': statuses,
-        'conversations': rows,
-        'timeline': {'replay': rows, 'production': production, 'gaps': coverage.get('gaps') or []},
+        'digest': view['digest'],
+        'statuses': {_status_of({'kind': k}): n for k, n in view['digest']['kinds'].items() if n},
+        'groups': groups,
+        'conversations': flat,
+        'timeline': {'gaps': coverage.get('gaps') or []},
     }
+
+
+def _highlight(value: Any) -> Any:
+    """A daily-summary highlight as ``{emoji, topic, summary}`` (product rows) or plain text."""
+    if isinstance(value, Mapping):
+        return {
+            'emoji': value.get('emoji') or '',
+            'topic': value.get('topic') or value.get('title') or '',
+            'summary': value.get('summary') or value.get('text') or value.get('content') or '',
+        }
+    return str(value)
 
 
 def _summary_text(value: Any) -> dict[str, Any]:
@@ -233,10 +248,17 @@ def _summary_text(value: Any) -> dict[str, Any]:
         return {
             'title': value.get('title') or value.get('headline') or '',
             'overview': value.get('overview') or value.get('summary') or value.get('text') or '',
-            'highlights': list(value.get('highlights') or []),
+            'highlights': [_highlight(x) for x in value.get('highlights') or []],
             'raw': value,
         }
     return {'title': '', 'overview': str(value), 'highlights': []}
+
+
+def _goal(goal: Any) -> Any:
+    if not isinstance(goal, Mapping):
+        return goal
+    before, after = goal.get('progress_before'), goal.get('progress_after')
+    return {**goal, 'changed': before != after}
 
 
 def day_panel(reader: Reader, run_id: str) -> dict[str, Any]:
@@ -256,14 +278,22 @@ def day_panel(reader: Reader, run_id: str) -> dict[str, Any]:
     log = pair_items(replay_pushes, production_pushes, notification_key, lambda n: f"{n.get('title')} {n.get('body')}")
     log.sort(key=lambda p: ((p['replay'] or p['baseline'] or {}).get('at') or ''))
     verdicts = [v for v in reader.verdicts(day_id=day_id) if v.get('item_kind') == 'daily_summary']
+    failure = None
+    if replay_summary is None:
+        found = [w for w in run.get('warnings') or [] if isinstance(w, str) and w.startswith('daily_summary')]
+        stage = ((run.get('stages') or {}).get('daily_summary') or {}).get('status')
+        failure = found[0] if found else (f'daily_summary stage {stage}' if stage and stage != 'complete' else None)
+    goals = [_goal(g) for g in run_day.get('goals') or []]
     return {
         'daily_summary': {
             'key': daily_summary_key(replay_summary) if replay_summary is not None else None,
             'replay': _summary_text(replay_summary) if replay_summary is not None else None,
+            'replay_failure': failure,
             'baseline': _summary_text(production_summary) if production_summary is not None else None,
             'verdicts': verdicts,
         },
-        'goals': run_day.get('goals') or [],
+        'goals': goals,
+        'goals_changed': sum(1 for g in goals if isinstance(g, Mapping) and g.get('changed')),
         'memory_delta': run_day.get('memory_delta') or {'added': [], 'updated': [], 'removed': []},
         'notifications': log,
     }
@@ -280,20 +310,70 @@ def _item_keys(conv: Optional[Mapping[str, Any]]) -> Optional[dict[str, str]]:
     }
 
 
+def _home_side(conv: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
+    if not conv:
+        return None
+    return {
+        'id': conv.get('id'),
+        'title': (conv.get('structured') or {}).get('title') or '',
+        'started_at': conv.get('started_at'),
+        'home': compare.on_home(conv),
+        'home_reason': compare.home_reason(conv),
+    }
+
+
+def _group_of(view: Mapping[str, Any], side: str, conversation_id: str) -> Optional[dict[str, Any]]:
+    return next((g for g in view['groups'] if conversation_id in (g.get(side) or [])), None)
+
+
+def _comparison(conv: Optional[Mapping[str, Any]], twin: Optional[Mapping[str, Any]], group) -> dict[str, Any]:
+    """Every compared field, its two values and its class, so a difference is never invisible."""
+    left, right = compare.comparable(conv), compare.comparable(twin)
+    if conv and twin:
+        if group and len(group['production']) == 1 and len(group['replay']) == 1:
+            fields = group.get('fields') or {}
+        else:  # this page's replay against the production it was built over
+            fields = compare.compare_pair(conv, twin, method='overlap')['fields']
+    else:
+        fields = {}
+    out = []
+    for name in compare.FIELDS:
+        found = fields.get(name)
+        out.append(
+            {
+                'field': name,
+                'replay': (left or {}).get(name),
+                'production': (right or {}).get(name),
+                'class': found['class'] if found else 'same',
+                'detail': found or {},
+            }
+        )
+    return {'fields': out, 'kind': group['kind'] if group else None}
+
+
 def conversation_detail(reader: Reader, run_id: str, conversation_id: str) -> dict[str, Any]:
     run = reader.run(run_id)
     conv = reader.conversation(run_id, conversation_id)
     by_id = {b['id']: b for b in reader.baseline_conversations(run['day_id'], pipeline_of(run)) if b.get('id')}
-    twins = [by_id[b] for b in baseline_ids_of(conv) if b in by_id]
+    view = reader.comparison(run)
+    group = _group_of(view, 'replay', conversation_id)
+    in_group = set(group['production']) if group else set()
+    linked = [b for b in baseline_ids_of(conv) if b in by_id]
+    # The production this page compares against: its own links inside its group (weak links to
+    # another group's conversations would mix two stretches), else the group's production side.
+    ids = [b for b in linked if b in in_group] or [b for b in (group or {}).get('production') or [] if b in by_id]
+    twins = [by_id[b] for b in ids]
     twin = _merge_twins(twins)
-    pairing = reader.pairing(run)
-    row = next((r for r in pairing['rows'] if r['replay'].get('id') == conversation_id), None)
     index = _verdict_index(reader, run['day_id'])
+    siblings = [i for i in (group or {}).get('replay') or [] if i != conversation_id]
     return {
         'run_id': run_id,
         'kind': 'replay',
-        'status': row['status'] if row else ('new' if not twins else 'changed'),
-        'reasons': row['reasons'] if row else [],
+        'status': _status_of(group) if group else ('new' if not twins else 'changed'),
+        'group': _group_summary(group),
+        'siblings': [_brief(reader.conversation(run_id, i)) for i in siblings],
+        'home': {'replay': _home_side(conv), 'production': [_home_side(t) for t in twins]},
+        'compare': _comparison(conv, twin, group),
         'replay': conv,
         'baseline': twin,
         'baselines': [_brief(t) for t in twins],
@@ -303,6 +383,15 @@ def conversation_detail(reader: Reader, run_id: str, conversation_id: str) -> di
         'audio': reader.audio_for(run['day_id'], conv),
         'llm_calls': reader.llm_calls(run_id, conversation_id, conv.get('llm_call_ids') or []),
         'verdicts': _verdicts_for(index, conversation_id, *baseline_ids_of(conv)),
+    }
+
+
+def _group_summary(group: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
+    if not group:
+        return None
+    return {
+        key: group.get(key)
+        for key in ('id', 'kind', 'marker', 'change', 'tags', 'home', 'production', 'replay', 'substantive', 'cosmetic')
     }
 
 
@@ -316,12 +405,16 @@ def production_detail(reader: Reader, run_id: str, baseline_id: str) -> dict[str
     )
     if twin is None:
         raise NotFound('production conversation not found')
+    group = _group_of(reader.comparison(run), 'production', baseline_id)
     index = _verdict_index(reader, run['day_id'])
     return {
         'run_id': run_id,
         'kind': 'production',
-        'status': 'missing',
-        'reasons': [],
+        'status': _status_of(group) if group else 'missing',
+        'group': _group_summary(group),
+        'siblings': [],
+        'home': {'replay': None, 'production': [_home_side(twin)]},
+        'compare': _comparison(None, twin, group),
         'replay': None,
         'baseline': twin,
         'baselines': [_brief(twin)],
@@ -392,6 +485,37 @@ def baseline_view(reader: Reader, day_id: str) -> dict[str, Any]:
 
 
 # ---- verdicts ------------------------------------------------------------------------------
+
+
+def verdict_open(reader: Reader, row: Mapping[str, Any]) -> Optional[dict[str, Any]]:
+    """Where a verdict's item lives in its run: ``{kind: replay|production|day, run_id, id}``.
+
+    Verdicts store the production id when one exists (RULINGS 4), which is not a replay file in a v3
+    run; the link resolves it to the replay conversation the mark was made on, else the replay
+    conversation grouped with that production one, else the production page.
+    """
+    run_id = row.get('run_id')
+    if not isinstance(run_id, str):
+        return None
+    try:
+        run = reader.run(run_id)
+    except NotFound:
+        return None
+    cid = row.get('conversation_id')
+    if not cid or row.get('item_kind') == 'daily_summary':
+        return {'kind': 'day', 'run_id': run_id, 'id': None}
+    replay_ids = {c['id'] for c in reader.conversations(run_id)}
+    for candidate in (row.get('replay_conversation_id'), cid):
+        if isinstance(candidate, str) and candidate in replay_ids:
+            return {'kind': 'replay', 'run_id': run_id, 'id': candidate}
+    group = _group_of(reader.comparison(run), 'production', cid)
+    if group and group.get('replay'):
+        return {'kind': 'replay', 'run_id': run_id, 'id': group['replay'][0]}
+    return {'kind': 'production', 'run_id': run_id, 'id': cid}
+
+
+def with_open_link(reader: Reader, row: Mapping[str, Any]) -> dict[str, Any]:
+    return {**row, 'open': verdict_open(reader, row)}
 
 
 def _find(items: list[Mapping[str, Any]], key: str, key_of) -> Optional[Mapping[str, Any]]:

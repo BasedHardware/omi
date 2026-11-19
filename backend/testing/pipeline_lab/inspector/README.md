@@ -50,12 +50,23 @@ verdict's `item_snapshot` from the store, so a client cannot record an item that
 | `sample_run.py` | Synthetic corpus day + baseline + two runs + tone WAVs + optional sample verdicts |
 | `static/` | `index.html`, `app.css`, `app.js` |
 
-Pairing: a replay conversation names its production twin in `baseline_id`, or several in the optional
-`baseline_ids` when it merged them. Status against production: `new` (no twin), `discard flipped`,
-`changed` (boundary moved > 30 s, summary, transcript, task/memory/push keys differ) or `same`; production
-rows nobody claims are `missing`. Items pair by content key, then by word overlap (≥ 0.45) as `changed`,
-else `added` / `removed`. Differences are labelled `vs production`, never "regression": production ran
-other code.
+Pairing, grouping and change classification are `baseline/compare.py` (one implementation): the reader
+uses `runs/<id>/baseline.json` when it is `version` 2 and covers every replay conversation, and otherwise
+runs the same `compare.baseline_view` in memory. The unit the day page shows is a **group**: a 1:1 pair
+(`same`, `cosmetic`, `content`), a `merge` (N production → 1 replay), a `split` (1 → N), a `regroup`
+(N → M), `new` or `missing`. Each group carries tags (`home_dropped`, `summary`, `tasks`, `cosmetic`,
+`worth`, …); every number in the "What changed" digest is the count of groups with that tag, and the chip
+filters the list to exactly those groups. Text fields compare after casefold + whitespace + punctuation
+normalization; emoji, category and the hidden reason (when both sides are hidden) are cosmetic and not
+"worth a look". Items on the conversation page pair by content key, then by word overlap (≥ 0.45) as
+`changed`, else `added` / `removed`. Differences are labelled `vs production`, never "regression":
+production ran other code.
+
+Day page: compact header, the digest (Home / Grouping / Content / Cosmetic), a "Worth a look" /
+"Everything" toggle, Time / Most different sort, and the paired list (production left, replay right, a
+time gutter in the middle: hour ticks, one lane per side, filled blocks are on Home). The day panel is a
+collapsible side column. Conversation page: Home state of both sides on top; the Summary tab lists every
+compared field, unchanged ones dimmed.
 
 ## API
 

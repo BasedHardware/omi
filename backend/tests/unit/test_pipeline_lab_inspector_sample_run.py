@@ -137,13 +137,23 @@ def test_runs_follow_the_contract_and_cross_reference(sample):
 def test_variant_run_exercises_every_inspector_state(sample):
     base, _ = sample
     reader = Reader(base / 'store', base / 'verdicts')
-    pairing = reader.pairing(reader.run(sample_run.RUN_ID))
-    statuses = {row['status'] for row in pairing['rows']}
-    assert statuses == {'same', 'changed', 'new', 'discard flipped'}
-    assert len(pairing['missing']) == 2
-    reasons = {reason for row in pairing['rows'] for reason in row['reasons']}
-    assert reasons >= {'boundary', 'summary', 'transcript', 'tasks', 'memories', 'pushes', 'discard'}
-    rows = pairing['rows']
+    view = reader.comparison(reader.run(sample_run.RUN_ID))
+    kinds = {kind for kind, n in view['digest']['kinds'].items() if n}
+    assert kinds == {'same', 'content', 'merge', 'split', 'new', 'missing'}
+    tags = {tag for tag, n in view['digest']['tags'].items() if n}
+    assert tags >= {
+        'boundary',
+        'summary',
+        'transcript',
+        'tasks',
+        'memories',
+        'pushes',
+        'discard',
+        'home_dropped',
+        'home_added',
+    }
+    by_id = {c['id']: c for c in reader.conversations(sample_run.RUN_ID)}
+    rows = [{'replay': by_id[i]} for g in view['groups'] for i in g['replay']]
     assert any(len(row['replay'].get('baseline_ids') or []) == 2 for row in rows), 'a merge'
     claimed = [row['replay']['baseline_id'] for row in rows if row['replay']['baseline_id']]
     assert len(claimed) != len(set(claimed)), 'a split'

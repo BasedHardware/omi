@@ -59,12 +59,14 @@ def test_runs_and_overview(lab):
     status, ov = get_json(lab, f'/api/runs/{RUN}')
     assert status == 200
     assert ov['day']['window'] == {'start': '2026-03-14T07:00:00Z', 'end': '2026-03-15T07:00:00Z'}
-    assert set(ov['statuses']) == {'same', 'changed', 'new', 'missing', 'discard flipped'}
+    assert set(ov['statuses']) == {'same', 'changed', 'new', 'missing', 'merge', 'split'}
+    assert ov['digest']['tags']['discard'] == 2  # a discard flip is a content change tagged ``discard``
     kinds = {row['kind'] for row in ov['conversations']}
     assert kinds == {'replay', 'production'}
     starts = [row['started_at'] for row in ov['conversations']]
     assert starts == sorted(starts)
-    assert len(ov['timeline']['production']) == 24 and len(ov['timeline']['gaps']) == 2
+    assert len(ov['timeline']['gaps']) == 2
+    assert sum(len(g['production']) for g in ov['groups']) == 24
 
 
 def test_conversation_detail_has_diff_ready_pairs_audio_and_calls(lab):
