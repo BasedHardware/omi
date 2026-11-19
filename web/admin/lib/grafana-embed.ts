@@ -93,7 +93,7 @@ async function grafana(
   return response.json();
 }
 
-export async function mintEmbed(uid: string) {
+export async function mintEmbed(uid: string, options: { rotation?: boolean } = {}) {
   const { key, kid } = await signingKey();
   const membership = await secret(process.env.GRAFANA_BUSINESS_TOKEN_SECRET);
   if (
@@ -167,7 +167,15 @@ export async function mintEmbed(uid: string) {
       }
     }
   }
-  const url = new URL("/d/omi-tv-v2", ORIGIN);
+  // Only the TV kiosk rotates (omi-tv-v2 and omi-tv-funnel) once
+  // GRAFANA_TV_PLAYLIST_UID is set; admin embeds keep the board. Until then the
+  // kiosk opens the wall board alone.
+  const playlist = process.env.GRAFANA_TV_PLAYLIST_UID;
+  const kioskPath =
+    options.rotation && playlist && /^[A-Za-z0-9_-]{1,64}$/.test(playlist)
+      ? `/playlists/play/${playlist}`
+      : "/d/omi-tv-v2";
+  const url = new URL(kioskPath, ORIGIN);
   url.searchParams.set("kiosk", "");
   url.searchParams.set("refresh", "15m");
   url.searchParams.set("orgId", String(org.id));

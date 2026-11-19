@@ -8,6 +8,8 @@ import 'package:omi/startup/boot_recovery.dart';
 import 'package:omi/startup/boot_recovery_app.dart';
 import 'package:omi/startup_failure_app.dart';
 
+import '../support/temp_dir_cleanup.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late BootRecovery recovery;
@@ -53,7 +55,7 @@ void main() {
       expect(upgrades, hasLength(2));
       expect(upgrades.every((row) => row['state'] == 'needed'), isTrue);
     } finally {
-      await directory.delete(recursive: true);
+      await deleteTempDirQuietly(directory);
     }
   });
 
@@ -83,7 +85,7 @@ void main() {
       await recovery.countInterruptedBoot(journal);
       expect(recovery.count, 1);
     } finally {
-      await directory.delete(recursive: true);
+      await deleteTempDirQuietly(directory);
     }
   });
 
@@ -97,7 +99,7 @@ void main() {
       await recovery.countInterruptedBoot(journal);
       expect(recovery.count, 0);
     } finally {
-      await directory.delete(recursive: true);
+      await deleteTempDirQuietly(directory);
     }
   });
 
@@ -110,7 +112,7 @@ void main() {
       await recovery.countInterruptedBoot(journal);
       expect(recovery.failingStage, 'resolve_auth');
     } finally {
-      await directory.delete(recursive: true);
+      await deleteTempDirQuietly(directory);
     }
   });
 
@@ -127,7 +129,7 @@ void main() {
       expect(recovery.count, 3);
       expect(recovery.shouldRecover, isTrue);
     } finally {
-      await directory.delete(recursive: true);
+      await deleteTempDirQuietly(directory);
     }
   });
 

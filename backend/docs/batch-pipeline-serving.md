@@ -76,7 +76,13 @@ With several serving instances, the periodic ticks (the supervisor and metrics
 scrapes) run maintenance (staging reap, artifact cleanup, enrichment sweep,
 quarantine discovery, lease recovery and the result-ready drain) on one instance
 per 60-second Firestore lease in `{namespace}_leases`. Projection sweeps and
-gauge refreshes stay per instance. Explicit `POST /reconcile` and the
+local samplers stay per instance. Fleet queue gauges use an independent
+20-second `queue_metrics` lease in the same store (default sample cadence 40s,
+60s export freshness bound). GPU queue queries use the 60s per-pod fallback
+because autoscaling also consumes per-pod freshness. Set
+`FIRESTORE_READ_LEVERS` entry `batch_metrics_oldest_leader` to 0 to restore
+per-instance sampling; see [queue sample ownership](runbooks/batch-queue-safety.md#fleet-queue-sample-ownership).
+Explicit `POST /reconcile` and the
 post-recovery drain always run. Every guarded step is already idempotent and
 transaction-fenced, so the lease saves reads and enqueues only. A lease-store
 error fails open to every instance running, and
@@ -1153,6 +1159,18 @@ an unready or fenced row is dropped from the set. Release commits carry
 source= head_state=` (closed labels only). `python -m
 testing.recovered_release_scenario` replays the run 18 shape.
 
+`BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED` defaults to `true` (kill
+switch: `false`). A provider-route unit settles in its own delivery, outside
+the pump, so the serving route wakes one coalesced owner drain after each
+delivery that settles a unit or ends it terminally
+(`Serving.drain_settled_async`: the owner-only merge drain and chain walk, with
+no release set, so no row skips the head wait or the depth hold). Provider
+settle stamps `ready_at` and provider admission stamps `fresh_capture`, as the
+GPU path does, and a provider row admitted before that stamp counts as
+catch-up. Without the switch a settled provider unit is found only by the
+100-row maintenance page and can use neither the head wait nor fresh-first.
+See `listen_pusher_pipeline/changes/2026-11-13-provider-merge-membership.md`.
+
 The walk is only a wakeup. Each row still passes the transactional predecessor,
 privacy, receipt-replay and owner-claim fences, so ordering is unchanged. For
 async projection, the persisted rows and their contents' persisted, not-ready
@@ -1222,6 +1240,47 @@ page by default (its kill switch restores the mixed page). All three pages
 use the same `in` filter on the declared results composite index
 (`projection_state, committed_at, __name__`), so no index changes are needed.
 
+### Finish backoff (dark, default off)
+
+`BATCH_PROJECTION_FINISH_BACKOFF_ENABLED` (default `false`, `true` is the only
+enable) bounds the replay the finish page does for already-projected work. Off,
+the page is exactly the one above and no no-change deferral transaction runs.
+State transitions maintain additive clock fields even with the lever off.
+
+On, a finish walk that changed nothing writes `projection_finish_due_at` and
+`projection_finish_backoff_step` on the row. The page then asks for
+`projection_state in (persisted, ready)` **and** `projection_finish_due_at <=
+now`: a no-change row is retried after 60 s, then 300 s, then 900 s (capped),
+instead of being re-read and re-fenced on every tick. A row that moved state is
+a changed row and is not deferred. The `pending` assignment page is untouched,
+so new work is never delayed.
+
+The range filter must lead the ordering, so that page uses the second declared
+results index `(projection_state, projection_finish_due_at, committed_at,
+__name__)` and its cursor becomes `(due_at, committed_at, key)`. Rows written
+before the lever have no clock and are outside every range filter. A bounded
+operator [backfill](runbooks/projection-finish-backfill.md) stamps missing clocks
+and atomically checkpoints progress in a shared, versioned control document.
+Until that marker is complete, serving processes use the legacy page without
+adding stamp transactions. New replicas trust the same completion marker and
+filter immediately; a negative marker read is cached for 60 seconds.
+
+Every transition into `persisted`/`ready` writes due now and step 0 in the same
+transaction, regardless of this lever or whether the host runs the serving loop.
+Session receipts, part summaries, privacy restore, quarantine release, sibling
+wake, and the ghost-hold repair script all use the shared clock helpers. Other
+state transitions retire the clock. Deploy these writers everywhere before
+finishing the backfill. Rollback of the read lever restores the legacy query;
+clock maintenance continues, so re-enable does not require another survey.
+
+The existing oldest-age and over-SLA guards cannot detect a sub-900 s delay
+introduced by this lever: the oldest-age max is already saturated by a
+multi-week held obligation, and the over-SLA stock is large enough that a few
+hundred units crossing the boundary is inside its noise. The finish-page
+reads-per-completion ratio (`omi_batch_projection_finish_reads_total` over
+`omi_batch_projection_finish_completed_total`) is the guard that can move; see
+`charts/monitoring/batch-projection/alerts.yaml`.
+
 ### Per-owner projection drain (Phase 1)
 
 The sweep-shared 30 s walk budget gave each heavy owner a shrinking share of
@@ -1258,6 +1317,47 @@ below have their own switches; all three off is the pre-drain behaviour):
 - Log lines: `event=batch_projection action=owner_drain outcome=turn steps=
   advanced= more= elapsed_ms=` per turn, and `action=owner_chain
   outcome=claim_busy`.
+
+### Follow-up desync (2026-11-05)
+
+Every serving process runs its own async follow-up discovery over the same
+`(projection_state, committed_at, __name__)` page. After a roll, all processes
+started at the head together and walked it in lockstep. Each retried the same
+unchanged blocked receipts and skipped rows that a peer had just claimed. On
+2026-11-05 the persisted/ready backlog grew past 45k over SLA while CPU stayed
+near 45 % (`data/run-2026-11-04-gpueff/projection-backlog-2026-11-05.md` in
+the workspace).
+
+`BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS` (default `900`; `0` is
+the kill switch; negative, NaN or above 3600 keeps 900):
+- **Invariant.** Every row committed at or before a pass's mark is offered
+  within that pass, ties at the mark included. A pass begins at the head, at
+  the seed, or with no mark, and its mark is the projector clock at that moment
+  (wall clock if the projector clock fails). It ends at the page's own wrap or
+  once the cursor is strictly past the mark. Desync requires keyset pagination:
+  with `BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED=false` every page is the
+  head, so offset, backoff and pass bounds stay off.
+- **Offset.** A process's first discovery page starts at a hashed point between
+  the oldest persisted/ready commit and now. The hash covers host, pid and
+  start time, and the seed costs one 1-row read. The page still
+  wraps to the head at its end, and every pass also wraps as soon as its cursor
+  reaches rows committed after that pass began (a high-water mark, re-armed
+  on each wrap). Arrivals that keep every page full can therefore neither
+  starve rows older than the seed nor strand a row skipped in backoff. A
+  failed seed read falls back to head-first.
+- **Backoff.** A row this process saw `blocked`, `retry`, `timeout`,
+  `incomplete` (content not finishable yet) or `claim_busy` is skipped in this
+  process's discovery. The skip is 60 s, doubling per repeat up to the ceiling.
+  `claim_busy` never escalates, and any other outcome clears the entry. The skip
+  lives in process memory only (at most 20,000 rows; dropping an entry only
+  retries sooner). Targeted and owed wakes bypass it, and other processes do
+  not see it. The durable row and its fences are unchanged.
+- **Counter.** `omi_batch_pipeline_projection_followup_outcomes_total{outcome}`
+  counts `completed`, `incomplete`, `blocked`, `retry`, `timeout`,
+  `claim_busy`, `coalesced`, `sync_owned`, `backoff_skipped` and `seeded`.
+
+`BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS` (default `4`, range 1–16; unset or
+out-of-range keeps 4) sets the concurrent follow-ups per process.
 
 `BATCH_PIPELINE_PROJECTION_PREFETCH` (default `4`; `0` is the kill switch;
 malformed or above 8 keeps 4). A budgeted walk reads the next N rows ahead on
@@ -1339,3 +1439,52 @@ The [policy contract](../config/policy/README.md) owns the read map, unchanged
 legacy cohort assignments, nested live-STT retirement rule, explicit process/worker
 exceptions, replay commands and revert procedure. This change alters no environment
 values; deployment remains part of the two-lane train.
+
+The maintenance leader also samples the fresh-delivery guard at most once per
+minute using two Firestore count aggregations, never streamed documents: fresh
+results committed in the inclusive interval 10–20 minutes ago, and that cohort's
+`projection_state=pending` subset. The merge transaction alone stamps the stored
+class `results.fresh_capture` from the job's exact `True` value (missing means
+`False`); no existing routing reader changes. The gauges
+`omi_batch_pipeline_fresh_committed_window_total`,
+`omi_batch_pipeline_fresh_unprojected_window_total`,
+`omi_batch_pipeline_fresh_unprojected_ratio` and
+`omi_batch_pipeline_fresh_guard_sample_age_seconds` expose the pair and its age;
+the ratio is absent for empty/failed samples, both counts and ratio expire after
+120 s, and a failed query leaves age advancing from the last successful pair.
+`BATCH_PIPELINE_FRESH_GUARD_ENABLED=off` stops the queries and removes all guard
+gauges. Counts use declared prod/dev indexes, cost roughly one read per 1,000
+index entries per count (minimum two reads per sample), and do not alter merge,
+projection or enrichment order. See the 2026-11-13 fresh-delivery change note
+for the complete reader inventory and release-owner live acceptance procedure.
+
+An independent 20s supervised guard timer uses the same maintenance lease and
+the DB executor, rather than waiting for the general maintenance pass and its
+sync executor. The existing lock still limits all callers together to one count
+pair per 60s. A slow pass can therefore continue without delaying guard refresh;
+query failures still remove counts/ratio and let age advance. The additional
+`omi_batch_pipeline_fresh_guard_sample_timestamp_seconds` gauge records the
+successful pair's **window anchor** (before either RPC), expires with the counts,
+and lets acceptance use the identical inclusive commit bounds. On the ro-prod
+tier run `python backend/scripts/fresh_guard_cohort.py --project based-hardware
+--stage prod --sample-time <anchor>` for two count aggregations and JSON totals,
+pending, ratio, and bounds. This replaces `projection_cohort.py` for this guard's
+comparison: that tool's `fresh_first`/capture-age cohort is different. The command
+never streams documents; empty/failed counts produce a null ratio. Compare near
+the metric sample because projection can advance between reads. No healthy hour
+or live agreement is inferred from these implementation tests.
+
+The same leader also samples the per-route, per-language delivered share at most
+every 300 s. It walks one bounded page of job metadata (states in the census
+vocabulary minus `record_pending`, admitted 20 to 5 minutes ago, ordered by
+`enqueued_at`, capped at 5,000 rows) and counts each unit as delivered in target
+when the projection acknowledge stamped `jobs.delivered_in_target` within 300 s
+of `enqueued_at`. `ProjectionStore.acknowledge` writes `delivered_at` and
+`delivered_in_target` on the job row it already reads, in the transaction that
+sets `projection_state=completed`; no other reader selects them. Gauges
+`omi_batch_pipeline_delivered_share_{ratio,admitted_units,units,truncated,sample_age_seconds}`
+carry the cells; a failed page clears counts and ratio, and both expire after
+600 s. `BATCH_PIPELINE_DELIVERED_SHARE_ENABLED=off` stops the page and hides the
+gauges. The Core Features row "Did the user get a transcript?" and the
+`omi-batch-delivered-share-language` rule read them. See the 2026-11-14
+delivered-share change note and `docs/runbooks/batch-language-delivery.md`.

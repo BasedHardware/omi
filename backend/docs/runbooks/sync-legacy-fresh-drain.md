@@ -1,4 +1,10 @@
-# Recent LEGACY sync and backlog drain
+# Retired: recent LEGACY sync and backlog drain
+
+Retired by [#24754](https://github.com/BasedHardware/omi/pull/24754): the
+optional promotion flags and Redis upload/byte budget have been removed. This
+file preserves the October 14 investigation and qualification record; its
+historical configuration proposals are not current operating instructions.
+Use [legacy-dark.md](legacy-dark.md) for the retained mode and retirement fence.
 
 Action class: local implementation and aggregate production reads; no merge,
 deploy, queue mutation, account payload reads or historical rewrite. Evidence
@@ -33,37 +39,18 @@ partial drains. Merely attaching a device id or claiming every batch would
 weaken proof or strand siblings. No small app patch is justified by this trace;
 the server correction does not wait for a release.
 
-## Admission and rollback
+## Current admission after retirement
 
-Default-off `SYNC_LEGACY_FRESH_ENABLED` changes V2 only. Promotion also requires
-an exact UID in `SYNC_LEGACY_FRESH_UID_ALLOWLIST` (default empty), or membership
-in `SYNC_LEGACY_FRESH_PERCENT` (default zero). The percentage uses the same
-stable SHA-256 UID bucket as transcription final pass; selecting 5 includes the
-previous allowlist and the stable five-percent cohort. The master flag overrides
-both. Missing/invalid/non-finite percent selects nobody beyond the allowlist;
-finite values clamp to 0–100. No account identifier belongs in code or logs.
-Enable master + allowlist + zero percent for the first account, then percent 5,
-then 100 only after the gates below. Setting master false stops all promotions.
+Mode `on` retains promotion of recent unbound V2 uploads to fresh, including
+when a ramp read fails safe to `on`. The retired Redis budget no longer applies.
+Modes `draining` and `dark` disable that promotion. Existing historical jobs
+retain their persisted lanes; trust remains LEGACY. Fresh-only hard restriction
+and daily ceiling checks still demote promoted LEGACY batches before persistence,
+while DEVICE_BOUND fresh retains its existing 429 behavior.
 
-This gate admits new uploads only. Existing historical jobs are never moved;
-new recordings reach fresh only if their oldest batch file is within six hours.
-A mixed old/new upload remains backfill. This is not a complete backlog remedy.
-
-Recent LEGACY batches reserve one token per upload or MiB, whichever is larger; default ten-token
-burst, sixty tokens/hour across devices and replicas. This bounds requests
-and bytes even when timestamps are forged. Retries spend; no client duration
-is trusted. Exhaustion/store failure goes to backfill without upload refusal.
-Future/invalid/lookback checks and DEVICE_BOUND routing remain unchanged.
-Trust stays LEGACY in persisted jobs and task payloads. Fresh-only hard restriction/daily ceiling refusals demote promoted LEGACY
-batches before persistence; DEVICE_BOUND fresh retains its existing 429. Flags/budgets are declared in both
-environments, generated from `_base.yaml`.
-
-Qualify on synthetic dev first, then enable on backend-sync through the reviewed
-deploy path. Monitor fresh p95, 5xx, fair-use refusals, new admission reasons,
-budget failures and backfill net depth. Stop promotion on >10% fresh p95
-regression or persistent 5xx/budget-store errors. Turning the flag off restores
-new admission; already admitted jobs retain their persisted lane. Roll back
-queue concurrency to 40 separately. No existing job is rewritten or moved.
+There is no promotion flag to enable or roll back. The mode fence remains
+owned by the [legacy-dark runbook](legacy-dark.md); restoring the removed
+admission implementation would require reverting the deletion PR.
 
 ## Drain evidence and proposed configuration
 
@@ -168,4 +155,5 @@ dev contention is a separate live check, not full serving-image qualification.
 Keep the per-UID backfill sequencer at one job; this retry changes no ownership
 or queue policy. A revision-fenced zero-success superseded job is acceptable
 only when its segment IDs are proven in the surviving persisted conversation.
-Rollback by disabling the retry flag; disable the LEGACY master to stop promotion.
+The historical retry rollback was to disable the retry flag. The removed
+promotion master is no longer an operating control.

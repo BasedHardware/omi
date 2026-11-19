@@ -9,7 +9,10 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/backend/schema/home_feed.dart';
+import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -17,11 +20,14 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
+import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/paywall/value_moment_paywall.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
+import 'package:omi/providers/conversation_task_presence_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -33,12 +39,21 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 
 /// The row title for a conversation (hub audit #21): its title, else its transcript text (legacy
 /// rows the server left untitled), a recording date/time when neither exists, and
 /// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
+  // A row the server said is not transcribed keeps its own title and the status slot says why,
+  // unless the title is only the server's stand-in; then the status is the title.
+  if (conversation.homeStep == 'failed') {
+    if (!TranscriptionPendingConversations.contains(conversation.id)) {
+      return l10n.summaryTemplateFailedTitle(l10n.omiAppName);
+    }
+    if (TranscriptionPendingConversations.replacesTitle(conversation)) return l10n.summaryTranscriptionPendingTitle;
+  }
   // A noise clip revealed from Home's fold reads like any row, not as "Discarded".
   if (conversation.discarded && !conversation.isFoldedNoise) {
     final seconds = conversation.getDurationInSeconds();
@@ -83,7 +98,7 @@ class ConversationListItem extends StatefulWidget {
   final ServerConversation conversation;
 
   /// Optional reprocess override for tests.
-  final Future<ServerConversation?> Function(String conversationId)? reprocess;
+  final Future<ReprocessResult> Function(String conversationId)? reprocess;
 
   /// Whether the long-press menu offers Select (multi-select). Off where no selection bar is shown
   /// (the Home preview), so selection mode can never start without a way to act on it or leave.
@@ -103,7 +118,11 @@ class ConversationListItem extends StatefulWidget {
 
   /// Closed episode projection, drawn by the same conversation row widget.
   final Episode? homeEpisode;
+  final HomeFeedCard? homeCard;
   final bool openEpisodeFromSearch;
+
+  /// A filtered server page already proves canonical membership.
+  final bool? hasLinkedTasks;
 
   const ConversationListItem({
     super.key,
@@ -117,7 +136,9 @@ class ConversationListItem extends StatefulWidget {
     this.embedded = false,
     this.fillingSeconds,
     this.homeEpisode,
+    this.homeCard,
     this.openEpisodeFromSearch = true,
+    this.hasLinkedTasks,
   });
 
   @override
@@ -128,12 +149,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
   Timer? _conversationNewStatusResetTimer;
   bool isNew = false;
   bool _reprocessing = false;
+  bool _hasLinkedTasks = false;
 
   int _visualSignature(ServerConversation conversation) => Object.hashAll([
         conversation.structured.title,
         conversation.structured.emoji,
         conversation.structured.category,
         conversation.status,
+        conversation.homeStep,
         conversation.discarded,
         conversation.starred,
         conversation.folderId,
@@ -147,14 +170,27 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.summaryRetryable,
         conversation.isLocked,
         conversation.processingDeferred,
+        conversation.v3?.tileState,
         widget.fillingSeconds,
         widget.homeEpisode?.members.length,
+        widget.homeCard?.revision,
+        widget.homeCard?.preview,
+        _hasLinkedTasks,
       ]);
 
   @override
   void initState() {
     super.initState();
     _offerAtCapIfLocked();
+    TranscriptionPendingConversations.ids.addListener(_onPendingChanged);
+  }
+
+  bool _pendingShown = false;
+
+  /// Title and retry area follow the not-transcribed set, including marks made on other surfaces.
+  void _onPendingChanged() {
+    final pending = TranscriptionPendingConversations.contains(widget.conversation.id);
+    if (pending != _pendingShown && mounted) setState(() {});
   }
 
   @override
@@ -175,6 +211,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   @override
   void dispose() {
+    TranscriptionPendingConversations.ids.removeListener(_onPendingChanged);
     _conversationNewStatusResetTimer?.cancel();
     super.dispose();
   }
@@ -183,15 +220,20 @@ class _ConversationListItemState extends State<ConversationListItem> {
     if (_reprocessing || widget.conversation.id == '0') return;
     setState(() => _reprocessing = true);
     try {
-      final reprocess = widget.reprocess ?? (String id) async => (await reProcessConversationServer(id)).conversation;
-      final updated = await reprocess(widget.conversation.id);
+      final reprocess = widget.reprocess ?? reProcessConversationServer;
+      final result = await reprocess(widget.conversation.id);
       if (!mounted) return;
-      final provider = context.read<ConversationProvider>();
-      if (updated == null) {
-        AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
-        return;
+      switch (result) {
+        case ReprocessSuccess(:final conversation):
+          context.read<ConversationProvider>().applyConversationReprocessResult(conversation);
+        // Not an error: the row shows the server's waiting state, or the not-transcribed status.
+        case ReprocessTranscriptionPending(conversation: final waiting?):
+          context.read<ConversationProvider>().applyConversationReprocessResult(waiting);
+        case ReprocessTranscriptionPending():
+          TranscriptionPendingConversations.mark(widget.conversation.id);
+        default:
+          AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
       }
-      provider.applyConversationReprocessResult(updated);
     } catch (_) {
       if (!mounted) return;
       AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
@@ -200,8 +242,18 @@ class _ConversationListItemState extends State<ConversationListItem> {
     }
   }
 
-  /// "Summary failed · Retry": shown only when the server says a reprocess can succeed.
+  /// "Summary failed · Retry": shown only when the server says a reprocess can succeed. A row the
+  /// server said is still awaiting transcription gets a plain waiting status and no retry.
   Widget _buildSummaryRetry(BuildContext context) {
+    if (_pendingShown) {
+      return Text(
+        context.l10n.summaryTranscriptionPendingTitle,
+        key: const Key('conversation_transcription_pending_indicator'),
+        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
     return Row(
       children: [
         Flexible(
@@ -235,6 +287,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
     if (widget.conversation.isLocked) {
       if (!context.read<UsageProvider>().showSubscriptionUI) return;
       openHeldAudioPlans(context);
+      return;
+    }
+    if (widget.homeCard case final card? when card.kind == 'episode') {
+      await routeToPage(context, EpisodePage(episode: card.episodeSeed(), displaySeedOnly: true));
+      if (context.mounted) unawaited(context.read<HomeFeedProvider?>()?.refresh());
       return;
     }
     if (widget.homeEpisode case final episode?) {
@@ -305,6 +362,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
     var result = await resultFuture;
     if (context.mounted) {
+      if (widget.homeCard != null) unawaited(context.read<HomeFeedProvider?>()?.refresh());
       // Don't upsert if the conversation was deleted while on the detail page
       if (result is Map && result['deleted'] == true) return;
       bool stillExists = provider.conversations.any((c) => c.id == widget.conversation.id);
@@ -332,7 +390,16 @@ class _ConversationListItemState extends State<ConversationListItem> {
   /// Long-press: the row's one context menu (hub audit #7). Multi-select is one of its entries.
   Future<void> _showActions(BuildContext context, ConversationProvider provider) async {
     HapticFeedback.mediumImpact();
-    final conversation = widget.conversation;
+    var conversation = widget.conversation;
+    if (widget.homeCard != null) {
+      final result = await getConversationByIdResult(conversation.id, userInitiated: true);
+      if (!context.mounted) return;
+      if (!result.ok || result.item == null) {
+        OmiFeedback.error(context, context.l10n.somethingWentWrong);
+        return;
+      }
+      conversation = result.item!;
+    }
     final action = await showConversationActionsSheet(
       context,
       conversation,
@@ -365,6 +432,15 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   @override
   Widget build(BuildContext context) {
+    _pendingShown = TranscriptionPendingConversations.contains(widget.conversation.id);
+    bool? linked = widget.homeCard?.hasTasks ?? widget.hasLinkedTasks;
+    if (!widget.conversation.isLocked && linked == null) {
+      context.read<ConversationTaskPresenceProvider?>()?.request(widget.conversation.id);
+      linked = context.select<ConversationTaskPresenceProvider?, bool?>(
+        (source) => source?.presence(widget.conversation.id),
+      );
+    }
+    _hasLinkedTasks = !widget.conversation.isLocked && linked == true;
     // Is new conversation
     DateTime memorizedAt = widget.conversation.createdAt;
     if (widget.conversation.finishedAt != null && widget.conversation.finishedAt!.isAfter(memorizedAt)) {
@@ -396,8 +472,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
           // when the selector correctly decides not to rebuild the content.
           isMerging: provider.mergingConversationIds.contains(widget.conversation.id) ||
               widget.conversation.status == ConversationStatus.merging,
-          isEligible:
-              !widget.conversation.isLocked && !provider.mergingConversationIds.contains(widget.conversation.id),
+          isEligible: !widget.conversation.isLocked &&
+              !_isLive &&
+              widget.homeCard?.kind != 'episode' &&
+              !provider.mergingConversationIds.contains(widget.conversation.id),
         ),
         builder: (context, rowState, child) {
           final provider = context.read<ConversationProvider>();
@@ -424,7 +502,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
           return GestureDetector(
             onTap: onTap,
-            onLongPress: isSelectionMode || isMerging || widget.homeEpisode != null
+            // The conversation in progress opens; it is not deleted or edited while capture writes it.
+            onLongPress: isSelectionMode ||
+                    isMerging ||
+                    _isLive ||
+                    (widget.homeEpisode != null || widget.homeCard?.kind == 'episode')
                 ? null
                 : () => _showActions(context, provider),
             child: Stack(
@@ -437,7 +519,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     child: Semantics(
                       selected: isSelectionMode ? isSelected : null,
                       child: _SwipeDeleteRow(
-                        enabled: !isSelectionMode && !isMerging && widget.homeEpisode == null,
+                        enabled: !isSelectionMode &&
+                            !isMerging &&
+                            !_isLive &&
+                            widget.homeEpisode == null &&
+                            widget.homeCard?.kind != 'episode',
                         // One delete path (D5): confirm unless opted out, then Undo. The confirm
                         // pops from the row's delete button.
                         confirm: (anchor) async {
@@ -497,7 +583,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
-  static const _metaSeparator = ' • ';
 
   Widget _buildCardContent(BuildContext context, Future<void> Function() onTap) {
     final content = Padding(
@@ -517,47 +602,63 @@ class _ConversationListItemState extends State<ConversationListItem> {
   Widget _buildMetaRow(BuildContext context) {
     final duration = _getConversationDuration(context);
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
-          style: _metaStyle,
-          maxLines: 1,
-        ),
-        if (duration.isNotEmpty) ...[
-          Text(_metaSeparator, style: _metaStyle),
-          Text(duration, style: _metaStyle, maxLines: 1)
-        ],
-        if (widget.fillingSeconds case final seconds?) ...[
-          // The ring is the separator here: "34m  ◌ adding 12m from your Omi".
-          const SizedBox(width: 6),
-          OmiActivityRing.inline(color: _metaStyle.color),
-          const SizedBox(width: 6),
-          // Wins the free space over the Spacer below, so the line truncates only when it must.
-          Flexible(
-            flex: 1000,
-            child: Text(
-              context.l10n.episodeAddingFromOmi(
-                  OmiDuration.compact(seconds < 60 ? seconds : (seconds ~/ 60) * 60, context.l10n)),
-              key: const Key('conversation_row_filling'),
-              style: _metaStyle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+        Expanded(
+          child: Wrap(
+            spacing: OmiSpacing.xs,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (widget.homeCard == null || widget.homeCard!.startedAt != null)
+                Text(
+                  OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
+                  style: _metaStyle,
+                  maxLines: 1,
+                ),
+              if (_isLive) ...[
+                // The conversation in progress shows its speech so far, through the same duration
+                // authority as its detail. Counting from its start to now grew it through silence.
+                if (duration.isNotEmpty)
+                  Text('• $duration', key: const Key('conversation_row_live_length'), style: _metaStyle, maxLines: 1),
+              ] else if (duration.isNotEmpty)
+                Text('• $duration', style: _metaStyle, maxLines: 1),
+              if (widget.homeCard?.memberCount case final count? when count > 1)
+                Text(context.l10n.homeRecordingsCount(count), style: _metaStyle),
+              if (widget.homeCard?.homeStep == 'transcribing') ...[
+                const OmiActivityRing.inline(),
+                Text(context.l10n.homeStepTranscribing, style: _metaStyle),
+              ],
+              if (widget.homeCard?.homeStep == 'writing_notes') ...[
+                const OmiActivityRing.inline(),
+                Text(context.l10n.episodeWritingNotes, style: _metaStyle),
+              ],
+              if (_hasLinkedTasks)
+                Semantics(
+                  key: const ValueKey('conversation_has_tasks'),
+                  label: context.l10n.hasLinkedTasksLabel,
+                  excludeSemantics: true,
+                  child: Icon(Icons.checklist_rounded, size: 16, color: OmiColors.textSecondary),
+                ),
+              if (widget.fillingSeconds case final seconds?) ...[
+                OmiActivityRing.inline(color: _metaStyle.color),
+                Text(
+                  context.l10n.episodeAddingFromOmi(
+                      OmiDuration.compact(seconds < 60 ? seconds : (seconds ~/ 60) * 60, context.l10n)),
+                  key: const Key('conversation_row_filling'),
+                  style: _metaStyle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              if (_captureSources.length > 1) CaptureSourceIcons(sources: _captureSources),
+              if (isNew) ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator),
+            ],
           ),
-        ],
-        // One row stands for an event several devices recorded.
-        if (_captureSources.length > 1) ...[
-          Text(_metaSeparator, style: _metaStyle),
-          CaptureSourceIcons(sources: _captureSources),
-        ],
-        if (isNew) ...[
-          const SizedBox(width: OmiSpacing.xs),
-          ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator),
-        ],
-        const Spacer(),
+        ),
         if (widget.conversation.starred)
           Padding(
-            padding: const EdgeInsets.only(right: 4.0),
+            padding: const EdgeInsetsDirectional.only(start: 4),
             child: Semantics(
               label: context.l10n.starred,
               child: const FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
@@ -569,8 +670,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   Widget _buildMobileLayout(BuildContext context) {
     final discarded = widget.conversation.discarded && !widget.conversation.isFoldedNoise;
-    final discardedSnippet =
-        discarded || widget.conversation.processingDeferred ? conversationSnippet(widget.conversation) : '';
+    final discardedSnippet = widget.homeCard?.preview ??
+        (discarded || widget.conversation.processingDeferred ? conversationSnippet(widget.conversation) : '');
     return Stack(
       children: [
         Column(
@@ -580,24 +681,18 @@ class _ConversationListItemState extends State<ConversationListItem> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!discarded)
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                    alignment: Alignment.center,
-                    child: Text(
-                      widget.conversation.structured.getEmoji(),
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-                    ),
-                  ),
+                if (!discarded) ConversationStateTile(conversation: widget.conversation),
                 if (!discarded) const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        conversationRowTitle(context, widget.conversation),
+                        widget.homeCard != null &&
+                                widget.homeCard!.startedAt == null &&
+                                widget.conversation.structured.title.trim().isEmpty
+                            ? context.l10n.recording
+                            : conversationRowTitle(context, widget.conversation),
                         style: Theme.of(context).textTheme.titleMedium,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -613,9 +708,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       ],
                       const SizedBox(height: 3),
                       _buildMetaRow(context),
-                      if (widget.conversation.processingDeferred) const ProcessingDeferredMarker(),
+                      if (widget.conversation.processingDeferred && widget.conversation.homeStep != 'failed')
+                        const ProcessingDeferredMarker(),
                       OnDeviceProvenanceChip(conversationId: widget.conversation.id),
-                      if (widget.conversation.showsSummaryRetry) ...[
+                      if ((widget.conversation.showsSummaryRetry || widget.conversation.homeStep == 'failed') &&
+                          !TranscriptionPendingConversations.replacesTitle(widget.conversation)) ...[
                         const SizedBox(height: 8),
                         _buildSummaryRetry(context),
                       ],
@@ -655,7 +752,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
-  List<String> get _captureSources => CaptureGroupPresentation.distinctSources(widget.conversation);
+  List<String> get _captureSources =>
+      widget.homeCard?.sources ?? CaptureGroupPresentation.distinctSources(widget.conversation);
 
   String? _searchSnippetText() {
     if (widget.conversation.matchSnippets.isEmpty) return null;
@@ -675,7 +773,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   /// The same length the detail page shows (`OmiDuration.compact`, hub audit #15).
+  bool get _isLive =>
+      widget.conversation.v3?.tileState == ConversationTileState.live &&
+      (context.read<ConversationsV3Provider?>()?.v3 ?? false);
+
   String _getConversationDuration(BuildContext context) {
+    if (widget.homeCard != null && widget.homeCard!.startedAt == null) return '';
     int durationSeconds = widget.conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
     return OmiDuration.compact(durationSeconds, context.l10n);
@@ -713,7 +816,8 @@ class _SwipeDeleteRowState extends State<_SwipeDeleteRow> with SingleTickerProvi
   static const double _askAt = 0.4;
 
   /// How far the card is pulled aside, in logical pixels.
-  late final AnimationController _offset = AnimationController.unbounded(vsync: this);
+  AnimationController? _offsetController;
+  AnimationController get _offset => _offsetController ??= AnimationController.unbounded(vsync: this);
   final GlobalKey _buttonKey = GlobalKey();
   ValueListenable<bool>? _scrolling;
   double _width = 0;
@@ -740,7 +844,8 @@ class _SwipeDeleteRowState extends State<_SwipeDeleteRow> with SingleTickerProvi
   @override
   void dispose() {
     _scrolling?.removeListener(_onScroll);
-    _offset.dispose();
+    // Never create the controller here: a row that was never swiped has no ticker left to give it.
+    _offsetController?.dispose();
     super.dispose();
   }
 

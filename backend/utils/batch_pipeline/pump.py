@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import contextvars
 import logging
 import time
 import threading
@@ -29,6 +30,7 @@ from utils.batch_pipeline.contracts import (
     ValidationFailureWork,
 )
 from utils.batch_pipeline.contracts import Priority
+from utils.batch_pipeline.ready_discovery import ReadyDiscovery
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError, error_site_field
 from utils.batch_pipeline.compute_client import from_env as compute_client_from_env, failure_outcome
@@ -36,10 +38,16 @@ from utils.batch_pipeline import worker_metrics
 from utils.batch_pipeline.leader import LeaderLease
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
 from utils.batch_pipeline.stage_timings import StageTimings
 from utils.executors import admission_executor, db_executor, run_blocking, sync_executor
 
 logger = logging.getLogger(__name__)
+
+# Set per lane task: a cycle that claimed leases is not an empty queue, even
+# when every lease was deferred (allowance-exhausted owners), so it must not
+# grow the lane's idle backoff.
+_CYCLE_CLAIMED: contextvars.ContextVar[list | None] = contextvars.ContextVar('batch_cycle_claimed', default=None)
 
 # Maintenance re-reads every result_ready job each sweep to find its owner;
 # jobs blocked behind an ordered predecessor would otherwise cost one read
@@ -97,6 +105,7 @@ class Pump:
         ):
             raise ValueError('invalid bounded pump configuration')
         self.scheduler = scheduler
+        self.ready_discovery = ReadyDiscovery(scheduler.store, 'gpu_pump')
         self.worker = worker
         self.merge = merge or OrderedMerge(scheduler.store, metrics=metrics, commit_source='gpu_pump')
         self.metrics = metrics
@@ -144,7 +153,12 @@ class Pump:
         # Periodic recovery and queue sampling get their own cadence so no
         # lane spends a claim/publication window on them between flights.
         maintaining = asyncio.create_task(self._maintain_loop(halt))
-        lanes = [asyncio.create_task(self._lane(halt, maintain=False)) for _ in range(self.flights)]
+        # Lane 0 stays strictly fresh-first; later lanes may borrow backfill
+        # while every fresh shard is claimed (BATCH_PULL_BUSY_BORROW_ENABLED).
+        lanes = [
+            asyncio.create_task(self._lane(halt, maintain=False, borrow_when_fresh_busy=index > 0))
+            for index in range(self.flights)
+        ]
         try:
             await asyncio.wait(lanes, return_when=asyncio.FIRST_EXCEPTION)
         finally:
@@ -177,11 +191,17 @@ class Pump:
             except asyncio.TimeoutError:
                 pass
 
-    async def _lane(self, stop_event: asyncio.Event, *, maintain: bool = True) -> None:
+    async def _lane(
+        self, stop_event: asyncio.Event, *, maintain: bool = True, borrow_when_fresh_busy: bool = False
+    ) -> None:
         idle_delay = self.poll_seconds
         while not stop_event.is_set():
+            claimed = [False]
+            marker = _CYCLE_CLAIMED.set(claimed)
             try:
-                count = await self.run_once(stop_event=stop_event, maintain=maintain)
+                count = await self.run_once(
+                    stop_event=stop_event, maintain=maintain, borrow_when_fresh_busy=borrow_when_fresh_busy
+                )
             except FatalGpuError:
                 raise  # Fatal CUDA requires process replacement, never another pull.
             except Exception as error:
@@ -191,7 +211,15 @@ class Pump:
                     error_site_field(error),
                 )
                 count = 0
-            if not count:
+                claimed[0] = False  # An error backs off like an empty queue.
+            finally:
+                _CYCLE_CLAIMED.reset(marker)
+            if not count and claimed[0]:
+                # Leased, then every lease deferred by admission (each carries
+                # its own retry delay): the queue is not empty, so pull again
+                # at once instead of backing off toward idlePollMaxSeconds.
+                idle_delay = self.poll_seconds
+            elif not count:
                 try:
                     await asyncio.wait_for(stop_event.wait(), timeout=idle_delay)
                 except asyncio.TimeoutError:
@@ -236,14 +264,20 @@ class Pump:
         with self.timings.measure(stage):
             return await run_blocking(executor, function, *args, **kwargs)
 
-    async def run_once(self, *, stop_event: asyncio.Event | None = None, maintain: bool = True) -> int:
+    async def run_once(
+        self,
+        *,
+        stop_event: asyncio.Event | None = None,
+        maintain: bool = True,
+        borrow_when_fresh_busy: bool = False,
+    ) -> int:
         with self.timings.measure('pump_cycle'):
             if maintain and not self._maintenance.locked():
                 async with self._maintenance:
                     await self._maintain()
             if stop_event is not None and stop_event.is_set():
                 return 0
-            return await self._flight(stop_event)
+            return await self._flight(stop_event, borrow_when_fresh_busy=borrow_when_fresh_busy)
 
     async def _maintain(self) -> None:
         if self.shadow is not None:
@@ -261,15 +295,35 @@ class Pump:
             if self.leader is None or await self._run_blocking('maintenance', db_executor, self.leader.acquire):
                 if self.project_pending:
                     await self._run_blocking('projection', sync_executor, self.project_pending)
-                await self._run_blocking('maintenance', db_executor, self.scheduler.recover, time.time())
-                ready = await self._run_blocking(
-                    'maintenance', db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100
+                await self._run_blocking(
+                    'maintenance',
+                    db_executor,
+                    self.scheduler.recover,
+                    time.time(),
+                    caller=RecoveryCaller.PUMP,
                 )
-                try:
-                    await self._drain_ready_owners(ready)
-                except Exception as error:
-                    # A fenced head on the page must not stop the held-owner re-offer below.
-                    self._log_held_retry('ready_page', error)
+                page = await self._run_blocking('maintenance', db_executor, self.ready_discovery.page)
+                if page is not None:
+                    while owner := await self._run_blocking(
+                        'maintenance', db_executor, self.ready_discovery.next_owner, page
+                    ):
+                        _, owner_id = owner
+                        try:
+                            if owner_id:
+                                await self.drain_owner(owner_id)
+                        except Exception as error:
+                            self._log_held_retry('ready_cursor', error)
+                if page is None or not await self._run_blocking(
+                    'maintenance', db_executor, self.ready_discovery.finish, page
+                ):
+                    ready = await self._run_blocking(
+                        'maintenance', db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100
+                    )
+                    try:
+                        await self._drain_ready_owners(ready)
+                    except Exception as error:
+                        # A fenced head on the page must not stop the held-owner re-offer below.
+                        self._log_held_retry('ready_page', error)
                 # Durable hold markers outlive the in-memory set below (restarts).
                 marked = await self._run_blocking('maintenance', db_executor, self.merge.marked_page, 50)
                 for key, owner_id in marked:
@@ -391,7 +445,7 @@ class Pump:
         )
 
     @with_batch_privacy_attempt
-    async def _flight(self, stop_event: asyncio.Event | None) -> int:
+    async def _flight(self, stop_event: asyncio.Event | None, *, borrow_when_fresh_busy: bool = False) -> int:
         now = time.time()
         snapshot = (
             self.capacity()
@@ -402,6 +456,8 @@ class Pump:
         def claim():
             if stop_event is not None and stop_event.is_set():
                 return []
+            if borrow_when_fresh_busy:
+                return self.scheduler.pull(time.time(), self.batch_size, capacity=snapshot, borrow_when_fresh_busy=True)
             return self.scheduler.pull(time.time(), self.batch_size, capacity=snapshot)
 
         leases = await self._run_blocking('pull', db_executor, claim)
@@ -415,6 +471,9 @@ class Pump:
                     logger.info('event=batch_shadow_worker outcome=error exception_type=%s', type(error).__name__)
             return 0
         self._normal_flights += 1
+        cycle = _CYCLE_CLAIMED.get()
+        if cycle is not None:
+            cycle[0] = True
         claimed = leases
         done = asyncio.Event()
         lost: set[str] = set()

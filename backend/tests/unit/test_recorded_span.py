@@ -143,7 +143,6 @@ def test_missing_capture_timeline_fails_before_acknowledging_held_audio(monkeypa
 def test_llm_measurement_is_on_without_revision_reuse_and_has_bounded_labels(monkeypatch, caplog):
     from utils.sync import repeat_work_metrics as metrics
 
-    monkeypatch.setattr(metrics, 'revision_reuse', lambda: False)
     before = metrics.PHASE_A_CALLS.labels('other', 'completed')._value.get()
     token = metrics._scope.set(('synthetic-user', SimpleNamespace(id='synthetic-conversation')))
     try:

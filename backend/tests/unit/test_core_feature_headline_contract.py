@@ -1,6 +1,7 @@
 """Keep coverage, failure detail and durable finalization counts honest."""
 
 import json
+import re
 from pathlib import Path
 
 MONITORING = Path(__file__).resolve().parents[2] / 'charts/monitoring'
@@ -36,10 +37,11 @@ def test_capture_coverage_is_visible_without_redefining_settled_success():
     count, share = [target['expr'] for target in coverage['targets']]
     assert 'outcome="stale"}[3h]' in count
     assert share.startswith('100 * ' + count + ' / ')
-    assert 'omi_journey_terminal_total{journey="capture_finalization"}[3h]' in share
+    assert 'omi_journey_terminal_total{job="pusher-metrics",journey="capture_finalization"}[3h]' in share
+    assert share.endswith(' > 0)')
     assert 'accepted_total' not in count + share  # Independent event windows are not a cohort/backlog.
     assert 'fenc' in coverage['description'].lower()
-    assert coverage['fieldConfig']['defaults']['noValue'] == 'not reporting'
+    assert coverage['fieldConfig']['defaults']['noValue'] == 'not measured'
     overrides = coverage['fieldConfig']['overrides']
     assert overrides[0]['matcher']['options'] == coverage['targets'][1]['legendFormat']
     assert {'id': 'unit', 'value': 'percent'} in overrides[0]['properties']
@@ -108,7 +110,13 @@ def test_first_screen_keeps_outcome_thresholds_and_a_trend_under_each_tile():
         assert 'noValue' not in spark['fieldConfig']['defaults'], 'noValue turns gaps into a drawn value'
         expr = spark['targets'][0].get('expr')
         assert spark['fieldConfig']['defaults']['custom']['gradientMode'] == 'scheme'
-        if stat_id != 73:
+        if stat_id == 36:
+            # Production has no realtime_voice denominator. Do not manufacture
+            # numerator data for an unmeasured journey.
+            assert ' or 0 * sum(' not in stat['targets'][0]['expr']
+            assert ' or 0 * sum(' not in spark['targets'][0]['expr']
+            assert stat['fieldConfig']['defaults']['noValue'] == 'not measured'
+        elif stat_id != 73:
             # A numerator series that was never created must read 0% under traffic, not "no traffic".
             assert ' or 0 * sum(' in stat['targets'][0]['expr'], stat['title']
             assert ' or 0 * sum(' in spark['targets'][0]['expr'], stat['title']
@@ -151,7 +159,7 @@ def test_home_rows_tile_is_an_average_not_a_success_rate():
     expr = panel['targets'][0]['expr']
     assert 'omi_home_rows_user_day_sum_total' in expr
     assert 'omi_home_rows_user_day_count_total' in expr
-    assert panel['fieldConfig']['defaults']['noValue'] == 'not reporting'
+    assert panel['fieldConfig']['defaults']['noValue'] == 'not measured'
     assert panel['fieldConfig']['defaults']['thresholds']['steps'] == [{'color': 'text', 'value': None}]
     # Stays off the locked first screen (panels between the feature-health row and "Is anything stuck?").
     stuck = next(i for i, p in enumerate(dashboard['panels']) if p['id'] == 27)
@@ -189,3 +197,114 @@ def test_headline_tiles_name_the_user_result_they_actually_count():
     assert 'on-device' in panels[36]['description'].lower()
     assert 'last 3 hours' in panels[73]['description'].lower() or 'last 3h' in panels[73]['title'].lower()
     assert 'not what the user received' in panels[73]['description'].lower()
+
+
+def test_server_journeys_use_only_their_emitting_jobs():
+    # November 7 dashboard incident: every process pre-initializes all three
+    # journeys. A journey-only selector silently counts unrelated scrape jobs.
+    owners = {
+        'chat_response': 'cloud-run-application-metrics',
+        'pusher_session': 'pusher-metrics',
+        'capture_finalization': 'pusher-metrics',  # Live finalization; sync is separate.
+    }
+    seen = set()
+    for panel in _panels().values():
+        for target in panel.get('targets', []):
+            expr = target.get('expr', '')
+            selectors = re.findall(r'\bomi_journey_\w+(\{[^}]*\})?', expr)
+            for selector in selectors:
+                journey = re.search(r'journey="([^"]+)"', selector)
+                assert journey is not None, (panel['id'], expr)
+                journey = journey[1]
+                assert journey in owners, (panel['id'], journey)
+                owner = owners[journey]
+                # Live capture is accepted by backend-listen and settled by pusher
+                # (prod 2026-11-12: 49,870 accepted on backend-listen, 0 on pusher, 2d).
+                if journey == 'capture_finalization' and f'omi_journey_accepted_total{selector}' in expr:
+                    owner = 'backend-listen-metrics'
+                # Exactly one job matcher: repeated matchers must all match, so a second
+                # job would select nothing while a substring check still passed.
+                assert re.findall(r'\bjob\s*(=~|!~|!=|=)\s*"([^"]*)"', selector) == [('=', owner)], (
+                    panel['id'],
+                    selector,
+                )
+                seen.add(journey)
+            # Client and server journey names are disjoint, not join keys.
+            for selector in re.findall(r'\bomi_client_journey_\w+\{([^}]*)\}', expr):
+                assert not any(f'journey="{journey}"' in selector for journey in owners), panel['id']
+    assert seen == set(owners)
+    for panel_id in (5, 6, 7, 8, 9):
+        for target in _panels()[panel_id]['targets']:
+            assert all(f'journey="{journey}"' in target['expr'] for journey in owners), panel_id
+
+
+def test_non_journey_metrics_match_the_observed_production_labels():
+    # Label-values evidence (c), 2026-11-07. No guessed spellings such as
+    # frames_seen=true or event=cancelled may silently empty these queries.
+    allowed = {
+        'pusher_socket_closed_total': {
+            'job': {'pusher-metrics'},
+            'frames_seen': {'audio', 'control_only', 'none'},
+            'reason': {
+                'application_error',
+                'cancelled',
+                'peer',
+                'protocol_error',
+                'queue_wait_timeout',
+                'receive_timeout',
+                'rejected',
+            },
+        },
+        'llm_gateway_requests_total': {
+            'job': {'llm-gateway-metrics'},
+            'outcome': {'error', 'success'},
+        },
+        'omi_listen_accepted_total': {
+            'job': {'backend-listen-metrics'},
+            'transcription_source': {
+                'apple_watch',
+                'bee',
+                'desktop',
+                'fieldy',
+                'limitless',
+                'omi',
+                'openglass',
+                'phone',
+                'plaud',
+                'rayban_meta',
+                'unknown',
+            },
+        },
+        'omi_subscription_events_total': {
+            'job': {'cloud-run-application-metrics'},
+            'event': {'cancellation_requested', 'cancellation_reverted', 'created', 'ended', 'payment_failed'},
+        },
+    }
+    seen = set()
+    for panel in _panels().values():
+        for target in panel.get('targets', []):
+            for metric, labels in allowed.items():
+                for selector in re.findall(r'\b' + metric + r'\{([^}]*)\}', target.get('expr', '')):
+                    assert 'journey' not in selector, (panel['id'], metric)
+                    for label, _, value in re.findall(r'(\w+)(=~|!~|!=|=)"([^"]*)"', selector):
+                        assert label in labels, (panel['id'], metric, label)
+                        assert set(value.split('|')) <= labels[label], (panel['id'], metric, label, value)
+                    seen.add(metric)
+    assert seen == set(allowed)
+
+
+def test_scoped_stats_preserve_missing_telemetry_instead_of_fabricating_zero():
+    panels = _panels()
+    for panel_id in (2, 3, 4, 5, 12, 13, 14, 15, 20, 36, 37, 38, 39, 51, 52, 53, 54, 55, 56, 57, 58, 59, 78, 94):
+        panel = panels[panel_id]
+        assert panel['fieldConfig']['defaults']['noValue'] == 'not measured', panel['title']
+        for target in panel['targets']:
+            assert 'or vector(0)' not in target['expr'], panel['title']
+    for panel_id in (2, 3, 4, 20, 36, 51, 52, 53, 54, 55, 56, 59):
+        # A present but idle denominator must also leave the stat empty.
+        assert panels[panel_id]['targets'][0]['expr'].endswith(' > 0)'), panels[panel_id]['title']
+    for panel_id in (12, 13, 14, 15):
+        expr = panels[panel_id]['targets'][0]['expr']
+        assert '0 * sum(increase(omi_subscription_events_total{job="cloud-run-application-metrics"}[$__range]))' in expr
+        # Unscoped, the query also scans the always-zero listen series and times out (2026-11-12).
+        assert 'omi_subscription_events_total[' not in expr and 'omi_subscription_events_total{event' not in expr

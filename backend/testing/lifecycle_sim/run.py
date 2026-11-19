@@ -9,6 +9,7 @@ import tempfile
 import time
 
 from testing.lifecycle_sim.preflight import preflight
+from testing.lifecycle_sim.pytest_entry import extra_test_module_path
 from testing.hermetic_network import block_outbound_network
 from testing.listen_pusher_stack.run import Stack
 
@@ -18,6 +19,7 @@ def main():
     parser.add_argument('--keep', action='store_true')
     parser.add_argument('--runxfail', action='store_true', help='local red-reason proof; never used by CI')
     parser.add_argument('--state-dir', type=Path)
+    parser.add_argument('--extra-test-module', action='append', type=extra_test_module_path, default=[])
     args = parser.parse_args()
     root = (args.state_dir or Path(tempfile.mkdtemp(prefix='omi-lifecycle-sim-'))).resolve()
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -66,6 +68,8 @@ def run_scenarios(root, args):
     ]
     if args.runxfail:
         command.append('--runxfail')
+    for module in args.extra_test_module:
+        command.extend(['--extra-test-module', module])
     try:
         result = subprocess.run(command, env=env, cwd=Path(__file__).resolve().parents[2], check=False)
         return result.returncode

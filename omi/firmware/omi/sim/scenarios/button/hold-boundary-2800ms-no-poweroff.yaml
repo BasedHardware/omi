@@ -1,0 +1,10 @@
+id: button/hold-boundary-2800ms-no-poweroff
+summary: A 2.8 s hold is below the 3 s power-off threshold.
+tags: [guard]
+timeline:
+  - {t: 5000, hold: 2800}
+end: 15000
+expect:
+  boot_count: 1
+  boots:
+    - {exit: stop, is_off: false, not_log: ["long press detected"]}

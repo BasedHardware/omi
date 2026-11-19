@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -21,6 +22,7 @@ import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
+import 'package:omi/utils/auth/sign_in_failure.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -31,13 +33,17 @@ import 'package:omi/utils/platform/platform_service.dart';
 /// it returned after the destination account has been established.
 Future<ProviderLinkResult?> completeProviderLinkAndMigrate({
   required Future<ProviderLinkResult?> Function() linkProvider,
-  required Future<bool> Function(String sourceUid, String sourceToken) migrate,
+  required Future<bool> Function(String sourceUid, String sourceToken, AuthSessionSnapshot destination) migrate,
 }) async {
   final result = await linkProvider();
   final source = result?.anonymousSourceMigration;
   final destinationUid = result?.destinationUid;
   if (source != null && destinationUid != null && destinationUid != source.uid) {
-    await migrate(source.uid, source.token);
+    final destination = result!.destinationSession;
+    if (destination == null || destination.ownerUid != destinationUid) {
+      throw StateError('Migration destination session is missing');
+    }
+    await migrate(source.uid, source.token, destination);
   }
   return result;
 }
@@ -255,18 +261,21 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
+  /// Asks Apple (or the web flow) for a credential. Tests stand in for the platform here.
+  @visibleForTesting
+  Future<UserCredential?> requestAppleCredential() {
+    if (PlatformService.isMobile && !Env.useWebAuth && !Platform.isAndroid) {
+      return AuthService.instance.signInWithAppleMobile();
+    }
+    return AuthService.instance.authenticateWithProvider('apple');
+  }
+
   Future<void> onAppleSignIn(Function() onSignIn) async {
-    final useWebAuth = Env.useWebAuth;
     if (!loading) {
       setLoadingState(true);
       PlatformManager.instance.analytics.signInStarted('apple');
       try {
-        UserCredential? credential;
-        if (PlatformService.isMobile && !useWebAuth && !Platform.isAndroid) {
-          credential = await AuthService.instance.signInWithAppleMobile();
-        } else {
-          credential = await AuthService.instance.authenticateWithProvider('apple');
-        }
+        final credential = await requestAppleCredential();
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn, credential: credential, authProvider: 'apple');
         } else {
@@ -276,12 +285,17 @@ class AuthenticationProvider extends BaseProvider {
                 'Failed to sign in with Apple, please try again.',
           );
         }
-      } catch (e) {
-        Logger.debug('OAuth Apple sign in error: $e');
+      } catch (e, stackTrace) {
         PlatformManager.instance.analytics.signInFailed('apple', error: e);
-        AppSnackbar.showSnackbarError(
-          globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
-        );
+        if (isSignInCancellation(e)) {
+          Logger.debug('Apple sign in cancelled');
+        } else {
+          Logger.handle(e, stackTrace, message: 'Apple sign in failed');
+          AppSnackbar.showSnackbarError(
+            globalNavigatorKey.currentContext?.l10n.authAppleSignInFailedUseGoogle ??
+                "Sign in with Apple didn't work. Try again or continue with Google.",
+          );
+        }
       }
       setLoadingState(false);
     }
@@ -398,40 +412,10 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> linkWithApple() async {
     setLoading(true);
     try {
-      final appleProvider = AppleAuthProvider();
-      try {
-        await FirebaseAuth.instance.currentUser?.linkWithProvider(appleProvider);
-      } catch (e) {
-        if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
-          // Get existing user credentials
-          final existingCred = e.credential;
-          final oldUserId = FirebaseAuth.instance.currentUser?.uid;
-          final sourceToken = await FirebaseAuth.instance.currentUser?.getIdToken();
-
-          // Sign out current anonymous user
-          await AuthService.instance.signOutForAccountSwitch();
-
-          // Sign in with existing account
-          await FirebaseAuth.instance.signInWithCredential(existingCred!);
-          final newUserId = FirebaseAuth.instance.currentUser?.uid;
-          if (newUserId != null) AuthService.instance.markAuthenticatedUser(newUserId);
-          await AuthService.instance.getIdToken();
-
-          SharedPreferencesUtil().onboardingCompleted = false;
-          SharedPreferencesUtil().uid = newUserId ?? '';
-          SharedPreferencesUtil().email = FirebaseAuth.instance.currentUser?.email ?? '';
-          SharedPreferencesUtil().givenName = FirebaseAuth.instance.currentUser?.displayName?.split(' ')[0] ?? '';
-          if (oldUserId != null && newUserId != null && sourceToken != null) {
-            await migrateAppOwnerId(oldUserId, sourceToken);
-          }
-          return;
-        }
-        AppSnackbar.showSnackbarError(
-          globalNavigatorKey.currentContext?.l10n.authFailedToLinkApple ??
-              'Failed to link with Apple, please try again.',
-        );
-        rethrow;
-      }
+      await completeProviderLinkAndMigrate(
+        linkProvider: AuthService.instance.linkWithApple,
+        migrate: migrateAppOwnerId,
+      );
     } catch (e) {
       Logger.debug('Error linking with Apple: $e');
       AppSnackbar.showSnackbarError(
@@ -443,7 +427,7 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
-  Future<bool> migrateAppOwnerId(String oldId, String sourceToken) async {
-    return await apps_api.migrateAppOwnerId(oldId, sourceToken);
+  Future<bool> migrateAppOwnerId(String oldId, String sourceToken, AuthSessionSnapshot destination) async {
+    return await apps_api.migrateAppOwnerId(oldId, sourceToken, destination: destination);
   }
 }

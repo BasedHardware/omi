@@ -1,5 +1,6 @@
 """Behavioral contract for the exclusive conversation lifecycle owner (#9516)."""
 
+import asyncio
 import copy
 import logging
 import threading
@@ -516,7 +517,8 @@ def test_processing_admission_guard_logs_a_byok_account_state_halt_by_bounded_cl
     assert 'BadRequestError' not in caplog.text
 
 
-def test_processing_admission_guard_still_rolls_back_a_byok_account_state_halt(monkeypatch, caplog):
+@pytest.mark.parametrize('failure_code', ['byok_quota', 'byok_rate_limit', 'byok_invalid_key'])
+def test_processing_admission_guard_still_rolls_back_a_byok_account_state_halt(monkeypatch, caplog, failure_code):
     _quiet_heartbeat(monkeypatch)
     caplog.set_level(logging.WARNING)
     rolled_back: list[tuple[str, str]] = []
@@ -529,7 +531,10 @@ def test_processing_admission_guard_still_rolls_back_a_byok_account_state_halt(m
 
     with pytest.raises(HTTPException):
         with lifecycle_service.processing_admission_guard('uid', 'conversation'):
-            _raise_byok_credit_exhaustion_halt()
+            try:
+                raise RuntimeError('synthetic private provider response')
+            except RuntimeError as error:
+                raise HTTPException(status_code=429, detail={'code': failure_code}) from error
 
     assert rolled_back == [('uid', 'conversation')]
     (record,) = _guard_failure_records(caplog)
@@ -537,6 +542,7 @@ def test_processing_admission_guard_still_rolls_back_a_byok_account_state_halt(m
     assert record.exc_info is None
     assert 'rolled_back=True' in record.getMessage()
     assert 'credit balance' not in caplog.text
+    assert 'synthetic private provider response' not in caplog.text
 
 
 def test_processing_admission_guard_bounds_the_rollback_failure_log_during_a_byok_halt(monkeypatch, caplog):
@@ -591,6 +597,18 @@ def test_processing_admission_guard_keeps_the_traceback_for_unexpected_failures(
     assert record.levelno == logging.ERROR
     assert record.exc_info is not None
     assert 'processor crashed' in caplog.text
+
+
+def test_processing_admission_guard_rolls_back_cancellation_to_recoverable_state(lifecycle_store, monkeypatch):
+    _quiet_heartbeat(monkeypatch)
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.processing.value, discarded=False)
+
+    with pytest.raises(asyncio.CancelledError):
+        with lifecycle_service.processing_admission_guard('uid', 'conversation'):
+            raise asyncio.CancelledError()
+
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.in_progress.value
+    assert lifecycle_service.admit_processing('uid', 'conversation') is True
 
 
 def test_processing_admission_guard_keeps_the_traceback_for_a_generic_processing_500(monkeypatch, caplog):

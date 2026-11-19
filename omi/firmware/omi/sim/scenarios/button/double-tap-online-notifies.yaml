@@ -1,0 +1,11 @@
+id: button/double-tap-online-notifies
+summary: Connected double tap is a GATT notification for the app's configured action; no local mute.
+committee: [2]
+tags: [guard]
+initial: {connected: true}
+timeline:
+  - {t: 5000, tap: [100, 150, 100]}
+end: 9000
+expect:
+  boots:
+    - {muted: 0, log: ["double tap detected", "SIM: GATT notify"]}

@@ -2,7 +2,8 @@
 
 Staging is composed from the prod overlay plus ``backend/deploy/runtime_env/staging.overlay.yaml``
 (``compose_runtime_env.compose_staging``). This check composes both and fails on any Cloud Run
-service, env var, secret binding or flag that differs outside ``STAGING_DIFF_ALLOWLIST``. Messages
+service, env var, secret binding or flag that differs outside ``STAGING_DIFF_ALLOWLIST``
+or the exact retained staging privacy values. Every other read-lever field remains equal. Messages
 name variables, never values. Registered by lane 1 in ``scripts/cross_service_contract.INVARIANTS``.
 """
 
@@ -10,6 +11,7 @@ from __future__ import annotations
 
 import fnmatch
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -43,6 +45,11 @@ STAGING_DIFF_ALLOWLIST: tuple[str, ...] = (
     'MCP_OAUTH_CLAUDE_CLIENT_*',
     'LADDER_V1_*_PRICE_ID',
     'SYNC_LEDGER_FENCE_MODE',
+    # Independent staging rollout inputs; prod supplies these at deploy time.
+    'RECORD_TOKEN_LEASE_MODE',
+    'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT',
+    'RECORD_TOKEN_LEASE_SECONDS',
+    'RECORD_TOKEN_LEASE_DEPLOYED_AT',
     # Messaging channels are prod-only (bot tokens, webhooks); staging turns them off.
     'OMI_TELEGRAM_ENABLED',
     'OMI_IMESSAGE_ENABLED',
@@ -98,6 +105,32 @@ def _env_values(entries: dict[str, Any]) -> dict[str, str | None]:
     return out
 
 
+# API admission does not extend to staging. These are exact retained staging values,
+# not a whole-map allowlist; all other lever names and values must mirror prod.
+STAGING_RETAINED_PRIVACY = {
+    'bpp_owner_memo_enforce': 0,
+    'privacy_checks_shadow': 10,
+    'bpp_decision_cache': 100,
+}
+STAGING_PRIVACY_SERVICES = frozenset({'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'})
+
+
+def _staging_read_levers_match(prod: str | None, staging: str | None) -> bool:
+    try:
+        p_map, s_map = json.loads(prod or ''), json.loads(staging or '')
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(p_map, dict) or not isinstance(s_map, dict) or p_map.keys() != s_map.keys():
+        return False
+    if any(type(s_map.get(key)) is not int or s_map[key] != value for key, value in STAGING_RETAINED_PRIVACY.items()):
+        return False
+    return all(
+        type(s_map[key]) is type(value) and s_map[key] == value
+        for key, value in p_map.items()
+        if key not in STAGING_RETAINED_PRIVACY
+    )
+
+
 def staging_diff(root: Path) -> list[tuple[str, str, str]]:
     """``(scope, name, problem)`` for every difference outside the allowlist. Empty means mirrored."""
     composer = _load_composer(root)
@@ -129,6 +162,10 @@ def staging_diff(root: Path) -> list[tuple[str, str, str]]:
         for name in sorted(set(p_env) | set(s_env)):
             if name in s_mounts or name in p_mounts:
                 continue  # judged as a secret binding below
+            if name == 'FIRESTORE_READ_LEVERS' and service in STAGING_PRIVACY_SERVICES:
+                if not _staging_read_levers_match(p_env.get(name), s_env.get(name)):
+                    problems.append((service, name, 'staging privacy retention or other lever parity differs'))
+                continue
             if name in p_env and name in s_env and p_env[name] == s_env[name]:
                 continue
             if _allowed(name, STAGING_DIFF_ALLOWLIST):

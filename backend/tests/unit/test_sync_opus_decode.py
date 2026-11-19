@@ -537,6 +537,86 @@ class TestDecodeOpusFileToWav:
             assert get_wav_duration(wav_path) > 0
 
 
+class TestOpusRawFrameWrites:
+    """synceff: per-frame writeframesraw() must write exactly the bytes writeframes() wrote."""
+
+    @staticmethod
+    def _varying_decoder(fail_on: frozenset[int] = frozenset()):
+        calls = {'n': 0}
+
+        def _decode(opus_data, frame_size):
+            idx = calls['n']
+            calls['n'] += 1
+            if idx in fail_on:
+                raise Exception(f'OpusError: frame {idx} is corrupt')
+            # Distinct PCM per frame so a dropped, reordered or repeated frame changes the bytes.
+            return bytes((idx * 7 + j) % 256 for j in range(320))
+
+        instance = MagicMock()
+        instance.decode.side_effect = _decode
+        return MagicMock(return_value=instance)
+
+    def _decode_bytes(self, d, name, frames, mode, fail_on=frozenset(), tail=b''):
+        bin_path = os.path.join(d, f'{name}_{mode}.bin')
+        wav_path = os.path.join(d, f'{name}_{mode}.wav')
+        _write_opus_bin(bin_path, frames)
+        if tail:
+            with open(bin_path, 'ab') as f:
+                f.write(tail)
+        with patch('utils.sync.files.Decoder', self._varying_decoder(fail_on)), patch.dict(
+            os.environ, {'SYNC_OPUS_RAW_FRAME_WRITES': mode}
+        ):
+            samples: list[int] = []
+            result = decode_opus_file_to_wav(bin_path, wav_path, decoded_frame_samples=samples)
+        data = open(wav_path, 'rb').read() if os.path.exists(wav_path) else None
+        return result, data, samples
+
+    @pytest.mark.parametrize(
+        'name,frames,fail_on,tail',
+        [
+            ('clean', [FAKE_OPUS_FRAME] * 250, frozenset(), b''),
+            ('corrupt_middle', [FAKE_OPUS_FRAME] * 40, frozenset({17}), b''),
+            ('truncated_prefix', [FAKE_OPUS_FRAME] * 12, frozenset(), b'\x01\x02'),
+            ('truncated_frame', [FAKE_OPUS_FRAME] * 9, frozenset(), struct.pack('<I', 50) + b'\xaa' * 10),
+            ('all_corrupt', [FAKE_OPUS_FRAME] * 3, frozenset({0}), b''),
+        ],
+    )
+    def test_raw_frame_writes_match_legacy_bytes(self, name, frames, fail_on, tail):
+        with tempfile.TemporaryDirectory() as d:
+            raw = self._decode_bytes(d, name, frames, '1', fail_on, tail)
+            legacy = self._decode_bytes(d, name, frames, '0', fail_on, tail)
+        assert raw == legacy
+
+    def test_raw_frame_writes_header_counts_every_frame(self):
+        with tempfile.TemporaryDirectory() as d:
+            result, data, samples = self._decode_bytes(d, 'header', [FAKE_OPUS_FRAME] * 37, '1')
+            assert result is True and samples == [160] * 37
+            with wave.open(io.BytesIO(data), 'rb') as wf:
+                assert wf.getnframes() == 37 * 160
+                assert len(wf.readframes(wf.getnframes())) == 37 * 320
+
+    def test_kill_switch_restores_per_frame_writeframes(self):
+        calls = {'writeframes': 0, 'writeframesraw': 0}
+        real_write, real_raw = wave.Wave_write.writeframes, wave.Wave_write.writeframesraw
+
+        def counting(method, key):
+            def wrapper(self, data):
+                calls[key] += 1
+                return method(self, data)
+
+            return wrapper
+
+        with tempfile.TemporaryDirectory() as d, patch.object(
+            wave.Wave_write, 'writeframes', counting(real_write, 'writeframes')
+        ), patch.object(wave.Wave_write, 'writeframesraw', counting(real_raw, 'writeframesraw')):
+            self._decode_bytes(d, 'switch_on', [FAKE_OPUS_FRAME] * 5, '1')
+            assert calls == {'writeframes': 0, 'writeframesraw': 5}
+            calls.update(writeframes=0, writeframesraw=0)
+            self._decode_bytes(d, 'switch_off', [FAKE_OPUS_FRAME] * 5, '0')
+            # writeframes() delegates to writeframesraw() and then patches the header.
+            assert calls == {'writeframes': 5, 'writeframesraw': 5}
+
+
 class TestRetrieveFilePaths:
     """Upload path validation for shared sync file helpers."""
 

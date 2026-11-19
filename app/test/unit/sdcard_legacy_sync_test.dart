@@ -123,7 +123,13 @@ void main() {
 
   SDCardWalSyncImpl syncWith(LocalWalSync local) {
     final sync = SDCardWalSyncImpl(_Listener())
-      ..testDevice = BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40)
+      ..testDevice = BtDevice(
+        id: 'devkit-1',
+        name: 'Omi DevKit',
+        type: DeviceType.omi,
+        rssi: -40,
+        firmwareRevision: '3.0.10',
+      )
       ..testConnection = card
       ..testWals = [wal];
     sync.setLocalSync(local);

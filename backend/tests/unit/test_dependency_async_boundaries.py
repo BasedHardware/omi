@@ -14,6 +14,13 @@ from testing.import_isolation import load_module_fresh, stub_modules
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
+@pytest.fixture(autouse=True)
+def directory_routing_enabled(monkeypatch):
+    # These witnesses exercise resolver offloading; off-mode bypass is covered
+    # separately by test_directory_router's auth dependency regressions.
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners')
+
+
 def _module(name: str, **attributes: Any) -> ModuleType:
     module = ModuleType(name)
     for key, value in attributes.items():
@@ -60,6 +67,7 @@ def _loaded_dependencies() -> Iterator[tuple[ModuleType, ModuleType, ModuleType,
         'utils.other.endpoints',
         check_api_key_rate_limit=lambda **_kwargs: None,
         enforce_account_deletion_http_access=lambda _uid: None,
+        _resolve_request_plane_or_503=lambda _uid, **_kwargs: None,
     )
     mcp_memories = _module(
         'utils.mcp_memories',
@@ -137,6 +145,12 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
                 ('user-1', None),
                 {},
             ),
+            (
+                dependencies.db_executor,
+                dependencies.auth_endpoints._resolve_request_plane_or_503,
+                ('user-1',),
+                {'request': None},
+            ),
         ]
 
 
@@ -180,10 +194,12 @@ def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
             (dependencies.db_executor, lookup_mcp),
             (dependencies.db_executor, dependencies.enforce_account_deletion_http_access),
             (dependencies.db_executor, dependencies._enforce_cutover_http_if_request),
+            (dependencies.db_executor, dependencies.auth_endpoints._resolve_request_plane_or_503),
             (dependencies.critical_executor, check_rate_limit),
             (dependencies.db_executor, lookup_dev),
             (dependencies.db_executor, dependencies.enforce_account_deletion_http_access),
             (dependencies.db_executor, dependencies._enforce_cutover_http_if_request),
+            (dependencies.db_executor, dependencies.auth_endpoints._resolve_request_plane_or_503),
         ]
         assert rate_limit_calls == [
             {
@@ -555,3 +571,29 @@ def test_dev_write_paths_check_burst_and_dedicated_rate_budgets() -> None:
             'dev:conversations',
             'dev:conversations_from_segments',
         ]
+
+
+def test_directory_resolution_keeps_the_event_loop_responsive() -> None:
+    with _loaded_dependencies() as (dependencies, _firebase_auth, _mcp_db, _dev_db):
+
+        async def exercise() -> None:
+            entered = asyncio.Event()
+            release = threading.Event()
+            loop = asyncio.get_running_loop()
+
+            def blocking_resolve(_uid: str, *, request=None) -> None:
+                loop.call_soon_threadsafe(entered.set)
+                assert release.wait(timeout=2)
+
+            dependencies.auth_endpoints._resolve_request_plane_or_503 = blocking_resolve
+            safety_release = threading.Timer(1, release.set)
+            safety_release.start()
+            try:
+                result = await _assert_loop_responsive_while_worker_waits(
+                    dependencies.get_current_user_id(SimpleNamespace(credentials='firebase-token')), entered, release
+                )
+            finally:
+                safety_release.cancel()
+            assert result == 'user-1'
+
+        asyncio.run(exercise())

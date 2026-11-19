@@ -38,6 +38,7 @@ EVENTS = frozenset(
         'action_item_created',
         'action_item_mutated',
         'conversation_sync_mutation',
+        'space_sync_mutation',
         'app_enabled',
         'conversation_deleted',
     }

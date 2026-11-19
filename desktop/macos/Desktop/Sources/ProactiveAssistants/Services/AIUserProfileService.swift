@@ -1,408 +1,330 @@
 import Foundation
-@preconcurrency import GRDB
 
-// MARK: - Database Record
+// MARK: - Model
 
-/// Database record for AI-generated user profile history
-// `MutablePersistableRecord` — not `PersistableRecord` — because the rowid is
-// captured by a `mutating didInsert`. `PersistableRecord`'s requirement is
-// non-mutating, so a mutating declaration silently witnesses nothing and the
-// empty default runs instead, leaving `id` nil after every insert.
-struct AIUserProfileRecord: Codable, FetchableRecord, MutablePersistableRecord, Identifiable {
-  var id: Int64?
-  var profileText: String
-  var dataSourcesUsed: Int
-  var backendSynced: Bool
-  var generatedAt: Date
+/// The user's AI profile as the backend stores it (`users/{uid}.ai_user_profile`).
+struct AIUserProfile: Equatable, Sendable {
+  let profileText: String
+  let generatedAt: Date?
+  let dataSourcesUsed: Int
+  let source: String?
+  let refreshedAt: Date?
 
-  static let databaseTableName = "ai_user_profiles"
-
-  mutating func didInsert(_ inserted: InsertionSuccess) {
-    id = inserted.rowID
+  /// nil when the backend has no profile or only blank text.
+  init?(_ response: AIUserProfileResponse?) {
+    guard let response, let text = response.profileText,
+      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else { return nil }
+    profileText = text
+    generatedAt = response.generatedAt ?? response.refreshedAt
+    dataSourcesUsed = response.dataSourcesUsed ?? 0
+    source = response.source
+    refreshedAt = response.refreshedAt
   }
 }
 
-// MARK: - TableDocumented
+// MARK: - Errors
 
-extension AIUserProfileRecord: TableDocumented {
-  static var tableDescription: String { ChatPrompts.tableAnnotations["ai_user_profiles"]! }
-  static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["ai_user_profiles"] ?? [:] }
+/// Why a manual refresh produced no profile. Each case is the message Settings shows.
+enum AIUserProfileRefreshError: LocalizedError, Equatable {
+  case usageBudgetExhausted
+  case alreadyRefreshing
+  case insufficientData
+  case synthesisFailed
+  case rateLimited
+  case unavailable
+
+  init(_ error: Error) {
+    if let mapped = error as? Self {
+      self = mapped
+      return
+    }
+    guard case APIError.httpError(let statusCode, _) = error else {
+      self = .unavailable
+      return
+    }
+    switch statusCode {
+    case 402: self = .usageBudgetExhausted
+    case 409: self = .alreadyRefreshing
+    case 422: self = .insufficientData
+    case 429: self = .rateLimited
+    case 502: self = .synthesisFailed
+    default: self = .unavailable
+    }
+  }
+
+  var errorDescription: String? {
+    switch self {
+    case .usageBudgetExhausted:
+      return "You've reached your plan's AI usage limit. Upgrade or wait for it to reset, then try again."
+    case .alreadyRefreshing:
+      return "Your profile is already being generated. Try again in a minute."
+    case .insufficientData:
+      return "There isn't enough to build a profile yet. Keep using Omi and try again later."
+    case .synthesisFailed:
+      return "Omi couldn't generate your profile just now. Try again later."
+    case .rateLimited:
+      return "Too many requests. Try again in a few minutes."
+    case .unavailable:
+      return "Couldn't reach Omi to generate your profile. Check your connection and try again."
+    }
+  }
+}
+
+// MARK: - Client
+
+/// Network seam over the backend profile routes; tests inject a fake.
+struct AIUserProfileClient: Sendable {
+  var fetch: @Sendable () async throws -> AIUserProfileResponse?
+  var refresh: @Sendable () async throws -> AIUserProfileResponse
+  var update: @Sendable (String, AIUserProfileEditSource) async throws -> AIUserProfileResponse
+  var delete: @Sendable () async throws -> Void
+
+  static let live = AIUserProfileClient(
+    fetch: { try await APIClient.shared.getAIUserProfile() },
+    refresh: { try await APIClient.shared.refreshAIUserProfile() },
+    update: { try await APIClient.shared.updateAIUserProfile(profileText: $0, source: $1) },
+    delete: { try await APIClient.shared.deleteAIUserProfile() })
 }
 
 // MARK: - Service
 
-/// Service that generates and maintains an AI-generated user profile.
-/// Inspired by the ContextAgent paper (arXiv:2505.14668).
-/// Runs once daily, fetches data from multiple sources, and calls Gemini to synthesize a concise profile.
-/// All generated profiles are stored in the local database for history tracking.
+/// Reader for the backend-owned AI user profile.
+///
+/// The backend selects the sources, synthesizes the profile and owns its daily cadence.
+/// This actor keeps the last fetched profile in memory so the prompt builders that read
+/// it on every turn stay cheap, refreshes that cache when it ages out, and routes the
+/// Settings and file-exploration mutations to the backend.
 actor AIUserProfileService {
   static let shared = AIUserProfileService()
-  private let repository = RewindRepository(owner: "AIUserStorage")
 
-  private let maxProfileLength = 10000
+  /// A cached read older than this is revalidated in the background.
+  static let cacheTTL: TimeInterval = 60 * 60
+  /// After a failed read, consumers use the cache instead of retrying for this long.
+  static let failureBackoff: TimeInterval = 60
+  /// Backend limit on `profile_text`.
+  static let maxProfileLength = 10_000
+  static let explorationSeparator = "\n\n--- File Exploration Insights ---\n"
 
-  /// Whether profile generation is currently in progress
-  private var isGenerating = false
+  private let client: AIUserProfileClient
+  private let localHistory: LocalProfileHistoryRetirement.Store
+  private let now: @Sendable () -> Date
 
-  /// Invalidate cached DB queue (called on user switch / sign-out)
-  func invalidateCache() async {
-    await repository.invalidate()
+  private var cached: AIUserProfile?
+  /// When the cache was last confirmed by the backend; nil until the first good read.
+  private var cachedAt: Date?
+  private var lastFailureAt: Date?
+  private var inFlight: Task<ProfileRead, Never>?
+  private var inFlightID = 0
+  private var isRefreshing = false
+  /// Bumped on owner switch: nothing started for the previous owner may land in the cache.
+  private var ownerEpoch = 0
+  /// Bumped on every mutation: a read that started earlier must not overwrite it.
+  private var writeRevision = 0
+  /// The owner session whose retired local history was already salvaged (or attempted).
+  private var localHistoryEpoch: Int?
+  private var localHistorySalvage: Task<Void, Never>?
+
+  /// What one backend read established.
+  private enum ProfileRead {
+    /// The backend answered for the current owner: its profile, or nil when it has none.
+    case current(AIUserProfile?)
+    /// The read failed.
+    case failed
+    /// The owner changed while the read was in flight.
+    case superseded
   }
 
-  // MARK: - Database Access
-
-  private func ensureDB() async throws -> DatabasePool {
-    guard let databasePool = try await repository.databasePool() else {
-      throw ProfileError.databaseNotAvailable
-    }
-    return databasePool
-  }
-
-  /// Insert a profile row and return it carrying its persisted rowid.
-  ///
-  /// Every caller hands the returned record's `id` to a `WHERE id = ?` consumer
-  /// (the backend-sync flag update, Settings edit/delete), so the insert must go
-  /// through the mutating path that runs `didInsert`.
-  func insertProfile(_ record: AIUserProfileRecord) async throws -> AIUserProfileRecord {
-    let db = try await ensureDB()
-    return try await db.write { database in
-      try record.inserted(database)
-    }
-  }
-
-  // MARK: - Public Interface
-
-  /// Check if we should generate a new profile (>24h since last generation)
-  func shouldGenerate() async -> Bool {
-    guard let db = try? await ensureDB() else { return false }
-    do {
-      let latest = try await db.read { database in
-        try AIUserProfileRecord
-          .order(Column("generatedAt").desc)
-          .fetchOne(database)
-      }
-      guard let latest else { return true }  // Never generated
-      return Date().timeIntervalSince(latest.generatedAt) > 86400
-    } catch {
-      return true
-    }
-  }
-
-  /// Get the latest stored profile
-  func getLatestProfile() async -> AIUserProfileRecord? {
-    guard let db = try? await ensureDB() else { return nil }
-    return try? await db.read { database in
-      try AIUserProfileRecord
-        .order(Column("generatedAt").desc)
-        .fetchOne(database)
-    }
-  }
-
-  /// Delete a profile by ID and return the next latest profile
-  func deleteProfile(id: Int64) async -> AIUserProfileRecord? {
-    guard let db = try? await ensureDB() else { return nil }
-    _ = try? await db.write { database in
-      try database.execute(
-        sql: "DELETE FROM ai_user_profiles WHERE id = ?",
-        arguments: [id]
-      )
-    }
-    return await getLatestProfile()
-  }
-
-  /// Update the profile text of an existing record and sync to backend
-  func updateProfileText(id: Int64, newText: String) async -> Bool {
-    guard let db = try? await ensureDB() else { return false }
-    do {
-      try await db.write { database in
-        try database.execute(
-          sql: "UPDATE ai_user_profiles SET profileText = ? WHERE id = ?",
-          arguments: [newText, id]
-        )
-      }
-      // Sync updated profile to backend (fire-and-forget)
-      let text = newText
-      Task {
-        do {
-          // Fetch the record to get generatedAt and dataSourcesUsed
-          let record = try? await db.read { database in
-            try AIUserProfileRecord.fetchOne(database, key: id)
-          }
-          try await APIClient.shared.syncAIUserProfile(
-            profileText: text,
-            generatedAt: record?.generatedAt ?? Date(),
-            dataSourcesUsed: record?.dataSourcesUsed ?? 0
-          )
-          _ = try? await db.write { database in
-            try database.execute(
-              sql: "UPDATE ai_user_profiles SET backendSynced = 1 WHERE id = ?",
-              arguments: [id]
-            )
-          }
-          log("AIUserProfileService: Synced updated profile to backend")
-        } catch {
-          log("AIUserProfileService: Failed to sync updated profile to backend: \(error.localizedDescription)")
-        }
-      }
-      return true
-    } catch {
-      log("AIUserProfileService: Failed to update profile text: \(error.localizedDescription)")
-      return false
-    }
-  }
-
-  /// Save exploration text as a new profile record (when no profile exists yet)
-  func saveExplorationAsProfile(text: String) async -> Bool {
-    let generatedAt = Date()
-    let record = AIUserProfileRecord(
-      profileText: String(text.prefix(maxProfileLength)),
-      dataSourcesUsed: 1,
-      backendSynced: false,
-      generatedAt: generatedAt
-    )
-    do {
-      let insertedId = try await insertProfile(record).id
-      log("AIUserProfileService: Saved exploration as new profile (\(record.profileText.count) chars)")
-
-      // Sync to backend (fire-and-forget)
-      let profileText = record.profileText
-      let recordId = insertedId
-      Task {
-        do {
-          try await APIClient.shared.syncAIUserProfile(
-            profileText: profileText,
-            generatedAt: generatedAt,
-            dataSourcesUsed: 1
-          )
-          if let id = recordId, let db = try? await self.ensureDB() {
-            _ = try? await db.write { database in
-              try database.execute(
-                sql: "UPDATE ai_user_profiles SET backendSynced = 1 WHERE id = ?",
-                arguments: [id]
-              )
-            }
-          }
-          log("AIUserProfileService: Synced exploration profile to backend")
-        } catch {
-          log("AIUserProfileService: Failed to sync exploration profile to backend: \(error.localizedDescription)")
-        }
-      }
-      return true
-    } catch {
-      log("AIUserProfileService: Failed to save exploration profile: \(error.localizedDescription)")
-      return false
-    }
-  }
-
-  /// Delete all stored profiles
-  func deleteAllProfiles() async {
-    guard let db = try? await ensureDB() else { return }
-    _ = try? await db.write { database in
-      try database.execute(sql: "DELETE FROM ai_user_profiles")
-    }
-  }
-
-  /// Get all stored profiles (newest first)
-  func getAllProfiles(limit: Int = 30) async -> [AIUserProfileRecord] {
-    guard let db = try? await ensureDB() else { return [] }
-    return
-      (try? await db.read { database in
-        try AIUserProfileRecord
-          .order(Column("generatedAt").desc)
-          .limit(limit)
-          .fetchAll(database)
-      }) ?? []
-  }
-
-  /// Generate a new AI user profile from all available data sources
-  func generateProfile() async throws -> AIUserProfileRecord {
-    guard !isGenerating else {
-      throw ProfileError.alreadyGenerating
-    }
-    isGenerating = true
-    defer { isGenerating = false }
-
-    log("AIUserProfileService: Starting profile generation")
-
-    // 1. Fetch all data sources in parallel
-    let (memories, tasks, goals, conversations, messages) = await fetchDataSources()
-
-    // 2. Count total data items
-    let dataSourcesUsed = memories.count + tasks.count + goals.count + conversations.count + messages.count
-    log(
-      "AIUserProfileService: Fetched \(dataSourcesUsed) data items (memories=\(memories.count), tasks=\(tasks.count), goals=\(goals.count), convos=\(conversations.count), messages=\(messages.count))"
-    )
-
-    guard dataSourcesUsed > 0 else {
-      throw ProfileError.insufficientData
-    }
-
-    // 3. Synthesize through the backend SSOT. The prompts, the model and the
-    // stage-2 consolidation with past profiles all live behind
-    // POST /v1/users/ai-profile/synthesize; this only ships the source lines.
-    // Stored newest-first, sent oldest-first for the consolidation stage.
-    let pastProfiles = await getAllProfiles(limit: 5)
-    let synthesis = try await APIClient.shared.synthesizeAIUserProfile(
-      memories: memories,
-      tasks: tasks,
-      goals: goals,
-      conversations: conversations,
-      messages: messages,
-      pastProfilesOldestFirst: pastProfiles.reversed().map { $0.profileText }
-    )
-    let finalText = synthesis.profileText
-    log(
-      "AIUserProfileService: Synthesis complete (\(finalText.count) chars, \(pastProfiles.count) past profiles)"
-    )
-
-    // 4. Truncate if needed
-    let truncated = String(finalText.prefix(maxProfileLength))
-    let generatedAt = Date()
-
-    // 5. Save to database
-    let record = try await insertProfile(
-      AIUserProfileRecord(
-        profileText: truncated,
-        dataSourcesUsed: dataSourcesUsed,
-        backendSynced: false,
-        generatedAt: generatedAt
-      ))
-
-    // 6. Sync to backend (fire-and-forget)
-    let recordId = record.id
-    Task {
-      do {
-        try await APIClient.shared.syncAIUserProfile(
-          profileText: truncated,
-          generatedAt: generatedAt,
-          dataSourcesUsed: dataSourcesUsed
-        )
-        // Mark as synced
-        if let id = recordId, let db = try? await self.ensureDB() {
-          _ = try? await db.write { database in
-            try database.execute(
-              sql: "UPDATE ai_user_profiles SET backendSynced = 1 WHERE id = ?",
-              arguments: [id]
-            )
-          }
-        }
-        log("AIUserProfileService: Synced profile to backend")
-      } catch {
-        log("AIUserProfileService: Failed to sync profile to backend: \(error.localizedDescription)")
-      }
-    }
-
-    log(
-      "AIUserProfileService: Profile generated successfully (\(truncated.count) chars, \(dataSourcesUsed) data items)")
-    return record
-  }
-
-  // MARK: - Data Fetching
-
-  private func fetchDataSources() async -> (
-    memories: [String],
-    tasks: [String],
-    goals: [String],
-    conversations: [String],
-    messages: [String]
+  init(
+    client: AIUserProfileClient = .live,
+    localHistory: LocalProfileHistoryRetirement.Store = .live,
+    now: @escaping @Sendable () -> Date = { Date() }
   ) {
-    async let memoriesTask = fetchMemories()
-    async let tasksTask = fetchTasks()
-    async let goalsTask = fetchGoals()
-    async let conversationsTask = fetchConversations()
-    async let messagesTask = fetchMessages()
-
-    let memories = await memoriesTask
-    let tasks = await tasksTask
-    let goals = await goalsTask
-    let conversations = await conversationsTask
-    let messages = await messagesTask
-
-    return (memories, tasks, goals, conversations, messages)
+    self.client = client
+    self.localHistory = localHistory
+    self.now = now
   }
 
-  private func fetchMemories() async -> [String] {
-    do {
-      let memories = try await APIClient.shared.getMemories(limit: 100)
-      return memories.map { "[\($0.category.rawValue)] \($0.content)" }
-    } catch {
-      log("AIUserProfileService: Failed to fetch memories: \(error.localizedDescription)")
-      return []
+  /// Forget the cached profile (user switch / sign-out). The next read fetches the new owner's.
+  func invalidateCache() {
+    ownerEpoch += 1
+    inFlight = nil
+    cached = nil
+    cachedAt = nil
+    lastFailureAt = nil
+  }
+
+  // MARK: Reads
+
+  /// The profile for prompt consumers. Served from memory; only the first read for an
+  /// owner waits on the network, and a stale cache is revalidated in the background.
+  func getLatestProfile() async -> AIUserProfile? {
+    if let lastFailureAt, now().timeIntervalSince(lastFailureAt) < Self.failureBackoff {
+      return cached
+    }
+    guard let cachedAt else { return await fetchProfile() }
+    if now().timeIntervalSince(cachedAt) >= Self.cacheTTL {
+      _ = startFetch()
+    }
+    return cached
+  }
+
+  /// Read the profile from the backend now (Settings open). Joins a read already in flight;
+  /// on failure returns the cached profile.
+  @discardableResult
+  func fetchProfile() async -> AIUserProfile? {
+    switch await startFetch().value {
+    case .current(let profile): return profile
+    case .failed: return cached
+    case .superseded: return nil
     }
   }
 
-  private func fetchTasks() async -> [String] {
-    do {
-      let response = try await APIClient.shared.getActionItems(limit: 50)
-      return response.items.map { item in
-        let status = item.completed ? "done" : "todo"
-        let priority = item.priority ?? "medium"
-        return "[\(status)/\(priority)] \(item.description)"
+  private func startFetch() -> Task<ProfileRead, Never> {
+    if let inFlight { return inFlight }
+    let epoch = ownerEpoch
+    let revision = writeRevision
+    inFlightID += 1
+    let id = inFlightID
+    let client = client
+    // Bound before the request, so the local history salvage that follows a good read runs
+    // only for the owner this read answered for.
+    let owner = localHistoryEpoch == epoch ? nil : localHistory.bindOwner()
+    let task = Task<ProfileRead, Never> {
+      let result: Result<AIUserProfile?, Error>
+      do {
+        result = .success(AIUserProfile(try await client.fetch()))
+      } catch {
+        result = .failure(error)
       }
-    } catch {
-      log("AIUserProfileService: Failed to fetch tasks: \(error.localizedDescription)")
-      return []
+      return self.finishFetch(result, id: id, epoch: epoch, revision: revision, owner: owner)
     }
+    inFlight = task
+    return task
   }
 
-  private func fetchGoals() async -> [String] {
-    do {
-      let goals = try await APIClient.shared.getGoals()
-      return goals.filter { $0.isActive }.map { goal in
-        let progress = goal.targetValue > 0 ? Int((goal.currentValue / goal.targetValue) * 100) : 0
-        return "\(goal.title) (\(progress)% complete)"
+  private func finishFetch(
+    _ result: Result<AIUserProfile?, Error>, id: Int, epoch: Int, revision: Int,
+    owner: LocalProfileHistoryRetirement.Owner?
+  ) -> ProfileRead {
+    guard epoch == ownerEpoch else { return .superseded }
+    if id == inFlightID { inFlight = nil }
+    switch result {
+    case .success(let profile):
+      // A mutation that landed after this read started is newer than its answer.
+      if revision == writeRevision {
+        cached = profile
+        cachedAt = now()
+        lastFailureAt = nil
       }
-    } catch {
-      log("AIUserProfileService: Failed to fetch goals: \(error.localizedDescription)")
-      return []
+      salvageLocalHistory(owner: owner, epoch: epoch)
+      return .current(cached)
+    case .failure(let error):
+      lastFailureAt = now()
+      log("AIUserProfileService: Fetch failed: \(error.localizedDescription)")
+      return .failed
     }
   }
 
-  private func fetchConversations() async -> [String] {
-    do {
-      let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())
-      let conversations = try await APIClient.shared.getConversations(
-        limit: 20,
-        startDate: sevenDaysAgo
-      )
-      return conversations.compactMap { convo in
-        let title = convo.structured.title
-        let summary = convo.structured.overview
-        guard !title.isEmpty else { return nil }
-        return "\(title): \(summary)"
+  /// Once per owner session, after its first good read: upload what the retired local history
+  /// holds that the backend lacks, then drop the table. A failure leaves it for the next launch.
+  private func salvageLocalHistory(owner: LocalProfileHistoryRetirement.Owner?, epoch: Int) {
+    guard let owner, localHistoryEpoch != epoch, owner.isCurrent() else { return }
+    localHistoryEpoch = epoch
+    let revision = writeRevision
+    let cloud = cached.map(LocalProfileHistoryRetirement.CloudState.init)
+    let historyStore = localHistory
+    localHistorySalvage = Task {
+      let outcome = await LocalProfileHistoryRetirement.salvage(cloud: cloud, owner: owner, store: historyStore) {
+        await self.isUnchanged(epoch: epoch, revision: revision)
       }
-    } catch {
-      log("AIUserProfileService: Failed to fetch conversations: \(error.localizedDescription)")
-      return []
+      guard case .restored(let profile, _) = outcome else { return }
+      _ = self.store(profile, epoch: epoch)
     }
   }
 
-  private func fetchMessages() async -> [String] {
+  /// Wait for the local history salvage started by the last good read (tests).
+  func waitForLocalHistorySalvage() async {
+    await localHistorySalvage?.value
+  }
+
+  /// Same owner session, and no profile mutation since `revision`.
+  private func isUnchanged(epoch: Int, revision: Int) -> Bool {
+    epoch == ownerEpoch && revision == writeRevision
+  }
+
+  // MARK: Mutations
+
+  /// Regenerate on the backend now. Throws `AIUserProfileRefreshError`.
+  func refresh() async throws -> AIUserProfile? {
+    guard !isRefreshing else { throw AIUserProfileRefreshError.alreadyRefreshing }
+    isRefreshing = true
+    defer { isRefreshing = false }
+    let epoch = ownerEpoch
     do {
-      let messages = try await APIClient.shared.getMessages(limit: 30)
-      return messages.map { "[\($0.sender)] \($0.text)" }
+      let response = try await client.refresh()
+      return store(AIUserProfile(response), epoch: epoch)
     } catch {
-      log("AIUserProfileService: Failed to fetch messages: \(error.localizedDescription)")
-      return []
+      log("AIUserProfileService: Refresh failed: \(error.localizedDescription)")
+      throw AIUserProfileRefreshError(error)
     }
   }
 
-  // MARK: - Errors
+  /// Replace the profile text. A user edit is kept by the next synthesis as a correction.
+  func updateProfileText(_ text: String, source: AIUserProfileEditSource = .userEdit) async throws
+    -> AIUserProfile?
+  {
+    let epoch = ownerEpoch
+    let response = try await client.update(text, source)
+    return store(AIUserProfile(response), epoch: epoch)
+  }
 
-  enum ProfileError: LocalizedError {
-    case alreadyGenerating
-    case insufficientData
-    case databaseNotAvailable
+  /// Delete the profile. The backend generates a new one on its next trigger.
+  func deleteProfile() async throws {
+    let epoch = ownerEpoch
+    try await client.delete()
+    _ = store(nil, epoch: epoch)
+  }
 
-    var errorDescription: String? {
-      switch self {
-      case .alreadyGenerating:
-        return "Profile generation is already in progress"
-      case .insufficientData:
-        return "Not enough data to generate a profile"
-      case .databaseNotAvailable:
-        return "Database is not available"
-      }
+  /// Fold a file-exploration answer into the profile (or start one with it).
+  ///
+  /// A read-modify-write, so it needs a read the backend answered right before the write:
+  /// a failed read is not "no profile yet", and writing then would replace the profile with
+  /// the exploration text alone. Returns false without writing when that read fails.
+  func appendExploration(_ text: String) async -> Bool {
+    let epoch = ownerEpoch
+    guard case .current(let profile) = await startFetch().value, epoch == ownerEpoch else {
+      log("AIUserProfileService: Skipped exploration save: the current profile could not be read")
+      return false
     }
+    let combined = Self.combine(existing: profile?.profileText, exploration: text)
+    do {
+      _ = try await updateProfileText(combined, source: .exploration)
+      return true
+    } catch {
+      log("AIUserProfileService: Failed to save exploration: \(error.localizedDescription)")
+      return false
+    }
+  }
+
+  /// Keep the newest insights whole; trim the older profile to fit the backend limit.
+  static func combine(existing: String?, exploration: String) -> String {
+    let insights = String(exploration.prefix(maxProfileLength))
+    guard let existing, !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      return insights
+    }
+    let room = maxProfileLength - explorationSeparator.count - insights.count
+    guard room > 0 else { return insights }
+    return String(existing.prefix(room)) + explorationSeparator + insights
+  }
+
+  private func store(_ profile: AIUserProfile?, epoch: Int) -> AIUserProfile? {
+    guard epoch == ownerEpoch else { return nil }
+    writeRevision += 1
+    inFlight = nil
+    cached = profile
+    cachedAt = now()
+    lastFailureAt = nil
+    return profile
   }
 }

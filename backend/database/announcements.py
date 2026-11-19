@@ -352,7 +352,10 @@ def delete_announcement(announcement_id: str, *, firestore_client: Optional[Any]
     if not getattr(doc, "exists", False):
         return False
 
-    doc_ref.delete()
+    try:
+        doc_ref.delete()
+    except NotFound:
+        return False
     return True
 
 

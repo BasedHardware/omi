@@ -1123,6 +1123,11 @@ class AppLocalizationsSr extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Име је успешно ажурирано!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Читај изабране календаре. Нови догађаји користе $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Подешавања календара';
 
   @override
@@ -1988,6 +1993,15 @@ class AppLocalizationsSr extends AppLocalizations {
   String get memoryHistory => 'Историја';
 
   @override
+  String get recordingWithYourPhone => 'Снима се телефоном';
+
+  @override
+  String get wrapUp => 'Заврши';
+
+  @override
+  String get recordingDiscarded => 'Снимак одбачен';
+
+  @override
   String get undo => 'Врати';
 
   @override
@@ -2285,10 +2299,10 @@ class AppLocalizationsSr extends AppLocalizations {
   String get firmwareUsbWarning => 'USB веза током ажурирања може оштетити ваш уређај.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Батерија изнад 15%';
+  String get firmwareBatteryRequirement => 'Батерија изнад 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Уверите се да ваш уређај има 15% батерије.';
+  String get firmwareEnsureBattery => 'Уверите се да ваш уређај има 30% батерије.';
 
   @override
   String get firmwareStableConnection => 'Стабилна веза';
@@ -7034,6 +7048,10 @@ class AppLocalizationsSr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Неуспешна пријава са Apple, молим покушајте поново.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Пријава преко Apple-а није успела. Покушајте поново или наставите са Google-ом.';
+
+  @override
   String get authFailedToRetrieveToken => 'Неуспешно преузимање firebase токена, молим покушајте поново.';
 
   @override
@@ -9071,7 +9089,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Овај снимак је отпремљен, али Omi још прави разговор. Ако га сада обришете и обрада не успе, неће моћи да се врати. Свеједно обрисати?';
+      'Овај снимак је већ отпремљен и Omi га обрађује. Брисање овде уклања копију са телефона. Ако обрада не успе, Omi неће моћи поново да покуша са овог телефона.';
 
   @override
   String get syncCardAllBackedUp => 'Сви снимци синхронизовани';
@@ -9177,6 +9195,24 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Није могуће одредити тренутну верзију фирмвера';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Примени на тренутни план';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Код је примењен на ваш тренутни план.',
+        'refused': 'Овај код није могуће применити. Проверите код и потребан план.',
+        'conflict': 'Код је већ искоришћен или ваш план већ има попуст.',
+        'rateLimited': 'Превише покушаја. Сачекајте и покушајте касније.',
+        'other': 'Код није примењен. Покушајте поново.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Промо код';
@@ -10594,8 +10630,12 @@ class AppLocalizationsSr extends AppLocalizations {
       'Ажурирање није могло да се преузме и уређај није промењен. Проверите интернет везу, па покушајте поново.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Ниво батерије још није доступан. Сачекајте тренутак и поново се повежите ако се то не промени.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Батерија је на $level%. Пре ажурирања напуните уређај на најмање 15%.';
+    return 'Батерија је на $level%. Пре ажурирања напуните уређај на најмање 30%.';
   }
 
   @override
@@ -12203,7 +12243,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Од упаривања: прекида $drops, неуспелих веза $failed.';
+    return 'Од упаривања: $drops поновних повезивања, $failed неуспешних повезивања.';
   }
 
   @override
@@ -13389,7 +13429,21 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Имате Omi Pro код? Унесите га на следећем екрану.';
+
+  @override
   String get paywallTrialCancelNote => 'Otkažite bilo kada. Bez naknada, bez penala.';
+
+  @override
+  String get paywallMonthlyFallbackTitle => 'Још нисте спремни за целу годину?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Почните са месечним планом. Истих $days дана бесплатно, затим $price месечно. Откажите било када.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Испробајте месечни бесплатно';
 
   @override
   String paywallTrialStarted(int days) {
@@ -13424,16 +13478,6 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Претварање $amount у разговоре';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Готово $done од $total · можете напустити овај екран';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount спремно за синхронизацију';
   }
@@ -13457,7 +13501,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Чека на овом телефону';
 
   @override
-  String get syncDetailsTranscribing => 'Транскрипција на Omi';
+  String get syncDetailsTranscribing => 'Отпремљено, чека сервер';
 
   @override
   String get syncDetailsAudioFiles => 'Аудио датотеке';
@@ -13645,6 +13689,9 @@ class AppLocalizationsSr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Поново генериши белешке';
 
   @override
   String get attentionSummaryFailed => 'Овај разговор није могуће сажети';
@@ -13910,6 +13957,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi већ ради на овом разговору. Сажетак ће се појавити овде када буде готов.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Још није транскрибовано';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Сажетак ће се појавити када транскрипт буде спреман.';
 
   @override
   String get summaryCheckAgain => 'Провери поново';
@@ -14813,6 +14866,21 @@ class AppLocalizationsSr extends AppLocalizations {
   String get episodeWritingNotes => 'Пишемо белешке…';
 
   @override
+  String get homeStepTranscribing => 'Транскрибујемо…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count снимака',
+      few: '$count снимка',
+      one: '$count снимак',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Прво завршавамо транскрипт. Можете напустити ову страницу.';
 
   @override
@@ -15014,4 +15082,507 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get episodeFinishingUp => 'Завршавање…';
+
+  @override
+  String get buildAndShareApp => 'Направи и дели своју прилагођену апликацију';
+
+  @override
+  String get membersAndCounting => '8000+ чланова и наставља се.';
+
+  @override
+  String get privacyIntro =>
+      'На Omi, посвећени смо заштити ваше приватности. Ова страница вам омогућава да контролишете како се ваши подаци чувају и користе.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Ваши подаци су подразумевано заштићени јаким шифровањем. Прегледајте своја подешавања и будуће опције приватности испод.';
+
+  @override
+  String get transcriptionConfig => 'Конфигуриши STT добављача';
+
+  @override
+  String get importDataConfig => 'Увези податке из других извора';
+
+  @override
+  String get understandingSubtitle => 'Речи разумене из твоих разговора.';
+
+  @override
+  String get rememberingSubtitle => 'Чињенице и детаљи запамћени за тебе.';
+
+  @override
+  String get debugLogsDesc => 'Помаже у дијагностицирању проблема';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Ово ће обрисати све изведене податке графа знања (чворове и конекције). Ваше оригиналне успомене остају безбедне. Граф ће бити обновљен током времена или при следећем захтеву.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Очисти све чворове и конекције';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'Како се наш модел побољшава, можемо пружити боље резултате преписа за твоје снимке.';
+
+  @override
+  String get bestInClassTranscription => 'Најбоље препознавање говора без постављања';
+
+  @override
+  String get optimizedForConversation => 'Оптимизовано за разговор';
+
+  @override
+  String get highAccuracy => 'Висока тачност';
+
+  @override
+  String get privacyFirst => 'Приватност прво';
+
+  @override
+  String get keepGoing => 'Настави, чиниш одличан посао';
+
+  @override
+  String get personalGrowthJourney => 'Твој путь личног развоја са AI који слуша сваку твоју реч.';
+
+  @override
+  String get memoryAllowUse => 'Дозволи употребу';
+
+  @override
+  String get memoryDontUse => 'Не користи';
+
+  @override
+  String get alwaysInContext => 'Увек у контексту';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Батерија изнад 15%';
+
+  @override
+  String get configureSttProvider => 'Конфигуриши STT провајдера';
+
+  @override
+  String get clearAllNodesAndConnections => 'Очисти све чворове и везе';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Добродошли у Omi! Твој AI пратилац је спреман да те помогне са разговорима, задацима и још много чега.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Разговори се обрађују аутоматски';
+
+  @override
+  String get getInsightsInstantly => 'Добити увиде и резимеа мгновено';
+
+  @override
+  String get dailyScoreDescription => 'Оцена која те помаже да боље\nфокусираш се на извршење.';
+
+  @override
+  String get startConversation => 'Почни разговор и нека магија почне';
+
+  @override
+  String get wearableAiCompanion => 'Носиви AI пратилац';
+
+  @override
+  String get organizeAndControlMemories => 'Организуј и контролиши своје меморије';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Постави све меморије на приватну видљивост';
+
+  @override
+  String get setAllMemoriesToPublic => 'Постави све меморије на јавну видљивост';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Изаберите префериран језик за најбољи Omi искуство';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Омогућите функције за најбоље Omi искуство на вашем уређају.';
+
+  @override
+  String get deliveryTimeDescription => 'Када желите да примите ваш дневни резиме';
+
+  @override
+  String get configureSTTProvider => 'Конфигуришите STT провајдера';
+
+  @override
+  String get setConversationEndDescription => 'Поставите када разговори аутоматски завршавају';
+
+  @override
+  String get clearNodesDescription => 'Очистите све чворове и веза';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Ово ће обрисати све изведене податке графа знања. Ваше оригиналне успомене остају безбедне.';
+
+  @override
+  String get createAndShareYourApp => 'Направите и делите своју апликацију';
+
+  @override
+  String get e2eeDescription =>
+      'Криптировање од краја до краја је золни стандард за приватност. Када је омогућено, ваши подаци су криптовани на вашем уређају пре него што буду послати нашим серверима. То значи да нико, чак ни Omi, не може приступити вашем садржају.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Ваши подаци су криптовани са кључем јединственим за вас на нашим серверима, смештеним на Google Cloud. То значи да ваш сирови садржај није приступачан никоме, укључујући Omi особље или Google, директно из базе podataka.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Омогућите за максималну безбедност где само вас можете приступити вашим подацима. Додирни да сазнаш више.';
+
+  @override
+  String get yourOmiUnleashed => 'Твој Omi, ослобођен. Иди без ограничења за бесконачне могућности.';
+
+  @override
+  String get privacyIntroText =>
+      'У Omi, озбиљно узимамо вашу приватност. Желимо да будемо транспарентни у вези са подаците које скупљамо и како их користимо да унапредимо наш производ за вас. Ево шта требате знати:';
+
+  @override
+  String get commitmentText =>
+      'Обавезани смо да користимо податке које скупљамо само да направимо Omi бољи производ за вас. Ваша приватност и поверење су од крајње важности за нас.';
+
+  @override
+  String get thankYouText =>
+      'Хвала вам што сте драгоцени корисник Omi. Ако имате неке питање или забринутости, слободно нас контактирајте на team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Ово ће обрисати све изведене податке графа знања (чворове и конексије). Ваша оригинална меморија остаће безбедна. Граф ће бити обновљен течајом времена или при следећем захтеву.';
+
+  @override
+  String get howPeopleWorks =>
+      'Када се особа направи, можете да идете на транскрипцију разговора и доделите јој одговарајуће сегменте, на тај начин Omi ће бити способна да препозна и њихов говор!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Направите и поделите своју прилагођену апликацију';
+
+  @override
+  String get onboardingChooseYourPreference => 'Одаберите своју преференцу';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Дајте потребан приступ';
+
+  @override
+  String get apiEnvironmentDescription => 'Одабери са којим backend-ом да се повежеш';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Твоји позиви су приватни и безбедни';
+
+  @override
+  String get omisStorageDesc =>
+      'Када твој Omi није повезан са твојим телефоном, снимци аудио се чувају локално на уграђеној меморији. Никада не губиш снимак.';
+
+  @override
+  String get permissionsSetupDescription => 'Омогући неколико дозвола да Omi может радити своју магију.';
+
+  @override
+  String get architectSubtitle => 'Напредни AI — хиљаде разговора + агентна аутоматизација';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current од $total';
+  }
+
+  @override
+  String get newestFirst => 'Прво најновије';
+
+  @override
+  String get backgroundModeNote => 'Засад ради само са Omi уређајима и непрекидно се побољшава.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Није снимљено ($count)';
+  }
+
+  @override
+  String get speakerTagPromptSubtitle => 'Брза провера гласова из последња два дана';
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Транскрипције на чекању $count';
+  }
+
+  @override
+  String get captureRecoveryBanner => 'Omi не шаље звук — додирните за поновно повезивање';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi ће се сам поново повезати';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Задржи особу $name и очекуј је у својим разговорима';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi пита пре него што упари сличне гласове.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Да повећава поузданост особе $name.';
+  }
+
+  @override
+  String get localCopiesSection => 'Локалне копије';
+
+  @override
+  String get forYou => 'За вас';
+
+  @override
+  String get stopThese => 'Заустави ово';
+
+  @override
+  String get meetingActionItemsTitle => 'Ставке за рад';
+
+  @override
+  String get addToTasks => 'Додај у задатке';
+
+  @override
+  String get showInTranscript => 'Прикажи транскрипт';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Рок око $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Оквирни рок $date';
+  }
+
+  @override
+  String get openTask => 'Отвори задатак';
+
+  @override
+  String get completeTask => 'Заврши задатак';
+
+  @override
+  String get reopenTask => 'Поново отвори задатак';
+
+  @override
+  String get addingToTasks => 'Додаје се у задатке';
+
+  @override
+  String get taskAddedToTasks => 'Задатак је креиран';
+
+  @override
+  String get completedStatus => 'Завршено';
+
+  @override
+  String get notCompletedStatus => 'На чекању';
+
+  @override
+  String get referralAffiliate => 'Партнерски програм';
+
+  @override
+  String get referralCampaignTerms =>
+      'Пријатељи добијају 10% попуста на Omi уређаје. Куповине прва 2 различита пријатеља откључавају 2 месеца Pro, куповине следећа 3 различита пријатеља још 3. До 5 пријатеља и укупно 5 месеци.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months месеци Pro · $count/$target куповина';
+  }
+
+  @override
+  String get referralClaim => 'Преузми награду';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Преузето $months месеци Pro';
+  }
+
+  @override
+  String get referralRewardPending => 'Награда се чува до краја плаћене претплате.';
+
+  @override
+  String get referralCampaignTitle => 'Препоручите Omi. Добијте Pro бесплатно.';
+
+  @override
+  String get referralCampaignSubtitle => 'Њима 10% попуста на Omi. Теби до 5 месеци Pro.';
+
+  @override
+  String get referralShareInvite => 'Подели позивницу';
+
+  @override
+  String get referralYourRewards => 'Твоје награде';
+
+  @override
+  String get referralRewardFirstTitle => '2 месеца Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Када 2 пријатеља купе Omi';
+
+  @override
+  String get referralRewardSecondTitle => 'Још 3 месеца';
+
+  @override
+  String get referralRewardSecondDetail => 'Када још 3 пријатеља купе';
+
+  @override
+  String get referralClaimShort => 'Преузми';
+
+  @override
+  String get paymentDeclinedTitle => 'Ваша картица је одбијена';
+
+  @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Ажурирајте картицу или вратите $plan за $price месечно';
+  }
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Ажурирајте картицу да бисте вратили $plan';
+  }
+
+  @override
+  String get hasLinkedTasksLabel => 'Има повезане задатке';
+
+  @override
+  String get hasTasksFilter => 'Са задацима';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Ажурирање није инсталирано. Ваш привезак и даље ради на тренутном фирмверу ($version). Уместо поновног покушаја ажурирања обратите се подршци.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Пређите на месечно';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price месечно';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Замењује неплаћену годишњу наплату од $yearly. Обнавља се месечно. Откажите било када.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Плаћање је одбијено. Ваш план се није променио.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Прелазак тренутно није доступан. Уместо тога ажурирајте картицу.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Сада плаћате месечно';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Данас плаћено $price. Обнавља се месечно.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Листа обраде се променила. Прегледајте је и покушајте поново.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Искористили сте $minutes минута за овај месец';
+  }
+
+  @override
+  String get freeCapBody => 'Omi и даље снима. Изаберите како да наставите са транскрипцијом.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Неограничена транскрипција у облаку';
+
+  @override
+  String get freeCapProAccuracy => 'Најбоља тачност';
+
+  @override
+  String get freeCapProWaiting => 'Транскрибује ваше снимке на чекању';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Бесплатно. Остаје укључено док се не вратите.';
+
+  @override
+  String get transcribingOnThisPhone => 'Транскрипција на овом телефону';
+
+  @override
+  String get getPro => 'Узмите Pro';
+
+  @override
+  String get unlock => 'Откључај';
+
+  @override
+  String get transcribeWith => 'Транскрибуј помоћу';
+
+  @override
+  String get omiCloud => 'Omi облак';
+
+  @override
+  String get thisPhone => 'Овај телефон';
+
+  @override
+  String get onDeviceReady => 'Спремно';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Преостало $left од $limit мин · обнавља се $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Доступно $minutes минута у облаку';
+  }
+
+  @override
+  String get switchBack => 'Врати се';
+
+  @override
+  String get setUpThisPhone => 'Подесите овај телефон';
+
+  @override
+  String get speechRecognition => 'Препознавање говора';
+
+  @override
+  String get audioStaysOnPhone => 'Звук остаје на вашем телефону';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Преузимање $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Преузми сада';
+
+  @override
+  String get onWifiLater => 'Касније на Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Пишемо ваш сажетак…';
+
+  @override
+  String get onTheWayServerWork => 'Рад који је пријавио сервер';
+
+  @override
+  String get finishNothingToProcess => 'Још нема ничега за обраду.';
+
+  @override
+  String get finishStillProcessing => 'Још се обрађује. Појавиће се на почетној.';
+
+  @override
+  String get finishBackToHome => 'Назад на почетну';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Резиме када се овај разговор заврши';
 }

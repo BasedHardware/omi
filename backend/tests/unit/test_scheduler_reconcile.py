@@ -102,16 +102,22 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "dream-agent-canary-half-hourly",
         "day3-reengagement-email-daily",
         "enrichment-maintenance",
+        "error-class-alerts-sweep",
         "frame-request-retention-hourly",
         "sync-backfill-uid-sequencer",
     }
     assert set(prod_jobs) == {
+        "batch-stock-census",
         "cap-hold-durable-redrive",
+        "app-review-config-sweep-hourly",
         "candidate-integration-sweep",
+        "conversations-v3-legacy-users",
+        "conversations-v3-sweep",
         "dream-agent-canary-half-hourly",
         "dream-agent-sweep-hourly",
         "day3-reengagement-email-daily",
         "enrichment-maintenance",
+        "error-class-alerts-sweep",
         "finops-unit-cost-daily",
         "frame-request-retention-hourly",
         "messaging-maintenance-hourly",
@@ -125,7 +131,10 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
     assert dev_jobs["enrichment-maintenance"]["lifecycle"] == "planned"
     assert "lifecycle" not in prod_jobs["enrichment-maintenance"]
     assert prod_jobs["enrichment-maintenance"]["state"] == "ENABLED"
+    assert "lifecycle" not in prod_jobs["app-review-config-sweep-hourly"]
+    assert prod_jobs["app-review-config-sweep-hourly"]["state"] == "ENABLED"
     assert dev_jobs["enrichment-maintenance"]["state"] == "PAUSED"  # dev shares prod Firestore
+    assert dev_jobs["error-class-alerts-sweep"]["state"] == "PAUSED"  # logging.read not granted in dev
     rollup = prod_jobs["omi-tv-rollup-daily"]
     assert rollup["lifecycle"] == "planned"
     assert rollup["state"] == "PAUSED"
@@ -326,7 +335,7 @@ def test_check_reports_unlisted_job_without_deleting():
     ]
 
 
-def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_manifest():
+def test_owner_scheduler_checks_are_scoped_and_central_reconcile_supports_planned_job_selection():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[3]
@@ -358,8 +367,26 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_ma
     assert "owner: .github/workflows/gcp_scheduler_reconcile.yml" in admin_job
 
     central = (root / ".github/workflows/gcp_scheduler_reconcile.yml").read_text(encoding="utf-8")
-    assert '--project "$PROJECT_ID" --check' in central
-    assert '--project "$PROJECT_ID" --check --jobs' not in central
+    assert "Optional space-separated declared job names" in central
+    assert 'JOBS: ${{ github.event.inputs.jobs }}' in central
+    assert "SELECTED_JOBS=()" in central
+    assert "JOB_ARGS=()" in central
+    assert 'read -r -a SELECTED_JOBS <<< "$JOBS"' in central
+    assert 'JOB_ARGS=(--jobs "${SELECTED_JOBS[@]}")' in central
+    assert '--project "$PROJECT_ID" --apply "${JOB_ARGS[@]}"' in central
+    assert '--project "$PROJECT_ID" --check "${JOB_ARGS[@]}"' in central
+
+
+def test_scheduler_cli_parses_unfiltered_and_multiple_job_selections_without_io():
+    prefix = ["--environment", "dev", "--project", "based-hardware-dev"]
+
+    unfiltered = reconcile._parser().parse_args([*prefix, "--check"])
+    assert unfiltered.jobs is None
+
+    selected = reconcile._parser().parse_args(
+        [*prefix, "--apply", "--jobs", "app-review-config-sweep-hourly", "dream-agent-sweep-hourly"]
+    )
+    assert selected.jobs == ["app-review-config-sweep-hourly", "dream-agent-sweep-hourly"]
 
 
 def test_notifications_cadence_covers_every_local_hour_boundary():

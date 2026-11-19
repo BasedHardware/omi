@@ -1,0 +1,18 @@
+# Merge-time billed-read ceilings, measured against the loopback Firestore emulator.
+# Raising any row requires a reviewed PR whose body states the resulting $/day impact.
+
+[[scenario]]
+scenario = "batch_unit_end_to_end"
+budget_reads = 455
+unit = "batch_unit"
+owner = "fsreads-lead"
+review_by = "2026-12-11"
+notes = "Measured 757 reads across the existing 2-unit flow (378.5/unit), including the post-decode, pre-ASR dispatch-authorization rechecks; ceil(measured/unit * 1.20) = 455; compute and object storage are mocked."
+
+[[scenario]]
+scenario = "conversation_list_page"
+budget_reads = 100
+unit = "page_at_limit_100"
+owner = "fsreads-lead"
+review_by = "2026-12-11"
+notes = "Measured 100 document reads and zero fixed overhead; K = ceil(0 * 1.20) = 0; source and list-projection fixtures are seeded."

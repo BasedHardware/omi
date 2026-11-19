@@ -94,7 +94,7 @@ def _run_expired_sync_status(monkeypatch: pytest.MonkeyPatch, capture: HelperCap
 
 
 def _run_episode_home(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
-    monkeypatch.setattr(episodes_router, '_admitted', lambda uid, channel: True)
+    monkeypatch.setattr(episodes_router, '_admitted', lambda uid, channel, **kw: True)
     trial(
         capture,
         episodes_router.list_episodes,

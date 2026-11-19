@@ -1,5 +1,8 @@
 """Real preservation writer/transactions with synthetic task rows and fake integrations only."""
 
+import fakeredis
+from database import action_item_versions
+
 from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -98,6 +101,8 @@ class Store(StrictFirestore):
 
 @pytest.fixture
 def world(monkeypatch):
+    fake_redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(action_item_versions, '_redis', lambda: fake_redis)
     monkeypatch.setenv('ACTION_ITEM_REFRESH_PRESERVE_ENABLED', 'true')
     monkeypatch.setattr(socket.socket, 'connect', lambda *a: pytest.fail('network forbidden'))
     monkeypatch.setattr(

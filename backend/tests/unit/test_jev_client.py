@@ -119,7 +119,6 @@ def test_direct_dispatch_attempts_are_measured_in_conversation_scope(gateway, mo
 
     _, script, _ = gateway
     script.extend([_raise(httpx.ReadTimeout('slow')), _respond(200, _ok_body())])
-    monkeypatch.setattr(metrics, 'revision_reuse', lambda: True)
     feature = 'jev_conversation_relevance'
     before = {
         outcome: metrics.PHASE_A_CALLS.labels(feature, outcome)._value.get() for outcome in ('completed', 'failed')

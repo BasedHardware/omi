@@ -98,8 +98,10 @@ async def test_process_now_keeps_selected_recording_before_enrichment(pipeline, 
     pipeline.lifecycle_service.restore_discarded.assert_called_once_with('uid', 'recording')
     pipeline.process_conversation.assert_called_once()
     assert pipeline.process_conversation.call_args.kwargs['user_kept'] is True
+    assert pipeline.process_conversation.call_args.kwargs['trigger'].value == 'backlog_choice'
     assert row['discarded'] is False
-    assert row['relevance_decision']['decided_by'] == 'user'
+    assert row['relevance_decision']['decided_by'] == 'policy'
+    assert row['relevance_decision']['reason'] == 'backlog_choice'
 
 
 @pytest.mark.asyncio

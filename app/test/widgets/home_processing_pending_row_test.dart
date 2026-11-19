@@ -6,9 +6,12 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/home_feed_provider.dart';
+import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/pages/conversations/home_rows.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -32,6 +35,83 @@ List<TranscriptSegment> _finishedSpeech() => [
 
 void main() {
   setUp(() => VisibilityDetectorController.instance.updateInterval = Duration.zero);
+  for (final (mode, compact) in [
+    for (final mode in ['cold', '404', 'read error', 'disabled'])
+      for (final compact in [false, true]) (mode, compact)
+  ]) {
+    testWidgets('default Home keeps one pending aggregate across days before capability: $mode compact=$compact',
+        (tester) async {
+      tester.view.physicalSize = const Size(390, 1800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final now = DateTime.now().subtract(const Duration(minutes: 30));
+      ServerConversation record(String id, DateTime at, {bool ready = false}) => ServerConversation(
+          id: id,
+          createdAt: at,
+          startedAt: at,
+          status: ready ? ConversationStatus.completed : ConversationStatus.processing,
+          structured: Structured(ready ? 'Finished notes' : '', ''),
+          homeStep: ready ? 'ready' : null);
+      final provider = ConversationProvider(isSignedIn: () => false)
+        ..isLoadingConversations = false
+        ..conversations = [
+          record('new', now),
+          record('ready', now.subtract(const Duration(minutes: 5)), ready: true),
+          record('old', now.subtract(const Duration(days: 1)))
+        ]
+        ..processingConversations = [record('local', now)]
+        ..groupConversationsByDate();
+      final store = PendingWorkStore(
+          loadPending: () async => mode == '404'
+              ? const ApiFailure(ApiProblem(ApiProblemKind.notFound))
+              : mode == 'read error'
+                  ? const ApiFailure(ApiProblem(ApiProblemKind.transport))
+                  : const ApiSuccess(PendingWorkSnapshot.disabled),
+          loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
+      addTearDown(provider.dispose);
+      addTearDown(store.dispose);
+      final feed = HomeFeedProvider(
+          owner: () => 'fixture',
+          fetch: ({cursor}) async => ApiSuccess(HomeFeedPage(items: [
+                for (final c in provider.conversations)
+                  HomeFeedCard(
+                      id: 'conversation:${c.id}',
+                      kind: 'conversation',
+                      detailId: c.id,
+                      startedAt: c.startedAt,
+                      title: c.structured.title,
+                      emoji: '',
+                      preview: '',
+                      status: c.status.name,
+                      homeStep: c.homeStep,
+                      starred: false,
+                      isLocked: false,
+                      hasTasks: false,
+                      memberCount: 1,
+                      sources: const [],
+                      summaryAvailable: c.homeStep == 'ready',
+                      revision: 'fixture')
+              ], nextCursor: null, hasMore: false, truncated: false, generation: 'fixture')));
+      addTearDown(feed.dispose);
+      if (compact) await feed.start();
+      final screen = await buildTypedConversationScreen(provider, pendingWork: store, feed: compact ? feed : null);
+      if (mode != 'cold') {
+        store.homeProcessingToday = true;
+        await store.refresh();
+      }
+      expect(store.homeProcessingToday, isFalse);
+      await tester.pumpWidget(screen);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(ProcessingConversationRow), findsOneWidget);
+      final row = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+      expect(row.count, 3);
+      expect(row.step, HomeStep.transcribing);
+      expect(row.episode!.members.map((m) => m.id), unorderedEquals(['new', 'old', 'local']));
+      expect(find.text('Transcribing… · 3 recordings'), findsOneWidget);
+      expect(find.text('Finished notes'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
   for (final live in [false, true]) {
     testWidgets('Home closing episode (live snapshot=$live) has one processing row until all members finish',
         (tester) async {
@@ -59,10 +139,8 @@ void main() {
             conversationIds: const ['a', 'b', 'c'],
             members: [a, b, c],
             title: 'Dinner and plans',
-            moments: [
-              EpisodeMoment(
-                  id: 'm', conversationId: 'a', startedAt: now, endedAt: now, points: const [EpisodePoint('Point')])
-            ],
+            // Not composed yet: members still processing hold the row. A composed episode keeps
+            // its notes row instead (home_rows_test).
           );
       final provider = ConversationProvider(isSignedIn: () => false)
         ..isLoadingConversations = false
@@ -74,7 +152,6 @@ void main() {
         fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [episode(live)])),
       );
       addTearDown(provider.dispose);
-      addTearDown(episodes.dispose);
       final screen = await buildTypedConversationScreen(provider, episodes: episodes);
       episodes
         ..debugSetLive(null)
@@ -98,6 +175,8 @@ void main() {
       expect(find.text('Dinner and plans'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
+      // Dispose before the test ends: a processing hold re-reads on a timer that must not outlive the page.
+      episodes.dispose();
     });
   }
 

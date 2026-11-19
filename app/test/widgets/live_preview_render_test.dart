@@ -736,9 +736,14 @@ void main() {
         // The tile carries the same session length the page counts, in whole minutes.
         expect(find.text('8m'), findsOneWidget);
         expect(find.text(title.isEmpty ? en.episodeListeningNow : title), findsOneWidget);
-        // Line two says Listening for a named episode, and a bare row still says it is live.
-        expect(find.byKey(const Key('home_live_episode_preview')), findsNothing);
-        expect(find.text(title.isEmpty ? en.live : en.listening), findsOneWidget);
+        // Newest on-device words stay visible on line two; an empty preview keeps Listening.
+        if (state == _State.streaming) {
+          expect(find.byKey(const Key('home_live_episode_preview')), findsOneWidget);
+          expect(find.textContaining('we can', findRichText: true), findsOneWidget);
+        } else {
+          expect(find.byKey(const Key('home_live_episode_preview')), findsNothing);
+          expect(find.text(title.isEmpty ? en.live : en.listening), findsOneWidget);
+        }
         // The row keeps its size: the tile never outgrows it.
         if (textScale == 1) {
           expect(tester.getSize(find.byKey(const Key('home_live_episode_row'))).height, lessThan(80));

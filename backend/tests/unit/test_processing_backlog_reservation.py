@@ -256,8 +256,9 @@ def worker_reservation(reservation, monkeypatch):
         h.choice['lease_until'] = 0
         live = worker.cap_hold.hold_manifest({'metadata': 'encrypted-live', 'name': 'live'}, 2, NOW - 10, 10)
         h.client.rows[source_path('audio', 'live')] = live
-        monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
-        monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+        # Execution admission comes from the STT cap switch, as on the prod live hosts
+        # (the ladder-only admission path was retired with LADDER_V1_BUDGET_ENFORCEMENT_ENABLED).
+        monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
         monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'uid:' + UID)
         monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
         monkeypatch.setattr(worker.funded_processing, 'period_id', lambda: PERIOD)

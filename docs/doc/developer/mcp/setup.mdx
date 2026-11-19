@@ -420,3 +420,19 @@ docker run --rm -i \
   The API key can also be provided with each tool call. If not provided, the
   server uses the `OMI_API_KEY` environment variable as a fallback.
 </Tip>
+
+## Connector scope contract
+
+First-party clients read connector requirements from the authenticated
+`GET /v1/mcp/oauth/grants` response's `connector_access` map. Each connector
+(`chatgpt`, `mcp_api_key`, `claude`) supplies `client_ids`, `required_scopes`, and
+`default_scopes` from the backend registry. ChatGPT requires the standard four
+read scopes; Claude has no implied scope floor.
+
+Before minting an MCP API key, clients read `GET /v1/mcp/keys/scopes` for its
+read-only `default_scopes`. `POST /v1/mcp/keys` also returns this contract as
+`connector_access`. The existing key-list endpoint remains an array, including
+when no keys exist. Older or unavailable backends use the clients' existing
+four-scope offline fallback; explicit scope selections remain explicit. This
+does not change legacy key repair, OAuth refresh upgrades, or the separate
+colon-form Developer API scope vocabulary.

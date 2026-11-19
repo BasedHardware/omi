@@ -36,6 +36,7 @@ Entry points (all synchronous, fail-open, run on a worker thread by callers):
 """
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 import logging
 import threading
@@ -54,6 +55,9 @@ from utils.sync.repeat_work_metrics import conversation_scope
 from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
 from utils.episodes.timeline import episode_at as episode_at, episodes_between as episodes_between
 from database import episode_timeline, episode_attach_memo
+from database import episode_live_members as live_members_db
+from config import episode_live_members as live_members
+from database._client import get_firestore_client
 
 from config.episodes import (
     CLOSE_GAP_SECONDS,
@@ -62,6 +66,7 @@ from config.episodes import (
     MAX_EPISODE_SECONDS,
     MOMENT_MIN_INTERVAL_SECONDS,
     MOMENT_MIN_WORDS,
+    F_JOIN_VARIANT,
     episode_hard_cap_across_conversations_enabled,
     episode_output_language_pinned,
     episodes_enabled_for,
@@ -73,7 +78,7 @@ from database import episodes as episodes_db
 from database import notifications as notification_db
 from database import users as users_db
 from database.auth import get_user_name
-from utils.episodes import moment_render, boundary_runtime
+from utils.episodes import moment_render, boundary_runtime, f_join
 from utils.episodes import output_language as episode_language
 from utils.llm.output_language import dominant_segment_language, languages_match
 from utils.episodes import client_gate, composer, incremental, metrics, policy, recovery
@@ -92,6 +97,7 @@ from utils.episodes.recorded_recovery import (
     unconsumed_moments,
 )
 from utils.observability.fallback import record_fallback
+from utils.summary_quality import episode_quality, title_or_fallback, content_units
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +121,10 @@ CLIENT_FINALIZE = 'client_finalize'
 SYNC_UPDATE = 'sync_update'
 # A finalization tail this short only costs a call when it might hold a request to Omi.
 FINALIZE_MIN_WORDS = 8
+
+
+class AdmissionClosed(Exception):
+    """The audio close already owns the capture: a late admission attached nothing."""
 
 
 @dataclass
@@ -145,14 +155,23 @@ def _tz(uid: str, c: Collaborators) -> str:
         return 'UTC'
 
 
-def _named_segments(uid: str, segments: Sequence[Mapping[str, Any]], c: Collaborators) -> list[dict[str, Any]]:
+def _named_segments(
+    uid: str, segments: Sequence[Mapping[str, Any]], c: Collaborators, *, person_limit: Optional[int] = None
+) -> list[dict[str, Any]]:
     """Attach stored person names so the model never sees only "Speaker 2" for a known voice."""
-    person_ids = sorted({str(s['person_id']) for s in segments if s.get('person_id')})
+    person_ids = sorted({str(s['person_id']) for s in segments if s.get('person_id')})[:person_limit]
     names: dict[str, str] = {}
     if person_ids:
         try:
             if c.people_names is not None:
                 names = c.people_names(uid, person_ids)
+            elif person_limit is not None:
+                # F needs only names, not the People learning projections and their extra reads.
+                client = c.firestore_client if c.firestore_client is not None else get_firestore_client()
+                people = client.collection('users').document(uid).collection('people')
+                for person_id in person_ids:
+                    person = people.document(person_id).get(field_paths=['name']).to_dict() or {}
+                    names[person_id] = str(person.get('name') or '')
             else:
                 names = {
                     str(person.get('id')): str(person.get('name') or '')
@@ -338,6 +357,10 @@ def _close(
     carried_items: Optional[list[dict[str, Any]]] = None,
     preserve_for_reconciliation: bool = False,
     extra_fields: Optional[Mapping[str, Any]] = None,
+    split_after: Optional[datetime] = None,
+    retained_member_window: bool = False,
+    f_detaches: Optional[set[str]] = None,
+    synced_f: bool = False,
 ) -> Optional[dict[str, Any]]:
     """Close once, returning committed state; None when the compare-and-swap loses.
 
@@ -345,16 +368,35 @@ def _close(
     ``closing`` keeps that member's items for finalization without reopening.
     ``preserve_for_reconciliation`` keeps other members' provisional items.
     """
-    expected_activity_at = policy.utc(episode.get('last_activity_at')) if reason == 'idle' else None
+    expected_activity_at = (
+        policy.utc(episode.get('last_activity_at'))
+        if reason == 'idle' or (reason == 'gap' and live_members.enabled())
+        else None
+    )
     # Fold unapplied WAL speech into these notes before close, explicitly
     # targeting this episode to avoid recursion or reassignment.
+    if synced_f:
+        fresh = episodes_db.get_episode(
+            uid, str(episode['id']), firestore_client=c.firestore_client, follow_redirects=False
+        )
+        if (
+            fresh is None
+            or not isinstance(fresh.get('conversation_ids'), list)
+            or len(fresh['conversation_ids']) > episodes_db.SYNCED_F_MEMBER_LIMIT
+            or fresh.get('recovered_conversation_ids')
+        ):
+            return None
+        episode = fresh
     for cid in episode.get('recovered_conversation_ids') or []:
         if cid == detach:
             continue
-        row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        row = read_product_conversation(
+            conversations_db.get_conversation, uid, cid, firestore_client=c.firestore_client
+        )
         if row and not any(row.get(key) for key in ('deleted', 'discarded', 'sync_merged_into')):
             _record_recovered(uid, str(episode['id']), cid, row, c)
-    episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or episode
+    if not synced_f:
+        episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or episode
     items = provisional_items(episode)
     transferred = [
         dict(item)
@@ -401,14 +443,28 @@ def _close(
         closed_at=closed_at,
         extra=extra,
         expected_activity_at=expected_activity_at,
+        expected_conversation_ids=episode.get('conversation_ids') if split_after is not None else None,
+        split_after=split_after,
         firestore_client=c.firestore_client,
+        **({'retained_member_window': True} if retained_member_window else {}),
+        **({'synced_f': True} if synced_f else {}),
     )
     if closed is not None:
+        if (
+            retained_member_window
+            and detach
+            and f_detaches is not None
+            and detach in (episode.get('conversation_ids') or [])
+            and detach not in (closed.get('conversation_ids') or [])
+        ):
+            # Record the committed detach before any post-close work can fail.
+            f_detaches.add(detach)
         if carried_items is not None:
             carried_items.extend(transferred)
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
-        composer.schedule(uid, str(episode['id']), collaborators=c)  # Members still processing reschedule it.
+        f_join.record_closed_size(closed)
+        composer.schedule_after_close(uid, str(episode['id']), episode=closed, collaborators=c, trigger='close')
     return closed
 
 
@@ -494,6 +550,9 @@ def _select_carried_segments(
     calls this helper, so an earlier occasion's buffer remains for finalization.
     """
     members = set(episode.get('conversation_ids') or [])
+    # A join marked for variant F keeps its speech out of another conversation's moment until its own
+    # boundary settles; its finalize tail still applies it.
+    members -= {cid for cid, marker in _pending(episode).items() if marker.get('variant') == F_JOIN_VARIANT}
     applied = dict(episode.get('applied') or {})
     selected_segments: list[Mapping[str, Any]] = []
     receipt_ids: dict[str, set[str]] = {}
@@ -583,7 +642,18 @@ def _attach_once(
         owner = episode_owning_recorded_time(uid, started_at, firestore_client=c.firestore_client)
         late = is_late((started_at, ended_at or started_at), now)
         if owner or late:
+            uncertain = (
+                None
+                if late
+                else f_join.uncertain(
+                    uid, owner, conversation_id, source, started_at, firestore_client=c.firestore_client
+                )
+            )
             placed = attach_recorded(uid, conversation_id, {'source': source}, started_at, started_at, c)
+            if uncertain is not None and owner is not None:
+                f_join.mark_pending(
+                    uid, owner, placed, conversation_id, uncertain, _pending(placed), c.firestore_client
+                )
             if owner and not policy.is_live(owner) and not late:
                 resumed = episode_timeline.resume_recorded(
                     uid,
@@ -621,7 +691,7 @@ def _attach_once(
             last_activity_at=started_at,
             calendar_identity=None,
             now=now,
-        )
+        ) | f_join.arm_fields(uid)
         episodes_db.commit_moment(
             uid,
             expected_episode_id=None,
@@ -673,9 +743,10 @@ def record_moment(
     if not episodes_enabled_for(uid):
         return 'disabled'
     outcome = 'error'
+    f_detaches: set[str] = set()
     for _ in range(2):
         try:
-            outcome = _record_moment_once(uid, moment, c, member_episode_id=member_episode_id)
+            outcome = _record_moment_once(uid, moment, c, member_episode_id=member_episode_id, f_detaches=f_detaches)
         except episodes_db.EpisodeConflict:
             if moment.recovery_receipts is not None:
                 moment.recovery_receipts.invalidate()
@@ -687,6 +758,7 @@ def record_moment(
         break
     if outcome in {'conflict', 'error'}:
         metrics.record_moment_update(trigger=moment.trigger, outcome=outcome)
+    f_join.record_orphans(uid, f_detaches, c)
     return outcome
 
 
@@ -698,13 +770,32 @@ def _settle_boundary(
     text: str,
     c: Collaborators,
     now: datetime,
+    named: Sequence[Mapping[str, Any]] = (),
+    short: bool = False,
+    f_detaches: Optional[set[str]] = None,
 ):
     """Settle provisional joins and keep continuing members with their original owner."""
     decision = boundary_runtime.decision(
         uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
     )
     pending = _pending(episode).get(moment.conversation_id)
-    if episode and pending is not None and decision.action == policy.CONTINUE:
+    f_split = False
+    if episode and pending is not None and pending.get('variant') == F_JOIN_VARIANT:
+        # A recorded-time join marked for variant F settles only with F, never the legacy prompt. The join
+        # was marked only where the meeting authority asked a question, and a moment too short to commit
+        # keeps the join unchanged.
+        if decision.action == policy.CONTINUE and not short:
+            decision = f_join.settle(
+                uid,
+                episode,
+                moment.conversation_id,
+                pending,
+                named,
+                c,
+                started_at=facts.started_at,
+            )
+            f_split = decision.action == 'close'
+    elif episode and pending is not None and decision.action == policy.CONTINUE:
         # It joined provisionally at its first words; with its text in hand, settle it now.
         decision = policy.Boundary(
             policy.ASK,
@@ -754,6 +845,9 @@ def _settle_boundary(
             carry_to_successor=moment.conversation_id if carry_previous_state else None,
             carried_items=carried_items if carry_previous_state else None,
             preserve_for_reconciliation=carry_previous_state,
+            split_after=facts.started_at if f_split else None,
+            retained_member_window=f_split,
+            f_detaches=f_detaches if f_split else None,
         )
         episode = None
     elif decision.action == policy.NEW:
@@ -779,7 +873,12 @@ def _settle_boundary(
 
 
 def _record_moment_once(
-    uid: str, moment: MomentInput, c: Collaborators, *, member_episode_id: Optional[str] = None
+    uid: str,
+    moment: MomentInput,
+    c: Collaborators,
+    *,
+    member_episode_id: Optional[str] = None,
+    f_detaches: Optional[set[str]] = None,
 ) -> str:
     now = _now(c)
     walk = moment.recovery_receipts if walk_context_enabled() and moment.trigger == 'sync_recovery' else None
@@ -869,7 +968,14 @@ def _record_moment_once(
     if closed is None and not member_episode_id:
         previous_episode_id = episode.get('id') if episode else None
         hard_cap_previous = dict(episode) if episode else None
-        settled = _settle_boundary(uid, episode, moment, facts, text.text, c, now)
+        short = (
+            not recovered
+            and moment.trigger != 'session_end'
+            and text.words < (FINALIZE_MIN_WORDS if moment.trigger == 'finalize' else MOMENT_MIN_WORDS)
+        )
+        settled = _settle_boundary(
+            uid, episode, moment, facts, text.text, c, now, named, short=short, f_detaches=f_detaches
+        )
         if isinstance(settled, str):
             return settled
         episode, pending, carried_items, successor_started_at, carry_previous_state = settled
@@ -914,6 +1020,8 @@ def _record_moment_once(
             previous=hard_cap_previous if carry_previous_state else None,
         )
     )
+    if episode is None:
+        base |= f_join.arm_fields(uid)
     if episode is None and carry_previous_state and hard_cap_previous is not None:
         _carry_hard_cap_state(base, hard_cap_previous, carried_items)
     if (
@@ -994,7 +1102,12 @@ def _record_moment_once(
     end_offset = max((_segment_end(s) for s in segments), default=0.0)
     start_offset = min((_segment_start(s) for s in segments), default=0.0)
     changes = (composer.no_changes if compose_owns else apply_update)(
-        base, result.update, conversation_id=moment.conversation_id, segment_offset=end_offset, now=now
+        base,
+        result.update,
+        conversation_id=moment.conversation_id,
+        segment_offset=end_offset,
+        now=now,
+        content_word_units=int(base.get("content_word_units") or 0) + content_units([*carried_segments, *segments]),
     )
     detected_output_language = (
         episode_language.detected_state_language({**base, **changes}, hint_language=output_language)
@@ -1107,7 +1220,7 @@ def _record_moment_once(
             updates=updates,
             segment_receipts=segment_receipts,
             firestore_client=c.firestore_client,
-            **({'recovery_conversation_id': moment.conversation_id} if walk is not None else {}),
+            recovery_conversation_id=moment.conversation_id if walk is not None else None,
         )
     else:
         stored = episodes_db.commit_moment(
@@ -1150,6 +1263,10 @@ def on_conversation_finalized(
     collaborators: Optional[Collaborators] = None,
 ) -> str:
     """After the conversation's normal processing. Returns an outcome label; never raises."""
+    if row.get('recording') or row.get('v3_derived'):
+        return 'skipped_recording_layer'
+    if row.get('capture_time_trust') == 'untrusted':
+        return 'skipped_unknown_date'
     c = collaborators or Collaborators()
     if not episodes_enabled_for(uid) or trigger not in RECONCILE_TRIGGERS:
         return 'skipped'
@@ -1384,7 +1501,152 @@ def _rejoin_closed_synced(
     return 'rejoined_member'
 
 
-def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
+def _synced_f_verdict(
+    uid: str,
+    conversation_id: str,
+    row: Mapping[str, Any],
+    started: datetime,
+    finished: datetime,
+    c: Collaborators,
+):
+    """Variant F for a sync or late conversation: its whole transcript answers before it is placed.
+
+    Returns the owner and F's boundary, or None when F does not decide this join.
+    """
+    if not f_join.admitted(uid) or not f_join.may_feed_llm(uid, row):
+        # Unknown/blocked candidate metadata never permits naming or a model call.
+        # Outside the cohort or killed: no owner read and no model call, so today's placement is untouched.
+        return None
+    fresh = read_product_conversation(
+        conversations_db.get_conversation_raw_snapshot, uid, conversation_id, firestore_client=c.firestore_client
+    )
+    if not fresh or not f_join.may_feed_llm(uid, fresh):
+        # Intake may precede a lock/deletion: check stored privacy before constructing or naming speech.
+        return None
+    segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
+    if sum(len(str(s.get('text') or '').split()) for s in segments) < MOMENT_MIN_WORDS:
+        # Too little speech to ask about: the join stays as today's, as a short moment keeps it.
+        return None
+    if episodes_db.get_episode_owner_snapshot(uid, conversation_id, firestore_client=c.firestore_client) is not None:
+        # Already placed (a retry or a changed re-attach): F answers only a first placement, and nothing moves.
+        # Checked after the cheap gates, so only an admitted join with enough speech pays this read.
+        return None
+    rows = episode_timeline.recorded_candidates(
+        uid,
+        started,
+        finished,
+        firestore_client=c.firestore_client,
+        candidate_limit=episode_timeline.F_JOIN_CANDIDATE_LIMIT,
+    )
+    selected = choose_recorded_episode(rows, started, started)
+    owner = (
+        episodes_db.get_episode(uid, selected['id'], firestore_client=c.firestore_client, follow_redirects=False)
+        if selected
+        else None
+    )
+    if (
+        owner is None
+        or not isinstance(owner.get('conversation_ids'), list)
+        or len(owner['conversation_ids']) > episodes_db.SYNCED_F_MEMBER_LIMIT
+        or owner.get('recovered_conversation_ids')
+    ):
+        return None
+    source = getattr(row.get('source'), 'value', row.get('source')) or None
+    marker = f_join.uncertain(uid, owner, conversation_id, source, started, firestore_client=c.firestore_client)
+    if marker is None:
+        return None
+    if episodes_db.get_episode_owner_snapshot(uid, conversation_id, firestore_client=c.firestore_client) is not None:
+        # A control attach may have committed after the selected owner snapshot, before uncertain.
+        return None
+    pending = {
+        'gap_seconds': marker.gap_seconds or 0.0,
+        'source_changed': marker.source_changed,
+        'variant': F_JOIN_VARIANT,
+        'previous': f_join.latest_member(owner, conversation_id),
+    }
+    # Sync/late F adds <=26 document reads and <=1 Jev call per decision, including close:
+    # 1 admitted owner candidate + 1 fresh candidate + 1 owner + 1 boundary authority
+    # + 1 early unplaced link + 2 post-uncertain/pre-Jev unplaced link reads + 1 predecessor + 1 user consent
+    # + 2 names per transcript (4 total) + 1 final candidate re-read before Jev + 1 post-Jev recheck + 1 pre-close refresh
+    # + 4 close control docs + <=3 close members + <=2 close candidates + 1 optimization-off owner re-read
+    # (includes optimization-off re-reads). The 2-document initial query fails closed
+    # when full, so only a window with <=1 result can reach the remaining reads.
+    # Close queries share one transaction snapshot: a complete first window has <=1 result,
+    # and the optimization-off requery uses the same or a narrower window.
+    # Full windows/large or recovered owners keep control placement. The close is single-attempt; sync retries reuse its placement without repeating F or close reads.
+    named = _named_segments(uid, f_join.candidate_head(segments), c, person_limit=2)
+    return owner, f_join.settle(
+        uid,
+        owner,
+        conversation_id,
+        pending,
+        named,
+        c,
+        started_at=started,
+        member=False,
+        # No candidate_row: settle re-reads stored privacy and consent, then ownership before Jev.
+        people_read_limit=2,
+    )
+
+
+def _attach_recorded_synced(
+    uid: str,
+    conversation_id: str,
+    row: Mapping[str, Any],
+    started: datetime,
+    finished: datetime,
+    c: Collaborators,
+    *,
+    attempts: Optional[dict[str, dict[str, Any]]] = None,
+) -> dict[str, Any]:
+    """Place a sync or late conversation on its recorded span and return the episode it joined or opened.
+
+    Variant F may split it into its own occasion. Every failure keeps today's placement.
+
+    ``attempts`` is the state one sync attach shares across the lost-CAS retries of ``sync_attach``.
+    Jev answers once, on the first attempt. A retry places the conversation the way that answer
+    decided, and the owner closes at most once, so one sync attach asks Jev at most one question.
+    """
+    state = {} if attempts is None else attempts.setdefault(conversation_id, {})
+    if 'verdict' not in state:
+        try:
+            state['verdict'] = _synced_f_verdict(uid, conversation_id, row, started, finished, c)
+        except Exception as error:
+            f_join.synced_failed(error)
+            state['verdict'] = None
+    verdict = state['verdict']
+    if state.get('keep') or verdict is None or verdict[1].action != 'close':
+        return attach_recorded(uid, conversation_id, row, started, finished, c)
+    if not state.get('closed'):
+        owner, boundary = verdict
+        try:
+            # Same split as the live path: the owner closes where the candidate begins, under the member guard.
+            closed = _close(
+                uid, owner, boundary.reason or 'moved_on', c, now=started, split_after=started, synced_f=True
+            )
+        except episodes_db.EpisodeConflict:
+            closed = None
+            metrics.record_boundary('f_later_member')
+        except Exception as error:
+            # Any other failure closing the owner keeps today's placement, as every F failure does.
+            f_join.synced_failed(error)
+            closed = None
+        if closed is None:
+            # The owner changed while F answered: the join stays as today's, on every retry too.
+            state['keep'] = True
+            return attach_recorded(uid, conversation_id, row, started, finished, c)
+        state['closed'] = True
+    return attach_recorded(uid, conversation_id, row, started, finished, c, new_occasion=True)
+
+
+def _attach_synced_once(
+    uid: str,
+    conversation_id: str,
+    row: Mapping[str, Any],
+    c: Collaborators,
+    *,
+    attempts: Optional[dict[str, dict[str, Any]]] = None,
+) -> str:
     """A sync-finalized conversation joins its recorded-time owner (or forms a closed one).
 
     The branch below the recorded-time switch is the legacy rollback path.
@@ -1404,7 +1666,7 @@ def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], 
         span = conversation_span(row)
         if span is None:
             return 'no_episode'
-        attach_recorded(uid, conversation_id, row, span.recorded_start, span.recorded_end, c)
+        _attach_recorded_synced(uid, conversation_id, row, span.recorded_start, span.recorded_end, c, attempts=attempts)
         return 'recorded'
     if started is None:
         return 'no_episode'
@@ -1424,7 +1686,25 @@ def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], 
     return _rejoin_closed_synced(uid, conversation_id, row, started, finished, c, allow_reopen=True)
 
 
-def attach_recorded(uid, conversation_id, row, started, finished, c, *, pending_transcription=False) -> dict[str, Any]:
+def _no_owner(rows, started, finished):
+    """An occasion variant F has just split off: it opens its own episode rather than joining a neighbour."""
+    return None
+
+
+def attach_recorded(
+    uid,
+    conversation_id,
+    row,
+    started,
+    finished,
+    c,
+    *,
+    pending_transcription=False,
+    new_occasion=False,
+    deadline_floor=None,
+    detach_from=None,
+    admission=False,
+) -> dict[str, Any]:
     template = new_episode(
         conversation_id=conversation_id,
         started_at=started,
@@ -1433,20 +1713,78 @@ def attach_recorded(uid, conversation_id, row, started, finished, c, *, pending_
         now=_now(c),
     )
     template['sources'] = [source] if (source := getattr(row.get('source'), 'value', row.get('source'))) else []
+    template |= f_join.arm_fields(uid)
+    if recorded_episodes_enabled() and live_members.enabled() and live_members.capturing(row):
+        placed = live_members_db.place(
+            uid,
+            conversation_id,
+            template=template,
+            firestore_client=c.firestore_client if c.firestore_client is not None else get_firestore_client(),
+            admission=admission,
+            pending_at=template['created_at'] if pending_transcription else None,
+            deadline_floor=deadline_floor,
+        )
+        if placed is not None:
+            if isinstance(placed, str):
+                raise AdmissionClosed()
+            if closed := placed.pop('_live_member_closed_episode', None):
+                composer.schedule_after_close(uid, str(closed['id']), episode=closed, collaborators=c, trigger='close')
+            if refusal := placed.pop('_live_member_clock_refusal', None):
+                metrics.record_live_member_clock_refusal(refusal)
+            if placed.pop('_live_member_rehomed', False):
+                metrics.record_live_member('rehomed')
+            return placed
     placed = episode_timeline.attach_recorded(
         uid,
         conversation_id,
         source,
         started,
         finished,
-        choose=choose_recorded_episode,
+        choose=_no_owner if new_occasion else choose_recorded_episode,
         new_episode=template,
         firestore_client=c.firestore_client,
         pending_at=template['created_at'] if pending_transcription else None,
+        deadline_floor=deadline_floor,
+        detach_from=detach_from,
         attach_row=row,
+        admission=admission,
     )
+    if isinstance(placed, str):
+        raise AdmissionClosed()
     placed.pop('_recorded_windows', None)
     return placed
+
+
+def repair_closed_live_members(uid: str, episode: Mapping[str, Any], c: Collaborators) -> bool:
+    """Lazy repair; uncertainty retains membership, while composition excludes active captures."""
+    if (
+        not recorded_episodes_enabled()
+        or not live_members.enabled()
+        or policy.is_live(episode)
+        or episode.get('close_reason') not in {'gap', 'idle'}
+    ):
+        return False
+    boundary = policy.utc(episode.get('closed_at'))
+    changed = False
+    for cid in episode.get('conversation_ids') or []:
+        row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        if not row or not live_members.capturing(row) or not boundary:
+            continue
+        start = policy.utc(row.get('started_at')) or boundary
+        try:
+            placed = attach_recorded(uid, cid, row, start, start + timedelta(seconds=1), c)
+            changed |= placed.get('id') != episode.get('id')
+        except Exception as error:
+            logger.warning('event=episode_live_member_repair exception_type=%s', type(error).__name__)
+            record_fallback(
+                component='conversation_notes',
+                from_mode='episode_live_member_rehome',
+                to_mode='episode_finished_member_compose',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+    return changed
 
 
 def _record_recovered(
@@ -1471,14 +1809,24 @@ def _record_recovered(
 def _attach_synced(
     uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators, *, absorbed_from: Optional[str] = None
 ) -> str:
+    # sync_attach re-runs an attach after a lost CAS. Both attach paths share one attempts memo,
+    # so Jev answers once per sync attach however many times the attach runs.
+    attempts: dict[str, dict[str, Any]] = {}
+
+    def attach_once_shared(uid, conversation_id, row, c):
+        return _attach_synced_once(uid, conversation_id, row, c, attempts=attempts)
+
+    def attach_recorded_shared(uid, conversation_id, row, started, finished, c):
+        return _attach_recorded_synced(uid, conversation_id, row, started, finished, c, attempts=attempts)
+
     return sync_attach.attach(
         uid,
         conversation_id,
         row,
         c,
         absorbed_from=absorbed_from,
-        attach_once=_attach_synced_once,
-        attach_recorded=attach_recorded,
+        attach_once=attach_once_shared,
+        attach_recorded=attach_recorded_shared,
         repoint_absorbed=_repoint_absorbed,
         repoint_donors=_repoint_sync_donors,
         end_discarded=_end_discarded,
@@ -1505,6 +1853,10 @@ def attach_synced_intake(
     episode (live or closed) never moves.
     Fail-open; returns a bounded outcome label; never raises.
     """
+    if row.get('recording') or row.get('v3_derived'):
+        return 'skipped_recording_layer'
+    if row.get('capture_time_trust') == 'untrusted':
+        return 'skipped_unknown_date'
     c = collaborators or Collaborators()
     if not episodes_enabled_for(uid) or not conversation_id:
         return 'disabled'
@@ -1558,6 +1910,10 @@ def _on_finalized(
     absorbed_from: Optional[str],
     c: Collaborators,
 ) -> str:
+    if row.get('recording') or row.get('v3_derived'):
+        return 'skipped_recording_layer'
+    if row.get('capture_time_trust') == 'untrusted':
+        return 'skipped_unknown_date'
     if row.get('deleted') or is_relevance_discarded(row):
         _end_discarded(uid, conversation_id, row, trigger, c)
         return 'skipped_discarded'
@@ -1574,7 +1930,12 @@ def _on_finalized(
     if trigger == SYNC_UPDATE:
         # Absorb callbacks carry the donor row; notes must read the survivor.
         sync_row = (
-            (conversations_db.get_conversation(uid, conversation_id, firestore_client=c.firestore_client) or {})
+            (
+                read_product_conversation(
+                    conversations_db.get_conversation, uid, conversation_id, firestore_client=c.firestore_client
+                )
+                or {}
+            )
             if absorbed_from
             else row
         )
@@ -1893,13 +2254,14 @@ def episode_by_id(
 
 def _wire_heading(heading: Any) -> str:
     text = clean_text(heading, 240)
-    return '' if is_placeholder_heading(text) else text
+    return text if text.startswith('Discussion ') else title_or_fallback(text)
 
 
 def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
     """Only the client-visible projection; applied offsets, usage and speaker keys stay server-side."""
     if not episode:
         return None
+    episode = episode_quality({}, episode)
     return {
         'id': episode['id'],
         'status': episode.get('status') or 'closed',
@@ -1913,6 +2275,7 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
         'title': clean_text(episode.get('title'), 240),
         'bullets': [clean_text(line, composer.COMPOSER_MAX_PARAGRAPH_CHARS) for line in episode.get('bullets') or []],
         'lede': clean_text(episode.get('lede'), composer.COMPOSER_MAX_PARAGRAPH_CHARS),
+        'compose_deferred': composer.episode_late_compose_enabled() and composer.is_deferred(episode),
         'follow_ups': [clean_text(line, 400) for line in episode.get('follow_ups') or [] if clean_text(line, 400)],
         'people': [clean_text(name, 60) for name in episode.get('people') or [] if clean_text(name, 60) != 'a speaker'],
         'provisional_items': [

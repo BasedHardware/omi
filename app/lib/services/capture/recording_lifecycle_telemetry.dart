@@ -1,6 +1,7 @@
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:uuid/uuid.dart';
+import 'package:omi/utils/logger.dart';
 
 typedef RecordingTelemetryEmitter = void Function(String eventName, Map<String, dynamic> properties);
 typedef RecordingIdFactory = String Function();
@@ -139,6 +140,9 @@ class RecordingLifecycleTelemetry {
         'recording_source': _source,
       });
 
+  /// Identity continuity only; this observation proves no audio gap recovery.
+  void reconnectOutcome(String outcome) => _milestone(outcome);
+
   void captureGap({required String reason, required String phase}) => _emit('Capture Gap Detected', {
         'recording_id': _recordingId,
         'recording_source': _source,
@@ -161,7 +165,8 @@ class RecordingLifecycleTelemetry {
   bool complete({String reason = 'user_stopped'}) {
     if (_recordingId == null) return false;
     if (!_startedEmitted) {
-      failStart(failureClass: 'pipeline_closed');
+      // Undo before the mic reported running is the reader's choice, not a broken pipeline.
+      failStart(failureClass: reason == 'user_discarded' ? 'user_discarded' : 'pipeline_closed');
       return false;
     }
     if (_startedAt != null && _source != null) {
@@ -190,6 +195,11 @@ class RecordingLifecycleTelemetry {
   }
 
   void failStart({required String failureClass}) {
+    Logger.debug(
+      '[Capture] start failed: failure_class=$failureClass source=$_source '
+      'prepared=${_recordingId != null} started=$_startedEmitted '
+      'audio_observed=$_audioObserved audio_bytes=$_audioBytes connections=$_connections',
+    );
     if (_recordingId == null) return;
     if (_startedEmitted) {
       complete(reason: 'pipeline_closed');
@@ -239,7 +249,7 @@ class RecordingLifecycleTelemetry {
   }
 
   static String _normalizeReason(String reason) => switch (reason) {
-        'user_stopped' || 'device_disconnected' || 'mode_changed' || 'pipeline_closed' => reason,
+        'user_stopped' || 'user_discarded' || 'device_disconnected' || 'mode_changed' || 'pipeline_closed' => reason,
         _ => 'unknown',
       };
 
@@ -248,6 +258,7 @@ class RecordingLifecycleTelemetry {
         'capture_unavailable' ||
         'pipeline_unavailable' ||
         'pipeline_closed' ||
+        'user_discarded' ||
         'unknown' =>
           failureClass,
         _ => 'unknown',

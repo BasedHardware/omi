@@ -34,6 +34,9 @@ SUMMARY = SimpleNamespace(structured={'overview': 'Synthetic committed summary'}
 def rows(state, monkeypatch):  # noqa: F811
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: False)
+    from database import conversations as conversations_db
+
+    monkeypatch.setattr(conversations_db, 'get_conversation_raw_snapshot', lambda *_args, **_kwargs: {})
     reprocess.mark('u', 'c', 'en', now=0)
     return state
 
@@ -60,8 +63,6 @@ def test_processed_delivery_retires_the_row(rows):
 
 
 def test_first_summary_keeps_a_dormant_receipt(rows, monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     result = _deliver(rows, lambda *_: SUMMARY)
     assert result.outcome == 'done'
     receipt = rows[0][KEY]
@@ -141,9 +142,112 @@ def test_lifecycle_fence_settles_as_superseded(rows):
     assert KEY not in rows[0]
 
 
+def test_action_item_revision_race_retries_and_keeps_the_row(rows, monkeypatch):
+    # synceff 2026-11-05: a sync write moved the revision during the run, so the action-item refresh refused
+    # stale extraction. That race is a retry that keeps the row and its wake, not error/unexpected.
+    from database.action_item_refresh import RefreshRevisionChanged
+
+    monkeypatch.delenv('ENRICHMENT_REVISION_RACE_RETRY_ENABLED', raising=False)
+    result = _deliver(rows, Mock(side_effect=RefreshRevisionChanged()))
+    assert (result.outcome, result.reason) == ('retry', 'persistence_fenced')
+    assert KEY in rows[0]
+
+
+def test_action_item_revision_race_kill_switch_restores_the_failure(rows, monkeypatch):
+    from database.action_item_refresh import RefreshRevisionChanged
+
+    monkeypatch.setenv('ENRICHMENT_REVISION_RACE_RETRY_ENABLED', 'false')
+    with pytest.raises(RefreshRevisionChanged) as raised:
+        _deliver(rows, Mock(side_effect=RefreshRevisionChanged()))
+    assert isinstance(raised.value, ValueError) and str(raised.value) == 'refresh conversation revision changed'
+
+
+def test_enrichment_delivery_activates_early_abort_only_during_its_callback(rows):
+    from utils.enrichment import early_abort
+
+    seen = []
+    result = _deliver(rows, Mock(side_effect=lambda *_: seen.append(early_abort.ACTIVE.get())))
+    assert (result.outcome, result.reason) == ('done', 'processed')
+    assert seen == [True] and early_abort.ACTIVE.get() is False
+
+
+def _fenced_run(rows, monkeypatch, *, row, resolved=None, resolve_error=None, first_summary=True):
+    # synceff 2026-11-05: a merge redirected the conversation while the run's LLM steps ran, so the persist fenced.
+    from database import conversations as conversations_db
+    from utils.enrichment import custody
+    from utils.enrichment.callback import SyncConversationPersistenceFenced
+
+    if not first_summary:
+        rows[0][KEY]['summary_seen'] = True
+    reads, resolves, transfers = [], [], []
+
+    def resolve(uid, cid, **_):
+        resolves.append(cid)
+        if resolve_error is not None:
+            raise resolve_error
+        return resolved
+
+    monkeypatch.setattr(
+        conversations_db, 'get_conversation_raw_snapshot', lambda uid, cid, **kw: reads.append(cid) or row
+    )
+    monkeypatch.setattr(conversations_db, 'resolve_sync_conversation_redirect', resolve)
+    monkeypatch.setattr(custody, 'transfer_redirect', lambda *args, **kwargs: transfers.append(args[3]))
+    result = _deliver(rows, Mock(side_effect=SyncConversationPersistenceFenced('synthetic')))
+    return result, reads, resolves, transfers
+
+
+REDIRECTED = {'deleted': True, 'sync_merged_into': 'survivor'}
+
+
+def test_fenced_run_redirected_mid_run_transfers_custody_to_the_survivor(rows, monkeypatch):
+    monkeypatch.delenv('ENRICHMENT_FENCE_REDIRECT_TRANSFER_ENABLED', raising=False)
+    result, reads, resolves, transfers = _fenced_run(rows, monkeypatch, row=REDIRECTED, resolved='survivor')
+    assert (result.outcome, result.reason) == ('stale', 'redirected')
+    assert reads == ['c'] and resolves == ['c'] and transfers == ['survivor']
+
+
+@pytest.mark.parametrize('resolved,error', [(None, None), ('c', None), (None, RuntimeError('synthetic outage'))])
+def test_unresolved_redirect_defers_and_keeps_the_row(rows, monkeypatch, resolved, error):
+    result, _reads, _resolves, transfers = _fenced_run(
+        rows, monkeypatch, row=REDIRECTED, resolved=resolved, resolve_error=error
+    )
+    assert result.outcome == 'deferred' and transfers == []
+    assert KEY in rows[0]
+
+
+def test_transient_fault_in_the_fence_redirect_probe_keeps_the_quick_retry(rows, monkeypatch):
+    from google.api_core.exceptions import ServiceUnavailable
+
+    result, _reads, _resolves, transfers = _fenced_run(
+        rows, monkeypatch, row=REDIRECTED, resolve_error=ServiceUnavailable('synthetic blip')
+    )
+    assert (result.outcome, result.reason) == ('retry', 'dependency_warming')
+    assert transfers == [] and KEY in rows[0]
+
+
+@pytest.mark.parametrize('row', [{'sync_content_revision': 4}, {'deleted': True}, None])
+def test_live_or_plainly_deleted_fenced_row_still_settles_superseded(rows, monkeypatch, row):
+    result, reads, resolves, transfers = _fenced_run(rows, monkeypatch, row=row, resolved='survivor')
+    assert (result.outcome, result.reason) == ('discarded', 'superseded')
+    assert reads == ['c'] and resolves == [] and transfers == []
+
+
+def test_fence_redirect_kill_switch_keeps_the_superseded_settle(rows, monkeypatch):
+    monkeypatch.setenv('ENRICHMENT_FENCE_REDIRECT_TRANSFER_ENABLED', 'false')
+    result, reads, resolves, transfers = _fenced_run(rows, monkeypatch, row=REDIRECTED, resolved='survivor')
+    assert (result.outcome, result.reason) == ('discarded', 'superseded')
+    assert reads == [] and resolves == [] and transfers == []
+
+
+def test_fence_without_custody_context_reads_nothing(rows, monkeypatch):
+    result, reads, resolves, transfers = _fenced_run(
+        rows, monkeypatch, row=REDIRECTED, resolved='survivor', first_summary=False
+    )
+    assert (result.outcome, result.reason) == ('discarded', 'superseded')
+    assert reads == [] and resolves == [] and transfers == []
+
+
 def test_open_live_target_defers_with_a_new_wake(rows, monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     state_rows, tasks = rows
     token = state_rows[KEY]['task_token']
 
@@ -163,8 +267,6 @@ def test_open_live_target_defers_with_a_new_wake(rows, monkeypatch):
 
 
 def test_long_stuck_live_target_polls_hourly_through_the_consumer(rows, monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     state_rows, _ = rows
     old = time.time() - reprocess.STUCK_DEFER_GRACE_SECONDS - 60
     state_rows[KEY].update(deferred_reason='open_live_target', deferred_since=old, first_pending_at=old)
@@ -283,15 +385,15 @@ def test_stale_and_busy_wakes_are_consumed(rows, client):
 
 
 def test_new_rows_bind_to_the_enrichment_queue_only_when_routed(rows, monkeypatch):
-    assert reprocess._dispatch_binding()['handler'].endswith('/v2/sync-jobs/run')
+    assert reprocess.dispatch_binding()['handler'].endswith('/v2/sync-jobs/run')
     monkeypatch.setenv('ENRICHMENT_ROUTE', 'enrichment_queue')
     monkeypatch.setenv('ENRICHMENT_TASKS_QUEUE', 'enrichment')
     monkeypatch.setenv('ENRICHMENT_TASKS_HANDLER_URL', 'https://workers.invalid/v2/enrichment/run')
-    binding = reprocess._dispatch_binding()
+    binding = reprocess.dispatch_binding()
     assert binding['queue'] == 'enrichment' and binding['handler'].endswith('/v2/enrichment/run')
     assert reprocess.valid_dispatch_binding(binding)
     monkeypatch.delenv('ENRICHMENT_TASKS_QUEUE')
-    assert reprocess._dispatch_binding()['handler'].endswith('/v2/sync-jobs/run')  # incomplete: fall back, counted
+    assert reprocess.dispatch_binding()['handler'].endswith('/v2/sync-jobs/run')  # incomplete: fall back, counted
 
 
 @pytest.fixture
@@ -303,7 +405,6 @@ def split_binding(state, monkeypatch):  # noqa: F811
     monkeypatch.setenv('SYNC_BACKFILL_TASKS_QUEUE', 'sync-backfill-fresh')
     monkeypatch.delenv('ENRICHMENT_BACKFILL_ROUTING_ENABLED', raising=False)
     monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'backfill')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
     monkeypatch.setattr(reprocess, '_conversation_finished_at', lambda *_: 0)
     monkeypatch.delenv('ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN', raising=False)
     return state
@@ -311,6 +412,8 @@ def split_binding(state, monkeypatch):  # noqa: F811
 
 def test_new_background_backfill_uses_existing_queue_and_enrichment_identity(split_binding):
     reprocess.mark('u', 'c', 'en', now=0)
+    split_binding[0][KEY].update(dormant=True, summary_seen=True, dispatch=None)
+    reprocess.mark('u', 'c', 'en', now=1)
     row = split_binding[0][KEY]
     assert row['summary_lane'] == 'backfill'
     assert row['dispatch'] == {
@@ -329,8 +432,6 @@ def test_other_lanes_keep_enrichment_queue(split_binding, monkeypatch, lane):
 
 
 def test_pending_backfill_first_summary_keeps_enrichment_queue(split_binding, monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     reprocess.mark('u', 'c', 'en', now=0, snapshot_summary=True)
     row = split_binding[0][KEY]
     assert reprocess.first_summary_pending(row)
@@ -353,6 +454,8 @@ def test_missing_backfill_queue_keeps_existing_binding(split_binding, monkeypatc
 def test_active_backfill_binding_survives_coalescing_and_retries(split_binding, monkeypatch):
     monkeypatch.setenv('ENRICHMENT_BACKFILL_ROUTING_ENABLED', 'false')
     reprocess.mark('u', 'c', 'en', now=0)
+    split_binding[0][KEY].update(dormant=True, summary_seen=True, dispatch=None)
+    reprocess.mark('u', 'c', 'en', now=1)
     original = dict(split_binding[0][KEY]['dispatch'])
     monkeypatch.delenv('ENRICHMENT_BACKFILL_ROUTING_ENABLED')
     reprocess.mark('u', 'c', 'en', now=100)
@@ -373,17 +476,66 @@ def test_backfill_effects_use_existing_queue(split_binding):
 
 
 @pytest.mark.parametrize('lane', ['fresh', 'live', 'batch', 'integration'])
-def test_new_user_facing_work_has_reserved_dispatch_slots(split_binding, monkeypatch, lane):
+def test_new_pending_first_summary_has_reserved_dispatch_slots(split_binding, monkeypatch, lane):
     monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
     monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: lane)
     reprocess.mark('u', 'c', 'en', now=0)
     assert split_binding[0][KEY]['dispatch']['queue'] == 'enrichment-fresh'
 
 
+@pytest.mark.parametrize('pending', [False, True])
+def test_recent_reopened_obligation_routes_by_pending_state(split_binding, monkeypatch, pending):
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'batch')
+    reprocess.mark('u', 'c', 'en', now=0)
+    token = split_binding[0][KEY]['task_token']
+    split_binding[0][KEY].update(dormant=True, summary_seen=not pending)
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    clock = Mock(return_value=9700)
+    monkeypatch.setattr(reprocess, '_conversation_finished_at', clock)
+    reprocess.mark('u', 'c', 'en', now=10_000)
+    row = split_binding[0][KEY]
+    assert row['dispatch']['queue'] == ('enrichment-fresh' if pending else 'enrichment')
+    assert row['task_token'] != token
+    assert clock.call_count == int(pending)
+
+
+def test_new_disabled_first_summary_policy_uses_primary_without_clock_read(split_binding, monkeypatch):
+    from config.policy import FirstSummaryPolicy
+
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'batch')
+    monkeypatch.setattr(
+        reprocess, 'resolve_stage_policy', lambda *_args, **_kwargs: FirstSummaryPolicy(first_summary_enabled=False)
+    )
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    clock = Mock(return_value=9700)
+    monkeypatch.setattr(reprocess, '_conversation_finished_at', clock)
+    reprocess.mark('u', 'c', 'en', now=10_000, snapshot_summary=True)
+    assert split_binding[0][KEY]['dispatch']['queue'] == 'enrichment'
+    clock.assert_not_called()
+
+
+def test_admission_cas_retry_rechecks_summary_state_after_cached_recency(split_binding, monkeypatch):
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'batch')
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    clock = Mock(return_value=9700)
+    monkeypatch.setattr(reprocess, '_conversation_finished_at', clock)
+    update = reprocess.mark_update(
+        'u', 'c', 'en', current=10_000, settle_at=10_600, coalesce='max', effects_only=False, batch=False
+    )
+    row, _ = update(None)
+    assert row['dispatch']['queue'] == 'enrichment-fresh'
+    row.update(dormant=True, summary_seen=True)
+    retried, _ = update(row)
+    assert retried['dispatch']['queue'] == 'enrichment'
+    clock.assert_called_once()
+
+
 def test_backfill_fallback_cannot_enter_fresh_queue(split_binding, monkeypatch):
     monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
     monkeypatch.delenv('SYNC_BACKFILL_TASKS_QUEUE')
     reprocess.mark('u', 'c', 'en', now=0)
+    split_binding[0][KEY].update(dormant=True, summary_seen=True, dispatch=None)
+    reprocess.mark('u', 'c', 'en', now=1)
     assert split_binding[0][KEY]['dispatch']['queue'] == 'enrichment'
 
 
@@ -398,9 +550,10 @@ def test_fresh_lazy_effects_cannot_enter_fresh_queue(split_binding, monkeypatch)
 @pytest.mark.parametrize('pending', [False, True])
 def test_backfill_first_summary_gets_priority_only_while_pending(split_binding, monkeypatch, pending):
     monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', str(pending).lower())
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     reprocess.mark('u', 'c', 'en', now=0, snapshot_summary=True)
+    if not pending:
+        split_binding[0][KEY].update(dormant=True, summary_seen=True, dispatch=None)
+        reprocess.mark('u', 'c', 'en', now=1)
     assert split_binding[0][KEY]['dispatch']['queue'] == ('enrichment-fresh' if pending else 'sync-backfill-fresh')
 
 
@@ -422,6 +575,47 @@ def test_sweep_promotes_waiting_fresh_work_and_fences_old_delivery(split_binding
     process = Mock()
     assert reprocess.run(KEY, old_token, process, now=10_000) == 'stale'
     process.assert_not_called()
+
+
+@pytest.mark.parametrize('unbound', [False, True])
+@pytest.mark.parametrize('summary_state', ['pending', 'seen', 'disabled', 'effects'])
+def test_sweep_reserves_fresh_only_for_pending_first_summaries(
+    split_binding, sweep_query, monkeypatch, unbound, summary_state
+):
+    from config.policy import FirstSummaryPolicy
+
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'batch')
+    reprocess.mark('u', 'c', 'en', now=0)
+    row = split_binding[0][KEY]
+    row['summary_seen'] = summary_state == 'seen'
+    row['effects_only'] = summary_state == 'effects'
+    if summary_state == 'disabled':
+        row['first_summary_policy'] = FirstSummaryPolicy(first_summary_enabled=False).to_dict()
+    if unbound:
+        row['dispatch'] = None
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    clock = Mock(return_value=9700)
+    monkeypatch.setattr(reprocess, '_conversation_finished_at', clock)
+    reprocess.sweep(now=10_000)
+    pending = summary_state == 'pending'
+    assert split_binding[0][KEY]['dispatch']['queue'] == ('enrichment-fresh' if pending else 'enrichment')
+    assert clock.call_count == int(pending)
+
+
+def test_leased_refresh_keeps_existing_fresh_binding_until_reopened(split_binding, sweep_query, monkeypatch):
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'batch')
+    reprocess.mark('u', 'c', 'en', now=0)
+    row = split_binding[0][KEY]
+    row.update(summary_seen=True, lease_until=20_000)
+    binding, token = dict(row['dispatch']), row['task_token']
+    clock = Mock(return_value=9700)
+    monkeypatch.setattr(reprocess, '_conversation_finished_at', clock)
+    reprocess.mark('u', 'c', 'en', now=10)
+    reprocess.sweep(now=10_000)
+    assert split_binding[0][KEY]['dispatch'] == binding
+    assert split_binding[0][KEY]['task_token'] == token
+    clock.assert_not_called()
 
 
 @pytest.mark.parametrize('reopened', [False, True])
@@ -499,6 +693,7 @@ def test_priority_sweep_preserves_custody_and_background_work(split_binding, swe
         row['effects_only'] = True
     elif fence == 'backfill':
         row['summary_lane'] = 'backfill'
+        row['summary_seen'] = True
     else:
         row['dispatch']['handler'] = row['dispatch']['audience'] = 'https://other.invalid/v2/enrichment/run'
     monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
@@ -517,7 +712,7 @@ def test_backfill_route_reaches_named_task_creation(split_binding, monkeypatch):
     monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', create)
     monkeypatch.setattr(demand_processing, 'schedule', lambda *_args, **_kwargs: False)
     _ENQUEUE(split_binding[0][KEY])
-    assert create.call_args.args[:2] == ('sync-backfill-fresh', 'https://workers.invalid/v2/enrichment/run')
+    assert create.call_args.args[:2] == ('enrichment', 'https://workers.invalid/v2/enrichment/run')
     assert create.call_args.kwargs['audience'] == 'https://workers.invalid/v2/enrichment/run'
 
 
@@ -539,12 +734,12 @@ def test_snapshot_first_summary_is_protected_after_env_rollback(split_binding, m
 
 @pytest.mark.parametrize('pending', [False, True])
 def test_sweep_routes_previously_unbound_backfill_by_summary_state(split_binding, sweep_query, monkeypatch, pending):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', str(pending).lower())
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.delenv('ENRICHMENT_TASKS_HANDLER_URL')
     monkeypatch.delenv('SYNC_TASKS_HANDLER_URL')
     reprocess.mark('u', 'c', 'en', now=0, snapshot_summary=True)
     row = split_binding[0][KEY]
+    if not pending:
+        row['summary_seen'] = True
     assert row['dispatch'] is None and not split_binding[1]
     token = row['task_token']
 
@@ -703,14 +898,32 @@ def test_transient_fault_in_the_empty_output_strike_releases_the_lease(rows, mon
     import database._client as firestore_client
     import database.summary_processing as summary_processing
 
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
     monkeypatch.setattr(summary_processing, 'record_empty_failure', Mock(side_effect=_remapped_aborted()))
     token = rows[0][KEY]['task_token']
     result = _deliver(rows, lambda *_: SimpleNamespace(structured={'title': 'Synthetic'}))
     assert (result.outcome, result.reason) == ('retry', 'dependency_warming')
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
+def test_empty_output_owner_race_defers_without_burning_callback_attempts(rows, monkeypatch):
+    import database._client as firestore_client
+    import database.summary_processing as summary_processing
+
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(
+        summary_processing,
+        'record_empty_failure',
+        Mock(return_value=summary_processing.EmptyFailureOutcome.OWNER_MISMATCH),
+    )
+    rows[0][KEY].update(summary_empty_failures=2)
+    token = rows[0][KEY]['task_token']
+    result = _deliver(rows, lambda *_: SimpleNamespace(structured={'title': 'Synthetic'}))
+    assert (result.outcome, result.reason) == ('deferred', 'not_due')
+    pending = rows[0][KEY]
+    assert pending['deferred_reason'] == 'summary_owner_changed'
+    assert pending['summary_empty_failures'] == 2
+    assert pending['task_token'] != token and pending['lease_until'] == 0
 
 
 def test_transient_fault_on_the_effects_only_path_releases_the_lease(rows, monkeypatch):
@@ -745,13 +958,21 @@ def _provider_sweep(monkeypatch, sweep):
     monkeypatch.setattr(outbox_module, 'outbox_for', lambda kind: SimpleNamespace(sweep=sweep))
 
 
-def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch):
+@pytest.mark.parametrize('near_expiry', [2, None], ids=['current', 'legacy'])
+def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch, near_expiry):
     from services import summary_debt_repair
     from database.outbox import SweepCounts
 
     monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(2, 0, 1, 0))
     _provider_sweep(monkeypatch, lambda *, now, limit=100: SweepCounts(4, 1, 2, 1))
-    monkeypatch.setattr(summary_debt_repair, 'tick', lambda *, now: {'scanned': 5, 'admitted': 3, 'errors': 0})
+    tick_counts = {'scanned': 5, 'admitted': 3, 'errors': 0, 'expired_seen': 2}
+    if near_expiry is not None:
+        tick_counts['near_expiry_admitted'] = near_expiry
+    monkeypatch.setattr(
+        summary_debt_repair,
+        'tick',
+        lambda *, now: tick_counts,
+    )
     assert route.maintain(1000.0) == {
         'rewoken': 2,
         'discarded': 1,
@@ -760,7 +981,9 @@ def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch
         'provider_stt_discarded': 2,
         'provider_stt_sweep_errors': 1,
         'summary_debt_scanned': 5,
+        'summary_debt_expired_seen': 2,
         'summary_debt_admitted': 3,
+        'summary_debt_near_expiry_admitted': near_expiry or 0,
         'summary_debt_errors': 0,
     }
 
@@ -784,7 +1007,11 @@ def test_maintenance_isolates_a_provider_stt_sweep_failure(rows, monkeypatch):
 
     monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(1, 0, 0, 0))
     _provider_sweep(monkeypatch, Mock(side_effect=RuntimeError('synthetic')))
-    monkeypatch.setattr(summary_debt_repair, 'tick', lambda *, now: {'scanned': 1, 'admitted': 1, 'errors': 0})
+    monkeypatch.setattr(
+        summary_debt_repair,
+        'tick',
+        lambda *, now: {'scanned': 1, 'admitted': 1, 'near_expiry_admitted': 0, 'errors': 0, 'expired_seen': 0},
+    )
     counts = route.maintain(1000.0)
     assert counts['rewoken'] == 1 and counts['provider_stt_sweep_errors'] == 1
     assert counts['summary_debt_admitted'] == 1
@@ -849,3 +1076,78 @@ async def test_legacy_sync_handler_acks_an_oversized_conversation_with_200(rows,
     redelivery = await batch_pipeline.enrichment_response(payload)
     assert redelivery.status_code == 200
     assert json.loads(redelivery.body) == {'status': 'stale'}
+
+
+# synceff 2026-11-05 (lead2 71492d): the per-row repeat-supersede streak and its histogram.
+
+
+def _streak_count(le):
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value('omi_enrichment_supersede_streak_bucket', {'le': le}) or 0.0
+
+
+def _superseded_with_a_newer_mark(rows, *, now):
+    from utils.enrichment.callback import SyncConversationPersistenceFenced
+
+    def fenced(uid, conversation_id, language):
+        reprocess.mark(uid, conversation_id, language, now=now - 100)  # the append that moved the revision
+        raise SyncConversationPersistenceFenced('synthetic')
+
+    return _deliver(rows, fenced, now=now)
+
+
+def test_consecutive_supersedes_build_a_bounded_streak_and_processed_clears_it(rows):
+    from database.outbox_firestore import SUPERSEDE_STREAK_FIELD
+
+    before = _streak_count('2.0') - _streak_count('1.0')
+    assert _superseded_with_a_newer_mark(rows, now=10_000).reason == 'superseded'
+    assert rows[0][KEY][SUPERSEDE_STREAK_FIELD] == 1
+    assert _superseded_with_a_newer_mark(rows, now=20_000).reason == 'superseded'
+    assert rows[0][KEY][SUPERSEDE_STREAK_FIELD] == 2
+    assert _streak_count('2.0') - _streak_count('1.0') == before + 1  # one observation of streak 2
+    assert _deliver(rows, Mock(return_value=None), now=30_000).reason == 'processed'
+    assert SUPERSEDE_STREAK_FIELD not in (rows[0].get(KEY) or {})
+
+
+def test_revision_race_retry_counts_toward_the_streak(rows):
+    from database.action_item_refresh import RefreshRevisionChanged
+    from database.outbox_firestore import SUPERSEDE_STREAK_FIELD
+
+    result = _deliver(rows, Mock(side_effect=RefreshRevisionChanged()))
+    assert (result.outcome, result.reason) == ('retry', 'persistence_fenced')
+    assert rows[0][KEY][SUPERSEDE_STREAK_FIELD] == 1
+
+
+def test_streak_is_capped(rows):
+    from database.outbox_firestore import SUPERSEDE_STREAK_CAP, SUPERSEDE_STREAK_FIELD
+
+    rows[0][KEY][SUPERSEDE_STREAK_FIELD] = SUPERSEDE_STREAK_CAP
+    _superseded_with_a_newer_mark(rows, now=10_000)
+    assert rows[0][KEY][SUPERSEDE_STREAK_FIELD] == SUPERSEDE_STREAK_CAP
+
+
+def test_enrichment_early_abort_and_streak_metrics_pass_the_gmp_sync_allowlist():
+    # synceff 2026-11-05: backend-integration has the sidecar, but its keep list hid these two families.
+    import re
+    from pathlib import Path
+
+    import yaml
+
+    config = yaml.safe_load((Path(__file__).parents[2] / 'deploy' / 'cloud_run_gmp_sync.yaml').read_text())
+    rules = config['spec']['endpoints'][0]['metricRelabeling']
+    keep = [row['regex'] for row in rules if row['action'] == 'keep' and row['sourceLabels'] == ['__name__']]
+    for name in (
+        'omi_enrichment_early_abort_total',
+        'omi_enrichment_supersede_streak_bucket',
+        'omi_enrichment_supersede_streak_count',
+        'omi_enrichment_supersede_streak_sum',
+    ):
+        assert any(re.fullmatch(pattern, name) for pattern in keep), name
+    for name in (
+        'omi_enrichment_supersede_streak_other',
+        'enrichment_early_abort_total',
+        'omi_enrichment_early_abort_total_extra',
+        'omi_enrichment_early_abort',
+    ):
+        assert not any(re.fullmatch(pattern, name) for pattern in keep), name

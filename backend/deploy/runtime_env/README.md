@@ -3,6 +3,10 @@
 Edit `_base.yaml` and the environment overlays, then regenerate
 `backend/deploy/runtime_env.yaml` with `backend/deploy/compose_runtime_env.py`.
 
+Pre-recorded Modulate credit/breaker failover to Soniox is declared on every
+runtime host beside `STT_PRERECORDED_MODEL`. `PRERECORDED_SONIOX_FAILOVER_ENABLED`
+defaults to `true`; rollback sets it to `false` on those same hosts and charts.
+
 Batch admission percentage is runtime-owned in `rollout_cohorts/_ramp`; these
 deploy inputs and listen charts deliberately omit `BATCH_PIPELINE_PERCENT`.
 Keep it out of deployment defaults and use the
@@ -70,14 +74,15 @@ mixed identity cannot be established. No actual resource is configured here.
 
 `FIRESTORE_READ_LEVERS` is a **replacement JSON literal**, not a patch. All
 surfaces explicitly declare all 20 current keys. The guard flag-offs leave
-`memory_list_index_window:0`, `batch_privacy_memoize:0`,
+`memory_list_index_window:0`,
 `people_scan_dedupe:0`, and `finjob_candidate_queries:0`.
 
 Monthly-total enablement and epoch deliberately remain split:
 
 | Surface | `usage_month_total` | `FSR_USAGE_MONTH_TOTAL_EPOCH` |
 | --- | --- | --- |
-| Four prod Cloud Run services: backend, backend-sync, backend-sync-backfill, backend-integration | 100 | `c2fs_20261026_r1` |
+| Prod Cloud Run: backend-sync, backend-integration | 100 | `c2fs_20261026_r1` |
+| Prod Cloud Run: backend, backend-sync-backfill | 0 | `c2fs_20261026_r1` |
 | Base, both GKE charts/environments, jobs, desktop backend, all dev services | 0 | `v1` |
 
 The Cloud Run overrides preserve the previously qualified serving scope. An off
@@ -110,9 +115,110 @@ establishes no realized savings.
 
 Batch worker control-loop settings are declared in the worker chart (including
 explicit prod values): candidate fanout 16, parallel admission true, idle max 10s,
-and `firestoreReadLevers: '{"batch_privacy_memoize":100}' `. The three control knobs
+and `firestoreReadLevers: '{}'` outside prod. Prod keeps integration's non-privacy map except `usage_month_cache:0` and
+`usage_month_total:0`. The API-only O2b admission below does not move the worker:
+its source retains `bpp_decision_cache:100`, `privacy_checks_shadow:10` and
+`bpp_owner_memo_enforce:0`, plus `batch_timeliness_leader:100` and held-poll skip.
+The offline parity check requires exactly that named role split and still rejects
+other divergence. Its kill switch is setting `heldPollSkipEnabled` to false.
+Projection finish backoff remains at its code default, off (SCA-2024).
+The three control knobs
 also have matching base declarations on serving batch hosts; pusher does not run
 the batch scheduler/pump and the co-host contract classifies them listen-only.
-The worker-only privacy lever does not change the complete serving-role literals
-above. Worker rollback: 64 / false / 2 / `{}` respectively. See
+The retired WQ12 privacy lever is absent from worker and serving-role literals.
+Worker rollback: 64 / false / 2 / `{}` respectively. See
 [the worker runbook](../../docs/batch-pipeline-worker.md) for the lead's soak gates.
+
+
+## Generated read-lever evidence (M7)
+
+`python3 backend/deploy/generate_read_lever_manifest.py` (from the repository
+root) writes [`../firestore_read_levers_manifest.json`](../firestore_read_levers_manifest.json).
+Use `--check` for freshness and offline validation. It calls the existing
+`compose_runtime_env.compose_manifest()` in memory and reuses the compose YAML
+loader/merge and runtime validator's literal extraction. It records each source's
+explicit values, every inherited code default (including the implicit zero), and
+the effective values; it is not live-state evidence or authority to change a rollout.
+The existing backend unit selector runs these checks when any source changes.
+`check_runtime_env_compose.sh` continues to verify the runtime artifact itself.
+
+`firestore_read_lever_policy.lever_expiry` in `_base.yaml` is a surface-keyed
+map: each partial `(surface, lever)` entry binds the exact `value` to an ISO UTC
+`expires` date. Dates must be today through seven days out. The lifecycle
+`lifecycle_record_pending_head:5` approvals ended on 2026-11-17 with no owner decision and
+started failing every backend PR; they were renewed unchanged through 2026-11-24 on 2026-11-18
+(value and admission unchanged) so the owning lane can decide 0, 100 or another renewal. The three retained prod backfill/worker shadow-10 entries
+are renewed through 2026-11-24 under the margin lead's panel F3 disposition to
+retain their excluded scope; percentages and runtime admission do not change.
+An expiry deadline is not permission to expand the rollout.
+Renewal requires an explicit reviewed source change. `base/` and `overlay/`
+identify raw input paths; `runtime/<env>/` identifies both the generated and
+in-memory composed surface; `chart/<env>/` includes Helm default inheritance;
+`code/defaults` covers partial defaults even if an explicit literal overrides them.
+No broad exception grants expiry coverage to another surface or percentage.
+
+Current source supersedes the 2026-11-14 privacy comparison pins: prod Cloud
+Run backend, sync and integration use owner enforcement 100/shadow 0/decision
+cache 0 under the API admission below. Backfill retains enforcement 0/shadow 10
+with decision cache 0; the prod worker retains enforcement 0/shadow 10/decision
+cache 100. Staging retains its prior enforcement 0/shadow 10/decision cache 100
+on all four Cloud Run services. Its explicit maps preserve that independent
+scope; `staging-mirrors-prod` checks those exact three retained values and strict
+parity of every other JSON key. No worker roll or staging privacy activation is
+requested. `privacy_ttl60` remains 0 everywhere.
+Prod worker and the three API services still pin `batch_timeliness_leader:100`
+and `lifecycle_record_pending_head:100`; backfill retains its separate row-3
+pins. Backend, sync and integration keep both monthly-reader levers at 100;
+backfill and the worker keep both at 0. Every other lever and epoch is unchanged.
+These source values ride each surface's next train.
+The generator's `REVIEWED_INHERITANCE` constant preserves `{}` on default/dev
+worker surfaces and enumerates the remaining unresolved inherited differences.
+The pending 5% monthly-reader proposal is not a compose input; its refreshed
+preimage now includes integration at 100%, while its proposed target remains 5%.
+
+UNRESOLVED: README-vs-base triple: `memory_list_index_window`,
+`people_scan_dedupe`, and `finjob_candidate_queries` are documented as 0 in the
+historical train text above, while `_base.yaml` carries 100. Both source claims
+are preserved pending a human ruling. The generator's `UNRESOLVED_NOTES` constant
+supplies the manifest notes; neither evidence structure lives in `_base.yaml`,
+whose `firestore_read_lever_policy` contains only `lever_expiry`. The offline guard
+extracts each historical train claim and compares it with every base declaration.
+It rejects missing or ambiguous claims, agreement with a stale UNRESOLVED note,
+and a missing note while the sources disagree.
+
+## API owner-memo source carry (O2b, 2026-11-17)
+
+The margin lead's stage-2 order and Release's completed 5xx qualification/apply
+admit owner-memo enforcement only on prod Cloud Run `backend`, `backend-sync`
+and `backend-integration`. Their canonical `prod.overlay.yaml` maps now carry
+`bpp_owner_memo_enforce:100`, `privacy_checks_shadow:0`, `bpp_decision_cache:0`,
+`privacy_negative_lookup_cache:0` and `privacy_ttl60:0`. All unrelated entries
+are preserved. The restored integration200/10/class16 values are pinned in both ops and
+prod/staging runtime overlays so full deploys cannot reintroduce the inverse;
+Release still owns application and separate runtime admission.
+
+Backfill is excluded: its existing O4 decision-cache OFF state is now durable
+with enforcement 0 and shadow 10. The worker chart, GKE, jobs, desktop and dev
+source remain unchanged. This supersedes the older shadow/negative-cache values
+in the historical SCA-2173 paragraph above, without widening its monthly readers.
+The six obsolete API shadow-10 expiry entries are removed. The three retained
+backfill/worker shadow-10 entries are renewed through 2026-11-24 by the margin
+lead's panel F3 disposition; no percentage changes and expiry never authorizes
+a rollout. The later04:56 privacy incident supersedes the earlier source GO;
+current lead/runtime reconciliation and explicit Release admission remain HOLD.
+
+These complete literals are source replacements, not live-map patches. Edit the
+prod overlay and run both canonical generators; never run the one-time source
+splitter or hand-edit the derived runtime/read-lever manifests. The normal
+renderer must preserve each literal, and Release reads back each actual receiver.
+The integration canary can preserve an authenticated live map instead of the
+source map, so its output is not proof that source values were deployed.
+
+Runtime rollback remains Release's current-map change to enforcement 0/shadow 10
+or the existing `ops_kill_switches/privacy_decision_cache` kill path. Reconcile
+source before a later train after an inverse; a source revert alone neither
+changes serving config nor restores a deleted predecessor. With shadow 0 there
+is no mismatch stream: the lead's guard is a manual-trip backstop, while existing
+per-decision transactional token checks remain the privacy fence. Source checks
+do not prove guard acceptance, writer coverage, a clean post-overlap hour,
+causal savings or settled/all-in billing. The existing lead retains measurement.

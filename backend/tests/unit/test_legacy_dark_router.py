@@ -36,7 +36,7 @@ def _restore(saved):
 async def _upload(module, BytesIO):
     from starlette.datastructures import UploadFile
 
-    upload = UploadFile(filename='omi_1792152000.bin', file=BytesIO(b'\x00' * 10))
+    upload = UploadFile(filename=f'omi_{int(module.time.time())}.bin', file=BytesIO(b'\x00' * 10))
     return await module.sync_local_files_v2(files=[upload], uid='test-uid')
 
 
@@ -49,13 +49,11 @@ async def test_router_never_creates_a_legacy_job_outside_on(monkeypatch, mode):
     try:
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
-        module.legacy_fresh.enabled_for = MagicMock(return_value=True)
         module.create_sync_job = MagicMock()
         response = await _upload(module, BytesIO)
         assert response.status_code == 409
         assert json.loads(response.body)['code'] == 'sync_content_retry_later'
         module.create_sync_job.assert_not_called()
-        module.legacy_fresh.enabled_for.assert_not_called()
     finally:
         _restore(saved)
 

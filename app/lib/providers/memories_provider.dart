@@ -19,6 +19,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 part 'memories_provider_loading.dart';
+part 'memories_provider_deletion.dart';
 
 typedef FetchMemoriesRequest = Future<GetMemoriesResult> Function({int limit, int offset, bool thisDeviceOnly});
 typedef FetchMemoriesCursorRequest = Future<GetMemoriesResult> Function({
@@ -73,9 +74,9 @@ class MemoriesProvider extends ChangeNotifier {
   ReadRetry _memoriesReadRetry;
   final FetchLedgerHistoryRequest _fetchLedgerHistoryRequest;
   final FetchLedgerHistoryCursorRequest? _fetchLedgerHistoryCursorRequest;
-  final Future<bool> Function(String) _deleteMemoryRequest;
+  final Future<bool> Function(String)? _deleteMemoryRequest;
   final Future<bool> Function() _deleteAllMemoriesRequest;
-  final Future<Memory?> Function(String, String, String) _createMemoryRequest;
+  final Future<Memory?> Function(String, String, String)? _createMemoryRequest;
   final Future<bool> Function(String, String) _updateMemoryVisibilityRequest;
   final ReviewMemoryRequest _reviewMemoryRequest;
   final EditMemoryRequest _editMemoryRequest;
@@ -127,9 +128,9 @@ class MemoriesProvider extends ChangeNotifier {
             fetchLedgerHistoryRequest ?? (fetchMemoriesRequest == null ? getLedgerHistory : _noLedgerHistory),
         _fetchLedgerHistoryCursorRequest = fetchLedgerHistoryCursorRequest ??
             (fetchMemoriesRequest == null && fetchLedgerHistoryRequest == null ? getLedgerHistory : null),
-        _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer,
+        _deleteMemoryRequest = deleteMemoryRequest,
         _deleteAllMemoriesRequest = deleteAllMemoriesRequest ?? deleteAllMemoriesServer,
-        _createMemoryRequest = createMemoryRequest ?? createMemoryServer,
+        _createMemoryRequest = createMemoryRequest,
         _updateMemoryVisibilityRequest = updateMemoryVisibilityRequest ?? updateMemoryVisibilityServer,
         _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer,
         _editMemoryRequest = editMemoryRequest ?? editMemoryServer,
@@ -398,9 +399,7 @@ class MemoriesProvider extends ChangeNotifier {
     _revertOperationIds.clear();
     _settledUnresolvedReviews.clear();
     _externalHydrateAttempts.clear();
-    _cancelDeletionTimer();
-    _lastDeletedMemory = null;
-    _pendingDeletionId = null;
+    _clearMemoryDeletions();
     notifyListeners();
   }
 
@@ -497,7 +496,7 @@ class MemoriesProvider extends ChangeNotifier {
       if (!result.supported) return;
 
       final existing = _memories.map((memory) => memory.id).toSet();
-      _memories.addAll(result.memories.where((memory) => existing.add(memory.id)));
+      _memories.addAll(_visibleMemories(result.memories).where((memory) => existing.add(memory.id)));
       _ledgerHistoryOffset += result.memories.length;
       _ledgerHistoryNextCursor = result.nextCursor;
       _ledgerHistoryHasMore =
@@ -528,7 +527,8 @@ class MemoriesProvider extends ChangeNotifier {
   void dispose() {
     _memoriesReadRetry.close();
     _sessionGeneration++;
-    _cancelDeletionTimer();
+    _memoryDeletesDisposed = true;
+    _clearMemoryDeletions(retireSession: false);
     _connectivityProvider?.removeListener(_onConnectivityChanged);
     super.dispose();
   }
@@ -572,31 +572,14 @@ class MemoriesProvider extends ChangeNotifier {
 
       for (var memory in List.from(pendingMemories)) {
         if (generation != _sessionGeneration) return;
+        if (!_memoryIsVisible(memory)) continue;
         try {
-          final serverMemory = await _createMemoryRequest(
-            memory.content,
-            memory.visibility.toString().split('.').last,
-            memory.category.toString().split('.').last,
-          );
+          final serverMemory = await _trackMemoryCreation(memory);
 
           if (serverMemory != null) {
             SharedPreferencesUtil().removePendingMemory(memory.id, ownerUid: ownerUid);
             if (generation != _sessionGeneration) return;
-            final idx = _memories.indexWhere((m) => m.id == memory.id);
-            if (idx != -1) {
-              // Keep the authoritative server projection, including temporal
-              // assessment fields that are absent from an offline draft.
-              _memories[idx] = serverMemory;
-            }
-            _ledgerProjectionRevision++;
-            _inFlightLoad = null;
-            SharedPreferencesUtil().cachedMemories = [
-              ...SharedPreferencesUtil()
-                  .cachedMemories
-                  .where((cached) => cached.id != memory.id && cached.id != serverMemory.id),
-              serverMemory,
-            ];
-            SiriIntegration.current.queueUpsertMemories([serverMemory]);
+            _applyCreatedMemory(memory.id, serverMemory);
           }
           if (generation != _sessionGeneration) return;
         } catch (e) {
@@ -782,7 +765,7 @@ class MemoriesProvider extends ChangeNotifier {
         historyOffset += result.memories.length;
       }
       if (generation != _sessionGeneration) return;
-      for (final row in refreshedHistory.values) {
+      for (final row in _visibleMemories(refreshedHistory.values)) {
         final index = _memories.indexWhere((candidate) => candidate.id == row.id);
         if (index == -1) {
           _memories.add(row);
@@ -878,105 +861,23 @@ class MemoriesProvider extends ChangeNotifier {
         current.userReview == returned.userReview;
   }
 
-  Memory? _lastDeletedMemory;
-  Timer? _deletionTimer;
-  String? _pendingDeletionId;
+  int _memoryDeletionGeneration = 0;
+  bool _memoryDeletesDisposed = false;
+  final _memoryDeletions = <String, _MemoryDeletion>{};
+  final _memoryCreations = <String, Future<Memory?>>{};
+  final _confirmedMemoryDeletes = <String>{};
+  String? _undoDeletionId;
 
-  Memory? get lastDeletedMemory => _lastDeletedMemory;
+  Memory? get lastDeletedMemory => _memoryDeletions[_undoDeletionId]?.memory;
 
-  Future<void> deleteMemory(Memory memory) async {
-    _cancelDeletionTimer();
-    if (_pendingDeletionId != null) unawaited(_finalizeDeletion());
-    _lastDeletedMemory = memory;
-    _pendingDeletionId = memory.id;
-    _memories.remove(memory);
-    _setCategories();
-    notifyListeners();
-    _startDeletionTimer();
-    SiriIntegration.current.queueDelete('memory', memory.id);
-  }
+  Future<void> deleteMemory(Memory memory, {VoidCallback? onFailure}) =>
+      _stageMemoryDeletion(memory, onFailure: onFailure);
 
-  void _cancelDeletionTimer() {
-    _deletionTimer?.cancel();
-    _deletionTimer = null;
-  }
-
-  /// Backstop commit; the Undo toast (OmiFeedbackTiming.undo) commits sooner and must close first.
   static const Duration pendingDeletionWindow = Duration(seconds: 8);
 
-  void _startDeletionTimer() => _deletionTimer = Timer(pendingDeletionWindow, () async {
-        await _finalizeDeletion();
-      });
+  Future<void> confirmPendingDeletion({String? id}) => _commitMemoryDeletion(id ?? _undoDeletionId);
 
-  Future<void> _finalizeDeletion() async {
-    if (_pendingDeletionId == null) {
-      _lastDeletedMemory = null;
-      return;
-    }
-
-    final generation = _sessionGeneration;
-    final ownerUid = SharedPreferencesUtil().uid;
-    final id = _pendingDeletionId!;
-
-    final deletedMemory = _lastDeletedMemory;
-    var deleteSucceeded = true;
-
-    // If memory was created offline and not yet synced
-    if (SharedPreferencesUtil().pendingMemories.any((m) => m.id == id)) {
-      SharedPreferencesUtil().removePendingMemory(id);
-    } else {
-      // Memory exists on server
-      try {
-        deleteSucceeded = await _deleteMemoryRequest(id);
-      } catch (e) {
-        Logger.debug('MemoriesProvider: Failed to delete memory $id: $e');
-        deleteSucceeded = false;
-      }
-    }
-
-    if (deleteSucceeded) {
-      if (generation == _sessionGeneration && SharedPreferencesUtil().uid == ownerUid) {
-        _ledgerProjectionRevision++;
-        SharedPreferencesUtil().cachedMemories =
-            SharedPreferencesUtil().cachedMemories.where((memory) => memory.id != id).toList();
-      }
-    } else if (deletedMemory?.id == id) {
-      if (!_memories.any((memory) => memory.id == id)) {
-        _memories.add(deletedMemory!);
-      }
-      _setCategories();
-      SiriIntegration.current.queueUpsertMemories([deletedMemory!], restoreDeleted: true);
-      notifyListeners();
-    }
-
-    if (_pendingDeletionId == id) {
-      _pendingDeletionId = null;
-      _lastDeletedMemory = null;
-    }
-  }
-
-  /// Commits now; with [id], only if that memory is still the pending one (a stale toast must not).
-  Future<void> confirmPendingDeletion({String? id}) async {
-    if (id != null && id != _pendingDeletionId) return;
-    _cancelDeletionTimer();
-    await _finalizeDeletion();
-  }
-
-  /// Restores the pending deletion; with [id], only if still pending (a stale toast must not restore).
-  Future<bool> restoreLastDeletedMemory({String? id}) async {
-    if (_lastDeletedMemory == null || (id != null && _lastDeletedMemory!.id != id)) return false;
-
-    _cancelDeletionTimer();
-    _pendingDeletionId = null;
-    final restored = _lastDeletedMemory!;
-    _memories.add(restored);
-    _lastDeletedMemory = null;
-    _setCategories();
-    notifyListeners();
-    SiriIntegration.current.queueUpsertMemories([restored], restoreDeleted: true);
-
-    return true;
-  }
+  Future<bool> restoreLastDeletedMemory({String? id}) async => _undoMemoryDeletion(id ?? _undoDeletionId);
 
   Future<bool> deleteAllMemories() async {
     final generation = _sessionGeneration;
@@ -1003,9 +904,7 @@ class MemoriesProvider extends ChangeNotifier {
     _ledgerHistoryHasMore = false;
     _ledgerHistoryTruncated = false;
     _memories.clear();
-    _cancelDeletionTimer();
-    _pendingDeletionId = null;
-    _lastDeletedMemory = null;
+    _clearMemoryDeletions();
     SharedPreferencesUtil().pendingMemories = [];
     SharedPreferencesUtil().cachedMemories = [];
     SiriIntegration.current.queueDeleteMany('memory', indexedIds, expectedUid: ownerUid);
@@ -1050,27 +949,17 @@ class MemoriesProvider extends ChangeNotifier {
     final pendingId = newMemory.id;
 
     // Try to sync to server immediately
-    final serverMemory = await _createMemoryRequest(content, visibility.name, category.name);
+    final serverMemory = await _trackMemoryCreation(newMemory);
 
     if (serverMemory != null) {
       // Remove from the original account's pending queue even if the visible
       // session changed while the request was in flight.
       SharedPreferencesUtil().removePendingMemory(pendingId, ownerUid: ownerUid);
       if (generation != _sessionGeneration) return true;
-      final idx = _memories.indexWhere((m) => m.id == pendingId);
-      if (idx != -1) {
-        _memories[idx].id = serverMemory.id;
+      _applyCreatedMemory(pendingId, serverMemory);
+      if (_memoryIsVisible(serverMemory)) {
+        unawaited(SiriIntegration.instance.donateUiAction('memory', serverMemory.id));
       }
-      _ledgerProjectionRevision++;
-      _inFlightLoad = null;
-      SharedPreferencesUtil().cachedMemories = [
-        ...SharedPreferencesUtil()
-            .cachedMemories
-            .where((cached) => cached.id != pendingId && cached.id != serverMemory.id),
-        serverMemory,
-      ];
-      SiriIntegration.current.queueUpsertMemories([serverMemory]);
-      unawaited(SiriIntegration.instance.donateUiAction('memory', serverMemory.id));
     }
     if (generation != _sessionGeneration) return true;
 

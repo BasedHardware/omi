@@ -128,7 +128,7 @@ def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None
         return
 
     all_folders = folders_db.get_folders(uid)
-    folder_map: Dict[str, str] = {str(f['id']): str(f['name']) for f in all_folders}
+    folder_map: Dict[str, str] = {str(f.id): str(f.name) for f in all_folders}
 
     for conv in conversations:
         folder_id = conv.get('folder_id')
@@ -150,9 +150,14 @@ def _strip_match_scores(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Voice calibration evidence stays inside backend persistence and processing."""
     conv.pop('speaker_match_scores', None)
     conv.pop('owner_recognition_diagnostics', None)
+    conv.pop('owner_identity_observation_sha256', None)
+    resolution = conv.get('speaker_resolution')
+    if isinstance(resolution, dict):
+        resolution.pop('input_membership_sha256', None)
     for segment in conv.get('transcript_segments') or []:
         if isinstance(segment, dict):
             segment.pop('speaker_match_scores', None)
+            segment.pop('speaker_word_seconds', None)
             strip_grouping_internal_fields(segment)
     return conv
 
@@ -200,6 +205,9 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv.pop('geolocation', None)
     # Server-computed capture badge stays on app views, outside the integration contract.
     conv.pop('capture_coverage', None)
+    # First-party speaker-exclusion state is not part of the public integration
+    # contract either; stays on app views (same §capture_coverage precedent).
+    conv.pop('excluded_speakers', None)
     for field in PROJECTION_FAMILY_FIELDS:
         conv.pop(field, None)
     # Where the live receiver heard each segment is internal placement evidence, not transcript.

@@ -98,6 +98,7 @@ There are exactly two ways out, and they mean different things.
 
 - Every tappable control is at least **44×44 pt** (48 dp on Android is fine), including the label
   next to a checkbox (`OmiCheckboxRow`).
+- A compact pill action uses `OmiButton(size: OmiButtonSize.compact, pill: true)` with `OmiRadius.pillAll`.
 - A button label is a verb in Title Case ("Save", "Delete Task", "Try Again"). A button that is
   busy keeps its size and shows a spinner in place of or beside its label.
 - A disabled control looks disabled. A Send that cannot send is not white.
@@ -170,7 +171,8 @@ One policy, and never neither:
 | progress | `OmiFeedback.progress(context, msg)` | until replaced (≤ 1 min) | ongoing work, replaced by its result |
 
 - Neutral surface with a small coloured status icon; never a red or green slab (white on red fails
-  contrast). Floating, above Home's chat bar. A pushed page with a pinned bottom action (conversation
+  contrast). Floating, above the root screen's bottom controls (Home's chat bar, the sign-in buttons;
+  `OmiFeedback.claimBottomClearance`). A pushed page with a pinned bottom action (conversation
   detail's Ask Omi bar) wraps its body in `OmiFeedbackClearance(bottom:)` so toasts float above it.
 - Code without a `BuildContext` uses `AppSnackbar` (same toasts on the global navigator).
 - An informational toast has no "OK" action.
@@ -255,7 +257,7 @@ for every locale (`hardcoded-text` counts `Text('…')` with letters in it).
 | Say | Not |
 |---|---|
 | **Omi** | omi, OMI |
-| **Task(s)** (D3) | Action Item(s), To-Do(s) |
+| **Tasks** (D3) | Action Item(s), To-Do(s), except the meeting-note section of extracted items is **Action items** |
 | **Memories** | Facts |
 | **Try Again** | Retry, Try again |
 | **Not Now** (postpone) | Later, Maybe Later, No |

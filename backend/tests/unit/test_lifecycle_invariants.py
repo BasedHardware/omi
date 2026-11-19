@@ -8,18 +8,36 @@ table; a removed gap that still fails, or an improved row left xfailed, fails CI
 
 import ast
 import json
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 
 import pytest
 
-from tests.support.lifecycle_state_table import CLAUSES, ORDERING_RULES, PATCH_CONTRACTS, STATES, ordering_holds
-from tests.support.lifecycle_ast import EntryPath, definition_fingerprint, entry_deadline_sites, function_node
+from tests.support.lifecycle_state_table import (
+    ABANDON_RECORD_PRODUCER,
+    CLAUSES,
+    FIELD_BUILDERS,
+    IMPORT_PAUSED_DWELL_ROWS,
+    ORDERING_RULES,
+    PATCH_CONTRACTS,
+    STATES,
+    ordering_holds,
+)
+from tests.support.lifecycle_ast import (
+    EntryPath,
+    constant_names,
+    definition_fingerprint,
+    entry_deadline_sites,
+    function_node,
+    parsed,
+)
 from utils.conversations.phase import ConversationPhase, EpisodePhase
 
 BACKEND = Path(__file__).resolve().parents[2]
 METRIC_MODULES = (
     'utils/metrics.py',
+    'database/record_token_lease_metrics.py',
     'utils/batch_pipeline/metrics.py',
     'utils/conversations/summary_delivery.py',
     'utils/observability/fair_use.py',
@@ -59,16 +77,33 @@ def phase_metric_gauge_names(tree):
     return {prefix + suffix for prefix in prefixes for suffix in suffixes}
 
 
+def literal_gauge_names(tree):
+    """Include declared Gauge subclasses without treating counters as stock."""
+    gauge_types = {'Gauge'} | {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef)
+        and any(isinstance(base, ast.Name) and base.id == 'Gauge' for base in node.bases)
+    }
+    return {
+        node.args[0].value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in gauge_types
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+    }
+
+
 @lru_cache(maxsize=1)
 def gauge_names():
     result = set()
     for module in METRIC_MODULES:
         tree = ast.parse((BACKEND / module).read_text())
         result.update(phase_metric_gauge_names(tree))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'Gauge' and node.args:
-                if isinstance(node.args[0], ast.Constant):
-                    result.add(node.args[0].value)
+        result.update(literal_gauge_names(tree))
     return result
 
 
@@ -78,6 +113,15 @@ def test_phase_metric_inventory_requires_declared_prefix_and_gauge_suffix():
     assert 'declared_new_oldest_age_seconds' in names
     assert 'made_up_prefix_new_oldest_age_seconds' not in names
     assert 'declared_made_up_suffix' not in names
+
+
+def test_gauge_inventory_recognizes_declared_subclasses_and_rejects_counters():
+    tree = ast.parse(
+        "class FreshGauge(Gauge): pass\n"
+        "class Events(Counter): pass\n"
+        "FreshGauge('stock'); Gauge('plain'); Counter('events'); Events('also_events')"
+    )
+    assert literal_gauge_names(tree) == {'stock', 'plain'}
 
 
 @lru_cache(maxsize=1)
@@ -105,7 +149,31 @@ def module_source(module):
     if not path.is_file():
         return '', ast.Module(body=[], type_ignores=[])
     source = path.read_text()
-    return source, ast.parse(source)
+    return source, parsed(source)
+
+
+@pytest.mark.parametrize(
+    'body',
+    [
+        'if condition:\n    FIELD = "state"\nelse:\n    FIELD = "status"',
+        'def outer():\n    FIELD = "state"\n    def inner():\n        FIELD = "status"',
+        'class Owner:\n    FIELD: str = "state"\n    def method(self):\n        FIELD = "status"',
+        'try:\n    FIELD = "state"\nexcept Exception:\n    FIELD = "status"',
+        'match value:\n    case 1:\n        FIELD = "state"\n    case _:\n        FIELD = "status"',
+    ],
+)
+def test_constant_inventory_retains_all_statement_scopes(body):
+    source = body + '\nPHASE = "queued" if condition else ConversationStatus.completed.value\n'
+    assert constant_names(parsed(source)) == {'FIELD': {'state', 'status'}, 'PHASE': {'queued', 'completed'}}
+
+
+def scope_definitions(nodes):
+    """Find definitions through control flow without entering another scope."""
+    for node in nodes:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            yield node
+        else:
+            yield from scope_definitions(ast.iter_child_nodes(node))
 
 
 @lru_cache(maxsize=None)
@@ -116,16 +184,38 @@ def function_source(cite):
         return source
     for part in function.split('.'):
         node = next(
-            (
-                child
-                for child in node.body
-                if isinstance(child, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == part
-            ),
+            (child for child in scope_definitions(node.body) if child.name == part),
             None,
         )
         if node is None:
             return ''
     return ast.get_source_segment(source, node) or ''
+
+
+def test_function_source_finds_loop_nested_transaction_without_crossing_scopes(monkeypatch):
+    source = 'def outer():\n    for item in []:\n        def commit(tx):\n            return item\ndef other():\n    def hidden():\n        pass\n'
+    monkeypatch.setitem(
+        function_source.__wrapped__.__globals__, 'module_source', lambda path: (source, ast.parse(source))
+    )
+    read = function_source.__wrapped__
+    assert 'return item' in read('synthetic.py:outer.commit')
+    assert read('synthetic.py:outer.hidden') == ''
+    assert read('synthetic.py:commit') == ''
+
+
+@pytest.mark.parametrize('outer_deadline', [False, True])
+def test_deadline_probe_never_borrows_or_erases_a_deadline_from_a_nested_scope(outer_deadline):
+    deadline = ", 'lease_until': 123" if outer_deadline else ''
+    nested = "row.pop('lease_until')" if outer_deadline else "row['lease_until'] = 123"
+    source = (
+        "def commit(tx, ref):\n"
+        f"    row = {{'state': 'leased'{deadline}}}\n"
+        "    def unrelated():\n"
+        f"        {nested}\n"
+        "    tx.set(ref, row)\n"
+    )
+    path = EntryPath('synthetic.py', 'commit', 'state', 'leased')
+    assert [stamped for _line, stamped in entry_deadline_sites(source, path, 'lease_until')] == [outer_deadline]
 
 
 def assigned_fields(source):
@@ -209,13 +299,54 @@ def assert_patch_contract(entry, deadline):
 
 def assert_clause(row, clause):
     if row.derived:
-        # Compatibility reader vocabulary has no state entry side effect.
-        assert row.machine == 'conversation_phase' and row.note.startswith('Read-only')
+        if row.machine == 'record_token':
+            # Per-token views derive from nested clocks, not a persisted phase.
+            # Their process-local stock and custody-invariant page do not claim
+            # an independent persisted-state deadline or backlog dwell alarm.
+            assert row.state in {'capturing', 'lease_lapsed'}
+            assert row.fields == ('record_upload_sessions',)
+            assert row.deadline_field is None and not row.deadline_stamped_at_entry and not row.deadline_entries
+            assert row.deadline_exemption
+            assert function_source(row.exit.cite), row.exit.cite
+            if clause == 'automatic_exit':
+                assert row.exit.kind in {'lease', 'sweeper'}
+                for writer in row.exit.automatic_writers:
+                    assert function_source(f'{writer.module}:{writer.function}'), writer
+                    assert writer.function in FIELD_BUILDERS.get(writer.module, {}).get('record_upload_sessions', ())
+            elif clause == 'entry_deadline':
+                assert function_source('config/record_seal_rules.py:token_lease_lapsed')
+            elif clause == 'dwell_metric':
+                assert row.dwell_metric == 'omi_record_token_lease_active' and row.dwell_metric in gauge_names()
+            elif clause == 'dwell_alert':
+                assert row.alert.uid == 'omi-record-token-lease-late-append' and row.alert.tier == 'page'
+                rule = alerts()[row.alert.uid]
+                assert rule.get('labels', {}).get('tier') == row.alert.tier and not rule.get('isPaused', False)
+                assert any(
+                    'omi_record_token_late_append_total' in item.get('model', {}).get('expr', '')
+                    for item in rule['data']
+                )
+            else:
+                raise AssertionError(clause)
+        else:
+            # Compatibility reader vocabulary has no state entry side effect.
+            assert row.machine == 'conversation_phase' and row.note.startswith('Read-only')
         return
     if row.quiescent:
         assert (row.machine, row.state) == ('fair_use', 'none')
         return  # Base state carries no outstanding enforcement obligation.
     if clause == 'automatic_exit':
+        for writer in row.exit.automatic_writers:
+            assert function_source(f'{writer.module}:{writer.function}'), writer
+            assert any(
+                writer.function in FIELD_BUILDERS.get(writer.module, {}).get(field, ()) for field in row.fields
+            ), f'{row.key}: automatic exit writer is outside the reviewed field inventory: {writer}'
+        if row.exit_exemption:
+            assert row.key == 'record_audio:capturing' and not row.terminal
+            assert row.exit.kind == 'callback-only'
+            assert row.exit.cite == 'database/record_audio.py:set_record_upload_pending'
+            assert row.deadline_exemption and 'exact-token finish' in row.exit_exemption
+            assert function_source(row.exit.cite)
+            return
         if row.terminal:
             assert (
                 row.owner and (BACKEND / row.owner.removeprefix('backend/')).is_file()
@@ -227,6 +358,17 @@ def assert_clause(row, clause):
             assert function_source(row.exit.cite), row.exit.cite
     elif clause == 'entry_deadline':
         if not row.terminal:
+            if row.deadline_exemption:
+                if row.key == 'batch:allowance_held':
+                    assert 'SCA-2195' in row.deadline_exemption and 'no recording expiry' in row.deadline_exemption
+                    assert row.deadline_field is None and not row.deadline_stamped_at_entry
+                    assert row.exit.cite == 'utils/batch_pipeline/allowance_hold.py:AllowanceHolds.tick'
+                    return
+                assert row.key in {'record_audio:capturing', 'record_audio_orphan:capturing'}
+                assert row.fields == ('record_upload_sessions',)
+                assert 'No producer TTL' in row.deadline_exemption and '9d457c' in row.deadline_exemption
+                assert row.deadline_field is None and not row.deadline_stamped_at_entry and not row.deadline_entries
+                return
             assert row.deadline_field and row.deadline_stamped_at_entry, 'deadline is absent or only computed on read'
             assert row.deadline_entries, 'every automatic entry path must be declared'
             declared = {(path.module, path.function) for path in row.deadline_entries}
@@ -246,6 +388,10 @@ def assert_clause(row, clause):
         assert row.dwell_metric in gauge_names(), 'authoritative age/stock Gauge missing (a counter is insufficient)'
     elif clause == 'dwell_alert':
         if not row.alert_required:
+            if row.key == 'batch:allowance_held':
+                assert row.deadline_exemption and row.dwell_metric == 'omi_batch_allowance_held_units'
+                assert not row.terminal  # A held recording still owes an eventual result.
+                return
             assert row.terminal and row.state in {'completed', 'committed', 'erased', 'composed', 'redirected'}
             return  # Success stock needs an owner/gauge, not a debt alarm.
         rule = alerts().get(row.alert.uid)
@@ -263,6 +409,18 @@ def assert_clause(row, clause):
 # KNOWN_GAPS is a reviewed baseline, added below. It is not derived from the
 # assertions at collection time; strict XPASS is a blocking improvement signal.
 KNOWN_GAPS = {
+    ('record_audio:seal_refused', 'automatic_exit'): 'Phase 1 preserves callback-only exact-token finish and seal; '
+    'automatic requeue is phase 4; ANX lcphase1-first-refusal-clock',
+    ('record_audio:seal_refused', 'entry_deadline'): 'First-refusal clock is an age anchor, not a custody deadline; '
+    'phase 4 owns requeue; ANX lcphase1-first-refusal-clock',
+    ('record_audio:seal_refused', 'dwell_metric'): 'Phase 1 emits bounded job-page age/count in the sweeper summary; '
+    'authoritative fleet Gauge including no-job rows remains outside scope; ANX lcphase1-first-refusal-clock',
+    ('record_audio:seal_refused', 'dwell_alert'): 'Phase 1 declares the agent alert identity; committed monitoring '
+    'rule is outside named file scope; ANX lcphase1-first-refusal-clock',
+    ('visibility:transcribing_hold', 'dwell_metric'): 'No dedicated transcription presentation dwell gauge; '
+    'homegate phase 1; ANX lcinv-lifecycle-invariants',
+    ('visibility:transcribing_hold', 'dwell_alert'): 'No dedicated transcription presentation stock alert; '
+    'homegate phase 1; ANX lcinv-lifecycle-invariants',
     ('batch:committed', 'dwell_metric'): 'batch:committed: missing authoritative dwell/stock gauge; phase contract '
     'follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
     ('batch:partial_retired', 'dwell_alert'): 'batch:partial_retired: missing committed dwell/stock alert; phase '
@@ -275,8 +433,11 @@ KNOWN_GAPS = {
     ('batch:privacy_blocked', 'dwell_metric'): 'batch:privacy_blocked: missing authoritative dwell/stock gauge; '
     'phase contract follow-up; no fix PR yet; ANX '
     'lcinv-lifecycle-invariants',
-    ('batch:quarantined', 'entry_deadline'): 'batch:quarantined: missing deadline stamped at entry; phase contract '
-    'follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
+    (
+        'batch:quarantined',
+        'entry_deadline',
+    ): 'GPU holds stamp a flag-gated held_deadline_at; provider-STT settle/terminal entries '
+    'remain unstamped and cannot join the GPU requeue path. ANX omi-lifecycle phase 4a',
     ('batch:ready', 'entry_deadline'): 'batch:ready: missing deadline stamped at entry; phase contract follow-up; no '
     'fix PR yet; ANX lcinv-lifecycle-invariants',
     ('batch:record_pending', 'entry_deadline'): 'batch:record_pending: total pending-dwell deadline is still '
@@ -299,9 +460,8 @@ KNOWN_GAPS = {
     ('batch_projection:persisted', 'entry_deadline'): 'batch_projection:persisted: missing deadline stamped at '
     'entry; phase contract follow-up; no fix PR yet; ANX '
     'lcinv-lifecycle-invariants',
-    ('batch_projection:quarantine_held', 'entry_deadline'): 'batch_projection:quarantine_held: missing deadline '
-    'stamped at entry; phase contract follow-up; no fix PR '
-    'yet; ANX lcinv-lifecycle-invariants',
+    ('batch_projection:quarantine_held', 'entry_deadline'): 'Assignment holds stamp held_deadline_at; privacy holds '
+    'remain explicitly outside phase 4b and must never age-expire. ANX lcinv-lifecycle-invariants',
     ('batch_projection:ready', 'entry_deadline'): 'batch_projection:ready: missing deadline stamped at entry; phase '
     'contract follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
     ('conversation:completed', 'dwell_metric'): 'conversation:completed: missing authoritative dwell/stock gauge; '
@@ -369,18 +529,24 @@ KNOWN_GAPS = {
     ('finalization:completed', 'dwell_metric'): 'finalization:completed: missing authoritative dwell/stock gauge; '
     'phase contract follow-up; no fix PR yet; ANX '
     'lcinv-lifecycle-invariants',
-    ('record_audio:capturing', 'dwell_alert'): 'record_audio:capturing: missing committed dwell/stock alert; Proof '
-    'repair exists for job-backed captures; bounded dwell waits on '
-    'freshtitles open-producer-token fix, no PR yet; ANX '
-    'lcinv-lifecycle-invariants',
-    ('record_audio:capturing', 'dwell_metric'): 'record_audio:capturing: missing authoritative dwell/stock gauge; '
-    'Proof repair exists for job-backed captures; bounded dwell waits on '
-    'freshtitles open-producer-token fix, no PR yet; ANX '
-    'lcinv-lifecycle-invariants',
-    ('record_audio:capturing', 'entry_deadline'): 'record_audio:capturing: missing deadline stamped at entry; Proof '
-    'repair exists for job-backed captures; bounded dwell waits on '
-    'freshtitles open-producer-token fix, no PR yet; ANX '
-    'lcinv-lifecycle-invariants',
+    ('record_audio:capturing', 'dwell_alert'): 'Live producer custody needs a dwell alert despite no TTL; 4bf62d; '
+    'capture monitoring follow-up, no PR yet; ANX lcinv-lifecycle-invariants',
+    ('record_audio:capturing', 'dwell_metric'): 'Live producer custody needs authoritative dwell visibility; 4bf62d; '
+    'capture monitoring follow-up, no PR yet; ANX lcinv-lifecycle-invariants',
+    ('record_audio:abandoned', 'entry_deadline'): 'PR #24689 adds a conditional eviction exit, not a bounded '
+    'repair deadline: abandoned_at records stopped-producer age; executor settlement, metadata admission retry '
+    'and retained-tail durability can wait indefinitely; ANX lcinv-lifecycle-invariants',
+    ('record_audio:abandoned', 'dwell_metric'): 'PR #24689 logs outcome=abandoned but supplies no authoritative '
+    'abandoned-token age/stock gauge; ANX lcinv-lifecycle-invariants',
+    ('record_audio:abandoned', 'dwell_alert'): 'PR #24689 supplies no abandoned-token dwell alert; '
+    'ANX lcinv-lifecycle-invariants',
+    (
+        'record_audio_orphan:capturing',
+        'dwell_metric',
+    ): 'Proven-dead orphan recovery needs an authoritative dwell gauge; '
+    '4bf62d; capture monitoring follow-up, no PR yet; ANX lcinv-lifecycle-invariants',
+    ('record_audio_orphan:capturing', 'dwell_alert'): 'Proven-dead orphan recovery needs a dwell alert; 4bf62d; '
+    'capture monitoring follow-up, no PR yet; ANX lcinv-lifecycle-invariants',
     ('record_audio:record_audio_partial', 'dwell_alert'): 'record_audio:record_audio_partial: missing committed '
     'dwell/stock alert; phase contract follow-up; no fix PR '
     'yet; ANX lcinv-lifecycle-invariants',
@@ -403,12 +569,6 @@ KNOWN_GAPS = {
     'bit; reconnect-only retry remains a freshtitles fix, '
     'no PR yet; ANX lcinv-lifecycle-invariants',
     ('record_audio:sealed', 'automatic_exit'): 'record_audio:sealed: missing independent automatic exit; No job: '
-    'manual digest-gated nojob recovery is not an automatic exit; '
-    'freshtitles fix, no PR yet; ANX lcinv-lifecycle-invariants',
-    ('record_audio:sealed', 'dwell_alert'): 'record_audio:sealed: missing committed dwell/stock alert; No job: '
-    'manual digest-gated nojob recovery is not an automatic exit; '
-    'freshtitles fix, no PR yet; ANX lcinv-lifecycle-invariants',
-    ('record_audio:sealed', 'dwell_metric'): 'record_audio:sealed: missing authoritative dwell/stock gauge; No job: '
     'manual digest-gated nojob recovery is not an automatic exit; '
     'freshtitles fix, no PR yet; ANX lcinv-lifecycle-invariants',
     ('record_audio:sealed', 'entry_deadline'): 'record_audio:sealed: missing deadline stamped at entry; No job: '
@@ -437,6 +597,21 @@ KNOWN_GAPS = {
 }
 
 
+# Ruling699300 reviewed the coverage loss explicitly. Never derive these gaps
+# from isPaused or from assertion failures: only the fixed reviewed table may enter.
+# Real unpause makes test_latch_clause XPASS strictly, forcing debt cleanup.
+KNOWN_GAPS.update(
+    {
+        (key, 'dwell_alert'): (
+            f'Lead2 ruling699300 (2026-11-08T15:13Z), PR #24938: {uid} paused for known '
+            'backlog until #24731/#24893 ships and its written clean24h unpause criteria hold; '
+            'active dwell protection is absent, not repaired. Owner: omi-pipeline/two-lane-lead.'
+        )
+        for key, uid in IMPORT_PAUSED_DWELL_ROWS.items()
+    }
+)
+
+
 def parameters():
     for row in STATES:
         for clause in CLAUSES:
@@ -448,6 +623,14 @@ def parameters():
 @pytest.mark.parametrize('row,clause', list(parameters()))
 def test_latch_clause(row, clause):
     assert_clause(row, clause)
+
+
+@pytest.mark.parametrize('clause', CLAUSES)
+def test_derived_record_token_view_rejects_unknown_states_and_fields(clause):
+    view = next(row for row in STATES if row.key == 'record_token:capturing')
+    for changed in (replace(view, state='invented'), replace(view, fields=('status',))):
+        with pytest.raises(AssertionError):
+            assert_clause(changed, clause)
 
 
 def test_declared_phase_vocabulary_matches_compatibility_reader():
@@ -478,10 +661,17 @@ def test_required_legacy_machines_are_present():
             'partial_retired',
         },
         'batch_projection': {'pending', 'persisted', 'ready', 'quarantine_held', 'completed', 'erased'},
-        'record_audio': {'capturing', 'sealed', 'record_upload_failed', 'record_audio_partial'},
+        'record_audio': {
+            'capturing',
+            'seal_refused',
+            'abandoned',
+            'sealed',
+            'record_upload_failed',
+            'record_audio_partial',
+        },
         'summary_debt': {'pending', 'completed'},
         'fair_use': {'warning', 'throttle', 'restrict'},
-        'visibility': {'bridge_pending', 'settling_hold'},
+        'visibility': {'bridge_pending', 'settling_hold', 'transcribing_hold'},
     }
     for machine, states in required.items():
         assert states <= {row.state for row in STATES if row.machine == machine}
@@ -494,13 +684,62 @@ def test_resolved_plan_gaps_do_not_regress():
         ('finalization:blocked_byok', 'dwell_alert'),
         ('finalization:blocked_byok', 'dwell_metric'),
         ('batch:record_pending', 'dwell_metric'),
-        ('batch:record_pending', 'dwell_alert'),
+        # record_pending dwell-alert coverage is now explicit reviewed import debt.
         ('finalization:dead_letter', 'dwell_alert'),
         ('batch:leased', 'entry_deadline'),
         ('visibility:bridge_pending', 'entry_deadline'),
+        ('visibility:transcribing_hold', 'entry_deadline'),
+        ('visibility:transcribing_hold', 'automatic_exit'),
     ):
         assert (key, clause) not in KNOWN_GAPS
         assert_clause(rows[key], clause)
+
+
+@pytest.mark.parametrize('key,uid', IMPORT_PAUSED_DWELL_ROWS.items())
+def test_reviewed_import_pauses_remain_real_dwell_coverage_gaps(key, uid):
+    row = next(row for row in STATES if row.key == key)
+    assert row.alert.uid == uid
+    assert (key, 'dwell_alert') in KNOWN_GAPS
+    rule = alerts()[uid]
+    assert rule['isPaused'] is True
+    assert '24h' in rule['annotations']['unpause_criteria']
+    with pytest.raises(AssertionError):
+        assert_clause(row, 'dwell_alert')
+
+
+@pytest.mark.parametrize('key,uid', IMPORT_PAUSED_DWELL_ROWS.items())
+def test_real_unpause_will_require_removing_the_strict_gap(key, uid, monkeypatch):
+    row = next(row for row in STATES if row.key == key)
+    monkeypatch.setitem(alerts(), uid, {**alerts()[uid], 'isPaused': False})
+    assert_clause(row, 'dwell_alert')  # Real source unpause would make the strict xfail XPASS.
+
+
+def test_unreviewed_pause_still_fails_the_active_dwell_contract(monkeypatch):
+    row = next(row for row in STATES if row.key == 'finalization:queued')
+    assert row.key not in IMPORT_PAUSED_DWELL_ROWS
+    monkeypatch.setitem(alerts(), row.alert.uid, {**alerts()[row.alert.uid], 'isPaused': True})
+    with pytest.raises(AssertionError):
+        assert_clause(row, 'dwell_alert')
+
+
+@pytest.mark.parametrize('key', ['record_audio:capturing', 'record_audio_orphan:capturing'])
+def test_no_ttl_custody_keeps_exit_and_monitoring_obligations_separate(key):
+    row = next(row for row in STATES if row.key == key)
+    assert_clause(row, 'entry_deadline')
+    assert_clause(row, 'automatic_exit')
+    for clause in ('dwell_metric', 'dwell_alert'):
+        assert (key, clause) in KNOWN_GAPS
+        with pytest.raises(AssertionError):
+            assert_clause(row, clause)
+
+
+def test_automatic_state_cannot_borrow_interactive_capture_exemptions():
+    custody = next(row for row in STATES if row.key == 'record_audio:capturing')
+    leased = next(row for row in STATES if row.key == 'batch:leased')
+    with pytest.raises(AssertionError):
+        assert_clause(replace(leased, deadline_exemption=custody.deadline_exemption), 'entry_deadline')
+    with pytest.raises(AssertionError):
+        assert_clause(replace(leased, exit_exemption=custody.exit_exemption), 'automatic_exit')
 
 
 def test_deadline_probe_rejects_a_read_without_an_entry_write():
@@ -735,6 +974,24 @@ def test_automatic_upload_failure_repair_is_a_green_source_control():
     assert 'repair_upload_failed=True' in repair
 
 
+def test_capacity_abandonment_declares_conditional_exit_and_honest_repair_gaps():
+    rows = {row.key: row for row in STATES}
+    live, abandoned = rows['record_audio:capturing'], rows['record_audio:abandoned']
+    assert live.exit.automatic_writers == (ABANDON_RECORD_PRODUCER,)
+    assert abandoned.entered_by == (ABANDON_RECORD_PRODUCER,)
+    assert abandoned.fields == ('record_upload_sessions',)
+    assert_clause(live, 'automatic_exit')
+    assert_clause(abandoned, 'automatic_exit')
+    assert not abandoned.terminal and not abandoned.derived and not abandoned.deadline_exemption
+    assert abandoned.deadline_field is None and not abandoned.deadline_stamped_at_entry
+    assert abandoned.dwell_metric is None and abandoned.alert.uid is None
+    assert {clause for key, clause in KNOWN_GAPS if key == abandoned.key} == {
+        'entry_deadline',
+        'dwell_metric',
+        'dwell_alert',
+    }
+
+
 @pytest.mark.parametrize('state,deadline', [('queued', 'reconcile_after_at'), ('leased', 'lease_expires_at')])
 def test_every_persisted_finalization_entry_function_is_declared(state, deadline):
     from tests.support.lifecycle_state_table import FIELD_BUILDERS
@@ -780,7 +1037,7 @@ def test_warning_reentry_callers_supply_the_deadline(path):
 
 
 ORDERING_COUNTEREXAMPLES = {
-    'finalization_after_batch_result_or_durable_rearm': {
+    'late_result_commit_rearms_titling': {
         'record_lane_owner': 'batch_live_v1',
         'status': 'completed',
         'finalization_status': 'completed',
@@ -809,6 +1066,7 @@ ORDERING_COUNTEREXAMPLES = {
             ),
         )
         for rule in ORDERING_RULES
+        if rule.name != 'late_result_commit_rearms_titling'
     ],
 )
 def test_known_red_cross_store_ordering_clause(rule):
@@ -817,10 +1075,29 @@ def test_known_red_cross_store_ordering_clause(rule):
     assert ordering_holds(rule, ORDERING_COUNTEREXAMPLES[rule.name])
 
 
-@pytest.mark.parametrize('results,rearm', [(1, False), (0, True), (1, True)])
-def test_finalization_ordering_accepts_committed_results_or_durable_rearm(results, rearm):
+@pytest.mark.parametrize('early,results,rearm', [(False, 1, False), (True, 0, False), (True, 1, True)])
+def test_ordering_accepts_normal_completion_and_rearmed_late_results(early, results, rearm):
     row = {'record_lane_owner': 'batch_live_v1', 'finalization_status': 'completed'}
-    assert ordering_holds(ORDERING_RULES[0], row, batch_result_count=results, rearm_on_result_commit=rearm)
+    assert ordering_holds(
+        ORDERING_RULES[0], row, batch_result_count=results, rearm_on_result_commit=rearm, completed_before_results=early
+    )
+
+
+@pytest.mark.parametrize('results,rearm,expected', [(0, False, True), (1, False, False), (1, True, True)])
+def test_early_completion_is_checked_at_late_result_commit(results, rearm, expected):
+    # A missing rearm after arrival is a negative predicate control, not a
+    # claimed runtime bug. B2 proves main actually persists the outbox rearm.
+    row = ORDERING_COUNTEREXAMPLES['late_result_commit_rearms_titling']
+    assert (
+        ordering_holds(
+            ORDERING_RULES[0],
+            row,
+            batch_result_count=results,
+            rearm_on_result_commit=rearm,
+            completed_before_results=True,
+        )
+        is expected
+    )
 
 
 def test_queued_finalization_can_wait_for_results():

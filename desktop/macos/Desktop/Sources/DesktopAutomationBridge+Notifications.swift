@@ -3,6 +3,7 @@ import Foundation
 /// Notification-facing automation actions, grouped out of the main registry file.
 extension DesktopAutomationActionRegistry {
   func registerNotificationActions() {
+    registerPassiveWindowActions()
     register(
       name: "settings_notifications_snapshot",
       effects: [.networkOrModel],

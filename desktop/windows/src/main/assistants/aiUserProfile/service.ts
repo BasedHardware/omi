@@ -1,453 +1,475 @@
-// AI User Profile — orchestrator (main process). Fetches the five data sources
-// in parallel, runs the two-stage LLM synthesis (synthesis.ts), stores the
-// profile locally (full history), and fire-and-forget syncs the current profile
-// to the backend. Faithful port of macOS AIUserProfileService.generateProfile.
+// AI User Profile — cloud reader (main process).
 //
-// TOKEN MODEL (Windows-specific): unlike macOS, the Firebase auth token lives in
-// the RENDERER, not the main process. So this service can't mint its own token —
-// the renderer supplies a session ({apiBase, desktopApiBase, token}) via IPC
-// (same pattern as memories:bulkDelete / memoryExport:notion). The session (plus
-// its staleness epoch and abort signal) is now held by the SHARED
-// `core/session.ts` — every main-side assistant reads the same one. A
-// missing/expired session makes background generation a soft no-op that defers
-// to the next renderer-driven trigger. See docs note in index.ts wiring.
+// The backend owns the profile: it picks the sources, runs the synthesis, keeps
+// the daily cadence and stores one current profile on the user doc. This client
+// only reads it and proxies the user's explicit actions:
+//
+//   GET    /v1/users/ai-profile          read (also lets the backend schedule a
+//                                        background refresh when its copy is stale)
+//   POST   /v1/users/ai-profile/refresh  "Generate now / Regenerate" (synchronous)
+//   PATCH  /v1/users/ai-profile          a user edit, sent with source=user_edit
+//   DELETE /v1/users/ai-profile          clear it; the backend regenerates later
+//
+// No local generation, history table, synthesize call or mirror PATCH. The one
+// exception is a one-time upgrade step: older builds kept the profile in a local
+// table and mirrored it with a fire-and-forget PATCH, so after the first
+// authenticated read this module uploads that table's newest text if the backend
+// never got it, then drops the table (see salvageLegacyProfile below).
+//
+// Prompt consumers (focus, screen-task extraction, chat personalization) read the
+// profile synchronously, so this module keeps the last fetched profile in memory
+// and refetches in the background once it is older than CACHE_TTL_MS. The cache
+// is keyed by the signed-in uid and dropped on sign-out, so one account's profile
+// never grounds another account's prompts.
+//
+// TOKEN MODEL (Windows-specific): the Firebase token lives in the RENDERER, which
+// relays a session on sign-in and on every id-token refresh (see
+// renderer/src/lib/aiProfileHost.ts). The shared `core/session.ts` holds it.
 import { net } from 'electron'
-import { noteBackendStatus } from '../../observability/backendDegraded'
+import { dropLegacyProfileTable, readLegacyProfileRow } from '../../ipc/db'
+import type { LegacyProfileRow } from '../../ipc/legacyProfileTable'
+import type {
+  AiProfileErrorCode,
+  AiProfileResult,
+  AiUserProfile,
+  AiUserProfileSource
+} from '../../../shared/types'
 import {
-  deleteAiUserProfile,
-  deleteAllAiUserProfiles,
-  insertAiUserProfile,
-  latestAiUserProfile,
-  listAiUserProfiles,
-  markAiUserProfileSynced,
-  updateAiUserProfileText
-} from '../../ipc/db'
-import { getAppSettings } from '../../appSettings'
-import type { AiUserProfileRecord } from '../../../shared/types'
-import { shouldGenerate, type ProfileSources } from './synthesis'
-import {
+  fetchWithFreshToken,
   getAbortSignal,
   getBackendSession,
   getSessionEpoch,
+  onSessionReset,
   setBackendSession,
+  tokenUid,
   type BackendSession
 } from '../core/session'
-import {
-  AuthExpiredError,
-  HttpError,
-  describeError,
-  generateProfile,
-  warnDegraded,
-  type SourceFetchers
-} from './orchestrate'
 
-/** Credentials the renderer hands the main process to reach the backend.
- *  Now just the shared session — the alias keeps the IPC layer's import stable. */
+/** Credentials the renderer hands the main process to reach the backend. */
 export type AiProfileSession = BackendSession
 
-const CONVERSATIONS_LOOKBACK_MS = 7 * 86_400_000
-// Re-check every 6h (not exactly 24h) so a session that arrives after startup
-// triggers a due generation on the next tick; shouldGenerate() still gates the
-// actual >24h cadence, so this never over-generates.
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
-const REQUEST_TIMEOUT_MS = 30_000
-const LLM_TIMEOUT_MS = 60_000
+const PROFILE_PATH = '/v1/users/ai-profile'
+const REFRESH_PATH = '/v1/users/ai-profile/refresh'
+/** Matches the backend's stored-profile cap; an edit longer than this is refused
+ *  locally instead of round-tripping to a 422. */
+export const MAX_PROFILE_CHARS = 10_000
+const READ_TIMEOUT_MS = 30_000
+/** The refresh call is synchronous on the backend (~10-40 s of synthesis). */
+const REFRESH_TIMEOUT_MS = 90_000
+/** Re-GET at most this often for prompt consumers. The backend decides whether
+ *  its copy is stale; this only bounds how old our view of it can get. */
+export const CACHE_TTL_MS = 60 * 60 * 1000
 
-// Floor between generation ATTEMPTS, successful or not. `generatedAt` is only
-// written on success, so without this a failing generation (429/500, empty LLM
-// content, timeout, or simply a user with no data) stays permanently "due" — and
-// since the renderer relays a session on every id-token refresh (~hourly), it
-// would retry ~24x/day forever with no backoff. 6h preserves the ≤4-attempts/day
-// ceiling the 6h timer alone used to give.
-const MIN_ATTEMPT_INTERVAL_MS = 6 * 60 * 60 * 1000
+type CacheEntry = {
+  /** Uid of the session the profile was fetched for (null if undecodable). */
+  uid: string | null
+  profile: AiUserProfile | null
+  fetchedAt: number
+}
 
-let isGenerating = false
-let timer: ReturnType<typeof setInterval> | null = null
-// Start time of the last generation ATTEMPT (any outcome). null = never tried.
-let lastAttemptAt: number | null = null
+let cache: CacheEntry | null = null
+let readInFlight: Promise<AiProfileResult<AiUserProfile | null>> | null = null
+// Session epoch the in-flight read started under. A session change aborts that
+// request, so a caller under the new session starts its own instead of joining it.
+let readEpoch = -1
+let refreshInFlight: Promise<AiProfileResult<AiUserProfile>> | null = null
+// Bumped whenever a mutation (refresh, edit, delete, legacy upload) commits. A read
+// pins it when it starts and drops its result if it moved: the GET may have been
+// served before the mutation, and storing it would undo the mutation in the cache
+// (and mark that older copy fresh for CACHE_TTL_MS).
+let mutationRevision = 0
 
-/** Relay a session from the renderer. Called by the IPC layer whenever fresh
- *  credentials arrive (sign-in, hourly id-token refresh, sign-out → null).
- *
- *  Beyond storing it (the shared `core/session` owns the cache, the staleness
- *  epoch, and the abort signal), a NON-null session kicks a `runIfDue()` — this
- *  closes the startup race: `maybeGenerateOnStartup` runs at app-ready, finds no
- *  session yet (the token lives in the renderer, which signs in later) and
- *  defers, after which nothing would re-check for up to 6h. Re-checking the
- *  moment credentials arrive means a >24h-old profile regenerates right after
- *  sign-in instead of hours later.
- *
- *  This is NOT a "generate on every push": `runIfDue` gates on
- *  `shouldGenerate(latest.generatedAt, now)`, so the cadence stays ≤1/day. It is
- *  fire-and-forget by construction (runIfDue kicks generation without awaiting),
- *  so the IPC returns immediately rather than blocking the renderer on a
- *  multi-second generation. */
-export function configureAiProfileSession(session: AiProfileSession | null): void {
-  setBackendSession(session)
-  if (!session) return
-  // Caching the session must never fail because a due-check threw — the IPC
-  // handler's whole job is to store credentials.
-  try {
-    runIfDue()
-  } catch (e) {
-    console.warn('[ai-profile] due-check on session push failed:', describeError(e))
+// Legacy-table upload state (one attempt per launch, see salvageLegacyProfile).
+// The local database belongs to the account signed in when this process first
+// read the profile: sign-out always wipes before it clears the session (and
+// dbWipe.ts clears the legacy rows), so a later account never sees them. Any other
+// uid in this process is never allowed to upload them.
+let legacyOwnerUid: string | null = null
+let legacySettled = false
+let legacyRunning = false
+
+// Sign-out: forget the departed account's profile before anyone else signs in.
+onSessionReset(() => {
+  cache = null
+})
+
+// --- Wire shape -------------------------------------------------------------
+
+/** Error raised by a non-OK response. Carries only the status, never a body. */
+class ProfileHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`HTTP ${status}`)
+    this.name = 'ProfileHttpError'
   }
 }
 
-// --- HTTP helpers -----------------------------------------------------------
+/** The session changed before a fenced request was dispatched. */
+class StaleSessionError extends Error {
+  constructor() {
+    super('AI profile: session changed')
+    this.name = 'StaleSessionError'
+  }
+}
 
-// Shared abort-on-timeout wrapper — every net.fetch call below (authedGet,
-// runChat, syncToBackend) needs the same AbortController + timer dance to cap
-// a hung request; this is the one place that owns it.
-// `external` is the current session's abort signal: a sign-out (or any session
-// change) aborts every request still in flight for the old session, on top of
-// the per-request timeout.
-async function withTimeout<T>(
-  ms: number,
-  fn: (signal: AbortSignal) => Promise<T>,
-  external?: AbortSignal
-): Promise<T> {
+class NotSignedInError extends Error {
+  constructor() {
+    super('AI profile: no backend session')
+    this.name = 'NotSignedInError'
+  }
+}
+
+/** HTTP status → the failure class the renderer explains. */
+export function codeForStatus(status: number): AiProfileErrorCode {
+  switch (status) {
+    case 401:
+    case 403:
+      return 'auth_expired'
+    case 402:
+      return 'usage_exhausted'
+    case 409:
+      return 'in_progress'
+    case 422:
+      return 'insufficient_data'
+    case 429:
+      return 'rate_limited'
+    case 502:
+      return 'synthesis_failed'
+    default:
+      return 'unknown'
+  }
+}
+
+function codeForError(e: unknown): AiProfileErrorCode {
+  if (e instanceof ProfileHttpError) return codeForStatus(e.status)
+  if (e instanceof NotSignedInError) return 'not_signed_in'
+  // Abort, timeout, DNS/TLS failure, malformed JSON.
+  return 'network'
+}
+
+/** PII-free log label: status or error NAME, never a message (a JSON parse error
+ *  message can echo a fragment of the profile text). */
+function describeError(e: unknown): string {
+  if (e instanceof ProfileHttpError) return `HTTP ${e.status}`
+  return e instanceof Error ? e.name : 'Error'
+}
+
+function toMs(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  if (typeof v === 'string' && v) {
+    const t = Date.parse(v)
+    return Number.isNaN(t) ? null : t
+  }
+  return null
+}
+
+const SOURCES: readonly AiUserProfileSource[] = ['backend', 'user_edit', 'exploration', 'client']
+
+/** Parse an AIUserProfileResponse (or null). An absent or blank profile_text is
+ *  "no profile", matching how the backend treats a cleared field. */
+export function parseProfile(json: unknown): AiUserProfile | null {
+  if (!json || typeof json !== 'object') return null
+  const r = json as Record<string, unknown>
+  const text = typeof r.profile_text === 'string' ? r.profile_text : ''
+  if (!text.trim()) return null
+  const source = SOURCES.find((s) => s === r.source) ?? null
+  return {
+    profileText: text,
+    generatedAt: toMs(r.generated_at),
+    dataSourcesUsed: typeof r.data_sources_used === 'number' ? r.data_sources_used : 0,
+    source,
+    refreshedAt: toMs(r.refreshed_at)
+  }
+}
+
+// --- HTTP -------------------------------------------------------------------
+
+/** One authed request against the Python backend. Resolves with the parsed JSON
+ *  body (null for an empty body); throws ProfileHttpError on a non-OK status.
+ *  The timeout covers reading the body too, and a session change aborts it.
+ *  With `epoch`, the request is never dispatched unless the session is still that
+ *  one (a token pull inside fetchWithFreshToken can switch accounts). */
+async function send(
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  body: unknown,
+  timeoutMs: number,
+  epoch?: number
+): Promise<unknown> {
+  if (!getBackendSession()) throw new NotSignedInError()
+  const external = getAbortSignal()
   const ctrl = new AbortController()
   const onExternalAbort = (): void => ctrl.abort()
-  const timer = setTimeout(() => ctrl.abort(), ms)
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   if (external?.aborted) ctrl.abort()
   else external?.addEventListener('abort', onExternalAbort, { once: true })
   try {
-    return await fn(ctrl.signal)
+    const res = await fetchWithFreshToken(async (session) => {
+      if (epoch !== undefined && getSessionEpoch() !== epoch) throw new StaleSessionError()
+      return net.fetch(`${session.apiBase}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {})
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: ctrl.signal
+      })
+    }, `${method} ${path}`)
+    if (!res.ok) throw new ProfileHttpError(res.status)
+    const raw = await res.text()
+    return raw ? (JSON.parse(raw) as unknown) : null
   } finally {
     clearTimeout(timer)
     external?.removeEventListener('abort', onExternalAbort)
   }
 }
 
-// Electron's net.fetch uses Chromium's network stack (proxy/TLS aware) — the
-// same path the renderer's axios uses.
-async function authedGet(
-  session: AiProfileSession,
-  path: string,
-  external?: AbortSignal
-): Promise<unknown> {
-  return withTimeout(
-    REQUEST_TIMEOUT_MS,
-    async (signal) => {
-      const res = await net.fetch(`${session.apiBase}${path}`, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${session.token}` },
-        signal
-      })
-      noteBackendStatus(res.status, `GET ${path.split('?')[0]}`) // 429-storm telemetry (observe only)
-      // Distinguish an expired/invalid session from genuine no-data so generation
-      // can abort with a clear signal instead of the misleading "not enough data".
-      if (res.status === 401 || res.status === 403) throw new AuthExpiredError()
-      if (!res.ok) throw new HttpError(res.status)
-      return await res.json()
-    },
-    external
-  )
+function currentUid(): string | null {
+  const s = getBackendSession()
+  return s ? tokenUid(s.token) : null
 }
 
-// --- Data sources -----------------------------------------------------------
-//
-// Each fetcher throws on failure; the orchestrator's collectSources() owns the
-// resilience policy (auth expiry aborts; any other failure degrades that one
-// source to []). Keeping the try/catch out of here means the per-source logging
-// (status/name only — never a response body) lives in exactly one place.
-
-function asArray<T>(data: unknown, key: string): T[] {
-  if (Array.isArray(data)) return data as T[]
-  const nested = (data as Record<string, unknown> | null)?.[key]
-  return Array.isArray(nested) ? (nested as T[]) : []
+/** Store a result only if the account that asked is still the one signed in. */
+function storeIfCurrent(uid: string | null, profile: AiUserProfile | null): void {
+  if (!getBackendSession() || currentUid() !== uid) return
+  cache = { uid, profile, fetchedAt: Date.now() }
 }
 
-async function fetchMemories(session: AiProfileSession, signal?: AbortSignal): Promise<string[]> {
-  const data = await authedGet(session, '/v3/memories?limit=100&offset=0', signal)
-  const items = asArray<{ content?: string; category?: string }>(data, 'memories')
-  return items
-    .slice(0, 100)
-    .map((m) => `[${m.category ?? 'other'}] ${m.content ?? ''}`.trim())
-    .filter((s) => s.length > 3)
+/** Record a committed mutation's result. Bumping the revision makes any read
+ *  that started before it discard its (possibly older) response. */
+function commitMutation(uid: string | null, profile: AiUserProfile | null): void {
+  mutationRevision += 1
+  storeIfCurrent(uid, profile)
 }
 
-async function fetchTasks(session: AiProfileSession, signal?: AbortSignal): Promise<string[]> {
-  const data = await authedGet(session, '/v1/action-items?limit=50&offset=0', signal)
-  // Windows ActionItemResponse has no `priority` field (Mac does) — omit it.
-  const items = asArray<{ description?: string; completed?: boolean }>(data, 'action_items')
-  return items
-    .slice(0, 50)
-    .map((t) => `[${t.completed ? 'done' : 'todo'}] ${t.description ?? ''}`.trim())
-    .filter((s) => s.length > 7)
+function cachedForCurrentUser(): CacheEntry | null {
+  if (!cache || !getBackendSession() || cache.uid !== currentUid()) return null
+  return cache
 }
 
-async function fetchGoals(session: AiProfileSession, signal?: AbortSignal): Promise<string[]> {
-  // /v1/goals/all returns active + completed; we keep active only (Mac parity).
-  const data = await authedGet(session, '/v1/goals/all', signal)
-  const goals = asArray<{
-    title?: string
-    target_value?: number
-    current_value?: number
-    is_active?: boolean
-  }>(data, 'goals')
-  return goals
-    .filter((g) => g.is_active !== false && g.title)
-    .map((g) => {
-      const target = g.target_value ?? 0
-      const progress = target > 0 ? Math.round(((g.current_value ?? 0) / target) * 100) : 0
-      return `${g.title} (${progress}% complete)`
-    })
-}
-
-async function fetchConversations(
-  session: AiProfileSession,
-  signal?: AbortSignal
-): Promise<string[]> {
-  const data = await authedGet(
-    session,
-    '/v1/conversations?limit=20&offset=0&statuses=completed,processing',
-    signal
-  )
-  const convos = asArray<{
-    created_at?: string
-    structured?: { title?: string; overview?: string }
-  }>(data, 'conversations')
-  const cutoff = Date.now() - CONVERSATIONS_LOOKBACK_MS
-  return convos
-    .filter((c) => {
-      // Keep past-7-days only (Mac passes startDate); tolerate a missing date.
-      const t = c.created_at ? new Date(c.created_at).getTime() : NaN
-      return Number.isNaN(t) || t >= cutoff
-    })
-    .map((c) => {
-      const title = c.structured?.title ?? ''
-      const summary = c.structured?.overview ?? ''
-      return title ? `${title}: ${summary}` : ''
-    })
-    .filter((s) => s.length > 0)
-}
-
-async function fetchMessages(session: AiProfileSession, signal?: AbortSignal): Promise<string[]> {
-  const data = await authedGet(session, '/v2/messages', signal)
-  const messages = asArray<{ sender?: string; text?: string }>(data, 'messages')
-  return messages
-    .slice(0, 30)
-    .map((m) => `[${m.sender ?? 'ai'}] ${m.text ?? ''}`.trim())
-    .filter((s) => s.length > 5)
-}
-
-function makeFetchers(session: AiProfileSession, signal?: AbortSignal): SourceFetchers {
-  return {
-    memories: () => fetchMemories(session, signal),
-    tasks: () => fetchTasks(session, signal),
-    goals: () => fetchGoals(session, signal),
-    conversations: () => fetchConversations(session, signal),
-    messages: () => fetchMessages(session, signal)
+async function run<T>(label: string, fn: () => Promise<T>): Promise<AiProfileResult<T>> {
+  try {
+    return { ok: true, value: await fn() }
+  } catch (e) {
+    console.warn(`[ai-profile] ${label} failed:`, describeError(e))
+    return { ok: false, code: codeForError(e) }
   }
-}
-
-// --- LLM + backend sync -----------------------------------------------------
-
-async function runSynthesis(
-  session: AiProfileSession,
-  sources: ProfileSources,
-  pastProfilesOldestFirst: string[],
-  external?: AbortSignal
-): Promise<string> {
-  return withTimeout(
-    LLM_TIMEOUT_MS,
-    async (signal) => {
-      const res = await net.fetch(`${session.apiBase}/v1/users/ai-profile/synthesize`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ ...sources, past_profiles: pastProfilesOldestFirst }),
-        signal
-      })
-      if (!res.ok) throw new Error(`ai-profile/synthesize HTTP ${res.status}`)
-      const json = (await res.json()) as { profile_text?: string }
-      const content = (json?.profile_text ?? '').trim()
-      if (!content) throw new Error('ai-profile/synthesize returned empty content')
-      return content
-    },
-    external
-  )
-}
-
-// `dataSourceItemCount` is the backend's `data_sources_used` INT — Mac sends
-// the total item count across all sources (see totalSourceItems), not the
-// count of source *types* that contributed. It is OMITTED entirely on a
-// text-only edit: the backend's PATCH applies each field only when non-null
-// (backend/database/users.py update_ai_user_profile), so omitting the key
-// preserves the stored count instead of clobbering it with a wrong value.
-// Only the generate path knows the true count and passes it.
-async function syncToBackend(
-  session: AiProfileSession,
-  id: number,
-  profileText: string,
-  generatedAtMs: number,
-  dataSourceItemCount?: number,
-  external?: AbortSignal
-): Promise<void> {
-  return withTimeout(
-    REQUEST_TIMEOUT_MS,
-    async (signal) => {
-      const body: Record<string, unknown> = {
-        profile_text: profileText,
-        generated_at: new Date(generatedAtMs).toISOString()
-      }
-      if (dataSourceItemCount !== undefined) body.data_sources_used = dataSourceItemCount
-      const res = await net.fetch(`${session.apiBase}/v1/users/ai-profile`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${session.token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body),
-        signal
-      })
-      if (!res.ok) throw new HttpError(res.status)
-      markAiUserProfileSynced(id)
-      console.log('[ai-profile] synced profile to backend')
-    },
-    external
-  )
 }
 
 // --- Public API -------------------------------------------------------------
 
-/** Generate a new profile now. Uses the provided session, else the cached one.
- *  Throws if no session is available or if there is no data to synthesize. */
-export async function generateNow(session?: AiProfileSession): Promise<AiUserProfileRecord> {
-  // setBackendSession (not configureAiProfileSession) — a due-check here would
-  // re-enter generateNow via runIfDue.
-  if (session) setBackendSession(session)
-  const active = getBackendSession()
-  if (!active) throw new Error('AI profile: no backend session available')
-  if (isGenerating) throw new Error('AI profile: generation already in progress')
+/** Relay a session from the renderer (sign-in, hourly id-token refresh, sign-out
+ *  → null). A non-null session warms the cache in the background so the first
+ *  prompt after sign-in already has the profile. */
+export function configureAiProfileSession(session: AiProfileSession | null): void {
+  setBackendSession(session)
+  if (session && !isFresh()) void loadProfile()
+}
 
-  // Pin the session this run belongs to. Every write is gated on the epoch still
-  // matching, so a sign-out (or user switch) mid-generation discards the result
-  // instead of writing the departed user's dossier back into the wiped DB.
-  const startEpoch = getSessionEpoch()
-  const signal = getAbortSignal()
-  const isStale = (): boolean => getSessionEpoch() !== startEpoch
+function isFresh(now: number = Date.now()): boolean {
+  const c = cachedForCurrentUser()
+  return c !== null && now - c.fetchedAt < CACHE_TTL_MS
+}
 
-  isGenerating = true
-  try {
-    console.log('[ai-profile] starting profile generation')
-    // Wire the electron/better-sqlite3 impls to the pure orchestrator core
-    // (orchestrate.ts) — the only place that touches the event loop / DB.
-    return await generateProfile({
-      fetchers: makeFetchers(active, signal),
-      synthesize: (sources, pastProfilesOldestFirst) =>
-        runSynthesis(active, sources, pastProfilesOldestFirst, signal),
-      listPastProfiles: (n) => listAiUserProfiles(n).map((r) => r.profileText),
-      insertProfile: insertAiUserProfile,
-      syncProfile: (id, text, generatedAtMs, itemCount) =>
-        syncToBackend(active, id, text, generatedAtMs, itemCount, signal),
-      isStale
+/** GET the profile and update the cache. Concurrent callers share one request.
+ *  On failure the last fetched profile for this account (if any) is returned, so
+ *  a flaky network doesn't blank the Settings card. */
+export function loadProfile(): Promise<AiProfileResult<AiUserProfile | null>> {
+  if (readInFlight && readEpoch === getSessionEpoch()) return readInFlight
+  const uid = currentUid()
+  const epoch = getSessionEpoch()
+  const revision = mutationRevision
+  readEpoch = epoch
+  if (legacyOwnerUid === null && uid !== null && getBackendSession()) legacyOwnerUid = uid
+  const p: Promise<AiProfileResult<AiUserProfile | null>> = run('read', async () => {
+    const profile = parseProfile(await send('GET', PROFILE_PATH, undefined, READ_TIMEOUT_MS))
+    if (revision !== mutationRevision) {
+      // An edit/delete/refresh committed while this GET was out; its result is
+      // newer than (or at least as new as) what this read saw.
+      const c = cachedForCurrentUser()
+      return c && c.uid === uid ? c.profile : profile
+    }
+    storeIfCurrent(uid, profile)
+    if (epoch !== getSessionEpoch()) return profile
+    return (await salvageLegacyProfile(uid, epoch, profile)) ?? profile
+  })
+    .then((r) => {
+      if (r.ok) return r
+      const c = cachedForCurrentUser()
+      return c ? { ok: true as const, value: c.profile } : r
     })
-  } finally {
-    isGenerating = false
-  }
+    .finally(() => {
+      if (readInFlight === p) readInFlight = null
+    })
+  readInFlight = p
+  return p
 }
 
-/** The latest stored profile text (for downstream pipeline grounding). */
+/** Ask the backend to regenerate now (POST refresh). Synchronous on the backend;
+ *  a second click while one is running joins it instead of drawing a 409. */
+export function refreshProfile(): Promise<AiProfileResult<AiUserProfile>> {
+  if (refreshInFlight) return refreshInFlight
+  const uid = currentUid()
+  refreshInFlight = run('refresh', async () => {
+    const profile = parseProfile(await send('POST', REFRESH_PATH, undefined, REFRESH_TIMEOUT_MS))
+    // A 200 with no text would be a backend bug; report it as a failed synthesis
+    // rather than showing an empty profile as success.
+    if (!profile) throw new ProfileHttpError(502)
+    commitMutation(uid, profile)
+    return profile
+  }).finally(() => {
+    refreshInFlight = null
+  })
+  return refreshInFlight
+}
+
+/** Save the user's edit. The backend keeps it as a correction the next synthesis
+ *  builds on. */
+export async function editProfile(text: string): Promise<AiProfileResult<AiUserProfile>> {
+  const uid = currentUid()
+  return run('edit', async () => {
+    const json = await send(
+      'PATCH',
+      PROFILE_PATH,
+      { profile_text: text, source: 'user_edit' },
+      READ_TIMEOUT_MS
+    )
+    const profile = parseProfile(json) ?? {
+      profileText: text,
+      generatedAt: Date.now(),
+      dataSourcesUsed: cachedForCurrentUser()?.profile?.dataSourcesUsed ?? 0,
+      source: 'user_edit' as const,
+      refreshedAt: cachedForCurrentUser()?.profile?.refreshedAt ?? null
+    }
+    commitMutation(uid, profile)
+    return profile
+  })
+}
+
+/** Clear the profile on the backend (it regenerates on its next trigger). */
+export async function deleteProfile(): Promise<AiProfileResult<null>> {
+  const uid = currentUid()
+  return run('delete', async () => {
+    await send('DELETE', PROFILE_PATH, undefined, READ_TIMEOUT_MS)
+    commitMutation(uid, null)
+    return null
+  })
+}
+
+/** The cached profile text for prompt grounding, or null. Never blocks: when the
+ *  cache is missing or older than CACHE_TTL_MS it kicks a background GET and
+ *  answers from what it has. */
 export function getLatestProfileText(): string | null {
-  return latestAiUserProfile()?.profileText ?? null
+  if (!getBackendSession()) return null
+  if (!isFresh()) void loadProfile()
+  return cachedForCurrentUser()?.profile?.profileText || null
 }
 
-/** The latest stored profile RECORD (for the Settings preview/edit UI, which
- *  needs the id/date/sources the text-only getter drops). Grounding paths keep
- *  using getLatestProfileText(). */
-export function getLatestProfileRecord(): AiUserProfileRecord | null {
-  return latestAiUserProfile()
+// --- Legacy local table: one-time upload --------------------------------------
+
+/** Whether the newest pre-cloud local row holds text the backend lacks. The old
+ *  `backendSynced` marker is set when a generation's mirror PATCH succeeded, but an
+ *  edit never cleared it, so a failed edit sync still reads as synced. Hence: an
+ *  unsynced row, or a row whose text differs from the cloud's and is not older
+ *  than it (an edit PATCHed with its generation's timestamp), is uploaded. A cloud
+ *  profile without a timestamp is trusted unless the row is marked unsynced. */
+export function legacyRowNeedsUpload(row: LegacyProfileRow, cloud: AiUserProfile | null): boolean {
+  const text = row.profileText.trim()
+  if (!text) return false
+  if (!cloud) return true
+  if (text === cloud.profileText.trim()) return false
+  if (cloud.generatedAt === null || !Number.isFinite(row.generatedAt)) return !row.backendSynced
+  return row.generatedAt >= cloud.generatedAt
 }
 
-/** Edit a stored profile's text, then fire-and-forget re-sync to the backend
- *  (using the cached session, if any). */
-export async function editProfileText(id: number, text: string): Promise<void> {
-  updateAiUserProfileText(id, text)
-  const active = getBackendSession()
-  if (!active) return
-  // Look the record up (no getById in db.ts) to preserve its original
-  // generatedAt on the backend.
-  const record = listAiUserProfiles(50).find((r) => r.id === id)
-  if (!record) return
-  // Text-only edit: pass NO data_sources_used so the backend preserves its
-  // stored item count (see syncToBackend / update_ai_user_profile). Sending an
-  // approximation here would clobber the true count with a smaller wrong value.
-  // A sync failure keeps the already-applied local edit (fail-open, degraded).
-  void syncToBackend(active, id, text, record.generatedAt).catch((e) =>
-    warnDegraded('backend_sync_failed', { op: 'edit', error: describeError(e) })
-  )
-}
-
-/** Delete a single stored profile (local history only — Mac keeps the backend's
- *  single current profile untouched on delete). */
-export function deleteProfile(id: number): void {
-  deleteAiUserProfile(id)
-}
-
-/** Delete all stored profiles (local history only). */
-export function deleteAll(): void {
-  deleteAllAiUserProfiles()
-}
-
-// --- Background scheduling --------------------------------------------------
-
-function runIfDue(): void {
-  if (!getAppSettings().aiProfileEnabled) return
-  // Non-reentrancy: runIfDue now has THREE triggers (startup, the 6h timer, and
-  // every session push). A generation is multi-second, so a timer tick landing
-  // on top of an in-flight run — or two rapid token refreshes — must not start a
-  // second one. generateNow() also guards internally (it throws if re-entered);
-  // bailing here keeps that from surfacing as a spurious warn log.
-  if (isGenerating) return
-
-  const now = Date.now()
-  // Attempt floor. `generatedAt` only advances on SUCCESS, so a persistently
-  // failing generation (or a user with no data) stays "due" forever — and this
-  // is now reached on every hourly session push, not just the 6h timer. Without
-  // this, one broken account would retry ~24x/day indefinitely.
-  if (lastAttemptAt !== null && now - lastAttemptAt < MIN_ATTEMPT_INTERVAL_MS) return
-
-  const latest = latestAiUserProfile()
-  if (!shouldGenerate(latest?.generatedAt ?? null, now)) return
-  if (!getBackendSession()) {
-    // Soft no-op: no throw, no lost local row, just defer to the next tick
-    // (or the next session push, whichever comes first). Deliberately does NOT
-    // consume an attempt — nothing was tried.
-    console.log('[ai-profile] generation due but no backend session yet — deferring')
-    return
+/** After an authenticated GET for the account that owns the local database: if
+ *  the old local table holds newer text the backend never got, PATCH it (as a
+ *  legacy client write: no source, the row's generated_at), and drop the table only
+ *  once the backend has the text. A failed PATCH keeps the table for the next
+ *  launch. Every step is fenced on the session epoch the GET ran under, and the
+ *  PATCH is never dispatched under another session. Resolves with the profile the
+ *  upload produced, or undefined when nothing was uploaded. */
+async function salvageLegacyProfile(
+  uid: string | null,
+  epoch: number,
+  cloud: AiUserProfile | null
+): Promise<AiUserProfile | undefined> {
+  if (legacySettled || legacyRunning || uid === null || uid !== legacyOwnerUid) return undefined
+  legacyRunning = true
+  try {
+    let row: LegacyProfileRow | null
+    try {
+      row = readLegacyProfileRow()
+    } catch (e) {
+      legacySettled = true
+      console.warn('[ai-profile] legacy table read failed:', describeError(e))
+      return undefined
+    }
+    if (getSessionEpoch() !== epoch) return undefined
+    if (!row || !legacyRowNeedsUpload(row, cloud)) {
+      dropLegacy()
+      return undefined
+    }
+    const revision = mutationRevision
+    let json: unknown
+    try {
+      json = await send(
+        'PATCH',
+        PROFILE_PATH,
+        {
+          profile_text: row.profileText.slice(0, MAX_PROFILE_CHARS),
+          generated_at: new Date(row.generatedAt).toISOString()
+        },
+        READ_TIMEOUT_MS,
+        epoch
+      )
+    } catch (e) {
+      // A session change (sign-out wipes the rows; a same-user token push may
+      // retry later under the same owner) leaves the attempt open; any other
+      // failure keeps the table for the next launch.
+      if (getSessionEpoch() === epoch) legacySettled = true
+      console.warn('[ai-profile] legacy profile upload failed:', describeError(e))
+      return undefined
+    }
+    dropLegacy()
+    const profile = parseProfile(json) ?? {
+      profileText: row.profileText.slice(0, MAX_PROFILE_CHARS),
+      generatedAt: row.generatedAt,
+      dataSourcesUsed: cloud?.dataSourcesUsed ?? 0,
+      source: 'client' as const,
+      refreshedAt: cloud?.refreshedAt ?? null
+    }
+    if (revision === mutationRevision) {
+      commitMutation(uid, profile)
+    } else {
+      // A user action committed while the upload was out; the server's final
+      // state depends on arrival order, so let the next consumer re-read it.
+      mutationRevision += 1
+      if (cache) cache.fetchedAt = 0
+    }
+    console.log('[ai-profile] uploaded the pre-cloud local profile')
+    return profile
+  } finally {
+    legacyRunning = false
   }
-
-  // Consume the attempt BEFORE starting: the floor must hold regardless of how
-  // this run ends (success, HTTP error, timeout, abort, no-data).
-  lastAttemptAt = now
-  // m7/logging-security: name/status only — never e.message. A malformed-JSON
-  // SyntaxError can echo a fragment of the user-data response body.
-  void generateNow().catch((e) =>
-    console.warn('[ai-profile] scheduled generation failed:', describeError(e))
-  )
 }
 
-/** Wire the startup check + daily timer. Idempotent (safe to call once at app
- *  startup). Generation is gated on the aiProfileEnabled setting and the >24h
- *  cadence; until the renderer has pushed a session this is a clean soft
- *  no-op (never throws, never loses a local row) — the renderer proactive
- *  framework (a later PR) owns actually deciding *when* to push a session and
- *  drive generation. This hook only covers the daily-cadence check once a
- *  session exists. */
-export function maybeGenerateOnStartup(): void {
-  runIfDue()
-  if (!timer) timer = setInterval(runIfDue, CHECK_INTERVAL_MS)
-}
-
-/** Test/teardown: stop the background timer. */
-export function stopAiProfileScheduler(): void {
-  if (timer) {
-    clearInterval(timer)
-    timer = null
+function dropLegacy(): void {
+  legacySettled = true
+  try {
+    dropLegacyProfileTable()
+  } catch (e) {
+    console.warn('[ai-profile] legacy table drop failed:', describeError(e))
   }
+}
+
+/** Test seam: drop the cache and any in-flight bookkeeping. */
+export function _resetAiProfileCache(): void {
+  cache = null
+  readInFlight = null
+  refreshInFlight = null
+  mutationRevision = 0
+  legacyOwnerUid = null
+  legacySettled = false
+  legacyRunning = false
 }

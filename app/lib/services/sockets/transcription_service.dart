@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/on_device/on_device_usage.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
@@ -236,9 +237,12 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   bool _stoppedIntentionally = false;
   bool get stoppedIntentionally => _stoppedIntentionally;
 
-  Future stop({String? reason}) async {
+  /// [userStop]: the user tapped Stop. The server then finalizes the conversation
+  /// on close instead of holding it open for a reconnect. Drops must not set it.
+  Future stop({String? reason, bool userStop = false}) async {
     _stoppedIntentionally = true;
     _detachClientState();
+    if (userStop) _sendUserStopReason();
     await _socket.stop();
     _listeners.clear();
 
@@ -280,6 +284,16 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     _socket.send(frame.payload);
     if (_socket.status == PureSocketStatus.connected) {
       _binaryAudioBytesSent += frame.payload.length;
+    }
+  }
+
+  /// Best-effort: a failed send never blocks the close.
+  void _sendUserStopReason() {
+    if (_socket.status != PureSocketStatus.connected) return;
+    try {
+      _socket.send(jsonEncode(const {'type': 'finalization_reason', 'reason': 'user_stop'}));
+    } catch (e) {
+      Logger.debug('finalization_reason send failed: $e');
     }
   }
 
@@ -642,6 +656,8 @@ class TranscriptSocketServiceFactory {
 
     // Special handling for On-Device Whisper
     if (config.provider == SttProvider.onDeviceWhisper) {
+      final usage = OnDeviceUsageTracker(
+          route: config.identity == 'freemium:on-device' ? OnDeviceUsageRoute.allowance : OnDeviceUsageRoute.custom);
       // Use Native iOS Speech Recognition on iOS
       if (Platform.isIOS) {
         return PurePollingSocket(
@@ -652,6 +668,7 @@ class TranscriptSocketServiceFactory {
             transcoder: transcoder,
           ),
           sttProvider: OnDeviceAppleProvider(language: config.language ?? 'en'),
+          onDeviceUsage: usage,
         );
       }
 
@@ -666,6 +683,7 @@ class TranscriptSocketServiceFactory {
           transcoder: transcoder,
         ),
         sttProvider: OnDeviceWhisperProvider(modelPath: config.url ?? '', language: config.language ?? 'en'),
+        onDeviceUsage: usage,
       );
     }
 

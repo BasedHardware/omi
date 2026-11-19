@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-before-denied-card-try-again-only.png",
+      "platform": "mobile-ios",
+      "description": "Before (main e56daad06f): Connect page after the Bluetooth permission is denied for good. The card says to allow Bluetooth in Settings but offers only Try Again and How to pair. iOS 26.4 simulator, lane sim local_dev build, seeded free owner with no saved Omi. SYNTHETIC: the Bluetooth permission answer is permanently denied via a debug-only hook (the simulator always reports Bluetooth allowed); the screen is the real app.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-after-denied-card-open-settings.png",
+      "platform": "mobile-ios",
+      "description": "After: the same card leads with Open Settings; Try Again and How to pair stay under it. iOS 26.4 simulator, lane sim local_dev build, seeded free owner with no saved Omi. SYNTHETIC: the Bluetooth permission answer is permanently denied via a debug-only hook (the simulator always reports Bluetooth allowed); the screen is the real app.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-after-open-settings-ios-settings.png",
+      "platform": "mobile-ios",
+      "description": "After: tapping Open Settings opens iOS Settings (back link reads Omi Dev). On this simulator it lands on the Settings root; on a device openAppSettings opens Omi's own page.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-after-resume-recheck-searches-again.png",
+      "platform": "mobile-ios",
+      "description": "After: Bluetooth allowed while in Settings (SYNTHETIC hook answer), then back in Omi. The permission card is gone without a tap: the resume re-check found it granted and searched again. The simulator has no Bluetooth radio, so that search ends on the existing no-radio state (Enable Bluetooth).",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

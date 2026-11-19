@@ -44,6 +44,14 @@ def _meets_user_capture_floor(signals: dict[str, Any]) -> bool:
 
 
 def run_capture_policy(signals: dict[str, Any]) -> CapturePolicyResult:
+    if (
+        signals.get('reminder_owner_review')
+        and signals.get('explicit_command')
+        and signals.get('owner') == 'unknown'
+        and signals.get('concrete_deliverable') is True
+        and _capture_confidence(signals) >= MINIMUM_CAPTURE_CONFIDENCE
+    ):
+        return CapturePolicyResult('pending_candidate', 'inline_review')
     if signals.get('already_done'):
         return CapturePolicyResult('propose_completion', 'inline_review')
     if signals.get('duplicate_of'):

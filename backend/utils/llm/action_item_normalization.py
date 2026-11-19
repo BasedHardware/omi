@@ -17,6 +17,13 @@ def normalize_action_item_due_dates(
     log_past_due_clears: bool,
 ) -> List[ActionItem]:
     for action_item in action_items:
+        due = getattr(action_item, 'due', None)
+        if due is not None:
+            action_item.due_at = due.instant if due.kind == 'instant' else None
+            continue
+        if getattr(action_item, 'reminder_intent', None) is not None:
+            action_item.due_at = None
+            continue
         if action_item.due_at is None:
             continue
         if action_item.due_at.tzinfo is None:

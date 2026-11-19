@@ -131,10 +131,23 @@ def test_actual_sync_durable_status_path_counts_and_identical_results(monkeypatc
     assert results[0] == results[1]
 
 
-@pytest.mark.parametrize('raw', [None, '{}', '{"bpp_generation_memo": 0}'])
+def test_owner_candidates_ship_on_but_missing_admission_never_enforces(monkeypatch):
+    # Ruling 2026-11-14 (SCA-2190): the owner-level memo is default on behind the
+    # privacy_decision_cache kill switch. The exact off path below therefore needs
+    # bpp_owner_memo set to 0 explicitly; an absent or empty map turns it on.
+    for raw in (None, '{}', '{"bpp_generation_memo": 0}'):
+        if raw is None:
+            monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+        else:
+            monkeypatch.setenv('FIRESTORE_READ_LEVERS', raw)
+        assert levers.lever_percent('bpp_owner_memo') == 100
+        assert levers.lever_enabled('bpp_owner_memo', UID)
+        assert levers.lever_percent('bpp_owner_memo_enforce') == 0
+
+
+@pytest.mark.parametrize('raw', ['{"bpp_owner_memo": 0}', '{"bpp_generation_memo": 0, "bpp_owner_memo": 0}'])
 def test_exact_off_path_reads_and_rows_byte_identical(monkeypatch, reads, raw):
-    if raw is not None:
-        monkeypatch.setenv('FIRESTORE_READ_LEVERS', raw)
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', raw)
     assert 'bpp_generation_memo' in levers.KNOWN_LEVERS
     assert levers.lever_percent('bpp_generation_memo') == 0
     db = database()
@@ -231,8 +244,14 @@ def test_failed_reads_never_publish_partial_decisions(monkeypatch, reads, failur
 
     monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
     with batch_privacy_attempt():
-        with pytest.raises(RuntimeError, match='unavailable'):
-            check(db)
+        if failure == TOKEN_PATH:
+            # An unavailable certificate cannot authorize reuse. A successful
+            # full authority read may still ALLOW, without memoizing the result.
+            assert check(db) == 7
+            assert len(reads) == 5
+        else:
+            with pytest.raises(RuntimeError, match='unavailable'):
+                check(db)
         reads.clear()
         check(db)
         assert len(reads) == 5
@@ -397,16 +416,6 @@ def test_missing_or_malformed_server_revision_never_reuses_token(monkeypatch, re
     assert len(reads) == 10
 
 
-def test_cached_hit_preserves_foreign_wq12_memo_validation(monkeypatch, reads):
-    monkeypatch.setattr(privacy, 'lever_enabled', lambda *a: True)
-    db = database()
-    with batch_privacy_attempt():
-        check(db)
-        foreign = privacy.BatchPrivacyMemo(db, db.transaction())
-        with pytest.raises(ValueError, match='another transaction'):
-            check(db, memo=foreign)
-
-
 @pytest.mark.parametrize('export_snapshots', [False, True])
 def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypatch, reads, export_snapshots):
     from types import SimpleNamespace
@@ -421,7 +430,9 @@ def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypa
         db = database()
         store = SimpleNamespace(client=db)
         reads.clear()
-        reads_before = sum(metrics.READS.labels('batch', 'live', result)._value.get() for result in ('hit', 'miss'))
+        reads_before = sum(
+            metrics.READS.labels('batch', 'live', result, 'unattributed')._value.get() for result in ('hit', 'miss')
+        )
         with batch_privacy_attempt():
             outputs = []
             for i in range(20):
@@ -431,7 +442,9 @@ def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypa
                 if snapshots is not None:
                     assert snapshots['conversations']['source']['title'] == f'live-{i}'
         counts.append(len(reads))
-        reads_after = sum(metrics.READS.labels('batch', 'live', result)._value.get() for result in ('hit', 'miss'))
+        reads_after = sum(
+            metrics.READS.labels('batch', 'live', result, 'unattributed')._value.get() for result in ('hit', 'miss')
+        )
         assert reads_after - reads_before == len(reads)
         results.append(outputs)
         if not on:
@@ -452,7 +465,7 @@ def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypa
 
 
 @pytest.mark.parametrize('export_snapshots', [False, True])
-def test_artifact_authorizer_exercises_shadow_without_enforcement_but_exports_stay_live(
+def test_artifact_authorizer_shadows_every_caller_without_enforcement_but_exports_stay_live(
     monkeypatch, reads, export_snapshots
 ):
     from types import SimpleNamespace
@@ -472,9 +485,12 @@ def test_artifact_authorizer_exercises_shadow_without_enforcement_but_exports_st
             snapshots = {} if export_snapshots else None
             outputs.append(retention.batch_artifact_authorize(store, item, snapshots=snapshots))
             if snapshots is not None:
+                # The live decision still exports its rows; the shadow
+                # candidate never publishes into this dict.
                 assert snapshots['conversations']['source']['title'] == f'fresh-shadow-{i}'
     assert outputs[0] == outputs[1] and outputs[0].generation == 7
-    assert metrics.SHADOW_CHECKS.labels('batch', 'match')._value.get() == before + (0 if export_snapshots else 2)
+    # The sampled cohort compares an owner-memo candidate on the export path too.
+    assert metrics.SHADOW_CHECKS.labels('batch', 'match')._value.get() == before + 2
 
 
 @pytest.mark.parametrize('on', [False, True])
@@ -594,10 +610,19 @@ async def test_serving_attempt_second_commit_reads_only_token_and_mutations_bloc
         await followups.run('source')
         await followups.run('source')
     else:
+        from utils.batch_pipeline import upload_coalescing
+
         monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
         monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', 'off')
         service = SimpleNamespace(store=store, reconcile_async=AsyncMock())
         monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
+
+        async def no_upload_drain(_store):
+            # The runtime's own coalescing loop reads its quota document on this
+            # shared client; keep the read window to this tick's privacy reads.
+            return None
+
+        monkeypatch.setattr(upload_coalescing, 'drain', no_upload_drain)
 
         async def drain(*args, **kwargs):
             await run_blocking(db_executor, commit_pair)

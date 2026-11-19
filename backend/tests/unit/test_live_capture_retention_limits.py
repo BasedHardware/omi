@@ -5,30 +5,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-from config.audio_timeline import live_capture_window_retention_enabled, live_capture_window_merge_preservation_enabled
+from config.audio_timeline import live_capture_window_merge_preservation_enabled
 from utils.audio_timeline import CaptureTimeline, SendMap
 
 FLAG = 'LIVE_CAPTURE_WINDOW_RETENTION'
 BACKEND = Path(__file__).resolve().parents[2]
-
-
-def test_default_off_and_limits_snapshotted(monkeypatch):
-    monkeypatch.delenv(FLAG, raising=False)
-    assert not live_capture_window_retention_enabled()
-    timeline = CaptureTimeline(100)
-    sends = SendMap(100)
-    assert timeline.max_anchors == 64 and sends._max_spans == 4096
-    monkeypatch.setenv(FLAG, 'true')
-    assert live_capture_window_retention_enabled()
-    assert timeline.max_anchors == 64 and sends._max_spans == 4096
-    assert CaptureTimeline(100).max_anchors == 512
-    assert SendMap(100)._max_spans == 16384
-
-
-@pytest.mark.parametrize('value', ['', 'FALSE', '0', 'garbage'])
-def test_unrecognized_or_falsy_flag_is_off(monkeypatch, value):
-    monkeypatch.setenv(FLAG, value)
-    assert not live_capture_window_retention_enabled()
 
 
 _LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
@@ -52,11 +33,7 @@ UNION_ON_SCOPES = {('prod', 'backend-listen'), ('prod', 'pusher')}
 
 def test_composed_and_helm_declarations_pin_rollout_state(declarations):
     manifest, charts = declarations
-    off_flags = (
-        FLAG,
-        'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION',
-        'LIVE_CAPTURE_WINDOW_STRICT_PROJECTION',
-    )
+    off_flags = ('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION',)
     union = 'LIVE_CAPTURE_WINDOW_MERGE_UNION'
     for env_name, env in manifest['environments'].items():
         services = {**env['gke'], **env['cloud_run']['services']}
@@ -78,7 +55,7 @@ def test_composed_and_helm_declarations_pin_rollout_state(declarations):
 
 @pytest.mark.parametrize('enabled', [False, True])
 def test_bounds_still_evict_and_refuse_old_positions(monkeypatch, enabled):
-    monkeypatch.setenv(FLAG, 'true' if enabled else 'false')
+    # Fixed incumbent limits after retirement.
     timeline = CaptureTimeline(100)
     for i in range(timeline.max_anchors + 1):
         timeline.accept(b'\0\0' * 100, 101 + i * 4, 1 + i * 4)

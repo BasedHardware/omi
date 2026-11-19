@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
+import re
 import subprocess
 from pathlib import Path
 import sys
@@ -47,6 +49,32 @@ def _expectation() -> verifier.DeploymentExpectation:
         region='us-central1',
         environment='dev',
     )
+
+
+def test_integration_only_vector_has_no_omitted_consumer_or_gke_reads():
+    kwargs = dict(
+        commit_sha='d' * 40,
+        deploy_run_id='123',
+        deploy_run_attempt='1',
+        project='based-hardware',
+        region='us-central1',
+        environment='prod',
+        integration_only=True,
+        expected_image='gcr.io/based-hardware/backend@sha256:' + 'a' * 64,
+    )
+    expectation = verifier.build_expectation(**kwargs)
+    assert set(expectation.revisions) == {'backend-integration'}
+    commands = verifier.build_read_only_commands(expectation, include_listener=False, include_revision_documents=True)
+    assert set(commands) == {'cloud_run/backend-integration', 'cloud_run_revision/backend-integration'}
+    verifier.assert_commands_are_read_only(commands)
+    for changes in (
+        {'environment': 'dev'},
+        {'project': 'elsewhere'},
+        {'commit_sha': 'abcdef1'},
+        {'service_images': {'backend-sync': 'x@sha256:' + 'a' * 64}},
+    ):
+        with pytest.raises(ValueError, match='integration-only'):
+            verifier.build_expectation(**{**kwargs, **changes})
 
 
 def _cloud_run_document(*, revision: str, image: str, environment: str = 'dev') -> dict:
@@ -379,9 +407,9 @@ def test_prod_deploy_invokes_legacy_binding_migration_before_deploy() -> None:
     text = backend_deploy_contract_text('gcp_backend.yml')
 
     assert 'preflight-cloud-run-deploy.py' in text
-    assert text.count('--migrate-legacy-public-binding') == 4
-    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
-        assert f'--migrate-legacy-public-binding {service}' in text
+    assert 'for service in $SELECTED_CLOUD_RUN_SERVICES' in text
+    assert '--migrate-legacy-public-binding "$service"' in text
+    assert 'SELECTED_CLOUD_RUN_SERVICES=backend backend-sync backend-sync-backfill backend-integration' in text
     assert text.index('migrate-legacy-public-binding') < text.index('Deploy ${{ inputs.service }} to Cloud Run')
 
 
@@ -391,9 +419,9 @@ def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> 
 
     assert 'environment: development' in text
     assert 'preflight-cloud-run-deploy.py' in text
-    assert text.count('--migrate-legacy-public-binding') == 4
-    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
-        assert f'--migrate-legacy-public-binding {service}' in text
+    assert 'for service in $SELECTED_CLOUD_RUN_SERVICES' in text
+    assert '--migrate-legacy-public-binding "$service"' in text
+    assert 'SELECTED_CLOUD_RUN_SERVICES=backend backend-sync backend-sync-backfill backend-integration' in text
     assert text.index('migrate-legacy-public-binding') < text.index('Deploy ${{ inputs.service }} to Cloud Run')
     assert '--check-runtime-bindings' in text
     assert text.index('migrate-legacy-public-binding') < text.index('--check-runtime-bindings')
@@ -1706,3 +1734,30 @@ def test_backend_listen_rollout_wait_can_cover_a_real_rollout():
         f'progressDeadlineSeconds={progress_deadline}s is below the {required_seconds}s a roll at '
         f'the HPA floor needs ({waves} waves x {per_pod_startup_seconds}s startup budget)'
     )
+
+
+@pytest.mark.parametrize(
+    ('directory', 'pattern'),
+    [('backend/scripts', '*.py'), ('infra/rollout', '**/*.py'), ('.github/scripts', '**/*.py')],
+)
+def test_deploy_script_argparse_percent_escapes(directory, pattern):
+    # Deploy run 42177595382: Python 3.14 rejects bare % while building the parser.
+    paths = sorted((REPOSITORY_ROOT / directory).glob(pattern))
+    for path in paths:
+        source = path.read_text(encoding='utf-8')
+        if '%' not in source:
+            continue
+        # Python can normalize Unicode identifiers to the keywords we scan for.
+        if source.isascii() and 'help' not in source and 'description' not in source:
+            continue
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            for keyword in node.keywords:
+                if keyword.arg not in ('help', 'description'):
+                    continue
+                for value in ast.walk(keyword.value):
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                        remainder = re.sub(r'%%|%\([^)]+\)s', '', value.value)
+                        assert '%' not in remainder, f'{path}:{value.lineno}: escape literal percent as %%'

@@ -548,6 +548,7 @@ def capture_owner_item(db, storage, output, digest, uid, cid, buckets):
         'schema': 1,
         'source': 'firestore-owner-ciphertext',
         'owner_token': token,
+        'owner_sha256': owner_hash,
         'referenced_units': sorted(units),
         'conversation_id': cid,
         'conversation': conversation,

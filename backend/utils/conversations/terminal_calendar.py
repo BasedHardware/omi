@@ -7,7 +7,7 @@ import asyncio
 
 def calendar_retains(uid: str, row: Mapping[str, Any]) -> bool | None:
     # Called before the terminal transaction; provider failure remains uncertain.
-    from database import calendar_meetings, users
+    from database import calendar_meetings, google_calendar_preferences, users
     from utils.conversations.calendar_linking import get_google_calendar_events, select_overlapping_calendar_event
     from utils.conversations.meeting_context import MEETING_SEARCH_TOLERANCE_MINUTES, select_overlapping_meeting
 
@@ -33,18 +33,30 @@ def calendar_retains(uid: str, row: Mapping[str, Any]) -> bool | None:
     token = integration.get('access_token')
     if not token:
         return None
+    # Resolve the read selection on this worker thread: the async read below runs
+    # inside asyncio.run, so letting it submit another db_executor job would make
+    # these probes queue behind themselves when the pool is saturated.
+    selections = google_calendar_preferences.get_selections(uid)
+    degraded: list[bool] = []
     events = asyncio.run(
         asyncio.wait_for(
             get_google_calendar_events(
+                uid=uid,
                 access_token=token,
                 time_min=start - timedelta(minutes=30),
                 time_max=end + timedelta(minutes=30),
                 max_results=20,
+                selections=selections,
+                on_degraded=lambda: degraded.append(True),
             ),
             timeout=10.0,
         )
     )
     if select_overlapping_calendar_event(events, start, end, require_accepted=True) is not None:
         return True
+    if degraded:
+        # A selected calendar could not be read, so absence is unproven. Keep
+        # the conversation rather than treating a partial read as no meeting.
+        return None
     # A bounded result can omit an overlapping event; uncertainty keeps.
     return None if len(events) >= 20 else False

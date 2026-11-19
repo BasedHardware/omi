@@ -93,12 +93,17 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   int _derivedLength = -1;
   WalDerivedViews get derivedWals {
     final source = allWals;
-    if (_derived == null || !identical(source, _derivedSource) || source.length != _derivedLength) {
-      _derived?.dispose();
-      _derivedSource = source;
-      _derivedLength = source.length;
-      _derived = WalDerivedViews(source);
+    if (_derived == null) {
+      _derived = WalDerivedViews(source, onPendingWorkExpired: () {
+        if (!_isDisposed) notifyListeners();
+      });
+    } else if (!identical(source, _derivedSource) || source.length != _derivedLength) {
+      // A new inventory snapshot usually differs by a row or two; adopt it
+      // incrementally instead of re-deriving the whole synced history.
+      _derived!.sync(source);
     }
+    _derivedSource = source;
+    _derivedLength = source.length;
     _derived!.refresh();
     return _derived!;
   }
@@ -620,11 +625,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     final eligibleWals = [
       ...missingWals,
       ..._allWals.where((wal) => wal.status == WalStatus.uploadRejected && isAutoUploadEligible(wal)),
-    ]
-        .where((wal) =>
-            (!wal.holdForUser || wal.status == WalStatus.uploadRejected) &&
-            (!liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds)))
-        .toList();
+    ].where((wal) => !wal.holdForUser && (!liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds))).toList();
     final hadEligibleWals = eligibleWals.isNotEmpty;
     if (!hadEligibleWals) return const RecordingTransferDrainResult.skipped();
 
@@ -795,20 +796,29 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> deleteWal(Wal wal) async {
     final generation = _sessionGeneration;
-    await _walService.getSyncs().deleteWal(wal);
-    await _refreshWals(generation);
+    try {
+      await _walService.getSyncs().deleteWal(wal);
+    } finally {
+      await _refreshWals(generation);
+    }
   }
 
   Future<void> deleteAllSyncedWals() async {
     final generation = _sessionGeneration;
-    await _walService.getSyncs().deleteAllSyncedWals();
-    await _refreshWals(generation);
+    try {
+      await _walService.getSyncs().deleteAllSyncedWals();
+    } finally {
+      await _refreshWals(generation);
+    }
   }
 
   Future<void> deleteAllPendingWals() async {
     final generation = _sessionGeneration;
-    await _walService.getSyncs().deleteAllPendingWals();
-    await _refreshWals(generation);
+    try {
+      await _walService.getSyncs().deleteAllPendingWals();
+    } finally {
+      await _refreshWals(generation);
+    }
   }
 
   /// Clears every local recording category. Unlike the retryable Pending
@@ -816,10 +826,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   Future<void> deleteAllClearableWals() async {
     final generation = _sessionGeneration;
     final syncs = _walService.getSyncs();
-    await syncs.deleteAllSyncedWals();
-    await syncs.deleteAllPendingWals();
-    await syncs.deleteAllCorruptedWals();
-    await _refreshWals(generation);
+    try {
+      await syncs.deleteAllSyncedWals();
+      await syncs.deleteAllPendingWals();
+      await syncs.deleteAllCorruptedWals();
+    } finally {
+      await _refreshWals(generation);
+    }
   }
 
   Future<void> syncWals({WakeTrigger trigger = WakeTrigger.userRetry}) async {

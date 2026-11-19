@@ -28,6 +28,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/siri_integration.dart';
@@ -64,6 +65,9 @@ class ConversationDetailProvider extends ChangeNotifier
     EnabledSummaryAppsFetch? fetchEnabledSummaryApps,
     SuggestedSummaryAppsFetch? fetchSuggestedSummaryApps,
     PreferredSummaryAppWrite? writePreferredSummaryApp,
+    Future<bool> Function(String)? unlinkCalendar,
+    Future<CalendarEventLink?> Function(String, String)? linkCalendar,
+    Future<CalendarEventLink?> Function(String)? autoLinkCalendar,
   })  : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
         _assignRecording = assignRecording ?? (assignSpeaker == null ? assignRecordingSpeakers : null),
         _fetchRecording = fetchRecording ??
@@ -81,10 +85,16 @@ class ConversationDetailProvider extends ChangeNotifier
                 : (_) async => null),
         _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
         _reprocess = reprocess ?? reProcessConversationServer,
-        _fetchConversation = fetchConversation ?? getConversationById,
+        _fetchConversation = fetchConversation ?? ((id) => getConversationById(id, userInitiated: true)),
         enabledSummaryAppsFetch = fetchEnabledSummaryApps ?? fetchInstalledSummaryApps,
         suggestedSummaryAppsFetch = fetchSuggestedSummaryApps ?? fetchConversationSuggestedSummaryApps,
-        preferredSummaryAppWrite = writePreferredSummaryApp ?? writeServerPreferredSummaryApp;
+        preferredSummaryAppWrite = writePreferredSummaryApp ?? writeServerPreferredSummaryApp,
+        _unlinkCalendar = unlinkCalendar ?? conv_api.unlinkCalendarEvent,
+        _linkCalendar = linkCalendar ?? conv_api.linkCalendarEvent,
+        _autoLinkCalendar = autoLinkCalendar ?? conv_api.autoLinkCalendarEvent;
+  final Future<bool> Function(String) _unlinkCalendar;
+  final Future<CalendarEventLink?> Function(String, String) _linkCalendar;
+  final Future<CalendarEventLink?> Function(String) _autoLinkCalendar;
   final SpeakerAssignmentCall _assignSpeaker;
   final RecordingAssignmentCall? _assignRecording;
   final Future<RecordingTranscript?> Function(String) _fetchRecording;
@@ -1113,13 +1123,26 @@ class ConversationDetailProvider extends ChangeNotifier
       }
       PlatformManager.instance.analytics.reProcessConversation(target);
       final updatedConversation = result.conversation;
-      if (updatedConversation == null || !conversationHasRequestedSummary(updatedConversation, appId)) {
+      if (result is ReprocessTranscriptionPending) {
+        // A 409 has no copy, so remember it; a 200 copy is the server's own waiting state, shown as is.
+        final waiting = result.conversation;
+        if (waiting == null) TranscriptionPendingConversations.mark(target.id);
+        if (waiting != null) conversationProvider?.updateConversation(waiting, preserveHomeStep: false);
+        if (waiting != null && conversationOrNull?.id == target.id) {
+          _cachedConversation = waiting;
+          _refreshGeneration++;
+        }
+      }
+      if (updatedConversation == null ||
+          result is ReprocessTranscriptionPending ||
+          !conversationHasRequestedSummary(updatedConversation, appId)) {
         _failReprocess(
           target,
           appId,
           switch (result) {
             ReprocessBusy() => SummaryFailureKind.busy,
             ReprocessRateLimited() => SummaryFailureKind.rateLimited,
+            ReprocessTranscriptionPending() => SummaryFailureKind.transcriptionPending,
             _ when appId != null => SummaryFailureKind.template,
             _ => SummaryFailureKind.generic,
           },
@@ -1127,7 +1150,8 @@ class ConversationDetailProvider extends ChangeNotifier
         return false;
       }
 
-      conversationProvider?.updateConversation(updatedConversation);
+      TranscriptionPendingConversations.unmark(target.id);
+      conversationProvider?.updateConversation(updatedConversation, preserveHomeStep: false);
       SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
 
       // Update the cached conversation to ensure we have the latest data. Reads already in
@@ -1205,7 +1229,10 @@ class ConversationDetailProvider extends ChangeNotifier
     lastFailedReprocessConversationId = target.id;
     lastFailedReprocessAppId = appId;
     recordSummaryFailure(SummaryFailure(conversationId: target.id, kind: kind, appId: appId));
-    notifyError('REPROCESS_FAILED');
+    // Not transcribed is not an error: a summary retry cannot change it.
+    kind == SummaryFailureKind.transcriptionPending
+        ? notifyInfo('REPROCESS_TRANSCRIPTION_PENDING')
+        : notifyError('REPROCESS_FAILED');
     notifyListeners();
   }
 
@@ -1290,8 +1317,17 @@ class ConversationDetailProvider extends ChangeNotifier
         if (!_syncConversationId.hasMatch(openedId)) return false;
         _adoptBridgedConversation(openedId, updatedConversation);
       } else {
+        if (updatedConversation.homeStep == null &&
+            conversation.homeStep == 'failed' &&
+            (updatedConversation.status == ConversationStatus.processing ||
+                updatedConversation.status == ConversationStatus.merging)) {
+          updatedConversation = updatedConversation.withHomeStep('failed');
+        }
+        // A transcript in the detail copy proves transcription finished; a missing Home step proves nothing.
+        TranscriptionPendingConversations.observe(updatedConversation);
         conversationProvider?.updateConversation(updatedConversation);
         _cachedConversation = updatedConversation;
+        clearSettledSummaryFailure(updatedConversation);
         resetRecordingTranscript();
       }
     }
@@ -1347,7 +1383,7 @@ class ConversationDetailProvider extends ChangeNotifier
   /// Unlinks the calendar event from the current conversation
   Future<bool> unlinkCalendarEvent() async {
     try {
-      final success = await conv_api.unlinkCalendarEvent(conversation.id);
+      final success = await _unlinkCalendar(conversation.id);
       if (success) {
         _updateLocalConversationWithCalendarEvent(null);
         notifyListeners();
@@ -1381,6 +1417,7 @@ class ConversationDetailProvider extends ChangeNotifier
         externalIntegration: _cachedConversation!.externalIntegration,
         calendarEvent: calendarEvent,
         status: _cachedConversation!.status,
+        homeStep: _cachedConversation!.homeStep,
         isLocked: _cachedConversation!.isLocked,
         starred: _cachedConversation!.starred,
         folderId: _cachedConversation!.folderId,
@@ -1398,7 +1435,7 @@ class ConversationDetailProvider extends ChangeNotifier
   /// Auto-links the conversation to the best overlapping calendar event
   Future<CalendarEventLink?> autoLinkCalendarEvent() async {
     try {
-      final calendarEvent = await conv_api.autoLinkCalendarEvent(conversation.id);
+      final calendarEvent = await _autoLinkCalendar(conversation.id);
       if (calendarEvent != null) {
         _updateLocalConversationWithCalendarEvent(calendarEvent);
       }
@@ -1412,7 +1449,7 @@ class ConversationDetailProvider extends ChangeNotifier
   /// Links the conversation to a specific calendar event by event ID
   Future<CalendarEventLink?> linkCalendarEvent(String eventId) async {
     try {
-      final calendarEvent = await conv_api.linkCalendarEvent(conversation.id, eventId);
+      final calendarEvent = await _linkCalendar(conversation.id, eventId);
       if (calendarEvent != null) {
         _updateLocalConversationWithCalendarEvent(calendarEvent);
       }

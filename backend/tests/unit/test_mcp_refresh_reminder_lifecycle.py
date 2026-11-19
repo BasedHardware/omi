@@ -80,6 +80,28 @@ def task(task_id='task-1', **fields):
     }
 
 
+def test_mcp_legacy_projection_omits_explicitly_null_reminder_fields(world):
+    result = world.actions.clean_action_item(task(due=None, reminder_origin=None, creation_receipt=None))
+    assert set(result) == PUBLIC_KEYS
+
+
+def test_mcp_reminder_projection_preserves_date_precision_and_creation_evidence(world):
+    due = {'kind': 'date', 'date': '2030-01-01', 'timezone': 'UTC'}
+    origin = {
+        'policy_revision': 'explicit-reminders-v1',
+        'input_revision': 'synthetic-input',
+        'speaker_evidence_revision': 'synthetic-speakers',
+        'extracted_at': DUE.isoformat(),
+    }
+    receipt = {'actor': {'uid': 'synthetic-owner'}, 'history_coverage': 'reminder_creation_only'}
+    result = world.actions.clean_action_item(
+        task(due_at=None, due=due, reminder_origin=origin, creation_receipt=receipt, private_metadata='not-public')
+    )
+    assert set(result) == PUBLIC_KEYS | {'due', 'reminder_origin', 'creation_receipt'}
+    assert result['due_at'] is None and result['due'] == due
+    assert result['reminder_origin'] == origin and result['creation_receipt'] == receipt
+
+
 @pytest.mark.parametrize('status', ['cancelled', 'superseded'])
 def test_mcp_due_update_cancels_using_raw_status_but_keeps_public_response_unchanged(world, status):
     existing = task(status='active')

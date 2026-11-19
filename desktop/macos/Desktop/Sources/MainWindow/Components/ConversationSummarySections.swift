@@ -40,7 +40,8 @@ struct ConversationSummaryBody: View {
           state: ConversationSummaryProvenanceState.empty(
             deferred: conversation.deferred,
             localSummaryRuntime: conversation.localSummary?.runtime,
-            isProcessing: conversation.status == .processing
+            isProcessing: conversation.showsSummaryProcessing,
+            isTranscribing: conversation.isAwaitingTranscription
           )
         )
         .padding(.horizontal, OmiSpacing.lg)

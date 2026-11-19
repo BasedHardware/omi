@@ -75,12 +75,15 @@ def test_only_user_actions_skip_assessment():
     # separately approved threshold before any paid work; a post-hoc discard
     # would spend the finalization and drop the only recovered copy. SMART_MERGE
     # refreshes a survivor whose fragments were each already assessed and kept.
+    # SCREEN_EVIDENCE similarly refreshes notes on a completed, already-kept row.
     # BACKLOG_CHOICE carries an explicit user/upgrade choice to process a
     # retained recording. CAPTURE_GROUP regenerates a primary whose transcript
     # is unchanged — only confirmed same-event meeting context is new — so
     # grouping must never re-judge (and possibly hide) the rendered row.
+    # HISTORICAL_OPEN is the owner opening a historical-tier row for its summary.
     assert keep == {
         ProcessingTrigger.FIRST_OPEN,
+        ProcessingTrigger.HISTORICAL_OPEN,
         ProcessingTrigger.USER_REPROCESS,
         ProcessingTrigger.MERGE,
         ProcessingTrigger.SMART_MERGE,
@@ -88,6 +91,7 @@ def test_only_user_actions_skip_assessment():
         ProcessingTrigger.SERVER_RECOVERY,
         ProcessingTrigger.BACKLOG_CHOICE,
         ProcessingTrigger.SILENT_BACKFILL,
+        ProcessingTrigger.SCREEN_EVIDENCE,
     }
 
 

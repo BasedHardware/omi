@@ -20,6 +20,7 @@ from testing.replay_snapshot import backend_snapshot, resolve_refs
 from testing.replay_harness.manifest import load_case
 from testing.replay_harness.gate_resources import cleanup_scopes, prepare_output, private_write
 from testing.replay_harness.report import StageResult, item_report
+from testing.replay_harness.decryption import add_arguments, file_options, load_decryption
 
 
 def digest_files(paths):
@@ -229,6 +230,7 @@ def markdown(result):
         f"Replay gate: **{result['verdict']}**",
         '',
         f"BASE `{result['refs']['baseline']}` → REF `{result['refs']['candidate']}`",
+        f"decryption: {result.get('decryption', 'off')}",
         '',
         '| case identity (prefix) | target | classification | BASE / REF runs | inconclusive |',
         '|---|---|---|---:|---|',
@@ -242,11 +244,19 @@ def markdown(result):
     return '\n'.join(rows) + '\n'
 
 
-def run_side(backend, cases, repeats, timeout=1800, grace=10, worker=None):
+def run_side(backend, cases, repeats, timeout=1800, grace=10, worker=None, *, decryption_files=None, runtime_env=None):
     worker = worker or Path(__file__).with_name('gate_worker.py')
     environment = {
         key: os.environ[key] for key in ('PATH', 'TMPDIR', 'SYSTEMROOT', 'FIRESTORE_EMULATOR_HOST') if key in os.environ
     }
+    options = [
+        argument
+        for name, path in (decryption_files or {}).items()
+        if path is not None
+        for argument in ('--' + name.replace('_', '-'), str(Path(path).resolve()))
+    ]
+    if runtime_env is not None:
+        options.extend(['--runtime-env', runtime_env])
     report = backend.parent / 'outcomes.json'
     scratch = Path('/Volumes/Ephemeral/scratch')
     with tempfile.TemporaryDirectory(
@@ -262,7 +272,7 @@ def run_side(backend, cases, repeats, timeout=1800, grace=10, worker=None):
                 scopes.append({'root': str(scope_root), 'token': uuid.uuid4().hex[:24]})
             request.append({'path': str(case.directory), 'scopes': scopes})
         process = subprocess.Popen(
-            [sys.executable, '-I', str(worker), '--backend', str(backend), '--output', str(report)],
+            [sys.executable, '-I', str(worker), '--backend', str(backend), '--output', str(report), *options],
             stdin=subprocess.PIPE,
             env=environment,
             stdout=subprocess.DEVNULL,
@@ -294,7 +304,21 @@ def run_side(backend, cases, repeats, timeout=1800, grace=10, worker=None):
     return json.loads(report.read_text())
 
 
-def gate(repo, directories, ref, base, output, repeats=3, regression_only=False, worker_timeout=1800):
+def gate(
+    repo,
+    directories,
+    ref,
+    base,
+    output,
+    repeats=3,
+    regression_only=False,
+    worker_timeout=1800,
+    *,
+    secret_file=None,
+    uid_file=None,
+    consent_file=None,
+    runtime_env=None,
+):
     if type(repeats) is not int or repeats < 1:
         raise ValueError('repeats must be positive')
     if worker_timeout <= 0:
@@ -302,6 +326,11 @@ def gate(repo, directories, ref, base, output, repeats=3, regression_only=False,
     cases = [load_case(p) for p in directories]
     if not cases or len({c.manifest.id for c in cases}) != len(cases):
         raise ValueError('cases must be nonempty and unique')
+    decryption_files = dict(secret_file=secret_file, uid_file=uid_file, consent_file=consent_file)
+    credentials = load_decryption(**decryption_files)
+    if credentials:
+        for case in cases:
+            credentials.validate(case)
     # Keep case content outside OUTPUT, including accidental placement by a caller.
     prepare_output(output)
     output = output.resolve()
@@ -314,10 +343,13 @@ def gate(repo, directories, ref, base, output, repeats=3, regression_only=False,
     private_write(output / 'identity.key', key)
     for name in ('gate.json', 'gate.md'):
         (output / name).unlink(missing_ok=True)
+    worker_options = {'decryption_files': decryption_files} if credentials else {}
+    if runtime_env is not None:
+        worker_options['runtime_env'] = runtime_env
     reports = {}
     for label in ('baseline', 'candidate'):
         with backend_snapshot(repo, refs[label], output, label) as backend:
-            reports[label] = run_side(backend, cases, repeats, worker_timeout)
+            reports[label] = run_side(backend, cases, repeats, worker_timeout, **worker_options)
             if label == 'candidate':
                 retry_indices = [
                     index
@@ -325,7 +357,13 @@ def gate(repo, directories, ref, base, output, repeats=3, regression_only=False,
                     if needs_retry(case, reports['baseline'][index], reports['candidate'][index])
                 ]
                 if retry_indices:
-                    retried = run_side(backend, [cases[index] for index in retry_indices], repeats, worker_timeout)
+                    retried = run_side(
+                        backend,
+                        [cases[index] for index in retry_indices],
+                        repeats,
+                        worker_timeout,
+                        **worker_options,
+                    )
                     reports['candidate_retry'] = dict(zip(retry_indices, retried, strict=True))
     if identity != adapter_digest() or digests != [case_digest(c) for c in cases]:
         raise ValueError('adapter or case changed during replay')
@@ -334,6 +372,7 @@ def gate(repo, directories, ref, base, output, repeats=3, regression_only=False,
         'refs': refs,
         'adapter_sha256': identity,
         'repeats': repeats,
+        'decryption': 'on' if credentials else 'off',
         **compare(cases, reports, key, repeats),
     }
     private_write(output / 'gate.json', (json.dumps(result, indent=2, sort_keys=True) + '\n').encode())
@@ -360,6 +399,8 @@ def main(argv=None):
     parser.add_argument(
         '--worker-timeout', type=float, default=1800, help='seconds per worker side before cooperative cleanup'
     )
+    parser.add_argument('--runtime-env', help='render service[:prod|dev] separately from each archived tree')
+    add_arguments(parser)
     args = parser.parse_args(argv)
     try:
         return gate(
@@ -371,6 +412,8 @@ def main(argv=None):
             args.repeats,
             args.regression_only,
             args.worker_timeout,
+            runtime_env=args.runtime_env,
+            **file_options(args),
         )
     except Exception as error:
         # No paths, identifiers, manifest values, command lines or raw tracebacks.

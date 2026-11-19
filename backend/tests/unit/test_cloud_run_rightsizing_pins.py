@@ -66,14 +66,15 @@ def test_prod_deploy_flags_match_the_margin20_target():
     integration = model['backend-integration'].scale
     # 2026-11-01 packing (#24308): LLM-bound enrichment runs 80 per instance with 64 postprocess threads.
     assert (integration['memory'], integration['cpu'], integration['concurrency']) == ('4Gi', '2', 80)
-    assert (integration['revision_min'], integration['revision_max']) == (3, 50)
+    assert (integration['revision_min'], integration['revision_max']) == (3, 35)
 
 
 def test_ops_train_values_match_the_live_right_sizing():
     model = dc.source_model('prod')
 
     sync = model['backend-sync'].ops_scale
-    assert (sync['service_min'], sync['service_max']) == (5, 40)
+    # Legacy-dark (2026-11-04, David e53a35) dropped the warm floor 5 -> 0.
+    assert (sync['service_min'], sync['service_max']) == (0, 40)
 
     # redis_guard owns the backfill cap between its bounds (live 16).
     backfill = model['backend-sync-backfill'].ops_scale

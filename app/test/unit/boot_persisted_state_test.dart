@@ -9,6 +9,8 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/startup/boot_journal.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
+import '../support/temp_dir_cleanup.dart';
+
 class _Documents extends PathProviderPlatform {
   _Documents(this.path);
   final String path;
@@ -30,7 +32,7 @@ void main() {
     // before removing its directory rather than racing a temporary-file rename.
     await BootJournal.instance.read();
     PathProviderPlatform.instance = previousProvider;
-    await directory.delete(recursive: true);
+    await deleteTempDirQuietly(directory);
   });
 
   test('old and corrupt boot preferences quarantine originals and load defaults', () async {

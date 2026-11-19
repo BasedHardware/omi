@@ -8,12 +8,14 @@ from google.cloud import firestore
 from utils.lifecycle_metrics import PhaseMetrics
 
 METRICS = PhaseMetrics('omi_enrichment_obligation', ['lane'])
+REPAIR_METRICS = PhaseMetrics('omi_enrichment_summary_repair', ['lane'])
 
 
 def observe(client, now):
-    from database.lifecycle_metrics_queries import enrichment
+    from database.lifecycle_metrics_queries import enrichment, enrichment_summary_repair
 
     METRICS.refresh(now, lambda: enrichment(client, now))
+    REPAIR_METRICS.refresh(now, lambda: enrichment_summary_repair(client))
 
 
 def begin(client: Any, collection: str) -> tuple[Any, dict[str, Any] | None]:

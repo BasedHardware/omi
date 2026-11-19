@@ -113,7 +113,7 @@ def test_tier_c_notes_cannot_reach_reports_or_stdout(tmp_path, capsys, monkeypat
     write_report([item], tmp_path)
     from testing.replay_harness import cli, runner
 
-    async def cases(_directories):
+    async def cases(_directories, **_options):
         return [item]
 
     monkeypatch.setattr(runner, 'run_cases', cases)

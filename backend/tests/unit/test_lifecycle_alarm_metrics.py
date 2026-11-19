@@ -36,7 +36,8 @@ class Query:
         return self
 
     def limit(self, cap):
-        assert 0 < cap <= 20001
+        # Aggregation caps may be large (billed per 1,000 index entries); stream() bounds document reads.
+        assert 0 < cap <= 1_000_000
         return replace(self, cap=cap)
 
     def document(self, key):
@@ -224,3 +225,133 @@ def test_first_failed_sample_remains_never_observed_and_calls_are_throttled():
     metrics.refresh(1100, sample)
     assert len(calls) == 1
     assert registry.get_sample_value('synthetic_phase_observed_at_seconds') == 0
+
+
+def test_repair_stock_is_capped_and_excludes_settled_receipts():
+    client = Client(
+        sync_reprocess_outbox=entries(
+            [
+                *[{'summary_repair': True, 'due_at': 0} for _ in range(120)],
+                {'summary_repair': True, 'due_at': None, 'dormant': True},
+                {'summary_repair': False, 'due_at': 0},
+            ]
+        )
+    )
+    assert queries.enrichment_summary_repair(client) == {'all': (0, 101, True)}
+    client = Client(
+        sync_reprocess_outbox=entries(
+            [
+                {'summary_repair': True, 'due_at': None, 'dormant': True},
+                {'summary_repair': False, 'due_at': 0},
+            ]
+        )
+    )
+    assert queries.enrichment_summary_repair(client) == {'all': (0, 0, False)}
+
+
+@pytest.mark.parametrize(
+    'rows, expected',
+    [
+        ([], (0, 0, False)),
+        (
+            [
+                {'state': 'record_pending', 'enqueued_at': 'NOW-7201'},
+                {'state': 'record_pending', 'enqueued_at': 'NOW-3'},
+            ],
+            None,
+        ),
+        ([{'state': 'record_pending', 'enqueued_at': 'NOW-8000'}] * 999, None),
+        ([{'state': 'record_pending', 'enqueued_at': 'NOW-8000'}] * 1000, None),
+        ([{'state': 'record_pending', 'enqueued_at': 'NOW-8000'}] * 6000, None),
+        (
+            [
+                {'state': 'record_pending', 'enqueued_at': 'NOW-259200'},
+                {'state': 'record_pending', 'enqueued_at': 'NOW+50'},
+            ],
+            None,
+        ),
+    ],
+)
+def test_record_pending_head_lever_matches_the_full_page_with_one_document_read(monkeypatch, rows, expected):
+    now = COHORT_START + 20_000
+    resolved = [
+        {**row, 'enqueued_at': now + int(row['enqueued_at'][3:])} if isinstance(row.get('enqueued_at'), str) else row
+        for row in rows
+    ]
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    legacy_client = Client(batch_pipeline_prod_jobs=entries(resolved))
+    legacy = queries.record_pending(legacy_client, 'batch_pipeline_prod', now)
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"lifecycle_record_pending_head":100}')
+    head_client = Client(batch_pipeline_prod_jobs=entries(resolved))
+    head = queries.record_pending(head_client, 'batch_pipeline_prod', now)
+    assert head == legacy
+    if expected is not None:
+        assert head == {'record_pending': expected}
+    assert [read.cap for read in head_client.reads] == [1]
+
+
+def test_record_pending_head_lever_cohorts_per_replica(monkeypatch):
+    from config.firestore_read_levers import lever_enabled
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"lifecycle_record_pending_head":50}')
+    seen = set()
+    for i in range(40):
+        monkeypatch.setenv('HOSTNAME', f'backend-integration-{i}')
+        seen.add(lever_enabled('lifecycle_record_pending_head', queries._replica_key('batch_pipeline_prod')))
+    assert seen == {True, False}  # a percentage splits replicas instead of the whole fleet
+    monkeypatch.delenv('HOSTNAME')
+    monkeypatch.delenv('K_REVISION', raising=False)
+    assert queries._replica_key('batch_pipeline_prod') == 'batch_pipeline_prod'
+
+
+def test_vendor_held_counts_each_reason_and_the_oldest_age():
+    from utils.observability.reasons import VendorHoldReason
+
+    now = COHORT_START + 50_000
+    client = Client(
+        batch_pipeline_prod_jobs=entries(
+            [
+                {'state': 'vendor_held', 'vendor_hold.reason': 'funds_refusal', 'enqueued_at': now - 9000},
+                {'state': 'vendor_held', 'vendor_hold.reason': 'funds_refusal', 'enqueued_at': now - 100},
+                {'state': 'vendor_held', 'vendor_hold.reason': 'cap_reached', 'enqueued_at': now - 50},
+                # A row with no recognised reason still counts, as unknown.
+                {'state': 'vendor_held', 'enqueued_at': now - 10},
+                {'state': 'provider_pending', 'vendor_hold.reason': 'funds_refusal', 'enqueued_at': now - 99_000},
+            ]
+        )
+    )
+    counts, age, truncated = queries.vendor_held(client, 'batch_pipeline_prod', now)
+    assert counts[VendorHoldReason.FUNDS_REFUSAL] == 2
+    assert counts[VendorHoldReason.CAP_REACHED] == 1
+    assert counts[VendorHoldReason.UNKNOWN] == 1
+    assert counts[VendorHoldReason.NO_HEALTHY_VENDOR] == 0
+    assert set(counts) == set(VendorHoldReason)
+    assert age == 9000 and truncated is False
+    # One document read (the head); everything else is an aggregation.
+    assert len(client.reads) == 1
+
+
+def test_vendor_held_empty_stock_reads_zero_without_reason_counts():
+    client = Client(batch_pipeline_prod_jobs=entries([{'state': 'ready', 'enqueued_at': 1.0}]))
+    counts, age, truncated = queries.vendor_held(client, 'batch_pipeline_prod', COHORT_START + 10)
+    assert set(counts.values()) == {0} and age == 0.0 and truncated is False
+
+
+def test_provider_stage_stock_includes_old_rows_and_both_states():
+    now = COHORT_START + 50_000
+    client = Client(
+        batch_pipeline_prod_jobs=entries(
+            [
+                # All epochs: a week-old pending row is exactly the stock the timeliness alarm leaves out.
+                {'state': 'provider_pending', 'enqueued_at': now - 7 * 86400},
+                {'state': 'provider_pending', 'enqueued_at': now - 60},
+                {'state': 'provider_running', 'enqueued_at': now - 30},
+                {'state': 'vendor_held', 'enqueued_at': now - 9 * 86400},
+            ]
+        )
+    )
+    assert queries.provider_stage(client, 'batch_pipeline_prod', now) == {
+        'provider_pending': (2, 7 * 86400),
+        'provider_running': (1, 30),
+    }
+    assert len(client.reads) == 2

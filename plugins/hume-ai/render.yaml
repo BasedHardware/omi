@@ -13,6 +13,8 @@ services:
         sync: false
       - key: OMI_API_KEY
         sync: false
+      - key: HUME_TOOLS_SECRET
+        sync: false
       - key: PORT
         value: 8080
     healthCheckPath: /health

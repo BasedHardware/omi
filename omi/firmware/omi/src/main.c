@@ -14,6 +14,7 @@
 #ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "lib/core/monitor.h"
 #endif
+#include "lib/core/capture_mute.h"
 #include "lib/core/settings.h"
 #include "lib/core/transport.h"
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
@@ -23,6 +24,7 @@
 #include <zephyr/fatal.h>
 #endif
 
+#include "boot_telemetry.h"
 #include "imu.h"
 #include "lib/core/sd_card.h"
 #include "rtc.h"
@@ -67,45 +69,6 @@ static void mic_handler(int16_t *buffer)
     if (err) {
         LOG_ERR("Failed to process PCM data: %d", err);
     }
-}
-
-static void boot_led_sequence(void)
-{
-    // Quick blue pulse = "I'm alive, booting..."
-    set_led_blue(true);
-    k_msleep(300);
-    led_off();
-}
-
-static void boot_ready_sequence(void)
-{
-    const int steps = 50;
-    const int delay_ms = 10;
-
-    // Smooth green fade in/out 2 times = "Ready!"
-    for (int cycle = 0; cycle < 2; cycle++) {
-        // Fade in: ease-in-out
-        for (int i = 0; i <= steps; i++) {
-            float t = (float) i / steps;
-            // Ease-in-out quadratic
-            float eased = t < 0.5f ? 2.0f * t * t : 1.0f - 2.0f * (1.0f - t) * (1.0f - t);
-            uint8_t level = (uint8_t) (eased * 50.0f);
-            set_led_pwm(LED_GREEN, level);
-            k_msleep(delay_ms);
-        }
-
-        // Fade out: ease-in-out
-        for (int i = 0; i <= steps; i++) {
-            float t = (float) i / steps;
-            float eased = t < 0.5f ? 2.0f * t * t : 1.0f - 2.0f * (1.0f - t) * (1.0f - t);
-            uint8_t level = (uint8_t) ((1.0f - eased) * 70.0f);
-            set_led_pwm(LED_GREEN, level);
-            k_msleep(delay_ms);
-        }
-    }
-    k_msleep(10);
-    led_off();
-    k_msleep(10);
 }
 
 void set_led_state()
@@ -189,6 +152,9 @@ int main(void)
     }
     int setting_ret = app_settings_init();
     safe_mode_settings_ready(setting_ret);
+    if (!setting_ret) {
+        omi_boot_telemetry_open();
+    }
     ret = safe_mode_devices_init();
     if (ret) {
         LOG_ERR("Deferred device initialization failed (%d)", ret);
@@ -299,6 +265,10 @@ int main(void)
         error_sd_card();
         return ret;
     }
+
+    /* app_sd_init() clears the in-memory write-pause bit. Re-apply the
+     * persisted mute so a reboot cannot resume capture (issue #5054). */
+    capture_mute_apply_runtime();
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     // Initialize storage service for offline audio

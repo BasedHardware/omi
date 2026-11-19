@@ -6,6 +6,7 @@ or end-user screens.
 """
 
 import asyncio
+import io
 import logging
 import os
 from pathlib import Path
@@ -107,6 +108,15 @@ def _calendar_module():
         GoogleAPIError=GoogleAPIError,
         refresh_google_token=MagicMock(),
     )
+    google_transport = _module(
+        "utils.retrieval.google_transport",
+        google_api_request=AsyncMock(),
+        GoogleAPIError=GoogleAPIError,
+    )
+    observability_fallback = _module(
+        "utils.observability.fallback",
+        record_fallback=MagicMock(),
+    )
     telemetry = _module(
         "utils.integration_telemetry",
         GOOGLE_CALENDAR="google_calendar",
@@ -116,6 +126,9 @@ def _calendar_module():
         emit_sync_succeeded=MagicMock(),
     )
     stubs = {
+        "database.google_calendar_preferences": _module(
+            "database.google_calendar_preferences", get_selections=lambda _uid: {}
+        ),
         "httpx": httpx,
         "langchain_core": _package("langchain_core"),
         "langchain_core.tools": langchain_tools,
@@ -129,6 +142,9 @@ def _calendar_module():
         "utils.executors": executors,
         "utils.http_client": http_client,
         "utils.retrieval": _package("utils.retrieval"),
+        "utils.retrieval.google_transport": google_transport,
+        "utils.observability": _package("utils.observability"),
+        "utils.observability.fallback": observability_fallback,
         "utils.retrieval.tools": _package("utils.retrieval.tools"),
         "utils.retrieval.tools.integration_base": integration_base,
         "utils.retrieval.tools.google_utils": google_utils,
@@ -136,6 +152,15 @@ def _calendar_module():
     }
 
     with stub_modules(stubs):
+        load_module_fresh("utils.google_calendar_identity", str(BACKEND_DIR / "utils/google_calendar_identity.py"))
+        load_module_fresh(
+            "utils.retrieval.google_calendar_catalog_cache",
+            str(BACKEND_DIR / "utils/retrieval/google_calendar_catalog_cache.py"),
+        )
+        load_module_fresh(
+            "utils.retrieval.google_calendar_selection",
+            str(BACKEND_DIR / "utils/retrieval/google_calendar_selection.py"),
+        )
         load_module_fresh("utils.log_sanitizer", str(BACKEND_DIR / "utils" / "log_sanitizer.py"))
         model_text = load_module_fresh("utils.model_text", str(BACKEND_DIR / "utils" / "model_text.py"))
         load_module_fresh("utils.user_clock", str(BACKEND_DIR / "utils" / "user_clock.py"))
@@ -511,6 +536,183 @@ class TestCalendarToolsSanitization(unittest.IsolatedAsyncioTestCase):
                 patch.object(ct, target, side_effect=leak),
             ):
                 self.assertEqual(expected, await call())
+
+    def setUp(self):
+        # Checks the server log, tracebacks included.
+        # assertLogs detaches this handler, so cases using it check their own capture.
+        logs = io.StringIO()
+        handler = logging.StreamHandler(logs)
+        handler.setFormatter(logging.Formatter())
+        ct.logger.addHandler(handler)
+        self.addCleanup(lambda: self.assertNotIn(self.SENSITIVE, logs.getvalue()))
+        self.addCleanup(ct.logger.removeHandler, handler)
+
+    def test_failure_location_logs_only_basename_for_posix_and_windows_paths(self):
+        for filename in (
+            '/home/private-person/calendar_vendor.py',
+            r'C:\Users\private-person\calendar_vendor.py',
+            r'\\private-host\private-share\calendar_vendor.py',
+        ):
+            with self.subTest(filename=filename):
+                try:
+                    exec(compile('raise RuntimeError(message)', filename, 'exec'), {'message': self.SENSITIVE})
+                except RuntimeError as error:
+                    with self.assertLogs(ct.logger, level='ERROR') as logs:
+                        ct._log_failure('Synthetic failure', error)
+                rendered = '\n'.join(logging.Formatter().format(record) for record in logs.records)
+                self.assertIn(' at calendar_vendor.py:1 in <module>', rendered)
+                self.assertNotIn(filename, rendered)
+                self.assertNotIn('private-', rendered)
+                self.assertNotIn(self.SENSITIVE, rendered)
+
+    async def test_retry_and_search_failures_log_without_exception_text(self):
+        current = {"id": "evt_123", "summary": "Standup", "attendees": []}
+
+        def expired_then_crash():
+            return [GoogleAPIError("Token expired", is_auth_error=True), RuntimeError(self.SENSITIVE)]
+
+        cases = [
+            (
+                "create_google_calendar_event",
+                expired_then_crash,
+                lambda: ct.create_calendar_event_tool.func(
+                    title="Design Sync", start_time="2026-09-28T10:00:00Z", end_time="2026-09-28T11:00:00Z"
+                ),
+                "Error after token refresh",
+            ),
+            (
+                "delete_google_calendar_event",
+                expired_then_crash,
+                lambda: ct.delete_calendar_event_tool.func(event_id="evt_123"),
+                "Error after token refresh deleting event",
+            ),
+            (
+                "get_google_calendar_events",
+                expired_then_crash,
+                lambda: ct.delete_calendar_event_tool.func(event_title="Standup"),
+                "Error after token refresh deleting events",
+            ),
+            (
+                "get_google_calendar_events",
+                lambda: RuntimeError(self.SENSITIVE),
+                lambda: ct.delete_calendar_event_tool.func(event_title="Standup"),
+                "Unexpected error searching events to delete",
+            ),
+            (
+                "get_google_calendar_event",
+                expired_then_crash,
+                lambda: ct.update_calendar_event_tool.func(event_id="evt_123"),
+                "Error after token refresh getting event",
+            ),
+            (
+                "update_google_calendar_event",
+                expired_then_crash,
+                lambda: ct.update_calendar_event_tool.func(event_id="evt_123", title="Renamed"),
+                "Error after token refresh updating event",
+            ),
+        ]
+        for target, failure, call, logged in cases:
+            with (
+                self.subTest(logged),
+                patch.object(ct, "prepare_access", return_value=("uid_123", {"access_token": "token"}, "token", None)),
+                patch.object(ct, "refresh_google_token", new=AsyncMock(return_value="new_token")),
+                patch.object(ct, "get_google_calendar_event", new=AsyncMock(return_value=current)),
+                patch.object(ct, target, side_effect=failure()),
+                self.assertLogs(ct.logger, level="ERROR") as logs,
+            ):
+                result = await call()
+            self.assertNotIn(self.SENSITIVE, result)
+            output = "\n".join(logs.output)
+            self.assertIn(f"{logged}: code=", output)
+            self.assertNotIn(self.SENSITIVE, output)
+
+    async def test_google_api_and_network_failures_log_without_exception_text(self):
+        current = {"id": "evt_123", "summary": "Standup", "attendees": []}
+        calls = [
+            (
+                "get_google_calendar_events",
+                lambda: ct.get_calendar_events_tool.func(),
+                "fetching calendar events",
+            ),
+            (
+                "create_google_calendar_event",
+                lambda: ct.create_calendar_event_tool.func(
+                    title="Design Sync", start_time="2026-09-28T10:00:00Z", end_time="2026-09-28T11:00:00Z"
+                ),
+                "creating calendar event",
+            ),
+            (
+                "delete_google_calendar_event",
+                lambda: ct.delete_calendar_event_tool.func(event_id="evt_123"),
+                "deleting event by ID",
+            ),
+            (
+                "get_google_calendar_events",
+                lambda: ct.delete_calendar_event_tool.func(event_title="Standup"),
+                "searching events to delete",
+            ),
+            (
+                "get_google_calendar_event",
+                lambda: ct.update_calendar_event_tool.func(event_id="evt_123"),
+                "getting event",
+            ),
+            (
+                "update_google_calendar_event",
+                lambda: ct.update_calendar_event_tool.func(event_id="evt_123", title="Renamed"),
+                "updating calendar event",
+            ),
+        ]
+        failures = [
+            (
+                "Google API error",
+                lambda: GoogleAPIError(f"Bad request: {self.SENSITIVE}", status_code=400),
+                "code=400 diagnostic=[redacted] exception_type=GoogleAPIError",
+            ),
+            ("Network error", lambda: ConnectError(self.SENSITIVE), "code="),
+        ]
+        for kind, failure, code in failures:
+            for target, call, action in calls:
+                with (
+                    self.subTest(f"{kind} {action}"),
+                    patch.object(
+                        ct, "prepare_access", return_value=("uid_123", {"access_token": "token"}, "token", None)
+                    ),
+                    patch.object(ct, "get_google_calendar_event", new=AsyncMock(return_value=current)),
+                    patch.object(ct, target, side_effect=failure()),
+                    self.assertLogs(ct.logger, level="ERROR") as logs,
+                ):
+                    await call()
+                logged = "\n".join(logs.output)
+                self.assertIn(f"{kind} {action}: {code}", logged)
+                self.assertNotIn(self.SENSITIVE, logged)
+
+    async def test_contacts_network_failures_log_without_exception_text(self):
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=ConnectError(self.SENSITIVE))
+        with (
+            patch.object(ct, "get_auth_client", return_value=client),
+            self.assertLogs(ct.logger, level="ERROR") as logs,
+        ):
+            self.assertIsNone(await ct.search_google_contacts("token", "Avery"))
+        logged = "\n".join(logs.output)
+        self.assertIn("Network error searching My Contacts: code=", logged)
+        self.assertIn("Other Contacts warm-up failed (non-critical): code=", logged)
+        self.assertIn("Network error searching Other Contacts: code=", logged)
+        self.assertNotIn(self.SENSITIVE, logged)
+
+    async def test_contacts_unexpected_failures_log_without_exception_text(self):
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=RuntimeError(self.SENSITIVE))
+        with (
+            patch.object(ct, "get_auth_client", return_value=client),
+            patch.object(ct.httpx, "HTTPError", ConnectError),  # the stub's HTTPError would catch everything
+            self.assertLogs(ct.logger, level="ERROR") as logs,
+        ):
+            self.assertIsNone(await ct.search_google_contacts("token", "Avery"))
+        logged = "\n".join(logs.output)
+        self.assertIn("Error searching My Contacts: code=", logged)
+        self.assertIn("Error searching Other Contacts: code=", logged)
+        self.assertNotIn(self.SENSITIVE, logged)
 
 
 if __name__ == "__main__":

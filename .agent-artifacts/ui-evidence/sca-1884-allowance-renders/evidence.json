@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-at-cap-default-dark.png",
+      "platform": "mobile-ios",
+      "description": "Allowance screen, default copy, dark: Transcribe on this phone (Included, runs while charging) or Upgrade to Omi Pro (speaker separation, higher accuracy)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-at-cap-default-light.png",
+      "platform": "mobile-ios",
+      "description": "Allowance screen, default copy, light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-at-cap-upgrade-selected-dark.png",
+      "platform": "mobile-ios",
+      "description": "Allowance screen with Upgrade to Omi Pro selected; Continue opens plans",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-at-cap-storefront-dark.png",
+      "platform": "mobile-ios",
+      "description": "Allowance screen with the storefront ladder-v1 at-cap copy (backend strings)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

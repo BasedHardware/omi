@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-deploy-input-serialization",
+  "family": "cross-boundary-contract",
   "violated_contract": "A Cloud Run deployment input must preserve every runtime environment key and value as one intended key-value pair.",
   "canonical_prevention": "Encode action-input separators at each raw Cloud Run environment serializer and exercise the manifest renderer plus live-contract clone path in deterministic deploy preflight.",
   "evidence_prs": [9986],

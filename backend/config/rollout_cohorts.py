@@ -14,20 +14,20 @@ class RolloutCohortUnavailable(RuntimeError):
 
 # Literal env reads keep the migration fallbacks visible to the flag registry.
 COHORT_ENVS = {
+    'conversations-v3': lambda: os.getenv('CONVERSATIONS_V3_UID_ALLOWLIST', ''),
+    'v3-recording-rotation': lambda: '',
     'batch-pipeline-shadow': lambda: '',
     # The composition root injects scoped policy env readers with the runtime.
     'batch-pipeline': lambda: '',
     'batch-pipeline-recovery': lambda: '',
-    'first-summary': lambda: os.getenv('FIRST_SUMMARY_UID_ALLOWLIST', ''),
-    'audio-archive': lambda: os.getenv('AUDIO_ARCHIVE_UID_ALLOWLIST', ''),
+    'audio-archive': lambda: '',
     'dream-agent': lambda: os.getenv('DREAM_AGENT_UID_ALLOWLIST', ''),
     'speaker-grouping-shadow': lambda: os.getenv('SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST', ''),
     'stt-live-demand': lambda: os.getenv('STT_LIVE_DEMAND_UID_ALLOWLIST', ''),
-    'sync-legacy-fresh': lambda: os.getenv('SYNC_LEGACY_FRESH_UID_ALLOWLIST', ''),
     'sync-lineage-resolve': lambda: os.getenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', ''),
     'transcription-final-pass': lambda: os.getenv('TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', ''),
     'transcription-shadow': lambda: os.getenv('TRANSCRIPTION_SHADOW_UID_ALLOWLIST', ''),
-    'mobile-standard-batch': lambda: os.getenv('MOBILE_STANDARD_BATCH_UIDS', ''),
+    'mobile-standard-batch': lambda: '',
     'messaging-telegram': lambda: os.getenv('OMI_MESSAGING_CHANNELS_UIDS', ''),
     'messaging-imessage': lambda: os.getenv('OMI_MESSAGING_CHANNELS_UIDS', ''),
 }

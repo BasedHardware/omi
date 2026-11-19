@@ -5,7 +5,7 @@ entrypoint is routers/conversation_finalization.run_listen_finalization_job.
 Only provider and derived-effect leaves are replaced. Return-site observation
 runs in the processing worker thread and never changes product decisions.
 Completed jobs are never fabricated into queued jobs. Opaque captured transcripts
-are diagnosed from metadata without attempting decryption.
+are diagnosed from metadata unless replay decryption is explicitly enabled.
 """
 
 from contextlib import ExitStack
@@ -115,6 +115,10 @@ class TitlingDriver:
     async def run(self, case, environment):
         ref = seed_case(case, environment)
         row = ref.get().to_dict()
+        if getattr(environment, 'decryption', False):
+            from database import conversations
+
+            row = conversations.get_conversation(environment.replay_uid, environment.replay_cid)
         jobs = [
             doc.get().to_dict()
             for doc in environment.replay_documents

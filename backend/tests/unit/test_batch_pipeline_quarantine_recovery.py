@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from config.batch_pipeline import recovery_owners
-from config.policy import resolve_batch_policy, resolve_stage_policy
+from config.policy import ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, ProjectionReplay
@@ -503,8 +503,13 @@ def test_result_held_logs_stage_and_type_without_private_exception(setup, monkey
     assert all(record.exc_info is None for record in caplog.records)
 
 
-def test_crash_after_assignment_replays_receipt_and_meters_once(setup):
+@pytest.mark.parametrize('async_head,async_sibling', [(False, False), (True, False), (False, True), (True, True)])
+def test_crash_after_assignment_replays_receipt_and_meters_once(setup, async_head, async_sibling):
     client, store, binding, _, stt, recovery = setup
+    for sid, async_policy in [('bad', async_head), ('good', async_sibling)]:
+        row(client, 'jobs', sid)['policy_parts'] = {
+            'projection': ProjectionPolicy(async_projection=async_policy).to_dict()
+        }
     assert recovery.recover('bad', binding.owner_id) == 'recovered'
     result = row(client)['result']
     row(client)['state'] = 'committed'
@@ -539,6 +544,9 @@ def test_crash_after_assignment_replays_receipt_and_meters_once(setup):
     ledger_key = ('users', binding.owner_id, 'sync_content_ledger', binding.content_id)
     original_usage = client.rows[ledger_key]['usage_committed_at']
     assert row(client, 'results', 'good')['projection_state'] == 'ready'
+    for sid, async_policy in [('bad', async_head), ('good', async_sibling)]:
+        assert row(client, 'results', sid)['projection_finish_due_at'] == (-1.0 if async_policy else 104)
+        assert row(client, 'results', sid)['projection_followup_due_at'] == 104
     assert projection.complete('bad', binding, 105, accounting) == first
     assert client.rows[ledger_key]['usage_committed_at'] == original_usage
     # The strict fixture does not model hourly merge writes; exercise the real
@@ -1694,7 +1702,7 @@ def test_held_sweep_completes_each_upload_once_and_contains_failures(setup, monk
         'waiting': 1,
         'error': 2,
         'units': 4,
-        'reads': 38,
+        'reads': 40,
         'more': 1,
         'pages': 1,
     }
@@ -1708,7 +1716,7 @@ def test_held_sweep_completes_each_upload_once_and_contains_failures(setup, monk
         'waiting': 0,
         'error': 1,
         'units': 4,
-        'reads': 4,
+        'reads': 6,
         'more': 0,
         'pages': 1,
     }
@@ -1722,7 +1730,7 @@ def test_held_sweep_completes_each_upload_once_and_contains_failures(setup, monk
         'waiting': 1,
         'error': 1,
         'units': 4,
-        'reads': 38,
+        'reads': 40,
         'more': 0,
         'pages': 1,
     }
@@ -1761,10 +1769,176 @@ def test_full_pages_chain_into_one_pass_and_attempt_each_upload_once(setup, monk
     counts = projector.sweep_held(3, deadline=1e12)
     # Two full pages schedule the third immediately: one call, three fetches.
     assert pages.call_count == 3
-    assert counts == {'partial': 0, 'waiting': 7, 'error': 0, 'units': 8, 'reads': 127, 'more': 0, 'pages': 3}
+    assert counts == {'partial': 0, 'waiting': 7, 'error': 0, 'units': 8, 'reads': 129, 'more': 0, 'pages': 3}
     # The unit repeated across pages is one upload: one attempt for the pass.
     assert attempts == [f'upload-{index}' for index in (0, 1, 2, 3, 5, 6, 7)]
     assert projector.held_after is None
+
+
+def test_restarted_instance_resumes_the_held_pass_from_the_durable_cursor(setup, monkeypatch):
+    """bp_2ba4592b: instances restart far more often than a pass wraps; the
+    next instance must resume where the last one stopped, not at page one."""
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    rows = held_unit_rows(client, 4)
+    pages = Mock(side_effect=[rows[0:2], rows[2:4]])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    first = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(first, 'complete_held', lambda b: None)
+    assert first.sweep_held(2, max_pages=1)['more'] == 1
+    restarted = Projector(store, artifacts.load_result, clock=lambda: 102)
+    monkeypatch.setattr(restarted, 'complete_held', lambda b: None)
+    assert restarted.held_after is None
+    assert restarted.sweep_held(2, max_pages=1)['pages'] == 1
+    assert pages.call_args_list[1].kwargs['after_id'] == 'unit-0001'
+    assert restarted.held_after == 'unit-0003'
+    # A pass another instance wrapped starts fresh here, dedupe included.
+    restarted.held_pass_seen.add(('stale', 'upload'))
+    from database.batch_pipeline_projection_release import HELD_PARTIAL_CURSOR_KEY, save_release_cursor
+
+    save_release_cursor(restarted.store, None, 103, key=HELD_PARTIAL_CURSOR_KEY)
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', Mock(return_value=[]))
+    restarted.sweep_held(2)
+    assert restarted.held_pass_seen == set()
+
+
+def test_peer_wrap_and_advance_drops_dedupe_from_the_previous_pass(setup, monkeypatch):
+    from database.batch_pipeline_projection_release import HELD_PARTIAL_CURSOR_KEY, save_release_cursor
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, _, artifacts, _, _ = setup
+    rows = held_unit_rows(client, 3)
+
+    def candidates(_client, _namespace, limit, *, after_id):
+        return [(key, row) for key, row in rows if after_id is None or key > after_id][:limit]
+
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', candidates)
+    first = Projector(store, artifacts.load_result, clock=lambda: 101)
+    peer = Projector(store, artifacts.load_result, clock=lambda: 102)
+    attempts = []
+    monkeypatch.setattr(first, 'complete_held', lambda binding: attempts.append(binding.content_id))
+    monkeypatch.setattr(peer, 'complete_held', lambda binding: None)
+    save_release_cursor(first.store, 'unit-0000', 100, key=HELD_PARTIAL_CURSOR_KEY)
+
+    first.sweep_held(1)
+    peer.sweep_held(1)
+    peer.sweep_held(1)
+    peer.sweep_held(1)
+    assert peer.held_after == 'unit-0000'
+    first.sweep_held(1)
+
+    assert attempts == ['upload-1', 'upload-1']
+
+
+def test_a_failed_cursor_save_keeps_the_in_memory_cursor(setup, monkeypatch):
+    """A lost durable write must not send the next segment back to the stale cursor."""
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    rows = held_unit_rows(client, 4)
+    pages = Mock(side_effect=[rows[0:2], rows[2:4]])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    saves = Mock(side_effect=[None, {'after_id': 'unit-0003'}])
+    monkeypatch.setattr('database.batch_pipeline_projection_release.advance_held_partial_cursor', saves)
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda b: None)
+    projector.sweep_held(2, max_pages=1)
+    projector.sweep_held(2, max_pages=1)
+    assert pages.call_args_list[1].kwargs['after_id'] == 'unit-0001'
+    assert saves.call_args_list[1].args[2] == 'unit-0003'
+
+
+def test_failed_cursor_load_keeps_local_progress_until_the_baseline_is_readable(setup, monkeypatch):
+    from database import batch_pipeline_projection_release as cursors
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, _, artifacts, _, _ = setup
+    rows = held_unit_rows(client, 6)
+    pages = Mock(side_effect=[rows[:2], rows[2:4], rows[4:]])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    load = cursors.load_held_partial_cursor
+    read = Mock(side_effect=lambda projection_store: None if read.call_count == 2 else load(projection_store))
+    monkeypatch.setattr(cursors, 'load_held_partial_cursor', read)
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda binding: None)
+
+    projector.sweep_held(2, max_pages=1)
+    projector.sweep_held(2, max_pages=1)
+    assert projector.held_after == 'unit-0003'
+    assert load(projector.store)['after_id'] == 'unit-0001'
+    projector.sweep_held(2, max_pages=1)
+
+    assert [call.kwargs['after_id'] for call in pages.call_args_list] == [None, 'unit-0001', 'unit-0003']
+    assert load(projector.store)['after_id'] == 'unit-0005'
+
+
+def test_first_successful_read_of_missing_checkpoint_keeps_local_progress(setup, monkeypatch):
+    from database import batch_pipeline_projection_release as cursors
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, _, artifacts, _, _ = setup
+    rows = held_unit_rows(client, 4)
+    pages = Mock(side_effect=[rows[:2], rows[2:]])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    load = cursors.load_held_partial_cursor
+    monkeypatch.setattr(cursors, 'load_held_partial_cursor', Mock(side_effect=[None, {}]))
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda binding: None)
+
+    first = projector.sweep_held(2, max_pages=1)
+    assert projector.held_after == 'unit-0001'
+    assert load(projector.store) == {}
+    second = projector.sweep_held(2, max_pages=1)
+
+    assert pages.call_args_list[1].kwargs['after_id'] == 'unit-0001'
+    assert first['reads'] == 37  # Two units, two attempts, and the failed lookup.
+    assert second['reads'] == 38  # The lookup and the checkpoint transaction are both charged.
+    assert load(projector.store)['after_id'] == 'unit-0003'
+
+
+@pytest.mark.parametrize('start', ['unit-0001', None])
+def test_rejected_cursor_wrap_is_reported_as_unconfirmed(setup, monkeypatch, start):
+    from database import batch_pipeline_projection_release as cursors
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, _, artifacts, _, _ = setup
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    baseline = cursors.advance_held_partial_cursor(projector.store, {}, start, 100)
+    assert baseline is not None
+    monkeypatch.setattr(projector, 'complete_held', lambda binding: None)
+    rows = held_unit_rows(client, 1)
+
+    def candidates(*args, **kwargs):
+        assert cursors.advance_held_partial_cursor(projector.store, baseline, 'unit-0003', 101)
+        return rows
+
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', candidates)
+    counts = projector.sweep_held(2, max_pages=1)
+
+    assert counts['more'] == 0
+    assert counts['wrap_unconfirmed'] == 1
+    assert cursors.load_held_partial_cursor(projector.store)['after_id'] == 'unit-0003'
+
+
+def test_cursor_writes_reject_late_advances_and_wraps_even_at_a_repeated_id(setup):
+    from database.batch_pipeline_projection_release import advance_held_partial_cursor, load_held_partial_cursor
+
+    _, store, _, _, _, _ = setup
+    projection_store = ProjectionStore(store)
+    missing = load_held_partial_cursor(projection_store)
+    assert missing == {}
+    first = advance_held_partial_cursor(projection_store, missing, 'a', 101)
+    assert first is not None
+    assert advance_held_partial_cursor(projection_store, missing, 'b', 101) is None
+    wrapped = advance_held_partial_cursor(projection_store, first, None, 101)
+    assert wrapped is not None
+    repeated = advance_held_partial_cursor(projection_store, wrapped, 'a', 101)
+    assert repeated is not None
+    assert advance_held_partial_cursor(projection_store, first, None, 101) is None
+    assert load_held_partial_cursor(projection_store) == repeated
 
 
 def test_pass_deadline_stops_between_pages_and_keeps_the_cursor(setup, monkeypatch):
@@ -1784,13 +1958,13 @@ def test_pass_deadline_stops_between_pages_and_keeps_the_cursor(setup, monkeypat
     # The first page ran before the deadline, the second after it: two fetches
     # only, with the cursor left on the second page's last unit.
     assert pages.call_count == 2
-    assert counts == {'partial': 0, 'waiting': 4, 'error': 0, 'units': 4, 'reads': 72, 'more': 1, 'pages': 2}
+    assert counts == {'partial': 0, 'waiting': 4, 'error': 0, 'units': 4, 'reads': 74, 'more': 1, 'pages': 2}
     assert projector.held_after == 'unit-0003'
     resumed = projector.sweep_held(2, deadline=1e12)
     # The resumed segment is the same pass: both uploads stay deduped, so its
     # page reads rows without re-attempting, then the short page wraps.
     assert pages.call_count == 4
-    assert resumed == {'partial': 0, 'waiting': 0, 'error': 0, 'units': 2, 'reads': 2, 'more': 0, 'pages': 2}
+    assert resumed == {'partial': 0, 'waiting': 0, 'error': 0, 'units': 2, 'reads': 4, 'more': 0, 'pages': 2}
 
 
 def test_page_budget_caps_a_pass_at_max_pages(setup, monkeypatch):
@@ -1805,7 +1979,7 @@ def test_page_budget_caps_a_pass_at_max_pages(setup, monkeypatch):
     monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
     counts = projector.sweep_held(2, deadline=1e12, max_pages=3)
     assert pages.call_count == 3
-    assert counts == {'partial': 0, 'waiting': 6, 'error': 0, 'units': 6, 'reads': 108, 'more': 1, 'pages': 3}
+    assert counts == {'partial': 0, 'waiting': 6, 'error': 0, 'units': 6, 'reads': 110, 'more': 1, 'pages': 3}
 
 
 def test_max_pages_alone_chains_full_pages(setup, monkeypatch):
@@ -1821,7 +1995,7 @@ def test_max_pages_alone_chains_full_pages(setup, monkeypatch):
     # No deadline: the page budget alone must still chain the pass.
     counts = projector.sweep_held(2, max_pages=3)
     assert pages.call_count == 3
-    assert counts == {'partial': 0, 'waiting': 6, 'error': 0, 'units': 6, 'reads': 108, 'more': 1, 'pages': 3}
+    assert counts == {'partial': 0, 'waiting': 6, 'error': 0, 'units': 6, 'reads': 110, 'more': 1, 'pages': 3}
 
 
 def test_failed_fetch_ends_the_segment_with_its_pages_charged(setup, monkeypatch):
@@ -1838,11 +2012,11 @@ def test_failed_fetch_ends_the_segment_with_its_pages_charged(setup, monkeypatch
     # The failed fetch raises nothing and charges the page already served, so
     # the caller's read budget sees it; the cursor stays resumable.
     assert pages.call_count == 2
-    assert counts == {'partial': 0, 'waiting': 2, 'error': 0, 'units': 2, 'reads': 36, 'more': 1, 'pages': 1}
+    assert counts == {'partial': 0, 'waiting': 2, 'error': 0, 'units': 2, 'reads': 38, 'more': 1, 'pages': 1}
     assert projector.held_after == 'unit-0001'
     resumed = projector.sweep_held(2, deadline=1e12)
     assert pages.call_count == 4
-    assert resumed == {'partial': 0, 'waiting': 2, 'error': 0, 'units': 2, 'reads': 36, 'more': 0, 'pages': 2}
+    assert resumed == {'partial': 0, 'waiting': 2, 'error': 0, 'units': 2, 'reads': 38, 'more': 0, 'pages': 2}
 
 
 def test_a_full_pass_over_a_large_backlog_finishes_within_the_tick_bound(setup, monkeypatch):
@@ -1863,7 +2037,7 @@ def test_a_full_pass_over_a_large_backlog_finishes_within_the_tick_bound(setup, 
     # simulated seconds, inside a 20 s tick budget.
     assert pages.call_count == 7
     assert counts['units'] == 200 and counts['more'] == 0 and counts['error'] == 0
-    assert counts['waiting'] == 200 and counts['reads'] == 200 + 200 * 17
+    assert counts['waiting'] == 200 and counts['reads'] == 200 + 200 * 17 + 2
     assert projector.held_after is None
 
 
@@ -1887,7 +2061,7 @@ def test_unit_failures_never_stop_a_multi_page_pass(setup, monkeypatch):
     # Every even unit failed — still charged for its reads — and the pass
     # served both pages to the end.
     assert pages.call_count == 3
-    assert counts == {'partial': 0, 'waiting': 3, 'error': 3, 'units': 6, 'reads': 108, 'more': 0, 'pages': 3}
+    assert counts == {'partial': 0, 'waiting': 3, 'error': 3, 'units': 6, 'reads': 110, 'more': 0, 'pages': 3}
 
 
 def test_attempt_charge_floors_at_the_measured_single_upload_worst(setup, monkeypatch):
@@ -1906,7 +2080,7 @@ def test_attempt_charge_floors_at_the_measured_single_upload_worst(setup, monkey
     # must never undercut the measured per-attempt worst case. The short page
     # wraps the scan in the same call.
     assert pages.call_count == 1
-    assert counts == {'partial': 0, 'waiting': 1, 'error': 0, 'units': 1, 'reads': 17, 'more': 0, 'pages': 1}
+    assert counts == {'partial': 0, 'waiting': 1, 'error': 0, 'units': 1, 'reads': 19, 'more': 0, 'pages': 1}
 
 
 @pytest.mark.parametrize('change', ['speech_redrive', 'recovery_enabled'])

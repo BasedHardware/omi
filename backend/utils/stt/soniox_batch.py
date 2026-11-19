@@ -10,6 +10,7 @@ import asyncio
 import math
 import os
 import time
+from collections import deque
 from uuid import UUID
 
 import httpx
@@ -30,6 +31,12 @@ BASE_URL = 'https://api.soniox.com/v1'
 MODEL = SONIOX_HELD_RECOVERY_MODEL
 DEADLINE_SECONDS = 120
 MAX_HTTP_ATTEMPTS = 3
+# A refused transcription DELETE (429, or still processing at the deadline) is
+# retried by later calls. Ids are never persisted, so a leaked transcription is
+# an orphan that counts toward Soniox's 2,000 stored-transcription cap; at the
+# cap every create is refused with 429 (2026-11-13).
+DEFERRED_CLEANUP_PER_CALL = 3
+_DEFERRED_CLEANUP: deque[str] = deque(maxlen=2000)
 
 
 ERROR_KINDS = frozenset(
@@ -69,6 +76,29 @@ def _typed(error: BaseException, submitted: bool) -> SonioxBatchError:
     if isinstance(error, (KeyError, TypeError, ValueError)):
         return SonioxBatchError('invalid_response', submitted=submitted)
     return SonioxBatchError('error', submitted=submitted)
+
+
+def _cleanup_paths(transcription_id, file_id) -> list[str]:
+    paths = [
+        path
+        for path in (
+            f'/transcriptions/{transcription_id}' if transcription_id else None,
+            f'/files/{file_id}' if file_id else None,
+        )
+        if path
+    ]
+    for _ in range(DEFERRED_CLEANUP_PER_CALL):
+        try:
+            paths.append(_DEFERRED_CLEANUP.popleft())
+        except IndexError:
+            break
+    return paths
+
+
+def _cleanup_failed(path: str, status_code: int | None) -> None:
+    logger.warning('event=soniox_batch_cleanup outcome=failed http_status=%s', status_code)
+    if path.startswith('/transcriptions/'):
+        _DEFERRED_CLEANUP.append(path)
 
 
 def request_retry_delay(error, method, path, attempt, remaining):
@@ -121,11 +151,11 @@ def resource_id(value):
     return str(UUID(value))
 
 
-def transcription_body(file_id, language):
+def transcription_body(file_id, language, *, diarize=True):
     body: dict[str, object] = {
         'model': MODEL,
         'file_id': file_id,
-        'enable_speaker_diarization': True,
+        'enable_speaker_diarization': diarize,
         'enable_language_identification': True,
     }
     hint = normalized_stt_language(language)
@@ -222,12 +252,20 @@ def transcribe(
     *,
     language=None,
     second_chance=False,
+    failover=False,
+    diarize=True,
+    retry_rate_limits=True,
     takeover_max_seconds=None,
     client_factory=httpx.Client,
     clock=time.monotonic,
     sleep=time.sleep,
 ):
-    headers = authorization(duration, second_chance=second_chance, takeover_max_seconds=takeover_max_seconds)
+    headers = authorization(
+        duration,
+        second_chance=second_chance,
+        failover=failover,
+        takeover_max_seconds=takeover_max_seconds,
+    )
     file_id, transcription_id, submitted = None, None, False
     deadline = clock() + DEADLINE_SECONDS
     # The transport has no implicit retries; an accepted paid POST occurs once.
@@ -254,6 +292,8 @@ def transcribe(
                         submitted = True
                     return response.json()
                 except Exception as error:
+                    if not retry_rate_limits and isinstance(error, SonioxBatchError) and error.kind == 'rate_limited':
+                        raise
                     delay = request_retry_delay(error, method, path, attempt, deadline - clock())
                     if delay is None:
                         raise
@@ -262,7 +302,10 @@ def transcribe(
 
         try:
             file_id = resource_id(request('POST', '/files', files={'file': ('recovery.wav', audio, 'audio/wav')})['id'])
-            body = transcription_body(file_id, language)
+            body = transcription_body(file_id, language, diarize=diarize)
+            from utils.stt.allowance_watch import observe_request
+
+            observe_request('prerecorded', 'soniox', duration)
             created = request('POST', '/transcriptions', json=body)
             transcription_id = resource_id(created['id'])
             state = created
@@ -284,17 +327,13 @@ def transcribe(
         finally:
             # Remove only this call's temporary vendor resources. Original Omi
             # artifacts stay in custody. Cleanup cannot authorize another POST.
-            for path in (
-                f'/transcriptions/{transcription_id}' if transcription_id else None,
-                f'/files/{file_id}' if file_id else None,
-            ):
-                if path:
-                    try:
-                        response = client.request('DELETE', BASE_URL + path, timeout=5)
-                        if response.status_code not in {200, 204, 404}:
-                            logger.warning('event=soniox_batch_cleanup outcome=failed')
-                    except Exception:
-                        logger.warning('event=soniox_batch_cleanup outcome=failed')
+            for path in _cleanup_paths(transcription_id, file_id):
+                try:
+                    response = client.request('DELETE', BASE_URL + path, timeout=5)
+                    if response.status_code not in {200, 204, 404}:
+                        _cleanup_failed(path, response.status_code)
+                except Exception:
+                    _cleanup_failed(path, None)
 
 
 async def transcribe_async(
@@ -365,6 +404,10 @@ async def transcribe_async(
         )
         body = transcription_body(file_id, language)
         try:
+            from utils.stt.allowance_watch import observe_async
+            from utils.byok import get_byok_uid
+
+            await observe_async(get_byok_uid(), 'prerecorded', 'soniox', duration)
             state = await request('POST', '/transcriptions', json=body)
         except SonioxBatchError:
             # request() preserves paid uncertainty on 5xx; explicit 429 refusals
@@ -393,18 +436,14 @@ async def transcribe_async(
     except Exception as error:
         raise final_failure(error, submitted) from None
     finally:
-        for path in (
-            f'/transcriptions/{transcription_id}' if transcription_id else None,
-            f'/files/{file_id}' if file_id else None,
-        ):
-            if path:
-                try:
-                    async with asyncio.timeout(5):
-                        async with semaphore:
-                            response = await client.request(
-                                'DELETE', BASE_URL + path, headers=headers, timeout=5, follow_redirects=False
-                            )
-                    if response.status_code not in {200, 204, 404}:
-                        logger.warning('event=soniox_batch_cleanup outcome=failed')
-                except Exception:
-                    logger.warning('event=soniox_batch_cleanup outcome=failed')
+        for path in _cleanup_paths(transcription_id, file_id):
+            try:
+                async with asyncio.timeout(5):
+                    async with semaphore:
+                        response = await client.request(
+                            'DELETE', BASE_URL + path, headers=headers, timeout=5, follow_redirects=False
+                        )
+                if response.status_code not in {200, 204, 404}:
+                    _cleanup_failed(path, response.status_code)
+            except Exception:
+                _cleanup_failed(path, None)

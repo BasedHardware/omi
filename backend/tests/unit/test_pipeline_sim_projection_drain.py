@@ -33,7 +33,9 @@ def assert_same_projection(baseline, result):
     assert result['index'] == baseline['index']
 
 
-def test_drain_beats_the_sweep_walk_on_a_short_backlog():
+def test_drain_beats_the_sweep_walk_on_a_short_backlog(monkeypatch):
+    # Serving defaults must not activate unmodelled finish work in this benchmark.
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
     today = sim.run('sweep_walk', rows=100)
     phase1 = sim.run('drain', rows=100)
     assert today['all_persisted'] and today['chain_order']
@@ -66,3 +68,19 @@ def test_heavy_owners_keep_their_rate_under_the_drain(capsys):
     # The sweep-shared 30 s budget collapses each owner's duty cycle (I4).
     assert today['rows_per_min_max'] < 10
     assert phase1['rows_per_min_min'] >= 50
+
+
+@pytest.mark.parametrize('enabled,state,checks', [('true', 'ready', 0), ('false', 'persisted', 1)])
+def test_silence_models_ready_assignment_without_check_cost(monkeypatch, enabled, state, checks):
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', enabled)
+    lanes = sim.Lanes(sim.VirtualClock())
+    log = sim.ChainLog(lanes)
+    log.commit('synthetic-owner', 'content', 'silent', ['silent'], 1000)
+    log.results['silent']['result']['outcome'] = 'silence'
+    projector = sim.projection.Projector.__new__(sim.projection.Projector)
+    projector.store, projector.clock = log, lambda: 10000
+    projector._assign('silent', log.jobs['silent'], log.results['silent'], log.bindings['silent'])
+    assert log.results['silent']['projection']['state'] == state
+    assert log.results['silent']['projection_state'] == state
+    assert lanes.charges.get('check_transaction', 0) == checks
+    assert lanes.charges['assignment_transaction'] == 1

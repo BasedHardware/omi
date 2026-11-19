@@ -14,7 +14,7 @@
 
 name: Deploy Backend to Cloud RUN
 
-run-name: Deploy Backend (${{ inputs.environment || github.event_name }} ${{ inputs.mode || github.event_name }}) by ${{ inputs.requested_by || github.actor }}
+run-name: Deploy Backend (${{ inputs.environment || github.event_name }} ${{ inputs.mode || github.event_name }} service=${{ inputs.cloud_run_service || 'all' }} source=${{ inputs.release_sha || '' }} lock=${{ github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train' }} images=${{ inputs.service_images == '' && 'default' || 'override' }} eligibility=${{ github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof' }}) by ${{ inputs.requested_by || github.actor }}
 
 on:
   workflow_dispatch:
@@ -48,6 +48,7 @@ on:
           - deploy
           - build-only
           - repair-traffic-only
+          - operator-qualify-publish
       deploy_targets:
         description: 'Deploy all backend surfaces or Cloud Run only'
         required: true
@@ -56,6 +57,12 @@ on:
         options:
           - all
           - cloud-run-only
+      cloud_run_service:
+        description: 'Cloud Run deploy target; all retains the existing four-service path'
+        required: false
+        default: 'all'
+        type: choice
+        options: [all, backend, backend-sync, backend-sync-backfill, backend-integration]
       deploy_gateway:
         description: 'Development only: deploy the LLM gateway binary with the backend stack (requires deploy_targets=all)'
         required: true
@@ -145,20 +152,70 @@ env:
 
 jobs:
   validate-production-boundary:
+    outputs:
+      integration_only: ${{ steps.boundary.outputs.integration_only }}
+      integration_image: ${{ steps.boundary.outputs.integration_image }}
+      post_wrap_guard: ${{ steps.boundary.outputs.post_wrap_guard }}
+      rollback_revision: ${{ steps.boundary.outputs.rollback_revision }}
     if: >-
       github.event.inputs.mode == 'deploy' ||
       github.event.inputs.mode == 'build-only'
     runs-on: ubuntu-latest
     steps:
       - name: Reject unsupported production deployment boundary before side effects
+        id: boundary
         env:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
           DEPLOY_TARGETS: ${{ github.event.inputs.deploy_targets }}
           WORKFLOW_MODE: ${{ github.event.inputs.mode }}
+          CLOUD_RUN_SERVICE: ${{ github.event.inputs.cloud_run_service || 'all' }}
           SERVICE_IMAGES: ${{ github.event.inputs.service_images }}
           REQUESTED_BY: ${{ github.event.inputs.requested_by }}
+          RELEASE_SHA: ${{ github.event.inputs.release_sha }}
+          SKIP_ELIGIBILITY: ${{ github.event.inputs.skip_eligibility_proof }}
+          BREAK_GLASS_LOCK: ${{ github.event.inputs.break_glass_lock }}
         run: |
           set -euo pipefail
+          CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-all}"
+          case "$CLOUD_RUN_SERVICE" in all|backend|backend-sync|backend-sync-backfill|backend-integration) ;; *) exit 1 ;; esac
+          if [[ "$CLOUD_RUN_SERVICE" != all ]]; then
+            [[ "$WORKFLOW_MODE" == deploy && "$DEPLOY_TARGETS" == cloud-run-only && "$DEPLOY_ENVIRONMENT" == prod && "$BREAK_GLASS_LOCK" != true && "$SKIP_ELIGIBILITY" != true ]] || exit 1
+          fi
+          INTEGRATION_ONLY=false
+          INTEGRATION_IMAGE=''
+          POST_WRAP_GUARD=internal
+          ROLLBACK_REVISION=backend-integration-provfix-off1114
+          if [[ "$SERVICE_IMAGES" == integration-canary=* ]]; then
+            INTEGRATION_IMAGE="${SERVICE_IMAGES#integration-canary=}"
+            if [[ "$INTEGRATION_IMAGE" == *,rollback_revision=* ]]; then
+              ROLLBACK_REVISION="${INTEGRATION_IMAGE##*,rollback_revision=}"
+              INTEGRATION_IMAGE="${INTEGRATION_IMAGE%,rollback_revision=*}"
+            fi
+            [[ "$ROLLBACK_REVISION" =~ ^backend-integration-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ && ${#ROLLBACK_REVISION} -le 63 ]] || exit 1
+            if [[ "$INTEGRATION_IMAGE" == *,post_wrap_guard=* ]]; then
+              POST_WRAP_GUARD="${INTEGRATION_IMAGE##*,post_wrap_guard=}"
+              INTEGRATION_IMAGE="${INTEGRATION_IMAGE%,post_wrap_guard=*}"
+            fi
+            [[ "$DEPLOY_ENVIRONMENT" == prod && "$WORKFLOW_MODE" == deploy &&
+               "$DEPLOY_TARGETS" == cloud-run-only && "$SKIP_ELIGIBILITY" != true &&
+               "$BREAK_GLASS_LOCK" != true && "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ &&
+               "$INTEGRATION_IMAGE" =~ ^gcr\.io/based-hardware/(backend|backend-workers)@sha256:[0-9a-f]{64}$ &&
+               ("$POST_WRAP_GUARD" == internal || "$POST_WRAP_GUARD" == external) ]] || {
+              echo 'Integration-only requires exact admitted source/digest and normal production gates.' >&2
+              exit 1
+            }
+            [[ "$CLOUD_RUN_SERVICE" == all || "$CLOUD_RUN_SERVICE" == backend-integration ]] || exit 1
+            INTEGRATION_ONLY=true
+          fi
+          printf 'integration_only=%s\nintegration_image=%s\npost_wrap_guard=%s\nrollback_revision=%s\n' "$INTEGRATION_ONLY" "$INTEGRATION_IMAGE" "$POST_WRAP_GUARD" "$ROLLBACK_REVISION" >> "$GITHUB_OUTPUT"
+          if [[ "$DEPLOY_ENVIRONMENT" == prod && "$WORKFLOW_MODE" == deploy &&
+                "$RELEASE_SHA" == 0714c5198be8f0183c8fd7dd3810d53c91af17a4 ]]; then
+            [[ "$DEPLOY_TARGETS" == cloud-run-only && "$SKIP_ELIGIBILITY" != true &&
+               "$BREAK_GLASS_LOCK" != true ]] || {
+              echo 'The ruled integration canary requires normal cloud-run-only admission and lock.' >&2
+              exit 1
+            }
+          fi
           if [[ "$DEPLOY_ENVIRONMENT" != "development" && "$DEPLOY_ENVIRONMENT" != "prod" ]]; then
             echo "Invalid environment: $DEPLOY_ENVIRONMENT. Must be 'development' or 'prod'." >&2
             exit 1
@@ -207,8 +264,10 @@ jobs:
     steps:
       - name: Validate Environment Input
         env:
+          CLOUD_RUN_SERVICE: ${{ github.event.inputs.cloud_run_service || 'all' }}
           REQUESTED_BY: ${{ github.event.inputs.requested_by }}
         run: |
+          [[ "${CLOUD_RUN_SERVICE:-all}" == all ]] || { echo "::error::repair does not accept a service selector" >&2; exit 1; }
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
@@ -227,12 +286,13 @@ jobs:
           # Traffic repair changes no source-derived runtime state. It stays a
           # separate recovery path and does not consume a release proof.
           ref: main
+          fetch-depth: 0
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C,
       # plan v2 Phase E). Development keeps its JSON lane.
       - name: Google Auth (prod WIF)
         id: auth-wif
-        if: github.event.inputs.environment == 'prod'
+        if: github.event.inputs.environment == 'prod' && (github.event.inputs.cloud_run_service == '' || github.event.inputs.cloud_run_service == 'all')
         uses: 'google-github-actions/auth@v3'
         with:
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
@@ -252,10 +312,12 @@ jobs:
 
       - name: Restore Cloud Run traffic spec to currently serving revisions
         run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           python3 backend/scripts/repair_cloud_run_traffic.py \
             --project=${{ vars.GCP_PROJECT_ID }} \
             --region=${{ env.REGION }} \
-            --repair
+            --repair \
+            --release-floor-check .github/scripts/verify_backend_release_floor.py
 
       - name: Cloud Run deploy status report
         if: always()
@@ -331,6 +393,8 @@ jobs:
             echo "ERROR: release_sha is not an ancestor of origin/main; only merged code may deploy."
             exit 1
           fi
+
+          python3 .github/scripts/verify_backend_release_floor.py --sha "$DEPLOY_SHA"
 
           if [[ "${SKIP_PROOF:-false}" == "true" ]]; then
             if [[ "$BREAK_GLASS_CONFIRM" != "deploy-without-proof" ]]; then
@@ -722,6 +786,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Deploy backend stack
+        timeout-minutes: ${{ needs.firestore_readiness.outputs.admitted_sha == '0714c5198be8f0183c8fd7dd3810d53c91af17a4' && 90 || 360 }}
         uses: ./.github/actions/deploy-backend-stack
         env:
           LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
@@ -732,12 +797,19 @@ jobs:
           LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
         with:
           deploy_profile: manual
+          # SCA-2283 captain ruling 01a1dca2: finite exact-source path only.
+          integration_canary: ${{ github.event.inputs.environment == 'prod' && (needs.validate-production-boundary.outputs.integration_only == 'true' || needs.firestore_readiness.outputs.admitted_sha == '0714c5198be8f0183c8fd7dd3810d53c91af17a4') && 'true' || 'false' }}
+          integration_only: ${{ needs.validate-production-boundary.outputs.integration_only || 'false' }}
+          integration_image: ${{ needs.validate-production-boundary.outputs.integration_image }}
+          post_wrap_guard: ${{ needs.validate-production-boundary.outputs.post_wrap_guard || 'internal' }}
+          rollback_revision: ${{ needs.validate-production-boundary.outputs.rollback_revision || 'backend-integration-provfix-off1114' }}
           # 2026-10-24 costcut (live 22:45Z): prod backend-sync runs 6Gi; dev keeps 8Gi.
           backend_sync_memory: ${{ vars.BACKEND_SYNC_MEMORY || (github.event.inputs.environment == 'prod' && '6Gi' || '8Gi') }}
           # Read only for a development dispatch, so a production run never carries it.
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
           environment: ${{ github.event.inputs.environment }}
           deploy_targets: ${{ github.event.inputs.deploy_targets }}
+          cloud_run_service: ${{ github.event.inputs.cloud_run_service || 'all' }}
           deploy_gateway: ${{ github.event.inputs.deploy_gateway }}
           service_images: ${{ github.event.inputs.service_images }}
           release_version: ${{ github.event.inputs.release_version }}
@@ -763,7 +835,7 @@ jobs:
 
       - name: Provision backend route and request storm alerts
         id: backend-route-alert
-        if: github.event.inputs.environment == 'prod'
+        if: github.event.inputs.environment == 'prod' && (github.event.inputs.cloud_run_service == '' || github.event.inputs.cloud_run_service == 'all')
         continue-on-error: true
         timeout-minutes: 15
         env:
@@ -811,7 +883,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Provision Firestore missing-index alert
-        if: github.event.inputs.environment == 'prod'
+        if: github.event.inputs.environment == 'prod' && (github.event.inputs.cloud_run_service == '' || github.event.inputs.cloud_run_service == 'all')
         env:
           ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -828,3 +900,87 @@ jobs:
           python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_firestore_missing_index_alert.py" \
             --project "$PROJECT_ID" \
             --notification-channels "$ALERT_CHANNELS"
+
+  # SOURCE-ONLY PROPOSAL: contract remains closed until approved ingress IDs
+  # and existing repository authorization evidence are reviewed and committed.
+  operator-qualify-publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.event.inputs.environment == 'prod' &&
+      github.event.inputs.mode == 'operator-qualify-publish'
+    environment: prod
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      # Draft release visibility requires push access. This ephemeral write
+      # scope is proposed explicitly, never replaced with a new PAT/secret.
+      contents: write
+      actions: read
+      id-token: write
+    steps:
+      - name: Checkout immutable workflow controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check operator publication controls without external services
+        run: python3 -m unittest discover -s backend/scripts/jobstore_operator/tests -v
+      - name: Validate mode, protected source, and available scratch
+        env:
+          REQUESTED_SOURCE: ${{ inputs.release_sha }}
+          SKIP_PROOF: ${{ inputs.skip_eligibility_proof }}
+          BREAK_GLASS_LOCK: ${{ inputs.break_glass_lock }}
+          SERVICE_IMAGES: ${{ inputs.service_images }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          test "$SKIP_PROOF" = false
+          test "$BREAK_GLASS_LOCK" = false
+          test -z "$SERVICE_IMAGES"
+          python3 backend/scripts/jobstore_operator/preflight.py
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          for source in "$REQUESTED_SOURCE" "$GITHUB_WORKFLOW_SHA"; do
+            git merge-base --is-ancestor "$source" origin/main
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${source}&per_page=100" > "$RUNNER_TEMP/operator-proof.json"
+            python3 .github/scripts/verify_backend_release_admission.py --sha "$source" --repository "$GITHUB_REPOSITORY" --workflow-runs "$RUNNER_TEMP/operator-proof.json"
+          done
+      - name: Fetch only approved private draft asset identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 backend/scripts/jobstore_operator/operator_ingress.py --contract backend/scripts/jobstore_operator/artifact-contract.json --directory "$RUNNER_TEMP/operator-input"
+      - name: Qualify the exact image on the native AMD64 runner
+        env:
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          python3 backend/scripts/jobstore_operator/qualify_operator.py --contract backend/scripts/jobstore_operator/artifact-contract.json --directory "$RUNNER_TEMP/operator-input" --output "$RUNNER_TEMP/operator-native-qualification.json"
+      - name: Google Auth only after native qualification (existing WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+      - name: Set up existing gcloud client
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Preserve and verify the dedicated operator digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          python3 backend/scripts/jobstore_operator/publish_operator.py --contract backend/scripts/jobstore_operator/artifact-contract.json --directory "$RUNNER_TEMP/operator-input" --qualification "$RUNNER_TEMP/operator-native-qualification.json" --output "$RUNNER_TEMP/operator-publication.json"
+      - name: Retain only bounded qualification and publication receipts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jobstore-operator-evidence-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/operator-native-qualification.json
+            ${{ runner.temp }}/operator-native-qualification.log
+            ${{ runner.temp }}/operator-native-qualification.failure.json
+            ${{ runner.temp }}/operator-native-qualification.failure.log
+            ${{ runner.temp }}/operator-native-qualification.cleanup.json
+            ${{ runner.temp }}/operator-publication.json
+            ${{ runner.temp }}/operator-proof.json

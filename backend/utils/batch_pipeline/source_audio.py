@@ -14,8 +14,9 @@ from typing import Callable
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from utils.batch_pipeline.audio import audio_unit, with_context
-from utils.batch_pipeline import leaf_timings
-from utils.other.raw_audio import decode_capture
+from utils.batch_pipeline import leaf_timings, record_seal_profile
+from utils.other.audio_frame_table import FRAME_SCHEMA, gapped_frames
+from utils.other.raw_audio import WAL_FORMAT, decode_capture, decode_capture_frames
 
 MAGIC = b'OMIRECORD1\n'
 MAX_SOURCE_BYTES = 256 * 1024 * 1024
@@ -33,7 +34,7 @@ class InvalidRetainedManifest(ValueError):
     """The stored manifest itself can never materialize; a retry reads the same bytes."""
 
 
-def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
+def decode_source(raw: bytes, ref: dict, owner_key: bytes, *, frames: list[dict] | None = None) -> bytes:
     if not raw or len(raw) > MAX_SOURCE_BYTES:
         raise ValueError('invalid retained audio size')
     metadata = ref.get('metadata') or {}
@@ -56,6 +57,11 @@ def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
     if path.startswith('raw-live/'):
         if hashlib.sha256(raw).hexdigest() != metadata.get('sha256'):
             raise ValueError('retained capture checksum mismatch')
+        if frames is not None and metadata.get('format') == WAL_FORMAT:
+            # A gapped pack's retained zero-sample frames are not decodable
+            # packets; walking the writer's own frame table keeps every sample
+            # at its capture position instead of failing on the diagnostic row.
+            return leaf_timings.call('decode', decode_capture_frames, raw, metadata, frames, 16000)
         return leaf_timings.call('decode', decode_capture, raw, metadata, 16000)
     if '.opus' in path:
         # Existing legacy chunk codec, shared with playback. Import is lazy in
@@ -94,39 +100,71 @@ def read_reference(
     *,
     source_metadata=False,
     read_budget=None,
+    listed_source=None,
+    frames=None,
 ) -> bytes:
     validate_reference(ref, uid, conversation_id, allowed_buckets)
     generation = int(ref['generation'])
     blob = client.bucket(ref['bucket']).blob(ref['path'], generation=generation)
     if read_budget is not None:
         read_budget.begin()
-    leaf_timings.call(
-        'download_metadata',
-        blob.reload,
-        if_generation_match=generation,
-        timeout=read_budget.timeout(30) if read_budget is not None else 30,
-        retry=None,
+    # Data generation alone does not fence metadata-only updates (sample rate,
+    # encryption/checksum metadata). Only a versioned listing can replace the GET.
+    listed = listed_source or {}
+    size = listed.get('size')
+    metageneration = listed.get('metageneration')
+    use_listing = (
+        size is not None
+        and (not source_metadata or 'metadata' in listed)
+        and type(metageneration) is int
+        and metageneration > 0
     )
+    if not use_listing:
+        record_seal_profile.metadata_reload()
+        leaf_timings.call(
+            'download_metadata',
+            blob.reload,
+            if_generation_match=generation,
+            timeout=read_budget.timeout(30) if read_budget is not None else 30,
+            retry=None,
+        )
+        size = blob.size
+        metadata = (blob.metadata or {}) if source_metadata else {}
+    else:
+        metadata = listed.get('metadata') or {}
     if source_metadata:
-        # Admission needs the source metadata in the manifest, including the
-        # legacy sample rate. Reuse this generation-pinned GET, not a second one.
-        ref['metadata'] = blob.metadata or {}
+        ref['metadata'] = metadata
         if 'sample_rate' not in ref:
-            ref['sample_rate'] = int(ref['metadata'].get('record_sample_rate', 16000))
-    if not blob.size or not 0 < blob.size <= MAX_SOURCE_BYTES:
+            ref['sample_rate'] = int(metadata.get('record_sample_rate', 16000))
+    if not size or not 0 < size <= MAX_SOURCE_BYTES:
         raise ValueError('retained audio source exceeds size budget')
     if read_budget is not None:
-        read_budget.reserve(blob.size)
+        read_budget.reserve(size)
     raw = leaf_timings.call(
         'download',
         blob.download_as_bytes,
         if_generation_match=generation,
+        **({'if_metageneration_match': metageneration} if use_listing else {}),
         timeout=read_budget.timeout(60) if read_budget is not None else 60,
         retry=None,
     )
+    record_seal_profile.received(len(raw))
     if read_budget is not None:
+        read_budget.received_bytes += len(raw)
         read_budget.timeout(60)
-    return decode_source(raw, ref, key)
+    if frames is None and ref['path'].startswith('raw-live/') and metadata:
+        # A gapped, unframed omi-wal pack has no declared frame schema, so the
+        # ordinary decoder would try to decode its retained zero-sample
+        # diagnostic rows. Resolve the writer's own frame table and decode
+        # through it. A gapped flac/pcm16 pack encodes the captured PCM
+        # contiguously, so the ordinary decoder already returns its samples.
+        if (
+            metadata.get('format') == WAL_FORMAT
+            and metadata.get('frame_schema') != FRAME_SCHEMA
+            and int(metadata.get('gap_count') or 0) != 0
+        ):
+            frames, _ = gapped_frames(client.bucket(ref['bucket']), blob, uid, metadata=metadata)
+    return decode_source(raw, ref, key, frames=frames)
 
 
 def _well_formed(ref: dict) -> bool:

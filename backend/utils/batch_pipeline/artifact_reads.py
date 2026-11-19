@@ -15,6 +15,9 @@ class ArtifactReadBudget:
     max_objects: int
     downloaded_bytes: int = 0
     objects: int = 0
+    # Reservations can include a failed transfer. Count completed response
+    # bodies separately; partial bytes from a failed SDK call are unknowable.
+    received_bytes: int = 0
 
     def timeout(self, ceiling):
         remaining = self.deadline - time.monotonic()

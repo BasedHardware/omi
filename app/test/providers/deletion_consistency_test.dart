@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api/memories.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -29,10 +30,10 @@ void main() {
   final List<MemoriesProvider> memoryProviders = [];
   final List<ActionItemsProvider> actionItemProviders = [];
 
-  setUp(() {
-    // SharedPreferences-backed getters (pendingMemories, uid, device-scope
-    // prefs) are used in loadMemories(), so mock the backing store.
-    SharedPreferences.setMockInitialValues({});
+  setUp(() async {
+    // Exercise authenticated deletion with the same owner as the memory rows.
+    SharedPreferences.setMockInitialValues({'uid': 'user-1'});
+    await SharedPreferencesUtil.init();
   });
 
   tearDown(() {
@@ -106,11 +107,8 @@ void main() {
     });
 
     test('consecutive deletions finalize the second memory before a refresh', () async {
-      // When two memories are deleted within the undo window, the second
-      // deleteMemory() cancels the first timer and replaces _pendingDeletionId.
-      // The second memory is finalized; the first is a known limitation of
-      // the single-pending-ID design (tracked separately). This test verifies
-      // the current pending memory is finalized and suppressed through refresh.
+      // Replacing Undo commits the first delete independently; confirming the
+      // new toast commits the second without dropping either operation.
       final deletedIds = <String>[];
       final mem4 = _mem('mem-4a', content: 'second');
 
@@ -140,8 +138,8 @@ void main() {
 
       expect(
         deletedIds,
-        contains('mem-4a'),
-        reason: 'confirmPendingDeletion must finalize the current pending deletion',
+        unorderedEquals(['mem-3a', 'mem-4a']),
+        reason: 'both selected deletions must finalize without replacing one another',
       );
 
       // The finalized second memory must not reappear after refresh.
@@ -215,8 +213,7 @@ void main() {
       // Start the load — it hangs on the uncompleted fetcher.
       final loadFuture = provider.loadMemories();
 
-      // Delete the memory while the load is in flight. This sets
-      // _pendingDeletionId after loadMemories() already snapshotted null.
+      // Delete while the load is in flight, after its initial snapshot.
       provider.deleteMemory(victim);
       expect(provider.memories, isEmpty, reason: 'Optimistic removal should hide the memory immediately');
 
@@ -227,7 +224,7 @@ void main() {
       expect(
         provider.memories.where((m) => m.id == 'mem-7'),
         isEmpty,
-        reason: 'loadMemories must re-check _pendingDeletionId at apply time '
+        reason: 'loadMemories must re-check pending deletions at apply time '
             'and suppress items deleted after the snapshot was taken',
       );
     });

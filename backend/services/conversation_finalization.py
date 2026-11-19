@@ -53,6 +53,7 @@ from utils.metrics import (
     OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL,
     register_listen_finalization_summary_metrics,
 )
+from database import finalization_due_marker_sweep as due_marker_sweep
 from utils.observability.fallback import record_fallback
 from utils.observability.finalization import finalization_diagnostic_id
 from utils.observability.journeys import (
@@ -232,6 +233,17 @@ def reconcile_listen_finalization_jobs(
         _publish_job_metrics(firestore_client=firestore_client)
         return result
 
+    # Before the candidate page is read, so a row restored to due is replayed in this pass.
+    try:
+        due_markers = due_marker_sweep.remark_missing_due_markers(firestore_client=firestore_client)
+    except Exception:
+        logger.exception('listen finalization due-marker sweep failed')
+        due_markers = {'remarked': 0, 'skipped': 0, 'error': 1}
+    for outcome, count in due_markers.items():
+        due_marker_sweep.count_sweep_outcome(outcome, count)
+    if due_markers['remarked']:
+        logger.warning('event=listen_finalization_due_marker_sweep remarked=%s', due_markers['remarked'])
+
     oldest_overdue_age = 0.0
     try:
         oldest_overdue_age = jobs_db.get_finalization_replay_oldest_overdue_age_seconds(
@@ -352,7 +364,9 @@ def reconcile_listen_finalization_jobs(
                         expected_status=str(candidate.get('status') or ''),
                         expected_dispatch_generation=int(candidate.get('dispatch_generation') or 1),
                         expected_lease_epoch=int(candidate.get('lease_epoch') or 0),
-                        failure_code=str(candidate.get('last_failure_code') or 'final_attempt_failed'),
+                        failure_code=_terminal_failure_row_code(
+                            str(candidate.get('last_failure_code') or 'final_attempt_failed')
+                        ),
                         firestore_client=firestore_client,
                     )
                 except Exception:
@@ -361,6 +375,7 @@ def reconcile_listen_finalization_jobs(
                 else:
                     if terminal:
                         result['terminalized'] += 1
+                        _record_dead_letter(job_id, firestore_client=firestore_client)
                         _emit_dead_letter_observability(
                             job_id,
                             candidate,
@@ -695,7 +710,21 @@ def reconcile_abandoned_byok_finalization_jobs(limit: int = 100, *, firestore_cl
 
 def _normalize_dead_letter_cause(cause: str) -> str:
     """Map any live failure code onto the closed counter/log cause vocabulary."""
+    if cause in {'deterministic_processing_failed', 'transient_processing_failed'}:
+        return 'processing_failed'
     return cause if cause in FINALIZATION_DEAD_LETTER_CAUSES else 'unknown'
+
+
+def _terminal_failure_row_code(failure_code: str) -> str:
+    """Preserve the conversation retry vocabulary for every terminal owner."""
+    if failure_code in SMART_MERGE_INCOMPLETE_CODES or failure_code in {
+        'deterministic_processing_failed',
+        'transient_processing_failed',
+    }:
+        return 'processing_failed'
+    if failure_code in {'invalid_job', 'worker_failed'}:
+        return 'final_attempt_failed'
+    return failure_code
 
 
 def _emit_dead_letter_observability(
@@ -707,7 +736,7 @@ def _emit_dead_letter_observability(
     dispatch_generation: int | None,
     source: str,
 ) -> None:
-    """One ERROR line and one bounded counter child per terminal dead-letter.
+    """One log line and one bounded counter child per terminal dead-letter.
 
     Cause values come only from the closed set (no ids, no exception text);
     a non-member live code maps to ``'unknown'``. Runs solely after a terminal
@@ -715,7 +744,8 @@ def _emit_dead_letter_observability(
     """
     normalized = _normalize_dead_letter_cause(cause)
     OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL.labels(cause=normalized).inc()
-    logger.error(
+    log = logger.warning if (job or {}).get('requires_byok') else logger.error
+    log(
         'listen finalization dead_letter terminal=%s job_hash=%s cause=%s budget_requeues=%s '
         'attempt_count=%s dispatch_generation=%s source=%s',
         True,
@@ -758,11 +788,7 @@ def final_attempt_failed(
         )
         OMI_CONVERSATION_FINALIZATION_BUDGET_REQUEUES_TOTAL.labels(cause=cause).inc()
         return 'requeued'
-    row_code = (
-        'processing_failed'
-        if failure_code in SMART_MERGE_INCOMPLETE_CODES
-        else 'final_attempt_failed' if failure_code in {'invalid_job', 'worker_failed'} else failure_code
-    )
+    row_code = _terminal_failure_row_code(failure_code)
     dead_letter_kwargs = {'firestore_client': firestore_client}
     if row_code != 'final_attempt_failed':
         dead_letter_kwargs['failure_code'] = row_code
@@ -835,8 +861,10 @@ def get_listen_finalization_tasks_max_attempts_for_worker() -> int:
 def _publish_job_metrics(*, firestore_client: Any = None) -> None:
     from database._client import get_firestore_client
     from database.lifecycle_metrics_queries import blocked_byok
+    from utils.lifecycle_pair_census import observe
 
     now = time.time()
+    observe(client=firestore_client, now=now)
     _byok_phase_metrics.refresh(
         now, lambda: blocked_byok(firestore_client if firestore_client is not None else get_firestore_client(), now)
     )
