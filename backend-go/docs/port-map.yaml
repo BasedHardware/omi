@@ -1,0 +1,43 @@
+# Each family lists exact repository-relative Python source paths.
+finalization:
+  - backend/database/conversation_finalization_jobs.py
+  - backend/routers/conversation_finalization.py
+  - backend/services/conversation_finalization.py
+  - backend/utils/conversations/finalizer.py
+  - backend/utils/conversations/lifecycle.py
+  - backend/utils/conversations/process_conversation.py
+
+# Runtime sources cited by Lane A's batch contract (SCA-3171, PR #25802).
+batch:
+  - backend/database/batch_pipeline_allowance_hold.py
+  - backend/database/batch_pipeline_conversation_purge.py
+  - backend/database/batch_pipeline_intake.py
+  - backend/database/batch_pipeline_paid_attempt.py
+  - backend/database/batch_pipeline_privacy.py
+  - backend/database/batch_pipeline_projection.py
+  - backend/database/batch_pipeline_projection_outbox.py
+  - backend/database/batch_pipeline_projection_session.py
+  - backend/database/batch_pipeline_purge.py
+  - backend/database/batch_pipeline_quarantine_recovery.py
+  - backend/database/batch_pipeline_record_dead_letter.py
+  - backend/database/batch_pipeline_source_reuse.py
+  - backend/database/batch_pipeline_store.py
+  - backend/routers/sync.py
+  - backend/utils/batch_pipeline/admission.py
+  - backend/utils/batch_pipeline/allowance_hold.py
+  - backend/utils/batch_pipeline/contracts.py
+  - backend/utils/batch_pipeline/intake.py
+  - backend/utils/batch_pipeline/merge.py
+  - backend/utils/batch_pipeline/projection.py
+  - backend/utils/batch_pipeline/projection_parts.py
+  - backend/utils/batch_pipeline/provider_stt.py
+  - backend/utils/batch_pipeline/record_barrier.py
+  - backend/utils/batch_pipeline/retention.py
+  - backend/utils/batch_pipeline/retry_policy.py
+  - backend/utils/batch_pipeline/route_selection.py
+  - backend/utils/batch_pipeline/scheduler.py
+  - backend/utils/batch_pipeline/shadow_projection.py
+  - backend/utils/batch_pipeline/shadow_transaction.py
+  - backend/utils/batch_pipeline/shadow_worker.py
+  - backend/utils/batch_pipeline/source_audio.py
+  - backend/utils/stt/batch_language.py
