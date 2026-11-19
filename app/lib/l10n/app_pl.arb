@@ -4696,7 +4696,7 @@
     "monthlySwitchDoneTitle": "Płacisz teraz co miesiąc",
     "monthlySwitchDoneBody": "Zapłacono dziś {price}. Odnawia się co miesiąc.",
     "processingDeleteScopeChanged": "Lista przetwarzania się zmieniła. Sprawdź ją i spróbuj ponownie.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Wykorzystano {minutes} minut w tym miesiącu",
     "freeCapBody": "Omi wciąż nagrywa. Wybierz, jak kontynuować transkrypcję.",
     "omiProPlanName": "Omi Pro",
@@ -4724,5 +4724,6 @@
     "onTheWayServerWork": "Praca zgłoszona przez serwer",
     "finishNothingToProcess": "Na razie nie ma czego przetworzyć.",
     "finishStillProcessing": "Nadal trwa przetwarzanie. Pojawi się na ekranie głównym.",
-    "finishBackToHome": "Wróć do ekranu głównego"
+    "finishBackToHome": "Wróć do ekranu głównego",
+    "conversationSummaryWhenItEnds": "Podsumowanie po zakończeniu tej rozmowy"
 }

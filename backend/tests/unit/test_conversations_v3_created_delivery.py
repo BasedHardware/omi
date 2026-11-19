@@ -166,8 +166,14 @@ def test_claims_are_bounded_when_delivery_never_completes(strict):
 
 
 def _visible_rebuild(monkeypatch, prior):
-    def build(uid, window, recordings, existing=None):
-        return {**(existing or prior), 'home_hidden': False, 'home_hidden_reason': None, 'status': 'processing'}
+    def build(uid, window, recordings, existing=None, *, allocated=None):
+        return {
+            **(existing or prior),
+            'home_hidden': False,
+            'home_hidden_reason': None,
+            'status': 'processing',
+            '_v3_claims': {},
+        }
 
     monkeypatch.setattr(service.planner, 'build', build)
     monkeypatch.setattr(service.planner, 'late_rewrite', lambda **kw: False)

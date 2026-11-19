@@ -10,6 +10,7 @@ This module provides functions for merging multiple conversations into one.
 
 from utils.conversations.layer import read_product as read_product_conversation
 import config.speaker_match_scores as match_scores
+from config import historical_tier
 
 import copy
 import random
@@ -346,6 +347,10 @@ def perform_merge_async(
         # a normal-STT one.
         uses_custom_stt = any(c.get('uses_custom_stt', False) for c in sorted_convs)
 
+        # Historical tier (T1+): a merge of old backfill stays summary-only, so the
+        # owner's merge cannot buy derived effects the tier withholds.
+        historical = any(historical_tier.is_historical(c) for c in sorted_convs)
+
         # Discarded: only if ALL are discarded
         discarded = all(c.get("discarded", False) for c in sorted_convs)
 
@@ -393,6 +398,7 @@ def perform_merge_async(
             client_device_id=client_device_id,
             client_platform=client_platform,
             external_data={"merge_metadata": merge_metadata},
+            **({'processing_tier': historical_tier.TIER} if historical else {}),
             **(
                 {
                     'v3_derived': True,

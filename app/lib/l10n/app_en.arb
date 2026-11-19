@@ -18882,7 +18882,7 @@
     "@processingDeleteScopeChanged": {
         "description": "Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again."
     },
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "You've used this month's {minutes} minutes",
     "@freeCapTitle": {
         "description": "Title of the sheet shown when a free plan has used all of its monthly cloud transcription minutes",
@@ -19017,5 +19017,9 @@
     "finishBackToHome": "Back to Home",
     "@finishBackToHome": {
         "description": "Button that leaves the processing page for the Home conversation list."
+    },
+    "conversationSummaryWhenItEnds": "Summary when this conversation ends",
+    "@conversationSummaryWhenItEnds": {
+        "description": "On the detail page of a conversation still in progress (v3): the summary is written once it ends."
     }
 }

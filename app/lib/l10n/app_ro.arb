@@ -4661,7 +4661,7 @@
     "monthlySwitchDoneTitle": "Acum plătești lunar",
     "monthlySwitchDoneBody": "{price} plătiți azi. Se reînnoiește lunar.",
     "processingDeleteScopeChanged": "Lista de procesare s-a schimbat. Verifică lista și încearcă din nou.",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Ai folosit cele {minutes} minute din această lună",
     "freeCapBody": "Omi înregistrează în continuare. Alege cum continui transcrierea.",
     "omiProPlanName": "Omi Pro",
@@ -4689,5 +4689,6 @@
     "onTheWayServerWork": "Activitate raportată de server",
     "finishNothingToProcess": "Încă nu este nimic de procesat.",
     "finishStillProcessing": "Încă se procesează. Va apărea pe pagina principală.",
-    "finishBackToHome": "Înapoi la pagina principală"
+    "finishBackToHome": "Înapoi la pagina principală",
+    "conversationSummaryWhenItEnds": "Rezumat când se încheie această conversație"
 }
