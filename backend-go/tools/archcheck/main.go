@@ -13,6 +13,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -76,8 +77,11 @@ func check(root string) ([]string, error) {
 	problems = append(problems, checkRoles(t)...)
 	problems = append(problems, checkPorts(t)...)
 	problems = append(problems, checkDocs(t)...)
+	if len(problems) == 0 {
+		problems, err = checkTypes(context.Background(), root, t.module)
+	}
 	sort.Strings(problems)
-	return problems, nil
+	return problems, err
 }
 
 func load(root string) (*tree, error) {

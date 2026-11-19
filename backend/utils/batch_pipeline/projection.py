@@ -45,6 +45,7 @@ from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTI
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 from utils.batch_pipeline.projection_finish_backoff import FinishBackoff
 from utils.batch_pipeline.projection_disposition import persist_disposition, mirror_assignment
+from utils.batch_pipeline.projection_prefetch import NativeAudioPending
 from utils.batch_pipeline.projection_privacy import PRIVACY_HELD, settle_refusals
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from utils.batch_pipeline.projection_index import ProjectionIndex
@@ -267,6 +268,8 @@ def projection_phase(phase: str, policy: ProjectionPolicy | None = None) -> Iter
     logger.info('event=batch_projection_phase phase=%s outcome=started', phase)
     try:
         yield
+    except NativeAudioPending:
+        raise
     except Exception as error:
         logger.info(
             'event=batch_projection_phase phase=%s outcome=error elapsed_ms=%d exception_type=%s%s%s block_reason=%s',
@@ -1096,7 +1099,11 @@ class Projector:
                 with projection_phase('manifest', policy):
                     prefetched = hint.prefetched if hint is not None else None
                     if prefetched is not None and prefetched.manifest is not None:
+                        prefetched.settle_audio('consumed')
                         manifest = prefetched.manifest
+                    elif prefetched is not None and prefetched.native_audio is not None:
+                        assert hint is not None
+                        manifest = prefetched.native_audio.context(self.fetch_audio, item, hint.deadline)
                     else:
                         manifest = read_context(self.fetch_audio(item))
             require_repair_manifest(item, binding, manifest, self.require_lineage_fence)
@@ -1608,9 +1615,8 @@ class Projector:
                 # The predecessor check walks erased receipts; so does discovery.
                 previous = segment_id
                 continue
-            job = entry = binding = None
+            job = entry = binding = prefetched = None
             try:
-                prefetched = None
                 if prefetch is not None:
                     prefetched = drain_diagnostics.observe(
                         'prefetch_wait', prefetch.take, segment_id, timeout=deadline - time.monotonic()
@@ -1643,6 +1649,16 @@ class Projector:
                     )
                 else:
                     self._project_read(segment_id, job, entry, binding, hint=hint, claimed=drain)
+            except NativeAudioPending:
+                if (
+                    prefetch is not None
+                    and isinstance(prefetched, Prefetched)
+                    and prefetch.defer(segment_id, prefetched)
+                ):
+                    prefetched = None  # The turn still owns the pending candidate.
+                more = True
+                stop = 'prefetch_wait'
+                break
             except StepDeadline:
                 more = True  # a partial multipart; the next step resumes it
                 stop = 'step_deadline'
@@ -1673,6 +1689,9 @@ class Projector:
                 previous = segment_id
                 advanced.append(segment_id)
                 continue
+            finally:
+                if isinstance(prefetched, Prefetched):
+                    prefetched.abandon_audio()
             try:
                 watermark = self.store.projection_watermark(key)
             except Exception as error:
