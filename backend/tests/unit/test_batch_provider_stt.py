@@ -1247,6 +1247,67 @@ async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake,
         }
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'answer,byok,flag,expected',
+    [
+        ('plan_allowance_exhausted', False, 'on', 'allowance_held'),
+        ('plan_within_allowance', False, 'on', 'ready'),
+        ('allowance_unavailable', False, 'on', 'ready'),
+        ('usage_invalid', False, 'on', 'ready'),
+        ('usage_budget_exhausted', False, 'on', 'ready'),
+        ('subscription_inactive', False, 'on', 'ready'),
+        ('unlimited_v2_backfill_day_tx_hours_cap', False, 'on', 'ready'),
+        (None, False, 'on', 'ready'),
+        ('plan_allowance_exhausted', True, 'on', 'ready'),
+        ('plan_allowance_exhausted', False, 'off', 'ready'),
+    ],
+)
+async def test_sync_intake_parks_only_a_definitive_monthly_refusal(
+    dark_intake, monkeypatch, answer, byok, flag, expected
+):
+    from database.batch_pipeline_allowance_hold import OWNERS
+    from utils import stt_cap_dispatch
+    from utils.batch_pipeline.scheduler import owner_key
+    from utils.sync.legacy_dark import LegacySyncMode
+    from utils.transcription_allowance import TranscriptionAllowance
+
+    dark_intake.mode['value'] = LegacySyncMode.ON
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"usage_month_total":100}')
+    monkeypatch.setenv('BATCH_ALLOWANCE_INTAKE_PARK_ENABLED', flag)
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'on')
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'true')
+    probe = Mock(
+        return_value=TranscriptionAllowance(
+            'managed' if answer == 'plan_within_allowance' else 'on_device', 0, answer or 'allowance_unavailable'
+        ),
+        side_effect=TimeoutError('synthetic policy fault') if answer is None else None,
+    )
+    monkeypatch.setattr(stt_cap_dispatch, 'funded_allowance', probe)
+    monkeypatch.setattr(
+        dark_intake.intake,
+        'admit',
+        lambda *a, **k: batch_pipeline_intake.admit(*a, **{**k, 'require_artifacts': False}),
+    )
+    response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': byok})
+    assert response.status_code == 202
+    store = dark_intake.store
+    receipt = store.get('intakes', json.loads(response.body)['job_id'])
+    (segment,) = receipt['segment_ids']
+    assert store.get('jobs', segment)['state'] == expected
+    owner = store.get(OWNERS, owner_key(OWNER))
+    assert owner.get('held_count', 0) == int(expected == 'allowance_held')
+    if byok or flag == 'off':
+        probe.assert_not_called()
+    else:
+        probe.assert_called_once_with(OWNER, lane='batch', ready_usage_only=True)
+    if flag == 'off':
+        queue = Scheduler(store)
+        (lease,) = queue.pull(200)
+        assert queue.defer(segment, lease.token, 201, held_reason='allowance_exhausted', admission_refused=True)
+        assert store.get('jobs', segment)['state'] == 'allowance_held'
+
+
 # --- a legacy_final_pass_v1 conversation in draining/dark (M3 review; lead ruling b209a5) ---------
 
 

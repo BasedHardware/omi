@@ -12218,7 +12218,7 @@
     "monthlySwitchDoneTitle": "اب آپ ماہانہ پلان پر ہیں",
     "monthlySwitchDoneBody": "آج {price} ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔",
     "processingDeleteScopeChanged": "پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔",
-    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "آپ نے اس مہینے کے {minutes} منٹ استعمال کر لیے ہیں",
     "freeCapBody": "Omi اب بھی ریکارڈ کر رہا ہے۔ منتخب کریں کہ ٹرانسکرپشن کیسے جاری رکھیں۔",
     "omiProPlanName": "Omi Pro",

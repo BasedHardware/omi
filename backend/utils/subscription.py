@@ -14,7 +14,7 @@ from database.fsr_read_cache import fresh_reader
 from dataclasses import dataclass
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Literal, Optional, Set, Tuple, overload
 
 from fastapi import HTTPException
 import stripe
@@ -1404,7 +1404,15 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
     return True, "User can make payment"
 
 
-def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
+@overload
+def get_monthly_usage_for_subscription(uid: str, *, ready_only: Literal[False] = False) -> Dict[str, Any]: ...
+
+
+@overload
+def get_monthly_usage_for_subscription(uid: str, *, ready_only: Literal[True]) -> Dict[str, Any] | None: ...
+
+
+def get_monthly_usage_for_subscription(uid: str, *, ready_only: bool = False) -> Dict[str, Any] | None:
     """
     Gets the current monthly usage for subscription purposes, considering the launch date from env variables.
     The launch date format is expected to be YYYY-MM-DD.
@@ -1419,7 +1427,7 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
         raise ValueError('missing subscription launch date')
     if not subscription_launch_date_str:
         # Subscription not launched, so no usage is counted against limits.
-        return {}
+        return None if ready_only else {}
 
     try:
         # Use strptime to enforce YYYY-MM-DD format
@@ -1430,13 +1438,15 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
             logger.error('event=stt_cap_launch_config outcome=invalid reason=invalid')
             raise
         # Invalid date format, treat as not launched.
-        return {}
+        return None if ready_only else {}
 
     now = datetime.now(timezone.utc)
     if now < launch_date:
         # Launch date is in the future, so no usage is counted yet.
-        return {}
+        return None if ready_only else {}
 
+    if ready_only:
+        return user_usage_db.get_ready_monthly_usage_stats_since(uid, now, launch_date)
     return user_usage_db.get_monthly_usage_stats_since(uid, now, launch_date)
 
 
@@ -1505,6 +1515,7 @@ def resolve_transcription_allowance(
     omi_funded: bool = False,
     usage_cache: Any = None,
     provision_subscription: bool = True,
+    ready_usage_only: bool = False,
 ) -> TranscriptionAllowance:
     """Resolve the managed-transcription allowance for one uid, once. Never raises.
 
@@ -1567,7 +1578,12 @@ def resolve_transcription_allowance(
         if allowance is None:
             return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'plan_unlimited', limit_seconds=None)
         if usage is _UNRESOLVED:
-            usage = get_monthly_usage_for_subscription(uid)
+            if ready_usage_only:
+                usage = get_monthly_usage_for_subscription(uid, ready_only=True)
+                if usage is None:
+                    return _closed('allowance_unavailable', limit_seconds=allowance)
+            else:
+                usage = get_monthly_usage_for_subscription(uid)
         used = _usage_seconds(usage)
         if used is None:
             logger.warning('transcription allowance: untrusted usage record for uid=%s', uid)
