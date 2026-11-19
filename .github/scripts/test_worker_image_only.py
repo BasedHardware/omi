@@ -920,6 +920,20 @@ class DryRunTests(unittest.TestCase):
         os.environ[worker.DRY_RUN_ENV] = "1"
         worker.require_dry_run_env()
 
+    def test_dry_run_refuses_without_the_mode_env(self):
+        os.environ.pop(worker.DRY_RUN_ENV, None)
+        recorder = Recorder(self.cluster)
+        with self.assertRaisesRegex(ValueError, "dry-run command requires"):
+            worker.dry_run(self.baseline, NEW, self.receipt_path, recorder)
+        self.assertEqual(recorder.calls, [])
+        baseline = Path(self.tmp.name) / "baseline.json"
+        baseline.write_text(json.dumps(self.baseline))
+        env = {k: v for k, v in os.environ.items() if k != worker.DRY_RUN_ENV}
+        result = subprocess.run([sys.executable, worker.__file__, "dry-run", "--baseline", str(baseline), "--image", NEW,
+                                 "--receipt", str(self.receipt_path)], capture_output=True, text=True, env=env)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("dry-run command requires", result.stderr)
+
     def test_any_value_of_the_mode_env_guards_writes(self):
         for value in ("true", "0", ""):
             with self.subTest(value=value):
@@ -1192,19 +1206,20 @@ class WorkflowTests(unittest.TestCase):
     # sha256 of its exact script. A new or moved step, or any edit to one of these scripts, fails here until it
     # is reviewed for writes (fail closed), whatever it calls.
     DRY_RUN_REACHABLE_RUN_STEPS = {
-        ("deploy", 0, "Validate Environment Input"): "0d2eb02f1ae99c8950d7f9073904f9be01b6016d5f5eee4bed279cd810df26a3",
-        ("deploy", 1, "Delete huge unnecessary tools folder"): "a71b06dd03bda76b2559683bd74127b61517f4f93cc53061a73d4b896c91eb38",
-        ("deploy", 3, "Select merged production source and image tag"): "2aaf02419157b69684a1739cc8a2c839e97176c764d2e77e3fe86a9033b6e164",
-        ("deploy", 7, "Resolve deployment target"): "d1f30ada455b94ebc25691e3189f8d8c2f4084b2ab959aca69738a06d3462655",
-        ("deploy", 11, None): "c63205ec4dfd63425f762ff34a73886a059822157d26079120ee7adabaa1ff59",  # gcloud auth configure-docker
-        ("deploy", 13, "Verify promoted worker digest"): "b1748a2caa525b382f9c7b5201ab3d53c2d303d14e2c9714fe78214dbd124de4",
-        ("deploy", 16, "Dry-run worker image preserving live runtime"): "26f8f6a07901ce23724ab66b9afb5a74cdc496b100aa080290354fedceb3573f",
+        ("deploy", 0, "Validate Environment Input"): "acfe38168b5679eccd7f1529ea4a79de772ede5a255ae5eabaf22c9ab1b8bd6a",
+        ("deploy", 1, "Delete huge unnecessary tools folder"): "5a5faacb04df5aab268eb9209ca091013f37c875222610c5a0ddd92bbd270e8a",
+        ("deploy", 3, "Select merged production source and image tag"): "22f8a15c2be33be8006fc5a2a8d85f4365193ad0d5f53bcd858cb7567dae70a5",
+        ("deploy", 7, "Resolve deployment target"): "70e03ebe8dfbbf768522c6bc295b2c93c160c8e9346d29e3946a3afe55df14b5",
+        ("deploy", 11, None): "b887a196f21fac03886c7dfbfae52c6b842028be839d6f96d5f07d74ba87c79c",  # gcloud auth configure-docker
+        ("deploy", 13, "Verify promoted worker digest"): "2a66d2bad4547cd05d49759e0ce8f883c186f80ee07855ceed3750359379acb7",
+        ("deploy", 16, "Dry-run worker image preserving live runtime"): "344ade981770f2dbfb00d02bca7c30a8cf24000b144de5410256f0ac44f5a40e",
     }
 
     @staticmethod
     def step_digest(step):
         # Everything that shapes what the step executes: its script, env, shell and working directory.
-        fields = {k: step.get(k) for k in ("run", "env", "shell", "working-directory")}
+        fields = {k: step.get(k) for k in ("run", "env", "shell", "working-directory", "continue-on-error", "if",
+                                            "timeout-minutes", "id")}
         return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
 
     # Workflow- and job-level execution context (env, defaults, permissions, container, environment) that
@@ -1219,6 +1234,14 @@ class WorkflowTests(unittest.TestCase):
                      for name, job in self.workflow["jobs"].items()},
         }
         return hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
+
+    def test_no_dry_run_reachable_step_continues_on_error(self):
+        # A gate that continues on error would let a refused dispatch reach the dry-run step.
+        for job in self.workflow["jobs"].values():
+            self.assertNotIn("continue-on-error", job)
+            for step in job.get("steps", []):
+                if not self.excludes_dry_run(step.get("if")):
+                    self.assertNotIn("continue-on-error", step, step.get("name") or step.get("uses"))
 
     def test_dry_run_execution_context_is_reviewed(self):
         self.assertEqual(self.context_digest(), self.DRY_RUN_CONTEXT_DIGEST)
