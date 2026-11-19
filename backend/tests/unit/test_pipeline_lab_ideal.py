@@ -231,3 +231,107 @@ def test_hourpass_walks_windows_carries_the_open_card_and_merges_continuations()
     assert logs[0].carried == 'B' and logs[1].continued == ['c001']
     assert [(c.title, c.home) for c in cards] == [('A', True), ('B', True)]
     assert cards[0].lines == ['L0001', 'L0002', 'L0003', 'L0008']  # C merged into A, A never split
+
+
+def _timed_lines(spec):
+    """spec: (minute, recording, text) -> packet lines in one day."""
+    rows = {}
+    for minute, rid, text in spec:
+        rows.setdefault(rid, []).append((minute, text))
+    recs = []
+    for rid, items in rows.items():
+        first = min(m for m, _ in items)
+        segs = [seg(text, (m - first) * 60, (m - first) * 60 + 5) for m, text in items]
+        recs.append(recording(rid, T0 + timedelta(minutes=first), segs))
+    lines, _ = build_lines(recs, tz=TZ)
+    return lines
+
+
+def test_repair_gives_each_line_one_owner_and_fills_gaps_from_the_line_before():
+    from testing.pipeline_lab.ideal.hourpass import repair
+
+    lines = _timed_lines([(m, 'r', f'word {m}') for m in range(6)])
+    answer = [{'lines': ['L0002-L0003'], 'kind': 'conversation'}, {'lines': ['L0003-L0004', 'L0009']}]
+    cards, moved = repair(answer, lines)
+    assert [c['lines'] for c in cards] == [['L0001', 'L0002', 'L0003'], ['L0004', 'L0005', 'L0006']]
+    assert moved == 3  # L0001 joins the line after it; L0005 and L0006 the line before
+    assert repair([{'lines': ['bad']}], lines) == ([], 0)
+
+
+def test_render_markers_and_second_capture_tags():
+    from testing.pipeline_lab.ideal.hourpass import render
+
+    lines = _timed_lines([(0, 'a', 'hello there'), (10, 'a', 'back again')])
+    text = render(lines, markers=True, second={'L0002'})
+    assert '---- 10 min without speech ----' in text and text.startswith('[r001 starts]')
+    assert text.endswith('back again (second capture)')
+    assert render(lines) == '\n'.join(text.splitlines()[i] for i in (1, 3)).replace(' (second capture)', '')
+
+
+def test_second_capture_lines_collapse_and_reattach_to_the_nearest_card():
+    from testing.pipeline_lab.ideal.hourpass import Card, attach_dropped, collapse_plan, secondary_lines
+
+    lines = _timed_lines(
+        [(0, 'main', 'a long sentence with many words in it'), (1, 'main', 'another long sentence here too')]
+        + [(1, 'echo', 'garbled')]
+    )
+    second = secondary_lines(lines)
+    echo = next(x['line'] for x in lines if x['text'] == 'garbled')
+    assert second == {echo: 'r001'}
+    assert collapse_plan(lines) == {echo}
+    kept = [x['line'] for x in lines if x['line'] != echo]
+    card = Card('c001', kept, 'conversation', True, None, 't', [], [], [], 'high', '')
+    assert attach_dropped([card], lines, {echo}) == 1 and echo in card.lines
+
+
+def test_silence_windows_end_at_a_long_silence_after_the_minimum():
+    from testing.pipeline_lab.ideal.hourpass import Variant, run_day
+
+    # talk at 0-40 min, a 25 min silence ending after minute 45, more at 65 and 70 min
+    lines = _timed_lines([(m, 'r', f'line {m}') for m in (0, 20, 40, 65, 70)])
+    asked = []
+
+    def ask(messages, tag):
+        ids = [
+            ln.split()[0]
+            for ln in messages[1]['content'].split('THIS STRETCH')[1].splitlines()[1:]
+            if ln.startswith('L')
+        ]
+        asked.append(ids)
+        return {'cards': [{'lines': [f'{ids[0]}-{ids[-1]}'], 'kind': 'conversation', 'title': 'x'}]}
+
+    cards, logs = run_day(
+        lines, spec='rules', context={}, ask=ask, variant=Variant(boundaries_only=True, silence_windows=True)
+    )
+    assert [len(ids) for ids in asked] == [3, 2]
+    assert [c.home for c in cards] == [False, False]  # boundaries-only leaves Home to a later pass
+
+
+def test_refine_absorbs_background_inside_a_conversation_and_merges_by_threshold():
+    from testing.pipeline_lab.ideal.refine import absorb, build, group_key, pairs
+
+    lines = _timed_lines([(m, 'r', f'w{m} ' * 60) for m in (0, 1, 2, 3, 10, 40)])
+    ids = [x['line'] for x in lines]
+    cards = [
+        {'id': 'c1', 'lines': ids[0:2], 'kind': 'conversation', 'title': 'A'},
+        {'id': 'c2', 'lines': ids[2:3], 'kind': 'background', 'title': 'bg'},
+        {'id': 'c3', 'lines': ids[3:4], 'kind': 'conversation', 'title': 'A again'},
+        {'id': 'c4', 'lines': ids[4:5], 'kind': 'conversation', 'title': 'B'},
+        {'id': 'c5', 'lines': ids[5:6], 'kind': 'conversation', 'title': 'C, much later'},
+    ]
+    owner = absorb(cards, lines)
+    assert owner[ids[2]] == 'c1'
+    found = {(a, b) for a, b, _ in pairs(cards, owner, lines)}
+    assert found == {('c1', 'c3'), ('c3', 'c4')}  # c5 is 30 min after c4
+    refined = {
+        'owner': owner,
+        'pairs': [{'a': 'c1', 'b': 'c3', 'p': 0.9}, {'a': 'c3', 'b': 'c4', 'p': 0.4}],
+        'groups': {
+            group_key(['c1', 'c3']): {'words': 240, 'p_keep': 0.6, 'p_wearer': 0.9},
+            group_key(['c4']): {'words': 60, 'p_keep': 0.35, 'p_wearer': None},
+            group_key(['c5']): {'words': 60, 'p_keep': 0.7, 'p_wearer': None},
+        },
+    }
+    out = build({'cards': cards}, refined, merge=0.5)
+    assert [(c['id'], c['home']) for c in out['cards']] == [('c1', True), ('c4', False), ('c5', True)]
+    assert out['cards'][0]['lines'] == [f'{ids[0]}-{ids[3]}']

@@ -18,7 +18,9 @@ Metrics (lines in time order, duplicates left out):
 - ``boundary_f1``: F1 of "a new card starts here" between neighbouring lines.
 - ``home``: ``recall`` (ideal Home cards whose lines are mostly on Home in the candidate),
   ``whole`` (... mostly inside a single candidate Home card), ``precision`` (candidate Home cards
-  whose lines are mostly in ideal Home cards), and the misses and false adds by title.
+  whose scored lines are mostly in ideal Home cards; a candidate card made mostly of don't-care
+  lines, such as dictation, is left out), the misses and false adds by title, and ``word_recall``
+  and ``word_precision``, the same weighted by words.
 - ``cards``: per ideal card, how the candidate covers it (for review lists).
 """
 
@@ -163,14 +165,20 @@ def score(ideal: Partition, candidate: Partition, lines: Sequence[Mapping[str, A
         if not candidate.home.get(cid):
             continue
         scored = [lid for lid in ids if lid in ideal.card_of]  # lines the ideal cares about
-        if not scored:
-            continue
+        if not scored or len(scored) < MOSTLY * len(ids):
+            continue  # mostly don't-care lines (e.g. dictation): neither a hit nor a false add
         cand_home_cards += 1
         in_ideal_home = sum(1 for lid in scored if ideal.home.get(ideal.card_of[lid], False))
         if in_ideal_home / len(scored) >= MOSTLY:
             cand_home_good += 1
         else:
             false_adds.append(candidate.title.get(cid, cid))
+    words = {str(line['line']): len(str(line.get('text') or '').split()) for line in lines}
+    ideal_home_words = sum(words[lid] for lid in order if ideal.home.get(ideal.card_of[lid], False))
+    recalled_words = sum(
+        words[lid] for lid in order if ideal.home.get(ideal.card_of[lid], False) and candidate.home.get(cand(lid))
+    )
+    cand_home_words = sum(words[lid] for lid in order if candidate.home.get(cand(lid)))
     return {
         'lines': len(order),
         'unassigned_lines': len(unassigned),
@@ -188,6 +196,8 @@ def score(ideal: Partition, candidate: Partition, lines: Sequence[Mapping[str, A
             'whole': round(home_whole / ideal_home, 3) if ideal_home else 1.0,
             'precision': round(cand_home_good / cand_home_cards, 3) if cand_home_cards else 1.0,
             'misses': misses,
+            'word_recall': round(recalled_words / ideal_home_words, 3) if ideal_home_words else 1.0,
+            'word_precision': round(recalled_words / cand_home_words, 3) if cand_home_words else 1.0,
             'false_adds': false_adds,
         },
         'split_at': split_at,
