@@ -146,6 +146,7 @@ def test_explicit_none_retry_field_guards():
 def test_list_items_null_retry(monkeypatch):
     mock_db = MagicMock()
     monkeypatch.setattr("database.processing_attention.db", mock_db)
+    monkeypatch.setattr("database.processing_attention.get_firestore_client", lambda: mock_db)
 
     attention_doc = MagicMock()
     attention_doc.to_dict.return_value = {

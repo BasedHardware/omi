@@ -312,9 +312,7 @@ def claim_in_transaction(
     if item is not None and owned:
         retry_obj = item.get('retry')
         retry_state = retry_obj.get('state') if isinstance(retry_obj, dict) else None
-        retryable = item.get('retryable') or (
-            current.get('state') == 'failed' and retry_state == 'failed'
-        )
+        retryable = item.get('retryable') or (current.get('state') == 'failed' and retry_state == 'failed')
         if not item.get('active') or not retryable:
             raise ClaimRejected('not_retryable')
     writes: list[Any] = []
