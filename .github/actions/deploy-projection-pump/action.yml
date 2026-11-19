@@ -130,6 +130,7 @@ runs:
           --github-output "$GITHUB_OUTPUT"
 
     - name: Require the published admitted backend image
+      id: published-image
       shell: bash
       env:
         IMAGE: ${{ steps.service-images.outputs.backend_projection_pump }}
@@ -141,7 +142,10 @@ runs:
           echo "ERROR: ${IMAGE} is not published; run a backend train or mode=build-only for this release_sha first." >&2
           exit 1
         }
-        echo "backend-projection-pump ships ${IMAGE} (${digest})"
+        # The tag is resolved once, here. Every later step deploys and verifies this
+        # digest, so a tag that moves mid-run cannot put other contents under this release.
+        echo "ref=${IMAGE%:*}@${digest}" >> "$GITHUB_OUTPUT"
+        echo "backend-projection-pump ships ${IMAGE%:*}@${digest} (tag ${IMAGE##*:})"
 
     - name: Install Python deps for deploy scripts
       shell: bash
@@ -234,7 +238,7 @@ runs:
         bash "$DEPLOY_CONTROL_SCRIPTS/probe-llm-gateway-from-cloud-run.sh" \
           --project "${{ inputs.project_id }}" \
           --region "${{ inputs.region }}" \
-          --image "${{ steps.service-images.outputs.backend_projection_pump }}" \
+          --image "${{ steps.published-image.outputs.ref }}" \
           --gateway-url "${{ steps.gateway-serving.outputs.gateway_url }}" \
           --network "${{ env.CLOUD_RUN_VPC_NETWORK }}" \
           --subnet "${{ env.CLOUD_RUN_VPC_SUBNET }}" \
@@ -342,7 +346,7 @@ runs:
         service: backend-projection-pump
         region: ${{ inputs.region }}
         project_id: ${{ inputs.project_id }}
-        image: ${{ steps.service-images.outputs.backend_projection_pump }}
+        image: ${{ steps.published-image.outputs.ref }}
         no_traffic: ${{ steps.pump-service.outputs.exists == 'true' }}
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
@@ -475,6 +479,7 @@ runs:
           --cloud-run-service backend-projection-pump \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+          --expected-image "${{ steps.published-image.outputs.ref }}" \
           --deploy-run-id "${{ github.run_id }}" \
           --deploy-run-attempt "${{ github.run_attempt }}" \
           --project "${{ inputs.project_id }}" \
@@ -513,6 +518,7 @@ runs:
           --cloud-run-service backend-projection-pump \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+          --expected-image "${{ steps.published-image.outputs.ref }}" \
           --deploy-run-id "${{ github.run_id }}" \
           --deploy-run-attempt "${{ github.run_attempt }}" \
           --project "${{ inputs.project_id }}" \

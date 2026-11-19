@@ -1,5 +1,5 @@
-"""SCA-3120: the projection pump's scrape profile is the sync profile plus the pump families,
-with revision identity, and the shared profiles stay unchanged."""
+"""SCA-3120: the projection pump's scrape profile keeps the pump and ramp families with
+revision identity, and the shared profiles stay unchanged."""
 
 from __future__ import annotations
 
@@ -37,17 +37,24 @@ def test_pump_keep_list_scrapes_each_pump_family(name):
     assert _keep(PUMP).fullmatch(name)
 
 
-def test_pump_profile_is_the_sync_profile_plus_the_pump_gauges_and_revision():
-    pump_rules = PUMP['spec']['endpoints'][0]['metricRelabeling']
-    sync_rules = SYNC['spec']['endpoints'][0]['metricRelabeling']
-    assert len(pump_rules) == len(sync_rules)
-    for pump_rule, sync_rule in zip(pump_rules, sync_rules):
-        if pump_rule['action'] == 'keep' and pump_rule['sourceLabels'] == ['__name__']:
-            assert pump_rule['regex'] == sync_rule['regex'].replace(
-                'omi_(', 'omi_(batch_projection_pump_last_(success|tick)_seconds|', 1
-            )
-        else:
-            assert pump_rule == sync_rule
+# Families the ramp gates and readbacks query on the pump. The profile is NOT pinned to the
+# sync profile byte for byte: that made every lane editing the sync keep-list fail here.
+RAMP_FAMILIES = (
+    'omi_firestore_billed_reads_by_origin_total',
+    'omi_firestore_billed_reads_by_caller_total',
+    'omi_fsr_leader_lease_total',
+    'omi_batch_leader_lease_total',
+    'omi_executor_task_active',
+    'omi_batch_projection_claim_busy_backoffs_total',
+)
+
+
+@pytest.mark.parametrize('name', RAMP_FAMILIES)
+def test_pump_keep_list_scrapes_each_ramp_family(name):
+    assert _keep(PUMP).fullmatch(name)
+
+
+def test_pump_profile_carries_revision_identity_and_the_shared_scrape_shape():
     assert PUMP['spec']['targetLabels']['metadata'] == ['service', 'revision']
     assert 'revision' not in SYNC['spec']['targetLabels']['metadata']
     assert PUMP['metadata'] == SYNC['metadata']

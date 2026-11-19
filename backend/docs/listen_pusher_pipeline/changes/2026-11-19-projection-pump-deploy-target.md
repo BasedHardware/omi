@@ -175,3 +175,15 @@ Rollback order at any step: serving sweep back on first, then the pump flag off,
   it, this one included, and that cannot be narrowed per service. The boundary this service
   relies on is internal ingress plus no service-level invoker; the routes it mounts keep their
   own authentication.
+- **Image pinning.** The deploy resolves the admitted tag to a digest once, deploys
+  `repository@digest`, and both release-vector checks expect that digest. It does not yet
+  check the image's `org.opencontainers.image.revision` label against the admitted SHA; the
+  tag-to-source binding still rests on the train or build-only run that published the tag.
+- **Env drift between pump deploys.** The pump derives backend-integration's env, but the
+  config train plans only services in `ops/prod.yaml`, which has no pump entry until the
+  service exists. Until that entry and a pump leg of `check_cloud_run_env_drift.py` land (with
+  step 1's readback), any kill-switch or flag change made on backend-integration must be
+  followed by a pump deploy at the same admitted SHA. Release owns that pairing.
+- **Headroom gate.** The pump is not in `all`, so trains do not evaluate it. If a caller ever
+  passes it to `deploy_headroom.py` it reads 4 of 4 and refuses; it must be excluded there
+  (omi-workspace) before anything adds it to a gated service list.

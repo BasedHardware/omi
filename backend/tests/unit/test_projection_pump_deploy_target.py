@@ -350,6 +350,20 @@ def test_pump_composite_refuses_latest_revision_traffic_before_any_mutation():
     assert ids.index('pump-service') < ids.index('deploy-backend-projection-pump')
 
 
+def test_pump_composite_deploys_and_verifies_the_resolved_digest_not_the_tag():
+    text = (ROOT / '.github/actions/deploy-projection-pump/action.yml').read_text()
+    steps = PUMP_ACTION['runs']['steps']
+    ids = [s.get('id') for s in steps]
+    resolve = steps[ids.index('published-image')]
+    assert 'ref=${IMAGE%:*}@${digest}' in resolve['run']
+    deploy = steps[ids.index('deploy-backend-projection-pump')]
+    assert deploy['with']['image'] == '${{ steps.published-image.outputs.ref }}'
+    assert ids.index('published-image') < ids.index('deploy-backend-projection-pump')
+    assert text.count('--expected-image "${{ steps.published-image.outputs.ref }}"') == 2
+    # The tag is read exactly once, by the step that resolves it.
+    assert text.count('${{ steps.service-images.outputs.backend_projection_pump }}') == 1
+
+
 # --- shape readback ---------------------------------------------------------------------------
 
 
