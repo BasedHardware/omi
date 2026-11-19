@@ -11,7 +11,7 @@
     {
       "file": "002-mobile-ios-v3-live-detail-end.png",
       "platform": "mobile-ios",
-      "description": "v3 live conversation detail: 'Summary when this conversation ends' instead of a summary spinner, End Conversation in the bottom bar beside Ask Omi while this phone is capturing",
+      "description": "v3 live conversation detail as it opens: on the Transcript tab, a '● Live · 11m' chip (the speech so far, as its Home row shows), no Share, End Conversation beside Ask Omi. Transcript lines render as blocks in the widget-test engine (the transcript's RichText has no font family); a device shows the system font",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -26,6 +26,20 @@
       "file": "004-mobile-ios-v3-home-light.png",
       "platform": "mobile-ios",
       "description": "v3 Home in light mode: live row with speech span, no End button",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-v3-live-detail-light.png",
+      "platform": "mobile-ios",
+      "description": "v3 live conversation detail in light mode: Transcript tab, live chip, no Share, End beside Ask Omi",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-v3-live-detail-summary-tab.png",
+      "platform": "mobile-ios",
+      "description": "v3 live conversation detail, Summary tab: one quiet line, 'Summary when this conversation ends'; no spinner, no link, no summary write",
       "captured_by": "agent",
       "source": "visual-audit"
     }

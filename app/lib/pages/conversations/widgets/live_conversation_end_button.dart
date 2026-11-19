@@ -45,9 +45,22 @@ class LiveConversationEndButton extends StatelessWidget {
                 HapticFeedback.mediumImpact();
                 context.read<CaptureProvider>().forceProcessingCurrentConversation();
               },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Center(child: Text(label, style: OmiType.headline.copyWith(color: OmiColors.danger))),
+              // At most half the bar, so Ask Omi keeps its room; a long translation scales down on one
+              // line, then ellipsizes, rather than overflowing a 320pt screen.
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.45),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: OmiType.headline.copyWith(color: OmiColors.danger)),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

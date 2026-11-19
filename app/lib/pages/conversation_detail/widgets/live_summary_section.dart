@@ -13,7 +13,6 @@ import 'package:omi/services/conversation_summary_stream.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
-import 'package:omi/pages/conversations/widgets/conversation_list_item.dart' show conversationSnippet;
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -23,8 +22,9 @@ typedef SummaryStreamOpener = Stream<SummaryStreamEvent> Function(String convers
 /// The summary of a v3 conversation that is still going or still being written.
 ///
 /// While the conversation is still going (tile state live) there is no summary to write yet: the
-/// section says it comes when the conversation ends, shows what was said so far, and re-reads the
-/// conversation every [liveRefreshEvery] so the transcript stays current and the end is noticed. It
+/// section says in one line that it comes when the conversation ends (the page opens on the
+/// Transcript tab, where the content is), and re-reads the conversation every [liveRefreshEvery] so
+/// the transcript stays current and the end is noticed. It
 /// never waits on a summary write, so the page cannot spin and then fall back to "No summary".
 ///
 /// Once the conversation has ended, the summary is written when the page opens. The server answers
@@ -42,7 +42,6 @@ class LiveSummarySection extends StatefulWidget {
     this.pollInterval = const Duration(seconds: 2),
     this.pollFor = const Duration(seconds: 60),
     this.liveRefreshEvery = const Duration(seconds: 15),
-    this.onOpenTranscript,
   });
 
   final ServerConversation conversation;
@@ -60,9 +59,6 @@ class LiveSummarySection extends StatefulWidget {
   final Duration pollInterval;
   final Duration pollFor;
   final Duration liveRefreshEvery;
-
-  /// Opens the Transcript tab, from the in-progress note.
-  final VoidCallback? onOpenTranscript;
 
   /// A v3 conversation in progress, or one whose summary is being written.
   static bool wants(ServerConversation? conversation) {
@@ -290,45 +286,16 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
     ]);
   }
 
-  /// Still going: the summary comes when it ends; meanwhile what was said so far, and the transcript.
+  /// Still going: one quiet line; the transcript tab holds what was said so far.
   Widget _buildLive(BuildContext context) {
-    final soFar = conversationSnippet(widget.conversation, maxChars: 280);
     return SliverToBoxAdapter(
       child: Padding(
         key: const Key('live_summary_in_progress'),
         padding: const EdgeInsets.only(top: 4, bottom: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Semantics(
-              liveRegion: true,
-              child: Row(
-                children: [
-                  const OmiBreathingDot(),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(context.l10n.conversationSummaryWhenItEnds,
-                        style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-                  ),
-                ],
-              ),
-            ),
-            if (soFar.isNotEmpty) ...[
-              const SizedBox(height: OmiSpacing.sm),
-              Text(soFar,
-                  key: const Key('live_summary_so_far'),
-                  style: OmiType.body.copyWith(color: OmiColors.textPrimary, height: 1.4)),
-            ],
-            if (widget.onOpenTranscript != null) ...[
-              const SizedBox(height: OmiSpacing.xs),
-              OmiButton.secondary(
-                key: const Key('live_summary_open_transcript'),
-                label: context.l10n.episodeOpenTranscript,
-                size: OmiButtonSize.compact,
-                onPressed: widget.onOpenTranscript,
-              ),
-            ],
-          ],
+        child: Semantics(
+          liveRegion: true,
+          child: Text(context.l10n.conversationSummaryWhenItEnds,
+              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
         ),
       ),
     );

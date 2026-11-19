@@ -164,10 +164,9 @@ void main() {
   });
 
   group('LiveSummarySection', () {
-    testWidgets('still going: no summary write, a note that it comes when it ends, kept current', (tester) async {
+    testWidgets('still going: no summary write, one line that it comes when it ends, kept current', (tester) async {
       var opens = 0;
       var refreshes = 0;
-      var opened = 0;
       var conversation = _conversation(state: ConversationTileState.live);
       late StateSetter rebuild;
       final events = StreamController<SummaryStreamEvent>();
@@ -185,7 +184,6 @@ void main() {
               return true;
             },
             onActiveChanged: (_) {},
-            onOpenTranscript: () => opened++,
           ),
         ]);
       })));
@@ -195,8 +193,7 @@ void main() {
       expect(find.text('Something went wrong'), findsNothing);
       expect(opens, 0, reason: 'a conversation still going has no summary to write');
 
-      await tester.tap(find.byKey(const Key('live_summary_open_transcript')));
-      expect(opened, 1);
+      expect(find.byKey(const Key('live_summary_open_transcript')), findsNothing);
 
       // The open page re-reads the conversation so its transcript stays current and its end is seen.
       await tester.pump(const Duration(seconds: 15));

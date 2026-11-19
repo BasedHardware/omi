@@ -22,6 +22,8 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
+import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
@@ -1227,7 +1229,16 @@ class _ConversationsPageState extends State<ConversationsPage>
                 child: ConversationCaptureWidget(
                     showsCall: true, deferStreamingToEpisode: episodeLive || v3Live != null || (v3Home && streaming)),
               ),
-              if (v3Home && streaming && v3Live == null) const SliverToBoxAdapter(child: V3LivePlaceholderRow()),
+              // An Omi call is shown as the call card above (a call also marks the phone capture
+              // interrupted, which reads as streaming); the placeholder never doubles it.
+              if (v3Home &&
+                  streaming &&
+                  v3Live == null &&
+                  !context.select<PhoneCallProvider?, bool>((p) => switch (p?.callState) {
+                        PhoneCallState.active || PhoneCallState.connecting || PhoneCallState.ringing => true,
+                        _ => false,
+                      }))
+                const SliverToBoxAdapter(child: V3LivePlaceholderRow()),
               // A declined renewal the user can still pay: one row, Update opens Stripe's billing portal.
               const SliverToBoxAdapter(child: PaymentIssueRow()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),

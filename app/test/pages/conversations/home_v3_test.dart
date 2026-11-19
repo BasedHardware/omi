@@ -250,7 +250,10 @@ class _RecordingAdapter implements AnalyticsAdapter {
 final _now = DateTime(2026, 11, 16, 12, 30);
 
 ServerConversation _conversation(String id, DateTime start, String title,
-        {ConversationV3Fields? v3, Duration length = const Duration(minutes: 25), DateTime? lastSpeech}) =>
+        {ConversationV3Fields? v3,
+        Duration length = const Duration(minutes: 25),
+        DateTime? lastSpeech,
+        List<TranscriptSegment> segments = const []}) =>
     ServerConversation(
       id: id,
       speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0]),
@@ -258,9 +261,28 @@ ServerConversation _conversation(String id, DateTime start, String title,
       startedAt: start,
       finishedAt: v3?.tileState == ConversationTileState.live ? lastSpeech : start.add(length),
       structured: Structured(title, 'Overview of $title.', emoji: '💬', category: 'work'),
-      transcriptSegments: const [],
+      transcriptSegments: segments,
       v3: v3,
     );
+
+TranscriptSegment _said(String id, String text, double start, double end, {bool user = true}) => TranscriptSegment(
+    id: id,
+    text: text,
+    speaker: user ? 'SPEAKER_00' : 'SPEAKER_01',
+    isUser: user,
+    personId: null,
+    start: start,
+    end: end,
+    translations: []);
+
+/// What was said so far in the conversation in progress: an 11-minute speech span, the length its
+/// Home row and its page both show.
+final _liveSoFar = [
+  _said('l1', 'Okay, launch checklist. The venue confirmed Thursday the 26th.', 0, 6),
+  _said('l2', 'Deposit is due Friday, so I will send it tomorrow morning.', 7, 12, user: false),
+  _said('l3', 'Capacity is 180 seated. We need to cut the list by about twenty.', 300, 306),
+  _said('l4', 'Priya sends the speaker bios by Tuesday; I own the slide order.', 640, 660, user: false),
+];
 
 const _done = ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.done, titleLocked: true);
 
@@ -336,6 +358,7 @@ class _Home {
             ? _conversation('live-1', _now.subtract(const Duration(minutes: 20)), 'Launch checklist',
                 // The server's finished_at for an open window is its last speech: 11 minutes in.
                 lastSpeech: _now.subtract(const Duration(minutes: 9)),
+                segments: _liveSoFar,
                 v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.live))
             : null,
       ));
@@ -585,6 +608,21 @@ void main() {
     });
   });
 
+  testWidgets('a 320pt phone: the live detail bar fits Ask Omi and End', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true, size: const Size(320, 640));
+      await tester.tap(find.text('Launch checklist'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.takeException(), isNull, reason: 'no overflow in the bar');
+      expect(find.byKey(const Key('live_conversation_end')), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('live_conversation_end'))).width, lessThanOrEqualTo(320 * 0.45 + 2),
+          reason: 'at most about half the bar, border included');
+      await _dispose(tester, home);
+    });
+  });
+
   group('render evidence (written when V3_HOME_RENDER_OUTPUT is set; a layout check otherwise)', () {
     const output = String.fromEnvironment('V3_HOME_RENDER_OUTPUT');
     final boundary = GlobalKey();
@@ -633,27 +671,32 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.byType(ConversationDetailPage), findsOneWidget);
-        // Still going: no summary write, no spinner, no "No summary"; the summary comes when it ends.
+        _expectLiveDetail(tester);
+        await shoot(tester, '002-mobile-ios-v3-live-detail-end');
+
+        // The Summary tab keeps one quiet line: no summary write, no spinner, no "No summary", no link.
+        await tester.tap(find.text('Summary'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
         expect(find.byKey(const Key('live_summary_in_progress')), findsOneWidget);
         expect(find.text('Summary when this conversation ends'), findsOneWidget);
         expect(find.text('Writing your summary…'), findsNothing);
+        expect(find.byKey(const Key('live_summary_open_transcript')), findsNothing);
         expect(summaryOpens, 0, reason: 'a conversation still in progress has no summary to write yet');
-        // End sits in the bottom bar beside Ask Omi.
-        expect(find.byKey(const ValueKey('detail_ask_omi')), findsOneWidget);
-        expect(find.byKey(const Key('live_conversation_end')), findsOneWidget);
-        await shoot(tester, '002-mobile-ios-v3-live-detail-end');
+        await shoot(tester, '006-mobile-ios-v3-live-detail-summary-tab');
 
-        // The in-progress note links the transcript tab.
-        await tester.tap(find.byKey(const Key('live_summary_open_transcript')));
+        // The ⋯ menu offers nothing that writes, edits, shares or deletes an unfinished conversation.
+        await tester.tap(find.byKey(const Key('conversation_more')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
-        expect(
-            find.byWidgetPredicate((w) =>
-                w is TabBar &&
-                (w.controller?.index ?? DefaultTabController.of(tester.element(find.byWidget(w))).index) == 1),
-            findsOneWidget,
-            reason: 'Open transcript selects the Transcript tab');
-        // End stays in the bar on the Transcript tab too.
+        expect(find.text('Search'), findsOneWidget);
+        for (final hidden in ['Reprocess Conversation', 'Summary Template', 'Copy Summary', 'Share Audio', 'Delete']) {
+          expect(find.text(hidden), findsNothing, reason: '$hidden waits until the conversation ends');
+        }
+        await tester.tapAt(const Offset(20, 700));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
         await tester.tap(find.byKey(const Key('live_conversation_end')));
         await tester.pump();
         expect(home.capture.endCalls, 1, reason: "the pendant double-tap's action");
@@ -699,11 +742,30 @@ void main() {
         final home = await _pumpHome(tester,
             v3: true, boundary: boundary, theme: theme(Brightness.light), size: const Size(393, 852));
         await shoot(tester, '004-mobile-ios-v3-home-light');
+
+        await tester.tap(find.text('Launch checklist'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pump(const Duration(milliseconds: 500));
+        _expectLiveDetail(tester);
+        await shoot(tester, '005-mobile-ios-v3-live-detail-light');
         debugDefaultTargetPlatformOverride = null;
         await _dispose(tester, home);
       });
     });
   });
+}
+
+/// The live conversation's page as it opens: on its transcript, a live chip with the speech so far,
+/// no Share, and End beside Ask Omi.
+void _expectLiveDetail(WidgetTester tester) {
+  expect(find.textContaining('Deposit is due Friday', findRichText: true), findsWidgets,
+      reason: 'it opens on the transcript');
+  expect(find.byKey(const Key('conversation_when_live')), findsOneWidget);
+  expect(find.text('Live · 11m'), findsOneWidget, reason: "the speech so far, the length its Home row shows");
+  expect(find.byKey(const Key('conversation_share')), findsNothing, reason: 'nothing to share until it ends');
+  expect(find.byKey(const Key('conversation_star')), findsOneWidget);
+  expect(find.byKey(const Key('live_conversation_end')), findsOneWidget);
 }
 
 Future<void> _loadFonts() async {

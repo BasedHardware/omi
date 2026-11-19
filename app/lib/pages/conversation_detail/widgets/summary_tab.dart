@@ -152,7 +152,6 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                             key: ValueKey('live-summary-${conversation.id}'),
                             conversation: conversation,
                             refresh: provider.refreshConversation,
-                            onOpenTranscript: widget.onOpenTranscript,
                             onActiveChanged: (active) {
                               if (mounted && active != _liveSummaryActive) {
                                 setState(() => _liveSummaryActive = active);
