@@ -19005,5 +19005,17 @@
     "@conversationWritingSummary": {
         "description": "Shown with a pen over a skeleton while the summary of a conversation in progress is written"
     },
-    "onTheWayServerWork": "Server-reported work"
+    "onTheWayServerWork": "Server-reported work",
+    "finishNothingToProcess": "Nothing to process yet.",
+    "@finishNothingToProcess": {
+        "description": "Brief notice after tapping Finish on the live capture page when nothing was heard since the last conversation, so no conversation is made."
+    },
+    "finishStillProcessing": "Still processing. It will appear on Home.",
+    "@finishStillProcessing": {
+        "description": "Shown on the page Finish opens when the conversation has not arrived after a long wait; it will show up on Home by itself."
+    },
+    "finishBackToHome": "Back to Home",
+    "@finishBackToHome": {
+        "description": "Button that leaves the processing page for the Home conversation list."
+    }
 }

@@ -15553,4 +15553,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Serveri teatatud töö';
+
+  @override
+  String get finishNothingToProcess => 'Veel pole midagi töödelda.';
+
+  @override
+  String get finishStillProcessing => 'Veel töödeldakse. See ilmub avalehele.';
+
+  @override
+  String get finishBackToHome => 'Tagasi avalehele';
 }

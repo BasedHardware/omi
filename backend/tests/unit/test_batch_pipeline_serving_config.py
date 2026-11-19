@@ -163,4 +163,4 @@ async def test_supervisor_uses_configured_tick(monkeypatch, raw, expected):
         runtime[0].set()
         await asyncio.gather(runtime[1], return_exceptions=True)
     assert ticks == [expected]
-    service.reconcile_async.assert_awaited_once_with(recover_quarantine=True, periodic=True)
+    service.reconcile_async.assert_awaited_once_with(recover_quarantine=True, periodic=True, supervised=True)

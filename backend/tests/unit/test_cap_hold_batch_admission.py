@@ -352,6 +352,7 @@ async def test_reselecting_a_batch_admitted_row_erases_only_after_projection(hoo
     monkeypatch.setattr(cap_hold, 'claim', lambda *a: pytest.fail('terminal hand-off claimed again'))
     monkeypatch.setattr(adapter, 'admit_held', lambda *a: pytest.fail('terminal hand-off re-admitted'))
     monkeypatch.setattr(adapter, 'handoff_projected', lambda uid, job_id: projected)
+    monkeypatch.setattr(cap_hold_recovery.cap_hold_reservations, 'release_projected', lambda *a: None)
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
     assert hook.events == erased  # never settles (no double bill); never erases unprojected audio
 

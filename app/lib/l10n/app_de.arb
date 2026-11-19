@@ -4686,5 +4686,8 @@
     "downloadNow": "Jetzt laden",
     "onWifiLater": "Später über WLAN",
     "conversationWritingSummary": "Deine Zusammenfassung wird geschrieben…",
-    "onTheWayServerWork": "Vom Server gemeldete Arbeit"
+    "onTheWayServerWork": "Vom Server gemeldete Arbeit",
+    "finishNothingToProcess": "Noch nichts zu verarbeiten.",
+    "finishStillProcessing": "Wird noch verarbeitet. Es erscheint auf der Startseite.",
+    "finishBackToHome": "Zur Startseite"
 }

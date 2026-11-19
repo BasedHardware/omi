@@ -98,6 +98,7 @@ class Serving:
         self.enrichment_sweep = enrichment_sweep
         self.recovery = recovery
         self.allowance_hold_due = 0.0
+        self._retirement = None
         # Optional single-owner lease for periodic maintenance (see reconcile).
         self.leader = leader
         self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
@@ -168,7 +169,14 @@ class Serving:
 
     @with_batch_privacy_attempt
     async def reconcile_async(
-        self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
+        self,
+        *,
+        recover_quarantine=False,
+        periodic=False,
+        owner_id=None,
+        recovered=None,
+        owner_only=False,
+        supervised=False,
     ):
         owner_only = owner_only and recovery_owner_only_enabled()
         priority = await run_blocking(
@@ -179,6 +187,7 @@ class Serving:
             owner_id=owner_id,
             recovered=recovered,
             owner_only=owner_only,
+            supervised=supervised,
         )
         # Walk-owed follow-ups keep the drain scheduled until they are queued.
         owes = getattr(self.projector, 'owes_followups', False) is True
@@ -218,7 +227,14 @@ class Serving:
         return []
 
     def reconcile(
-        self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
+        self,
+        *,
+        recover_quarantine=False,
+        periodic=False,
+        owner_id=None,
+        recovered=None,
+        owner_only=False,
+        supervised=False,
     ) -> list[str]:
         """Returns async follow-ups an owner-chain wake wants run first."""
         if owner_only:
@@ -229,6 +245,7 @@ class Serving:
             self._maintain(
                 recover_quarantine=recover_quarantine,
                 recovery_caller=RecoveryCaller.SERVING if periodic else RecoveryCaller.RECONCILE,
+                retire_copies=periodic and supervised,
             )
         elif self.metrics:
             self.metrics.fresh_guard.deactivate()
@@ -335,7 +352,7 @@ class Serving:
             self.metrics.fresh_guard.deactivate()
         return leads
 
-    def _maintain(self, *, recover_quarantine: bool, recovery_caller=None):
+    def _maintain(self, *, recover_quarantine: bool, recovery_caller=None, retire_copies=False):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
         leads = self.refresh_fresh_guard()
         if self.metrics:
@@ -422,6 +439,23 @@ class Serving:
             self._drain_ready_page()
         # Held owners by durable marker: the page above can be all one held backlog.
         self.merge.reoffer_marked(self.drain_owner)
+        if retire_copies and self._leads(True):
+            try:
+                from database.jobstore.retirement import Retirement
+
+                if self._retirement is None:
+                    self._retirement = Retirement()
+                self._retirement.tick(self.store)
+            except Exception:
+                # Imports/config/provider failures cannot stop critical maintenance.
+                from database.batch_pipeline_retirement_metrics import RetirementPageReason, page_error
+
+                namespace = (
+                    self.store.namespace
+                    if self.store.namespace in {'batch_pipeline_dev', 'batch_pipeline_prod'}
+                    else 'other'
+                )
+                page_error(namespace, 'copy', 'jobs', RetirementPageReason.OPERATION_FAILED)
 
     def _drain_ready_page(self):
         owners = set()
@@ -575,7 +609,7 @@ def start_serving_from_env():
         while not stop.is_set():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                await service.reconcile_async(recover_quarantine=True, periodic=True)
+                await service.reconcile_async(recover_quarantine=True, periodic=True, supervised=True)
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__

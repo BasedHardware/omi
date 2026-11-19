@@ -818,6 +818,20 @@ class CaptureController extends ChangeNotifier
 
   ServerConversation? _conversation;
   DateTime? get liveTranscriptStartedAt => _conversation?.startedAt;
+
+  /// The conversation the server last closed on its own (quiet or boundary check), when, and the
+  /// preview's word count and session then. Finish right after it, with nothing heard since, opens
+  /// that conversation instead of finishing the new, empty one.
+  ({String id, DateTime at, int previewWords, int previewSession})? _lastServerClose;
+  ({String id, DateTime at, int previewWords, int previewSession})? get lastServerClose => _lastServerClose;
+
+  /// The preview's word count and session when the reader last tapped Finish: a repeat Finish with
+  /// no new words has nothing to process. Set by [noteClientFinish].
+  ({DateTime at, int previewWords, int previewSession})? lastClientFinish;
+  void noteClientFinish() =>
+      lastClientFinish = (at: DateTime.now(), previewWords: _previewWords, previewSession: _previewSession);
+  int get _previewWords => _localPreview.preview?.totalWordsSeen ?? 0;
+  int get _previewSession => _localPreview.preview?.sessionGeneration ?? 0;
   @override
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
@@ -4087,6 +4101,8 @@ class CaptureController extends ChangeNotifier
   @override
   void onMessageEventReceived(MessageEvent event) {
     if (event is ConversationProcessingStartedEvent) {
+      _lastServerClose =
+          (id: event.memory.id, at: DateTime.now(), previewWords: _previewWords, previewSession: _previewSession);
       _closingSegmentArrivals[event.memory.id] = Map.of(_segmentArrivals);
       // An event that never arrives leaves its entry behind, and a few closes back are plenty.
       if (_closingSegmentArrivals.length > 8) _closingSegmentArrivals.remove(_closingSegmentArrivals.keys.first);

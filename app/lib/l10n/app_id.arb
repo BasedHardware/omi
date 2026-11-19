@@ -4721,5 +4721,8 @@
     "downloadNow": "Unduh Sekarang",
     "onWifiLater": "Nanti via Wi-Fi",
     "conversationWritingSummary": "Menulis ringkasan Anda…",
-    "onTheWayServerWork": "Pekerjaan yang dilaporkan server"
+    "onTheWayServerWork": "Pekerjaan yang dilaporkan server",
+    "finishNothingToProcess": "Belum ada yang perlu diproses.",
+    "finishStillProcessing": "Masih diproses. Ini akan muncul di Beranda.",
+    "finishBackToHome": "Kembali ke Beranda"
 }

@@ -4686,5 +4686,8 @@
     "downloadNow": "التنزيل الآن",
     "onWifiLater": "لاحقًا عبر Wi-Fi",
     "conversationWritingSummary": "جارٍ كتابة ملخصك…",
-    "onTheWayServerWork": "عمل أبلغ عنه الخادم"
+    "onTheWayServerWork": "عمل أبلغ عنه الخادم",
+    "finishNothingToProcess": "لا يوجد شيء لمعالجته بعد.",
+    "finishStillProcessing": "لا تزال المعالجة جارية. ستظهر على الشاشة الرئيسية.",
+    "finishBackToHome": "العودة إلى الرئيسية"
 }

@@ -4686,5 +4686,8 @@
     "downloadNow": "Baixa ara",
     "onWifiLater": "Més tard amb Wi-Fi",
     "conversationWritingSummary": "Escrivint el teu resum…",
-    "onTheWayServerWork": "Feina indicada pel servidor"
+    "onTheWayServerWork": "Feina indicada pel servidor",
+    "finishNothingToProcess": "Encara no hi ha res per processar.",
+    "finishStillProcessing": "Encara s'està processant. Apareixerà a l'inici.",
+    "finishBackToHome": "Torna a l'inici"
 }
