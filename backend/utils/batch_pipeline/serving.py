@@ -733,10 +733,10 @@ def start_serving_from_env():
         finally:
             set_recurring_sweep(None)
 
-    name = 'batch_projection_pump' if pump_enabled else 'batch_pipeline_serving'
+    supervisor_name = 'batch_projection_pump' if pump_enabled else 'batch_pipeline_serving'
     if not (pump_enabled or serving_enabled):
-        name = 'batch_projection_outbox'
-    return stop, start_background_task(run(), name=name)
+        supervisor_name = 'batch_projection_outbox'
+    return stop, start_background_task(run(), name=supervisor_name)
 
 
 async def stop_serving(runtime):
