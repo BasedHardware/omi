@@ -166,7 +166,12 @@ def autoscalers(items):
         ]
         require(len(owners) == 1, f"replica exclusion needs exactly one HPA for {name}")
         hpa = owners[0]
-        require(hpa["metadata"].get("uid") and hpa["spec"].get("minReplicas", 1) >= 1, f"HPA for {name} is unproven")
+        require(
+            hpa["metadata"].get("uid")
+            and not hpa["metadata"].get("deletionTimestamp")
+            and hpa["spec"].get("minReplicas", 1) >= 1,
+            f"HPA for {name} is unproven",
+        )
         bindings.append(
             {
                 "kind": "HorizontalPodAutoscaler",
@@ -284,23 +289,23 @@ def deploy(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
     _, index = target_state(obj)
     expected["spec"]["template"]["spec"]["containers"][index]["image"] = image
     after, _ = target_state(expected)
-    # The CAS patch applies to the exact object just read, so admission must leave the whole spec,
-    # replicas included, as expected; only cross-read identity checks tolerate autoscaling.
-    exact = digest(expected["spec"])
     if rollback_receipt is not None:
         require(after == rollback_receipt["before"], "rollback must restore the exact recorded prior runtime spec")
     receipt = {"before": actual["target"], "after": after, "consumers": actual["consumers"]}
     private_json(receipt_path, receipt)
-    # Safe, reviewable image diff and exact reverse identity; never print the full spec.
-    print(json.dumps({"deployment": TARGET, "namespace": NAMESPACE, "patch": patch, "rollback": receipt}), flush=True)
     # An HPA rescale since the first read bumps resourceVersion; rebuild the CAS patch from a fresh
     # read whose identity (UID, image, spec without replicas) must still equal the admitted one.
+    # A rescale after this read still fails the resourceVersion test (API conflict) and refuses.
     fresh = run("get", "deployment", TARGET, "-o", "json")
     require(target_state(fresh)[0] == actual["target"], "target drift immediately before write")
     patch = patch_for(fresh, image)
     expected = copy.deepcopy(fresh)
     expected["spec"]["template"]["spec"]["containers"][index]["image"] = image
+    # The CAS patch applies to the exact object just read, so admission must leave the whole spec,
+    # replicas included, as expected; only cross-read identity checks tolerate autoscaling.
     exact = digest(expected["spec"])
+    # Safe, reviewable image diff (the patch actually sent) and exact reverse identity.
+    print(json.dumps({"deployment": TARGET, "namespace": NAMESPACE, "patch": patch, "rollback": receipt}), flush=True)
     preview = run("patch", "deployment", TARGET, "--type=json", "-p", json.dumps(patch), "--dry-run=server", "-o", "json")
     require(
         target_state(preview)[0] == after and digest(preview["spec"]) == exact,

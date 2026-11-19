@@ -576,6 +576,32 @@ class PreservationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "HPA"):
             worker.snapshot(self.cluster)
 
+    def test_terminating_hpa_is_not_proof(self):
+        self.cluster.hpas[1]["metadata"]["deletionTimestamp"] = "2026-11-19T00:00:00Z"
+        with self.assertRaisesRegex(ValueError, "HPA"):
+            worker.snapshot(self.cluster)
+
+    def test_rescale_after_the_fresh_read_still_refuses_by_cas(self):
+        self.cluster.drift_on_patch = True  # resourceVersion moves after the fresh read
+        with self.assertRaisesRegex(ValueError, "API conflict"):
+            self.deploy()
+        self.assertEqual(self.cluster.writes, 0)
+
+    def test_printed_patch_is_the_patch_sent(self):
+        self.cluster.deployment_reads = 0
+        self.cluster.rescale_before_write = 11
+        self.deploy()
+        printed = json.loads(self.output.strip().splitlines()[-1])["patch"]
+        self.assertIn({"op": "test", "path": "/metadata/resourceVersion", "value": "40"}, printed)
+
+    def test_hpa_chart_tripwire_matches_listed_deployments(self):
+        # If the chart renders another HPA-scaled worker-image Deployment (e.g. borrowed node pools),
+        # HPA_DEPLOYMENTS must be reviewed; this test is triggered by chart changes.
+        chart = Path(__file__).parents[2] / "backend/charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml"
+        values = yaml.safe_load(chart.read_text())
+        self.assertFalse((values.get("borrowedNodePools") or {}).get("enabled", False))
+        self.assertEqual(worker.HPA_DEPLOYMENTS, frozenset({worker.TARGET, "record-seal-worker"}))
+
     def test_admission_change_on_the_real_write_only_escalates(self):
         self.cluster.admission_mutates_on_write = True
         with self.assertRaisesRegex(ValueError, "stop and escalate"):
