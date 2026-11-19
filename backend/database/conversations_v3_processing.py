@@ -1,6 +1,7 @@
 """Conversation summary persistence and content-scoped retry fences."""
 
 from database import conversations_v3_leases as leases
+from database.conversations_v3_fence import permits_native_source
 from utils.conversations.v3 import metrics
 
 import hashlib
@@ -39,6 +40,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
             or lease.get('token') != token
             or not lease.get('until')
             or lease['until'] <= datetime.now(timezone.utc)
+            or not permits_native_source(tx, client, uid, current)
         ):
             raise Conflict('summary_source_changed')
         if current.get('title_locked'):
@@ -97,6 +99,8 @@ def settle_processing(
             raise Conflict('processing_source_changed')
         if not row:
             return False
+        if not skipped and not row.get('deleted') and not permits_native_source(tx, client, uid, row):
+            raise Conflict('processing_source_changed')
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
             decoded = store.decode_row(uid, snapshot)
             if not content_hash or processing_hash(decoded) != content_hash:
@@ -217,6 +221,11 @@ def processing_hash(row):
                 'segments': (row or {}).get('transcript_segments') or [],
                 'manual_end': bool((row or {}).get('manual_end')),
                 'kind': (row or {}).get('kind') or 'conversation',
+                **(
+                    {policy.NATIVE_MANUAL_BINDING: row[policy.NATIVE_MANUAL_BINDING]}
+                    if row and row.get(policy.NATIVE_MANUAL_BINDING)
+                    else {}
+                ),
             },
             sort_keys=True,
             default=str,
@@ -239,6 +248,12 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
         ):
             raise Conflict('lease_lost')
         if not current or current.get('deleted') or current.get('is_locked'):
+            return False
+        if (
+            policy.NATIVE_MANUAL_BINDING in row
+            and row.get(policy.NATIVE_MANUAL_BINDING) != current.get(policy.NATIVE_MANUAL_BINDING)
+            or not permits_native_source(tx, client, uid, current)
+        ):
             return False
         attempts = (
             current.get('v3_process_attempts', 0)
@@ -297,6 +312,8 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
         if row.get('is_locked'):
             tx.update(ref, {'v3_process_pending': False, 'tile_state': 'done', 'v3_process_failed': False})
             return False
+        if not permits_native_source(tx, client, uid, row):
+            raise Conflict('processing_source_changed')
         if row.get('sync_content_revision') != revision:
             if not content_hash or processing_hash(store.decode_row(uid, snapshot)) != content_hash:
                 raise Conflict('processing_source_changed')

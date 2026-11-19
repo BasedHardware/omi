@@ -50,7 +50,13 @@ from utils.batch_pipeline.projection_hold_observability import log_projection_ho
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.processing_hold import MAX_HOLD_SECONDS
 from utils.sync import capture_end, processing_hold
-from utils.conversations.v3.policy import NATIVE_MANUAL_INPUT_REVISION, NATIVE_MANUAL_READY, NATIVE_MANUAL_STOP
+from utils.conversations.v3.policy import (
+    NATIVE_MANUAL_INPUT_REVISION,
+    NATIVE_MANUAL_PROOF,
+    NATIVE_MANUAL_READY,
+    NATIVE_MANUAL_STOP,
+    native_manual_binding,
+)
 from database.batch_pipeline_projection_protocol import (
     PROJECTION_HEAD_BLOCK_TYPE,
     PROJECTION_HEAD_BLOCKED_SINCE,
@@ -129,37 +135,20 @@ def _native_manual_receipts_match(target, receipts):
 
 
 def _native_manual_ready_patch(row, upload_revision, sealed_at, now):
-    intent = row.get(NATIVE_MANUAL_STOP)
-    finished_at = row.get('finished_at')
     if (
-        not isinstance(intent, dict)
-        or not finished_at
-        or intent.get('finished_at') != finished_at
-        or not intent.get('job_id')
-        or intent.get('job_id') != row.get('finalization_job_id')
-        or intent.get('revision') != row.get('finalization_revision')
-        or row.get('recording') is not True
-        or row.get('data_protection_level') not in {'standard', 'enhanced'}
-        or row.get('private_cloud_sync_enabled') is not True
-        or any(
-            row.get(key)
-            for key in ('deleted', 'discarded', 'sync_merged_into', 'is_locked', 'uses_custom_stt', 'v3_manual_end')
-        )
-        or row.get(NATIVE_MANUAL_READY) is not None
-        or type(upload_revision) is not int
-        or upload_revision < 1
-        or row.get('record_upload_revision') != upload_revision
-        or not sealed_at
-        or row.get('record_sealed_at') != sealed_at
+        row.get(NATIVE_MANUAL_READY) is not None
+        or row.get('v3_manual_end')
         or capture_end.seal_barrier(row) is not None
     ):
         return None
-    return {
+    patch = {
         'v3_manual_end': True,
         NATIVE_MANUAL_READY: upload_revision,
+        NATIVE_MANUAL_PROOF: {'seal': sealed_at, 'intent': row.get(NATIVE_MANUAL_STOP)},
         'v3_pending': True,
         'v3_pending_since': row.get('v3_pending_since') or datetime.fromtimestamp(now, timezone.utc),
     }
+    return patch if native_manual_binding({**row, **patch}) else None
 
 
 class ProjectionStore:

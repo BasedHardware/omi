@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from datetime import timedelta
+import math
 
 from utils.conversations.processing_trigger import ProcessingTrigger
 
@@ -12,6 +13,28 @@ ROTATION_CAP_FIELD = 'v3_rotation_cap_seconds'
 NATIVE_MANUAL_STOP = 'v3_native_manual_stop'
 NATIVE_MANUAL_INPUT_REVISION = 'v3_native_manual_input_revision'
 NATIVE_MANUAL_READY = 'v3_native_manual_ready_revision'
+NATIVE_MANUAL_PROOF = 'v3_native_manual_ready_proof'
+NATIVE_MANUAL_BINDING = 'v3_native_manual_binding'
+NATIVE_MANUAL_SOURCE_FIELDS = (
+    NATIVE_MANUAL_STOP,
+    NATIVE_MANUAL_READY,
+    NATIVE_MANUAL_PROOF,
+    'v3_manual_end',
+    'finished_at',
+    'finalization_job_id',
+    'finalization_revision',
+    'record_lane_owner',
+    'record_upload_revision',
+    'record_sealed_at',
+    'record_audio_closed',
+    'record_upload_sessions',
+    'record_audio_partial',
+    'record_upload_failed',
+    'private_cloud_sync_enabled',
+    'uses_custom_stt',
+    'status',
+    'discarded',
+)
 # How long a sealed recording's pending transcript keeps the previous stretch open.
 TRANSCRIPT_WAIT = timedelta(minutes=15)
 
@@ -23,6 +46,65 @@ def field(row, name):
 def flag(row, name):
     """A v3 boolean marker is set only when it is literally True (never a truthy stand-in)."""
     return field(row, name) is True
+
+
+def native_manual_binding(row, *, recording_id=None):
+    """Bind manual notes to the same sealed upload and explicit stop that completed projection."""
+    intent = row.get(NATIVE_MANUAL_STOP)
+    upload_revision = row.get(NATIVE_MANUAL_READY)
+    sealed_at = row.get('record_sealed_at')
+    finished_at = row.get('finished_at')
+    cid = recording_id or row.get('id')
+    finalization_revision = row.get('finalization_revision')
+    if (
+        not isinstance(cid, str)
+        or not cid
+        or '/' in cid
+        or not isinstance(intent, Mapping)
+        or not finished_at
+        or intent.get('finished_at') != finished_at
+        or not intent.get('job_id')
+        or intent.get('job_id') != row.get('finalization_job_id')
+        or type(finalization_revision) is not int
+        or finalization_revision < 1
+        or intent.get('revision') != finalization_revision
+        or type(upload_revision) is not int
+        or upload_revision < 1
+        or type(row.get('record_upload_revision')) is not int
+        or row.get('record_upload_revision') != upload_revision
+        or type(sealed_at) not in (int, float)
+        or not math.isfinite(sealed_at)
+        or sealed_at <= 0
+        or row.get(NATIVE_MANUAL_PROOF) != {'seal': sealed_at, 'intent': intent}
+        or row.get('recording') is not True
+        or row.get('v3_manual_end') is not True
+        or row.get('status') != 'completed'
+        or row.get('record_lane_owner') != 'batch_live_v1'
+        or row.get('record_audio_closed') is not True
+        or row.get('private_cloud_sync_enabled') is not True
+        or row.get('data_protection_level') not in {'standard', 'enhanced'}
+        or any(
+            row.get(key)
+            for key in (
+                'deleted',
+                'discarded',
+                'sync_merged_into',
+                'is_locked',
+                'uses_custom_stt',
+                'record_upload_sessions',
+                'record_upload_failed',
+                'record_audio_partial',
+            )
+        )
+    ):
+        return None
+    return {
+        'recording_id': cid,
+        'upload_revision': upload_revision,
+        'sealed_at': sealed_at,
+        'finished_at': finished_at,
+        'finalization_revision': finalization_revision,
+    }
 
 
 def manual_intent(row):

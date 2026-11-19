@@ -290,6 +290,7 @@ def test_full_native_manual_promotion_is_bound_to_raw_receipts_and_the_current_s
     assert ready == {
         'v3_manual_end': True,
         'v3_native_manual_ready_revision': 7,
+        'v3_native_manual_ready_proof': {'seal': NOW.timestamp(), 'intent': row['v3_native_manual_stop']},
         'v3_pending': True,
         'v3_pending_since': NOW,
     }

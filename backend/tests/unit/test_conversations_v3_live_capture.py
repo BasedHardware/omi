@@ -9,6 +9,7 @@ import pytest
 from database import conversations_v3 as store, conversations_v3_leases as leases
 from utils.conversations.v3 import Conflict, created, service
 from tests.unit.test_conversations_v3_transactions import R, strict  # noqa: F401
+from tests.unit.test_conversations_v3_engine import native_ready_fields
 
 C = ('users', 'synthetic', 'conversations', 'c')
 
@@ -204,7 +205,7 @@ async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_repl
     end = datetime.now(timezone.utc) - timedelta(seconds=10)
     start = end - timedelta(seconds=20)
     successor_key = ('users', 'synthetic', 'conversations', 'successor')
-    old = live(start, status='completed', v3_manual_end=True, v3_native_manual_ready_revision=7)
+    old = live(start, **native_ready_fields(end))
     old['transcript_segments'][-1].update(text='The final decision was to ship tomorrow.', end=20)
     strict.rows[R] = old
     strict.rows[successor_key] = live(end, words=1, id='successor')
@@ -267,3 +268,24 @@ async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_repl
     windows = [row for row in strict.rows.values() if row.get('v3_derived')]
     (successor,) = [row for row in windows if row['status'] == 'in_progress']
     assert successor['v3_recording_ids'] == ['successor']
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'record_upload_revision': 8, 'record_audio_closed': False},
+        {'record_upload_sessions': {'producer': True}},
+        {'record_sealed_at': 1234.0},
+        {'record_audio_partial': {'generation': 1}},
+    ],
+)
+def test_promoted_native_source_custody_change_is_not_a_speech_only_race(strict, change):
+    start = datetime.now(timezone.utc) - timedelta(seconds=30)
+    before = live(start, **native_ready_fields(start + timedelta(seconds=20)))
+    strict.rows[R] = {**before, **change, '_test_revision': 2}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    with pytest.raises(Conflict, match='source_changed'):
+        store.commit_projection(
+            'synthetic', token, {'r': loaded(before, 1)}, {}, [window(start)], [], firestore_client=strict
+        )
+    assert C not in strict.rows and strict.rows[R]['v3_pending'] is True

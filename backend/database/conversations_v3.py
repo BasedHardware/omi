@@ -67,13 +67,15 @@ SOURCE_FENCE_FIELDS = (
     'started_at',
     'claims',
     'v3_derived',
-    policy.NATIVE_MANUAL_STOP,
-    policy.NATIVE_MANUAL_READY,
 )
 
 
 def source_fence(raw):
-    return {key: (raw or {}).get(key) for key in SOURCE_FENCE_FIELDS}
+    row = raw or {}
+    fields = SOURCE_FENCE_FIELDS
+    if policy.NATIVE_MANUAL_STOP in row or policy.NATIVE_MANUAL_READY in row:
+        fields += policy.NATIVE_MANUAL_SOURCE_FIELDS
+    return {key: row.get(key) for key in fields}
 
 
 def recording_input(uid, snapshot):

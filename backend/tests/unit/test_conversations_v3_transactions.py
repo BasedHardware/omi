@@ -528,3 +528,51 @@ def test_terminal_failure_counter_counts_committed_transitions_once(strict):
     assert writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
     assert not writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
     assert metrics.TERMINAL_FAILURES.labels('processing')._value.get() == before + 1
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'record_upload_revision': 8, 'record_audio_closed': False},
+        {'record_sealed_at': AT.timestamp() + 1},
+        {'record_upload_sessions': {'producer': True}},
+        {'record_audio_partial': {'generation': 1}},
+    ],
+)
+def test_native_notes_recheck_source_custody_during_the_write(strict, change):
+    from database import conversations_v3_fence as fence
+    from tests.unit.test_conversations_v3_engine import native_ready_fields
+    from utils.conversations.v3 import policy
+
+    source = {'id': 'r', 'recording': True, **native_ready_fields(AT)}
+    strict.rows[R] = source
+    binding = policy.native_manual_binding(source)
+    assert binding
+    path = ('users', 'synthetic', 'conversations', 'native-derived')
+    derived = {
+        'id': path[-1],
+        'v3_derived': True,
+        'v3_recording_ids': ['r'],
+        'manual_end': True,
+        'v3_native_manual_binding': binding,
+        'sync_content_revision': 3,
+        'status': 'processing',
+        'transcript_segments': [{'text': 'Synthetic notes input'}],
+    }
+    strict.rows[path] = derived
+    token = leases.acquire('synthetic', 'summary-' + path[-1], firestore_client=strict)
+    assert writers.begin_processing('synthetic', derived, token, firestore_client=strict)
+    with fence.writer('synthetic', path[-1], token, native_binding=binding):
+        assert fence.permits(strict.transaction(), strict, 'synthetic', path[-1], strict.rows[path])
+        # The builder has not updated the derived row; only the raw custody facts moved.
+        strict.rows[R].update(change)
+        assert not fence.permits(strict.transaction(), strict, 'synthetic', path[-1], strict.rows[path])
+        assert not writers.begin_processing('synthetic', derived, token, firestore_client=strict)
+        with pytest.raises(store.Conflict, match='summary_source_changed'):
+            writers.store_summary(
+                'synthetic', path[-1], token, 1, {'overview': 'Stale content'}, AT, firestore_client=strict
+            )
+        with pytest.raises(store.Conflict, match='processing_source_changed'):
+            writers.settle_processing('synthetic', path[-1], token, 3, AT, notes=True, firestore_client=strict)
+    assert not strict.rows[path].get('structured')
+    assert not strict.rows[path].get('v3_notes_written')

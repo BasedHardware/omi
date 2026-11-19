@@ -110,7 +110,10 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
             queue.put_nowait(text)
 
     def emit(text):
-        loop.call_soon_threadsafe(deliver, text)
+        # A bound upload can reopen while the model runs. Publish its sections
+        # only after store_summary transactionally accepts the source.
+        if row.get(policy.NATIVE_MANUAL_BINDING) is None:
+            loop.call_soon_threadsafe(deliver, text)
 
     worker = None
     try:

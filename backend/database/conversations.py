@@ -1566,8 +1566,6 @@ def persist_processing_result_with_lifecycle(
         write_data.pop(CAPTURE_GROUP_FIELD, None)
         from database.conversations_v3_fence import permits
 
-        if not permits(transaction, db, uid, conversation_data['id']):
-            return False
         existing_snapshot = conversation_ref.get(transaction=transaction)
         source_revision = pipeline_ledger.source_revision(existing_snapshot)
         if not getattr(existing_snapshot, 'exists', False):
@@ -1578,6 +1576,8 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
+        if not permits(transaction, db, uid, conversation_data['id'], existing):
+            return False
         if existing.get('arrival_at'):
             write_data['arrival_at'] = existing['arrival_at']
         if expected_capture_group is not None:

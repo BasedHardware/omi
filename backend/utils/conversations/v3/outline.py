@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 
-from utils.conversations.v3.policy import NATIVE_MANUAL_READY
+from utils.conversations.v3 import policy
 
 
 def utc(value):
@@ -109,16 +109,17 @@ def stretches(members, now):
     lines.sort(key=lambda line: (line['start'], line['conversation_id']))
     groups = []
     native_cuts = {
-        row['id']: utc(row['finished_at'])
-        for row in members
-        if row.get(NATIVE_MANUAL_READY) is not None and row.get('v3_manual_end') and row.get('finished_at')
+        row['id']: utc(binding['finished_at']) for row in members if (binding := policy.native_manual_binding(row))
     }
     recording_starts = {row['id']: utc(row.get('started_at')) for row in members} if native_cuts else {}
     native_tails = {line['conversation_id']: line for line in lines if line['conversation_id'] in native_cuts}
     manual_cuts = [
         utc(row['finished_at'])
         for row in members
-        if row.get('v3_manual_end') and row.get('finished_at') and row['id'] not in native_cuts
+        if row.get('v3_manual_end')
+        and row.get('finished_at')
+        and policy.NATIVE_MANUAL_READY not in row
+        and policy.NATIVE_MANUAL_STOP not in row
     ]
     for line in lines:
         prior_line = groups[-1]['lines'][-1] if groups else None
@@ -156,9 +157,10 @@ def stretches(members, now):
             and group['end'] <= max(tail['end'], native_cuts[native_source])
         )
         group['native_manual_end'] = native_manual_end
-        group['manual_end'] = native_manual_end or any(
-            group['lines'][0]['start'] <= cut < next_start for cut in manual_cuts
-        )
+        if native_manual_end:
+            group['native_manual_source'] = native_source
+        group['legacy_manual_end'] = any(group['lines'][0]['start'] <= cut < next_start for cut in manual_cuts)
+        group['manual_end'] = native_manual_end or group['legacy_manual_end']
         continues = any(
             r.get('_v3_page_continues') and r['id'] == group['lines'][-1]['conversation_id'] for r in members
         )

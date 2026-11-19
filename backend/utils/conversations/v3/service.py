@@ -619,7 +619,10 @@ def _process(uid, row, token):
     else:
         notes = True
         persisted = []
-        with fence.writer(uid, row['id'], token), models.notes_mode(uid):
+        with (
+            fence.writer(uid, row['id'], token, native_binding=row.get(policy.NATIVE_MANUAL_BINDING)),
+            models.notes_mode(uid),
+        ):
             result = process_conversation(
                 uid,
                 row.get('language') or 'en',
