@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -91,6 +93,23 @@ func TestEraseRequiresAuthenticatedArmedGenerationAndCommit(t *testing.T) {
 				t.Fatal("successful erase must return a receipt for the requesting generation and claim")
 			}
 		})
+	}
+}
+
+func TestEraseFailureStatusRejectsMixedConnectionOutcomes(t *testing.T) {
+	t.Parallel()
+	unavailable := &pgconn.PgError{Code: "57P03"}
+	denied := &pgconn.PgError{Code: "42501"}
+	for _, err := range []error{errors.Join(unavailable, denied), errors.Join(denied, unavailable)} {
+		if got := eraseFailureStatus(fmt.Errorf("pool: %w", err)); got != http.StatusConflict {
+			t.Errorf("joined permission denial got HTTP %d", got)
+		}
+	}
+	if got := eraseFailureStatus(errors.Join(unavailable, syscall.ECONNREFUSED)); got != http.StatusServiceUnavailable {
+		t.Errorf("joined transient failures got HTTP %d", got)
+	}
+	if got := eraseFailureStatus(fmt.Errorf("read commit acknowledgement: %w", io.ErrUnexpectedEOF)); got != http.StatusServiceUnavailable {
+		t.Errorf("lost acknowledgement got HTTP %d", got)
 	}
 }
 

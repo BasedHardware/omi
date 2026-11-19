@@ -114,31 +114,42 @@ func eraseGrant(marker map[string]any, req eraseRequest, now time.Time) (time.Ti
 }
 
 func eraseFailureStatus(err error) int {
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+	_, connecting := errors.AsType[*pgconn.ConnectError](err)
+	if transientEraseFailure(err, !connecting) {
 		return http.StatusServiceUnavailable
 	}
-	if fault, ok := errors.AsType[*docstore.CallError](err); ok {
-		if fault.Kind == docstore.KindTransient {
-			return http.StatusServiceUnavailable
+	return http.StatusConflict
+}
+
+// A connection can try several addresses. Every outcome must be transient
+// before another credential may retry an operation.
+func transientEraseFailure(err error, established bool) bool {
+	if joined, ok := errors.AsType[interface{ Unwrap() []error }](err); ok {
+		for _, cause := range joined.Unwrap() {
+			if !transientEraseFailure(cause, established) {
+				return false
+			}
 		}
-		return http.StatusConflict
+		return true
+	}
+	if fault, ok := errors.AsType[*docstore.CallError](err); ok {
+		return fault.Kind == docstore.KindTransient
 	}
 	if fault, ok := errors.AsType[*pgconn.PgError](err); ok {
 		switch fault.Code {
 		case "08000", "08001", "08003", "08006", "08007", "55P03", "57014", "57P01", "57P02", "57P03", "53300":
-			return http.StatusServiceUnavailable
+			return true
 		}
-		return http.StatusConflict
+		return false
 	}
-	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) ||
-		errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) {
-		return http.StatusServiceUnavailable
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) ||
+		errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) ||
+		(established && errors.Is(err, io.ErrUnexpectedEOF)) {
+		return true
 	}
 	var network net.Error
-	if errors.As(err, &network) && network.Timeout() {
-		return http.StatusServiceUnavailable
-	}
-	return http.StatusConflict
+	return errors.As(err, &network) && network.Timeout()
 }
 
 func authorizeErase(validator *idtoken.Validator, cfg eraseConfig) func(context.Context, string) error {
