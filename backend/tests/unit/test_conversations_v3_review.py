@@ -1025,7 +1025,8 @@ async def test_scoped_open_keeps_other_provisional_outlines(builder, monkeypatch
     inputs[2] = [finished, *cache]
     await service.reconcile('synthetic', on_open=True, conversation_id=earlier['id'])
     assert len(messages) == 2
-    assert cache[-1] in committed[-1][5] and other['v3_unlocked']
+    assert cache[-1] in committed[-1][5]
+    assert other['id'] not in {row['id'] for row in committed[-1][4]}
     assert finished in committed[-1][5]
 
 
@@ -1056,3 +1057,64 @@ async def test_configured_reconcile_retains_existing_notes_after_late_speech(bui
     assert row['id'] == 'card' and len(row['transcript_segments']) == 2
     assert row['v3_rewrites'] == 0 and not row.get('v3_process_pending')
     assert row['summary_covers_through'] == end
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('age,delay', [(60, 300), (600, 3600)])
+async def test_configured_builder_wakes_at_outline_then_lock(builder, monkeypatch, age, delay):
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    end = datetime.now(timezone.utc) - timedelta(seconds=age)
+    raw = source(started_at=end - timedelta(seconds=10), finished_at=end)
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': raw}, {}, []))
+    wakes = []
+    monkeypatch.setattr(service, 'enqueue', lambda uid, *, at: wakes.append(at))
+
+    assert await service.reconcile('synthetic') == 'committed'
+    assert wakes == [end + timedelta(seconds=delay)]
+
+
+@pytest.mark.parametrize('gap,continues', [(600, True), (900, False)])
+def test_pending_page_continuation_uses_configured_silence(monkeypatch, gap, continues):
+    monkeypatch.setenv('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', '900')
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
+    monkeypatch.setattr(store, 'recording_input', lambda uid, snap: snap.to_dict() if snap.exists else None)
+    prefix = '/users/synthetic/conversations/'
+    rows = {}
+    for index in range(32):
+        start = AT + timedelta(seconds=index * 10)
+        rid = str(index)
+        rows[prefix + rid] = source(
+            rid, started_at=start, finished_at=start + timedelta(seconds=10), v3_pending_since=start
+        )
+    successor = rows[prefix + '31']['finished_at'] + timedelta(seconds=gap)
+    rows[prefix + 'next'] = source(
+        'next', started_at=successor, finished_at=successor + timedelta(seconds=10), v3_pending_since=successor
+    )
+
+    recordings, _, _ = store.load('synthetic', firestore_client=MemoryQuery(rows))
+    assert 'next' not in recordings
+    assert bool(recordings['31'].get('_v3_page_continues')) is continues
+
+
+@pytest.mark.asyncio
+async def test_provisional_window_does_not_reopen_a_locked_card_by_clock(builder, monkeypatch):
+    committed, _ = builder
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    start = datetime.now(timezone.utc) - timedelta(minutes=10)
+    end = start + timedelta(seconds=10)
+    raw = source(started_at=start, finished_at=end, claims=[])
+    prior = {
+        'id': 'locked',
+        'v3_derived': True,
+        'status': 'completed',
+        'started_at': start,
+        'finished_at': end,
+        'title_locked': True,
+        'structured': {'title': 'Saved title', 'emoji': '🌲'},
+        'v3_recording_ids': ['r'],
+    }
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': raw}, {'locked': prior}, []))
+    assert await service.reconcile('synthetic') == 'committed'
+    [preview] = committed[-1][4]
+    assert preview['id'] != 'locked' and preview['v3_unlocked']
+    assert committed[-1][3]['locked']['structured'] == {'title': 'Saved title', 'emoji': '🌲'}

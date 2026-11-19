@@ -359,6 +359,11 @@ async def reconcile(
             used.update(
                 row['id'] for row in existing.values() if row.get('v3_refined') and row.get('v3_claims_transferred_to')
             )
+            locked_ids = (
+                {row['id'] for row in existing.values() if not planner.is_unlocked(row) and not row.get('deleted')}
+                if custom_timing
+                else set()
+            )
             taken = set()
             allocated = {}
             await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
@@ -366,7 +371,11 @@ async def reconcile(
                 # An affirmative transcription failure is terminal even before the silence deadline.
                 if any(policy.transcription_failed(recordings[line['conversation_id']]) for line in window['lines']):
                     window['finished'] = True
-                prior = existing.get(window.get('existing_id')) or _match(window, existing, used, preferred=preferred)
+                # A preview cannot take over a locked card by time matching alone.
+                excluded = used if window['finished'] else used | locked_ids
+                prior = existing.get(window.get('existing_id')) or _match(
+                    window, existing, excluded, preferred=preferred
+                )
                 if prior:
                     used.add(prior['id'])
                 opening = on_open and prior and prior['id'] == conversation_id and custom_timing
@@ -381,10 +390,10 @@ async def reconcile(
                 if custom_timing and not window['finished']:
                     row['v3_unlocked'] = True
                 published_ids = window.get('_published_ids', ())
-                if not prior and (row['id'] in used | taken or row['id'] in published_ids):
+                if not prior and (row['id'] in excluded | taken or row['id'] in published_ids):
                     first = window['lines'][0]['conversation_id']
                     seed = f"v3:{uid}:{row['started_at'].isoformat()}:{first}"
-                    blocked_ids = used | taken | set(published_ids)
+                    blocked_ids = excluded | taken | set(published_ids)
                     # Preserve the recording-qualified ID when free. Same-clock windows can also
                     # share a recording, so probe deterministic suffixes in planner order.
                     identifier = str(uuid5(NAMESPACE_URL, seed))
