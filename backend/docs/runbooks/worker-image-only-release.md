@@ -28,7 +28,7 @@ python3 .github/scripts/worker_image_only.py inventory > worker-baseline.json
 
 The inventory emits only target UID/image/spec hash and shared-image consumer
 bindings, never environment values or a private Deployment snapshot. It reads
-Deployments, StatefulSets, DaemonSets, Jobs and CronJobs in the named namespace,
+Deployments, StatefulSets, DaemonSets, Jobs, CronJobs and HorizontalPodAutoscalers in the named namespace,
 including init containers and suspended record-seal jobs. No new permissions
 are installed: unavailable reads fail closed. Review the inventory against the
 release packet, including `record-seal-worker`, repair/sweeper CronJobs and any

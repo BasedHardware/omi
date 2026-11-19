@@ -96,6 +96,18 @@ def cronjob_history(obj, cronjobs):
         return False
     run_meta, owner_meta = spec["template"].get("metadata", {}), template["template"].get("metadata", {})
     run_labels, owner_labels = run_meta.get("labels", {}), owner_meta.get("labels", {})
+    # The selector and generated labels must be exactly what the Job controller writes for this Job.
+    uid, name = obj["metadata"].get("uid"), obj["metadata"]["name"]
+    generated = {
+        "batch.kubernetes.io/controller-uid": uid,
+        "controller-uid": uid,
+        "batch.kubernetes.io/job-name": name,
+        "job-name": name,
+    }
+    if not uid or spec.get("selector") != {"matchLabels": {"batch.kubernetes.io/controller-uid": uid}}:
+        return False
+    if any(run_labels.get(k) != v for k, v in generated.items()):
+        return False
     return (
         spec["template"]["spec"] == template["template"]["spec"]
         and run_meta.get("annotations") == owner_meta.get("annotations")
@@ -149,6 +161,7 @@ def autoscalers(items):
             o for o in items
             if o["kind"] == "HorizontalPodAutoscaler"
             and o["spec"].get("scaleTargetRef", {}).get("kind") == "Deployment"
+            and o["spec"]["scaleTargetRef"].get("apiVersion") == "apps/v1"
             and o["spec"]["scaleTargetRef"].get("name") == name
         ]
         require(len(owners) == 1, f"replica exclusion needs exactly one HPA for {name}")
@@ -280,6 +293,14 @@ def deploy(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
     private_json(receipt_path, receipt)
     # Safe, reviewable image diff and exact reverse identity; never print the full spec.
     print(json.dumps({"deployment": TARGET, "namespace": NAMESPACE, "patch": patch, "rollback": receipt}), flush=True)
+    # An HPA rescale since the first read bumps resourceVersion; rebuild the CAS patch from a fresh
+    # read whose identity (UID, image, spec without replicas) must still equal the admitted one.
+    fresh = run("get", "deployment", TARGET, "-o", "json")
+    require(target_state(fresh)[0] == actual["target"], "target drift immediately before write")
+    patch = patch_for(fresh, image)
+    expected = copy.deepcopy(fresh)
+    expected["spec"]["template"]["spec"]["containers"][index]["image"] = image
+    exact = digest(expected["spec"])
     preview = run("patch", "deployment", TARGET, "--type=json", "-p", json.dumps(patch), "--dry-run=server", "-o", "json")
     require(
         target_state(preview)[0] == after and digest(preview["spec"]) == exact,
@@ -289,14 +310,6 @@ def deploy(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
     final = run("get", RESOURCES, "-o", "json")["items"]
     require(bindings(final) == baseline["consumers"], "consumer drift")
     require_t4_serves(final, image)
-    # An HPA rescale since the first read bumps resourceVersion; rebuild the CAS patch from a fresh
-    # read whose identity (UID, image, spec without replicas) must still equal the admitted one.
-    fresh = run("get", "deployment", TARGET, "-o", "json")
-    require(target_state(fresh)[0] == actual["target"], "target drift immediately before write")
-    patch = patch_for(fresh, image)
-    expected = copy.deepcopy(fresh)
-    expected["spec"]["template"]["spec"]["containers"][index]["image"] = image
-    exact = digest(expected["spec"])
     result = run("patch", "deployment", TARGET, "--type=json", "-p", json.dumps(patch), "-o", "json")
     require(
         target_state(result)[0] == after and digest(result["spec"]) == exact,

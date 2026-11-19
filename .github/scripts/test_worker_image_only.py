@@ -84,9 +84,11 @@ def job(name, owner=None):
     source = owner["spec"]["jobTemplate"]["spec"]["template"] if owner is not None else obj["spec"]["template"]
     template = copy.deepcopy(source)
     # What the Job controller and API defaulting add to a CronJob-created run (live shape, 2026-11-19).
+    uid = obj["metadata"]["uid"]
     template["metadata"]["labels"].update({"batch.kubernetes.io/job-name": name, "job-name": name,
-                                           "batch.kubernetes.io/controller-uid": "c", "controller-uid": "c"})
-    obj["spec"] = {"template": template, "selector": {"matchLabels": {"controller-uid": "c"}}, **worker.JOB_DEFAULTED}
+                                           "batch.kubernetes.io/controller-uid": uid, "controller-uid": uid})
+    obj["spec"] = {"template": template, "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": uid}},
+                   **worker.JOB_DEFAULTED}
     if owner is not None:
         obj["metadata"]["ownerReferences"] = [
             {"apiVersion": "batch/v1", "kind": "CronJob", "name": owner["metadata"]["name"],
@@ -105,6 +107,7 @@ class Cluster:
         self.hpas = [hpa(worker.TARGET), hpa("record-seal-worker")]
         self.admission_mutates_on_write = False
         self.rescale_before_write = None
+        self.deployment_reads = 0
         self.writes = 0
         self.drift_on_patch = False
         self.consumer_reads = 0
@@ -114,7 +117,9 @@ class Cluster:
     def __call__(self, *args):
         if args[0] == "get":
             if args[1] == "deployment":
-                if self.rescale_before_write is not None and self.consumer_reads >= 3:
+                self.deployment_reads += 1
+                # Fire on the read after deploy()'s snapshot: an HPA write lands before the fresh read.
+                if self.rescale_before_write is not None and self.deployment_reads == 2:
                     self.target["spec"]["replicas"] = self.rescale_before_write
                     self.target["metadata"]["resourceVersion"] = "40"
                     self.rescale_before_write = None
@@ -542,12 +547,34 @@ class PreservationTests(unittest.TestCase):
             worker.verify(receipt, self.cluster)
 
     def test_hpa_rescale_between_first_read_and_write_still_writes(self):
+        self.cluster.deployment_reads = 0
         self.cluster.rescale_before_write = 11
         receipt = self.deploy()
         self.assertEqual(self.cluster.writes, 1)
         self.assertEqual(self.cluster.target["spec"]["replicas"], 11)
         self.assertEqual(self.cluster.target["spec"]["template"]["spec"]["containers"][0]["image"], NEW)
         worker.verify(receipt, self.cluster)
+
+    def test_owned_job_with_foreign_selector_or_generated_labels_stays_bound(self):
+        sweeper = self.add_sweeper()
+        receipt = self.deploy()
+        for mutate in (
+            lambda j: j["spec"].update(selector={"matchLabels": {"app": "record-seal-sweeper"}}),
+            lambda j: j["spec"]["template"]["metadata"]["labels"].update({"controller-uid": "someone-else"}),
+            lambda j: j["spec"]["template"]["metadata"]["labels"].pop("job-name"),
+        ):
+            with self.subTest(mutate=mutate):
+                run = job("record-seal-sweeper-8", sweeper)
+                mutate(run)
+                self.cluster.siblings.append(run)
+                with self.assertRaisesRegex(ValueError, "drift"):
+                    worker.verify(receipt, self.cluster)
+                self.cluster.siblings.pop()
+
+    def test_hpa_with_wrong_target_api_version_is_not_proof(self):
+        self.cluster.hpas[0]["spec"]["scaleTargetRef"]["apiVersion"] = "extensions/v1beta1"
+        with self.assertRaisesRegex(ValueError, "HPA"):
+            worker.snapshot(self.cluster)
 
     def test_admission_change_on_the_real_write_only_escalates(self):
         self.cluster.admission_mutates_on_write = True
