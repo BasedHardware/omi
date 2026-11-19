@@ -152,14 +152,17 @@ def test_listing_keeps_every_real_gap_and_its_true_position(remote, monkeypatch,
 
 
 @pytest.mark.parametrize('change', ['unchanged', 'generation', 'metadata', 'unversioned', 'deleted', 'media_changed'])
-def test_inventory_manifest_body_reuse_checks_the_current_object(remote, monkeypatch, native_opus, change):
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+def test_inventory_manifest_body_reuse_checks_the_current_object(remote, monkeypatch, native_opus, change, protection):
     wire(remote, monkeypatch)
     monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', remote.name)
     monkeypatch.delenv('PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED', raising=False)
     monkeypatch.delenv('PRIVATE_SYNC_INVENTORY_MANIFEST_BODY_CACHE_ENABLED', raising=False)
     monkeypatch.setattr(audio_frame_table, '_inventory_bodies', {})
-    receipt, _, _, _ = build_pack(remote, gapped_frames())
+    receipt, _, _, _ = build_pack(remote, gapped_frames(), protection=protection)
     manifest = remote.blob(receipt.manifest_path)
+    decrypt = Mock(wraps=audio_frame_table.encryption.decrypt_audio_file)
+    monkeypatch.setattr(audio_frame_table.encryption, 'decrypt_audio_file', decrypt)
     manifest.metageneration = None if change == 'unversioned' else 1
     manifest.reload = Mock(wraps=manifest.reload)
     manifest.download_as_bytes = Mock(wraps=manifest.download_as_bytes)
@@ -187,6 +190,10 @@ def test_inventory_manifest_body_reuse_checks_the_current_object(remote, monkeyp
         assert manifest.reload.call_args.kwargs['if_metageneration_match'] == manifest.metageneration
     expected_reads = 1 if change in {'unchanged', 'deleted', 'media_changed'} else 2
     assert manifest.download_as_bytes.call_count == expected_reads
+    if change == 'unchanged' and protection == 'enhanced':
+        assert manifest.metadata['encrypted'] == 'true'
+        assert b'"schema"' not in manifest.data
+        assert decrypt.call_count == 2
     if change == 'unversioned':
         assert 'if_metageneration_match' not in manifest.download_as_bytes.call_args.kwargs
     else:
