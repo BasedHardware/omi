@@ -10313,3 +10313,11 @@ Task payloads and the reconciler protocol are unchanged. The workspace release
 floor excludes older workers whose completion cannot fence a re-arm. For
 emergency handback, roll out the switch off to all purge consumers. See the
 [rollback and canary contract](runbooks/conversation-purge-coalescing.md).
+
+### Live conversation transcript and recap
+
+The authenticated live conversation row may include `v3_recording_ids`. The phone matches those source IDs against its active capture before showing on-device transcript lines in the detail. When the server transcript covers a line's time interval, it replaces that local line.
+
+Opening Summary requests the first eligible recap. Each subsequent five-minute interval of uninterrupted viewing can update the recap when there is new speech. Switching tabs, covering the detail or backgrounding the app resets the interval. An unchanged transcript reuses the displayed result.
+
+A `GET /v1/conversations/{conversation_id}/summary/live-catchup/stream` requests a recap of the current projected speech. The server checks the exact live conversation, the caller's compute policy and the summary lease. The detail response may include `live_summary.structured` and `live_summary.summary_covers_through`. The timestamp identifies the last speech included in that recap. A strictly later append preserves the earlier preview. Correcting covered speech invalidates it. Final processing uses its own summary and coverage fields.

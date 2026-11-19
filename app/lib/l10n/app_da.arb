@@ -4733,5 +4733,7 @@
     "finishBackToHome": "Tilbage til Hjem",
     "conversationSummaryWhenItEnds": "Resumé, når denne samtale slutter",
     "deviceUploadsWaitingOnServer": "Uploads, der venter på serveren",
-    "deviceUploadsWaitingOnServerSubtitle": "Din lyd er i sikkerhed på din enhed eller telefon"
+    "deviceUploadsWaitingOnServerSubtitle": "Din lyd er i sikkerhed på din enhed eller telefon",
+    "conversationSummaryThrough": "Opsummering indtil {time}",
+    "conversationRecentTranscript": "Seneste udskrift"
 }

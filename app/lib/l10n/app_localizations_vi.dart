@@ -15577,4 +15577,12 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get deviceUploadsWaitingOnServerSubtitle =>
       'Âm thanh của bạn vẫn an toàn trên thiết bị hoặc điện thoại của bạn';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Tóm tắt đến $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Bản chép lời gần đây';
 }

@@ -15590,4 +15590,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Audio Anda aman di perangkat atau ponsel Anda';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Ringkasan hingga $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Transkrip Terbaru';
 }

@@ -15586,4 +15586,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Sesiniz cihazınızda veya telefonunuzda güvende';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time itibariyle özet';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Son transkript';
 }

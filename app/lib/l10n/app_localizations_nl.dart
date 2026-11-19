@@ -15615,4 +15615,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Je audio is veilig op je apparaat of telefoon';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Samenvatting tot $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Recente transcriptie';
 }

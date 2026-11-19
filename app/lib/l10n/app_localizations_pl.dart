@@ -15620,4 +15620,12 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Twoje nagrania są bezpieczne na urządzeniu lub telefonie';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Podsumowanie do $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Najnowsza transkrypcja';
 }

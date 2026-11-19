@@ -15603,4 +15603,12 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Seu áudio está seguro no seu dispositivo ou celular';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Resumo até $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Transcrição recente';
 }

@@ -15677,4 +15677,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Ο ήχος σας είναι ασφαλής στη συσκευή ή στο τηλέφωνό σας';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Σύνοψη έως $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Πρόσφατη απομαγνητοφώνηση';
 }

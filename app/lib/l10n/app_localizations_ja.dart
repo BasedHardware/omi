@@ -15348,4 +15348,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => '音声はデバイスまたはスマートフォンに安全に保存されています';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$timeまでの要約';
+  }
+
+  @override
+  String get conversationRecentTranscript => '最近の文字起こし';
 }

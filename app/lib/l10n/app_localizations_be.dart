@@ -15611,4 +15611,12 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Ваш аўдыё ў бяспецы на вашай прыладзе або тэлефоне';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Рэзюмэ да $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Апошняя транскрыпцыя';
 }

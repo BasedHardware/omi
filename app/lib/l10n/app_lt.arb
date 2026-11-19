@@ -4691,5 +4691,7 @@
     "finishBackToHome": "Grįžti į pagrindinį",
     "conversationSummaryWhenItEnds": "Santrauka, kai šis pokalbis baigsis",
     "deviceUploadsWaitingOnServer": "Įkėlimai laukia serveryje",
-    "deviceUploadsWaitingOnServerSubtitle": "Jūsų garso įrašai saugūs jūsų įrenginyje arba telefone"
+    "deviceUploadsWaitingOnServerSubtitle": "Jūsų garso įrašai saugūs jūsų įrenginyje arba telefone",
+    "conversationSummaryThrough": "Santrauka iki {time}",
+    "conversationRecentTranscript": "Naujausia transkripcija"
 }

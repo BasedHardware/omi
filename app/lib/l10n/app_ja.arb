@@ -4691,5 +4691,7 @@
     "finishBackToHome": "ホームに戻る",
     "conversationSummaryWhenItEnds": "この会話が終わると要約が表示されます",
     "deviceUploadsWaitingOnServer": "サーバーで待機中のアップロード",
-    "deviceUploadsWaitingOnServerSubtitle": "音声はデバイスまたはスマートフォンに安全に保存されています"
+    "deviceUploadsWaitingOnServerSubtitle": "音声はデバイスまたはスマートフォンに安全に保存されています",
+    "conversationSummaryThrough": "{time}までの要約",
+    "conversationRecentTranscript": "最近の文字起こし"
 }

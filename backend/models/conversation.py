@@ -485,6 +485,11 @@ class RecordingPiece(BaseModel):
     end: float = Field(ge=0)
 
 
+class LiveSummaryPreview(BaseModel):
+    structured: Structured
+    summary_covers_through: datetime
+
+
 class Conversation(BaseModel):
     title_content_units: float = Field(default=0, exclude=True)
     notes_quality_filter_input_hash: Optional[str] = Field(default=None, exclude=True)
@@ -520,6 +525,7 @@ class Conversation(BaseModel):
     recording_pieces: Optional[List[RecordingPiece]] = None
     manual_end: Optional[bool] = None
     summary_covers_through: Optional[datetime] = None
+    live_summary: Optional[LiveSummaryPreview] = None
     v3_pending: SkipJsonSchema[Optional[bool]] = Field(default=None, exclude=True)
     v3_derived: SkipJsonSchema[Optional[bool]] = None
     v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
@@ -668,6 +674,8 @@ class Conversation(BaseModel):
         data = handler(self)
         if not self.processing_deferred and 'processing_deferred' not in self.model_fields_set:
             data.pop('processing_deferred', None)
+        if self.live_summary is None:
+            data.pop('live_summary', None)
         if self.home_step is None:
             data.pop('home_step', None)
         for name in ('processing_tier', 'summary_on_open'):
@@ -1138,6 +1146,9 @@ class LiveConversation(BaseModel):
     created_at: datetime
     status: ConversationStatus
     tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done', 'failed']] = None
+
+    is_locked: SkipJsonSchema[Optional[bool]] = None
+    v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
 
 
 class ConversationsLiveResponse(BaseModel):

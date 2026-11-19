@@ -4691,5 +4691,7 @@
     "finishBackToHome": "Torna a l'inici",
     "conversationSummaryWhenItEnds": "Resum quan acabi aquesta conversa",
     "deviceUploadsWaitingOnServer": "Pujades pendents al servidor",
-    "deviceUploadsWaitingOnServerSubtitle": "El vostre àudio està segur al vostre dispositiu o telèfon"
+    "deviceUploadsWaitingOnServerSubtitle": "El vostre àudio està segur al vostre dispositiu o telèfon",
+    "conversationSummaryThrough": "Resum fins a {time}",
+    "conversationRecentTranscript": "Transcripció recent"
 }

@@ -4691,5 +4691,7 @@
     "finishBackToHome": "返回首页",
     "conversationSummaryWhenItEnds": "对话结束后生成摘要",
     "deviceUploadsWaitingOnServer": "上传内容正在等待服务器处理",
-    "deviceUploadsWaitingOnServerSubtitle": "您的音频安全保存在您的设备或手机上"
+    "deviceUploadsWaitingOnServerSubtitle": "您的音频安全保存在您的设备或手机上",
+    "conversationSummaryThrough": "截至 {time} 的摘要",
+    "conversationRecentTranscript": "最近的文字记录"
 }

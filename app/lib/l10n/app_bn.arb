@@ -12248,5 +12248,7 @@
     "finishBackToHome": "হোমে ফিরে যান",
     "conversationSummaryWhenItEnds": "এই কথোপকথন শেষ হলে সারাংশ",
     "deviceUploadsWaitingOnServer": "সার্ভারে অপেক্ষায় থাকা আপলোড",
-    "deviceUploadsWaitingOnServerSubtitle": "আপনার অডিও আপনার ডিভাইস বা ফোনে নিরাপদ আছে"
+    "deviceUploadsWaitingOnServerSubtitle": "আপনার অডিও আপনার ডিভাইস বা ফোনে নিরাপদ আছে",
+    "conversationSummaryThrough": "{time} পর্যন্ত সারসংক্ষেপ",
+    "conversationRecentTranscript": "সাম্প্রতিক প্রতিলিপি"
 }

@@ -4726,5 +4726,7 @@
     "finishBackToHome": "На главную",
     "conversationSummaryWhenItEnds": "Сводка появится, когда разговор закончится",
     "deviceUploadsWaitingOnServer": "Загрузки, ожидающие на сервере",
-    "deviceUploadsWaitingOnServerSubtitle": "Ваше аудио в безопасности на устройстве или телефоне"
+    "deviceUploadsWaitingOnServerSubtitle": "Ваше аудио в безопасности на устройстве или телефоне",
+    "conversationSummaryThrough": "Сводка до {time}",
+    "conversationRecentTranscript": "Последняя расшифровка"
 }

@@ -4691,5 +4691,7 @@
     "finishBackToHome": "Tagasi avalehele",
     "conversationSummaryWhenItEnds": "Kokkuvõte, kui see vestlus lõpeb",
     "deviceUploadsWaitingOnServer": "Üleslaadimised ootavad serveris",
-    "deviceUploadsWaitingOnServerSubtitle": "Teie audio on turvaliselt teie seadmes või telefonis"
+    "deviceUploadsWaitingOnServerSubtitle": "Teie audio on turvaliselt teie seadmes või telefonis",
+    "conversationSummaryThrough": "Kokkuvõte kuni {time}",
+    "conversationRecentTranscript": "Hiljutine transkriptsioon"
 }

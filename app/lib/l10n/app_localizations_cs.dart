@@ -15575,4 +15575,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Váš zvuk je v bezpečí na vašem zařízení nebo telefonu';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Shrnutí do $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Nejnovější přepis';
 }

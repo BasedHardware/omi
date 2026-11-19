@@ -26,6 +26,10 @@ def jobs(text):
 PR_SCHEMA_WRITERS = {"gcp_firestore_indexes.yml"}
 
 INTENTIONAL_BUDGET_CHANGES = {
+    # Lane 8 adds a port-map job to the reusable workflow. It is skipped on
+    # the pinned nightly, and its PR and main-push budget is fixed here.
+    ("backend-go-checks.yml", "port-tasks", "runs-on"): "ubuntu-latest",
+    ("backend-go-checks.yml", "port-tasks", "timeout-minutes"): "15",
     # iOS Compile Check: the 40-min ceiling sat below the measured cold path
     # (39:25 real steps + ~1 min post-job Post Setup Flutter cache save, run
     # 39634604539 attempt 1), cancelling a healthy cold job after every real
@@ -139,8 +143,12 @@ class WorkflowTests(unittest.TestCase):
                 continue
             baseline = shown.stdout
             before, after = jobs(baseline), jobs((WORKFLOWS / filename).read_text())
-            self.assertEqual(set(before), set(after), filename)
-            for name in before:
+            approved_jobs = {
+                name for workflow, name, field in INTENTIONAL_BUDGET_CHANGES
+                if workflow == filename and field == "runs-on"
+            }
+            self.assertEqual(set(before) | approved_jobs, set(after), filename)
+            for name in after:
                 for field in ("runs-on", "timeout-minutes"):
                     pattern = rf"(?m)^    {field}:.*$"
                     after_values = re.findall(pattern, after[name])
@@ -148,7 +156,7 @@ class WorkflowTests(unittest.TestCase):
                     if pinned is not None:
                         self.assertEqual([f"    {field}: {pinned}"], after_values, (filename, name, field))
                         continue
-                    self.assertEqual(re.findall(pattern, before[name]), after_values, (filename, name, field))
+                    self.assertEqual(re.findall(pattern, before.get(name, "")), after_values, (filename, name, field))
 
 
 if __name__ == "__main__":

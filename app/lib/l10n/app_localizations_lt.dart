@@ -15599,4 +15599,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Jūsų garso įrašai saugūs jūsų įrenginyje arba telefone';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Santrauka iki $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Naujausia transkripcija';
 }

@@ -15487,4 +15487,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'الصوت الخاص بك آمن على جهازك أو هاتفك';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'الملخص حتى $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'النص المكتوب الأخير';
 }

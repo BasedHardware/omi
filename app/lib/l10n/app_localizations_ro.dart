@@ -15640,4 +15640,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'Audioul tău este în siguranță pe dispozitiv sau pe telefon';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Rezumat până la $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Transcriere recentă';
 }

@@ -15583,4 +15583,12 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get deviceUploadsWaitingOnServerSubtitle => 'तुमचा ऑडिओ तुमच्या डिव्हाइसवर किंवा फोनवर सुरक्षित आहे';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time पर्यंतचा सारांश';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'अलीकडील प्रतिलेख';
 }
