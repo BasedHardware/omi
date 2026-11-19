@@ -404,6 +404,15 @@ def ledger(strict, monkeypatch):
     monkeypatch.setattr(runs, 'get_run', book.get)
     monkeypatch.setattr(runs, 'update_run', book.update)
     monkeypatch.setattr(runs, 'list_priors', lambda uid, run_id, **kw: priors(strict))
+    erased = []
+
+    def delete_conversation(uid, cid):
+        # The production helper also erases child collections; here the document is the whole row.
+        erased.append(cid)
+        strict.rows.pop(path(cid), None)
+
+    monkeypatch.setattr(backfill.conversations_db, 'delete_conversation', delete_conversation)
+    book.erased = erased
     return book
 
 
@@ -421,6 +430,8 @@ async def test_undo_restores_every_row_and_claim_exactly(owner, strict, ledger):
     assert any(row.get('v3_recording_ids') == ['r9'] for row in changed.values())
     result = backfill.undo_run(UID, RUN)
     assert result['outcome'] == 'undone' and result['rows_removed'] == 1
+    # The created row leaves through the conversation deletion helper (children included).
+    assert len(ledger.erased) == 1 and ledger.erased[0] not in before
     assert conversations(strict) == before
     assert ledger.run['status'] == 'undone'
     # Rerunning an undo changes nothing.
@@ -437,6 +448,34 @@ async def test_undo_refuses_after_the_owner_deleted_a_rebuilt_row(owner, strict,
     result = backfill.undo_run(UID, RUN)
     assert result == {'outcome': 'busy', 'reason': 'owner_deleted_rebuilt_row'}
     assert conversations(strict) == after and ledger.run['undo']['reason'] == 'owner_deleted_rebuilt_row'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('edit', [{'user_title': 'Renamed'}, {'starred': True}, {'has_photos': True}])
+async def test_undo_refuses_after_the_owner_edited_a_rebuilt_or_created_row(owner, strict, ledger, edit):
+    sources, rows = lunch(count=3)
+    extra = source('r9', AT + timedelta(minutes=30), words=400)
+    owner(*sources, *rows, extra)
+    await rederive()
+    created = next(cid for cid, row in conversations(strict).items() if row.get('v3_recording_ids') == ['r9'])
+    for cid in ('c0', created):
+        strict.rows[path(cid)].update(edit)
+        after = conversations(strict)
+        assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': 'owner_edited_rebuilt_row'}
+        assert conversations(strict) == after and not ledger.erased
+        for key in edit:
+            strict.rows[path(cid)].pop(key)
+
+
+@pytest.mark.asyncio
+async def test_a_partition_over_the_transaction_write_cap_blocks(owner, strict, monkeypatch):
+    sources, rows = lunch()
+    owner(*sources, *rows)
+    before = conversations(strict)
+    monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 8)
+    outcome, report = await rederive()
+    assert outcome == 'blocked' and report['blocked_reason'] == 'backfill_partition_budget'
+    assert conversations(strict) == before and not priors(strict)
 
 
 @pytest.mark.asyncio
@@ -468,7 +507,7 @@ def test_dry_run_preview_counts_before_and_after_and_writes_nothing(owner, stric
     est = backfill.estimate_live_partition(UID, {'since': SINCE, 'until': UNTIL}, 'dry-run', now=UNTIL)
     assert strict.rows == before and not strict.transactions
     assert est['rows_eligible'] == 6 and est['visible_before'] == 6
-    assert est['windows_after'] == 1 and est['visible_after'] == 1 and est['rows_retired_max'] == 5
+    assert est['windows_after'] == 1 and est['visible_after'] == 1 and est['rows_retired_est'] == 5
     assert est['outline_calls'] == 1 and est['usd'] > 0
 
 
@@ -488,7 +527,7 @@ def test_operator_dry_run_prints_the_preview_without_uids(tmp_path, monkeypatch,
             'visible_before': 18,
             'windows_after': 1,
             'visible_after': 1,
-            'rows_retired_max': 17,
+            'rows_retired_est': 17,
             'outline_calls': 1,
             'notes_calls': 1,
             'short_task_calls': 0,
@@ -501,7 +540,7 @@ def test_operator_dry_run_prints_the_preview_without_uids(tmp_path, monkeypatch,
     assert script.main([*args, '--since', SINCE.isoformat(), '--until', UNTIL.isoformat()]) == 0
     out = capsys.readouterr().out
     assert secret_uid not in out
-    assert 'windows=18->1' in out and 'visible=18->1' in out and 'rows_retired_max=17' in out and 'llm_calls=2' in out
+    assert 'windows=18->1' in out and 'visible=18->1' in out and 'rows_retired_est=17' in out and 'llm_calls=2' in out
     # The live edge is the live builder's.
     with pytest.raises(SystemExit):
         script.main([*args, '--days', '1'])

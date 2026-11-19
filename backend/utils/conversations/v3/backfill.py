@@ -17,6 +17,7 @@ import time
 from datetime import datetime, timezone
 
 from config.conversations_v3 import stretch_cohesion_enabled
+from database import conversations as conversations_db
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
@@ -549,8 +550,9 @@ def estimate_live_partition(uid, partition, run_id, *, now=None):
 
     Before counts are exact. After counts come from the real planner with one window per stretch
     (each stretch outlined as a single conversation), so ``windows_after`` is the fewest windows the
-    run can make and ``rows_retired_max`` the most it can retire; the outline can split a stretch
-    into more windows (each with at least 300 words, or the manual-end window). Spend is priced
+    run can make; the outline can split a stretch into more windows (each with at least 300 words, or
+    the manual-end window), which adopt more rows, so the run retires at most about
+    ``rows_retired_est`` (eligible rows minus the windows that adopt one). Spend is priced
     like a backfill: one outline per stretch, plus notes or tasks for every window after.
     """
     now = now or datetime.now(timezone.utc)
@@ -574,7 +576,7 @@ def estimate_live_partition(uid, partition, run_id, *, now=None):
         'visible_before': counts.get('visible_before', 0),
         'windows_after': len(fresh),
         'visible_after': 0,
-        'rows_retired_max': max(0, counts.get('rows_eligible', 0) - len(fresh)),
+        'rows_retired_est': max(0, counts.get('rows_eligible', 0) - _adopting(fresh, existing, protected)),
         'protected': sum(v for k, v in counts.items() if k.startswith('protected_')),
         'sources_blocked': sum(v for k, v in counts.items() if k.startswith('sources_blocked_')),
         'outline_calls': len(groups),
@@ -608,6 +610,23 @@ def estimate_live_partition(uid, partition, run_id, *, now=None):
             est['short_task_calls'] += 1
             est['usd'] += _usd(SHORT_TASKS_TOKENS['in'] + own * TOKENS_PER_WORD, SHORT_TASKS_TOKENS['out'])
     return est
+
+
+def _adopting(windows, existing, protected):
+    """How many windows adopt an eligible row's id (service._match: earliest unused overlapping row)."""
+    free = sorted(
+        (row for cid, row in existing.items() if cid not in protected and row.get('started_at')),
+        key=lambda row: row['started_at'],
+    )
+    used = set()
+    for window in sorted(windows, key=lambda w: w['lines'][0]['start']):
+        start, end = window['lines'][0]['start'], window['lines'][-1]['end']
+        prior = next(
+            (r for r in free if r['id'] not in used and r['started_at'] <= end and r['finished_at'] >= start), None
+        )
+        if prior is not None:
+            used.add(prior['id'])
+    return len(used)
 
 
 def _undo_groups(priors):
@@ -652,21 +671,23 @@ def undo_live_run(uid, run_id, *, firestore_client=None):
         priors = runs.list_priors(uid, run_id, firestore_client=firestore_client)
         if any(leases.held(uid, 'summary-' + e['id'], firestore_client=firestore_client) for e in priors):
             return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client)
-        blocker = rederive_store.live_undo_blocker(
-            uid, run_id, [e['id'] for e in priors], firestore_client=firestore_client
-        )
+        blocker = rederive_store.live_undo_blocker(uid, run_id, priors, firestore_client=firestore_client)
         if blocker:
             return _undo_refused(uid, run_id, blocker, firestore_client)
         totals = {'rows_restored': 0, 'rows_removed': 0, 'sources_repaired': 0}
         try:
             for group in _undo_groups(priors):
                 result = rederive_store.undo_live_rederive(uid, token, run_id, group, firestore_client=firestore_client)
-                for key in totals:
-                    totals[key] += result[key]
+                totals['rows_restored'] += result['rows_restored']
+                totals['sources_repaired'] += result['sources_repaired']
+                for cid in result['created']:
+                    # Already hidden with no claims; the deletion helper also erases its child collections.
+                    conversations_db.delete_conversation(uid, cid)
+                    totals['rows_removed'] += 1
                 for key, held_token in held:
                     leases.renew(uid, key, held_token, firestore_client=firestore_client)
         except store.Conflict as error:
-            if str(error) not in {'undo_newer_run_first', 'owner_deleted_rebuilt_row'}:
+            if str(error) not in {'undo_newer_run_first', 'owner_deleted_rebuilt_row', 'owner_edited_rebuilt_row'}:
                 raise
             return _undo_refused(uid, run_id, str(error), firestore_client)
     finally:

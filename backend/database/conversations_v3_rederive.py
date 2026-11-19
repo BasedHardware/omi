@@ -231,18 +231,35 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
     return recordings, existing, cache, counts
 
 
-def live_undo_blocker(uid, run_id, ids, *, firestore_client=None):
+def owner_changed(row, raw):
+    """The owner acted on a row the run wrote (or created) after the run: undo must not erase that."""
+    if row.get('sync_merged_into'):
+        # Retired by the run: hidden everywhere, nothing the owner can edit.
+        return False
+    raw = raw or {}
+    if any(row.get(field) and row.get(field) != raw.get(field) for field in OWNER_EDIT_FIELDS):
+        return True
+    if row.get('visibility') not in (None, 'private') and row.get('visibility') != raw.get('visibility'):
+        return True
+    return bool(row.get('is_locked')) and not raw.get('is_locked')
+
+
+def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
     """Checked before any group restores, so a refusal leaves the run whole (each group re-checks)."""
     client = firestore_client or store.get_firestore_client()
     coll = store.user_conversations(client, uid)
     deleted = client.collection('users').document(uid).collection('deleted_conversations')
-    for cid in ids:
+    for entry in entries:
+        cid = entry['id']
         if deleted.document(cid).get().exists:
             return 'owner_deleted_rebuilt_row'
         snapshot = coll.document(cid).get()
-        stamp = (snapshot.to_dict() or {}).get('v3_rederive_live_run') if snapshot.exists else None
+        row = (snapshot.to_dict() or {}) if snapshot.exists else {}
+        stamp = row.get('v3_rederive_live_run')
         if stamp not in (None, run_id):
             return 'undo_newer_run_first'
+        if stamp == run_id and owner_changed(row, entry.get('raw')):
+            return 'owner_edited_rebuilt_row'
     return None
 
 
@@ -252,7 +269,9 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
     ``entries`` are the run's priors: ``raw`` (the row as stored before the run), or ``created`` for a
     row the run made, plus ``claims`` (each claim the row held, with its source and list position).
     Only rows still stamped by this run are restored; their sources get back exactly the claims they
-    had, in place. Refuses when a newer run restamped a row or the owner deleted one since.
+    had, in place. A created row is hidden here (retired, with no claims) and returns its id in
+    ``created`` for the caller to erase with the conversation deletion helper, which also removes its
+    child collections. Refuses when a newer run restamped a row, or the owner deleted or edited one.
     """
     client = firestore_client or store.get_firestore_client()
     coll = store.user_conversations(client, uid)
@@ -273,17 +292,23 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
         if any(row and row.get('v3_rederive_live_run') not in (None, run_id) for row in current.values()):
             raise Conflict('undo_newer_run_first')
         ours = {cid for cid, row in current.items() if row and row.get('v3_rederive_live_run') == run_id}
+        raws = {e['id']: e.get('raw') for e in entries}
+        if any(owner_changed(current[cid] or {}, raws[cid]) for cid in ours):
+            raise Conflict('owner_edited_rebuilt_row')
         rids = {c['recording_id'] for e in entries if e['id'] in ours for c in e.get('claims') or []}
         rids.update(rid for cid in ours for rid in (current[cid] or {}).get('v3_recording_ids') or [])
         rids.update(rid for e in entries if e['id'] in ours for rid in e.get('sources') or [])
         sources = {rid: coll.document(rid).get(transaction=tx) for rid in sorted(rids)}
-        restored = removed = 0
+        restored, created = 0, []
         for entry in entries:
             if entry['id'] not in ours:
                 continue
             if entry.get('created'):
-                tx.delete(coll.document(entry['id']))
-                removed += 1
+                tx.update(
+                    coll.document(entry['id']),
+                    {'deleted': True, 'discarded': True, 'v3_derived': False, 'home_hidden': True},
+                )
+                created.append(entry['id'])
             else:
                 tx.set(coll.document(entry['id']), entry['raw'])
                 restored += 1
@@ -308,6 +333,6 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
             if kept != claims:
                 tx.update(coll.document(rid), {'claims': kept})
                 repaired += 1
-        return {'rows_restored': restored, 'rows_removed': removed, 'sources_repaired': repaired}
+        return {'rows_restored': restored, 'created': created, 'sources_repaired': repaired}
 
     return undo(client.transaction())

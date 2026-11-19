@@ -695,6 +695,10 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
         for rid, recording in recordings.items()
         if any(isinstance(c, dict) and c.get('conversation_id') in touched for c in recording.get('claims') or [])
     }
+    if len(sources) + len(retire) + 2 > store.BATCH_MAX_WRITES:
+        # The final batch writes every committed source, every retire patch, a row and the lease in one
+        # transaction; more than Firestore's write cap would fail on every retry.
+        raise Conflict('backfill_partition_budget')
     new_sources = {row['id']: set(row.get('v3_recording_ids') or []) for row in write}
     priors = []
     for cid in sorted(touched):

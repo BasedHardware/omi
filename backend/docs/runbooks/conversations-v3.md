@@ -277,7 +277,7 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     armed or cancelled.
   - Dry-run: reads only and calls no model. Before counts are exact; `windows_after` and
     `visible_after` replan with one outline chapter per stretch, so the outline can only add windows
-    (`rows_retired_max` is the most it retires). Spend: one outline per stretch plus notes per
+    and retire fewer rows than `rows_retired_est`. Spend: one outline per stretch plus notes per
     window after. The run's ledger records the exact `windows_after`, `visible_after`,
     `rows_rebuilt`, `rows_created`, `rows_unchanged`, `rows_retired` and `outline_calls`.
   - Blocked: `rederive_live_open` (speech within five minutes of now), `rederive_live_boundary` (a
