@@ -47,10 +47,17 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
     if (widget.isRollback) {
       await getStableVersion(deviceModelNumber: device.modelNumber);
+      final stableVersion = latestFirmwareDetails['version']?.toString();
+      final alreadyStable =
+          isKnownFirmwareVersion(device.firmwareRevision) && device.firmwareRevision.trim() == stableVersion?.trim();
       if (mounted) {
         setState(() {
-          shouldUpdate = latestFirmwareDetails.isNotEmpty && latestFirmwareDetails['version'] != null;
-          updateMessage = shouldUpdate ? '' : context.l10n.noStableFirmwareFound;
+          shouldUpdate = isKnownFirmwareVersion(stableVersion) && !alreadyStable;
+          updateMessage = alreadyStable
+              ? context.l10n.alreadyOnStableFirmware
+              : shouldUpdate
+                  ? ''
+                  : context.l10n.noStableFirmwareFound;
           isLoading = false;
         });
       }
