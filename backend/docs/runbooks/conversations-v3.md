@@ -269,7 +269,8 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     discarded, deleted, backfilled by a legacy run, unreadable or still owed notes. These are offered
     to the planner as published finished rows, so their speech, claims and audio stay theirs. The
     ledger counts each as `protected_<reason>`, `sources_blocked_<reason>` or `skipped_deleted`,
-    plus `sources_with_deleted_spans` (deleted spans are never replanned).
+    plus `sources_with_deleted_spans` (deleted spans are never replanned) and `sources_unclaimed`
+    (sealed live speech no window ever claimed; the run makes new cards of it, so check it first).
   - Adoption: a rebuilt window keeps the id of the earliest row it absorbs. A rebuilt window equal to
     its row (speech, bounds, claims and Home decision) is not written and its notes do not re-run.
     Every other row it absorbs is retired as a sync bridge (`deleted`, `discarded`,
@@ -297,7 +298,9 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     deleted a rebuilt row (`owner_deleted_rebuilt_row`), after the owner edited, shared, locked,
     merged or retitled a row the run wrote, created or retired (`owner_edited_rebuilt_row`; compared
     against the owner-surface digest each settled partition records), or while a newer live run
-    restamped one (`undo_newer_run_first`: undo that one first). A later live speech append to a rebuilt row is
+    restamped one (`undo_newer_run_first`: undo that one first). An interrupted undo is rerun as is:
+    rows it already restored, and created rows it already hid (`v3_rederive_live_undone`), are
+    finished rather than refused. A later live speech append to a rebuilt row is
     replaced by the restored document. Not undone: outline cache entries and gateway spend.
 
 Rollout owner: lead2. Step 0: set CONVERSATIONS_V3_FIRST_APP_BUILD through the shared runtime source

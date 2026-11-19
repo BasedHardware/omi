@@ -394,11 +394,11 @@ class Ledger:
         return self.run
 
 
-def priors(strict):
+def priors(strict, run_id=RUN):
     return [
         {**deepcopy(row), 'id': p[-1]}
         for p, row in strict.rows.items()
-        if len(p) == 6 and p[:4] == ('users', UID, runs.COLLECTION, RUN) and p[4] == runs.PRIORS
+        if len(p) == 6 and p[:4] == ('users', UID, runs.COLLECTION, run_id) and p[4] == runs.PRIORS
     ]
 
 
@@ -407,7 +407,7 @@ def ledger(strict, monkeypatch):
     book = Ledger()
     monkeypatch.setattr(runs, 'get_run', book.get)
     monkeypatch.setattr(runs, 'update_run', book.update)
-    monkeypatch.setattr(runs, 'list_priors', lambda uid, run_id, **kw: priors(strict))
+    monkeypatch.setattr(runs, 'list_priors', lambda uid, run_id, **kw: priors(strict, run_id))
     erased = []
 
     def delete_conversation(uid, cid):
@@ -490,6 +490,108 @@ async def test_undo_refuses_after_a_summary_edit_or_merge_once_baselines_exist(o
     after = conversations(strict)
     assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': 'owner_edited_rebuilt_row'}
     assert conversations(strict) == after
+
+
+@pytest.mark.asyncio
+async def test_an_owner_change_before_the_partition_settles_is_never_taken_as_the_baseline(owner, strict, ledger):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    await rederive()
+    # Starred while its notes were still running; the settle must not adopt the star as the baseline.
+    strict.rows[path('c0')]['starred'] = True
+    rederive_store.record_baselines(UID, RUN)
+    after = conversations(strict)
+    assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': 'owner_edited_rebuilt_row'}
+    assert conversations(strict) == after
+
+
+@pytest.mark.asyncio
+async def test_an_undo_interrupted_before_erasing_a_created_row_finishes_on_rerun(owner, strict, ledger, monkeypatch):
+    sources, rows = lunch()
+    extra = source('r9', AT + timedelta(minutes=30), words=400)
+    owner(*sources, *rows, extra)
+    before = conversations(strict)
+    await rederive()
+    rederive_store.record_baselines(UID, RUN)
+    erase = backfill.conversations_db.delete_conversation
+
+    def failing(uid, cid):
+        raise RuntimeError('child collection delete failed')
+
+    monkeypatch.setattr(backfill.conversations_db, 'delete_conversation', failing)
+    with pytest.raises(RuntimeError):
+        backfill.undo_run(UID, RUN)
+    # The groups are restored and the created row is hidden, waiting for its erasure.
+    assert ledger.run['status'] == 'undoing'
+    monkeypatch.setattr(backfill.conversations_db, 'delete_conversation', erase)
+    result = backfill.undo_run(UID, RUN)
+    assert result['outcome'] == 'undone' and result['rows_removed'] == 1
+    assert conversations(strict) == before
+
+
+@pytest.mark.asyncio
+async def test_undo_of_a_later_run_over_an_earlier_runs_rows_can_be_rerun(owner, strict, ledger):
+    later = 'run-live-2'
+    sources, rows = lunch()
+    owner(*sources, *rows)
+    before = conversations(strict)
+    await rederive()
+    # The first run's notes settled, then more speech landed on one of its sources.
+    for row in strict.rows.values():
+        row.pop('v3_backfill_process_pending', None)
+    strict.rows[path('r2')]['transcript_segments'].append(
+        {'id': 'r2-late', 'text': 'late words', 'start': 59.0, 'end': 60.0, 'is_user': True}
+    )
+    after_first = conversations(strict)
+    report = {}
+    outcome = await service.reconcile(
+        UID, derive=True, live=True, since=SINCE, until=UNTIL, run_id=later, report=report
+    )
+    assert outcome == 'committed' and priors(strict, later)
+    assert conversations(strict)['c0']['v3_rederive_live_run'] == later
+    assert backfill.undo_run(UID, later)['outcome'] == 'undone' and conversations(strict) == after_first
+    # Rows the first attempt restored carry the earlier run's stamp; a rerun is not a newer run.
+    assert backfill.undo_run(UID, later)['outcome'] == 'undone' and conversations(strict) == after_first
+    expected = deepcopy(before)
+    expected['r2']['transcript_segments'] = after_first['r2']['transcript_segments']
+    assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
+    restored = conversations(strict)
+    for row in restored.values():
+        row.pop('v3_backfill_process_pending', None)
+    for row in expected.values():
+        row.pop('v3_backfill_process_pending', None)
+    assert restored == expected
+
+
+def test_priors_are_never_written_once_the_owner_account_deletion_began(strict, monkeypatch):
+    from database.account_deletion_marker import account_deletion_document
+
+    strict.rows[account_deletion_document(UID, firestore_client=strict).path] = {'status': 'pending'}
+    with pytest.raises(store.Conflict, match='account_deletion'):
+        runs.save_priors(UID, RUN, [{'id': 'c0', 'raw': {'id': 'c0'}, 'claims': []}], firestore_client=strict)
+    assert not priors(strict)
+
+
+def test_the_window_classifier_counts_each_kind_once():
+    meta = [
+        {'recording': True},
+        {'recording': True, 'deleted': True},
+        {'v3_derived': True},
+        {'v3_derived': True, 'home_hidden': True},
+        {'v3_derived': True, 'backfilled': True},
+        {'v3_derived': True, 'backfilled': True, 'v3_rederive_live_run': RUN},
+        {'v3_derived': True, 'sync_merged_into': 'c0'},
+        {'structured': {}},
+    ]
+    assert backfill.classify_live_window(meta) == {
+        'documents': 8,
+        'live_sources': 1,
+        'live_rows': 3,
+        'live_rows_visible': 2,
+        'backfilled_rows': 1,
+        'legacy_rows': 1,
+        'deleted': 2,
+    }
 
 
 @pytest.mark.asyncio

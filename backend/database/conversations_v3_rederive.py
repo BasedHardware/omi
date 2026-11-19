@@ -203,6 +203,9 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
             continue
         if raws[rid].get('deleted_spans'):
             count('sources_with_deleted_spans')
+        if not raws[rid].get('claims'):
+            # Live speech no window ever claimed: the replan makes a card of it (reported, not hidden).
+            count('sources_unclaimed')
         recordings[rid] = {
             **row,
             '_v3_rederive_live': True,
@@ -298,8 +301,25 @@ def owner_changed(row, entry):
     return bool(row.get('is_locked')) and not raw.get('is_locked')
 
 
+# The baseline of a row the owner changed before its partition settled: never equals a digest.
+CHANGED_BEFORE_SETTLE = 'changed_before_settle'
+
+
+def already_undone(row, entry, run_id):
+    """This run's undo already handled the row: restored to its prior, or hidden awaiting erasure."""
+    if row is None:
+        return True
+    if entry.get('created'):
+        return row.get('v3_rederive_live_undone') == run_id
+    return row == entry.get('raw')
+
+
 def record_baselines(uid, run_id, *, firestore_client=None):
-    """After a partition settles its notes, digest the owner surface of every row the run stamped."""
+    """After a partition settles its notes, digest the owner surface of every row the run stamped.
+
+    A row the owner already changed between the commit and now (checked against the prior, as
+    before a baseline exists) gets a baseline that never matches, so undo keeps refusing it.
+    """
     client = firestore_client or store.get_firestore_client()
     coll = store.user_conversations(client, uid)
     pending = [e for e in runs.list_priors(uid, run_id, firestore_client=client) if not e.get('baseline')]
@@ -317,7 +337,8 @@ def record_baselines(uid, run_id, *, firestore_client=None):
                 if row.get('v3_rederive_live_run') != run_id:
                     continue
                 ref = runs.run_ref(client, uid, run_id).collection(runs.PRIORS).document(entry['id'])
-                tx.update(ref, {'baseline': owner_surface(row)})
+                baseline = CHANGED_BEFORE_SETTLE if owner_changed(row, entry) else owner_surface(row)
+                tx.update(ref, {'baseline': baseline})
                 count += 1
             return count
 
@@ -335,7 +356,10 @@ def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
         if deleted.document(cid).get().exists:
             return 'owner_deleted_rebuilt_row'
         snapshot = coll.document(cid).get()
-        row = (snapshot.to_dict() or {}) if snapshot.exists else {}
+        row = (snapshot.to_dict() or {}) if snapshot.exists else None
+        if already_undone(row, entry, run_id):
+            continue
+        row = row or {}
         stamp = row.get('v3_rederive_live_run')
         if stamp not in (None, run_id):
             return 'undo_newer_run_first'
@@ -370,24 +394,39 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
         current = {cid: (snapshot.to_dict() or {}) if snapshot.exists else None for cid, snapshot in docs.items()}
         if any(t.exists for t in tombstones.values()):
             raise Conflict('owner_deleted_rebuilt_row')
-        if any(row and row.get('v3_rederive_live_run') not in (None, run_id) for row in current.values()):
-            raise Conflict('undo_newer_run_first')
-        ours = {cid for cid, row in current.items() if row and row.get('v3_rederive_live_run') == run_id}
         by_id = {e['id']: e for e in entries}
+        # An interrupted earlier attempt of this undo: rows it restored or hid are done, not conflicts.
+        done = {cid for cid, row in current.items() if already_undone(row, by_id[cid], run_id)}
+        if any(
+            row.get('v3_rederive_live_run') not in (None, run_id)
+            for cid, row in current.items()
+            if cid not in done and row
+        ):
+            raise Conflict('undo_newer_run_first')
+        ours = {
+            cid for cid, row in current.items() if cid not in done and row and row.get('v3_rederive_live_run') == run_id
+        }
         if any(owner_changed(current[cid] or {}, by_id[cid]) for cid in ours):
             raise Conflict('owner_edited_rebuilt_row')
         rids = {c['recording_id'] for e in entries if e['id'] in ours for c in e.get('claims') or []}
         rids.update(rid for cid in ours for rid in (current[cid] or {}).get('v3_recording_ids') or [])
         rids.update(rid for e in entries if e['id'] in ours for rid in e.get('sources') or [])
         sources = {rid: coll.document(rid).get(transaction=tx) for rid in sorted(rids)}
-        restored, created = 0, []
+        restored = 0
+        created = [cid for cid in sorted(done) if current[cid] is not None and by_id[cid].get('created')]
         for entry in entries:
             if entry['id'] not in ours:
                 continue
             if entry.get('created'):
                 tx.update(
                     coll.document(entry['id']),
-                    {'deleted': True, 'discarded': True, 'v3_derived': False, 'home_hidden': True},
+                    {
+                        'deleted': True,
+                        'discarded': True,
+                        'v3_derived': False,
+                        'home_hidden': True,
+                        'v3_rederive_live_undone': run_id,
+                    },
                 )
                 created.append(entry['id'])
             else:

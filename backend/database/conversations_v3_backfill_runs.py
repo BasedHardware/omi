@@ -15,6 +15,9 @@ from datetime import datetime, timezone
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from database.account_deletion_marker import account_deletion_document
+from database.account_deletion_policy import account_deletion_marker_blocks_access
+from utils.conversations.v3 import Conflict
 
 COLLECTION = 'conversations_v3_backfill_runs'
 # Terminal run states; the task route refuses work for a run in one of these or undoing.
@@ -142,6 +145,12 @@ def save_priors(uid, run_id, entries, *, firestore_client=None):
 
     @firestore.transactional
     def write(tx, batch):
+        # Fenced like the commit: no copy of a row is written once the owner's account deletion began.
+        deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
+        if account_deletion_marker_blocks_access(
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+        ):
+            raise Conflict('account_deletion')
         for entry in batch:
             tx.set(coll.document(entry['id']), {**entry, 'recorded_at': datetime.now(timezone.utc)})
 
