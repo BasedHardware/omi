@@ -530,7 +530,8 @@ def test_terminal_failure_counter_counts_committed_transitions_once(strict):
     assert metrics.TERMINAL_FAILURES.labels('processing')._value.get() == before + 1
 
 
-def test_locked_refinement_commits_redirect_and_transferred_claims_together(strict):
+def test_locked_refinement_commits_redirect_and_transferred_claims_together(strict, monkeypatch):
+    monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: False)
     older, later = R[:-1] + ('older',), R[:-1] + ('later',)
     end = AT + timedelta(seconds=30)
     midpoint = AT + timedelta(seconds=10)
@@ -566,6 +567,13 @@ def test_locked_refinement_commits_redirect_and_transferred_claims_together(stri
     assert strict.rows[R]['claims'] == old_claims
     del strict.rows[tombstone]
 
+    monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: True)
+    with pytest.raises(store.Conflict, match='source_changed'):
+        store.commit_projection('synthetic', token, {'r': source}, existing, [survivor], [], firestore_client=strict)
+    assert strict.rows[R]['claims'] == old_claims
+    assert 'deleted' not in strict.rows[later]
+    monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: False)
+
     store.commit_projection('synthetic', token, {'r': source}, existing, [survivor], [], firestore_client=strict)
     assert strict.rows[older]['finished_at'] == end
     assert '_v3_absorbed' not in strict.rows[older]
@@ -584,7 +592,8 @@ def test_full_builder_prunes_stale_provisional_lease_ids(strict):
     existing = {path[-1]: {**strict.rows[path], '_v3_revision': 1} for path in (live, settled)}
     new = {'id': 'new', 'v3_unlocked': True, 'status': 'in_progress'}
     store.commit_projection('synthetic', token, {}, existing, [new], [], firestore_client=strict)
-    assert strict.rows[L]['unlocked_ids'] == ['live', 'new']
+    assert strict.rows[L]['unlocked_ids'] == ['new']
+    assert strict.rows[live]['v3_unlocked']
 
 
 def test_on_open_summary_commit_finalizes_provisional_snapshot(strict):

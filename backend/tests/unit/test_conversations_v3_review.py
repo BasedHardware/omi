@@ -47,6 +47,7 @@ def builder(monkeypatch):
     monkeypatch.setattr(store, 'outline_attempt', lambda *a, **kw: True)
     monkeypatch.setattr(store, 'save_outline', lambda *a, **kw: None)
     monkeypatch.setattr(store, 'adoptable', lambda *a: {})
+    monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: False)
     monkeypatch.setattr(store, 'backoff_state', lambda *a: (None, None))
     monkeypatch.setattr(service, '_commit', lambda *a, **kw: committed.append(a))
     monkeypatch.setattr(service, 'has_pending', lambda *a: False)
@@ -280,6 +281,7 @@ class MemoryQuery:
                         return False
                     if not {
                         '==': lambda: actual == expected,
+                        'in': lambda: actual in expected,
                         '>': lambda: actual > expected,
                         '>=': lambda: actual >= expected,
                         '<=': lambda: actual <= expected,
@@ -919,7 +921,8 @@ async def test_configured_preview_reuses_outline_at_lock(builder, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_configured_reconcile_refines_locked_cards_without_new_notes(builder, monkeypatch):
+@pytest.mark.parametrize('donor_has_tasks', [False, True])
+async def test_configured_reconcile_refines_locked_cards_without_new_notes(builder, monkeypatch, donor_has_tasks):
     from tests.unit.test_conversations_v3_lock_timing import _locked_pair
 
     committed, _ = builder
@@ -927,7 +930,12 @@ async def test_configured_reconcile_refines_locked_cards_without_new_notes(build
     monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
     recordings['r'].update(recording=True, status='completed', v3_pending=True)
     monkeypatch.setattr(store, 'load', lambda *a, **kw: (recordings, existing, []))
+    monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: donor_has_tasks)
     assert await service.reconcile('synthetic') == 'committed'
+    if donor_has_tasks:
+        assert {row['id'] for row in committed[0][4]} == {'early', 'late'}
+        assert all(not row.get('_v3_absorbed') for row in committed[0][4])
+        return
     (row,) = committed[0][4]
     assert row['id'] == 'early' and row['_v3_absorbed'] == ['late']
     assert row['summary_covers_through'] == row['finished_at']
@@ -1118,3 +1126,14 @@ async def test_provisional_window_does_not_reopen_a_locked_card_by_clock(builder
     [preview] = committed[-1][4]
     assert preview['id'] != 'locked' and preview['v3_unlocked']
     assert committed[-1][3]['locked']['structured'] == {'title': 'Saved title', 'emoji': '🌲'}
+
+
+def test_merge_donor_task_guard_is_scoped_and_bounded():
+    rows = {
+        '/users/synthetic/action_items/linked': {'conversation_id': 'donor'},
+        '/users/other/action_items/unrelated': {'conversation_id': 'other'},
+    }
+    client = MemoryQuery(rows)
+    assert store.merge_donors_have_tasks('synthetic', ['other', 'donor'], firestore_client=client)
+    assert not store.merge_donors_have_tasks('synthetic', ['other'], firestore_client=client)
+    assert all(limit == 1 for _filters, limit, _after in client.calls)

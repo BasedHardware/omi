@@ -105,6 +105,7 @@ def test_locked_refinement_keeps_earliest_id_notes_and_single_copy_of_audio():
     assert merged['_v3_absorbed'] == ['late']
     assert merged['summary_covers_through'] == merged['finished_at'] == existing['late']['finished_at']
     assert [section['heading'] for section in merged['structured']['sections']] == ['A', 'Late', 'B']
+    assert merged['structured']['overview'] == 'Recap'
     assert merged['_v3_claims'] == {'r': [{'start': AT, 'end': AT + timedelta(seconds=30)}]}
     assert [(piece['start'], piece['end']) for piece in merged['recording_pieces']] == [(0, 20), (20, 30)]
 

@@ -19,12 +19,15 @@ def _eligible(row):
         and row.get('kind') in {'conversation', 'voice_work'}
         and row.get('visibility', 'private') == 'private'
         and not row.get('home_hidden')
+        and row.get('finalization_status') != 'dead_letter'
         and not any(
             row.get(key)
             for key in (
                 'deleted',
                 'recording',
                 'discarded',
+                'dream_duplicate_of',
+                'summary_retryable',
                 'manual_end',
                 'is_locked',
                 'backfilled',
@@ -125,6 +128,8 @@ def _merged_row(rows, claims):
     for row in donors:
         structured = row['structured']
         if overview := structured.get('overview'):
+            if not merged['structured'].get('overview'):
+                merged['structured']['overview'] = overview
             sections.append({'heading': structured.get('title') or '', 'body_markdown': overview})
         sections.extend(structured.get('sections') or ())
         for field in ('action_items', 'events', 'participants', 'insights', 'note_claims'):

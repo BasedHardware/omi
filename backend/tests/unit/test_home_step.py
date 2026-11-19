@@ -62,6 +62,7 @@ def test_older_v3_preview_keeps_its_individual_home_card_and_outline():
     assert projected['home_step'] == 'ready'
     assert projected['structured'] == preview['structured']
     assert home_step.classify({**preview, 'tile_state': 'writing'}) == 'writing_notes'
+    assert home_step.classify({**preview, 'finished_at': NOW - timedelta(days=1)}) == 'failed'
 
 
 def test_row_level_projection_provenance_is_writing_notes_without_structured_provenance():

@@ -64,6 +64,21 @@ def user_conversations(client, uid):
     return client.collection('users').document(uid).collection('conversations')
 
 
+def merge_donors_have_tasks(uid, donor_ids, *, firestore_client=None, transaction=None):
+    """Preserve standalone task links by checking the donor IDs without loading item content."""
+    client = firestore_client or get_firestore_client()
+    query = (
+        client.collection('users')
+        .document(uid)
+        .collection('action_items')
+        .where(filter=FieldFilter('conversation_id', 'in', list(donor_ids)))
+        .select(('conversation_id',))
+        .limit(1)
+    )
+    matches = query.stream() if transaction is None else query.stream(transaction=transaction)
+    return next(iter(matches), None) is not None
+
+
 def decode_row(uid, snapshot) -> dict[str, Any] | None:
     data = snapshot.to_dict() or {}
     if not snapshot.exists:
@@ -559,16 +574,18 @@ def commit_projection(
     open_ids = [r['id'] for r in rows if r['status'] == 'in_progress' and not r.get('deleted')]
     if len(open_ids) > 1:
         raise Conflict('multiple_open_conversations')
+    planned_unlocked = {r['id'] for r in rows if r.get('v3_unlocked') and not r.get('deleted')}
     # One merge per pass, with all donor redirects in the survivor's batch.
     all_absorbed = [cid for row in rows for cid in row.get('_v3_absorbed', ())]
     if all_absorbed:
+        if len(recordings) + len(all_absorbed) + 2 > BATCH_MAX_WRITES:
+            raise Conflict('request_too_large')
         planned_ids = {row['id'] for row in rows}
         if (
             key != 'builder'
             or remove
             or not set(all_absorbed) <= existing.keys() - planned_ids
             or len(all_absorbed) != len(set(all_absorbed))
-            or len(recordings) + len(all_absorbed) + 2 > BATCH_MAX_WRITES
         ):
             raise Conflict('source_changed')
     failure_transitions = {
@@ -628,6 +645,8 @@ def commit_projection(
                 moved.add(rid)
             observed[rid] = current or {}
         absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
+        if absorbed and merge_donors_have_tasks(uid, absorbed, firestore_client=client, transaction=tx):
+            raise Conflict('source_changed')
         for cid in [*(row['id'] for row in batch_rows), *absorbed]:
             tombstone = (
                 client.collection('users')
@@ -745,13 +764,12 @@ def commit_projection(
         unlocked = {r['id'] for r in batch_rows if r.get('v3_unlocked') and not r.get('deleted')}
         if unlocked or lease.get('unlocked_ids'):
             previous_unlocked = set(lease.get('unlocked_ids') or ()) - {r['id'] for r in batch_rows}
-            if key == 'builder' and clear_pending:
-                # The full builder load follows every indexed ID. Drop entries
-                # whose row is gone or settled, while a scoped open leaves them alone.
-                previous_unlocked.intersection_update(
-                    cid for cid, row in existing.items() if row.get('v3_unlocked') and not row.get('deleted')
-                )
-            lease_update['unlocked_ids'] = sorted(previous_unlocked | unlocked)
+            if key == 'builder' and clear_pending and final:
+                # A full pass plans every eligible indexed preview. Missing,
+                # settled or ineligible sources no longer owe a timer.
+                lease_update['unlocked_ids'] = sorted(planned_unlocked)
+            else:
+                lease_update['unlocked_ids'] = sorted(previous_unlocked | unlocked)
         staged['lease'] = (lease, lease_update)
         tx.update(held, lease_update)
         return observed
