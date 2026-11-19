@@ -63,6 +63,7 @@ class PendingWorkStore extends ChangeNotifier {
     _retryAllKey = null;
     _seenFailedConversations.clear();
     failedConversationsSeen.value++;
+    _pendingAnswered = false;
     notifyListeners();
   }
 
@@ -121,6 +122,9 @@ class PendingWorkStore extends ChangeNotifier {
 
   int _generation = 0;
 
+  /// True once this account's pending read has answered; until then a failed read keeps old Home.
+  bool _pendingAnswered = false;
+
   /// Re-reads both server views. A failed read keeps the last good rows: a flaky network must not
   /// empty the bell or drop the card.
   Future<void> refresh() async {
@@ -134,13 +138,14 @@ class PendingWorkStore extends ChangeNotifier {
       case ApiSuccess(:final data):
         _pending = data.enabled ? data.items : const [];
         homeProcessingToday = data.enabled && data.homeProcessingToday;
+        _pendingAnswered = true;
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         _pending = const [];
         homeProcessingToday = false;
       case ApiFailure():
         // A flaky read keeps the last good answer (X17): dropping the flag would empty Activity's
-        // attention and processing lists, which it gates.
-        break;
+        // attention and processing lists, which it gates. With no answer yet, old Home stays.
+        if (!_pendingAnswered) homeProcessingToday = false;
     }
     if (attentionRevision == _attentionRevision) {
       switch (attention) {

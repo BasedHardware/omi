@@ -76,8 +76,8 @@ class _ConversationStateTileState extends State<ConversationStateTile> {
       height: ConversationStateTile.extent,
       decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
       alignment: Alignment.center,
-      child: AnimatedSwitcher(
-        duration: OmiMotion.of(context).standard,
+      child: OmiCrossFade(
+        alignment: Alignment.center,
         // Done and no-state both show the emoji: one key, so the emoji never cross-fades with itself.
         child: KeyedSubtree(key: ValueKey('tile_${label == null ? 'emoji' : state!.name}'), child: child),
       ),

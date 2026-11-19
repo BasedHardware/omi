@@ -845,14 +845,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
           key: const ValueKey('conversation_row_status_writing'), style: style, maxLines: 1),
       _ => KeyedSubtree(key: const ValueKey('conversation_row_meta'), child: _buildMetaRow(context)),
     };
-    return AnimatedSwitcher(
-      duration: OmiMotion.of(context).standard,
-      layoutBuilder: (current, previous) => Stack(
-        alignment: AlignmentDirectional.topStart,
-        children: [...previous, if (current != null) current],
-      ),
-      child: child,
-    );
+    return OmiCrossFade(child: child);
   }
 
   String _getConversationDuration(BuildContext context) {
