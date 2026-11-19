@@ -22,7 +22,7 @@ import json
 import math
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from google.cloud.firestore_v1.field_path import FieldPath
 
@@ -181,8 +181,6 @@ def process_page(
     max_statements: int = 2000,
     budget_s: float = 10.0,
     apply: bool = False,
-    load_cursor: Callable[[Any], str | None] | None = None,
-    advance: Callable[[Any, PageResult], None] | None = None,
 ) -> PageResult:
     """Reconcile one bounded page; failures raise without publishing a cursor.
 
@@ -209,20 +207,14 @@ def process_page(
     limit = min(max_rows, max_primary_reads // (2 if source == 'primary' else 1))
     if limit < 1:
         raise ValueError('primary-read budget cannot cover one row')
+    keys = _primary_keys(dual.primary, table, after, limit, budget) if source == 'primary' else None
     with dual.shadow.pool.connection(timeout=budget.remaining(), existing_only=True) as raw:
         with connection_deadline(raw, budget.deadline):
             budget.statement(2)  # reserve BEGIN and COMMIT (or rollback on failure)
             with raw.transaction():
                 conn = _BoundedConnection(raw, budget)
-                # Durable workers lock/read and advance their checkpoint in this
-                # exact transaction. Both hooks share SQL and wall budgets.
-                if load_cursor is not None:
-                    after = decode_cursor(load_cursor(conn), namespace, source, table)
-                keys = (
-                    _primary_keys(dual.primary, table, after, limit, budget)
-                    if source == 'primary'
-                    else _copy_keys(conn, namespace, table, after, limit)
-                )
+                if keys is None:
+                    keys = _copy_keys(conn, namespace, table, after, limit)
                 if (
                     len(keys) > limit
                     or keys != sorted(set(keys))
@@ -263,10 +255,7 @@ def process_page(
                         dual.copy_current(conn, [(table, key)], reader=reader)
                     else:
                         reader(dual.primary, [(table, key)])
-                end = len(keys) < limit
-                result = PageResult(counts, end, None if end else _encode_cursor(namespace, source, table, keys[-1]))
-                if advance is not None:
-                    advance(conn, result)
-                budget.remaining()  # deadline failure rolls back page AND checkpoint
+                budget.remaining()  # deadline failure rolls back the entire apply page
     budget.remaining()
-    return result
+    end = len(keys) < limit
+    return PageResult(counts, end, None if end else _encode_cursor(namespace, source, table, keys[-1]))

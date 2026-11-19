@@ -9094,7 +9094,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Bu kayıt yüklendi ancak Omi hâlâ konuşmayı oluşturuyor. Şimdi silerseniz ve işleme başarısız olursa kurtarılamaz. Yine de silinsin mi?';
+      'Bu kayıt zaten yüklendi ve Omi onu işliyor. Burada silmek telefondaki kopyayı kaldırır. İşleme başarısız olursa Omi bu telefondan yeniden deneyemez.';
 
   @override
   String get syncCardAllBackedUp => 'Tüm kayıtlar eşitlendi';
@@ -15446,6 +15446,11 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Güncelleme yüklenmedi. Kolyeniz mevcut yazılımıyla ($version) çalışmaya devam ediyor. Güncellemeyi yeniden denemek yerine lütfen destekle iletişime geçin.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15580,4 +15585,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Ana Sayfaya Dön';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Bu konuşma bittiğinde özet';
 }

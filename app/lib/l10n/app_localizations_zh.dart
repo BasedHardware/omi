@@ -8944,7 +8944,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteWhileProcessingTitle => '仍在处理';
 
   @override
-  String get deleteWhileProcessingMessage => '此录音已上传，但 Omi 仍在创建对话。如果现在删除且处理失败，将无法恢复。仍要删除吗？';
+  String get deleteWhileProcessingMessage => '此录音已上传，Omi 正在处理。在这里删除会移除手机上的副本。如果处理失败，Omi 将无法从这部手机重试。';
 
   @override
   String get syncCardAllBackedUp => '所有录音已同步';
@@ -15184,6 +15184,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return '更新未能安装。你的吊坠仍可使用当前固件（$version）正常工作。请联系支持团队，不要反复重试更新。';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15318,4 +15323,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get finishBackToHome => '返回首页';
+
+  @override
+  String get conversationSummaryWhenItEnds => '对话结束后生成摘要';
 }

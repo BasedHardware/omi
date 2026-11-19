@@ -2958,7 +2958,7 @@
     "noRecordingsYet": "Записей пока нет",
     "syncInProgress": "Идёт синхронизация",
     "deleteWhileProcessingTitle": "Ещё обрабатывается",
-    "deleteWhileProcessingMessage": "Эта запись загружена, но Omi ещё создаёт разговор. Если удалить её сейчас и обработка не удастся, восстановить будет невозможно. Всё равно удалить?",
+    "deleteWhileProcessingMessage": "Эта запись уже загружена, и Omi её обрабатывает. Удаление здесь убирает копию на телефоне. Если обработка не удастся, Omi не сможет повторить попытку с этого телефона.",
     "syncCardAllBackedUp": "Все записи синхронизированы",
     "syncCardReadyCount": "{count, plural, one{1 запись готова к синхронизации} few{{count} записи готовы к синхронизации} many{{count} записей готовы к синхронизации} other{{count} записи готовы к синхронизации}}",
     "syncCardProcessing": "Обработка в Omi…",
@@ -4685,6 +4685,7 @@
     "hasLinkedTasksLabel": "Есть связанные задачи",
     "hasTasksFilter": "С задачами",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateNotInstalledCv1Message": "Обновление не установилось. Ваш кулон продолжает работать на текущей прошивке ({version}). Пожалуйста, обратитесь в поддержку, а не повторяйте обновление.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
@@ -4724,5 +4725,6 @@
     "onTheWayServerWork": "Работа по данным сервера",
     "finishNothingToProcess": "Пока нечего обрабатывать.",
     "finishStillProcessing": "Ещё обрабатывается. Появится на главной.",
-    "finishBackToHome": "На главную"
+    "finishBackToHome": "На главную",
+    "conversationSummaryWhenItEnds": "Сводка появится, когда разговор закончится"
 }

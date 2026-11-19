@@ -9079,7 +9079,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can\'t be recovered. Delete anyway?';
+      'This recording is already uploaded and Omi is processing it. Deleting it here removes the phone\'s copy. If processing fails, Omi can\'t retry from this phone.';
 
   @override
   String get syncCardAllBackedUp => 'All recordings synced';
@@ -15419,6 +15419,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'The update didn\'t install. Your pendant still works on its current firmware ($version). Please contact support rather than retrying the update.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15553,4 +15558,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Back to Home';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Summary when this conversation ends';
 }

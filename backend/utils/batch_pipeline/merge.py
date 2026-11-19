@@ -22,6 +22,7 @@ from config.record_drain import capture_age_priority
 from config.record_latency import record_fresh_merge_enabled
 from database import batch_pipeline_allowance_hold as allowance_hold
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_projection_outbox import arm as arm_projection
 from database.batch_pipeline_store import Store
 from utils.batch_pipeline import backlog_release
 from utils.batch_pipeline.result_protocol import merge_markers
@@ -710,6 +711,7 @@ class OrderedMerge:
                 'fresh_capture': job.get('fresh_capture') is True,
             }
             entry.update(markers)
+            entry.update(arm_projection(entry, now))
             if job.get('recovery_state') == 'recovered' or (job.get('stt_route') or {}).get('stt_route') == 'provider':
                 entry['recovery_version'] = 1
             if bypass:
