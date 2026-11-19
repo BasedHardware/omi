@@ -3,6 +3,7 @@ import pytest
 from models.app import AppReview, App
 from utils.apps import _extract_rating_stats
 
+
 def _valid_review_dict(uid: str = "user_1") -> dict[str, Any]:
     return {
         "uid": uid,
@@ -13,6 +14,7 @@ def _valid_review_dict(uid: str = "user_1") -> dict[str, Any]:
         "response": "Thank you for the review!",
         "responded_at": "2026-07-02T13:00:00",
     }
+
 
 class TestAppReviewSafeDeserialization:
     def test_deserialize_safe_valid(self):
@@ -36,36 +38,36 @@ class TestAppReviewSafeDeserialization:
         assert reviews[0].uid == "u1"
         assert reviews[1].uid == "u2"
 
+
 class TestRatingAggregationSafety:
     def test_extract_rating_stats_clamping(self):
-        reviews = [
-            {"score": 10.0},
-            {"score": -1.0},
-        ]
+        reviews = {
+            "u1": {"score": 10.0, "review": "a"},
+            "u2": {"score": -1.0, "review": "b"},
+        }
         avg, count = _extract_rating_stats(reviews)
         assert count == 2
         assert avg == 3.0
 
     def test_extract_rating_stats_missing_score(self):
-        reviews = [
-            {"review": "no score here"},
-            {"score": 4.0},
-        ]
+        reviews = {
+            "u1": {"review": "no score here"},
+            "u2": {"score": 4.0, "review": "valid"},
+        }
         avg, count = _extract_rating_stats(reviews)
         assert count == 1
         assert avg == 4.0
 
     def test_extract_rating_stats_non_dict_entries(self):
-        reviews = [
-            "not a dict",
-            None,
-            {"score": 3.0},
-        ]
+        reviews = {
+            "u1": "not a dict",
+            "u2": None,
+            "u3": {"score": 3.0, "review": "valid"},
+        }
         avg, count = _extract_rating_stats(reviews)
         assert count == 1
         assert avg == 3.0
 
     def test_extract_rating_stats_empty_input(self):
-        avg, count = _extract_rating_stats([])
-        assert count == 0
-        assert avg == 0.0
+        assert _extract_rating_stats({}) == (None, 0)
+        assert _extract_rating_stats([]) == (None, 0)
