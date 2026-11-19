@@ -20,4 +20,6 @@ sum by (outcome)(increase(omi_batch_projection_native_audio_prefetch_total{servi
 
 The native audio prefetch counter uses only `outcome`. `started` counts rows that reach the audio prefetch decision. `consumed` counts attempts where assignment needs the context, including an attempt that fails validation. `abandoned` counts candidates whose context went unused, including unused results and failed eager loads. The counter runs in both switch modes. Compare full windows because pending candidates can settle in a later window.
 
+The shared Cloud Run sync collector admits this exact metric name. Confirm backend-integration has the collector configuration that includes it before taking the baseline or the serving readback.
+
 One abandoned candidate in the default mode avoids the eager attempt to open its staging artifact and any private-sync sources it references. Use the abandoned count with the direct `batch_source` and native bucket counters to size the savings, since source objects per candidate vary. A consumed assignment still verifies its sources. The Nov 2026 bucket-wide bytes-per-audio-hour proxy includes all readers and cannot size this path by itself.

@@ -51,7 +51,15 @@ class DelayedManifestExecutor(InlineExecutor):
 
 @pytest.mark.parametrize(
     'eager,fault',
-    [(False, None), (True, None), (False, 'staging'), (False, 'source'), (False, 'privacy'), (False, 'delayed')],
+    [
+        (False, None),
+        (True, None),
+        (True, 'staging'),
+        (False, 'staging'),
+        (False, 'source'),
+        (False, 'privacy'),
+        (False, 'delayed'),
+    ],
 )
 def test_native_read_ahead_only_defers_with_full_assignment_verification(monkeypatch, eager, fault):
     if eager:
@@ -130,7 +138,8 @@ def test_native_read_ahead_only_defers_with_full_assignment_verification(monkeyp
     prefetch = projection_prefetch.ChainPrefetch(projector, owner_key(BURST), 1, executor=executor)
     before = native_prefetch_counts()
     prefetch.advance(None)
-    assert gcs.downloads == (2 if eager else 0)
+    eager_failure = eager and fault == 'staging'
+    assert gcs.downloads == (1 if eager_failure else 2 if eager else 0)
     if delayed is not None:
         original_wait = projection_prefetch.wait
 
@@ -148,8 +157,9 @@ def test_native_read_ahead_only_defers_with_full_assignment_verification(monkeyp
     walk = projector.drain_step(BURST, 15, prefetch=prefetch)
     prefetch.close()
     after = native_prefetch_counts()
-    assert after == {**before, 'started': before['started'] + 1, 'consumed': before['consumed'] + 1}
-    assert gcs.downloads == (1 if fault == 'staging' else 2)
+    terminal = 'abandoned' if eager_failure else 'consumed'
+    assert after == {**before, 'started': before['started'] + 1, terminal: before[terminal] + 1}
+    assert gcs.downloads == (1 if fault == 'staging' and not eager_failure else 2)
     if fault in {None, 'delayed'}:
         assert checks == [0, 1, 2]
         assert walk.advanced == [segment]
