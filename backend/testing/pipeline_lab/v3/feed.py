@@ -10,6 +10,9 @@ and the source is recorded per recording:
 2. ``record_sealed_at`` + ``lag``     - the batch lane sealed the audio (epoch seconds);
 3. ``finished_at`` + ``lag``          - last resort (default lag 60 s, flagged).
 
+A stamp more than ``MAX_STAMP_LAG`` (30 min) after ``finished_at`` is skipped: on rows a backfill
+converted, ``terminal_family_at`` records the legacy row's later re-finalization.
+
 ``mode='finish'`` ignores the production stamps and uses ``finished_at + lag`` for every
 recording (an idealized, latency-free day).
 
@@ -34,6 +37,9 @@ from testing.pipeline_lab.chain.order import CAPTURE_FIELDS, pre_finalization_ro
 from testing.pipeline_lab.stack.io import parse_time
 
 DEFAULT_LAG = timedelta(seconds=60)
+# A production stamp further than this after ``finished_at`` is not the capture's arrival (backfill
+# donors carry their legacy row's late re-finalization in ``terminal_family_at``: hours, not minutes).
+MAX_STAMP_LAG = timedelta(minutes=30)
 MODES = ('production', 'finish')
 
 
@@ -84,12 +90,16 @@ def arrival_instant(row: Mapping[str, Any], *, lag: timedelta = DEFAULT_LAG, mod
     if mode not in MODES:
         raise ValueError(f'unknown arrival mode {mode!r}')
     finished = parse_time(row.get('finished_at'))
+
+    def plausible(stamp: datetime | None) -> bool:
+        return stamp is not None and (finished is None or stamp - finished <= MAX_STAMP_LAG)
+
     if mode == 'production':
         terminal = parse_time(row.get('terminal_family_at'))
-        if terminal is not None:
+        if plausible(terminal):
             return terminal, 'terminal_family_at'
         sealed = _epoch(row.get('record_sealed_at'))
-        if sealed is not None:
+        if plausible(sealed):
             return max(sealed, finished or sealed) + lag, 'record_sealed_at+lag'
     if finished is not None:
         return finished + lag, 'finished_at+lag'

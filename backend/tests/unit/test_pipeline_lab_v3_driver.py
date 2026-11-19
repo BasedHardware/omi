@@ -40,6 +40,9 @@ def test_arrival_instant_prefers_terminal_then_sealed_then_finished():
     assert arrival_instant(row, mode='finish') == (T0 + timedelta(minutes=4), 'finished_at+lag')
     with pytest.raises(ValueError):
         arrival_instant(row, mode='bogus')
+    # a late lifecycle stamp (a backfill donor's re-finalization) is not the arrival
+    late = rec('d', T0, terminal_family_at=(T0 + timedelta(hours=10)).isoformat())
+    assert arrival_instant(late) == (T0 + timedelta(minutes=4), 'finished_at+lag')
 
 
 def test_plan_orders_by_instant_and_skips_unusable_rows():

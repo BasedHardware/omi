@@ -34,6 +34,7 @@ synthetic uid `local-dev-user`.
 | `day/`, `baseline/` | Day-level outputs; production normalization, pairing and status (the one implementation). |
 | `timeline/`, `cassette/`, `lanes/` | Day timeline and lanes; STT cassettes (vendor prerecorded and Parakeet batch adapters); record/batch and sync replay; `lanes/plugin.py`. |
 | `inspector/` | Stdlib server and static UI; `sample_run.py` (synthetic Lumen Bay day). |
+| `v3/` | Conversations v3 replay: `feed.py` (recordings, arrival instants), `tasks.py` (loopback Cloud Tasks), `driver.py` (event loop), `product.py` + `run.py` + `entry.py` (real v3 code), `export.py` (contract rows, pairing by recording), `corpus.py` (add-day ingest), `select.py` (pipeline choice), `fake.py`, `smoke.py`, `prod_export.py` (read-only v3 exporter). |
 | `sample.py` | Minimal synthetic run, used only when the inspector plugin is absent. |
 
 ## Store
@@ -68,7 +69,34 @@ runs/<run_id>/vendor_log.jsonl                    what audio went to which vendo
 runs/<run_id>/decisions.jsonl                     serving pins, unpinned decisions, network refusals
 runs/<run_id>/ledger.json, errors.log, chain_errors.log, processing_errors.log, <stage>.process.log
 $VERDICTS/verdicts.jsonl                          Verdict, append-only; newest row per item wins; mark good|bad|clear
+corpus/<day_id>/v3/recordings.jsonl               v3 days: the day's recordings (raw, lab uid); the v3 replay feeds these
+corpus/<day_id>/v3/derived.jsonl, v3/meta.json    production's v3 conversations (raw) and day facts (live since, backfill runs)
+corpus/<day_id>/baseline/v3_conversations.jsonl   production's v3 conversations in the contract shape: the v3 comparison target
+runs/<run_id>/v3_driver.json, v3_tasks.jsonl      arrival plan and every event; every named task (enqueue, dedupe, due)
+runs/<run_id>/v3_recordings.json                  where each replayed recording's speech went
 ```
+
+A v3 conversation row adds `recordings` (source recording ids) and `v3` (`visible` on the phone's Home,
+`home_hidden_reason`, `kind`, `tile_state`, notes state); its `structured` may carry `sections`,
+`participants` and `gist`. Its id is derived from the uid, so pairing with production is by shared
+recording (`baseline_id`, `baseline_ids`), never by id.
+
+## Conversations v3
+
+`run` replays a day through conversations v3 when the overlay turns `CONVERSATIONS_V3` on (the production
+runtime env does) and the corpus day has v3 recordings; `model_config.pipeline: "classic" | "v3"` overrides.
+Each recording is fed at its production arrival instant (`terminal_family_at`, else `record_sealed_at` + 60 s,
+else `finished_at` + 60 s; stamps over 30 min late are ignored) as a fresh capture end through the product's
+admission and durable finalization (`recording_short_path` wakes v3). Named Cloud Tasks run in process at
+their virtual time (`service.reconcile`: outline, plan, commit, notes drain, created fanout) and the `*/5`
+sweep runs while anything is pending. The lab writes the two app-capability markers the phone would
+(`client_gate.note_client_seen`, `client_capability.note_capable`) so admission at stage `beta` is the
+product's own decision, and removes them after the run. `model_config.v3` tunes it:
+`{"arrival": "production"|"finish", "arrival_lag_seconds": 60, "tail_hours": 2, "sweeps": true}`.
+
+Not replayed: on-open (foreground) notes and Retry, which need a user opening the app; listen's live
+in-progress passes (the batch lane has no transcript until a recording seals); production's builder lease
+state at the day start (`open_id`, outline cache).
 
 Segment `start`/`end` are seconds from the conversation's `started_at`. A verdict's
 `conversation_id` is the production id when the item's conversation has one (the replay
@@ -154,7 +182,7 @@ python -m testing.pipeline_lab llm-proxy --run <run> --upstream URL [--port N]
 python -m testing.pipeline_lab stages | doctor
 python -m testing.pipeline_lab corpus add-day --snapshot DIR --date YYYY-MM-DD --timezone TZ [--audio-dir DIR]
 python -m testing.pipeline_lab record-stt --day <day> --adapter prerecorded|parakeet_batch [--provider P] --model M --budget-usd N
-python -m testing.pipeline_lab overlay from-runtime-env --out overlay.json
+python -m testing.pipeline_lab overlay from-runtime-env [--runtime-env ARM/backend/deploy/runtime_env.yaml] [--owner-uid-file F] --out overlay.json
 python -m testing.pipeline_lab serve [--port 8765] [--allow-login LOGIN]
 ```
 
@@ -178,9 +206,13 @@ names look secret are redacted in `run.json`. `model_config.stt` picks the casse
 `transcribe` stage plays: `{"adapter": "prerecorded"|"parakeet_batch", "provider", "model",
 "language", "vocabulary", "sync_mode": "span"|"exact"}`.
 
-`overlay from-runtime-env [--service backend-sync] [--owner-uid-env VAR] --out FILE`
+`overlay from-runtime-env [--service backend-sync] [--owner-uid-file F] --out FILE`
 builds an overlay from the ref's `deploy/runtime_env.yaml` production profile: the lab
-clears the process env, so without it every flag takes its code default.
+clears the process env, so without it every flag takes its code default. `backend-sync` is
+the default service because it runs the v3 reconcile task (outline, notes, derived effects).
+Every serve decision is pinned (cohorts through the owner uid when given; the rest are
+uid-independent), and uid allow-lists carry the owner's membership over to the lab uid; the
+owner uid never reaches the overlay. Read the uid from a 0600 file, never the environment.
 
 ## Worktrees
 
@@ -198,6 +230,8 @@ differs from the harness's.
 cd backend
 for f in tests/unit/test_pipeline_lab_*.py; do python -m pytest "$f" -q; done   # one process per file, as CI
 testing/pipeline_lab/stack/run_chain_smoke.sh   # LOCAL-STACK SMOKE: emulator + redis on 8295/6391, synthetic day
+FS_PORT=8296 REDIS_PORT=6392 SMOKE_MODULE=testing.pipeline_lab.v3.smoke \
+  testing/pipeline_lab/stack/run_chain_smoke.sh [--ref SHA]   # the same for a synthetic v3 day
 ```
 
 `test_pipeline_lab_integration_e2e.py` drives the CLI end to end on a synthetic snapshot with
@@ -220,9 +254,13 @@ cd backend
 python -m testing.pipeline_lab corpus add-day --snapshot "$SNAPSHOT_DIR" --date "$DAY" --timezone "$TZ" \
     --audio-dir "$AUDIO_DIR" --json
 
-# 2. Production flags at the ref under test (owner uid only resolves partial cohorts; never written)
-python -m testing.pipeline_lab overlay from-runtime-env --service backend-sync \
-    --owner-uid-env OWNER_UID --out "$OMI_PIPELINE_LAB_ROOT/overlays/prod.json" --json
+#    A v3 export beside the snapshot (v3/prod_export.py, read-only, owner guard injected by path) adds the
+#    day's recordings and production's v3 conversations; runs then replay v3 under the production overlay.
+
+# 2. Production flags at the ref under test (owner uid from a 0600 file: cohorts and allow-lists; never written)
+python -m testing.pipeline_lab worktree ensure "$REF" --json      # pinned arm; its runtime env is the source
+python -m testing.pipeline_lab overlay from-runtime-env --runtime-env "$ARM/backend/deploy/runtime_env.yaml" \
+    --owner-uid-file "$UID_FILE" --out "$OMI_PIPELINE_LAB_ROOT/overlays/prod.json" --json
 
 # 3. Local stack: Firestore + Auth emulators, Redis, Typesense (dev-up ports 8085/9099/6380/8108)
 make dev-up            # or point FIRESTORE_EMULATOR_HOST / OMI_PIPELINE_LAB_REDIS / _TYPESENSE elsewhere

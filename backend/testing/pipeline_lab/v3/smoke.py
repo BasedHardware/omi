@@ -34,6 +34,7 @@ def _jsonl(path: Path) -> list[dict[str, Any]]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog='python -m testing.pipeline_lab.v3.smoke')
     parser.add_argument('--keep', help='store root to write (default: a fresh temp dir)')
+    parser.add_argument('--ref', help='run a pinned arm of this ref (e.g. the production release) instead of in place')
     args = parser.parse_args(argv)
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
@@ -52,7 +53,15 @@ def main(argv: list[str] | None = None) -> int:
     from testing.pipeline_lab.seed.synthetic import write_synthetic_snapshot
 
     report: dict[str, Any] = {'root': str(base), 'firestore': host, 'redis': os.environ.get('OMI_PIPELINE_LAB_REDIS')}
-    code, built = _cli('overlay', 'from-runtime-env', '--out', str(base / 'overlay.json'))
+    runtime_env: list[str] = []
+    if args.ref:
+        code, arm = _cli('worktree', 'ensure', args.ref)
+        if code != 0 or not arm:
+            print(json.dumps({'ok': False, 'error': f'worktree ensure failed: {arm}'}))
+            return 1
+        report['arm'] = {'sha': arm.get('sha'), 'backend_tree': arm.get('backend_tree')}
+        runtime_env = ['--runtime-env', str(Path(arm['path']) / 'backend' / 'deploy' / 'runtime_env.yaml')]
+    code, built = _cli('overlay', 'from-runtime-env', *runtime_env, '--out', str(base / 'overlay.json'))
     report['overlay'] = (
         {k: built.get(k) for k in ('service', 'kept', 'cohorts', 'pinned_static', 'unresolved', 'v3')}
         if built
@@ -67,9 +76,7 @@ def main(argv: list[str] | None = None) -> int:
             'run',
             '--day',
             DAY,
-            '--ref',
-            'HEAD',
-            '--in-place',
+            *(['--ref', args.ref] if args.ref else ['--ref', 'HEAD', '--in-place']),
             '--engine',
             'product',
             '--from-stage',
