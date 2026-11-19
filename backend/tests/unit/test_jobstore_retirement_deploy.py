@@ -39,16 +39,6 @@ def test_cloud_run_and_listen_deletion_executors_have_complete_dark_target_conte
     )
 
 
-def test_prod_retirement_stays_off_on_the_serving_leader_until_0010_readback():
-    # Staged #25630 roll (lead2 a392ec): delete this test with the overlay line once Release reads back 0010.
-    services = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)[
-        'environments'
-    ]['prod']['cloud_run']['services']
-    assert services['backend-integration']['env']['JOBSTORE_RETIREMENT_ENABLED']['value'] == 'off'
-    for name in ('backend', 'backend-sync', 'backend-sync-backfill'):
-        assert 'JOBSTORE_RETIREMENT_ENABLED' not in services[name]['env']
-
-
 def test_prod_worker_target_is_optional_in_shared_chart_and_matches_pod_identity():
     result = render(
         '-f', str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'), '--set', 'image.digest=sha256:' + 'a' * 64
