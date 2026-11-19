@@ -15472,4 +15472,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'عمل أبلغ عنه الخادم';
+
+  @override
+  String get finishNothingToProcess => 'لا يوجد شيء لمعالجته بعد.';
+
+  @override
+  String get finishStillProcessing => 'لا تزال المعالجة جارية. ستظهر على الشاشة الرئيسية.';
+
+  @override
+  String get finishBackToHome => 'العودة إلى الرئيسية';
 }

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 import sys
-from unittest.mock import Mock
+from unittest.mock import ANY, Mock
 
 import google.auth
 from google.auth.transport import requests as auth_requests
@@ -140,8 +140,10 @@ def test_direct_cli_preserves_iam_token_auth(cli, command, monkeypatch):
 
     module.main()
 
-    adc.assert_called_once_with(scopes=['https://www.googleapis.com/auth/sqlservice.login'])
-    credentials.refresh.assert_called_once_with(request)
+    adc.assert_called_once_with(scopes=['https://www.googleapis.com/auth/sqlservice.login'], request=ANY)
+    credentials.refresh.assert_called_once()
+    (bounded,) = credentials.refresh.call_args.args
+    assert adc.call_args.kwargs['request'] is bounded and callable(bounded)
     driver.connect.assert_called_once()
     assert driver.connect.call_args.args == ()
     # Timeout policy belongs to the shared connector's owner; guard the CLI's auth contract.

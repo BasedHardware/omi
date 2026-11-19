@@ -51526,6 +51526,24 @@
             }
           },
           {
+            "description": "Opaque page cursor from a previous response's X-Omi-Next-Cursor header; when accepted it replaces offset. An unknown or stale cursor falls back to offset.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque page cursor from a previous response's X-Omi-Next-Cursor header; when accepted it replaces offset. An unknown or stale cursor falls back to offset.",
+              "title": "Cursor"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,

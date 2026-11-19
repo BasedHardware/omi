@@ -46,7 +46,7 @@ from tests.support.firestore_review_query_drivers import registry_extension as o
 from tests.support.firestore_dream_query_drivers import registry_extension as dream_drivers
 from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRIVER
 from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
-from tests.support.firestore_allowance_hold_drivers import entries as allowance_hold_entries
+from tests.support.firestore_allowance_hold_drivers import entries as allowance_hold_entries, StoreArgument
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
 from tests.support.firestore_home_feed_drivers import entries as home_feed_entries
 from tests.support.firestore_composer_default_context_drivers import entries as composer_default_context_entries
@@ -158,8 +158,8 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
-    'database.batch_pipeline_conversation_purge_scans._claim': 'a0c54821175dbc883d89f41bea6e5d2d6b25c6f25733362556db13a13e87c2bc',
-    'database.batch_pipeline_conversation_purge_scans.run_job': 'b73e589c1018bfb3a8eefc51bd7ba4ef29a0c9876fd670d74efae3e1ba4cff30',
+    'database.batch_pipeline_conversation_purge_scans._claim': '8bd1a47728de848c4fd6bee2490705b21465536f0b431315a5f0f14bb5851b81',
+    'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
     'database.batch_census_export._filtered': '6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
@@ -169,7 +169,7 @@ BODY_DIGEST = {
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
     'database.conversation_batch_purge_jobs._drop_segment_records': '2db3123e6e11d177d434326668969249a7fd4e0aade9788d045056fbdefe8c9d',
     'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
-    'database.conversation_batch_purge_jobs.run_job': 'f56ed851d01cdc69e0b755dbe1a53a6a6ccb6cbc77d3c84104e17b26bde6f0ef',
+    'database.conversation_batch_purge_jobs.run_job': '2c963aa7f8692928c6d1892b87992ea3b369bbb9547b71b48a4ddb21c35cd09b',
     'database.batch_pipeline_store.promote_record_recoveries': 'ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
     'database.record_custody_receipts.prune': 'a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
     'database.user_usage._s4_month_cache': '14a6b7d82ee83ec56f552ab798b0021e2342ffd920dcdbe2a8e851ec32029f28',
@@ -200,7 +200,6 @@ BODY_DIGEST = {
     # Re-reviewed 2026-11-01: intake-outcome evidence kwarg only; no query or read added.
     'database.batch_ramp.ramp_admission_policy': '2d702e87308e65426820bbe9b4b89f492a966a01bc056fa39d63ed3a8545d649',
     # Re-reviewed 2026-11-05: forward presentation visibility only; cursor/query/budget bounds unchanged.
-    'database.conversations._collect_cursor_conversation_page': '0becc04e442dcd1d1fb97be36684dc5e998833d7907eb2bda38982dc97fa1682',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
     'database.batch_pipeline_store.FirestoreStore.projection_page': '96f024578c9d338e4fb3a528f1c59801c928167da8ddf0d2747d686700b46ff5',
@@ -269,9 +268,8 @@ BODY_DIGEST = {
     'database.jobstore.backfill._pages': 'b4170ee77666433d35e0d46a3ea23eed96930160fca3b84b9ffb4810c321b94f',
     'database.jobstore.backfill.backfill': '4b979526157be71d49595ebc54f6c01eb5fd307279b245e07907a5dc86fe8ad8',
     'database.jobstore.backfill.backfill_table': '4ee7bc177237443422fcd2fbef51e7dde2d6841f20751b26fa6b943d39824343',
-    # Reviewed 2026-11-15: bounded reconcile-page operator CLI, not a serving caller.
-    'database.jobstore.reconcile._primary_keys': '47158c3d453cda1ca78ea73d191f342a72e677bb2012ac67ee0c172f4e673cc8',
-    'database.jobstore.reconcile.process_page': '0a7c1c343f8a0397e152558629477f9d0127e9e10a73fa829c7863d7209a0eea',
+    # Reviewed 2026-11-18: bounded serving rotation; query helper driven below, callbacks add only PG SQL.
+    'database.jobstore.reconcile.process_page': '3566a8c6c32bd741726fab3eb915f2a39a6a5c5dfe3b4c353eadab2ef2425244',
     'database.pinecone_partition_state._uncertain_mutations_are_deletes': '6b08a953074c2ae24cc1cf503ee5ae2e32049b62d3446e11248d5f72253b162d',
     'database.pinecone_partition_state.uncertain_mutations_are_deletes': '49b0052e3a4aeb004ae9680393cd599fe972e1716ec3089a9ac163c445c6d384',
 }
@@ -1317,14 +1315,12 @@ _add(
 )
 _add(
     CoveredByEntry(
-        'database.conversations._collect_cursor_conversation_page',
+        'database.conversations._PageFill._run',
         covered_by=(
             'database.conversations.get_conversations',
             'database.conversations.get_conversations_without_photos',
         ),
-        reason='cursor lever is off in drivers; reviewed v3 additions only filter returned rows; synthetic cursor refill contracts cover recording/home opt-ins; query builder unchanged',
-        expect_observed=False,
-        body_digest=BODY_DIGEST['database.conversations._collect_cursor_conversation_page'],
+        reason='shared page fill for the offset and cursor paths (the cursor collector only builds its start_after bookmark query); offset window and start_after refills observed inside both listed consumers',
     )
 )
 _add(
@@ -1530,6 +1526,7 @@ _add(
             'include_recordings': (False, 'post-read visibility only; same query'),
             'hide_home': (False, 'post-read visibility only; same query'),
             'capture_only': (False, 'post-read visibility only; same query'),
+            'show_held': (False, 'post-read visibility only; same query'),
             'limit': _LIMIT,
             'offset': _OFFSET,
             'budget': _BUDGET,
@@ -4392,21 +4389,57 @@ for _key, _reason in (
         'database.jobstore.backfill.backfill',
         'Lane 12 A6 staging backfill: loops backfill_table per table; no query of its own.',
     ),
-    (
-        'database.jobstore.reconcile._primary_keys',
-        'Bounded reconcile-page operator CLI only, never serving: one batch collection page ordered by '
-        'document id, optional document-id start_after, and explicit limit; bounded RPC with retries disabled. '
-        'No filters or composite index; built-in document-id ordering only.',
-    ),
-    (
-        'database.jobstore.reconcile.process_page',
-        'Bounded reconcile-page operator CLI only: orchestrates the pinned _primary_keys helper for primary '
-        'discovery or a limited PG key page, then exact-key primary get_all rereads. No additional Firestore '
-        'query shape; row/read/statement/deadline budgets and commit-only cursor checked by '
-        'tests/unit/test_jobstore_reconcile.py.',
-    ),
 ):
     _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))
+
+
+# The bounded source page is now reachable from the supervised serving tick,
+# so exercise every table/cursor shape rather than keeping an operator-only skip.
+class _JobstorePageBudget:
+    def __deepcopy__(self, memo):
+        from database.jobstore.reconcile import _Budget, PageCounts
+
+        return _Budget(3, 20, 500, PageCounts())
+
+
+_add(
+    DriverEntry(
+        'database.jobstore.reconcile._primary_keys',
+        base={'primary': StoreArgument('batch_pipeline_prod')},
+        domains={
+            'table': [
+                'jobs',
+                'queues',
+                'owners',
+                'control',
+                'results',
+                'gpus',
+                'intakes',
+                'artifacts',
+                'allowance_holds',
+                'pull_claims',
+                'merge_holds',
+            ],
+            'after': [None, 'cursor'],
+        },
+        neutrals={
+            'limit': (10, 'bounded page size; no filter/index effect'),
+            'budget': (_JobstorePageBudget(), 'RPC timeout/read cap only; fresh budget supplied per trial'),
+        },
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.jobstore.reconcile.process_page',
+        covered_by=('database.jobstore.reconcile._primary_keys',),
+        reason='Serving-hosted bounded rotation/CLI share the driven document-id page. '
+        'Copy-source discovery is SQL; fresh get_all uses exact document references. '
+        'Cursor load/advance callbacks run in the same PG transaction and add no Firestore shape. '
+        'Row/read/SQL/deadline budgets remain tested in test_jobstore_reconcile.py.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.jobstore.reconcile.process_page'],
+    )
+)
 
 
 # Transparent raw-snapshot transport: the callers above continue to own every

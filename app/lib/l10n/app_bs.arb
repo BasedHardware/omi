@@ -12243,5 +12243,8 @@
     "downloadNow": "Preuzmi sada",
     "onWifiLater": "Kasnije na Wi-Fi",
     "conversationWritingSummary": "Pišemo vaš sažetak…",
-    "onTheWayServerWork": "Rad prijavljen sa servera"
+    "onTheWayServerWork": "Rad prijavljen sa servera",
+    "finishNothingToProcess": "Još nema ništa za obradu.",
+    "finishStillProcessing": "Još se obrađuje. Pojavit će se na početnoj.",
+    "finishBackToHome": "Nazad na početnu"
 }

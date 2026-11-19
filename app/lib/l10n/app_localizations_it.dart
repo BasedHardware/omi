@@ -15638,4 +15638,13 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Lavoro segnalato dal server';
+
+  @override
+  String get finishNothingToProcess => 'Ancora niente da elaborare.';
+
+  @override
+  String get finishStillProcessing => 'Ancora in elaborazione. Apparirà nella Home.';
+
+  @override
+  String get finishBackToHome => 'Torna alla Home';
 }

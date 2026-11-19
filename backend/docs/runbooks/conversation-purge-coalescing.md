@@ -160,3 +160,25 @@ readiness control document is necessary because the actual pre-PR binary cannot
 fence re-arms after takeover; missing readiness retains legacy execution. Live
 sharing factor, read attribution, revision mix and savings remain canary questions; production
 inspection is outside this task's authorized scope.
+
+## Remainder audit
+
+Run `scripts/audit_conversation_purge_remainders.py` from the backend with
+read-only ADC and explicit `--project`, `--start` and `--end`. The script
+compares the half-open deletion-intent window with the immediately preceding
+window of equal length. It checks current state. A tombstone's `deleted_at`
+survives retries, and absence of an obligation gives no completion timestamp
+or execution-path attribution. Firestore needs a collection-group index on
+`deleted_conversations.deleted_at`. An unavailable index prevents enumeration.
+Missing coverage is reported separately from observed remainder counts.
+Content-free result ordering edges are an intended part of the purge contract.
+Associations discarded with successful bindings and the Postgres mirror
+require independent evidence.
+
+The worker emits `conversation_batch_purge_owner_scan_audit` at WARNING
+after a committed seal, completion, or handback. Join group events on
+`epoch_hash` and sum `members` for groups with a completed outcome. Handback
+counts describe the sealed group, including any members already taken over.
+These records give group and member totals. They carry no member identities.
+A process exit after the transaction commits and before logging, or a legacy
+takeover after lease expiry, can leave a seal without a terminal event.

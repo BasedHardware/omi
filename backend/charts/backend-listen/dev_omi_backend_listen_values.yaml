@@ -257,6 +257,12 @@ env:
     value: "true"
   - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
     value: "true"
+  - name: CONVERSATIONS_V3_RECORDING_ROTATION
+    value: "off"
+  - name: CONVERSATIONS_V3_ROTATION_MIN_SECONDS
+    value: "180"
+  - name: CONVERSATIONS_V3_ROTATION_MAX_SECONDS
+    value: "300"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
