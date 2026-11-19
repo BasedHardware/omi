@@ -1,9 +1,8 @@
 // Opening one conversation by id for a link or a citation; owns telling "gone", "locked" and
 // "unreachable" apart, which `getConversationByIdResult` folds into one null (ux-contract §17).
 
-import 'dart:convert';
-
-import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/env/env.dart';
 
@@ -33,26 +32,16 @@ final class ConversationOpenUnreachable extends ConversationOpen {
   const ConversationOpenUnreachable();
 }
 
+/// Reads through the typed boundary (`ConversationApi.byId`) and keeps its classification: 404 is
+/// gone, 402 is locked, and every other failure (transport, server, decode, auth) is unreachable.
 Future<ConversationOpen> openConversationById(String conversationId) async {
-  final response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return const ConversationOpenUnreachable();
-  switch (response.statusCode) {
-    case 200:
-      try {
-        return ConversationOpenFound(ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>));
-      } catch (_) {
-        return const ConversationOpenUnreachable();
-      }
-    case 402:
-      return const ConversationOpenLocked();
-    case 404:
-      return const ConversationOpenGone();
-    default:
-      return const ConversationOpenUnreachable();
-  }
+  final result = await ConversationApi(baseUrl: Env.apiBaseUrl ?? '').byId(conversationId);
+  return conversationOpenFrom(result);
 }
+
+ConversationOpen conversationOpenFrom(ApiResult<ServerConversation> result) => switch (result) {
+      ApiSuccess(:final data) => ConversationOpenFound(data),
+      ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound => const ConversationOpenGone(),
+      ApiFailure(:final problem) when problem.kind == ApiProblemKind.paymentRequired => const ConversationOpenLocked(),
+      ApiFailure() => const ConversationOpenUnreachable(),
+    };

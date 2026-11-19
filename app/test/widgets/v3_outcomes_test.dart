@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/conversation_open.dart';
-import 'package:omi/backend/http/api/conversations_v3.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -340,6 +339,15 @@ void main() {
     expect(find.text('Wait until it ends to change it.'), findsOneWidget);
     expect(conversationIsLive(_decoded('live'), v3: false), isFalse, reason: 'not a v3 account');
     await tester.pump(const Duration(seconds: 9));
+  });
+
+  test('X14: the typed read keeps 404, 402 and an outage apart', () {
+    expect(conversationOpenFrom(const ApiFailure(ApiProblem(ApiProblemKind.notFound))), isA<ConversationOpenGone>());
+    expect(conversationOpenFrom(const ApiFailure(ApiProblem(ApiProblemKind.paymentRequired))),
+        isA<ConversationOpenLocked>());
+    expect(conversationOpenFrom(const ApiFailure(ApiProblem(ApiProblemKind.transport))),
+        isA<ConversationOpenUnreachable>());
+    expect(conversationOpenFrom(ApiSuccess(_decoded('done'))), isA<ConversationOpenFound>());
   });
 
   group('X14: a conversation link says what happened', () {
