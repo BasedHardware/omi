@@ -23,6 +23,7 @@ from config.batch_pipeline import scheduler_control_key
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database import batch_pipeline_projection_outbox as projection_outbox
 from testing.store_fixtures import store_backend  # noqa: F401  (the parametrized fixture)
+from utils.batch_pipeline import scheduler as scheduler_module
 from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
@@ -559,8 +560,6 @@ def _projection_rows(h):
 
 
 def test_projection_outbox_merge_and_token_conformance(h, monkeypatch):
-    from utils.batch_pipeline import scheduler as scheduler_module
-
     # This test advances a synthetic domain clock. Host load must not expire the scheduler's setup claim.
     monkeypatch.setattr(scheduler_module, 'monotonic', lambda: 100.0)
     queue = Scheduler(h.store)
@@ -674,8 +673,6 @@ def test_pl668_legacy_projection_recovers_when_outbox_coverage_is_lost(h, monkey
 
 
 def test_pl665_projection_debt_commits_with_result(h, monkeypatch):
-    from utils.batch_pipeline import scheduler as scheduler_module
-
     monkeypatch.setattr(scheduler_module, 'monotonic', lambda: 100.0)
     monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'true')
     queue = Scheduler(h.store)
