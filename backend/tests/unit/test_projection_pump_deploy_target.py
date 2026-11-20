@@ -996,11 +996,12 @@ def test_cap_recovery_quoted_etag_round_trip(tmp_path, monkeypatch, inverse_read
     step = WORKFLOW['jobs']['recover-projection-pump-cap']['steps'][-1]
     assert step['env']['APPROVED_ETAG'] == '${{ inputs.pump_recovery_etag }}'
     # Capture the workflow shell's argv with a stand-in for the Python executable.
-    argv = subprocess.check_output(
+    command_output = subprocess.check_output(
         ['bash', '-c', 'python3() { printf "%s\\0" "$@"; }\n' + step['run']],
         env={**os.environ, 'APPROVED_ETAG': inputs['pump_recovery_etag']},
         timeout=10,
-    ).decode().split('\0')[:-1]
+    )
+    argv = command_output.decode().split('\0')[:-1]
     assert argv[0] == 'backend/scripts/recover_projection_pump_cap.py'
     monkeypatch.setattr(sys, 'argv', argv)
 
@@ -1026,7 +1027,9 @@ def test_cap_recovery_quoted_etag_round_trip(tmp_path, monkeypatch, inverse_read
     monkeypatch.setattr(api.opener, 'open', open_patch)
     monkeypatch.setattr(recovery, 'RunAPI', lambda _token: api)
     monkeypatch.setattr(recovery, '_read', lambda _project, _region, *args: fixture.read(*args))
-    monkeypatch.setattr(recovery.subprocess, 'run', lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, 'token'))
+    monkeypatch.setattr(
+        recovery.subprocess, 'run', lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, 'token')
+    )
     if dispatch_etag == live_etag:
         assert recovery.main() == 0
         assert fixture.cap_requests == [
