@@ -365,12 +365,8 @@ async def reconcile(
             and not eligible_ids.intersection(row.get('v3_recording_ids') or ())
         }
 
-        # Locked rows' ends: the two-hour cap cuts there before cutting anywhere new.
-        committed_cuts = [
-            row['finished_at']
-            for row in existing.values()
-            if not planner.is_unlocked(row) and not row.get('deleted') and row.get('finished_at') is not None
-        ]
+        # Locked rows: the two-hour cap keeps their cuts through the lines they hold.
+        locked_rows = [row for row in existing.values() if not planner.is_unlocked(row) and not row.get('deleted')]
 
         async def plan():
             proposed = planner.windows(
@@ -379,7 +375,7 @@ async def reconcile(
                 cohesion=cohesion,
                 silence_gap=silence_gap,
                 defer_topic_lock=custom_timing,
-                committed=committed_cuts,
+                locked=locked_rows,
             )
             merge = refinement.candidate(proposed, existing, recordings) if refine_locked else None
             if merge and await run_blocking(db_executor, store.merge_donors_have_tasks, uid, merge[1]['_v3_absorbed']):

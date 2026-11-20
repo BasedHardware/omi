@@ -154,16 +154,19 @@ Setting the gap back to 300 seconds turns sit-down cutting off for later passes.
 At any timing, a stretch over two hours is cut at the last line that starts
 within two hours of its start, then again from there. The cut ignores the
 outline and does not move as live speech arrives, so a locked part never
-strands lines between an old and a new cut. A part that reaches past the end of
-a locked row cuts there first, so rows cut by earlier code or an earlier pass
-keep their cut and the cap counts from it. A segment a row already holds stays
+strands lines between an old and a new cut. When a locked row holds the first
+line of a part, the part ends at the first line that row does not hold, so rows
+cut by earlier code or an earlier pass keep their cut (even when a turn
+straddles it) and the cap counts from there. A locked row that holds none of
+the stretch's lines never cuts it. A segment a row already holds stays
 with that row on later passes, even when overlapping turns put it inside a
 neighbour's window and audio claim.
 
 Under custom timing (either setting differs from 300), the lock delay counts
 from the later of the stretch's last speech and when that speech landed
 (`v3_speech_landed_at`, written in the same transaction as the speech by the
-live transcript write and sync assignment). A batch of old speech from
+live transcript write and sync assignment, and only when the speech changed). A
+batch of old speech from
 offline sync then waits the lock delay after landing instead of locking on
 arrival. Default timing still counts from the last speech.
 

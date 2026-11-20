@@ -27,7 +27,7 @@ def late_rewrite(*, previous_words, new_words, ended_at, now, rewrites):
     )
 
 
-def _capped(lines, sections=(), committed=()):
+def _capped(lines, sections=(), held=None):
     """Cut a stretch over two hours after the longest prefix that ends within two hours of its start; repeat.
 
     Every part but the last locks. A cut that moved with later speech (the old middle cut) or with the
@@ -35,20 +35,27 @@ def _capped(lines, sections=(), committed=()):
     stranded the lines between cuts as one-line cards. Line starts are append-only for live speech, so
     this cut stays put. ``sections`` is accepted for callers and ignored on purpose.
 
-    ``committed`` holds the end times of locked rows. A part that reaches past one cuts there first, so
-    rows locked by earlier code (main cut at the middle) or by another pass keep their cut, and the cap
-    counts from it instead of re-cutting the speech after it.
+    ``held(line)`` names the locked row that already holds a line, if any. A part whose first line a
+    locked row holds keeps that row's cut: it ends at the first line the row does not hold, so rows
+    locked by earlier code (main cut at the middle) or an earlier pass keep their cut even when a turn
+    straddles it, and the cap counts from there. Only ownership of this stretch's own lines counts;
+    a locked row that holds none of them never cuts it.
     """
     parts, offset = [], 0
     while max(line['end'] for line in lines[offset:]) - lines[offset]['start'] > CAP:
+        owner = held(lines[offset]) if held else None
+        if owner is not None:
+            cut = next((i for i in range(offset + 1, len(lines)) if held(lines[i]) != owner), None)
+            if cut is None:
+                break  # the locked row holds the rest
+            parts.append(lines[offset:cut])
+            offset = cut
+            continue
         # The longest prefix whose latest end (overlapping turns included) stays within the cap.
         limit = lines[offset]['start'] + CAP
         cut, latest = None, lines[offset]['end']
         for i in range(offset + 1, len(lines)):
             if latest > limit:
-                break
-            if any(latest <= b <= lines[i]['start'] for b in committed):
-                cut = i
                 break
             cut = i
             latest = max(latest, lines[i]['end'])
@@ -161,7 +168,7 @@ def _join_sitdown(lines: list, entries: list[dict[str, Any]]) -> list[dict[str, 
 
 
 def _cohesive_groups(
-    groups, outlines, sitdown=False, committed=()
+    groups, outlines, sitdown=False, held=None
 ) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
     for group, entries in zip(groups, outlines):
         if not entries:
@@ -174,7 +181,7 @@ def _cohesive_groups(
             for section in entry.get('sections') or []
             if isinstance(section.get('first_line'), int)
         )
-        parts = _capped(group['lines'], cut_points, committed)
+        parts = _capped(group['lines'], cut_points, held)
         start = 1
         for index, part in enumerate(parts):
             end = start + len(part)
@@ -209,12 +216,12 @@ def _cohesive_groups(
             start = end
 
 
-def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topic_lock=False, committed=()):
-    """``committed``: end times of locked derived rows, which the two-hour cap reuses (see ``_capped``)."""
+def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topic_lock=False, locked=()):
+    """``locked``: locked derived rows, whose cuts the two-hour cap reuses for lines they hold (``_capped``)."""
     result = []
     sitdown = is_sitdown(silence_gap)
-    committed = sorted(set(committed))
-    pairs = _cohesive_groups(groups, outlines, sitdown, committed) if cohesion else zip(groups, outlines)
+    held = _holder(locked)
+    pairs = _cohesive_groups(groups, outlines, sitdown, held) if cohesion else zip(groups, outlines)
     for group, entries in pairs:
         first_result = len(result)
         if len(entries) > 1 and (group.get('manual_end') or group.get('after_manual_end')):
@@ -226,7 +233,7 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
             sections = [
                 s['first_line'] - 1 - begin for s in entry.get('sections', []) if isinstance(s.get('first_line'), int)
             ]
-            capped = _capped(lines, sections, committed)
+            capped = _capped(lines, sections, held)
             for part_index, part in enumerate(capped):
                 candidate = {
                     **entry,
@@ -562,6 +569,21 @@ def _holds_line(row, line, keys=None):
     end = (line['end'] - row['started_at']).total_seconds()
     text = None if segment_id is not None else line['segment'].get('text')
     return (segment_id, start, end, text) in (keys if keys is not None else _segment_keys(row))
+
+
+def _holder(rows):
+    """line -> id of the locked row that holds it (exact segment), computed only when the cap asks."""
+    rows = [r for r in rows if r.get('started_at') and r.get('finished_at')]
+    if not rows:
+        return None
+    keys, seen = {r['id']: _segment_keys(r) for r in rows}, {}
+
+    def held(line):
+        if id(line) not in seen:
+            seen[id(line)] = next((r['id'] for r in rows if _holds_line(r, line, keys[r['id']])), None)
+        return seen[id(line)]
+
+    return held
 
 
 def _contains_line(row, line, spans):

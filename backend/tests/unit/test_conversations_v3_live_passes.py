@@ -430,3 +430,72 @@ async def test_resuming_a_backfill_run_cut_by_the_old_cap_keeps_its_rows(strict,
     assert all(len(ids) == 1 for ids in ownership(rows).values())
     spans = claim_spans(strict)
     assert all(left[1] <= right[0] for left, right in zip(spans, spans[1:])), spans
+
+
+def overlapping_speech(count, step=30.0):
+    # Every turn runs 10 s into the next one, so any cut between turns is straddled.
+    return [
+        {'id': f's{i}', 'text': 'word ' * 12, 'start': i * step, 'end': i * step + step + 10, 'is_user': True}
+        for i in range(count)
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('gap, lock', [(300, 300), (900, 900)])
+async def test_an_old_cut_a_turn_straddles_still_holds_after_upgrade(strict, monkeypatch, gap, lock):
+    # main cut at the middle; the open tail's first turn starts before the locked prefix's last turn
+    # ends. The new code recognises the cut by what the prefix holds, not by a gap between turns, so
+    # it never cuts into the old open tail (#25829 review).
+    from utils.conversations.v3 import planner
+
+    timing(monkeypatch, gap, lock)
+    segments = overlapping_speech(300)
+    end = T0 + timedelta(seconds=segments[-1]['end'])
+    put_recording(strict, segments, status='in_progress', landed=end + timedelta(seconds=30))
+    with monkeypatch.context() as old:
+        old.setattr(planner, '_capped', main_capped)
+        assert await reconcile_at(strict, monkeypatch, end + timedelta(seconds=30)) == 'committed'
+    rows = derived(strict)
+    before = locked_state(strict, rows)
+    assert len(before) == 1 and len(rows) == 2
+    tail = next(r for r in rows if planner_open(r))
+    assert tail['started_at'] < next(iter(before.values()))[1]  # the straddle
+    for count in (330, 360):
+        more = overlapping_speech(count)
+        later = T0 + timedelta(seconds=more[-1]['end'])
+        put_recording(strict, more, status='in_progress', landed=later + timedelta(seconds=30))
+        assert await reconcile_at(strict, monkeypatch, later + timedelta(seconds=30)) == 'committed'
+        rows = derived(strict)
+        after = locked_state(strict, rows)
+        assert {k: after[k] for k in before} == before
+        assert len(rows) == 2 and planner_open(rows[1]), [(r['started_at'], r['finished_at']) for r in rows]
+        assert rows[1]['id'] == tail['id']
+        assert all(len(ids) == 1 for ids in ownership(rows).values())
+
+
+def test_a_full_write_that_changes_no_speech_keeps_the_landing_time(strict, monkeypatch):
+    # A retried full-payload write must not refresh the landing time and extend the lock.
+    from database import conversations as db
+    from utils.conversations.v3 import triggers
+
+    clock = {'now': T0 + timedelta(hours=2)}
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock['now']
+
+    monkeypatch.setattr(db, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(db, 'datetime', Clock)
+    monkeypatch.setattr(triggers, 'changed', lambda uid, cid: None)
+    put_recording(strict, speech(3), status='in_progress', landed=T0)
+    first = speech(5)
+    assert db.update_conversation_segments(UID, 'r', deepcopy(first))
+    stamped = strict.rows[path('r')]['v3_speech_landed_at']
+    assert stamped == clock['now']
+    clock['now'] += timedelta(minutes=10)
+    assert db.update_conversation_segments(UID, 'r', deepcopy(first))  # same speech again
+    assert strict.rows[path('r')]['v3_speech_landed_at'] == stamped
+    first[-1]['text'] += 'more '
+    assert db.update_conversation_segments(UID, 'r', deepcopy(first))
+    assert strict.rows[path('r')]['v3_speech_landed_at'] == clock['now']

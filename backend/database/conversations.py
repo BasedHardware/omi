@@ -4379,10 +4379,19 @@ def update_conversation_segments(
                 v3_pending=True, v3_pending_since=current.get('v3_pending_since') or datetime.now(timezone.utc)
             )
             if segment_update_fields is None:
-                # Commit the landing time with the speech it describes (field-only writes add no speech).
+                # The landing time commits with the speech it describes, and only when speech changed:
+                # field-only writes and no-op retries must not extend the v3 lock.
                 from config.conversations_v3 import SPEECH_LANDED_FIELD
 
-                update_payload[SPEECH_LANDED_FIELD] = datetime.now(timezone.utc)
+                before = persisted if live_segments is not None else None
+                if before is None:
+                    raw = current.get('transcript_segments') or []
+                    before = _decode_transcript_segments_strict(
+                        uid, raw, bool(current.get('transcript_segments_compressed'))
+                    )
+                speech = ('id', 'start', 'end', 'text')
+                if [[r.get(k) for k in speech] for r in before] != [[r.get(k) for k in speech] for r in accepted]:
+                    update_payload[SPEECH_LANDED_FIELD] = datetime.now(timezone.utc)
         prepared_payload = _prepare_conversation_for_write(
             update_payload,
             uid,

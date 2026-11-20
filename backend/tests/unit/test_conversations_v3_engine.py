@@ -1,5 +1,6 @@
 """Synthetic recorded-clock contracts; no model calls or customer fixtures."""
 
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
 
@@ -97,6 +98,38 @@ def test_two_hour_cap_cuts_after_two_hours_whatever_the_outline_sections():
     assert len(windows) == 2
     assert windows[1]['lines'][0]['start'] == NOW + timedelta(minutes=120)
     assert all(max(line['end'] for line in w['lines']) - w['lines'][0]['start'] <= timedelta(hours=2) for w in windows)
+
+
+def _locked(segments, minutes):
+    return {
+        'id': 'locked',
+        'status': 'completed',
+        'started_at': NOW,
+        'finished_at': NOW + timedelta(minutes=minutes, seconds=10),
+        'transcript_segments': segments,
+    }
+
+
+@pytest.mark.parametrize('cohesion', [False, True])
+def test_a_locked_row_that_holds_none_of_the_stretch_never_cuts_it(cohesion):
+    # A separate locked card ending in a pause 20 minutes into an over-cap stretch owns none of its
+    # speech, so the cap ignores it and cuts at two hours (#25829 review).
+    row = recording(segments=[{'text': str(i), 'start': i * 60, 'end': i * 60 + 10} for i in range(180)])
+    groups = outline.stretches([row], NOW + timedelta(hours=4))
+    unrelated = _locked([{'id': 'elsewhere', 'text': 'other', 'start': 0, 'end': 5}], 20)
+    windows = planner.windows(groups, [[entry()]], cohesion=cohesion, locked=[unrelated])
+    assert [w['lines'][0]['start'] for w in windows] == [NOW, NOW + timedelta(minutes=120)]
+
+
+@pytest.mark.parametrize('cohesion', [False, True])
+def test_a_locked_row_holding_the_stretch_start_keeps_its_cut(cohesion):
+    segments = [{'text': str(i), 'start': i * 60, 'end': i * 60 + 10} for i in range(180)]
+    groups = outline.stretches([recording(segments=segments)], NOW + timedelta(hours=4))
+    prefix = _locked(deepcopy(segments[:21]), 20)
+    windows = planner.windows(groups, [[entry()]], cohesion=cohesion, locked=[prefix])
+    # Its cut stays; the cap then counts from it (159 minutes remain, cut again at 141).
+    assert [w['lines'][0]['start'] for w in windows] == [NOW, NOW + timedelta(minutes=21), NOW + timedelta(minutes=141)]
+    assert windows[0]['finished']
 
 
 @pytest.mark.parametrize('gap', [5, 15.056, 20])
