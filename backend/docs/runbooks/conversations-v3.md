@@ -456,7 +456,8 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     `windows_crossing_edge`; widen `since`/`until` around it or leave it.
     Restores are exact apart from the commit hook's `home_source_version` and
     `home_content_invalidated` stamps.
-    `undo --run` takes both builder leases, waits for in-flight notes, then restores each group of
+    `undo --run` keeps both builder leases renewed during preflight, refuses in-flight notes or
+    lost leases, then restores each group of
     rows that share a source in one transaction: stored documents back exactly, created rows removed,
     each source's claim list back in its original order. It refuses (`undo.reason`) after the owner
     deleted a rebuilt row (`owner_deleted_rebuilt_row`), after the owner edited, shared, locked,

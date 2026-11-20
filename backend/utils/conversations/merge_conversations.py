@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from google.api_core import exceptions as google_exceptions
 
 import database.conversations as conversations_db
-from database import conversation_tombstones
+from database import conversation_tombstones, conversations_v3_backfill_runs
 from database.conversation_merge_policy import source_has_merge_receipt
 from database._client import db as firestore_db
 from database.vector_db import delete_action_item_vectors_batch, delete_vector
@@ -969,9 +969,6 @@ def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
 
 
 def _purge_rederive_priors(uid: str, conversation_ids: list) -> None:
-    # Imported on use: only a row a live re-derive stamped has copies in a run ledger.
-    from database import conversations_v3_backfill_runs
-
     conversations_v3_backfill_runs.purge_conversation_priors(uid, conversation_ids, 'deleted')
 
 

@@ -11,7 +11,7 @@ backend/docs/storing-conversations.md).
 from utils.conversations import phase_shadow
 
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
-from database import conversation_recorded_time
+from database import conversation_recorded_time, conversations_v3_backfill_runs
 from database import pipeline_ledger
 from utils.conversations import summary_delivery, lifecycle_clocks
 from utils.observability.delivery import summary_terminal_outcome
@@ -3123,8 +3123,6 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
         batch.commit()
     if rederived:
         # After rows and photos: a live re-derive's undo copies stored at another level are emptied.
-        from database import conversations_v3_backfill_runs
-
         conversations_v3_backfill_runs.purge_conversation_priors(
             uid, sorted(rederived), 'protection', firestore_client=db, keep_level=target_level
         )

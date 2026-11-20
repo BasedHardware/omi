@@ -14,6 +14,7 @@ import hashlib
 import logging
 import os
 import time
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 
 from config.conversations_v3 import HISTORICAL_SITDOWN_TIMING, stretch_cohesion_enabled
@@ -725,13 +726,21 @@ def undo_live_run(uid, run_id, *, firestore_client=None):
     """
     runs.update_run(uid, run_id, status='undoing', firestore_client=firestore_client)
     held = []
+    heartbeats = ExitStack()
     try:
         for key, reason in ((store.BACKFILL_LEASE, 'backfill_pass_in_flight'), ('builder', 'live_builder_in_flight')):
             token = leases.acquire(uid, key, firestore_client=firestore_client)
             if token is None:
                 return _undo_refused(uid, run_id, reason, firestore_client)
             held.append((key, token))
-        token = held[0][1]
+            heartbeats.enter_context(
+                leases.keepalive(uid, key, token, firestore_client=firestore_client, max_seconds=None)
+            )
+
+        def renew():
+            for key, held_token in held:
+                leases.renew(uid, key, held_token, firestore_client=firestore_client)
+
         # Copies of rows the run never stamped (a stopped attempt) restore nothing; they go first.
         rederive_store.drop_stale_priors(uid, run_id, firestore_client=firestore_client)
         priors = runs.list_priors(uid, run_id, firestore_client=firestore_client)
@@ -745,31 +754,32 @@ def undo_live_run(uid, run_id, *, firestore_client=None):
         if blocker:
             return _undo_refused(uid, run_id, blocker, firestore_client)
         totals = {'rows_restored': 0, 'rows_removed': 0, 'sources_repaired': 0}
-        try:
-            for group in groups:
-                result = rederive_store.undo_live_rederive(uid, token, run_id, group, firestore_client=firestore_client)
-                totals['rows_restored'] += result['rows_restored']
-                totals['sources_repaired'] += result['sources_repaired']
-                for cid in result['created']:
-                    # Already hidden with no claims; the deletion helper also erases its child collections.
-                    conversations_db.delete_conversation(uid, cid)
-                    totals['rows_removed'] += 1
-                for key, held_token in held:
-                    leases.renew(uid, key, held_token, firestore_client=firestore_client)
-        except store.Conflict as error:
-            refusals = {
-                'undo_newer_run_first',
-                'owner_deleted_rebuilt_row',
-                'owner_edited_rebuilt_row',
-                'account_deletion',
-                'undo_source_missing',
-            }
-            if str(error) not in refusals:
-                raise
-            return _undo_refused(uid, run_id, str(error), firestore_client)
+        for group in groups:
+            # A stopped heartbeat or a taken-over token must fail before restoration begins.
+            renew()
+            result = rederive_store.undo_live_rederive(uid, held, run_id, group, firestore_client=firestore_client)
+            totals['rows_restored'] += result['rows_restored']
+            totals['sources_repaired'] += result['sources_repaired']
+            for cid in result['created']:
+                # Already hidden with no claims; the deletion helper also erases its child collections.
+                conversations_db.delete_conversation(uid, cid)
+                totals['rows_removed'] += 1
         # Restored exactly: the copies of the owner's rows are no longer needed, so none are kept.
+        renew()
         runs.drop_priors(uid, run_id, [e['id'] for e in priors], firestore_client=firestore_client)
+    except store.Conflict as error:
+        if str(error) not in {
+            'undo_newer_run_first',
+            'owner_deleted_rebuilt_row',
+            'owner_edited_rebuilt_row',
+            'account_deletion',
+            'undo_source_missing',
+            'lease_lost',
+        }:
+            raise
+        return _undo_refused(uid, run_id, str(error), firestore_client)
     finally:
+        heartbeats.close()
         for key, held_token in held:
             leases.release(uid, key, held_token, firestore_client=firestore_client)
     result = {**totals, 'priors': len(priors)}
