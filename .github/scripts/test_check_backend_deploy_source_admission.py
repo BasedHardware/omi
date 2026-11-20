@@ -588,12 +588,46 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
-            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      true\n",
+            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      github.event.inputs.cloud_run_service != 'backend-projection-pump' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
+            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      github.event.inputs.cloud_run_service != 'backend-projection-pump' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      true\n",
         )
         self.assertIn(
             "manual deployment must gate break-glass deploys on a successful audit record", CHECKER.validate(root)
         )
+
+    def test_projection_pump_job_is_prod_singleton_and_admitted(self) -> None:
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "      github.event.inputs.environment == 'prod' &&\n      github.event.inputs.cloud_run_service == 'backend-projection-pump' &&\n",
+            "      github.event.inputs.cloud_run_service == 'backend-projection-pump' &&\n",
+        )
+        self.assertIn(
+            "projection pump deployment must run only for an admitted prod backend-projection-pump selection",
+            CHECKER.validate(root),
+        )
+
+        root = self.fixture_root()
+        path = root / CHECKER.MANUAL_WORKFLOW_PATH
+        text = path.read_text(encoding="utf-8")
+        head, _, tail = text.partition("  deploy-projection-pump:\n")
+        tail = tail.replace(
+            "admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}",
+            "admitted_sha: ${{ github.event.inputs.release_sha }}",
+            1,
+        )
+        path.write_text(head + "  deploy-projection-pump:\n" + tail, encoding="utf-8")
+        self.assertIn(
+            "projection pump deployment must pass the admitted SHA to its composite action", CHECKER.validate(root)
+        )
+
+        root = self.fixture_root()
+        path = root / CHECKER.MANUAL_WORKFLOW_PATH
+        text = path.read_text(encoding="utf-8")
+        renamed = text.replace("  deploy-projection-pump:\n", "  deploy-projection-pump-renamed:\n", 1)
+        path.write_text(renamed, encoding="utf-8")
+        self.assertIn("manual backend deploy is missing its projection pump deployment job", CHECKER.validate(root))
 
     def test_manual_workflow_rejects_boundary_dependency_bypasses(self) -> None:
         root = self.fixture_root()

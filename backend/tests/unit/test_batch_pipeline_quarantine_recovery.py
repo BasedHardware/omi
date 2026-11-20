@@ -138,7 +138,7 @@ def test_handoff_refuses_live_or_receipted_or_foreign_work(setup, change):
 
 def test_lease_loss_during_download_blocks_dispatch_and_stale_gpu_cannot_publish(setup):
     client, store, _, artifacts, stt, recovery = setup
-    artifacts.fetch_audio.side_effect = lambda _: row(client).update(recovery_state='cancelled') or b'synthetic'
+    artifacts.fetch_audio.side_effect = lambda *_, **__: row(client).update(recovery_state='cancelled') or b'synthetic'
     assert recovery.recover('bad', 'synthetic-owner') == 'held'
     stt.assert_not_called()
     queue = Scheduler(store)
@@ -209,7 +209,7 @@ def test_lost_settle_reply_is_reread_without_stt(setup, monkeypatch):
 def test_deletion_or_protection_change_cancels_mid_recovery(setup, change, phase):
     client, _, binding, artifacts, stt, recovery = setup
 
-    def revoke(*args):
+    def revoke(*args, **kwargs):
         if change == 'account':
             client.rows[('account_deletions', binding.owner_id)] = {'wipe_status': 'pending'}
         elif change == 'source':
@@ -342,7 +342,7 @@ def test_replacement_adopts_late_old_upload_without_recognizing_again(setup, arr
     )
     if arrival == 'during_download':
 
-        def download(item):
+        def download(item, **kwargs):
             available[0] = True
             return b'synthetic'
 
