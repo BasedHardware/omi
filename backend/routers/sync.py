@@ -1154,7 +1154,7 @@ async def sync_local_files_v2(
             )
 
         ledger = await run_blocking(db_executor, legacy_dark.read_ledger_row, uid, content_id)
-        if (ledger or {}).get('status') == 'owner_cancelled':
+        if ledger and ledger.get('status') == 'owner_cancelled':
             return owner_cancelled_response(ledger.get('job_id'), total_files=len(files), lane=lane_decision.lane.value)
 
         archive_paths = None

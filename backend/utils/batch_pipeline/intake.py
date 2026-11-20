@@ -545,6 +545,44 @@ async def _probe_upload_allowance(
         return None
 
 
+async def _completed_legacy_upload_response(store, uid, content_id, job_id, *, conversation_id, total_files, lane):
+    try:
+        cached = await run_blocking(
+            db_executor,
+            cache_completed,
+            store,
+            uid,
+            content_id,
+            job_id,
+            {
+                'owner_key': owner_key(uid),
+                'conversation_id': conversation_id,
+                'total_files': total_files,
+                'lane': lane,
+            },
+            time.time(),
+        )
+    except BatchPrivacyBlocked as error:
+        # cache_completed checks privacy only after proving a valid
+        # completed receipt. The user deleted its conversation: answer
+        # the synchronous all-success shape (no IDs, no intake write) so
+        # the phone ACKs instead of looping on a 409.
+        if not is_conversation_deleted(error):
+            raise
+        # Re-prove in one transaction that every denial is a deletion;
+        # any other denial raises here and keeps the 409.
+        total = await run_blocking(db_executor, store.run, lambda tx: _only_deleted_total(tx, uid, content_id))
+        if total is None:
+            raise error
+        logger.info('event=batch_intake outcome=conversation_deleted_terminal')
+        return JSONResponse(status_code=200, content=deleted_conversation_result(total))
+    if cached:
+        status = await run_blocking(db_executor, durable_status, store, uid, job_id)
+        if status:
+            return start_response(status)
+    return None
+
+
 async def accept_upload(
     *,
     uid: str,
@@ -618,40 +656,17 @@ async def accept_upload(
             status = await run_blocking(db_executor, durable_status, store, uid, previous['job_id'])
             return start_response(status) if status else sync_content_in_progress_response(previous['job_id'])
         if previous.get('status') == 'completed':
-            try:
-                cached = await run_blocking(
-                    db_executor,
-                    cache_completed,
-                    store,
-                    uid,
-                    content_id,
-                    public_job_id,
-                    {
-                        'owner_key': owner_key(uid),
-                        'conversation_id': conversation_id,
-                        'total_files': len(paths),
-                        'lane': lane,
-                    },
-                    time.time(),
-                )
-            except BatchPrivacyBlocked as error:
-                # cache_completed checks privacy only after proving a valid
-                # completed receipt. The user deleted its conversation: answer
-                # the synchronous all-success shape (no IDs, no intake write) so
-                # the phone ACKs instead of looping on a 409.
-                if not is_conversation_deleted(error):
-                    raise
-                # Re-prove in one transaction that every denial is a deletion;
-                # any other denial raises here and keeps the 409.
-                total = await run_blocking(db_executor, store.run, lambda tx: _only_deleted_total(tx, uid, content_id))
-                if total is None:
-                    raise error
-                logger.info('event=batch_intake outcome=conversation_deleted_terminal')
-                return JSONResponse(status_code=200, content=deleted_conversation_result(total))
-            if cached:
-                status = await run_blocking(db_executor, durable_status, store, uid, public_job_id)
-                if status:
-                    return start_response(status)
+            completed = await _completed_legacy_upload_response(
+                store,
+                uid,
+                content_id,
+                public_job_id,
+                conversation_id=conversation_id,
+                total_files=len(paths),
+                lane=lane,
+            )
+            if completed is not None:
+                return completed
         phase = 'ownership_fence'
         mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
         adopt = None
