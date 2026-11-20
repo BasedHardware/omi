@@ -113,6 +113,9 @@ class _Recording:
 
 
 class PgSimStore(SimStore):
+    def packing_candidates(self, owner_key: str) -> list[dict]:
+        return self.pg.packing_candidates(owner_key)
+
     def projection_finish_backfill_complete(self) -> bool:
         return self.pg.projection_finish_backfill_complete()
 
@@ -217,6 +220,12 @@ class PgSimStore(SimStore):
             exclude_async=exclude_async,
             followup_due_before=followup_due_before,
         )
+
+    def projection_outbox_page(self, now: float, limit: int):
+        return self.pg.projection_outbox_page(now, limit)
+
+    def projection_page_with_outbox(self, **scope):
+        return self.pg.projection_page_with_outbox(**scope)
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         return self.pg.projection_successor(owner_key, previous)

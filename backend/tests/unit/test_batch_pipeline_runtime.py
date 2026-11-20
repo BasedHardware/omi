@@ -221,6 +221,34 @@ def test_firestore_probe_is_served_by_every_child_before_parent_merge():
         assert all(s.value >= 7 for s in observed)
 
 
+def test_packing_probe_origin_is_exposed_once_by_worker_and_default_registry():
+    from prometheus_client import generate_latest
+    from prometheus_client.parser import text_string_to_metric_families
+
+    from database.firestore_document_probe import FIRESTORE_BILLED_READS_BY_ORIGIN
+
+    origin = 'job:batch_packing_counterfactual'
+    labels = {'origin': origin, 'collection': 'other', 'kind': 'query'}
+    server = runtime.health_server(runtime.RuntimeState(), CollectorRegistry(), 0, '127.0.0.1')
+    try:
+        FIRESTORE_BILLED_READS_BY_ORIGIN.labels(**labels).inc()
+        with urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}/metrics', timeout=5) as response:
+            worker_metrics = response.read()
+        for exposition in (worker_metrics, generate_latest()):
+            samples = [
+                sample
+                for family in text_string_to_metric_families(exposition.decode())
+                for sample in family.samples
+                if sample.name == 'omi_firestore_billed_reads_by_origin_total' and sample.labels == labels
+            ]
+            assert len(samples) == 1
+            assert samples[0].value >= 1
+    finally:
+        server.shutdown()
+        server.server_close()
+        FIRESTORE_BILLED_READS_BY_ORIGIN.remove(origin, 'other', 'query')
+
+
 def test_supervision_drains_after_stop_before_readiness_closes():
     async def check():
         state = runtime.RuntimeState()
@@ -537,10 +565,9 @@ def test_a2_parity_collector_failure_keeps_the_worker_metrics(monkeypatch):
     monkeypatch.setattr(builtins, '__import__', refuse)
     from database.batch_pipeline_shadow_hook import shadow_parity_collectors
 
-    from database.batch_pipeline_retirement_metrics import RETIREMENT_COLLECTORS
     from database.batch_pipeline_recovery_metrics import RECOVERY_COLLECTORS
 
-    assert shadow_parity_collectors() == (*RECOVERY_COLLECTORS, *RETIREMENT_COLLECTORS)
+    assert shadow_parity_collectors() == RECOVERY_COLLECTORS
 
 
 @pytest.mark.parametrize('raw,expected', [(None, 1), ('2', 2), ('1', 1), ('3', 3), ('0', 1), ('4', 1), ('two', 1)])

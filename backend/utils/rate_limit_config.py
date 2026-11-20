@@ -79,7 +79,8 @@ _BOOST_EXEMPT_DEFAULT = (
     "storefront:plans,import:upload,action_items:list,action_items:list_hot_client,static_map:get,"
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
     "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily,users:budget_choice,"
-    "conversations:task-presence,google_calendar:selection"
+    "conversations:task-presence,google_calendar:selection,"
+    "conversations:historical_summary_open,conversations:historical_summary_open_daily"
 )
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
@@ -117,6 +118,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # LLM calls, well under :create's STT + ~22 calls), so 10/hour/user keeps
     # the worst case below the :create ceiling while allowing real exploration.
     "conversations:reprocess": (10, 3600),
+    # Historical-tier summary on open (T1+): one summary per old conversation the
+    # owner opens. A cost cap, so boost-exempt; the hour and the day are separate windows.
+    "conversations:historical_summary_open": (30, 3600),
+    "conversations:historical_summary_open_daily": (100, 86400),
     "conversations:merge": (5, 3600),
     # Episodes: "Wrap up now" and Undo on a captured item; no model call.
     "episodes:write": (60, 3600),

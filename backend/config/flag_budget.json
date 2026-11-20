@@ -26,6 +26,11 @@
   "seed_review_by": "2026-11-15",
   "budget": 161,
   "names": {
+    "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED": {
+      "owner": "batch-custody / lead2",
+      "review_by": "2026-12-16",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED": {
       "owner": "Goal: Margin / Sol",
       "review_by": "2026-12-12",
@@ -51,6 +56,11 @@
     "BATCH_ALLOWANCE_HOLD_RETRY_SECONDS": {
       "owner": "Goal: Pipeline",
       "review_by": "2026-12-14"
+    },
+    "BATCH_ALLOWANCE_INTAKE_PARK_ENABLED": {
+      "owner": "batch-pipeline",
+      "review_by": "2026-12-14",
+      "registry": "config/feature-flags.yaml"
     },
     "BATCH_CONTROL_CANDIDATE_FANOUT": {
       "owner": "planscost",
@@ -237,6 +247,10 @@
     "BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED": {
       "owner": "planscost / gpu efficiency sprint",
       "review_by": "2026-12-02"
+    },
+    "BATCH_PIPELINE_PACKING_SAMPLE_RATE": {
+      "owner": "batch owner-state / lead2",
+      "review_by": "2026-12-18"
     },
     "BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS": {
       "owner": "cl2-gpueff",
@@ -468,6 +482,11 @@
     "BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT": {
       "owner": "firestore-lead / SCA-2280",
       "review_by": "2026-12-14"
+    },
+    "BATCH_PROJECTION_OUTBOX": {
+      "owner": "omi-pipeline / lead2",
+      "review_by": "2026-12-18",
+      "registry": "config/feature-flags.yaml"
     },
     "BATCH_PULL_BUSY_BORROW_ENABLED": {
       "owner": "cl2-gpueff / batch rollout lead",

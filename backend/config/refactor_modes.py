@@ -165,6 +165,10 @@ def raw_live_gapped_packs_enabled() -> bool:
     return default_on('RAW_LIVE_GAPPED_PACKS_ENABLED')
 
 
+def inventory_manifest_body_cache_enabled() -> bool:
+    return default_on('PRIVATE_SYNC_INVENTORY_MANIFEST_BODY_CACHE_ENABLED')
+
+
 def batch_input_expiring_enabled() -> bool:
     """Stop held staging inputs at day 29; off restores the existing held lifecycle."""
     return default_on('BATCH_INPUT_EXPIRING_ENABLED')

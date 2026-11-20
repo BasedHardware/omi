@@ -5,6 +5,7 @@ from utils.conversations.v3 import metrics
 
 import hashlib
 import json
+import math
 from datetime import datetime, timedelta, timezone
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -12,14 +13,126 @@ from database import conversations, conversations_v3 as store
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.conversations.v3 import Conflict, policy
+from utils.conversations.summary_delivery import present
+from utils.encryption import encrypt, decrypt
+
+_LIVE_INPUT_SCOPE = (
+    'id',
+    'created_at',
+    'started_at',
+    'v3_recording_ids',
+    'kind',
+    'language',
+    'uses_custom_stt',
+    'source',
+    'data_protection_level',
+    'private_cloud_sync_enabled',
+)
 
 
-def store_summary(uid, cid, token, revision, structured, covers, *, firestore_client=None):
+def _live_scope(row):
+    # Older fingerprints omit this input entirely and must miss even when a
+    # previously applied correction has since been removed.
+    return {**{key: row.get(key) for key in _LIVE_INPUT_SCOPE}, 'user_corrections': row.get('user_corrections') or []}
+
+
+def _live_summary_fingerprint(row):
+    evidence = {'scope': _live_scope(row), 'speech': processing_hash(row)}
+    return hashlib.sha256(json.dumps(evidence, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def read_live_summary(uid, row, *, exact=False):
+    cached = row.get(policy.LIVE_SUMMARY_FIELD)
+    if not isinstance(cached, dict) or not policy.live_summary_target(row):
+        return None
+    count, coverage, ciphertext = cached.get('segments'), cached.get('coverage'), cached.get('ciphertext')
+    if (
+        type(count) is not int
+        or count < 1
+        or not isinstance(coverage, datetime)
+        or not isinstance(ciphertext, str)
+        or coverage > row['finished_at']
+    ):
+        return None
+    segments = row.get('transcript_segments') or []
+    if len(segments) < count or (exact and len(segments) != count):
+        return None
+    covered = {**row, 'transcript_segments': segments[:count], 'finished_at': coverage}
+    recording_count = cached.get('recording_count')
+    if recording_count is not None:
+        recording_ids = row.get('v3_recording_ids')
+        if (
+            not isinstance(recording_ids, list)
+            or type(recording_count) is not int
+            or not 0 < recording_count <= len(recording_ids)
+        ):
+            return None
+        covered['v3_recording_ids'] = recording_ids[:recording_count]
+    if cached.get('input') != _live_summary_fingerprint(covered):
+        return None
+    if len(segments) > count and not _strict_live_append(covered, row):
+        return None
+    plaintext = decrypt(ciphertext, uid)
+    if plaintext == ciphertext:
+        return None
+    try:
+        structured = json.loads(plaintext)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(structured, dict) or not present(structured):
+        return None
+    return {'structured': structured, 'summary_covers_through': coverage}
+
+
+def _strict_live_append(frozen, current):
+    if not current or not policy.live_summary_target(current) or current['finished_at'] <= frozen['finished_at']:
+        return False
+    frozen_scope, current_scope = _live_scope(frozen), _live_scope(current)
+    old_ids, new_ids = frozen_scope.get('v3_recording_ids'), current_scope.get('v3_recording_ids')
+    if isinstance(old_ids, list) and old_ids and isinstance(new_ids, list):
+        current_scope['v3_recording_ids'] = new_ids[: len(old_ids)]
+    if frozen_scope != current_scope:
+        return False
+    before, after = frozen.get('transcript_segments') or [], current.get('transcript_segments') or []
+    if not before or len(after) <= len(before) or after[: len(before)] != before:
+        return False
+    ends = [segment.get('end') for segment in before]
+    if any(type(end) not in (int, float) or not math.isfinite(end) for end in ends):
+        return False
+    boundary = max(max(ends), (frozen['finished_at'] - frozen['started_at']).total_seconds())
+    for segment in after[len(before) :]:
+        start, end = segment.get('start'), segment.get('end')
+        if (
+            type(start) not in (int, float)
+            or type(end) not in (int, float)
+            or not math.isfinite(start)
+            or not math.isfinite(end)
+            or not boundary <= start <= end
+            or end <= boundary
+        ):
+            return False
+    return True
+
+
+def store_summary(uid, cid, token, revision, structured, covers, *, live_input=None, firestore_client=None):
     client = firestore_client or store.get_firestore_client()
     ref, held = store.user_conversations(client, uid).document(cid), leases.lease_ref(client, uid, 'summary-' + cid)
-    patch = conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
-        {'structured': structured}, uid, 'enhanced', allow_offload=False
-    )
+    live_cache = None
+    patch = {}
+    if live_input is not None:
+        if not present(structured):
+            raise Conflict('summary_empty')
+        live_cache = {
+            'input': _live_summary_fingerprint(live_input),
+            **({'recording_count': len(live_input['v3_recording_ids'])} if live_input.get('v3_recording_ids') else {}),
+            'coverage': covers,
+            'segments': len(live_input['transcript_segments']),
+            'ciphertext': encrypt(json.dumps(structured, default=str), uid),
+        }
+    else:
+        patch = conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
+            {'structured': structured}, uid, 'enhanced', allow_offload=False
+        )
 
     @firestore.transactional
     def persist(tx):
@@ -35,34 +148,55 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
             not snapshot.exists
             or current.get('deleted')
             or current.get('is_locked')
-            or snapshot.update_time != revision
             or lease.get('token') != token
             or not lease.get('until')
             or lease['until'] <= datetime.now(timezone.utc)
         ):
             raise Conflict('summary_source_changed')
+        if live_input is not None:
+            if not policy.live_summary_target(current) or (
+                snapshot.update_time != revision
+                and not _strict_live_append(live_input, store.decode_row(uid, snapshot))
+            ):
+                raise Conflict('summary_source_changed')
+            tx.update(ref, {policy.LIVE_SUMMARY_FIELD: live_cache})
+            return False
+        if snapshot.update_time != revision:
+            raise Conflict('summary_source_changed')
         if current.get('title_locked'):
             patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
             patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
-        settled = current.get('v3_derived') and current.get('status') != 'in_progress'
+        # The scoped reconcile may time out while its outline is still running.
+        # A successful scoped reconcile can also have locked the card before notes are written.
+        # Finish either explicit Open path here while retaining any other owed processing.
+        was_unlocked = current.get('v3_unlocked')
+        open_lock = (
+            {
+                'status': 'completed',
+                'v3_unlocked': False,
+                'v3_open_locked': True,
+                'v3_process_pending': bool(was_unlocked or current.get('v3_process_pending')),
+            }
+            if current.get('v3_derived')
+            and (was_unlocked or (current.get('v3_open_locked') and current.get('status') == 'processing'))
+            else {}
+        )
+        settled = current.get('v3_derived') and (bool(open_lock) or current.get('status') != 'in_progress')
         # On-open notes are a notes write too: a row whose background notes failed and the user then
         # opened owes the same single created delivery once it is visible and completed.
         armed = bool(
             settled
             and policy.created_eligible(
-                {**current, 'v3_notes_written': True, 'v3_process_failed': False, 'tile_state': 'done'}
+                {**current, **open_lock, 'v3_notes_written': True, 'v3_process_failed': False, 'tile_state': 'done'}
             )
         )
         tx.update(
             ref,
             {
                 **patch,
+                **open_lock,
                 'summary_covers_through': covers,
-                **(
-                    {'tile_state': 'done', 'v3_process_failed': False, 'summary_retryable': False}
-                    if current.get('v3_derived') and current.get('status') != 'in_progress'
-                    else {}
-                ),
+                **({'tile_state': 'done', 'v3_process_failed': False, 'summary_retryable': False} if settled else {}),
                 **(
                     {'title_locked': True}
                     if current.get('v3_derived') and not current.get('home_hidden') and patch['structured'].get('title')

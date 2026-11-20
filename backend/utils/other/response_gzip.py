@@ -45,7 +45,7 @@ _EXEMPT_PREFIXES = (
 
 
 # Per-conversation streams: /v1/conversations/{id}/summary/stream (v3 on-open summary, chat SSE).
-_EXEMPT_CONVERSATION_SUFFIXES = ('/summary/stream',)
+_EXEMPT_CONVERSATION_SUFFIXES = ('/summary/stream', '/summary/live-catchup/stream')
 
 
 def _is_exempt(path: str) -> bool:

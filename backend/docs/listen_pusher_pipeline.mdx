@@ -8292,9 +8292,15 @@ page; recovery and repair still return them through pending assignment to
 persisted/ready. Unchanged finishable receipts are retried each cycle: a sibling
 or destination can unblock them without changing their own result version.
 Already-ready siblings in one discovered page share a content-completion
-probe for their exact immutable binding. Every row still rechecks its receipt
-and privacy fences; persisted rows still finish their own side effects and
-probe completion. Failed/cancelled probes clear their marker. Each new
+probe for their exact immutable binding. With the default-on
+`BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED`, a duplicate can skip the
+read-only session check after a successful same-process, same-page probe.
+Its ready receipt and pinned policy must match, the first live deletion and
+privacy walk must cover all of its inputs and outputs, and a fresh privacy
+token must match the token revision in that walk. The proof expires within
+60 seconds. Any uncertainty runs the full check. Set the switch to `false`
+to restore the original check order. Persisted rows still finish their own
+side effects and probe completion. Failed/cancelled probes clear their marker. Each new
 discovery page gets a fresh probe; an older page keeps its marker until its
 queued/running rows finish. Priority/owed recovery work bypasses sharing,
 including owed rows also found by discovery or woken before their probe. Thus an
@@ -10303,8 +10309,15 @@ See the [capacity runbook](./runbooks/batch-vendor-routing-capacity.md#overflow-
 conversation deletion batch-purge consumer shares one resumable owner scan for a
 sealed group of fresh obligations. `false`, `off`, `0` or `no` returns members to
 legacy execution, preserving their per-conversation journals and legacy progress.
-Task payloads and the reconciler protocol are unchanged. Coalescing also requires
-Release's expiring all-consumers-new marker; missing/stale readiness stays legacy.
-Revoke readiness, switch off and drain groups before routing an old binary, whose
-completion cannot fence a re-arm. See the
+Task payloads and the reconciler protocol are unchanged. The workspace release
+floor excludes older workers whose completion cannot fence a re-arm. For
+emergency handback, roll out the switch off to all purge consumers. See the
 [rollback and canary contract](runbooks/conversation-purge-coalescing.md).
+
+### Live conversation transcript and recap
+
+The authenticated live conversation row may include `v3_recording_ids`. The phone matches those source IDs against its active capture before showing on-device transcript lines in the detail. When the server transcript covers a line's time interval, it replaces that local line.
+
+Opening Summary requests the first eligible recap. Each subsequent five-minute interval of uninterrupted viewing can update the recap when there is new speech. Switching tabs, covering the detail or backgrounding the app resets the interval. An unchanged transcript reuses the displayed result.
+
+A `GET /v1/conversations/{conversation_id}/summary/live-catchup/stream` requests a recap of the current projected speech. The server checks the exact live conversation, the caller's compute policy and the summary lease. The detail response may include `live_summary.structured` and `live_summary.summary_covers_through`. The timestamp identifies the last speech included in that recap. A strictly later append preserves the earlier preview. Correcting covered speech invalidates it. Final processing uses its own summary and coverage fields.

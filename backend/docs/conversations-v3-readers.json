@@ -679,6 +679,10 @@
     "policy": "both",
     "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
   },
+  "backend/utils/conversations/historical_summary.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Owner open-time summary: validated by-id read that refuses soft-deleted rows and recordings before any generation."
+  },
   "backend/utils/conversations/late_meeting_notes.py:collection": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."

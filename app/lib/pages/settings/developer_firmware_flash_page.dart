@@ -48,7 +48,8 @@ class _DeveloperFirmwareFlashPageState extends State<DeveloperFirmwareFlashPage>
     final observedVersion = observedFirmwareVersion ?? '';
     final failure = updateFailure;
     final failureMessage = switch (failure) {
-      FirmwareUpdateFailure.notInstalled => l10n.firmwareUpdateNotInstalledMessage(observedFirmwareVersion ?? ''),
+      FirmwareUpdateFailure.notInstalled =>
+        firmwareNotInstalledMessage(l10n, widget.device, observedFirmwareVersion ?? ''),
       FirmwareUpdateFailure.noReconnect => l10n.firmwareUpdateUnconfirmedMessage,
       FirmwareUpdateFailure.download => l10n.firmwareDownloadFailedMessage,
       FirmwareUpdateFailure.install => l10n.firmwareUpdateFailedMessage,

@@ -15,7 +15,6 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/episodes/episode_moments_section.dart';
@@ -1275,50 +1274,6 @@ void main() {
       expect(find.byKey(const Key('device_right_now_live')), findsNothing, reason: 'the failure replaces the live row');
       await tester.tap(find.byKey(const Key('device_right_now_no_audio')));
       expect(reconnected, 1);
-    });
-
-    testWidgets('recently lists only real drops from the last day', (tester) async {
-      BleDisconnectEvent event(
-        DateTime at, {
-        int reconnectMs = 90000,
-        bool manual = false,
-        String type = 'disconnect',
-      }) =>
-          BleDisconnectEvent(
-            timestamp: at.millisecondsSinceEpoch,
-            reason: 'link_lost',
-            reasonCode: 8,
-            eventType: type,
-            isManual: manual,
-            lastRssi: -70,
-            connectionDurationMs: 600000,
-            appState: 'foreground',
-            timeToReconnectMs: reconnectMs,
-            rssiTrend: 'stable',
-          );
-      await tester.pumpWidget(
-        wrap(
-          DeviceRecentlyGroup(
-            now: () => _now,
-            load: () async => [
-              event(_now.subtract(const Duration(hours: 30))),
-              event(_now.subtract(const Duration(hours: 2)), manual: true),
-              event(_now.subtract(const Duration(hours: 1)), type: 'fail_to_connect'),
-              event(_now.subtract(const Duration(minutes: 40)), reconnectMs: 0),
-              event(_now.subtract(const Duration(minutes: 20))),
-            ],
-          ),
-        ),
-      );
-      await tester.pump();
-      expect(find.byKey(const Key('device_recently')), findsOneWidget);
-      expect(find.textContaining('Disconnected for'), findsOneWidget);
-    });
-
-    testWidgets('recently is absent with no history', (tester) async {
-      await tester.pumpWidget(wrap(DeviceRecentlyGroup(load: () async => const [])));
-      await tester.pump();
-      expect(find.byKey(const Key('device_recently')), findsNothing);
     });
   });
 

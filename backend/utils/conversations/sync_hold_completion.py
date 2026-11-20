@@ -15,6 +15,7 @@ EXPLICIT = frozenset(
         ProcessingTrigger.FIRST_OPEN,
         ProcessingTrigger.USER_REPROCESS,
         ProcessingTrigger.MERGE,
+        ProcessingTrigger.HISTORICAL_OPEN,
     }
 )
 
