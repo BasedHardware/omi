@@ -13,8 +13,11 @@ receivers continue to fence late writes after a queue database session disappear
 
 ## Enablement and rollback
 
-1. Ship with `GO_QUEUE_ERASE_REQUIRED=false` (the default in every environment). Existing
-   deletion paths still run without contacting Go. Configure the private HTTPS listener
+1. Ship with the shared barrier off. In the authoritative account-deletion Firestore
+   database, `account_deletion_settings/dev` and `account_deletion_settings/prod`
+   each control their own environment. A missing document or a boolean
+   `go_queue_erase_required: false` retains legacy deletion behavior. Configure the
+   private HTTPS listener
    and give it normal queue access. Set `ERASE_FIRESTORE_PROJECT` and
    `ERASE_FIRESTORE_DATABASE` to the authoritative project and database resolved by the
    Python deletion executor. Use `(default)` explicitly for the default database. Omit
@@ -37,10 +40,21 @@ receivers continue to fence late writes after a queue database session disappear
    wipe-start timestamp ordering. The queue and Firestore fences must both be active.
 4. Let wipes that began removing data under the old behavior finish before enabling the
    barrier. Preserve and audit existing wipe-start evidence for any legacy retry.
-   In the first live family's release, set `GO_QUEUE_ERASE_REQUIRED=true` for the Python
-   Cloud Tasks deletion executor and supply `GO_QUEUE_ERASE_URL` and `GO_QUEUE_ERASE_AUDIENCE`
-   before admitting any live tenant traffic. The URL is a private TLS endpoint at
-   `/internal/v1/tenant-erase` and the audience is that service's configured OIDC audience.
+   In the first live family's release, verify that public admission, restore, grace
+   reconciliation, and the Cloud Tasks executor resolve the same authoritative database
+   and `OMI_ENV_STAGE`. Configure Cloud Tasks dispatch and supply `GO_QUEUE_ERASE_URL`
+   and `GO_QUEUE_ERASE_AUDIENCE` to its executor. Then set the environment's shared
+   `go_queue_erase_required` field to boolean `true`. Wait for deletion requests and
+   tasks that already read the old value to finish before admitting live Go tenant
+   traffic. Verify with synthetic accounts that admission retains credentials and a
+   worker outage leaves them untouched.
+
+   Each runtime reads the document directly, so there is no per-service barrier override
+   or cached value. A failed read or malformed document prevents credential deletion in
+   admission and prevents an unarmed wipe from starting. With the barrier on, only the
+   executor deletes credentials, after the receipt. The erase URL is a private TLS
+   endpoint at `/internal/v1/tenant-erase` and the audience is that service's configured
+   OIDC audience.
 5. Roll back the switch only as part of disabling all live Go tenant traffic. Stop new
    work, drain or erase remaining tenant queue rows, and finish armed deletions before
    turning it off. Already armed generations continue to require a receipt.

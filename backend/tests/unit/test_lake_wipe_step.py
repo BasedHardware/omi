@@ -135,7 +135,6 @@ def test_lake_dark_still_tombstones_existing_or_absent_keys(world, monkeypatch, 
 
 @pytest.fixture
 def ceremony(monkeypatch, world):
-    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'false')
     monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners')
     monkeypatch.setenv('DIRECTORY_PG_DSN', 'synthetic-configured-directory')
     # Fake-before-import, as in test_delete_account_purge_storage. The ceremony

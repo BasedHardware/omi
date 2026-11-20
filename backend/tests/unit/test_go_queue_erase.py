@@ -10,6 +10,35 @@ from services.users import go_queue_erase as erase
 QUEUE_ID = 'a' * 64
 
 
+@pytest.mark.parametrize(
+    ('exists', 'document', 'expected'),
+    [(False, None, False), (True, {'go_queue_erase_required': False}, False), (True, {}, None)],
+)
+def test_shared_barrier_setting_defaults_off_and_rejects_invalid_configuration(monkeypatch, exists, document, expected):
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    client = MagicMock()
+    snapshot = client.collection.return_value.document.return_value.get.return_value
+    snapshot.exists = exists
+    snapshot.to_dict.return_value = document
+    monkeypatch.setattr(receipts, 'account_deletion_firestore_client', lambda: client)
+
+    if expected is None:
+        with pytest.raises(RuntimeError, match='invalid shared'):
+            erase.go_queue_erase_required()
+    else:
+        assert erase.go_queue_erase_required() is expected
+    client.collection.return_value.document.assert_called_once_with('dev')
+
+
+def test_deployed_runtime_without_stage_does_not_default_off(monkeypatch):
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+    monkeypatch.setenv('K_SERVICE', 'backend')
+    with pytest.raises(RuntimeError, match='known OMI_ENV_STAGE'):
+        erase.go_queue_erase_required()
+
+
 def test_readback_counts_overdue_and_late_generations():
     now = datetime(2026, 11, 19, tzinfo=timezone.utc)
     armed = now - timedelta(hours=1)

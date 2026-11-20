@@ -29,10 +29,13 @@ class EraseRejected(RuntimeError):
 
 
 def go_queue_erase_required() -> bool:
-    mode = os.getenv('GO_QUEUE_ERASE_REQUIRED', 'false').strip().lower()
-    if mode not in {'true', 'false'}:
-        raise ValueError('invalid GO_QUEUE_ERASE_REQUIRED')
-    return mode == 'true'
+    """Read the same uncached, environment-scoped switch in every deletion runtime."""
+    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
+    if stage in {'', 'local', 'offline'} and not (os.getenv('K_SERVICE') or os.getenv('CLOUD_RUN_JOB')):
+        return False
+    if stage not in {'dev', 'prod'}:
+        raise RuntimeError('account deletion requires a known OMI_ENV_STAGE')
+    return receipt.read_barrier_required(stage)
 
 
 def _oidc_token(audience: str) -> str:

@@ -1,4 +1,4 @@
-"""Durable, generation-bound receipts for the account wipe's Go queue barrier."""
+"""Shared rollout setting and generation-bound receipts for the Go queue erase barrier."""
 
 import re
 from datetime import datetime, timedelta, timezone
@@ -29,6 +29,17 @@ PATH = 'go_queue_erase_path'
 RECOVERY_QUEUE_ID = 'go_queue_erase_recovery_queue_id'
 ORDER_UNKNOWN = 'go_queue_erase_prior_wipe_unknown'
 Step = Literal['arm', 'verify', 'receipt', 'wipe']
+
+
+def read_barrier_required(stage: str) -> bool:
+    client = account_deletion_firestore_client()
+    snapshot = client.collection('account_deletion_settings').document(stage).get(retry=None, timeout=3)
+    if not snapshot.exists:
+        return False
+    required = (snapshot.to_dict() or {}).get('go_queue_erase_required')
+    if not isinstance(required, bool):
+        raise RuntimeError('invalid shared go_queue_erase_required setting')
+    return required
 
 
 def running_stale_window(marker: dict, default: timedelta) -> timedelta:
