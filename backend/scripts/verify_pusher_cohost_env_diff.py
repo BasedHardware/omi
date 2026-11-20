@@ -479,6 +479,10 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
             "TRANSCRIPTION_SHADOW_PERCENT",
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+            # Listen reads its STT cap enforcement and fallback cohort from privateSecretEnv (Secret
+            # Manager references, not env literals); pusher keeps its public observe-only values.
+            "STT_CAP_DISPATCH_ENFORCEMENT",
+            "STT_CAP_DISPATCH_COHORT",
         }
     )
     | frozenset(PROD_FINAL_PASS_SHADOW_VALUES),

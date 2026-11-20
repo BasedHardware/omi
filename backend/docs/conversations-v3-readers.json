@@ -3,6 +3,10 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/action_items.py:collection": {
+    "policy": "conversations",
+    "reason": "After a V3 refinement, repair retirement or undo marker hit, the task transaction checks only deletion and recording fields to allow an active product card with the same ID."
+  },
   "backend/database/batch_pipeline_privacy.py:collection": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
@@ -114,6 +118,18 @@
   "backend/database/conversations_v3_processing.py:user_conversations": {
     "policy": "both",
     "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."
+  },
+  "backend/database/conversations_v3_backfill_runs.py:collection": {
+    "policy": "storage",
+    "reason": "Live re-derive undo priors: save_priors reads only the protection level of each row it copies, inside its transaction, so no copy is recorded at a level the row has left."
+  },
+  "backend/database/conversations_v3_rederive.py:user_conversations": {
+    "policy": "storage",
+    "reason": "Operator live re-derive and its undo: one owner's window and claim closure under the backfill-builder lease; transaction-fenced, owner scoped, rows written only through commit_projection or the exact undo restore."
+  },
+  "backend/database/conversations_v3_sync_repair.py:collection": {
+    "policy": "operator",
+    "reason": "Explicit owner-scoped point reads of one sync redirect chain and its claimants, fenced by source/card revisions and tombstones."
   },
   "backend/database/daily_summaries.py:collection": {
     "policy": "storage",

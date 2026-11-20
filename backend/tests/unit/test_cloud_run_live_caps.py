@@ -132,7 +132,7 @@ def resolve(
 
 
 @pytest.mark.parametrize('cap', ['8', '16', '32', '80'])
-def test_service_cap_wins_over_stale_revision(tmp_path, action, cap):
+def test_service_cap_takes_precedence_over_stale_revision(tmp_path, action, cap):
     result, output = resolve(tmp_path, action, service_cap=cap, revision_cap='40')
     assert result.returncode == 0, result.stderr
     # Integration mirrors the headroom gate: min(service cap, receiving revision caps).

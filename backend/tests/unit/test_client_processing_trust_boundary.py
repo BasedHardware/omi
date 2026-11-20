@@ -498,8 +498,6 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/llm/external_integrations.py', 'generate_comprehensive_daily_summary', 'model_dump'),
         DumpSite('models/conversation.py', 'project_shared_conversation', 'model_dump'),
         DumpSite('models/conversation.py', 'as_dict_cleaned_dates', 'model_dump'),
-        # Historical-tier seam (T1+): dumps the explicit template app's results, not a conversation.
-        DumpSite('utils/conversations/process_conversation.py', 'process_conversation', 'dict'),
         DumpSite('utils/conversations/render.py', 'conversation_to_dict', 'model_dump'),
         DumpSite('utils/app_integrations.py', '_single', 'conversation_to_dict'),
         DumpSite('utils/webhooks.py', '_build_conversation_webhook_payload_sync', 'conversation_to_dict'),

@@ -127,6 +127,23 @@ def test_wrong_runtime_identity_and_secret_reference_are_rejected(contracts: Sim
     assert any("secretKeyRef" in failure and "dev-omi-backend-secrets" in failure for failure in failures)
 
 
+def test_listen_private_env_secret_is_allowed_in_prod_only(contracts: SimpleNamespace):
+    listen = contracts.CONTRACTS[0]
+    deployment = deepcopy(_deployment(contracts))
+    deployment["spec"]["template"]["spec"]["containers"][0]["env"].append(
+        {
+            "name": "STT_CAP_DISPATCH_COHORT",
+            "valueFrom": {
+                "secretKeyRef": {"name": "prod-omi-backend-listen-private-env", "key": "STT_CAP_DISPATCH_COHORT"}
+            },
+        }
+    )
+    failures = contracts.validate_rendered_deployment(listen, "dev", [deployment])
+    assert any("prod-omi-backend-listen-private-env" in failure for failure in failures)
+    assert ("prod", "prod-omi-backend-listen-private-env") in listen.extra_secret
+    assert all(not c.extra_secret for c in contracts.CONTRACTS if c.service != "backend-listen")
+
+
 def test_render_command_uses_the_deploy_immutable_tag_override(monkeypatch, contracts: SimpleNamespace):
     captured: list[list[str]] = []
 

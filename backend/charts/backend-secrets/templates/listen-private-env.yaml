@@ -1,0 +1,39 @@
+{{- /*
+Private backend-listen env values (uid-bearing cohorts). One Secret Manager
+secret holds a JSON object of NAME -> string; dataFrom.extract turns each
+property into one key of a dedicated Kubernetes Secret, which only
+backend-listen references (per-name secretKeyRef, see the listen chart's
+privateSecretEnv). Kept apart from the shared backend secret because other
+workloads load that one whole through envFrom.
+
+refreshInterval 0s: synced on creation and on spec or force-sync annotation
+changes only. A new Secret Manager version therefore never reaches new pods
+(e.g. an HPA scale-up) until the operator force-syncs and restarts listen:
+backend/docs/runbooks/listen-private-env.md.
+*/}}
+{{- with .Values.listenPrivateEnv }}
+{{- if .enabled }}
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: {{ required "listenPrivateEnv.name is required" .name }}
+  # The no-roll migration applies this template before the Helm release includes it.
+  labels:
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+  annotations:
+    meta.helm.sh/release-name: {{ $.Release.Name | quote }}
+    meta.helm.sh/release-namespace: {{ $.Release.Namespace | quote }}
+spec:
+  refreshInterval: {{ .refreshInterval | default "0s" | quote }}
+  secretStoreRef:
+    name: {{ $.Chart.Name }}-store
+    kind: SecretStore
+  target:
+    name: {{ required "listenPrivateEnv.targetSecretName is required" .targetSecretName }}
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  dataFrom:
+    - extract:
+        key: {{ required "listenPrivateEnv.remoteKey is required" .remoteKey }}
+{{- end }}
+{{- end }}

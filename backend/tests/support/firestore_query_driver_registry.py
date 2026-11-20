@@ -162,7 +162,7 @@ BODY_DIGEST = {
     'utils.support.holds._events': '94365aaff7a6a2a9d7620bb2b14c8c5a0919c05064a3fb1dc9ca2944d56f68eb',
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
-    'database.conversations_v3.commit_projection': 'ef2e983f527e4c07c35d5756b816405140fb88196bc819bc9f7a20012411c40e',
+    'database.conversations_v3.commit_projection': '1839fb90b6ce564158f484f9608796e98a401dc0b9b0b6222c60fee1d66514ad',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -545,6 +545,12 @@ _add(
 )
 
 _add(DriverEntry('database.account_deletion_transitions.read_agent_vm_migration_journals', base={'uid': UID}))
+_add(
+    DriverEntry(
+        'database.go_queue_erase.readback',
+        base={'now': T0, 'collection': ref_collection('account_deletions')},
+    )
+)
 
 _add(
     DriverEntry(
@@ -645,6 +651,7 @@ _add(
         neutrals={
             'document_id': (None, 'optional doc id; absent does not change query'),
             'reuse_finished': (True, 'filters streamed key matches in Python; query unchanged'),
+            'check_undo_removals': (False, 'adds only owner-scoped removal marker and conversation point reads'),
         },
         setup=_seed_action_items_control,
         trials=2,
@@ -3636,7 +3643,7 @@ for entry in (
     CoveredByEntry(
         'database.conversations_v3.commit_projection',
         covered_by=('database.conversations_v3.merge_donors_have_tasks',),
-        reason='The projection is lease fenced. Its only collection query checks donor task links before writes.',
+        reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),

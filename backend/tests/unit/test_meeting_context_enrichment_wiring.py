@@ -399,3 +399,57 @@ class TestNeverMutatesTheUsersCalendar:
                 meetings=[_meeting_record()],
             )
         write_back.assert_not_called()
+
+
+def _external_integration_conversation():
+    from models.conversation import ExternalIntegrationCreateConversation
+    from models.conversation_enums import ConversationSource, ExternalIntegrationConversationSource
+
+    return ExternalIntegrationCreateConversation(
+        text='Synthetic integration transcript.',
+        text_source=ExternalIntegrationConversationSource.audio,
+        started_at=CONVERSATION_START,
+        finished_at=CONVERSATION_END,
+        source=ConversationSource.external_integration,
+    )
+
+
+class TestExternalIntegrationCreateConversation:
+    """Regression for Cloud Error Reporting group ``CMma2pfi_ePzeg``.
+
+    ``ExternalIntegrationCreateConversation`` carried neither
+    ``calendar_meeting_context`` nor ``external_data``, so a resolved context
+    raised ``ValueError`` out of ``process_conversation`` and the conversation
+    never completed. The create model now carries the context as a field, the
+    same way ``CreateConversation`` does, and the persisted ``Conversation``
+    carries it in ``external_data``.
+    """
+
+    def test_a_resolved_context_is_stored_on_the_create_model(self):
+        conversation = _external_integration_conversation()
+
+        _enrich(conversation, meetings=[_meeting_record()])
+
+        context = conversation.calendar_meeting_context
+        assert context is not None, 'the resolved context was dropped instead of stored'
+        assert context.title == 'Scaling Forever sync'
+        assert [p.name for p in context.participants] == ['David Zhang', 'Ash']
+
+    def test_the_context_reaches_the_persisted_conversation(self):
+        from models.structured import Structured
+
+        conversation = _external_integration_conversation()
+        _enrich(conversation, meetings=[_meeting_record()])
+
+        persisted = pc._get_conversation_obj(
+            'uid-meeting',
+            Structured(title='Synthetic summary'),
+            conversation,
+            relevance_discarded=False,
+        )
+
+        raw = persisted.external_data['calendar_meeting_context']
+        assert isinstance(raw, dict), 'the persisted shape must stay a JSON mapping'
+        assert raw['calendar_event_id'] == 'evt-scaling-forever'
+        assert CalendarMeetingContext(**raw).title == 'Scaling Forever sync'
+        assert persisted.external_data['text'] == 'Synthetic integration transcript.'
