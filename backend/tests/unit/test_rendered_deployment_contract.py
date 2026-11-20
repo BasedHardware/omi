@@ -121,7 +121,7 @@ def test_gateway_rotation_keys_are_optional_and_scoped(contracts, rendered_gatew
     entry = next(entry for entry in env if entry["name"] == "LLM_GATEWAY_IDEMPOTENCY_SECONDARY_ENCRYPTION_SECRET")
     entry["valueFrom"]["secretKeyRef"]["name"] = "dev-omi-backend-secrets"
     errors = contracts.validate_rendered_deployment(contract, "dev", mutated)
-    assert any("must use its optional scoped secret reference" in error for error in errors)
+    assert any("invalid or missing optional scoped secretKeyRef" in error for error in errors)
 
 
 def test_stale_or_fallback_image_is_rejected_at_rendered_outcome(contracts: SimpleNamespace):
@@ -144,7 +144,7 @@ def test_wrong_runtime_identity_and_secret_reference_are_rejected(contracts: Sim
 
     assert any("serviceAccountName must be" in failure for failure in failures)
     assert any("GOOGLE_CLOUD_PROJECT must be" in failure for failure in failures)
-    assert any("secretKeyRef" in failure and "dev-omi-backend-secrets" in failure for failure in failures)
+    assert any("secretKeyRef" in failure and "the shared backend secret" in failure for failure in failures)
 
 
 def test_failure_diagnostics_omit_rendered_values(monkeypatch, capsys, contracts: SimpleNamespace):
@@ -169,6 +169,7 @@ def test_failure_diagnostics_omit_rendered_values(monkeypatch, capsys, contracts
     assert contracts.main() == 1
     diagnostics = capsys.readouterr().err
     assert "synthetic-" not in diagnostics
+    assert "dev-omi-backend-secrets" not in diagnostics
     for name in ("serviceAccountName", "immutable image", "GOOGLE_CLOUD_PROJECT", "secretKeyRef", "Helm render"):
         assert name in diagnostics
 

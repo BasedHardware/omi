@@ -199,18 +199,18 @@ def validate_rendered_deployment(
         if name not in env:
             errors.append(f"{prefix}: required environment variable {name!r} is missing")
     replacements = {"environment": environment, **ENVIRONMENTS[environment]}
-    for name, expected_value in contract.expected_env:
-        actual = _mapping(env.get(name)).get("value")
+    for setting, expected_value in contract.expected_env:
+        actual = _mapping(env.get(setting)).get("value")
         rendered_expected = expected_value.format(**replacements)
         if actual != rendered_expected:
-            errors.append(f"{prefix}: {name} must be set to the deployment contract value")
+            errors.append(f"{prefix}: {setting} must be set to the deployment contract value")
 
     expected_secret = f"{environment}-omi-backend-secrets"
     has_shared_secret_ref = False
     for name, suffix in contract.optional_scoped_secrets:
         ref = _mapping(_mapping(env.get(name, {}).get("valueFrom")).get("secretKeyRef"))
         if ref != {"name": f"{environment}-{suffix}", "key": name, "optional": True}:
-            errors.append(f"{prefix}: {name} must use its optional scoped secret reference")
+            errors.append(f"{prefix}: invalid or missing optional scoped secretKeyRef")
 
     scoped_names = {name for name, _ in contract.optional_scoped_secrets}
     for entry in env.values():
@@ -221,18 +221,18 @@ def validate_rendered_deployment(
             if not ref.get("name") or not ref.get("key"):
                 errors.append(f"{prefix}: secretKeyRef needs a non-empty name and key")
             elif ref.get("name") != expected_secret:
-                errors.append(f"{prefix}: secretKeyRef must target {expected_secret!r}")
+                errors.append(f"{prefix}: secretKeyRef must target the shared backend secret")
             else:
                 has_shared_secret_ref = True
     if contract.required_secret_name and not has_shared_secret_ref:
-        errors.append(f"{prefix}: expected at least one secretKeyRef to {expected_secret!r}")
+        errors.append(f"{prefix}: missing required shared backend secretKeyRef")
 
     expected_volume_secret = dict(contract.expected_volume_secret).get(environment)
     if expected_volume_secret:
         volumes = _list(pod_spec.get("volumes"))
         secret_names = {_mapping(volume.get("secret")).get("secretName") for volume in volumes}
         if expected_volume_secret not in secret_names:
-            errors.append(f"{prefix}: required volume secret {expected_volume_secret!r} is missing")
+            errors.append(f"{prefix}: required volume secret reference is missing")
     return errors
 
 
