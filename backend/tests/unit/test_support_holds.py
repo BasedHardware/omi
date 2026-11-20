@@ -127,7 +127,7 @@ def test_place_dry_run_writes_only_the_audit_record(client):
     assert result["dry_run"] is True
     assert f"legal_holds/{UID}" not in client.docs
     (audit,) = _actions(client).values()
-    assert audit["status"] == "succeeded" and audit["apply"] is False and audit["ticket"] == "ic-1"
+    assert audit["outcome"] == "succeeded" and audit["apply"] is False and audit["ticket"] == "ic-1"
     assert audit["summary"] == {"already_active": False, "review_days": holds.DEFAULT_REVIEW_DAYS}
 
 
@@ -165,7 +165,7 @@ def test_place_cannot_overtake_a_running_deletion(client):
         _run(holds.place, _ctx(apply=True), review_by=None)
     assert f"legal_holds/{UID}" not in client.docs
     (audit,) = _actions(client).values()
-    assert audit["status"] == "failed" and audit["error_type"] == "DestructiveOperationInProgress"
+    assert audit["outcome"] == "failed" and audit["error_type"] == "DestructiveOperationInProgress"
 
 
 @pytest.mark.parametrize("value", ["2026-11-01", "2030-01-01", "May 1"])
@@ -276,5 +276,5 @@ def test_operator_cli_wires_every_group_and_audits_the_run(client, capsys, monke
     assert code == 0
     assert '"action_id"' in capsys.readouterr().out
     (audit,) = _actions(client).values()
-    assert audit["command"] == "hold status" and audit["status"] == "succeeded"
+    assert audit["command"] == "hold status" and audit["outcome"] == "succeeded"
     assert audit["principal"] == "support-operator@example.iam.gserviceaccount.com"

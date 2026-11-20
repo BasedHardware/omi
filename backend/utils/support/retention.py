@@ -174,7 +174,7 @@ def _conversation_report(conversation_id: str, data: dict[str, Any] | None) -> d
         'created_at': data.get('created_at'),
         'started_at': data.get('started_at'),
         'finished_at': data.get('finished_at'),
-        'status': data.get('status'),
+        'conversation_status': data.get('status'),
         'discarded': data.get('discarded'),
         'title': structured.get('title'),
         'data_protection_level': data.get('data_protection_level'),

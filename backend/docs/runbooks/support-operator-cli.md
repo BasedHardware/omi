@@ -16,7 +16,7 @@ their behalf, and every run is attributable.
   person who asked) and `--reason` (one line, no customer content). `--agent`
   (or `SUPPORT_AGENT_ID`) names the identity that ran it.
 - Every command, read or write, first writes `support_actions/{action_id}` and
-  then finishes it with `succeeded` or `failed`. If the audit write fails, the
+  then finishes it with `outcome` `succeeded` or `failed`. If the audit write fails, the
   command does not run. The audit document never contains customer content:
   only counts, states and digests.
 - Writes are dry runs unless `--apply` is passed.

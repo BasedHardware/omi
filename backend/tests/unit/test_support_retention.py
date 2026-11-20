@@ -243,7 +243,7 @@ def test_single_conversation_reports_fields_and_compressed_segment_count():
     (conv,) = result['conversations']
     assert conv['id'] == 'c1' and conv['exists'] is True
     assert conv['title'] == 'Secret Meeting Title'
-    assert conv['status'] == 'completed' and conv['discarded'] is False
+    assert conv['conversation_status'] == 'completed' and conv['discarded'] is False
     assert conv['transcript_present'] is True and conv['segment_count'] == 3
     assert fs.queries == []
     assert [p['prefix'] for p in conv['storage']] == [

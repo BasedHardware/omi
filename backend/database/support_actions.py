@@ -112,7 +112,7 @@ def record_action(
         "command": command,
         "apply": ctx.apply,
         "args_digest": digest(args),
-        "status": "started",
+        "outcome": "started",
         "started_at": now(),
     }
     try:
@@ -124,13 +124,13 @@ def record_action(
         yield record
     except BaseException as exc:
         document.set(
-            {"status": "failed", "error_type": type(exc).__name__, "finished_at": now()},
+            {"outcome": "failed", "error_type": type(exc).__name__, "finished_at": now()},
             merge=True,
         )
         raise
     document.set(
         {
-            "status": "succeeded",
+            "outcome": "succeeded",
             "summary": _content_free_summary(record.summary),
             "before_digest": record.before_digest,
             "after_digest": record.after_digest,
