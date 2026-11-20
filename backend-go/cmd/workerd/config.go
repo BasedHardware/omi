@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"regexp"
@@ -19,13 +20,17 @@ import (
 const gateAbandoned queue.Cause = "gate_abandoned"
 
 type config struct {
-	policy           queue.Config
-	databaseURL      string
-	firestoreProject string
-	encryptionSecret string
-	healthPort       int
-	metricsPort      int
-	stopTimeout      time.Duration
+	policy                               queue.Config
+	databaseURL                          string
+	firestoreProject                     string
+	encryptionSecret                     string
+	healthPort                           int
+	metricsPort                          int
+	stopTimeout                          time.Duration
+	summaryRepair                        bool
+	summaryMaxAge                        time.Duration
+	privateArchive, derivedArchive       string
+	retractionOrigin, retractionAudience string
 }
 
 type lookupEnv func(string) (string, bool)
@@ -64,6 +69,57 @@ func (c *config) readWorkerConfig(lookup lookupEnv) error {
 	}
 	if c.healthPort == c.metricsPort {
 		return errors.New("HEALTH_PORT and METRICS_PORT must differ")
+	}
+	if err := c.readSummaryRepair(lookup); err != nil {
+		return err
+	}
+	return c.readFinalizationAdapters(lookup)
+}
+
+func (c *config) readFinalizationAdapters(lookup lookupEnv) error {
+	private, _ := lookup("BUCKET_PRIVATE_CLOUD_SYNC")
+	derived, _ := lookup("BUCKET_AUDIO_DERIVED")
+	c.privateArchive, c.derivedArchive = strings.TrimSpace(private), strings.TrimSpace(derived)
+	if c.privateArchive == "" && c.derivedArchive != "" {
+		c.privateArchive = "omi-private-cloud-sync"
+	}
+	origin, _ := lookup("WORKER_MERGE_RETRACTION_ORIGIN")
+	if origin == "" {
+		return nil
+	}
+	u, err := url.Parse(origin)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil ||
+		u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return errors.New("WORKER_MERGE_RETRACTION_ORIGIN must be an HTTPS origin")
+	}
+	audience, _ := lookup("LISTEN_FINALIZATION_TASKS_OIDC_AUDIENCE")
+	if audience == "" {
+		audience, _ = lookup("LISTEN_FINALIZATION_TASKS_HANDLER_URL")
+	}
+	if strings.TrimSpace(audience) == "" {
+		return errors.New("merge retraction requires a listen finalization OIDC audience")
+	}
+	c.retractionOrigin, c.retractionAudience = origin, audience
+	return nil
+}
+
+func (c *config) readSummaryRepair(lookup lookupEnv) error {
+	c.summaryMaxAge = 72 * time.Hour
+	raw, set := lookup("WORKER_SUMMARY_REPAIR_ENABLED")
+	if !set || raw == "" {
+		return nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return errors.New("WORKER_SUMMARY_REPAIR_ENABLED must be a boolean")
+	}
+	c.summaryRepair = enabled
+	if age, configured := lookup("ENRICHMENT_MAX_AGE_HOURS"); configured {
+		hours, parseErr := strconv.ParseFloat(strings.TrimSpace(age), 64)
+		nanos := hours * float64(time.Hour)
+		if parseErr == nil && !math.IsNaN(nanos) && nanos >= 0 && nanos < float64(math.MaxInt64) {
+			c.summaryMaxAge = time.Duration(nanos)
+		}
 	}
 	return nil
 }

@@ -1,9 +1,12 @@
 # workerd
 
-Runs the Go queue worker process. Family lanes supply their declarations and handlers in
-`run`. The initial dev image runs with an empty registry, so queued jobs remain untouched.
-It validates the Firestore project and encryption secret at startup. Firestore clients and
-runtime cloud permissions arrive with the families that use them.
+Runs the Go queue worker process. The finalization kind is declared in the queue registry.
+The ordinary handler joins the registry once its serving ports are present. The current
+composition can opt into summary repair while gateway and serving effects are pending.
+Summary repair shares the Python scheduler's Firestore lease and writes wakes for the
+existing enrichment dispatcher. Archive and retraction clients are wired when their
+configuration is present. The retraction receiver must be deployed and workerd must
+run with the configured OIDC invoker identity before explicit-merge dispatch can use it.
 
 The health listener serves `GET /health` and `GET /ready`. Readiness requires the expected
 Postgres migration checksums. The separate metrics listener serves `GET /metrics` for a
@@ -20,6 +23,11 @@ Lane B needs to provide a bounded drain and fenced handback API before enabling 
 | `DATABASE_URL` | required | PostgreSQL URL with explicit host, user and database; TLS required except for loopback hosts |
 | `FIRESTORE_PROJECT` | required | Google Cloud project ID |
 | `ENCRYPTION_SECRET` | required | At least 32 bytes, per `crypt.Check` |
+| `WORKER_SUMMARY_REPAIR_ENABLED` | false | Run the due-summary scan in workerd |
+| `ENRICHMENT_MAX_AGE_HOURS` | 72 | Nonnegative hours, with zero disabling age-based scan phases |
+| `BUCKET_PRIVATE_CLOUD_SYNC` | unset | Private recording bucket for the read-only archive client |
+| `BUCKET_AUDIO_DERIVED` | unset | Additional regional recording bucket |
+| `WORKER_MERGE_RETRACTION_ORIGIN` | unset | HTTPS backend origin, using the configured listen finalization OIDC audience |
 | `HEALTH_PORT` | 8080 | 1–65535 |
 | `METRICS_PORT` | 9090 | 1–65535, distinct from health |
 | `SHUTDOWN_SECONDS` | 25 | 5–300 seconds |

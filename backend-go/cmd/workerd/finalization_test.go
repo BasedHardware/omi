@@ -32,6 +32,22 @@ func (syntheticEffects) Resolve(_ context.Context, g queue.Guarded, _ finalizati
 	return nil, g.Err()
 }
 
+func (syntheticEffects) Reserve(_ context.Context, g queue.Guarded, _ finalization.Claim, _ finalization.Conversation) error {
+	return g.Err()
+}
+
+func (syntheticEffects) CompleteCapture(_ context.Context, g queue.Guarded, _ finalization.Claim, _ finalization.Conversation) error {
+	return g.Err()
+}
+
+func (syntheticEffects) DeleteEmpty(_ context.Context, g queue.Guarded, _ finalization.Claim, _ finalization.Conversation) error {
+	return g.Err()
+}
+
+func (syntheticEffects) Deliver(_ context.Context, g queue.Guarded, _ finalization.IntegrationEvent, _ []finalization.Target, _ bool) (bool, error) {
+	return false, g.Err()
+}
+
 type syntheticGateway struct {
 	first                 sync.Once
 	beforeFirstCompletion func(context.Context) error
@@ -74,13 +90,12 @@ func TestF09MergedDocumentAdapterFencesNewerInputAndUpdatesHome(t *testing.T) {
 	if _, err := bench.Raw.Doc(path).Set(t.Context(), row); err != nil {
 		t.Fatal(err)
 	}
-	causes := append(finalizationdocs.Causes(), conversations.Causes()...)
-	h := queuetest.Open(t, queuetest.Policy(), finalization.Declaration(causes...))
+	h := queuetest.Open(t, queuetest.Policy(), workerdKinds()...)
 	lifecycle := finalizationdocs.Store{Docs: bench.Store, Clock: clock.System{}}
 	effects := syntheticEffects{}
 	s := &finalization.Service{
 		Queue:   h.Store,
-		Meeting: effects, Effects: effects, Targets: effects,
+		Meeting: effects, Effects: effects, Targets: effects, Batch: effects, Integrations: effects,
 		Gateway: &syntheticGateway{beforeFirstCompletion: func(ctx context.Context) error {
 			current, err := bench.Raw.Doc(path).Get(ctx)
 			if err != nil {
@@ -100,7 +115,11 @@ func TestF09MergedDocumentAdapterFencesNewerInputAndUpdatesHome(t *testing.T) {
 	if err != nil || intent.JobID == "" {
 		t.Fatalf("admit: %+v %v", intent, err)
 	}
-	h.Start(map[string]queue.Handler{finalization.Kind: s})
+	handlers := workerdHandlers(s)
+	if handlers[finalization.Kind] != s {
+		t.Fatal("fully composed finalization handler was not registered")
+	}
+	h.Start(handlers)
 	waiting := h.Until(intent.JobID, "sync revision quiet wait", func(job queue.Job) bool {
 		return job.State == queue.StateWaiting && job.Reason != nil && *job.Reason == finalization.CauseChanged
 	})
