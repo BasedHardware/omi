@@ -66,6 +66,20 @@ def _raise_transport_error(error: OSError) -> NoReturn:
     raise EraseRejected('Go queue erase network operation rejected') from None
 
 
+_RETRYABLE_WORKER_HTTP_STATUSES = frozenset({408, 429, 502, 503, 504})
+
+
+class _EraseHTTPResponse(http.client.HTTPResponse):
+    def begin(self) -> None:
+        try:
+            super().begin()
+        except (OSError, http.client.HTTPException):
+            # The stdlib parses the final status before reading response headers.
+            if isinstance(self.status, int) and self.status not in _RETRYABLE_WORKER_HTTP_STATUSES | {200}:
+                raise EraseRejected('Go queue erase request rejected') from None
+            raise
+
+
 def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
     endpoint = os.getenv('GO_QUEUE_ERASE_URL', '')
     parsed = urlsplit(endpoint)
@@ -110,6 +124,7 @@ def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
             secured.settimeout(5)
             connection = http.client.HTTPSConnection(parsed.hostname, parsed.port)
             connection.sock = secured
+            connection.response_class = _EraseHTTPResponse
             try:
                 connection.request(
                     'POST',
@@ -132,7 +147,7 @@ def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
                 raise EraseRejected('invalid Go queue erase HTTP response') from None
             finally:
                 connection.close()
-    if status in (408, 429, 502, 503, 504):
+    if status in _RETRYABLE_WORKER_HTTP_STATUSES:
         raise EraseUnavailable('Go queue erase service unavailable')
     if status != 200 or len(body) > 2048:
         raise EraseRejected('Go queue erase request rejected')

@@ -147,6 +147,28 @@ def test_interrupted_acknowledgement_uses_database_recovery(monkeypatch, interru
     assert [call.args[3] for call in record.call_args_list] == ['arm', 'verify', 'receipt', 'wipe']
 
 
+@pytest.mark.parametrize('status', [401, 409])
+def test_interrupted_rejection_headers_cannot_authorize_recovery(monkeypatch, status):
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv('GO_QUEUE_ERASE_URL', 'https://worker.example/internal/v1/tenant-erase')
+    monkeypatch.setenv('GO_QUEUE_ERASE_AUDIENCE', 'worker')
+    monkeypatch.setattr(erase, '_oidc_token', lambda _: 'token')
+    monkeypatch.setattr(erase.socket, 'create_connection', MagicMock())
+    tls = MagicMock()
+    monkeypatch.setattr(erase.ssl, 'create_default_context', lambda: tls)
+    wire = tls.wrap_socket.return_value.__enter__.return_value.makefile.return_value
+    wire.readline.side_effect = [f'HTTP/1.1 {status} Rejected\r\n'.encode(), TimeoutError()]
+    monkeypatch.setattr(receipts, 'record', MagicMock(return_value={}))
+    recover = MagicMock()
+    monkeypatch.setattr(erase, '_erase_at_postgres', recover)
+
+    with pytest.raises(erase.EraseRejected, match='request rejected'):
+        erase.require_committed_erase('tenant', 'job', 'token', lambda: datetime.now(timezone.utc), lambda _: None)
+
+    recover.assert_not_called()
+
+
 def test_tls_context_setup_timeout_cannot_authorize_recovery(monkeypatch):
     from unittest.mock import MagicMock
 

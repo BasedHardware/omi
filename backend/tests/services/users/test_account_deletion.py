@@ -2716,6 +2716,21 @@ def test_unarmed_flag_off_task_records_lake_failure_for_retry(monkeypatch):
     account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
 
 
+def test_required_go_erase_refuses_inline_dispatch_and_execution(monkeypatch):
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'true')
+    monkeypatch.setattr(account_deletion, 'is_account_deletion_dispatch_enabled', lambda: False)
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+
+    with pytest.raises(RuntimeError, match='requires Cloud Tasks'):
+        account_deletion.enqueue_deletion_wipe('uid1', 'opaque-job-id')
+    with pytest.raises(RuntimeError, match='requires an authenticated wipe task'):
+        account_deletion.background_wipe_user_data('uid1')
+
+    submit.assert_not_called()
+    account_deletion.acquire_destructive_operation.assert_not_called()
+
+
 def test_billing_failure_does_not_arm_the_go_queue_barrier(monkeypatch):
     _stub_wipe_steps_after_billing(monkeypatch)
     monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'true')

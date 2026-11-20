@@ -65,7 +65,7 @@ from utils.retrieval.frame_request_storage import (
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 from utils.integration_telemetry import emit_posthog_event
 from services.users.agent_vm_account_cleanup import delete_agent_vm_for_account
-from services.users.go_queue_erase import require_committed_erase
+from services.users.go_queue_erase import go_queue_erase_required, require_committed_erase
 from config.account_deletion_grace import (
     account_deletion_grace_enabled,
     account_deletion_grace_window,
@@ -398,6 +398,8 @@ def background_wipe_user_data(
     *,
     erase_claim: tuple[str, str] | None = None,
 ) -> bool:
+    if erase_claim is None and go_queue_erase_required():
+        raise RuntimeError('Go queue erase requires an authenticated wipe task')
     started_at = time.monotonic()
     current_operation = 'wipe_running_marker'
     purge_result: object = {}
@@ -631,6 +633,8 @@ def enqueue_deletion_wipe(uid: str, wipe_job_id: str):
     if is_account_deletion_dispatch_enabled() is True:
         enqueue_account_deletion_wipe(wipe_job_id)
         return
+    if go_queue_erase_required():
+        raise RuntimeError('Go queue erase requires Cloud Tasks account deletion dispatch')
     # Inline dispatch is retained solely for deterministic local/dev/test
     # execution, and may never reach production data whatever the stage says.
     assert_inline_account_deletion_permitted()
