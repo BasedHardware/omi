@@ -9106,7 +9106,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'To nagranie zostało przesłane, ale Omi nadal tworzy rozmowę. Jeśli usuniesz je teraz, a przetwarzanie się nie powiedzie, nie będzie można go odzyskać. Usunąć mimo to?';
+      'To nagranie jest już przesłane i Omi je przetwarza. Usunięcie go tutaj usuwa kopię z telefonu. Jeśli przetwarzanie się nie powiedzie, Omi nie będzie mógł ponowić próby z tego telefonu.';
 
   @override
   String get syncCardAllBackedUp => 'Wszystkie nagrania zsynchronizowane';
@@ -14535,14 +14535,6 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Ostatnio';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Rozłączono na $duration';
-  }
-
-  @override
   String get deviceControls => 'Sterowanie';
 
   @override
@@ -15480,6 +15472,11 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Aktualizacja się nie zainstalowała. Twój wisiorek nadal działa na obecnym oprogramowaniu ($version). Zamiast ponawiać aktualizację, skontaktuj się z pomocą techniczną.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15617,6 +15614,20 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Podsumowanie po zakończeniu tej rozmowy';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Wysłane pliki oczekujące na serwerze';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Twoje nagrania są bezpieczne na urządzeniu lub telefonie';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Podsumowanie do $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Najnowsza transkrypcja';
 
   @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';

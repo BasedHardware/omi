@@ -9089,7 +9089,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Овај снимак је отпремљен, али Omi још прави разговор. Ако га сада обришете и обрада не успе, неће моћи да се врати. Свеједно обрисати?';
+      'Овај снимак је већ отпремљен и Omi га обрађује. Брисање овде уклања копију са телефона. Ако обрада не успе, Omi неће моћи поново да покуша са овог телефона.';
 
   @override
   String get syncCardAllBackedUp => 'Сви снимци синхронизовани';
@@ -14498,14 +14498,6 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Недавно';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Без везе $duration';
-  }
-
-  @override
   String get deviceControls => 'Контроле';
 
   @override
@@ -15443,6 +15435,11 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Ажурирање није инсталирано. Ваш привезак и даље ради на тренутном фирмверу ($version). Уместо поновног покушаја ажурирања обратите се подршци.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15580,6 +15577,20 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Резиме када се овај разговор заврши';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Отпремања која чекају на серверу';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ваш звук је безбедан на вашем уређају или телефону';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Резиме до $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Недавни препис';
 
   @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';

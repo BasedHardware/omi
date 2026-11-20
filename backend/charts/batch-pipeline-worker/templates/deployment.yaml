@@ -105,10 +105,6 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
-            {{- range $name, $value := .Values.jobstoreEnv }}
-            - name: {{ $name }}
-              value: {{ $value | quote }}
-            {{- end }}
             # Immutable rollout exporter identity, including supervised GPU children.
             - name: ROLLOUT_POD_TEMPLATE_HASH
               valueFrom:
@@ -127,6 +123,7 @@ spec:
             {{- end }}
             - {name: BATCH_SHARD_SPREAD_ENABLED, value: {{ .Values.worker.shardSpreadEnabled | quote }}}
             - {name: BATCH_PULL_MULTI_LEASE_ENABLED, value: {{ .Values.worker.pullMultiLeaseEnabled | quote }}}
+            - {name: BATCH_PIPELINE_PACKING_SAMPLE_RATE, value: {{ .Values.worker.packingSampleRate | quote }}}
             - {name: BATCH_PULL_BUSY_BORROW_ENABLED, value: {{ .Values.worker.pullBusyBorrowEnabled | quote }}}
             - {name: BATCH_PIPELINE_CONTENTION_RETRY_ENABLED, value: {{ .Values.worker.contentionRetryEnabled | quote }}}
             {{- if ne .Values.worker.stageProfilingEnabled nil }}
@@ -166,6 +163,7 @@ spec:
             # Prepare the budgeted flight prefix before the GPU lock; "false" is the kill switch.
             - {name: BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED, value: {{ .Values.worker.prepareFlightEnabled | quote }}}
             - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "true"}
+            - {name: BATCH_PROJECTION_OUTBOX, value: {{ .Values.worker.projectionOutbox | quote }}}
             - {name: BATCH_PIPELINE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_PERCENT, value: "0"}
             - {name: BATCH_PIPELINE_SHADOW_PERCENT, value: {{ .Values.worker.shadowPercent | quote }}}

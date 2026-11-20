@@ -9128,7 +9128,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Оваа снимка е поставена, но Omi сè уште го создава разговорот. Ако ја избришете сега и обработката не успее, не може да се врати. Сепак да се избрише?';
+      'Оваа снимка е веќе поставена и Omi ја обработува. Бришењето тука ја отстранува копијата на телефонот. Ако обработката не успее, Omi нема да може повторно да проба од овој телефон.';
 
   @override
   String get syncCardAllBackedUp => 'Сите снимки се синхронизирани';
@@ -14555,14 +14555,6 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Неодамна';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Исклучено $duration';
-  }
-
-  @override
   String get deviceControls => 'Контроли';
 
   @override
@@ -15500,6 +15492,11 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Ажурирањето не се инсталираше. Вашиот приврзок и понатаму работи на тековниот фирмвер ($version). Контактирајте ја поддршката наместо повторно да го пробувате ажурирањето.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15637,6 +15634,20 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Резиме кога ќе заврши овој разговор';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Подигнувања што чекаат на серверот';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Вашето аудио е безбедно на вашиот уред или телефон';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Резиме до $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Скорешен транскрипт';
 
   @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';

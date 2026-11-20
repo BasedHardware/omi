@@ -232,3 +232,18 @@ def test_from_segments_ttl_policy_is_separately_reviewable_and_defaults_do_not_e
         'projects/demo-synthetic/databases/(default)/collectionGroups/from_segments_chunks/fields/expires_at'
     ]
     assert len(ttl_resources('demo-synthetic')) == 19
+
+
+def test_account_operation_ttl_targets_only_replay_receipts():
+    import json
+    from pathlib import Path
+
+    from database.batch_account_authority import ACCOUNT_OPERATION_RETENTION
+
+    policy = (
+        Path(__file__).resolve().parents[2] / 'deploy' / 'batch-pipeline' / 'account-privacy-receipt-retention.json'
+    )
+    assert json.loads(policy.read_text())['receipt_retention_days'] == ACCOUNT_OPERATION_RETENTION.days == 90
+    assert ttl_resources('demo-synthetic', policy_path=policy) == [
+        'projects/demo-synthetic/databases/(default)/collectionGroups/account_operations/fields/expires_at'
+    ]

@@ -22,6 +22,7 @@ environment_shared:
       - memory.canonical.mutate
       env:
         CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+        BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'true', category: ops_kill}
         CONVERSATIONS_V3_RECORDING_ROTATION: {value: 'off', category: rollout}
         CONVERSATIONS_V3_ROTATION_MIN_SECONDS: {value: '180', category: rollout}
         CONVERSATIONS_V3_ROTATION_MAX_SECONDS: {value: '300', category: rollout}
@@ -82,6 +83,7 @@ environment_shared:
         BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
         BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
         BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
+        BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0.001', category: ops_kill}
         BATCH_PIPELINE_ENABLED:
           value: 'false'
           category: rollout
@@ -977,6 +979,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'true', category: ops_kill}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -1019,6 +1022,7 @@ environment_shared:
           BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'false', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
+          BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0.001', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1041,6 +1045,7 @@ environment_shared:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
             default: '0'
             category: rollout
+          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1409,6 +1414,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'true', category: ops_kill}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -1431,6 +1437,7 @@ environment_shared:
           BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'true', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
+          BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0.001', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1453,6 +1460,7 @@ environment_shared:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
             default: '0'
             category: rollout
+          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1794,6 +1802,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'true', category: ops_kill}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -1819,6 +1828,7 @@ environment_shared:
           BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'false', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
+          BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0.001', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1841,6 +1851,7 @@ environment_shared:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
             default: '0'
             category: rollout
+          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -2161,6 +2172,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'true', category: ops_kill}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -2182,6 +2194,7 @@ environment_shared:
           BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'true', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
+          BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0.001', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -2204,6 +2217,7 @@ environment_shared:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
             default: '0'
             category: rollout
+          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             category: rollout
           BATCH_PIPELINE_WORKER_ENABLED:

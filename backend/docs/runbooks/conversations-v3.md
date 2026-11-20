@@ -31,6 +31,64 @@ worktree. Leave `CONVERSATIONS_V3_FIRST_APP_BUILD` unset in source. At rollout,
 lead2 sets it through the shared runtime source from the first TestFlight build
 containing this PR; unset/invalid yields unknown and cannot qualify deletion evidence.
 
+## Internal live recap beta
+
+`CONVERSATIONS_V3_LIVE_RECAP_COHORT` controls the authenticated API detail
+projection of saved live recaps and the live catch-up stream. Its default is
+empty. The syntax is a comma-separated set of `uid:<uid>` entries. A missing
+value, a malformed entry, a wildcard, or any percentage token closes the entire
+cohort. The classic summary stream refuses rows eligible for live recap.
+Finished summaries and the live Transcript tab keep their normal paths.
+
+The released classic stream could store generated summary prose in the same
+`structured.overview` field used for owner edits. Older overview-only rows
+have no authoritative provenance that distinguishes the two. Denied LIVE
+detail and list responses omit confirmed generated legacy sections while
+retaining the ordinary editable overview and verified settled notes. The LIVE
+recap surface reads only the separately attributed recap. No stored notes are
+rewritten during rollout or rollback.
+
+The Pipeline owner qualifies SCA-3062 and the Release owner applies approved
+configuration through the managed deployment source for each API role serving
+the conversation endpoints. Admit only the existing approved internal
+TestFlight group. Keep the membership values in protected deployment
+configuration and out of the public repository, issue comments, and logs.
+Verify the exact serving release and build before starting the readback.
+Broader release requires a server-enforced generation budget and separate
+approval. The internal client cadence and telemetry do not enforce that budget.
+
+Start with an approved member and a nonmember. Verify that the member can
+retrieve a saved recap and explicitly request a live recap. Verify that the
+nonmember's detail has no recap and the stream returns the typed
+`live_recap_unavailable` refusal before a writer or provider call. Both must
+still be able to read their transcripts and finished summaries. Use the
+content-free recap events and gateway accounting receipts, described below,
+to distinguish provider attempts from cache hits and lease conflicts. Exclude
+deliberate first opens and retries from the automatic count. Record missing
+receipts or unjoinable evidence as unknown and keep wider release closed.
+
+Stop on the first confirmed automatic provider invocation outside an eligible
+foreground Summary tab or the first window with more than one automatic
+invocation for the same viewer in five rolling minutes. Use the approved
+first-open-only path once it is verified serving, or disable admission by
+clearing the cohort on all API roles. Record rollout or rollback with the exact
+serving revision and UTC read time. Repeat the nonmember, Transcript, and
+finished-summary checks on the serving revision. After a full five-minute
+window on that revision, record the joined provider counts and verify that a
+previously saved recap is unavailable when admission is disabled.
+
+First filter provider-attempt timestamps to the trailing 300 seconds. Within
+that window, join shared viewer aliases and deduplicate gateway attempt IDs.
+Adjacent buckets intentionally overlap, so a shared alias alone cannot establish
+elapsed time. Keep distinct request and foreground interval digests when grouping. Missing
+or invalid diagnostics yield `join=unverified`. A `gateway_dispatch` records
+intent to send. Existing gateway accounting must be enabled and healthy for
+the readback interval. A `cache_hit` or `lease_conflict` with no dispatch
+in that request contributes zero provider attempts. The live recap uses
+transcript evidence and keeps deterministic relevance checks. It skips paid
+relevance classification, task deduplication, optional account and screen
+context, and pre-notes merge work. Finished notes keep the full path.
+
 Only new `omi`/`phone` capture/sync creates become recordings. Existing documents
 keep their layer through stage changes. A recording is not a product item;
 `home_hidden` only removes a conversation from unfiltered Home and its count.
@@ -59,6 +117,28 @@ is final before it seals. A rotation-sealed recording carries
 the cap) or sealed and untranscribed (up to 15 minutes) hold its stretch open. The
 two-hour cap still bounds each resulting window. Missing transcript is not
 proof of acoustic silence; qualify transcript completeness separately.
+
+`CONVERSATIONS_V3_STRETCH_COHESION` defaults to `on`. The outline renders
+stretch-local speaker labels, and short conversational topics fold within the
+same silence, manual-end and two-hour cap boundaries. Home evaluates the
+300-word threshold against that fresh stretch. Media, recognized background
+and late fragments around published claims retain their own visibility rules.
+Set the switch to `off` on v3 builder and backfill runners to restore the prior
+prompt and per-topic Home minimum for subsequent passes. Existing published
+windows and claims remain in place when the switch changes.
+
+With stretch cohesion enabled, `CONVERSATIONS_V3_SILENCE_GAP_SECONDS`
+controls recorded-speech grouping (120–1800 seconds), and `CONVERSATIONS_V3_LOCK_SECONDS`
+controls when a card locks and owes notes (120–3600 seconds). Both default to
+300. Invalid values use the defaults. When either value differs from its
+default, the existing summary-open path and explicit End bypass the lock timer.
+Setting both values back to 300 or disabling cohesion restores the prior
+timing; provisional rows remain reachable for the builder to finish.
+A lock delay shorter than the silence threshold can finalize an initial card
+while later speech still belongs to the same outline stretch. Later speech
+gets its own continuation. Reconciliation can merge settled cards when the
+outline and the loaded source claims cover the complete merge.
+
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product
 conversations. Legacy recording-wide naming keeps its existing behavior.
@@ -96,8 +176,8 @@ task coalesces each owner-minute. Explicit manual ends use a separate,
 deterministic source-close task name so an already completed live task in the
 same minute cannot swallow the close. They do not wait for the silence deadline.
 Automatic end detection still waits five minutes of speech quiet; this is not
-a measured 30-second end-to-notes guarantee. On-open Standard notes stream
-through the existing summary endpoint without that background close wait.
+a measured 30-second end-to-notes guarantee. The scoped live recap can run before that background close wait for admitted testers.
+Finished Standard notes use the existing summary stream.
 The builder holds a Firestore token/expiry
 lease, revision-checks sources and targets, and writes conversation copies and
 recording claims together. A conflict retains pending work. The five-minute

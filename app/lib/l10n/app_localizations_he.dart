@@ -9012,7 +9012,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'ההקלטה הזו הועלתה אך Omi עדיין יוצר את השיחה. אם תמחק אותה עכשיו והעיבוד ייכשל, לא יהיה ניתן לשחזר אותה. למחוק בכל זאת?';
+      'ההקלטה הזו כבר הועלתה ו-Omi מעבד אותה. מחיקה כאן מסירה את העותק שבטלפון. אם העיבוד ייכשל, Omi לא יוכל לנסות שוב מהטלפון הזה.';
 
   @override
   String get syncCardAllBackedUp => 'כל ההקלטות סונכרנו';
@@ -14385,14 +14385,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'לאחרונה';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'מנותק למשך $duration';
-  }
-
-  @override
   String get deviceControls => 'פקדים';
 
   @override
@@ -15323,6 +15315,11 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'העדכון לא הותקן. התליון שלך ממשיך לעבוד עם הקושחה הנוכחית ($version). במקום לנסות שוב את העדכון, פנה לתמיכה.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15460,6 +15457,20 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'סיכום כשהשיחה הזו תסתיים';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'העלאות שממתינות בשרת';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'האודיו שלך נשמר בבטחה במכשיר או בטלפון שלך';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'סיכום עד $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'תמלול אחרון';
 
   @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';

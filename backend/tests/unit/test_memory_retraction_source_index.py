@@ -358,6 +358,9 @@ def test_account_wipe_drops_a_late_index_document(monkeypatch):
 def test_account_wipe_erases_head_recreated_after_state_collection(monkeypatch, root_exists):
     from database import batch_pipeline_purge, user_data_deletion
 
+    # The fake records the erasure order. The default-on root deletion
+    # transaction is exercised by the real Firestore writer suite.
+    monkeypatch.setenv('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'false')
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
     monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda uid, *, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: MagicMock())

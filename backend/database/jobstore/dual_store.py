@@ -278,13 +278,23 @@ class _Recorder:
     def __init__(self, inner: Any):
         self._inner = inner
         self.reads: dict[tuple[str, str], dict] = {}
+        self.patched: set[tuple[str, str]] = set()
 
     def get(self, table: str, key: str) -> dict:
         value = self._inner.get(table, key)
         address = (table, key)
-        if table in MIRRORED_TABLES and address not in self.reads and address not in self._inner.writes:
+        if (
+            table in MIRRORED_TABLES
+            and address not in self.reads
+            and address not in self._inner.writes
+            and address not in self.patched
+        ):
             self.reads[address] = deepcopy(value)
         return value
+
+    def patch(self, table: str, key: str, fields: dict) -> None:
+        self._inner.patch(table, key, fields)
+        self.patched.add((table, key))
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
@@ -336,6 +346,11 @@ class DualStore:
             return result
 
         return observed
+
+    def packing_candidates(self, owner_key: str) -> list[dict]:
+        # This call is itself sampled telemetry. Keep it to one attributed read
+        # even when automatic serving-query parity is enabled.
+        return self.primary.packing_candidates(owner_key)
 
     def observe_discovery(self, name: str, args: tuple, kwargs: dict) -> None:
         """Keep optional parity on its bounded queue when an index supplies the discovery answer."""
@@ -404,7 +419,7 @@ class DualStore:
     def _after_commit(self, view: _Recorder) -> None:
         # Only the written addresses travel: the mirror copies the primary's current state, never this
         # commit's snapshot (see ``copy_current``).
-        writes = sorted({address for address in view.writes if address[0] in MIRRORED_TABLES})
+        writes = sorted(address for address in set(view.writes) | view.patched if address[0] in MIRRORED_TABLES)
         if not writes and not view.reads:
             return
         if not shadow_writes_enabled():

@@ -9166,7 +9166,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Na-upload na ang recording na ito ngunit ginagawa pa ng Omi ang usapan. Kung buburahin mo ito ngayon at mabigo ang pagproseso, hindi na ito mababawi. Burahin pa rin?';
+      'Na-upload na ang recording na ito at pinoproseso na ito ng Omi. Ang pagbura dito ay nag-aalis ng kopya sa phone. Kung pumalya ang pagproseso, hindi na makakasubok ulit ang Omi mula sa phone na ito.';
 
   @override
   String get syncCardAllBackedUp => 'Lahat ng recording ay na-sync na';
@@ -14605,14 +14605,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Kamakailan';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Nadiskonekta nang $duration';
-  }
-
-  @override
   String get deviceControls => 'Mga Kontrol';
 
   @override
@@ -15557,6 +15549,11 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Hindi na-install ang update. Gumagana pa rin ang iyong pendant sa kasalukuyang firmware ($version). Makipag-ugnayan sa support sa halip na subukang muli ang update.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15695,6 +15692,20 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Buod kapag natapos ang usapang ito';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Mga upload na naghihintay sa server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ligtas ang iyong audio sa iyong device o phone';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Buod hanggang $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Pinakabagong Transcript';
 
   @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';

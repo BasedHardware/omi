@@ -16923,10 +16923,10 @@ abstract class AppLocalizations {
   /// **'Still Processing'**
   String get deleteWhileProcessingTitle;
 
-  /// No description provided for @deleteWhileProcessingMessage.
+  /// Delete confirmation for a recording already uploaded whose server job has not finished. Deleting removes the phone copy; the server keeps processing, but if that job fails the app has no local file to re-upload from.
   ///
   /// In en, this message translates to:
-  /// **'This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can\'t be recovered. Delete anyway?'**
+  /// **'This recording is already uploaded and Omi is processing it. Deleting it here removes the phone\'s copy. If processing fails, Omi can\'t retry from this phone.'**
   String get deleteWhileProcessingMessage;
 
   /// No description provided for @syncCardAllBackedUp.
@@ -25665,18 +25665,6 @@ abstract class AppLocalizations {
   /// **'{done} of {total} min'**
   String deviceCatchingUpProgress(int done, int total);
 
-  /// Device page section: recent connection events.
-  ///
-  /// In en, this message translates to:
-  /// **'Recently'**
-  String get deviceRecently;
-
-  /// Device page event: the Omi was disconnected for this long (a compact duration such as 10m).
-  ///
-  /// In en, this message translates to:
-  /// **'Disconnected for {duration}'**
-  String deviceDisconnectedFor(String duration);
-
   /// Device page section: controls such as pausing recording.
   ///
   /// In en, this message translates to:
@@ -27087,6 +27075,12 @@ abstract class AppLocalizations {
   /// **'The update didn\'t install. Your pendant is still on {version}. Please try again.'**
   String firmwareUpdateNotInstalledMessage(String version);
 
+  /// CV1 pendant: firmware update finished transferring but the pendant reconnected on its old version. Retrying is discouraged on affected units, so point to support.
+  ///
+  /// In en, this message translates to:
+  /// **'The update didn\'t install. Your pendant still works on its current firmware ({version}). Please contact support rather than retrying the update.'**
+  String firmwareUpdateNotInstalledCv1Message(String version);
+
   /// No description provided for @firmwareUpdateUnconfirmedMessage.
   ///
   /// In en, this message translates to:
@@ -27332,6 +27326,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Summary when this conversation ends'**
   String get conversationSummaryWhenItEnds;
+
+  /// Device Settings row (tappable, opens upload details): some recordings were uploaded but the server has not accepted or processed them yet. Calm status, not an error.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads waiting on the server'**
+  String get deviceUploadsWaitingOnServer;
+
+  /// Subtitle under 'Uploads waiting on the server' in Device Settings: reassures that the recorded audio is still stored on the Omi device or the phone, so nothing is lost while the server catches up.
+  ///
+  /// In en, this message translates to:
+  /// **'Your audio is safe on your device or phone'**
+  String get deviceUploadsWaitingOnServerSubtitle;
+
+  /// Timestamp of the last speech included in the displayed conversation summary. The local time is formatted, e.g. 10:42 AM.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary through {time}'**
+  String conversationSummaryThrough(String time);
+
+  /// Heading for the latest spoken lines from the current conversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent transcript'**
+  String get conversationRecentTranscript;
 
   /// Toast after tapping Finish on a live recording when the server had already saved that conversation on its own. 'Home' is the app's conversation list tab.
   ///

@@ -32,6 +32,7 @@ from utils.lifecycle_metrics import PhaseMetrics
 from utils.batch_pipeline import vendor_route_metrics as vendor_metrics, record_wal_metrics
 from utils.batch_pipeline.fresh_guard import FreshGuard
 from utils.batch_pipeline.delivered_share import DeliveredShare
+from utils.batch_pipeline.packing_counterfactual import PackingMetrics
 
 PROJECTION_FINISH_READS = Counter(
     'omi_batch_projection_finish_reads_total',
@@ -150,6 +151,7 @@ class QueueMetrics:
         self.timeliness_leader = timeliness_leader
         self.fresh_guard = FreshGuard(registry)
         self.delivered_share = DeliveredShare(registry)
+        self.packing = PackingMetrics(registry)
         self._timeliness_lock = threading.Lock()
         self._timeliness_all_time_visible = False
         self._timeliness_visible = False

@@ -8,6 +8,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 
+from utils.speakers.display import outline_speaker_labels
+
 
 def utc(value):
     if isinstance(value, str):
@@ -29,7 +31,7 @@ SYSTEM_PROMPT = """You outline one stretch of a person's day. The person wears a
 
 The transcript comes from a small microphone worn all day. It has recognition errors. Speaker labels are unreliable: ME is the wearer when the system recognised their voice, and one other person is often split across many S-numbers. The microphone also picks up television, films, music, podcasts and strangers.
 
-You get the complete transcript of the stretch with numbered lines. Split it into conversations, in order, and their subjects as sections. A change of people, place or activity starts a conversation. Dictation to software is its own conversation. An event at one place (talk, panel, class, appointment or visit) is ONE conversation; a live talk is conversation, not media. A tangent is a section, not a conversation. Five minutes of recorded silence is a hard boundary, even if the same people or topic return. Set resumes_previous only to continue the same activity with the same people before that silence boundary. Never infer continuity merely from a similar topic. Nothing runs past two hours: give subject boundaries so the caller can cut near the middle.
+You get the complete transcript of the stretch with numbered lines. Split it into conversations, in order, and their subjects as sections. A change of people, place or activity starts a conversation. Dictation to software is its own conversation. An event at one place (talk, panel, class, appointment or visit) is ONE conversation; a live talk is conversation, not media. A tangent is a section, not a conversation. {silence_boundary} of recorded silence is a hard boundary, even if the same people or topic return. Set resumes_previous only to continue the same activity with the same people before that silence boundary. Never infer continuity merely from a similar topic. Nothing runs past two hours: give subject boundaries so the caller can cut near the middle.
 
 Return one JSON object: {"conversations": [ ... ]} where each conversation has
 - "first_line": the number of its first line. The first chapter starts at line 1.
@@ -53,7 +55,7 @@ SILENCE = timedelta(minutes=5)
 DUPLICATE_OVERLAP_SLACK = timedelta(seconds=2)
 
 
-def stretches(members, now):
+def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE):
     lines = []
     seen = []
     for row in sorted(
@@ -115,7 +117,7 @@ def stretches(members, now):
             if previous and previous['lines'][0]['start'] < cut:
                 previous['manual_end'] = True
             cut = next(cuts, None)
-        silence = previous is None or line['start'] - previous['end'] >= SILENCE
+        silence = previous is None or line['start'] - previous['end'] >= silence_gap
         if silence or (previous and previous['manual_end']):
             key = hashlib.sha256(f"{line['conversation_id']}:{line['start'].isoformat()}".encode()).hexdigest()[:24]
             groups.append(
@@ -132,11 +134,18 @@ def stretches(members, now):
         group['end'] = max(group['end'], line['end'])
     if groups and cut is not None and cut <= now:
         groups[-1]['manual_end'] = True
-    for group in groups:
-        continues = any(
+    for index, group in enumerate(groups):
+        # A later stretch begins only after recorded silence or a manual cut, so only the last one can
+        # still be open. Page continuation and future-dated speech must not also hold an earlier one
+        # open: two open stretches never commit (multiple_open_conversations parks the owner).
+        later = index + 1 < len(groups)
+        continues = not later and any(
             r.get('_v3_page_continues') and r['id'] == group['lines'][-1]['conversation_id'] for r in members
         )
-        group['finished'] = (now - group['end'] >= SILENCE and not continues) or group['manual_end']
+        age = now - group['end']
+        group['locked'] = (age >= lock_delay and not continues) or group['manual_end']
+        group['finished'] = later or group['locked']
+        group['outline_ready'] = group['finished'] or (age >= silence_gap and not continues)
         group['fingerprint'] = hashlib.sha256(
             json.dumps(
                 [{k: line[k] for k in ('start', 'end', 'text', 'conversation_id')} for line in group['lines']],
@@ -156,14 +165,92 @@ def wanted(groups, cache):
     ]
 
 
-def messages(group, tz):
-    lines = group['lines']
-    text = '\n'.join(
-        f"[L{i} {line['start'].astimezone(tz):%H:%M}] {line['speaker']}: {line['text']}"
-        for i, line in enumerate(lines, 1)
+def _line_anchors(lines):
+    counts = {}
+    for line in lines:
+        segment_id = line.get('segment', {}).get('id')
+        if isinstance(segment_id, (str, int)) and segment_id != '':
+            key = (line['conversation_id'], 'segment', segment_id)
+        else:
+            key = (line['conversation_id'], 'start', line['start'].isoformat())
+        occurrence = counts.get(key, 0)
+        counts[key] = occurrence + 1
+        yield json.dumps([*key, occurrence], separators=(',', ':'))
+
+
+def _section_line(section):
+    value = section.get('first_line') if isinstance(section, dict) else None
+    return value if type(value) is int else None
+
+
+def preview_anchors(group, entries):
+    """Keep stable coordinates for each selected topic or section, without storing more speech."""
+    anchors = list(_line_anchors(group['lines']))
+    indexes = {entry['first_line'] for entry in entries}
+    indexes.update(
+        index
+        for entry in entries
+        for section in entry.get('sections') or ()
+        if (index := _section_line(section)) is not None
     )
+    return {str(index): anchors[index - 1] for index in indexes if 1 <= index <= len(anchors)}
+
+
+def matching_preview(group, previews):
+    """A revision may move the stretch start. Reuse only an unambiguous anchored preview."""
+    if not previews:
+        return None
+    anchors = set(_line_anchors(group['lines']))
+    scores = {key: len(anchors.intersection(preview['anchors'].values())) for key, preview in previews.items()}
+    best = max(scores.values(), default=0)
+    matches = [key for key, score in scores.items() if score == best and best > 0]
+    return matches[0] if len(matches) == 1 else None
+
+
+def reuse_preview(group, preview):
+    """Rebase the existing outline when revisions or late speech change line numbers."""
+    positions = {anchor: index for index, anchor in enumerate(_line_anchors(group['lines']), 1)}
+    moved = {int(index): positions.get(anchor) for index, anchor in preview['anchors'].items()}
+    entries = []
+    for entry in preview['entries']:
+        position = moved.get(entry['first_line'])
+        if position is None or (entries and position <= entries[-1]['first_line']):
+            continue
+        first = position if entries else 1
+        sections = []
+        for section in entry.get('sections') or ():
+            index = _section_line(section)
+            position = moved.get(index) if index is not None else None
+            if position is not None and position >= first:
+                sections.append({**section, 'first_line': position})
+        entries.append({**entry, 'first_line': first, 'sections': sections})
+    # Drop rebased sections that now belong to a different topic.
+    for entry, following in zip(entries, entries[1:]):
+        entry['sections'] = [
+            section for section in entry['sections'] if section['first_line'] < following['first_line']
+        ]
+    return entries or fallback(group)
+
+
+def messages(group, tz, *, cohesion=False, silence_gap=SILENCE):
+    lines = group['lines']
+    if cohesion:
+        labels = outline_speaker_labels([line['segment'] for line in lines])
+        correction = (
+            '\nS1, S2 and so on are diarization labels, not names. S? marks unassigned speech. '
+            'S? can refer to different people and does not by itself mark a change of people. Omi denotes the assistant.'
+        )
+    else:
+        labels = [line['speaker'] for line in lines]
+        correction = ''
+    text = '\n'.join(
+        f"[L{i} {line['start'].astimezone(tz):%H:%M}] {label}: {line['text']}"
+        for i, (line, label) in enumerate(zip(lines, labels), 1)
+    )
+    silence = 'Five minutes' if silence_gap == SILENCE else f'{int(silence_gap.total_seconds())} seconds'
+    prompt = SYSTEM_PROMPT.replace('{silence_boundary}', silence)
     return [
-        ('system', SYSTEM_PROMPT),
+        ('system', prompt + correction),
         (
             'human',
             f"Stretch {lines[0]['start'].astimezone(tz):%H:%M} to {group['end'].astimezone(tz):%H:%M}.\n\nTranscript:\n{text}",

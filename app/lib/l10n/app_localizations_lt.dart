@@ -9091,7 +9091,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Šis įrašas įkeltas, bet Omi vis dar kuria pokalbį. Jei ištrinsite dabar ir apdorojimas nepavyks, jo nebus galima atkurti. Vis tiek ištrinti?';
+      'Šis įrašas jau įkeltas, ir Omi jį apdoroja. Ištrynus čia pašalinama telefone esanti kopija. Jei apdorojimas nepavyks, Omi negalės bandyti dar kartą iš šio telefono.';
 
   @override
   String get syncCardAllBackedUp => 'Visi įrašai sinchronizuoti';
@@ -14513,14 +14513,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Neseniai';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Atsijungta $duration';
-  }
-
-  @override
   String get deviceControls => 'Valdikliai';
 
   @override
@@ -15459,6 +15451,11 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Atnaujinimas neįdiegtas. Jūsų pakabukas toliau veikia su dabartine programine įranga ($version). Užuot bandę atnaujinti dar kartą, susisiekite su pagalba.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15596,6 +15593,20 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Santrauka, kai šis pokalbis baigsis';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Įkėlimai laukia serveryje';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Jūsų garso įrašai saugūs jūsų įrenginyje arba telefone';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Santrauka iki $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Naujausia transkripcija';
 
   @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';

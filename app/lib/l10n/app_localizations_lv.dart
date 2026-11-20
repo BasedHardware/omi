@@ -9106,7 +9106,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Šis ieraksts ir augšupielādēts, bet Omi vēl veido sarunu. Ja to tagad izdzēsīsiet un apstrāde neizdosies, to nevarēs atjaunot. Vai tomēr dzēst?';
+      'Šis ieraksts jau ir augšupielādēts, un Omi to apstrādā. Dzēšot šeit, tiek noņemta tālrunī esošā kopija. Ja apstrāde neizdosies, Omi nevarēs mēģināt vēlreiz no šī tālruņa.';
 
   @override
   String get syncCardAllBackedUp => 'Visi ieraksti sinhronizēti';
@@ -14524,14 +14524,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Nesen';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Atvienots $duration';
-  }
-
-  @override
   String get deviceControls => 'Vadīklas';
 
   @override
@@ -15470,6 +15462,11 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Atjauninājums netika instalēts. Jūsu kulons joprojām darbojas ar pašreizējo programmaparatūru ($version). Lūdzu, sazinieties ar atbalstu, nevis mēģiniet atjaunināt vēlreiz.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15607,6 +15604,20 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => 'Kopsavilkums, kad šī saruna beigsies';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Augšupielādes gaida serverī';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Jūsu audio ir droši jūsu ierīcē vai tālrunī';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Kopsavilkums līdz $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Jaunākā transkripcija';
 
   @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';

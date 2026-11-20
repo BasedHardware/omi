@@ -228,6 +228,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED", "value": "false"},
         {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS", "value": "24"},
         {"name": "BATCH_PIPELINE_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_PACKING_SAMPLE_RATE", "value": "0.001"},
         {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
         {"name": "FIRST_SUMMARY_DEADLINE_PERCENT", "value": "0"},
@@ -663,6 +664,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         r'\n        {"name": "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED", "value": "true"},'
         r'\n        {"name": "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
+        r'\n        {"name": "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
         flags=re.DOTALL,
@@ -749,6 +751,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
                 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S',
                 'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
                 'BATCH_INPUT_EXPIRING_ENABLED',
+                'BATCH_PROJECTION_OUTBOX',
                 'DREAM_AGENT_ELIGIBILITY',
                 'DREAM_ON_DEMAND_ENABLED',
                 'DEMAND_PROCESSING_ENABLED',
@@ -1416,7 +1419,7 @@ def test_automatic_firestore_readiness_contract_requires_current_main_then_admit
     stale_source_workflow = copy.deepcopy(workflow)
     current_main_checkout = next(
         step
-        for step in stale_source_workflow['jobs']['firestore_readiness']['steps']
+        for step in stale_source_workflow['jobs']['admit_source']['steps']
         if step.get('name') == 'Checkout current main for automatic source admission'
     )
     current_main_checkout['with']['ref'] = '${{ github.event.workflow_run.head_sha }}'
@@ -2089,7 +2092,9 @@ def missing_gateway_cloud_run_state():
     'missing',
     [
         None,
+        'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
         'BATCH_INPUT_EXPIRING_ENABLED',
+        'BATCH_PROJECTION_OUTBOX',
         'BATCH_HELD_DEAD_LETTER_ENABLED',
         'SYNC_LINEAGE_LIVE_DEDUPE_ENABLED',
         'SYNC_WAL_AUDIO_COVERAGE_ENABLED',

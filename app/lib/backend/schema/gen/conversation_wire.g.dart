@@ -1141,6 +1141,7 @@ class GeneratedConversation {
   final bool isLocked;
   final String? kind;
   final String? language;
+  final GeneratedLiveSummaryPreview? liveSummary;
   final bool? manualEnd;
   final double? meetingDedupSpeechS;
   final double? meetingDurationS;
@@ -1222,6 +1223,7 @@ class GeneratedConversation {
     this.isLocked = false,
     this.kind,
     this.language,
+    this.liveSummary,
     this.manualEnd,
     this.meetingDedupSpeechS,
     this.meetingDurationS,
@@ -1305,6 +1307,7 @@ class GeneratedConversation {
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
       kind: _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: true),
       language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      liveSummary: _readFieldValue<GeneratedLiveSummaryPreview>(_readField(json, const ["live_summary"]), "live_summary", (value) => _readObject(value, GeneratedLiveSummaryPreview.fromJson), requiredField: false, nullable: true),
       manualEnd: _readFieldValue<bool>(_readField(json, const ["manual_end"]), "manual_end", _readBool, requiredField: false, nullable: true),
       meetingDedupSpeechS: _readFieldValue<double>(_readField(json, const ["meeting_dedup_speech_s"]), "meeting_dedup_speech_s", _readDouble, requiredField: false, nullable: true),
       meetingDurationS: _readFieldValue<double>(_readField(json, const ["meeting_duration_s"]), "meeting_duration_s", _readDouble, requiredField: false, nullable: true),
@@ -1389,6 +1392,7 @@ class GeneratedConversation {
       'is_locked': isLocked,
       'kind': kind,
       'language': language,
+      'live_summary': liveSummary?.toJson(),
       'manual_end': manualEnd,
       'meeting_dedup_speech_s': meetingDedupSpeechS,
       'meeting_duration_s': meetingDurationS,
@@ -1430,6 +1434,30 @@ class GeneratedConversation {
       'user_overview': userOverview,
       'uses_custom_stt': usesCustomStt,
       'visibility': visibility,
+    };
+  }
+}
+
+class GeneratedLiveSummaryPreview {
+  final GeneratedStructured structured;
+  final DateTime summaryCoversThrough;
+
+  const GeneratedLiveSummaryPreview({
+    required this.structured,
+    required this.summaryCoversThrough,
+  });
+
+  factory GeneratedLiveSummaryPreview.fromJson(Map<String, dynamic> json) {
+    return GeneratedLiveSummaryPreview(
+      structured: _required(_readFieldValue<GeneratedStructured>(_readField(json, const ["structured"]), "structured", (value) => _readObject(value, GeneratedStructured.fromJson), requiredField: true, nullable: false), "structured"),
+      summaryCoversThrough: _required(_readFieldValue<DateTime>(_readField(json, const ["summary_covers_through"]), "summary_covers_through", _readDateTime, requiredField: true, nullable: false), "summary_covers_through"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'structured': structured.toJson(),
+      'summary_covers_through': summaryCoversThrough.toUtc().toIso8601String(),
     };
   }
 }
@@ -1793,6 +1821,7 @@ class GeneratedConversationSearchItem {
   final bool isLocked;
   final String? kind;
   final String? language;
+  final GeneratedLiveSummaryPreview? liveSummary;
   final bool? manualEnd;
   final List<GeneratedTranscriptMatchSnippet> matchSnippets;
   final double? meetingDedupSpeechS;
@@ -1875,6 +1904,7 @@ class GeneratedConversationSearchItem {
     this.isLocked = false,
     this.kind,
     this.language,
+    this.liveSummary,
     this.manualEnd,
     this.matchSnippets = const [],
     this.meetingDedupSpeechS,
@@ -1959,6 +1989,7 @@ class GeneratedConversationSearchItem {
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
       kind: _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: true),
       language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      liveSummary: _readFieldValue<GeneratedLiveSummaryPreview>(_readField(json, const ["live_summary"]), "live_summary", (value) => _readObject(value, GeneratedLiveSummaryPreview.fromJson), requiredField: false, nullable: true),
       manualEnd: _readFieldValue<bool>(_readField(json, const ["manual_end"]), "manual_end", _readBool, requiredField: false, nullable: true),
       matchSnippets: _required(_readFieldValue<List<GeneratedTranscriptMatchSnippet>>(_readField(json, const ["match_snippets"]), "match_snippets", (value) => _readObjectList(value, GeneratedTranscriptMatchSnippet.fromJson), requiredField: false, nullable: false, defaultValue: const []), "match_snippets"),
       meetingDedupSpeechS: _readFieldValue<double>(_readField(json, const ["meeting_dedup_speech_s"]), "meeting_dedup_speech_s", _readDouble, requiredField: false, nullable: true),
@@ -2044,6 +2075,7 @@ class GeneratedConversationSearchItem {
       'is_locked': isLocked,
       'kind': kind,
       'language': language,
+      'live_summary': liveSummary?.toJson(),
       'manual_end': manualEnd,
       'match_snippets': matchSnippets.map((value) => value.toJson()).toList(),
       'meeting_dedup_speech_s': meetingDedupSpeechS,

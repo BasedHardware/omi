@@ -8956,7 +8956,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      '이 녹음은 업로드되었지만 Omi가 아직 대화를 만들고 있습니다. 지금 삭제하고 처리가 실패하면 복구할 수 없습니다. 그래도 삭제하시겠습니까?';
+      '이 녹음은 이미 업로드되었고 Omi가 처리 중입니다. 여기서 삭제하면 휴대폰에 있는 사본이 삭제됩니다. 처리에 실패하면 Omi가 이 휴대폰에서 다시 시도할 수 없습니다.';
 
   @override
   String get syncCardAllBackedUp => '모든 녹음이 동기화됨';
@@ -14290,14 +14290,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => '최근';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration 동안 연결 끊김';
-  }
-
-  @override
   String get deviceControls => '제어';
 
   @override
@@ -15214,6 +15206,11 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return '업데이트가 설치되지 않았습니다. 펜던트는 현재 펌웨어($version)로 계속 작동합니다. 업데이트를 다시 시도하지 말고 지원팀에 문의해 주세요.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15351,6 +15348,20 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get conversationSummaryWhenItEnds => '이 대화가 끝나면 요약이 표시됩니다';
+
+  @override
+  String get deviceUploadsWaitingOnServer => '서버에서 대기 중인 업로드';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => '오디오는 기기 또는 휴대전화에 안전하게 저장되어 있습니다';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time까지의 요약';
+  }
+
+  @override
+  String get conversationRecentTranscript => '최근 녹취록';
 
   @override
   String get finishAlreadySaved => 'Already saved. It\'s on Home.';

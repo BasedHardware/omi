@@ -1086,9 +1086,15 @@ page; recovery and repair still return them through pending assignment to
 persisted/ready. Unchanged finishable receipts are retried each cycle: a sibling
 or destination can unblock them without changing their own result version.
 Already-ready siblings in one discovered page share a content-completion
-probe for their exact immutable binding. Every row still rechecks its receipt
-and privacy fences; persisted rows still finish their own side effects and
-probe completion. Failed/cancelled probes clear their marker. Each new
+probe for their exact immutable binding. With the default-on
+`BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED`, a duplicate can skip the
+read-only session check after a successful same-process, same-page probe.
+Its ready receipt and pinned policy must match, the first live deletion and
+privacy walk must cover all of its inputs and outputs, and a fresh privacy
+token must match the token revision in that walk. The proof expires within
+60 seconds. Any uncertainty runs the full check. Set the switch to `false`
+to restore the original check order. Persisted rows still finish their own
+side effects and probe completion. Failed/cancelled probes clear their marker. Each new
 discovery page gets a fresh probe; an older page keeps its marker until its
 queued/running rows finish. Priority/owed recovery work bypasses sharing,
 including owed rows also found by discovery or woken before their probe. Thus an
@@ -1488,3 +1494,34 @@ carry the cells; a failed page clears counts and ratio, and both expire after
 gauges. The Core Features row "Did the user get a transcript?" and the
 `omi-batch-delivered-share-language` rule read them. See the 2026-11-14
 delivered-share change note and `docs/runbooks/batch-language-delivery.md`.
+
+## Lease packing observation
+
+`BATCH_PIPELINE_PACKING_SAMPLE_RATE` defaults to `0.001` of committed leases and
+accepts rates up to `0.01`. Set `0` on intake, serving, and GPU worker roles to
+disable new metadata stamps, candidate reads, and cohort completion counters.
+In Helm use `worker.packingSampleRate: '0'`.
+
+Each accepted probe reads at most 17 projected job rows in capture order for the
+selected owner. One probe may be queued or running per process. The read runs
+after commit with a one-second RPC deadline and no retry. Its Firestore origin is
+`job:batch_packing_counterfactual`. The read is a near-lease observation. Concurrent
+lease, completion, and erasure can change its view. Stale, busy, missing-anchor,
+and capped observations have explicit coverage signals. Due depth describes only
+the observed owner-priority partition. Costs multiply across worker replicas.
+
+The nine packing estimates use validated device-bound source intervals and the
+original PCM seconds before inserted gap silence. The size ceiling also includes
+decoded padding already present in the row. A pack ends at the first incompatible,
+unready, overlapping, oversize, or predecessor-blocked row, or at the count cap.
+The admission stamp carries only bounded proof and cohort metadata. Session and
+compatibility equality use owner-local digests. Logs and metric labels carry no
+customer IDs. Old or uncertain clocks and ambiguous paid-versus-trial snapshots
+remain unknown. Trial and conversion releases carry their explicit evidence.
+
+Existing readers, including GPU image `ef42ee8`, ignore the optional job stamp.
+New readers accept unstamped jobs and the worker RPC payload is unchanged. The
+ordinary fenced completion counter remains the cost denominator. The separate
+cohort counter uses the newest-source age frozen at intake and records each
+completion once. Compare coverage, sample overhead and production results before
+using the estimates to choose a packing policy.
