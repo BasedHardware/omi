@@ -5310,7 +5310,7 @@ environments:
               value: 'on'
               category: ops_kill
             BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
               value: 'true'
@@ -5389,7 +5389,7 @@ environments:
               default: '0'
               category: rollout
             BATCH_PROJECTION_OUTBOX:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
@@ -5857,7 +5857,7 @@ environments:
               value: 'on'
               category: ops_kill
             BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
               value: 'true'
@@ -5926,7 +5926,7 @@ environments:
               default: '0'
               category: rollout
             BATCH_PROJECTION_OUTBOX:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'true'}
             BATCH_PIPELINE_WORKER_ENABLED:
