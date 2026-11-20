@@ -34,6 +34,7 @@ type QuietWake struct {
 type QuietStore interface {
 	ArmQuiet(ctx context.Context, a queue.Admitting, ref Ref, timeout float64, requiresBYOK bool) (QuietCheck, error)
 	WakeQuiet(ctx context.Context, a queue.Admitting, check QuietCheck) (QuietWake, error)
+	ResolveQuietLimit(ctx context.Context, a queue.Admitting, wake QuietWake, cause error) (rules.QuietAction, bool, error)
 }
 
 // ArmQuiet records an idempotent check for an authenticated disconnect.
@@ -66,5 +67,26 @@ func (s *Service) WakeQuiet(ctx context.Context, check QuietCheck, dispatchAvail
 		Ref: check.Ref, Trigger: rules.ServerRecovery, RequiresDispatch: true, DispatchAvailable: true,
 		RequireExpiredLease: true, RecoveryCutoff: wake.Cutoff, QuietGeneration: wake.Check.Generation,
 	})
-	return wake, intent, err
+	if err == nil || intent.JobID != "" {
+		return wake, intent, err
+	}
+	return s.resolveQuietFailure(ctx, wake, err)
+}
+
+func (s *Service) resolveQuietFailure(ctx context.Context, wake QuietWake, cause error) (QuietWake, Intent, error) {
+	var action rules.QuietAction
+	var matched bool
+	err := s.Queue.Tenant(ctx, wake.Check.Ref.Owner, func(sc *queue.Scope) error {
+		var handleErr error
+		action, matched, handleErr = s.Quiet.ResolveQuietLimit(ctx, sc.Admitting(), wake, cause)
+		return handleErr
+	})
+	if err != nil {
+		return wake, Intent{}, err
+	}
+	if !matched {
+		return wake, Intent{}, cause
+	}
+	wake.Action = action
+	return wake, Intent{}, nil
 }

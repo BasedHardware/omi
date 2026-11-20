@@ -20,6 +20,7 @@ const (
 type quietRows struct {
 	jobPath, conversationPath docstore.Ref
 	job, row                  document
+	written                   time.Time
 }
 
 func getQuietRows(tx *docstore.Tx, ref finalization.Ref) (quietRows, error) {
@@ -39,7 +40,7 @@ func getQuietRows(tx *docstore.Tx, ref finalization.Ref) (quietRows, error) {
 		field[string](rows.job, "conversation_id") != ref.ID) {
 		return quietRows{}, finalization.ErrInvalid
 	}
-	_, err = tx.Get(path, &rows.row)
+	rows.written, err = tx.GetVersion(path, &rows.row)
 	return rows, err
 }
 
@@ -97,46 +98,64 @@ func armQuiet(tx *docstore.Tx, ref finalization.Ref, now time.Time, timeout time
 // WakeQuiet reserves the next wake before returning a ready conversation.
 func (s Store) WakeQuiet(ctx context.Context, a queue.Admitting, check finalization.QuietCheck) (finalization.QuietWake, error) {
 	now := s.Clock.Now().UTC()
-	var wake finalization.QuietWake
-	err := s.Docs.Fenced(ctx, a, check.Ref.Owner, func(tx *docstore.Tx) error {
-		var wakeErr error
-		wake, wakeErr = s.wakeQuiet(tx, check, now)
-		return wakeErr
-	})
+	wake, candidate, err := s.evaluateQuiet(ctx, a, check, now, archiveProof{})
+	if err != nil || candidate.session == "" {
+		return wake, classify(err)
+	}
+	empty, proofErr := s.Archive.Empty(ctx, a, check.Ref, candidate.session)
+	candidate.checked, candidate.empty = true, empty && proofErr == nil
+	wake, _, err = s.evaluateQuiet(ctx, a, check, s.Clock.Now().UTC(), candidate)
 	return wake, classify(err)
 }
 
-func (s Store) wakeQuiet(tx *docstore.Tx, check finalization.QuietCheck, now time.Time) (finalization.QuietWake, error) {
+func (s Store) evaluateQuiet(ctx context.Context, a queue.Admitting, check finalization.QuietCheck, now time.Time, proof archiveProof) (finalization.QuietWake, archiveProof, error) {
+	var wake finalization.QuietWake
+	var candidate archiveProof
+	err := s.Docs.Fenced(ctx, a, check.Ref.Owner, func(tx *docstore.Tx) error {
+		var wakeErr error
+		wake, candidate, wakeErr = s.wakeQuiet(tx, check, now, proof)
+		return wakeErr
+	})
+	return wake, candidate, err
+}
+
+func (s Store) wakeQuiet(tx *docstore.Tx, check finalization.QuietCheck, now time.Time, proof archiveProof) (finalization.QuietWake, archiveProof, error) {
 	rows, err := getQuietRows(tx, check.Ref)
 	if err != nil {
-		return finalization.QuietWake{}, err
+		return finalization.QuietWake{}, archiveProof{}, err
 	}
 	job, row := rows.job, rows.row
-	if check.Generation < 1 || field[string](job, "status") != quietWaiting || field[int64](job, "dispatch_generation") != check.Generation {
-		return finalization.QuietWake{Action: rules.QuietStale}, nil
+	if !currentQuiet(job, check.Generation) {
+		return finalization.QuietWake{Action: rules.QuietStale}, archiveProof{}, nil
 	}
 	if due := field[time.Time](job, "due_at"); due.After(now) {
 		check.Due = due
-		return finalization.QuietWake{Check: check, Action: rules.QuietWait}, nil
+		return finalization.QuietWake{Check: check, Action: rules.QuietWait}, archiveProof{}, nil
 	}
 
 	lease, err := recordingExpiry(tx, check.Ref, row)
 	if err != nil {
-		return finalization.QuietWake{}, err
+		return finalization.QuietWake{}, archiveProof{}, err
 	}
 	timeout := rules.QuietTimeout(quietSeconds(job, "quiet_timeout_seconds"))
 	action, due := rules.PlanQuietWake(now, quietDeadline(row, timeout), lease, quietEligible(row), s.hasInlineContent(check.Ref.Owner, row))
 	wake := finalization.QuietWake{Action: action}
 	switch action {
 	case rules.QuietRetire:
-		return wake, retireQuiet(tx, rows.jobPath, job, now, "")
+		return wake, archiveProof{}, retireQuiet(tx, rows.jobPath, job, now, "")
 	case rules.QuietRepair:
-		return wake, retireQuiet(tx, rows.jobPath, job, now, "record_orphan_repair")
+		session := field[string](field[map[string]any](row, "external_data"), "recording_session_id")
+		if s.Archive != nil && emptyBatch(row) && !proof.checked {
+			return wake, archiveProof{session: session, written: rows.written, expiry: lease}, nil
+		}
+		var cleanupErr error
+		wake.Action, cleanupErr = removeQuietEmpty(tx, rows, check.Ref, session, now, lease, proof)
+		return wake, archiveProof{}, cleanupErr
 	case rules.QuietStale:
-		return wake, nil
+		return wake, archiveProof{}, nil
 	case rules.QuietWait, rules.QuietReady:
 		if check.Generation == math.MaxInt64 {
-			return finalization.QuietWake{}, finalization.ErrInvalid
+			return finalization.QuietWake{}, archiveProof{}, finalization.ErrInvalid
 		}
 		check.Due, check.Generation = due, check.Generation+1
 		wake.Check, wake.Cutoff = check, now.Add(-timeout)
@@ -144,9 +163,13 @@ func (s Store) wakeQuiet(tx *docstore.Tx, check finalization.QuietCheck, now tim
 			wake.Cutoff = now
 		}
 	}
-	return wake, tx.Update(rows.jobPath, document{
+	return wake, archiveProof{}, tx.Update(rows.jobPath, document{
 		"dispatch_generation": check.Generation, "due_at": due, "reconcile_after_at": due, "updated_at": now,
 	})
+}
+
+func currentQuiet(job document, generation int64) bool {
+	return generation > 0 && field[string](job, "status") == quietWaiting && field[int64](job, "dispatch_generation") == generation
 }
 
 func retireQuiet(tx *docstore.Tx, path docstore.Ref, job document, now time.Time, reason string) error {

@@ -30,9 +30,10 @@ const (
 
 // Store is the fenced Firestore persistence for finalization's ordinary intents.
 type Store struct {
-	Docs  *docstore.Store
-	Codec crypt.Codec
-	Clock clock.Clock
+	Docs    *docstore.Store
+	Codec   crypt.Codec
+	Clock   clock.Clock
+	Archive ClosedArchive
 }
 
 // ErrUnsupported identifies admission paths needing recovery or backfill evidence
