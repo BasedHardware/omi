@@ -1,4 +1,4 @@
-"""Content-free task-link fences for cards retired or removed by live re-derive."""
+"""Content-free task-link fences for cards hidden by V3 refinement, repair or undo."""
 
 from __future__ import annotations
 

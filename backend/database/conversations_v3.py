@@ -611,8 +611,9 @@ def commit_projection(
     deferred_wakes = preview_wakes(rows, recordings) if key == 'builder' else {}
     # One merge per pass, with all donor redirects in the survivor's batch.
     all_absorbed = [cid for row in rows for cid in row.get('_v3_absorbed', ())]
+    absorption_writes = 2 * len(all_absorbed)  # Redirect and task-link marker per donor.
     if all_absorbed:
-        if len(recordings) + len(all_absorbed) + 2 > BATCH_MAX_WRITES:
+        if len(recordings) + absorption_writes + 2 > BATCH_MAX_WRITES:
             raise Conflict('request_too_large')
         planned_ids = {row['id'] for row in rows}
         if (
@@ -729,6 +730,7 @@ def commit_projection(
                     'sync_content_revision': int(existing[cid].get('sync_content_revision') or 0) + 1,
                 },
             )
+            tx.set(removal_ref(user, cid), {'absorbed_by_refinement': True})
         if final:
             for cid in remove:
                 tx.delete(coll.document(cid))
@@ -830,8 +832,8 @@ def commit_projection(
         return observed
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
-    # Reserve final-batch space for removal, retirement, lineage and task-link fences.
-    fixed_writes = len(recordings) + len(remove) + len(all_absorbed) + len(retire) + len(retired) + 1
+    # Reserve space for all donor writes, including the task-link fences in the survivor's batch.
+    fixed_writes = len(recordings) + len(remove) + absorption_writes + len(retire) + len(retired) + 1
     if retired and fixed_writes + bool(rows) > BATCH_MAX_WRITES:
         raise Conflict('backfill_partition_budget')
     max_rows = max(1, BATCH_MAX_WRITES - fixed_writes)

@@ -712,6 +712,27 @@ def task_writes(strict, monkeypatch):
 
 
 @pytest.fixture
+def commit_refinement(owner, strict):
+    sources, rows = lunch(count=2)
+    owner(*sources, *rows)
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    recordings = {row['id']: {**row, '_v3_revision': 1} for row in sources}
+    existing = {row['id']: {**row, '_v3_revision': 1} for row in rows}
+    survivor = {
+        **rows[0],
+        'finished_at': rows[1]['finished_at'],
+        'v3_recording_ids': [row['id'] for row in sources],
+        '_v3_absorbed': ['c1'],
+        '_v3_claims': {row['id']: [{'start': row['started_at'], 'end': row['finished_at']}] for row in sources},
+    }
+
+    def commit(*other_rows):
+        store.commit_projection(UID, token, recordings, existing, [survivor, *other_rows], [], firestore_client=strict)
+
+    return commit
+
+
+@pytest.fixture
 async def undo_task_card(owner, strict, ledger, task_writes):
     sources, rows = lunch(count=3)
     extra = source('r9', AT + timedelta(minutes=30), words=400)
@@ -1270,6 +1291,65 @@ async def test_task_create_validated_before_retirement_cannot_commit(
     assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
     assert not strict.rows[path('c1')].get('deleted')
     assert task_service.create_action_item(UID, payload)
+
+
+@pytest.mark.parametrize('batch', [False, True], ids=['single', 'batch'])
+def test_task_create_validated_before_refinement_cannot_commit(
+    commit_refinement, strict, task_writes, monkeypatch, batch
+):
+    monkeypatch.setenv(task_source_validation.SOURCE_LINKS_ENABLED_ENV, 'true')
+    run = tasks_db.FirestoreActionItems._run_contention
+
+    def absorb_after_validation(self, *args, **kwargs):
+        # The shared create service has validated the active donor and is about to start its write.
+        commit_refinement()
+        donor = strict.rows[path('c1')]
+        assert donor['deleted'] and donor['sync_merged_into'] == 'c0'
+        return run(self, *args, **kwargs)
+
+    monkeypatch.setattr(tasks_db.FirestoreActionItems, '_run_contention', absorb_after_validation)
+    payload = {'description': 'Paused task', 'conversation_id': 'c1'}
+    with pytest.raises(task_source_validation.TaskSourceValidationError):
+        if batch:
+            task_service.create_action_items_batch(UID, [{'description': 'Standalone'}, payload])
+        else:
+            task_service.create_action_item(UID, payload)
+    assert not any(doc[:3] == ('users', UID, 'action_items') for doc in strict.rows)
+
+
+def test_task_committed_first_blocks_refinement(commit_refinement, strict, task_writes):
+    task = task_service.create_action_item(UID, {'description': 'Donor task', 'conversation_id': 'c1'})
+    before = conversations(strict)
+    with pytest.raises(store.Conflict, match='source_changed'):
+        commit_refinement()
+    assert conversations(strict) == before
+    assert strict.rows[('users', UID, 'action_items', task)]['conversation_id'] == 'c1'
+    assert not removal_ref(strict.document(f'users/{UID}'), 'c1').get().exists
+
+
+def test_refinement_preflight_reserves_marker_write(commit_refinement, strict, monkeypatch):
+    # Two recordings, the donor redirect and marker, the survivor and the lease.
+    monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 5)
+    before = conversations(strict)
+    tx_count = len(strict.transactions)
+    with pytest.raises(store.Conflict, match='request_too_large'):
+        commit_refinement()
+    assert conversations(strict) == before and len(strict.transactions) == tx_count
+
+
+def test_refinement_batch_reserves_marker_with_donor(commit_refinement, strict, monkeypatch):
+    cap = 6
+    monkeypatch.setattr(store, 'BATCH_MAX_WRITES', cap)
+    commit_refinement({'id': 'unrelated', 'status': 'completed', 'started_at': AT, 'finished_at': AT})
+
+    batches = [tx for tx in strict.transactions if any('claims' in patch for _, patch in tx.updates)]
+    assert len(batches) == 2
+    survivor_batch, other_batch = batches
+    marker = removal_ref(strict.document(f'users/{UID}'), 'c1').path
+    assert {path('c0'), marker} <= {doc for doc, _ in survivor_batch.sets}
+    assert any(doc == path('c1') and patch.get('deleted') for doc, patch in survivor_batch.updates)
+    assert path('unrelated') in {doc for doc, _ in other_batch.sets}
+    assert len(survivor_batch.sets) + len(survivor_batch.updates) <= cap
 
 
 @pytest.mark.asyncio
