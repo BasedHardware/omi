@@ -6,7 +6,7 @@ strict in-memory Firestore; only the outline model, speaker evidence and the sta
 """
 
 import json
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import InvalidArgument
 
+from database import action_items as tasks_db
 from database import conversations as conversations_db
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
@@ -26,6 +27,8 @@ from services import conversation_frame_evidence
 from utils.conversations import merge_conversations
 from utils.conversations.v3 import Conflict, backfill, service
 from utils.other import lake_wipe
+from utils.retrieval.tool_services import action_items as task_service
+from utils.task_intelligence import task_source_validation
 from tests.unit.fixtures.strict_firestore_transaction import (
     StrictFirestoreCollection,
     StrictFirestoreDocument,
@@ -147,7 +150,6 @@ def owner(strict, monkeypatch):
     monkeypatch.setattr(StrictFirestoreCollection, 'where', where)
     for module in (store, runs):
         monkeypatch.setattr(module, 'get_firestore_client', lambda: strict)
-    monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: False)
     monkeypatch.setattr(store, 'decrypt', lambda value, uid: value)
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
     monkeypatch.setattr(
@@ -607,6 +609,135 @@ async def test_an_undo_interrupted_before_erasing_a_created_row_finishes_on_reru
     result = backfill.undo_run(UID, RUN)
     assert result['outcome'] == 'undone' and result['rows_removed'] == 1
     assert conversations(strict) == before
+
+
+@pytest.fixture
+async def undo_task_card(owner, strict, ledger, monkeypatch):
+    sources, rows = lunch(count=3)
+    extra = source('r9', AT + timedelta(minutes=30), words=400)
+    owner(*sources, *rows, extra)
+    before = conversations(strict)
+    assert (await rederive())[0] == 'committed'
+    rederive_store.record_baselines(UID, RUN)
+    cid = next(entry['id'] for entry in priors(strict) if entry.get('created'))
+    monkeypatch.setattr(tasks_db, 'db', strict)
+    monkeypatch.setattr(tasks_db, 'fenced_action_item_commit', lambda uid: nullcontext())
+    monkeypatch.setattr(tasks_db, 'bump_action_items_list_version', lambda uid: None)
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, cid: strict.rows.get(path(cid)))
+    document = StrictFirestoreCollection.document
+    task_ids = iter(['linked-task', 'standalone-task', 'batch-linked-task'])
+
+    def allocate(self, name=None):
+        if name is None:
+            assert self.id == 'action_items'
+            name = next(task_ids)
+        return document(self, name)
+
+    monkeypatch.setattr(StrictFirestoreCollection, 'document', allocate)
+    return cid, before
+
+
+UNDO_TASK_BLOCK = {'outcome': 'busy', 'reason': 'undo_created_row_has_tasks'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('late', [False, True], ids=['later-group-at-preflight', 'committed-after-preflight'])
+async def test_undo_refuses_to_remove_a_task_bearing_created_card(undo_task_card, strict, ledger, monkeypatch, late):
+    cid, _ = undo_task_card
+    groups = backfill._undo_groups(priors(strict))
+    assert len(groups) > 1 and cid not in {entry['id'] for entry in groups[0]}
+    before_undo = conversations(strict)
+
+    def link_task():
+        task_service.create_action_item(UID, {'description': 'Owner task', 'conversation_id': cid})
+
+    if late:
+        preflight = rederive_store.live_undo_blocker
+
+        def create_after_preflight(*args, **kwargs):
+            assert preflight(*args, **kwargs) is None
+            link_task()
+
+        monkeypatch.setattr(rederive_store, 'live_undo_blocker', create_after_preflight)
+    else:
+        link_task()
+    assert backfill.undo_run(UID, RUN) == UNDO_TASK_BLOCK
+    assert not ledger.erased and strict.rows[path(cid)] == before_undo[cid]
+    assert strict.rows[path('r9')]['claims'] == before_undo['r9']['claims']
+    assert strict.rows[('users', UID, 'action_items', 'linked-task')]['conversation_id'] == cid
+    if not late:
+        assert conversations(strict) == before_undo
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('late', [False, True], ids=['retry-preflight', 'retry-transaction'])
+async def test_undo_retry_preserves_an_already_hidden_card_with_a_task(
+    undo_task_card, strict, ledger, monkeypatch, late
+):
+    cid, _ = undo_task_card
+    with monkeypatch.context() as patch:
+        patch.setattr(conversations_db, 'delete_conversation', MagicMock(side_effect=RuntimeError('interrupted')))
+        with pytest.raises(RuntimeError, match='interrupted'):
+            backfill.undo_run(UID, RUN)
+    hidden = deepcopy(strict.rows[path(cid)])
+    assert hidden['deleted'] and hidden['v3_rederive_live_undone'] == RUN
+
+    def add_legacy_task():
+        strict.rows[('users', UID, 'action_items', 'legacy-task')] = {'conversation_id': cid}
+
+    if late:
+        preflight = rederive_store.live_undo_blocker
+
+        def link_after_preflight(*args, **kwargs):
+            assert preflight(*args, **kwargs) is None
+            add_legacy_task()
+
+        monkeypatch.setattr(rederive_store, 'live_undo_blocker', link_after_preflight)
+    else:
+        add_legacy_task()
+    assert backfill.undo_run(UID, RUN) == UNDO_TASK_BLOCK
+    assert strict.rows[path(cid)] == hidden and not ledger.erased
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('batch', [False, True], ids=['single', 'batch'])
+@pytest.mark.parametrize('erase', [False, True], ids=['hidden', 'erased'])
+async def test_task_create_validated_before_undo_cannot_commit_after_removal(
+    undo_task_card, strict, ledger, monkeypatch, batch, erase
+):
+    cid, before = undo_task_card
+    # A task attached to a row that undo restores is outside its removal set.
+    assert task_service.create_action_item(UID, {'description': 'Unrelated task', 'conversation_id': 'c0'})
+    run = tasks_db.FirestoreActionItems._run_contention
+
+    def undo_before_task_transaction(self, *args, **kwargs):
+        if erase:
+            assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
+            assert ledger.erased == [cid]
+        else:
+            with monkeypatch.context() as patch:
+                patch.setattr(
+                    conversations_db, 'delete_conversation', MagicMock(side_effect=RuntimeError('interrupted'))
+                )
+                with pytest.raises(RuntimeError, match='interrupted'):
+                    backfill.undo_run(UID, RUN)
+            assert strict.rows[path(cid)]['v3_rederive_live_undone'] == RUN
+        return run(self, *args, **kwargs)
+
+    monkeypatch.setattr(tasks_db.FirestoreActionItems, '_run_contention', undo_before_task_transaction)
+    payload = {'description': 'Task awaiting commit', 'conversation_id': cid}
+    with pytest.raises(task_source_validation.TaskSourceValidationError):
+        if batch:
+            task_service.create_action_items_batch(UID, [{'description': 'Standalone'}, payload])
+        else:
+            task_service.create_action_item(UID, payload)
+    after = conversations(strict)
+    if not erase:
+        assert after.pop(cid)['deleted']
+    assert after == before
+    assert [
+        task['conversation_id'] for doc, task in strict.rows.items() if doc[:3] == ('users', UID, 'action_items')
+    ] == ['c0']
 
 
 @pytest.mark.asyncio

@@ -16,6 +16,7 @@ Open windows and the recordings they hold remain with the live builder.
 - Before replacing rows, the repair records their prior documents and claim positions.
   Undo restores groups sharing a source together. It refuses when deletion, a
   protection change, intervening owner edits or a newer run makes restoration unsafe.
+  A standalone task linked to a card undo would remove also blocks restoration.
   Conversation deletion and protection changes clear affected undo copies.
 
 ## Rollout and rollback
@@ -24,7 +25,8 @@ The existing `CONVERSATIONS_V3_BACKFILL` flag defaults to `off`. A release revie
 an explicit operator run are needed before live data is repaired. Start with the
 read-only, no-model dry-run and inspect protected rows, unclaimed speech and size
 refusals before committing. Set the flag to `off` to stop new steps. Use
-`undo --run` to revert a started repair when its custody guards permit it.
+`undo --run` to revert a started repair when its custody guards permit it. Before
+undo, verify the action-item API workers serve the transactional source check.
 
 ## Verification
 

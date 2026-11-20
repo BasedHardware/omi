@@ -641,6 +641,7 @@ _add(
         neutrals={
             'document_id': (None, 'optional doc id; absent does not change query'),
             'reuse_finished': (True, 'filters streamed key matches in Python; query unchanged'),
+            'validate_conversation': (False, 'adds only an owner-scoped conversation point read'),
         },
         setup=_seed_action_items_control,
         trials=2,
