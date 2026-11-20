@@ -7,6 +7,8 @@ import pytest
 from database import go_queue_erase as receipts
 from services.users import go_queue_erase as erase
 
+QUEUE_ID = 'a' * 64
+
 
 def test_readback_counts_overdue_and_late_generations():
     now = datetime(2026, 11, 19, tzinfo=timezone.utc)
@@ -38,8 +40,10 @@ def test_readback_counts_overdue_and_late_generations():
 def test_only_committed_erase_unlocks_wipe(monkeypatch, error, enabled, expected, failure):
     observed = []
 
-    def record(uid, job_id, claim, step, path=None, *, expires=None):
+    def record(uid, job_id, claim, step, path=None, *, expires=None, queue_id=None):
         assert (uid, job_id, claim) == ('tenant', 'job', receipts.claim_fingerprint('token'))
+        if step == 'receipt':
+            assert queue_id == (QUEUE_ID if path == 'postgres' else None)
         observed.append(step)
         return {receipts.CLAIM_EXPIRES_AT: datetime.now(timezone.utc) + timedelta(seconds=10)}
 
@@ -50,7 +54,7 @@ def test_only_committed_erase_unlocks_wipe(monkeypatch, error, enabled, expected
 
     def recovery(uid, expires):
         observed.append('recovery')
-        return enabled
+        return QUEUE_ID if enabled else None
 
     monkeypatch.setattr(receipts, 'record', record)
     monkeypatch.setattr(erase, '_erase_at_worker', worker)
@@ -137,7 +141,7 @@ def test_interrupted_acknowledgement_uses_database_recovery(monkeypatch, interru
     expires = datetime.now(timezone.utc) + timedelta(seconds=25)
     record = MagicMock(return_value={receipts.CLAIM_EXPIRES_AT: expires})
     monkeypatch.setattr(receipts, 'record', record)
-    recover = MagicMock(return_value=True)
+    recover = MagicMock(return_value=QUEUE_ID)
     monkeypatch.setattr(erase, '_erase_at_postgres', recover)
 
     erase.require_committed_erase('tenant', 'job', 'token', lambda: expires, lambda _: None)
@@ -145,6 +149,7 @@ def test_interrupted_acknowledgement_uses_database_recovery(monkeypatch, interru
     connection.request.assert_called_once()
     recover.assert_called_once_with('tenant', expires)
     assert [call.args[3] for call in record.call_args_list] == ['arm', 'verify', 'receipt', 'wipe']
+    assert record.call_args_list[2].kwargs == {'queue_id': QUEUE_ID}
 
 
 @pytest.mark.parametrize('status', [401, 409])
@@ -186,9 +191,32 @@ def test_tls_context_setup_timeout_cannot_authorize_recovery(monkeypatch):
     recover.assert_not_called()
 
 
-def test_recovery_is_off_without_a_database_binding(monkeypatch):
-    monkeypatch.delenv('GO_QUEUE_ERASE_RECOVERY_DATABASE_URL', raising=False)
-    assert erase._erase_at_postgres('tenant', datetime.now(timezone.utc)) is False
+@pytest.mark.parametrize('missing', ['DATABASE_URL', 'QUEUE_ID'])
+def test_recovery_is_off_without_a_verified_database_binding(monkeypatch, missing):
+    monkeypatch.setenv('GO_QUEUE_ERASE_RECOVERY_DATABASE_URL', 'configured')
+    monkeypatch.setenv('GO_QUEUE_ERASE_RECOVERY_QUEUE_ID', QUEUE_ID)
+    monkeypatch.delenv(f'GO_QUEUE_ERASE_RECOVERY_{missing}')
+    assert erase._erase_at_postgres('tenant', datetime.now(timezone.utc)) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('proof', [None, ('b' * 64, False)])
+async def test_recovery_never_commits_against_an_unverified_queue(monkeypatch, proof):
+    from unittest.mock import AsyncMock
+
+    import psycopg
+
+    connection = AsyncMock()
+    connection.execute.return_value.fetchone.return_value = proof
+    monkeypatch.setattr(psycopg.AsyncConnection, 'connect', AsyncMock(return_value=connection))
+
+    with pytest.raises(erase.EraseRejected, match='does not match the intended queue'):
+        await erase._recover_erase(
+            'test-only', 'queue', 'tenant', datetime.now(timezone.utc) + timedelta(seconds=10), QUEUE_ID
+        )
+
+    connection.commit.assert_not_awaited()
+    connection.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -215,7 +243,9 @@ async def test_recovery_closes_connection_before_cancelling_stalled_sql(monkeypa
     connection.execute = stall
     monkeypatch.setattr(psycopg.AsyncConnection, 'connect', AsyncMock(return_value=connection))
     with pytest.raises(erase.EraseUnavailable):
-        await erase._recover_erase('test-only', 'queue', 'tenant', datetime.now(timezone.utc) + timedelta(seconds=1))
+        await erase._recover_erase(
+            'test-only', 'queue', 'tenant', datetime.now(timezone.utc) + timedelta(seconds=1), QUEUE_ID
+        )
 
     assert started.is_set()
     connection.commit.assert_not_awaited()
@@ -237,6 +267,9 @@ async def test_recovery_never_issues_commit_after_expiry(monkeypatch):
 
     async def finish_after_deadline(*args):
         monkeypatch.setattr(loop, 'time', lambda: start + 15)
+        cursor = AsyncMock()
+        cursor.fetchone.return_value = (QUEUE_ID, True)
+        return cursor
 
     connection.execute = finish_after_deadline
     monkeypatch.setattr(psycopg.AsyncConnection, 'connect', AsyncMock(return_value=connection))
@@ -244,7 +277,7 @@ async def test_recovery_never_issues_commit_after_expiry(monkeypatch):
     try:
         with pytest.raises(erase.EraseUnavailable):
             await erase._recover_erase(
-                'test-only', 'queue', 'tenant', datetime.now(timezone.utc) + timedelta(seconds=10)
+                'test-only', 'queue', 'tenant', datetime.now(timezone.utc) + timedelta(seconds=10), QUEUE_ID
             )
     finally:
         monkeypatch.undo()
@@ -276,7 +309,7 @@ async def test_recovery_does_not_extend_grant_when_clock_sampling_is_interrupted
         patch.setattr(erase, 'datetime', PausedClock)
         patch.setattr(psycopg.AsyncConnection, 'connect', connect)
         with pytest.raises(erase.EraseUnavailable, match='grant expired'):
-            await erase._recover_erase('test-only', 'queue', 'tenant', wall_clock + timedelta(seconds=10))
+            await erase._recover_erase('test-only', 'queue', 'tenant', wall_clock + timedelta(seconds=10), QUEUE_ID)
     connect.assert_not_awaited()
 
 
@@ -305,7 +338,7 @@ def test_unreadable_success_headers_allow_recovery(monkeypatch):
     wire.readline.side_effect = [b'HTTP/1.1 200 OK\r\n', erase.http.client.LineTooLong('header')]
     expires = datetime.now(timezone.utc) + timedelta(seconds=20)
     monkeypatch.setattr(receipts, 'record', MagicMock(return_value={receipts.CLAIM_EXPIRES_AT: expires}))
-    recover = MagicMock(return_value=True)
+    recover = MagicMock(return_value=QUEUE_ID)
     monkeypatch.setattr(erase, '_erase_at_postgres', recover)
 
     erase.require_committed_erase('tenant', 'job', 'token', lambda: expires, lambda _: None)
@@ -318,6 +351,7 @@ def test_recovery_refuses_unresolved_dns_before_starting_event_loop(monkeypatch)
 
     monkeypatch.setenv('GO_QUEUE_ERASE_RECOVERY_DATABASE_URL', 'host=slow.invalid dbname=queue')
     monkeypatch.setenv('GO_QUEUE_ERASE_RECOVERY_SCHEMA', 'queue')
+    monkeypatch.setenv('GO_QUEUE_ERASE_RECOVERY_QUEUE_ID', QUEUE_ID)
     resolver = MagicMock(side_effect=AssertionError('DNS may outlive the recovery grant'))
     start_loop = MagicMock()
     monkeypatch.setattr(erase.socket, 'getaddrinfo', resolver)

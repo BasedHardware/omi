@@ -28,9 +28,10 @@ receivers continue to fence late writes after a queue database session disappear
    supply `GO_QUEUE_ERASE_RECOVERY_DATABASE_URL` via an approved secret binding and set
    `GO_QUEUE_ERASE_RECOVERY_SCHEMA` to the schema used by workerd. Set a single TLS
    verification hostname (`host`) and its numeric `hostaddr` in the DSN so recovery
-   can honor its deadline without DNS. An absent recovery URL
-   disables recovery. Both Lane B dependencies must reach main before merging this
-   barrier. Verify both paths target the same queue using a synthetic tenant.
+   can honor its deadline without DNS. Pin `GO_QUEUE_ERASE_RECOVERY_QUEUE_ID` using
+   the read-only check below. Recovery stays disabled until both the DSN and a
+   verified pin are configured. Both Lane B dependencies must reach main before
+   merging this barrier.
 3. Wire aggregate readback and paging in the environment as described below. Exercise both
    erase paths and a workerd outage with synthetic tenants. Confirm the armed receipt and
    wipe-start timestamp ordering. The queue and Firestore fences must both be active.
@@ -43,6 +44,36 @@ receivers continue to fence late writes after a queue database session disappear
 5. Roll back the switch only as part of disabling all live Go tenant traffic. Stop new
    work, drain or erase remaining tenant queue rows, and finish armed deletions before
    turning it off. Already armed generations continue to require a receipt.
+
+## Verify the recovery queue binding
+
+Run this read-only query from the backend checkout using the intended workerd writer's
+connection and queue schema. Source the DSN from workerd's approved configuration into
+`WORKER_QUEUE_DSN` for the check. Use a TCP connection to that writer.
+
+```bash
+python - "$WORKER_QUEUE_SCHEMA" <<'PY'
+import os
+import sys
+
+import psycopg
+
+from services.users.go_queue_erase import RECOVERY_QUEUE_ID_SQL
+
+with psycopg.connect(os.environ['WORKER_QUEUE_DSN']) as conn:
+    proof = conn.execute(RECOVERY_QUEUE_ID_SQL, (sys.argv[1],)).fetchone()
+    if proof is None:
+        raise SystemExit('No fingerprint for this writer and queue schema')
+    print(proof[0])
+PY
+```
+
+Use the result as the recovery pin and exercise the workerd and recovery routes with a
+synthetic tenant. The recovery call compares that pin with the connected cluster,
+database, writer address and queue tables in the same transaction as the erase. A
+mismatch fails closed and records no receipt. A successful recovery includes the pin in
+its Firestore receipt. Re-verify after a writer failover, address change, or queue
+recreation before updating the pin.
 
 ## Readback and escalation
 

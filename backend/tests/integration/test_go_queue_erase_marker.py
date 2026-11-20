@@ -16,7 +16,8 @@ from database.legal_holds import acquire_destructive_operation, LegalHoldAuthori
 pytestmark = pytest.mark.integration
 
 
-def test_go_queue_erase_receipt_requires_held_due_generation(monkeypatch):
+@pytest.mark.parametrize('path', ['workerd', 'postgres'])
+def test_go_queue_erase_receipt_requires_held_due_generation(monkeypatch, path):
     host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
     if urlsplit(f'//{host}').hostname not in {'localhost', '127.0.0.1', '::1'}:
         pytest.fail('requires loopback Firestore emulator')
@@ -46,14 +47,21 @@ def test_go_queue_erase_receipt_requires_held_due_generation(monkeypatch):
             receipts.record(uid, 'job', 'old-claim', 'receipt', 'workerd')
         with pytest.raises(RuntimeError, match='receipt missing'):
             receipts.record(uid, 'job', 'claim', 'wipe')
-        receipts.record(uid, 'job', 'claim', 'receipt', 'workerd')
+        if path == 'postgres':
+            with pytest.raises(RuntimeError, match='missing verified queue identity'):
+                receipts.record(uid, 'job', 'claim', 'receipt', path)
+            assert ref.get().to_dict().get(receipts.RECEIPT_AT) is None
+            receipts.record(uid, 'job', 'claim', 'receipt', path, queue_id='a' * 64)
+        else:
+            receipts.record(uid, 'job', 'claim', 'receipt', path)
         ref.update({receipts.CLAIM: 'new-claim', receipts.CLAIM_EXPIRES_AT: None})
         arm('new-claim')
         receipts.record(uid, 'job', 'new-claim', 'wipe')
         marker = ref.get().to_dict()
         assert marker['wipe_due_at'] == marker[receipts.ARMED_AT]
         assert marker[receipts.ARMED_AT] <= marker[receipts.RECEIPT_AT] <= marker[receipts.WIPE_AT]
-        assert marker[receipts.PATH] == 'workerd'
+        assert marker[receipts.PATH] == path
+        assert marker.get(receipts.RECOVERY_QUEUE_ID) == ('a' * 64 if path == 'postgres' else None)
         assert receipts.readback(
             datetime.now(timezone.utc) + timedelta(minutes=16), db.collection('account_deletions')
         ) == {

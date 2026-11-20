@@ -1,5 +1,6 @@
 """Durable, generation-bound receipts for the account wipe's Go queue barrier."""
 
+import re
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from typing import Any, Literal
@@ -25,6 +26,7 @@ ERASE_LEASE_SECONDS = 180
 ERASE_GRANT_DURATION = timedelta(seconds=25)
 PROTECTED_ATTEMPT = 'go_queue_erase_protected_attempt'
 PATH = 'go_queue_erase_path'
+RECOVERY_QUEUE_ID = 'go_queue_erase_recovery_queue_id'
 ORDER_UNKNOWN = 'go_queue_erase_prior_wipe_unknown'
 Step = Literal['arm', 'verify', 'receipt', 'wipe']
 
@@ -79,9 +81,22 @@ def _generation_due(marker: dict[str, Any]) -> object:
     return due
 
 
+def valid_recovery_queue_id(value: object) -> bool:
+    return isinstance(value, str) and re.fullmatch(r'[a-f0-9]{64}', value) is not None
+
+
 @transactional
 def _record(
-    transaction, client, ref, uid: str, job_id: str, claim: str, step: Step, path: str | None, expires: datetime | None
+    transaction,
+    client,
+    ref,
+    uid: str,
+    job_id: str,
+    claim: str,
+    step: Step,
+    path: str | None,
+    expires: datetime | None,
+    queue_id: str | None,
 ):
     assert_destructive_operation_transaction(
         transaction, client, uid=uid, kind='account_deletion', token=f'account-deletion:{uid}'
@@ -100,8 +115,11 @@ def _record(
         raise RuntimeError('Go queue erase requires the active due wipe generation')
     if marker.get(CLAIM) != claim:
         raise RuntimeError('Go queue erase claim changed')
+    has_receipt = marker.get(RECEIPT_AT) is not None
+    if has_receipt and marker.get(PATH) == 'postgres' and not valid_recovery_queue_id(marker.get(RECOVERY_QUEUE_ID)):
+        raise RuntimeError('Go queue recovery receipt is missing verified queue identity')
     if step == 'arm':
-        if marker.get(RECEIPT_AT) is not None:
+        if has_receipt:
             return marker
         now = datetime.now(timezone.utc)
         if expires is None or not now < expires <= now + ERASE_GRANT_DURATION:
@@ -121,7 +139,12 @@ def _record(
     ):
         raise RuntimeError('Go queue erase claim expired')
     elif step == 'receipt' and marker.get(RECEIPT_AT) is None:
-        transaction.update(ref, {RECEIPT_AT: firestore.SERVER_TIMESTAMP, PATH: path, CLAIM_EXPIRES_AT: None})
+        fields: dict[str, Any] = {RECEIPT_AT: firestore.SERVER_TIMESTAMP, PATH: path, CLAIM_EXPIRES_AT: None}
+        if path == 'postgres':
+            if not valid_recovery_queue_id(queue_id):
+                raise RuntimeError('Go queue recovery receipt is missing verified queue identity')
+            fields[RECOVERY_QUEUE_ID] = queue_id
+        transaction.update(ref, fields)
     elif step == 'wipe':
         if not isinstance(marker.get(RECEIPT_AT), datetime):
             raise RuntimeError('Go queue erase receipt missing')
@@ -130,10 +153,19 @@ def _record(
     return marker
 
 
-def record(uid: str, job_id: str, claim: str, step: Step, path: str | None = None, *, expires: datetime | None = None):
+def record(
+    uid: str,
+    job_id: str,
+    claim: str,
+    step: Step,
+    path: str | None = None,
+    *,
+    expires: datetime | None = None,
+    queue_id: str | None = None,
+):
     client = account_deletion_firestore_client()
     ref = account_deletion_document(uid, firestore_client=client)
-    return _record(client.transaction(), client, ref, uid, job_id, claim, step, path, expires)
+    return _record(client.transaction(), client, ref, uid, job_id, claim, step, path, expires, queue_id)
 
 
 def summarize(now: datetime, markers) -> dict[str, int]:

@@ -706,7 +706,7 @@ def purge_user_conversation_index(uid: str) -> None:
 
 
 def _run_immediate_deletion_steps(uid: str) -> None:
-    """Cancel billing and revoke owner credentials before accepting deletion."""
+    """Run admission actions, leaving protected credential deletion to the wipe."""
     failures: list[Exception] = []
     try:
         _cancel_subscription_for_account_deletion(uid)
@@ -718,10 +718,11 @@ def _run_immediate_deletion_steps(uid: str) -> None:
         logger.info('delete_account immediate revocation observed Firebase Auth user already absent')
     except Exception as error:
         failures.append(error)
-    try:
-        delete_account_credentials(uid)
-    except Exception as error:
-        failures.append(error)
+    if not go_queue_erase_required():
+        try:
+            delete_account_credentials(uid)
+        except Exception as error:
+            failures.append(error)
     if failures:
         raise failures[0]
 

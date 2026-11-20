@@ -162,7 +162,23 @@ def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
         raise EraseRejected('mismatched Go queue erase receipt')
 
 
-async def _recover_erase(dsn: str, schema: str, uid: str, expires: datetime) -> None:
+# Pin the physical writer and the exact queue catalog objects. The provisioned
+# fingerprint comes from the intended workerd queue, never the recovery DSN.
+RECOVERY_QUEUE_ID_SQL = """
+SELECT pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(pg_catalog.concat_ws(':',
+    control.system_identifier, db.oid, settings.oid, erasure.oid,
+    pg_catalog.inet_server_addr(), pg_catalog.inet_server_port()
+), 'UTF8')), 'hex') AS queue_id
+FROM pg_catalog.pg_control_system() AS control
+JOIN pg_catalog.pg_database AS db ON db.datname = pg_catalog.current_database()
+JOIN pg_catalog.pg_namespace AS ns ON ns.nspname = %s
+JOIN pg_catalog.pg_class AS settings ON settings.relnamespace = ns.oid AND settings.relname = 'queue_settings'
+JOIN pg_catalog.pg_class AS erasure ON erasure.relnamespace = ns.oid AND erasure.relname = 'queue_erasure'
+WHERE pg_catalog.inet_server_addr() IS NOT NULL AND NOT pg_catalog.pg_is_in_recovery()
+"""
+
+
+async def _recover_erase(dsn: str, schema: str, uid: str, expires: datetime, expected_queue_id: str) -> str:
     import psycopg
     from psycopg import sql
 
@@ -178,22 +194,33 @@ async def _recover_erase(dsn: str, schema: str, uid: str, expires: datetime) -> 
                 dsn,
                 sslmode='verify-full',
                 connect_timeout=3,
-                options='-c statement_timeout=6000 -c lock_timeout=4000',
+                options='-c search_path=pg_catalog -c statement_timeout=6000 -c lock_timeout=4000',
             )
 
-        async def commit_erase() -> None:
+        async def commit_erase() -> str:
             await connection.set_isolation_level(psycopg.IsolationLevel.READ_COMMITTED)
-            await connection.execute(sql.SQL('SELECT {}.queue_erase_tenant(%s)').format(sql.Identifier(schema)), (uid,))
+            result = await connection.execute(
+                sql.SQL(
+                    'WITH identity AS (' + RECOVERY_QUEUE_ID_SQL + ') '
+                    'SELECT queue_id, CASE WHEN queue_id = %s '
+                    'THEN {}.queue_erase_tenant(%s) IS NOT NULL ELSE FALSE END FROM identity'
+                ).format(sql.Identifier(schema)),
+                (schema, expected_queue_id, uid),
+            )
+            proof = await result.fetchone()
+            if proof != (expected_queue_id, True):
+                raise EraseRejected('Go queue erase recovery target does not match the intended queue')
             if loop.time() >= deadline or datetime.now(timezone.utc) >= expires:
                 raise TimeoutError
             await connection.commit()
+            return expected_queue_id
 
         operation = asyncio.create_task(commit_erase())
         try:
             done, _ = await asyncio.wait({operation}, timeout=max(0, deadline - loop.time()))
             if not done or loop.time() >= deadline:
                 raise TimeoutError
-            operation.result()
+            return operation.result()
         finally:
             # Close the wire before cancellation, so psycopg cannot wait on a stalled server.
             await connection.close()
@@ -206,10 +233,13 @@ async def _recover_erase(dsn: str, schema: str, uid: str, expires: datetime) -> 
         raise EraseUnavailable('Go queue erase recovery unavailable') from None
 
 
-def _erase_at_postgres(uid: str, expires: datetime) -> bool:
+def _erase_at_postgres(uid: str, expires: datetime) -> str | None:
     dsn = os.getenv('GO_QUEUE_ERASE_RECOVERY_DATABASE_URL', '')
-    if not dsn:
-        return False
+    expected_queue_id = os.getenv('GO_QUEUE_ERASE_RECOVERY_QUEUE_ID', '')
+    if not dsn or not expected_queue_id:
+        return None
+    if not receipt.valid_recovery_queue_id(expected_queue_id):
+        raise EraseRejected('invalid Go queue erase recovery queue fingerprint')
     schema = os.getenv('GO_QUEUE_ERASE_RECOVERY_SCHEMA', '')
     if not schema:
         raise EraseRejected('Go queue erase recovery schema missing')
@@ -226,8 +256,7 @@ def _erase_at_postgres(uid: str, expires: datetime) -> bool:
         ip_address(hostaddr)
     except (ProgrammingError, ValueError):
         raise EraseRejected('Go queue erase recovery requires a TLS host and numeric hostaddr') from None
-    asyncio.run(_recover_erase(dsn, schema, uid, expires))
-    return True
+    return asyncio.run(_recover_erase(dsn, schema, uid, expires, expected_queue_id))
 
 
 def require_committed_erase(
@@ -239,17 +268,24 @@ def require_committed_erase(
         if marker.get(receipt.RECEIPT_AT) is None:
             remote_inflight(True)
             path = 'workerd'
+            queue_id = None
             try:
                 _erase_at_worker(uid, job_id, claim)
             except EraseUnavailable:
                 owns_claim()
                 current = receipt.record(uid, job_id, claim, 'verify')
                 expires = current.get(receipt.CLAIM_EXPIRES_AT)
-                if not isinstance(expires, datetime) or not _erase_at_postgres(uid, expires):
+                if not isinstance(expires, datetime):
+                    raise
+                queue_id = _erase_at_postgres(uid, expires)
+                if queue_id is None:
                     raise
                 path = 'postgres'
             owns_claim()
-            receipt.record(uid, job_id, claim, 'receipt', path)
+            if queue_id is None:
+                receipt.record(uid, job_id, claim, 'receipt', path)
+            else:
+                receipt.record(uid, job_id, claim, 'receipt', path, queue_id=queue_id)
     except (EraseRejected, EraseUnavailable) as error:
         armed = marker.get(receipt.ARMED_AT)
         if isinstance(error, EraseRejected) or (

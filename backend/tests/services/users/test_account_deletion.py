@@ -2654,6 +2654,54 @@ def test_required_lake_step_failure_retries(monkeypatch, step):
         account_deletion.destroy_owner_lake_keys.assert_not_called()
 
 
+@pytest.mark.parametrize('grace', [False, True])
+def test_protected_admission_retains_credentials_during_workerd_outage(monkeypatch, grace):
+    from services.users.go_queue_erase import EraseUnavailable
+
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'true')
+    monkeypatch.setenv('ACCOUNT_DELETION_GRACE_ENABLED', 'true' if grace else 'false')
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent())
+    )
+    monkeypatch.setattr(
+        account_deletion.deletion_grace_db,
+        'mark_user_deletion_grace_intent',
+        lambda uid, due: {
+            **_new_wipe_intent(),
+            'mode': 'created',
+            'wipe_status': 'pending_deletion',
+            'wipe_due_at': due,
+        },
+    )
+    monkeypatch.setattr(
+        account_deletion.deletion_grace_db, 'mark_user_deletion_grace_actions_complete', MagicMock(return_value=True)
+    )
+    monkeypatch.setattr(account_deletion.deletion_marker_db, 'read_account_deletion_marker', lambda _: None)
+    monkeypatch.setattr(account_deletion.deletion_marker_db, 'account_deletion_firestore_client', lambda: object())
+    monkeypatch.setattr(account_deletion, 'enqueue_deletion_wipe', MagicMock())
+    monkeypatch.setattr(account_deletion, 'renew_job_run_lock', MagicMock(return_value=True))
+    monkeypatch.setattr(account_deletion, 'assert_destructive_gate_still_ours', MagicMock())
+    monkeypatch.setattr(account_deletion, 'mark_remote_erasure', MagicMock())
+    credentials = MagicMock()
+    monkeypatch.setattr(account_deletion, 'delete_account_credentials', credentials)
+    barrier = MagicMock(side_effect=EraseUnavailable('workerd unavailable'))
+    monkeypatch.setattr(account_deletion, 'require_committed_erase', barrier)
+
+    result = account_deletion.start_account_deletion('uid1', grace=grace)
+
+    assert result['pending_deletion'] is grace
+    account_deletion.firebase_auth.revoke_refresh_tokens.assert_called_once_with('uid1')
+    credentials.assert_not_called()
+    barrier.assert_not_called()
+
+    # For grace admission this represents the later, due wipe.
+    assert not account_deletion.background_wipe_user_data('uid1', erase_claim=('job-1', 'token'))
+    barrier.assert_called_once()
+    credentials.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ('workerd_down', 'already_armed'),
     [(False, False), (True, False), (True, True)],
