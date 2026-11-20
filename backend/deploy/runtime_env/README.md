@@ -14,6 +14,35 @@ Keep it out of deployment defaults and use the
 one-time zero seed, controller/guard cutover and rollback. Existing env values
 are fallback only, never evidence of effective admission after that seed.
 
+## Live-only values are a debt with a due date
+
+A value that exists only on a serving host is not configuration: it is an
+unreviewed change that the next listen/pusher Helm roll deletes (Helm replaces
+the env list) and the next Cloud Run train preserves invisibly (the train folds
+live values back). Do not change production env with `kubectl set env` or
+`gcloud run services update --update-env-vars` as a shortcut. The sanctioned
+paths are:
+
+- **Reviewed Git** (this manifest and the charts): the default for every public
+  value, including kill switches flipped in an incident. Open the PR in the same
+  task; the next deploy applies it.
+- **Runtime-owned** (batch ramp percent, `rollout_cohorts/*` documents):
+  deliberately absent from this manifest, changed through their own tools and
+  never expected to match Git.
+- **Private values** (uid-bearing cohorts, tokens): names in Git, values in
+  Secret Manager. On backend-listen the chart's `privateSecretEnv` declares the
+  names and the `LISTEN_PRIVATE_ENV` document holds the values; a value change
+  is a new version, force-sync and rollout restart
+  ([runbook](../../docs/runbooks/listen-private-env.md)), never a code deploy.
+  The retired `LISTEN_PRIVATE_VALUES_YAML` privateEnv overlay is refused by the
+  chart.
+
+If an incident truly needs a live edit before a PR can land, it is a loan: record
+it in the meta repo's drift ledger (`infra/rollout/bin/drift_ledger.py add` with
+owner, ruling and expiry, scoped to one target) and open the fold-back PR in the
+same task. The train's drift gate refuses a live-only key nobody owns; a
+refusal is a finding, not an obstacle.
+
 Version 2 requires the backend voice route's staging bucket as an explicit
 literal: `syncing-local-development` in dev and `syncing-local` in prod. Normal
 admission and the existing prebuild preflight reject missing, blank, implicit,

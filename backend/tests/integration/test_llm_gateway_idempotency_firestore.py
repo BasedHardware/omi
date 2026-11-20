@@ -1,11 +1,12 @@
 """Exercise gateway replicas through the HTTP contract and a real Firestore transaction."""
 
+import asyncio
 from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import os
-from threading import Barrier, Event
+from threading import Barrier, BoundedSemaphore, Event
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -13,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
+from httpx import ASGITransport, AsyncClient
 
 from database import _client as firestore_clients, account_deletion_marker
 from llm_gateway.gateway import idempotency, idempotency_store
@@ -73,8 +75,6 @@ def docs(db, headers, collection):
 
 
 def test_replay_and_lookup_use_one_dispatch_across_clients(db, headers, monkeypatch):
-    import asyncio
-
     entered, release = Event(), Event()
     traces = []
 
@@ -403,8 +403,6 @@ def test_rotation_preserves_replay_across_mixed_replicas(db, headers, monkeypatc
 
 
 def test_inflight_completion_settles_when_claim_and_lookup_pool_is_full(db, headers, monkeypatch):
-    import asyncio
-
     entered, provider_release, storage_release = Event(), Event(), Event()
 
     class HeldProvider(FakeChatCompletionProvider):
@@ -481,12 +479,6 @@ def test_schema_property_order_conflicts_but_envelope_order_replays(db, headers,
 
 
 def test_canceled_post_keeps_queued_settlement_and_recovers_paid_result(db, headers, monkeypatch):
-    import asyncio
-    from concurrent.futures import Future
-    from threading import BoundedSemaphore
-
-    from httpx import ASGITransport, AsyncClient
-
     provider = FakeChatCompletionProvider()
     use_providers(monkeypatch, provider)
     permits = BoundedSemaphore(1)

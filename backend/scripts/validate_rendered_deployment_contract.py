@@ -48,6 +48,8 @@ class DeploymentContract:
     required_secret_name: bool = False
     expected_volume_secret: tuple[tuple[str, str], ...] = ()
     optional_scoped_secrets: tuple[tuple[str, str], ...] = ()
+    # (environment, secret): one more Secret a secretKeyRef may target in that environment only.
+    extra_secret: tuple[tuple[str, str], ...] = ()
 
 
 # Adding a first-party service means adding one concise entry here.  The
@@ -60,6 +62,8 @@ CONTRACTS = (
         required_env=("OMI_ENV_STAGE", "GOOGLE_CLOUD_PROJECT"),
         expected_env=(("OMI_ENV_STAGE", "{environment}"), ("GOOGLE_CLOUD_PROJECT", "{project}")),
         required_secret_name=True,
+        # Private listen env (privateSecretEnv), synced from Secret Manager LISTEN_PRIVATE_ENV.
+        extra_secret=(("prod", "prod-omi-backend-listen-private-env"),),
     ),
     DeploymentContract(
         service="pusher",
@@ -207,6 +211,7 @@ def validate_rendered_deployment(
             errors.append(f"{prefix}: {setting} must be set to the deployment contract value")
 
     expected_secret = f"{environment}-omi-backend-secrets"
+    allowed_secrets = {expected_secret, *(name for env_name, name in contract.extra_secret if env_name == environment)}
     has_shared_secret_ref = False
     for name, suffix in contract.optional_scoped_secrets:
         ref = _mapping(_mapping(env.get(name, {}).get("valueFrom")).get("secretKeyRef"))
@@ -221,9 +226,9 @@ def validate_rendered_deployment(
         if ref:
             if not ref.get("name") or not ref.get("key"):
                 errors.append(f"{prefix}: secretKeyRef needs a non-empty name and key")
-            elif ref.get("name") != expected_secret:
+            elif ref.get("name") not in allowed_secrets:
                 errors.append(f"{prefix}: secretKeyRef must target the shared backend secret")
-            else:
+            elif ref.get("name") == expected_secret:
                 has_shared_secret_ref = True
     if contract.required_secret_name and not has_shared_secret_ref:
         errors.append(f"{prefix}: missing required shared backend secretKeyRef")

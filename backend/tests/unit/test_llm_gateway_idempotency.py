@@ -1,11 +1,15 @@
+import asyncio
 from pathlib import Path
 import shutil
+import sqlite3
 import subprocess
 from threading import Event
 from types import SimpleNamespace
 from unittest.mock import Mock
 from uuid import uuid4
 
+from fastapi import Request
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 import pytest
 import yaml
@@ -13,6 +17,8 @@ import yaml
 from database import _client as firestore_clients
 
 from llm_gateway.gateway import idempotency, idempotency_store
+from llm_gateway.gateway.auth import ServiceCaller
+from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.executor import ProviderRegistry
 from llm_gateway.gateway.providers import FakeChatCompletionProvider
 from llm_gateway.main import app
@@ -220,8 +226,6 @@ def test_post_counter_uses_bounded_writer_environment(gateway, monkeypatch):
 
 
 def test_readback_excludes_confirmed_boundary_scope_and_other_environments():
-    import sqlite3
-
     guide = Path(__file__).resolve().parents[2] / 'docs' / 'llm_gateway.mdx'
     readback = guide.read_text().split('### Rollout readback', 1)[1]
     query = readback.split('```sql\n', 1)[1].split('```', 1)[0]
@@ -248,14 +252,6 @@ def test_readback_excludes_confirmed_boundary_scope_and_other_environments():
 
 
 def test_cancellation_does_not_release_a_running_settlement_permit(monkeypatch):
-    import asyncio
-
-    from fastapi import Request
-    from fastapi.responses import JSONResponse
-
-    from llm_gateway.gateway.auth import ServiceCaller
-    from llm_gateway.gateway.credentials import build_omi_managed_credential_context
-
     monkeypatch.setenv(idempotency.ENVIRONMENT_SETTING, 'local')
     monkeypatch.delenv('LLM_GATEWAY_IDEMPOTENCY_ENABLED', raising=False)
     entered, release = Event(), Event()

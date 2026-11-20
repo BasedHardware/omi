@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from google.api_core.exceptions import AlreadyExists
 from google.cloud import firestore
 
+from database import _client as firestore_clients
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from llm_gateway.gateway.auth import ServiceCaller
@@ -135,9 +136,7 @@ def _customer_firestore_client() -> Any:
     project = os.getenv(DATA_PLANE_ENV, '').strip()
     if not project:
         raise IdempotencyError(503, 'idempotency_store_unavailable')
-    from database._client import get_pinned_data_plane_firestore_client
-
-    client = get_pinned_data_plane_firestore_client(project)
+    client = firestore_clients.get_pinned_data_plane_firestore_client(project)
     if client.project != project:
         raise IdempotencyError(503, 'idempotency_store_unavailable')
     return client

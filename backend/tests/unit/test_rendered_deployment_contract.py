@@ -219,6 +219,32 @@ with patch("shutil.which", return_value="helm"), patch(
     assert "Helm render failed or returned invalid YAML" in result.stderr
 
 
+def test_listen_private_env_secret_is_allowed_in_prod_only(contracts: SimpleNamespace):
+    listen = contracts.CONTRACTS[0]
+    deployment = deepcopy(_deployment(contracts))
+    deployment["spec"]["template"]["spec"]["containers"][0]["env"].append(
+        {
+            "name": "STT_CAP_DISPATCH_COHORT",
+            "valueFrom": {
+                "secretKeyRef": {"name": "prod-omi-backend-listen-private-env", "key": "STT_CAP_DISPATCH_COHORT"}
+            },
+        }
+    )
+    failures = contracts.validate_rendered_deployment(listen, "dev", [deployment])
+    # Diagnostics stay value-free (see test_failure_diagnostics_omit_rendered_values).
+    assert any("secretKeyRef must target the shared backend secret" in failure for failure in failures)
+    assert all("prod-omi-backend-listen-private-env" not in failure for failure in failures)
+    prod = deepcopy(deployment)
+    for entry in prod["spec"]["template"]["spec"]["containers"][0]["env"]:
+        ref = (entry.get("valueFrom") or {}).get("secretKeyRef") or {}
+        if ref.get("name") == "dev-omi-backend-secrets":
+            ref["name"] = "prod-omi-backend-secrets"
+    prod_failures = contracts.validate_rendered_deployment(listen, "prod", [prod])
+    assert not any("secretKeyRef must target" in failure for failure in prod_failures)
+    assert ("prod", "prod-omi-backend-listen-private-env") in listen.extra_secret
+    assert all(not c.extra_secret for c in contracts.CONTRACTS if c.service != "backend-listen")
+
+
 def test_render_command_uses_the_deploy_immutable_tag_override(monkeypatch, contracts: SimpleNamespace):
     captured: list[list[str]] = []
 

@@ -298,7 +298,10 @@ class EnrichmentConsumer:
                 superseded = True
         except summary_delivery.SummaryOutputUnavailable:
             if not context:
-                return _callback_pending('empty_output_unrecorded', now)
+                # The row already holds a delivered summary (``summary_seen``),
+                # so an empty reprocess output is not a delivery failure. Retrying
+                # it forever would keep the wake alive for no user-visible gain.
+                return Result(Outcome.DONE, ConsumerReason.PROCESSED)
             empty_outcome = record_empty_failure(
                 get_firestore_client(), rows.COLLECTION, claim.row_id, claim.lease_token, claim.wake_token
             )

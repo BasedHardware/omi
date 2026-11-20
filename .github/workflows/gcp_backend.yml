@@ -15,7 +15,22 @@
 
 name: Deploy Backend to Cloud RUN
 
-run-name: Deploy Backend (${{ inputs.environment || github.event_name }} ${{ inputs.mode || github.event_name }} service=${{ inputs.cloud_run_service || 'all' }} source=${{ inputs.release_sha || '' }} lock=${{ github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train' }} images=${{ inputs.service_images == '' && 'default' || 'override' }} eligibility=${{ github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof' }}) by ${{ inputs.requested_by || github.actor }}
+run-name: >-
+  ${{ inputs.selected_rollback_revision && format('Select {0}/{1}/{2} sha={3} lock={4} img={5} elig={6} by {7} inverse={8}',
+    inputs.environment, inputs.mode, inputs.cloud_run_service, inputs.release_sha,
+    github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train',
+    inputs.service_images == '' && 'default' || 'override',
+    github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof',
+    inputs.requested_by, inputs.selected_rollback_revision) ||
+    format('Deploy Backend ({0} {1} service={2} source={3} lock={4} images={5} eligibility={6}) by {7}',
+      inputs.environment || github.event_name,
+      inputs.mode || github.event_name,
+      inputs.cloud_run_service || 'all',
+      inputs.release_sha || '',
+      github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train',
+      inputs.service_images == '' && 'default' || 'override',
+      github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof',
+      inputs.requested_by || github.actor) }}
 
 on:
   workflow_dispatch:
@@ -65,6 +80,10 @@ on:
         default: 'all'
         type: choice
         options: [all, backend, backend-sync, backend-sync-backfill, backend-integration, backend-projection-pump]
+      selected_rollback_revision:
+        description: 'Named standard deploy only. Exact revision admitted at 100% serving before dispatch.'
+        required: false
+        default: ''
       deploy_gateway:
         description: 'Development only: deploy the LLM gateway binary with the backend stack (requires deploy_targets=all)'
         required: true
@@ -186,6 +205,7 @@ jobs:
           WORKFLOW_MODE: ${{ github.event.inputs.mode }}
           CLOUD_RUN_SERVICE: ${{ github.event.inputs.cloud_run_service || 'all' }}
           SERVICE_IMAGES: ${{ github.event.inputs.service_images }}
+          SELECTED_ROLLBACK_REVISION: ${{ inputs.selected_rollback_revision }}
           REQUESTED_BY: ${{ github.event.inputs.requested_by }}
           RELEASE_SHA: ${{ github.event.inputs.release_sha }}
           SKIP_ELIGIBILITY: ${{ github.event.inputs.skip_eligibility_proof }}
@@ -196,6 +216,7 @@ jobs:
         run: |
           set -euo pipefail
           CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-all}"
+          SELECTED_ROLLBACK_REVISION="${SELECTED_ROLLBACK_REVISION:-}"
           case "$CLOUD_RUN_SERVICE" in all|backend|backend-sync|backend-sync-backfill|backend-integration|backend-projection-pump) ;; *) exit 1 ;; esac
           if [[ "$CLOUD_RUN_SERVICE" != all ]]; then
             [[ "$WORKFLOW_MODE" == deploy && "$DEPLOY_TARGETS" == cloud-run-only && "$DEPLOY_ENVIRONMENT" == prod && "$BREAK_GLASS_LOCK" != true && "$SKIP_ELIGIBILITY" != true ]] || exit 1
@@ -248,6 +269,17 @@ jobs:
             }
             [[ "$CLOUD_RUN_SERVICE" == all || "$CLOUD_RUN_SERVICE" == backend-integration ]] || exit 1
             INTEGRATION_ONLY=true
+          fi
+          if [[ "$CLOUD_RUN_SERVICE" != all && "$CLOUD_RUN_SERVICE" != backend-projection-pump && "$INTEGRATION_ONLY" != true ]]; then
+            if [[ ! "$SELECTED_ROLLBACK_REVISION" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ||
+                  ${#SELECTED_ROLLBACK_REVISION} -gt 63 ]]; then
+              echo 'Named deploy requires the admitted selected_rollback_revision.' >&2
+              exit 1
+            fi
+            ROLLBACK_REVISION="$SELECTED_ROLLBACK_REVISION"
+          elif [[ -n "$SELECTED_ROLLBACK_REVISION" ]]; then
+            echo 'selected_rollback_revision applies only to a named standard deploy.' >&2
+            exit 1
           fi
           printf 'integration_only=%s\nintegration_image=%s\npost_wrap_guard=%s\nrollback_revision=%s\n' "$INTEGRATION_ONLY" "$INTEGRATION_IMAGE" "$POST_WRAP_GUARD" "$ROLLBACK_REVISION" >> "$GITHUB_OUTPUT"
           if [[ "$DEPLOY_ENVIRONMENT" == prod && "$WORKFLOW_MODE" == deploy &&
@@ -310,8 +342,10 @@ jobs:
             .break_glass_lock == "false" and .skip_eligibility_proof == "false" and
             .deploy_gateway == "false" and
             ([.service_images, .pump_release_disposition, .break_glass_confirm,
-              .break_glass_reason, .release_version] | all(. == "" or . == null)) and
+              .break_glass_reason, .release_version, .selected_rollback_revision] | all(. == "" or . == null)) and
             (.requested_by | test("[^[:space:]]"))' "$GITHUB_EVENT_PATH" >/dev/null
+          # Cloud Run v2 can return literal outer quotes as part of the etag.
+          etag_pattern='^([A-Za-z0-9_+/=-]{1,200}|"[A-Za-z0-9_+/=-]{1,200}")$'
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" == refs/heads/main &&
              "$GITHUB_REPOSITORY" == BasedHardware/omi && "$GITHUB_RUN_ATTEMPT" == 1 &&
              "$DEPLOY_ENVIRONMENT" == prod && "$DEPLOY_TARGETS" == cloud-run-only &&
@@ -319,7 +353,7 @@ jobs:
              "$CONTROL_SHA" =~ ^[0-9a-f]{40}$ && "$CONTROL_SHA" == "$WORKFLOW_CONTROL_SHA" &&
              "$WORKFLOW_CONTROL_SHA" == "$GITHUB_SHA" &&
              "$RELEASE_SHA" == f7060aa1a0c9e3481790d497140096ae99f9b062 &&
-             "$APPROVED_ETAG" =~ ^[A-Za-z0-9_+/=-]{1,200}$ ]]
+             "$APPROVED_ETAG" =~ $etag_pattern ]]
           jq -n --arg control "$CONTROL_SHA" --arg etag "$APPROVED_ETAG" --arg source "$RELEASE_SHA" \
             '{issue:"SCA-3318", service:"backend-projection-pump", control:$control, etag:$etag,
               base_source:$source, forward_max:4, inverse_max:20}' >> "$GITHUB_STEP_SUMMARY"

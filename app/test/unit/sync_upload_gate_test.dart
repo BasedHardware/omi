@@ -382,8 +382,12 @@ void main() {
       reasonCode: 'record_capture_pending',
     ));
 
-    await expectLater(gate.upload([]), throwsA(isA<SyncUploadHttpException>()));
+    await Future.wait([
+      expectLater(gate.upload([], recordingGroup: 'waiting'), throwsA(isA<SyncUploadHttpException>())),
+      expectLater(gate.upload([], recordingGroup: 'waiting'), throwsA(isA<SyncRecordingWaitException>())),
+    ]);
 
+    expect(gate.isRecordingWaiting(recordingGroup: 'other'), isFalse);
     expect(limiter.isLimited, isFalse);
   });
 
