@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"google.golang.org/api/cloudkms/v1"
@@ -46,12 +47,13 @@ type finalizationRuntime struct {
 	family  *finalization.Service
 	docs    *docstore.Store
 	scan    *finalizationdocs.SummaryScan
+	quiet   *finalizationdocs.QuietScan
 	retract *httpx.Client
 	sender  *integrations.Sender
 }
 
 func openFinalizationRuntime(ctx, startup context.Context, cfg config, q *queue.Store) (finalizationRuntime, error) {
-	if !cfg.summaryRepair && cfg.privateArchive == "" && cfg.retractionOrigin == "" && cfg.objectBucket == "" {
+	if !cfg.quietRecovery && !cfg.summaryRepair && cfg.privateArchive == "" && cfg.retractionOrigin == "" && cfg.objectBucket == "" {
 		return finalizationRuntime{}, nil
 	}
 	docs, err := docstore.Open(startup, docstore.Config{Project: cfg.firestoreProject})
@@ -79,7 +81,21 @@ func openFinalizationRuntime(ctx, startup context.Context, cfg config, q *queue.
 	if cfg.summaryRepair {
 		runtime.scan = &finalizationdocs.SummaryScan{Docs: docs, Family: runtime.family, Clock: clk, MaxAge: cfg.summaryMaxAge}
 	}
+	if registerErr := runtime.registerQuietRecovery(cfg.quietRecovery, store.Archive != nil, clk); registerErr != nil {
+		return finalizationRuntime{}, errors.Join(registerErr, runtime.close())
+	}
 	return runtime, nil
+}
+
+func (m *finalizationRuntime) registerQuietRecovery(enabled, hasArchive bool, clk clock.Clock) error {
+	if !enabled {
+		return nil
+	}
+	if !hasArchive || len(workerdHandlers(m.family)) == 0 || m.family.Quiet == nil {
+		return errors.New("quiet recovery requires the archive and serving finalization handler")
+	}
+	m.quiet = &finalizationdocs.QuietScan{Docs: m.docs, Family: m.family, Clock: clk}
+	return nil
 }
 
 func openTranscriptReader(ctx context.Context, cfg config, docs *docstore.Store) (conversations.TranscriptReader, error) {
@@ -155,21 +171,39 @@ func (m *finalizationRuntime) close() error {
 }
 
 func (m *finalizationRuntime) run(ctx context.Context, logger *slog.Logger) {
-	if m.scan == nil {
-		return
+	var loops sync.WaitGroup
+	if m.scan != nil {
+		loops.Go(func() {
+			runMaintenance(ctx, 2*time.Minute, func() {
+				counts, err := m.scan.Tick(ctx)
+				if ctx.Err() == nil && (err != nil || counts.Errors != 0) {
+					logger.Warn("summary debt repair needs retry", "failed_admissions", counts.Errors)
+				}
+			})
+		})
 	}
-	const interval = 2 * time.Minute
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
+	if m.quiet != nil {
+		loops.Go(func() {
+			runMaintenance(ctx, 30*time.Second, func() {
+				failed, err := m.quiet.Tick(ctx)
+				if ctx.Err() == nil && (err != nil || failed > 0) {
+					logger.Warn("quiet recovery needs retry", "failed_wakes", failed)
+				}
+			})
+		})
+	}
+	loops.Wait()
+}
+
+func runMaintenance(ctx context.Context, interval time.Duration, tick func()) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 	for ctx.Err() == nil {
-		counts, err := m.scan.Tick(ctx)
-		if ctx.Err() == nil && (err != nil || counts.Errors != 0) {
-			logger.Warn("summary debt repair needs retry", "failed_admissions", counts.Errors)
-		}
+		tick()
 		select {
 		case <-ctx.Done():
 			return
-		case <-tick.C:
+		case <-ticker.C:
 		}
 	}
 }

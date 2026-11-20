@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/BasedHardware/omi/backend-go/internal/finalization"
+	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
 )
 
 func TestWorkerdLeavesFinalizationUnclaimedWithoutServingPorts(t *testing.T) {
@@ -42,5 +43,26 @@ func TestWorkerdValidatesArchiveAndRetractionComposition(t *testing.T) {
 	env["WORKER_MERGE_RETRACTION_ORIGIN"] = "http://backend.fixture.test"
 	if _, insecureErr := readConfig(envLookup(env), false); insecureErr == nil {
 		t.Fatal("retraction accepted a plaintext origin")
+	}
+}
+
+func TestQuietRecoveryRequiresCompleteRuntime(t *testing.T) {
+	t.Parallel()
+	env := fixtureEnv()
+	env["WORKER_QUIET_RECOVERY_ENABLED"] = "invalid"
+	if _, err := readConfig(envLookup(env), false); err == nil {
+		t.Fatal("quiet recovery accepted invalid boolean")
+	}
+	env["WORKER_QUIET_RECOVERY_ENABLED"] = "true"
+	cfg, err := readConfig(envLookup(env), false)
+	if err != nil || !cfg.quietRecovery {
+		t.Fatalf("quiet recovery opt-in: %v %v", cfg.quietRecovery, err)
+	}
+	runtime := finalizationRuntime{family: &finalization.Service{}}
+	if err := runtime.registerQuietRecovery(false, true, clock.System{}); err != nil || runtime.quiet != nil {
+		t.Fatalf("disabled quiet recovery: %v", err)
+	}
+	if err := runtime.registerQuietRecovery(cfg.quietRecovery, true, clock.System{}); err == nil || runtime.quiet != nil {
+		t.Fatal("quiet recovery accepted an incomplete handler")
 	}
 }

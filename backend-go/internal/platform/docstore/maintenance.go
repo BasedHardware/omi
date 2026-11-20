@@ -64,10 +64,22 @@ type ScanRow struct {
 
 // ScanGroup reads one bounded page of projected metadata.
 func (s *Store) ScanGroup(ctx context.Context, scan GroupScan) ([]ScanRow, error) {
+	return s.scanProjected(ctx, scan, true)
+}
+
+// ScanCollection reads one bounded page from an explicitly named root collection.
+func (s *Store) ScanCollection(ctx context.Context, scan GroupScan) ([]ScanRow, error) {
+	return s.scanProjected(ctx, scan, false)
+}
+
+func (s *Store) scanProjected(ctx context.Context, scan GroupScan, group bool) ([]ScanRow, error) {
 	if scan.Limit <= 0 || scan.Limit > 500 || scan.Collection == "" || strings.Contains(scan.Collection, "/") || len(scan.Fields) == 0 {
 		return nil, ErrPath
 	}
-	q := s.client.CollectionGroup(scan.Collection).Select(scan.Fields...)
+	q := s.client.Collection(scan.Collection).Select(scan.Fields...)
+	if group {
+		q = s.client.CollectionGroup(scan.Collection).Select(scan.Fields...)
+	}
 	for _, f := range scan.Filters {
 		q = q.Where(f.Field, f.Operator, f.Value)
 	}

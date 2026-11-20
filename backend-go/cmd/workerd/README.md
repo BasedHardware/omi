@@ -23,6 +23,7 @@ Lane B needs to provide a bounded drain and fenced handback API before enabling 
 | `DATABASE_URL` | required | PostgreSQL URL with explicit host, user and database; TLS required except for loopback hosts |
 | `FIRESTORE_PROJECT` | required | Google Cloud project ID |
 | `ENCRYPTION_SECRET` | required | At least 32 bytes, per `crypt.Check` |
+| `WORKER_QUIET_RECOVERY_ENABLED` | false | Drive due quiet wakes once the archive and ordinary serving handler are configured |
 | `WORKER_SUMMARY_REPAIR_ENABLED` | false | Run the due-summary scan in workerd |
 | `ENRICHMENT_MAX_AGE_HOURS` | 72 | Nonnegative hours, with zero disabling age-based scan phases |
 | `BUCKET_PRIVATE_CLOUD_SYNC` | unset | Private recording bucket for the read-only archive client |

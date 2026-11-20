@@ -27,6 +27,7 @@ type config struct {
 	healthPort                           int
 	metricsPort                          int
 	stopTimeout                          time.Duration
+	quietRecovery                        bool
 	summaryRepair                        bool
 	notesDedupe                          bool
 	summaryMaxAge                        time.Duration
@@ -79,6 +80,13 @@ func (c *config) readWorkerConfig(lookup lookupEnv) error {
 }
 
 func (c *config) readFinalizationAdapters(lookup lookupEnv) error {
+	if raw, set := lookup("WORKER_QUIET_RECOVERY_ENABLED"); set {
+		enabled, err := strconv.ParseBool(raw)
+		if err != nil {
+			return errors.New("WORKER_QUIET_RECOVERY_ENABLED must be a boolean")
+		}
+		c.quietRecovery = enabled
+	}
 	value, set := lookup("CONVERSATION_LLM_INPUT_DEDUPE_ENABLED")
 	c.notesDedupe = !set || strings.EqualFold(strings.TrimSpace(value), "true")
 	private, _ := lookup("BUCKET_PRIVATE_CLOUD_SYNC")
