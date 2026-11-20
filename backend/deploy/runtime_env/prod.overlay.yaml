@@ -581,6 +581,9 @@ overlay:
         # (SCA-2283).
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         secrets:
+          CONVERSATIONS_V3_LIVE_RECAP_COHORT:
+            secret: CONVERSATIONS_V3_LIVE_RECAP_COHORT
+            version: '1'
           SONIOX_API_KEY:
             secret: SONIOX_API_KEY
             version: latest
