@@ -4378,6 +4378,11 @@ def update_conversation_segments(
             update_payload.update(
                 v3_pending=True, v3_pending_since=current.get('v3_pending_since') or datetime.now(timezone.utc)
             )
+            if segment_update_fields is None:
+                # Commit the landing time with the speech it describes (field-only writes add no speech).
+                from config.conversations_v3 import SPEECH_LANDED_FIELD
+
+                update_payload[SPEECH_LANDED_FIELD] = datetime.now(timezone.utc)
         prepared_payload = _prepare_conversation_for_write(
             update_payload,
             uid,

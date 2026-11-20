@@ -42,11 +42,11 @@ def put_recording(strict, segments, *, status, landed):
         'claims': current.get('claims', []),
         'v3_pending': True,
         'v3_pending_since': current.get('v3_pending_since') or landed,
-        'v3_speech_landed_at': landed,  # what store.mark_pending stamps when speech lands
+        'v3_speech_landed_at': landed,  # what the speech write stamps
     }
 
 
-async def reconcile_at(strict, monkeypatch, now, outline_entries=None):
+async def reconcile_at(strict, monkeypatch, now, outline_entries=None, derive_run=None):
     for row in strict.rows.values():
         row['_test_revision'] = 1
 
@@ -63,9 +63,19 @@ async def reconcile_at(strict, monkeypatch, now, outline_entries=None):
         }
         return recordings, existing, []
 
+    def load_derive(uid, **kwargs):
+        recordings, existing, cache = load(uid)
+        recordings = {
+            k: {**r, '_v3_derive': True, '_v3_backfill_run': derive_run, '_v3_backfill_prior': {}}
+            for k, r in recordings.items()
+        }
+        return recordings, {k: r for k, r in existing.items() if r.get('v3_backfill_run') == derive_run}, cache
+
     async def blocking(pool, fn, *args, **kwargs):
         if fn is store.load:
             return load(*args, **kwargs)
+        if fn is store.load_derive:
+            return load_derive(*args, **kwargs)
         if fn is store.adoptable:
             return {}
         return fn(*args, **kwargs)
@@ -93,6 +103,10 @@ async def reconcile_at(strict, monkeypatch, now, outline_entries=None):
     monkeypatch.setattr(service.models, 'outline', outline)
     monkeypatch.setattr(service.visibility, 'hydrate_recognition', lambda uid, recordings, windows: None)
     monkeypatch.setattr(service.context, 'outline_sources', lambda *args: ({}, [], []))
+    if derive_run:
+        return await service.reconcile(
+            UID, derive=True, since=T0 - timedelta(days=1), until=T0 + timedelta(days=1), run_id=derive_run
+        )
     return await service.reconcile(UID)
 
 
@@ -226,16 +240,193 @@ async def test_cap_cut_ignores_a_section_a_later_outline_drops(strict, monkeypat
     assert len(rows) == 2 and not slivers(rows), [(r['started_at'], r['finished_at']) for r in rows]
 
 
-def test_mark_pending_stamps_when_speech_landed(strict, monkeypatch):
-    landed = T0 + timedelta(hours=3)
+def test_mark_pending_leaves_the_landing_time_to_the_speech_write(strict):
+    # The re-arm can run after a reconcile has already seen the speech, so it must not be the stamp.
+    strict.rows[path('r')] = {'id': 'r', 'recording': True, 'v3_pending_since': T0}
+    assert store.mark_pending(UID, 'r')
+    row = strict.rows[path('r')]
+    assert 'v3_speech_landed_at' not in row and row['v3_pending_since'] == T0 and row['v3_pending']
+
+
+@pytest.mark.asyncio
+async def test_old_speech_written_live_does_not_lock_before_the_rearm(strict, monkeypatch):
+    # Offline speech two hours old lands through the transcript write. A reconcile runs after that
+    # transaction commits and before changed() re-arms the row: the landing time must already be there.
+    from database import conversations as db
+    from utils.conversations.v3 import triggers
+
+    timing(monkeypatch, 900, 900)
+    first = speech(7)
+    arrival = T0 + timedelta(hours=2)
+    put_recording(strict, first, status='in_progress', landed=arrival)
+    assert await reconcile_at(strict, monkeypatch, arrival) == 'committed'
+
+    landed = arrival + timedelta(minutes=20)  # past the lock delay from the first batch
 
     class Clock(datetime):
         @classmethod
         def now(cls, tz=None):
             return landed
 
-    monkeypatch.setattr(store, 'datetime', Clock)
-    strict.rows[path('r')] = {'id': 'r', 'recording': True, 'v3_pending_since': T0}
-    assert store.mark_pending(UID, 'r')
+    rearmed = []
+    monkeypatch.setattr(db, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(db, 'datetime', Clock)
+    monkeypatch.setattr(triggers, 'changed', lambda uid, cid: rearmed.append(cid))
+    more = speech(14)
+    assert db.update_conversation_segments(UID, 'r', more, finished_at=T0 + timedelta(seconds=more[-1]['end']))
     row = strict.rows[path('r')]
-    assert row['v3_speech_landed_at'] == landed and row['v3_pending_since'] == T0 and row['v3_pending']
+    assert row['v3_speech_landed_at'] == landed  # committed with the speech, before the re-arm
+    assert rearmed == ['r']
+    row['transcript_segments'] = db._decode_transcript_segments_strict(
+        UID, row['transcript_segments'], row.get('transcript_segments_compressed', False)
+    )
+    row['transcript_segments_compressed'] = False
+
+    assert await reconcile_at(strict, monkeypatch, landed + timedelta(seconds=30)) == 'committed'
+    rows = derived(strict)
+    assert len(rows) == 1 and planner_open(rows[0]), [(r['started_at'], r['status']) for r in rows]
+
+
+def test_derive_ignores_the_landing_clock(monkeypatch):
+    # Backfill derive plans at default timing whatever the live setting, so it never settles on landing.
+    from config import conversations_v3 as cfg
+
+    timing(monkeypatch, 900, 900)
+    assert cfg.boundary_seconds(cohesion=True) == (900, 900)
+    assert cfg.boundary_seconds(cohesion=False) == (cfg.DEFAULT_BOUNDARY_SECONDS,) * 2
+    source = __import__('inspect').getsource(service.reconcile)
+    assert 'boundary_seconds(cohesion=cohesion and not derive)' in source
+
+
+def ownership(rows):
+    owners = {}
+    for row in rows:
+        for segment in row.get('transcript_segments') or []:
+            owners.setdefault(segment['id'], []).append(row['id'])
+    return owners
+
+
+def claim_spans(strict):
+    return sorted((c['start'], c['end'], c['conversation_id']) for c in strict.rows[path('r')].get('claims') or [])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('gap, lock', [(300, 300), (900, 900)])
+async def test_overlapping_turns_at_the_cap_keep_one_owner_across_passes(strict, monkeypatch, gap, lock):
+    # Turns at [0, 119), [118, 121) and [118.5, 119) minutes: the cap puts the first in the prefix and
+    # the other two in the tail, whose claim is clipped to [119, 121). A retry must not hand the short
+    # turn to the prefix too (its window and claim contain it), and claims must never overlap.
+    timing(monkeypatch, gap, lock)
+    minute = 60.0
+    segments = [
+        {'id': 'a', 'text': 'word ' * 400, 'start': 0.0, 'end': 119 * minute, 'is_user': True},
+        {'id': 'b', 'text': 'word ' * 40, 'start': 118 * minute, 'end': 121 * minute, 'is_user': True},
+        {'id': 'c', 'text': 'word ' * 5, 'start': 118.5 * minute, 'end': 119 * minute, 'is_user': True},
+    ]
+    end = T0 + timedelta(minutes=121)
+    put_recording(strict, segments, status='in_progress', landed=end)
+    seen = []
+    for now in (
+        end + timedelta(seconds=30),
+        end + timedelta(seconds=60),
+        end + timedelta(seconds=max(gap, lock) + 120),
+    ):
+        if len(seen) == 2:
+            put_recording(strict, segments, status='completed', landed=end)
+        assert await reconcile_at(strict, monkeypatch, now) == 'committed'
+        rows = derived(strict)
+        owners = ownership(rows)
+        assert all(len(ids) == 1 for ids in owners.values()), owners
+        spans = claim_spans(strict)
+        assert all(left[1] <= right[0] for left, right in zip(spans, spans[1:])), spans
+        seen.append({sid: ids[0] for sid, ids in owners.items()})
+    assert seen[0] == seen[1] == seen[2], seen
+    assert seen[0]['a'] != seen[0]['b'] == seen[0]['c']
+
+
+def main_capped(lines, sections, committed=()):
+    # planner._capped before this change (main b301dc3): cut at the section nearest the middle.
+    from utils.conversations.v3.planner import CAP
+
+    end = max(line['end'] for line in lines)
+    if end - lines[0]['start'] <= CAP:
+        return [lines]
+    middle = lines[0]['start'] + (end - lines[0]['start']) / 2
+    candidates = [i for i in sections if 0 < i < len(lines)] or list(range(1, len(lines)))
+    cut = min(candidates, key=lambda i: abs((lines[i]['start'] - middle).total_seconds()))
+    return main_capped(lines[:cut], ()) + main_capped(lines[cut:], ())
+
+
+def locked_state(strict, rows):
+    claims = strict.rows[path('r')].get('claims') or []
+    return {
+        r['id']: (
+            r['started_at'],
+            r['finished_at'],
+            sorted(s['id'] for s in r.get('transcript_segments') or []),
+            sorted((c['start'], c['end']) for c in claims if c['conversation_id'] == r['id']),
+        )
+        for r in rows
+        if not planner_open(r)
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('gap, lock', [(300, 300), (900, 900)])
+async def test_rows_cut_by_the_old_midpoint_cap_keep_their_cuts_after_upgrade(strict, monkeypatch, gap, lock):
+    # Upgrade: main cut a 2.5 h live stretch at its middle and locked the prefix. The new code then
+    # runs on the same owner as more speech lands. Locked rows keep boundaries, segments and claims;
+    # only the live edge changes, and no segment or audio gets two owners.
+    from utils.conversations.v3 import planner
+
+    timing(monkeypatch, gap, lock)
+    segments = speech(300)
+    end = T0 + timedelta(seconds=segments[-1]['end'])
+    put_recording(strict, segments, status='in_progress', landed=end + timedelta(seconds=30))
+    with monkeypatch.context() as old:
+        old.setattr(planner, '_capped', main_capped)
+        assert await reconcile_at(strict, monkeypatch, end + timedelta(seconds=30)) == 'committed'
+    before = locked_state(strict, derived(strict))
+    assert len(before) == 1
+    (prefix,) = before.values()
+    assert timedelta(minutes=70) < prefix[1] - prefix[0] < timedelta(minutes=80)  # the old midpoint cut
+
+    for count in (330, 360):
+        more = speech(count)
+        later = T0 + timedelta(seconds=more[-1]['end'])
+        put_recording(strict, more, status='in_progress', landed=later + timedelta(seconds=30))
+        assert await reconcile_at(strict, monkeypatch, later + timedelta(seconds=30)) == 'committed'
+        rows = derived(strict)
+        after = locked_state(strict, rows)
+        assert {k: after[k] for k in before} == before
+        owners = ownership(rows)
+        assert sorted(owners) == sorted(s['id'] for s in more)
+        assert all(len(ids) == 1 for ids in owners.values()), owners
+        spans = claim_spans(strict)
+        assert all(left[1] <= right[0] for left, right in zip(spans, spans[1:])), spans
+        # The cap counts from the committed cut: the old tail (under two hours) stays one open card.
+        assert len(rows) == 2 and planner_open(rows[1]), [(r['started_at'], r['finished_at']) for r in rows]
+
+
+@pytest.mark.asyncio
+async def test_resuming_a_backfill_run_cut_by_the_old_cap_keeps_its_rows(strict, monkeypatch):
+    # A backfill run derived by main (middle cut) is resumed by the new code (a redelivered step, or
+    # the operator's resume after a block). The committed rows keep boundaries, segments and claims.
+    from utils.conversations.v3 import planner
+
+    segments = speech(300)
+    end = T0 + timedelta(seconds=segments[-1]['end'])
+    put_recording(strict, segments, status='completed', landed=end)
+    later = end + timedelta(hours=1)
+    with monkeypatch.context() as old:
+        old.setattr(planner, '_capped', main_capped)
+        assert await reconcile_at(strict, monkeypatch, later, derive_run='run-1') == 'committed'
+    rows = derived(strict)
+    before = locked_state(strict, rows)
+    assert len(before) == 2 and all(r.get('backfilled') for r in rows)
+    assert await reconcile_at(strict, monkeypatch, later + timedelta(minutes=5), derive_run='run-1') == 'committed'
+    rows = derived(strict)
+    assert locked_state(strict, rows) == before
+    assert all(len(ids) == 1 for ids in ownership(rows).values())
+    spans = claim_spans(strict)
+    assert all(left[1] <= right[0] for left, right in zip(spans, spans[1:])), spans

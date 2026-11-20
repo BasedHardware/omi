@@ -558,14 +558,9 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
         row = ref.get(transaction=tx).to_dict() or {}
         if not row.get('recording') or row.get('deleted'):
             return False
-        now = datetime.now(timezone.utc)
-        # v3_speech_landed_at: when speech last landed (offline sync can deliver speech that is already
-        # old). Custom lock timing counts from it, so a late batch does not lock on arrival.
-        update = {
-            'v3_pending': True,
-            'v3_pending_since': row.get('v3_pending_since') or now,
-            'v3_speech_landed_at': now,
-        }
+        # The landing time (SPEECH_LANDED_FIELD) is stamped by the transaction that commits the speech,
+        # not here: a reconcile can run between that commit and this re-arm.
+        update = {'v3_pending': True, 'v3_pending_since': row.get('v3_pending_since') or datetime.now(timezone.utc)}
         if manual_end:
             update['v3_manual_end'] = True
         tx.update(ref, update)

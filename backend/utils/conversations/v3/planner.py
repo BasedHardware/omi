@@ -27,13 +27,17 @@ def late_rewrite(*, previous_words, new_words, ended_at, now, rewrites):
     )
 
 
-def _capped(lines, sections=()):
+def _capped(lines, sections=(), committed=()):
     """Cut a stretch over two hours after the longest prefix that ends within two hours of its start; repeat.
 
     Every part but the last locks. A cut that moved with later speech (the old middle cut) or with the
     outline (a topic boundary the first paid outline adds) froze a different prefix on each pass and
     stranded the lines between cuts as one-line cards. Line starts are append-only for live speech, so
     this cut stays put. ``sections`` is accepted for callers and ignored on purpose.
+
+    ``committed`` holds the end times of locked rows. A part that reaches past one cuts there first, so
+    rows locked by earlier code (main cut at the middle) or by another pass keep their cut, and the cap
+    counts from it instead of re-cutting the speech after it.
     """
     parts, offset = [], 0
     while max(line['end'] for line in lines[offset:]) - lines[offset]['start'] > CAP:
@@ -42,6 +46,9 @@ def _capped(lines, sections=()):
         cut, latest = None, lines[offset]['end']
         for i in range(offset + 1, len(lines)):
             if latest > limit:
+                break
+            if any(latest <= b <= lines[i]['start'] for b in committed):
+                cut = i
                 break
             cut = i
             latest = max(latest, lines[i]['end'])
@@ -153,7 +160,9 @@ def _join_sitdown(lines: list, entries: list[dict[str, Any]]) -> list[dict[str, 
     return result
 
 
-def _cohesive_groups(groups, outlines, sitdown=False) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
+def _cohesive_groups(
+    groups, outlines, sitdown=False, committed=()
+) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
     for group, entries in zip(groups, outlines):
         if not entries:
             continue
@@ -165,7 +174,7 @@ def _cohesive_groups(groups, outlines, sitdown=False) -> Iterator[tuple[dict[str
             for section in entry.get('sections') or []
             if isinstance(section.get('first_line'), int)
         )
-        parts = _capped(group['lines'], cut_points)
+        parts = _capped(group['lines'], cut_points, committed)
         start = 1
         for index, part in enumerate(parts):
             end = start + len(part)
@@ -200,10 +209,12 @@ def _cohesive_groups(groups, outlines, sitdown=False) -> Iterator[tuple[dict[str
             start = end
 
 
-def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topic_lock=False):
+def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topic_lock=False, committed=()):
+    """``committed``: end times of locked derived rows, which the two-hour cap reuses (see ``_capped``)."""
     result = []
     sitdown = is_sitdown(silence_gap)
-    pairs = _cohesive_groups(groups, outlines, sitdown) if cohesion else zip(groups, outlines)
+    committed = sorted(set(committed))
+    pairs = _cohesive_groups(groups, outlines, sitdown, committed) if cohesion else zip(groups, outlines)
     for group, entries in pairs:
         first_result = len(result)
         if len(entries) > 1 and (group.get('manual_end') or group.get('after_manual_end')):
@@ -215,7 +226,7 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
             sections = [
                 s['first_line'] - 1 - begin for s in entry.get('sections', []) if isinstance(s.get('first_line'), int)
             ]
-            capped = _capped(lines, sections)
+            capped = _capped(lines, sections, committed)
             for part_index, part in enumerate(capped):
                 candidate = {
                     **entry,
@@ -535,6 +546,24 @@ def unavailable_preview(row, recordings):
     }
 
 
+def _segment_keys(row):
+    return {
+        (s.get('id'), s.get('start'), s.get('end'), None if s.get('id') is not None else s.get('text'))
+        for s in row.get('transcript_segments') or []
+    }
+
+
+def _holds_line(row, line, keys=None):
+    """The row published this exact segment (id and timing, or text when it has no id)."""
+    if not (row['started_at'] <= line['start'] and line['end'] <= row['finished_at']):
+        return False
+    segment_id = line['segment'].get('id')
+    start = (line['start'] - row['started_at']).total_seconds()
+    end = (line['end'] - row['started_at']).total_seconds()
+    text = None if segment_id is not None else line['segment'].get('text')
+    return (segment_id, start, end, text) in (keys if keys is not None else _segment_keys(row))
+
+
 def _contains_line(row, line, spans):
     inside_window = row['started_at'] <= line['start'] and line['end'] <= row['finished_at']
     if not inside_window:
@@ -543,16 +572,9 @@ def _contains_line(row, line, spans):
         return True
     # A previous pass may have published this segment with a clipped audio claim.
     # Its original timing and id still identify the segment on retry.
-    segment_id = line['segment'].get('id')
     if not any(a < line['end'] and line['start'] < b for a, b in spans):
         return False
-    start = (line['start'] - row['started_at']).total_seconds()
-    end = (line['end'] - row['started_at']).total_seconds()
-    return any(
-        (s.get('id'), s.get('start'), s.get('end')) == (segment_id, start, end)
-        and (segment_id is not None or s.get('text') == line['segment'].get('text'))
-        for s in row.get('transcript_segments') or []
-    )
+    return _holds_line(row, line)
 
 
 def preserve_finished_windows(planned, existing, recordings=None, *, protect_provisional=False):
@@ -596,6 +618,16 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
             published_ids.add(row['id'])
             files = published.setdefault(p['recording_id'], {}).setdefault('files', {})
             files.setdefault(p['audio_file_id'], []).append((p['start'], p['end']))
+    holders = finished + [
+        row
+        for row in existing.values()
+        if row['id'] not in protected
+        and is_unlocked(row)
+        and not row.get('deleted')
+        and row.get('started_at')
+        and row.get('finished_at')
+    ]
+    holder_keys = {row['id']: _segment_keys(row) for row in holders}
     retained, fresh = {}, []
     published_partitions = set()
     fresh_metadata = {'_published': published, '_published_ids': published_ids}
@@ -604,10 +636,21 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
         partition = window.get('_stretch_partition')
         for line in window['lines']:
             claims = claims_by_recording.get(line['conversation_id'])
-            owner = next(
-                (r for r in finished if _contains_line(r, line, None if claims is None else claims.get(r['id'], ()))),
-                None,
-            )
+            # One owner per segment across passes: a row that already published this exact segment
+            # keeps it. Overlapping turns at a cut can sit inside a neighbour's window and claim (the
+            # neighbour's claim is clipped, not the turn), so containment alone would move them.
+            holder = next((r for r in holders if _holds_line(r, line, holder_keys[r['id']])), None)
+            if holder is not None:
+                owner = holder if holder['id'] in protected else None
+            else:
+                owner = next(
+                    (
+                        r
+                        for r in finished
+                        if _contains_line(r, line, None if claims is None else claims.get(r['id'], ()))
+                    ),
+                    None,
+                )
             if partition is not None and partition not in published_partitions:
                 spans = published.get(line['conversation_id'], {}).get('claims', ())
                 if owner or any(a < line['end'] and line['start'] < b for a, b in spans):
