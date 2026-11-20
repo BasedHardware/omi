@@ -72,7 +72,7 @@ func (s *syntheticGateway) Complete(ctx context.Context, g queue.Guarded, req fi
 	if !strings.Contains(req.Messages[1].Text, "late speech") {
 		return "", finalization.ErrInvalid
 	}
-	return `{"title":"Latest", "overview":"Summary includes late speech"}`, nil
+	return `{"title":"Latest", "overview":"Summary includes late speech","sections":["Synthetic detail"]}`, nil
 }
 
 func (*syntheticGateway) Recover(context.Context, queue.Guarded, string) (string, error) {
@@ -108,7 +108,7 @@ func TestF09MergedDocumentAdapterFencesNewerInputAndUpdatesHome(t *testing.T) {
 			return err
 		}},
 	}
-	wireFinalizationDocuments(s, lifecycle, nil)
+	wireFinalizationDocuments(s, lifecycle, nil, true)
 	intent, err := s.Admit(t.Context(), finalization.AdmissionRequest{
 		Ref: finalization.Ref{Owner: "replay-owner", ID: "replay-conversation"}, Trigger: rules.CaptureEnd,
 	})
@@ -139,10 +139,19 @@ func TestF09MergedDocumentAdapterFencesNewerInputAndUpdatesHome(t *testing.T) {
 		Structured struct {
 			Title    string `firestore:"title"`
 			Overview string `firestore:"overview"`
+			Sections []struct {
+				Body string `firestore:"body_markdown"`
+			} `firestore:"sections"`
 		} `firestore:"structured"`
+		InputHash  string `firestore:"go_finalization_notes_input_hash"`
+		OutputHash string `firestore:"go_finalization_notes_output_hash"`
 	}
 	if err := conv.DataTo(&fields); err != nil {
 		t.Fatal(err)
+	}
+	if len(fields.Structured.Sections) != 1 || fields.Structured.Sections[0].Body != "Synthetic detail" ||
+		len(fields.InputHash) != 64 || len(fields.OutputHash) != 64 {
+		t.Fatal("generated sections and hashes did not commit together")
 	}
 	if fields.Status != "completed" || fields.Structured.Title != "Owner's title" ||
 		fields.Structured.Overview != "Summary includes late speech" ||
@@ -177,7 +186,7 @@ func TestF35ManualRedriveResumesFanoutWithoutAnotherAutomaticGrant(t *testing.T)
 	h := queuetest.Open(t, policy, finalization.Declaration(causes...))
 	effects := syntheticEffects{}
 	s := &finalization.Service{Queue: h.Store, Meeting: effects, Effects: effects, Targets: effects, Gateway: unavailableNotes{}}
-	wireFinalizationDocuments(s, finalizationdocs.Store{Docs: bench.Store, Clock: clock.System{}}, nil)
+	wireFinalizationDocuments(s, finalizationdocs.Store{Docs: bench.Store, Clock: clock.System{}}, nil, true)
 	intent, err := s.Admit(t.Context(), finalization.AdmissionRequest{Ref: ref, Trigger: rules.CaptureEnd})
 	if err != nil {
 		t.Fatal(err)

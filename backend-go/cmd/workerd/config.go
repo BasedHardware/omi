@@ -28,6 +28,7 @@ type config struct {
 	metricsPort                          int
 	stopTimeout                          time.Duration
 	summaryRepair                        bool
+	notesDedupe                          bool
 	summaryMaxAge                        time.Duration
 	privateArchive, derivedArchive       string
 	objectBucket, objectKMSKey           string
@@ -78,6 +79,8 @@ func (c *config) readWorkerConfig(lookup lookupEnv) error {
 }
 
 func (c *config) readFinalizationAdapters(lookup lookupEnv) error {
+	value, set := lookup("CONVERSATION_LLM_INPUT_DEDUPE_ENABLED")
+	c.notesDedupe = !set || strings.EqualFold(strings.TrimSpace(value), "true")
 	private, _ := lookup("BUCKET_PRIVATE_CLOUD_SYNC")
 	derived, _ := lookup("BUCKET_AUDIO_DERIVED")
 	c.privateArchive, c.derivedArchive = strings.TrimSpace(private), strings.TrimSpace(derived)

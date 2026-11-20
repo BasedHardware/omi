@@ -19,6 +19,11 @@ func (s Store) decode(ctx context.Context, g queue.Guarded, ref Ref, row map[str
 		return Conversation{}, err
 	}
 	structured := field[map[string]any](row, "structured")
+	sections, integrity := readNotesSections(structured["sections"])
+	outputHash := ""
+	if integrity {
+		outputHash = field[string](row, notesOutputHashField)
+	}
 	return Conversation{
 		Revision:             revision,
 		Status:               Status(field[string](row, "status")),
@@ -30,6 +35,7 @@ func (s Store) decode(ctx context.Context, g queue.Guarded, ref Ref, row map[str
 		Discarded:            field[bool](row, "discarded"),
 		Title:                effectiveTitle(row, field[string](structured, "title")),
 		Overview:             effectiveOverview(row, field[string](structured, "overview")),
+		Sections:             sections, NotesInputHash: field[string](row, notesInputHashField), NotesOutputHash: outputHash,
 		CreatedAt:            field[time.Time](row, "created_at"),
 		StartedAt:            field[time.Time](row, "started_at"),
 		FinishedAt:           field[time.Time](row, "finished_at"),

@@ -52,32 +52,36 @@ const (
 
 // Conversation is the stored conversation view for finalization.
 type Conversation struct {
-	Revision             Revision
-	Status               Status
-	FinalizationStatus   FinalizationStatus
-	FinalizationJobID    string
-	FinalizationRevision int64
-	SyncContentRevision  int64
-	ProtectionLevel      string
-	Discarded            bool
-	Title                string
-	Overview             string
-	CreatedAt            time.Time
-	StartedAt            time.Time
-	FinishedAt           time.Time
-	SummaryCoversThrough time.Time
-	Transcript           []json.RawMessage
+	Revision                        Revision
+	Status                          Status
+	FinalizationStatus              FinalizationStatus
+	FinalizationJobID               string
+	FinalizationRevision            int64
+	SyncContentRevision             int64
+	ProtectionLevel                 string
+	Discarded                       bool
+	Title                           string
+	Overview                        string
+	Sections                        []string
+	NotesInputHash, NotesOutputHash string
+	CreatedAt                       time.Time
+	StartedAt                       time.Time
+	FinishedAt                      time.Time
+	SummaryCoversThrough            time.Time
+	Transcript                      []json.RawMessage
 }
 
 // Finalization is a partial update. Nil fields leave the corresponding Firestore fields alone.
 type Finalization struct {
-	Status               *Status
-	FinalizationStatus   *FinalizationStatus
-	Discarded            *bool
-	Title                *string
-	Overview             *string
-	FinishedAt           *time.Time
-	SummaryCoversThrough *time.Time
+	Status                          *Status
+	FinalizationStatus              *FinalizationStatus
+	Discarded                       *bool
+	Title                           *string
+	Overview                        *string
+	Sections                        *[]string
+	NotesInputHash, NotesOutputHash *string
+	FinishedAt                      *time.Time
+	SummaryCoversThrough            *time.Time
 }
 
 // TranscriptReader resolves a transcript pointer under the original read guard.

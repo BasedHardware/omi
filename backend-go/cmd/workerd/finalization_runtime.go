@@ -68,7 +68,7 @@ func openFinalizationRuntime(ctx, startup context.Context, cfg config, q *queue.
 		}
 		offload = reader
 	}
-	wireFinalizationDocuments(runtime.family, store, offload)
+	wireFinalizationDocuments(runtime.family, store, offload, cfg.notesDedupe)
 	if cfg.summaryRepair {
 		runtime.scan = &finalizationdocs.SummaryScan{Docs: docs, Family: runtime.family, Clock: clk, MaxAge: cfg.summaryMaxAge}
 	}

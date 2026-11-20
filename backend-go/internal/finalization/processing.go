@@ -190,6 +190,9 @@ func parseNotes(text string) (Notes, string, error) {
 }
 
 func canonicalNotes(notes Notes) (string, error) {
+	if len(notes.Sections) == 0 {
+		notes.Sections = nil
+	}
 	body, err := json.Marshal(notesWire(notes))
 	if err != nil {
 		return "", err
