@@ -51,6 +51,20 @@ def test_classify(data, expected):
     assert home_step.classify(data) == expected
 
 
+def test_older_v3_preview_keeps_its_individual_home_card_and_outline():
+    preview = row(
+        status='processing',
+        v3_derived=True,
+        tile_state='live',
+        structured={'title': 'Preview', 'emoji': '🌲', 'overview': 'Outline'},
+    )
+    projected = home_step.project(preview)
+    assert projected['home_step'] == 'ready'
+    assert projected['structured'] == preview['structured']
+    assert home_step.classify({**preview, 'tile_state': 'writing'}) == 'writing_notes'
+    assert home_step.classify({**preview, 'finished_at': NOW - timedelta(days=1)}) == 'failed'
+
+
 def test_row_level_projection_provenance_is_writing_notes_without_structured_provenance():
     stamped = row(
         structured={'title': '', 'overview': ''},
@@ -397,11 +411,16 @@ def test_unstamped_wait_uses_server_clock_not_offline_capture_age(age, expected,
     assert home_step.classify(empty) == expected
 
 
-@pytest.mark.parametrize('title', ['', 'Discussion notes'])
-def test_feed_read_of_a_projected_batch_row_owing_notes_is_writing_notes(title):
-    """The feed classifies the field-masked read, so the row-level stand-in marker must be loaded."""
+@pytest.fixture(scope='module')
+def prepared_conversation_fields():
     from database.home_feed import CONVERSATION_FIELDS
 
+    return CONVERSATION_FIELDS
+
+
+@pytest.mark.parametrize('title', ['', 'Discussion notes'])
+def test_feed_read_of_a_projected_batch_row_owing_notes_is_writing_notes(title, prepared_conversation_fields):
+    """The feed classifies the field-masked read, so the row-level stand-in marker must be loaded."""
     projected = row(
         structured={'title': title, 'overview': ''},
         record_lane_owner='batch_live_v1',
@@ -411,13 +430,12 @@ def test_feed_read_of_a_projected_batch_row_owing_notes_is_writing_notes(title):
         summary_due_at=NOW.timestamp(),
         transcript_segments=[{'text': 'we closed the round', 'start': 0, 'end': 3}],
     )
-    read = {key: value for key, value in projected.items() if key in CONVERSATION_FIELDS}
+    read = {key: value for key, value in projected.items() if key in prepared_conversation_fields}
     assert home_step.classify(read) == 'writing_notes'
 
 
-def test_past_age_gate_projection_stamp_stays_on_home_through_the_feed_mask():
+def test_past_age_gate_projection_stamp_stays_on_home_through_the_feed_mask(prepared_conversation_fields):
     """A late batch transcript past the repair age gate gets the row marker but no debt."""
-    from database.home_feed import CONVERSATION_FIELDS
     from utils.conversations import summary_delivery
 
     old = NOW - timedelta(days=4)
@@ -435,7 +453,7 @@ def test_past_age_gate_projection_stamp_stays_on_home_through_the_feed_mask():
     assert summary_delivery.stamp_projection_debt(projected, now=NOW.timestamp()) is False
     assert projected['summary_title_provenance'] == 'server_minimum'
     assert 'summary_due_at' not in projected
-    read = {key: value for key, value in projected.items() if key in CONVERSATION_FIELDS}
+    read = {key: value for key, value in projected.items() if key in prepared_conversation_fields}
     # The feed, slim list and full-row list reads agree: a finished card, never hidden as noise.
     assert home_step.classify(read) == home_step.classify(projected) == 'ready'
 

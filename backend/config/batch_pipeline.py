@@ -726,6 +726,10 @@ def projection_followup_page_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED')
 
 
+def projection_followup_early_coalesce_enabled() -> bool:
+    return kill_switch('BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED', log=False)
+
+
 def owner_drain_enabled() -> bool:
     """Kill switch: a per-process owner drain replaces the sweep-shared walk budget."""
     from config.policy import kill_switch
@@ -758,6 +762,10 @@ def serving_projection_sweep_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP')
+
+
+def projection_outbox_enabled() -> bool:
+    return kill_switch('BATCH_PROJECTION_OUTBOX', log=False)
 
 
 def _pump_bound(raw: str, default: int, maximum: int, minimum: int = 1) -> int:
@@ -1079,6 +1087,16 @@ def merge_head_wait_seconds() -> float:
     if value <= 0:
         return 0.0
     return value if value <= MERGE_HEAD_WAIT_MAX else MERGE_HEAD_WAIT_DEFAULT
+
+
+# A head still unready this long after admission is starved stock, not a unit about to finish.
+MERGE_STALE_HEAD_SECONDS = 1800.0
+
+
+def merge_stale_head_skip(owner_id: str) -> bool:
+    """Canary: listed owners skip the head wait behind a stale head. Unset or empty: nobody."""
+    raw = os.getenv('BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST', '')
+    return bool(owner_id) and owner_id in {uid.strip() for uid in raw.split(',') if uid.strip()}
 
 
 MERGE_CATCH_UP_DEPTH_DEFAULT = 16

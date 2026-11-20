@@ -14,25 +14,9 @@ reads `conversation_batch_purge_jobs` using `due_at` and dispatches ordinary
 with deletion intent. Accepted-delete cascade jobs are unchanged. There is **no
 new task kind, route, index, backfill, TTL or independent dispatcher**.
 
-The existing collection also holds one Release-owned readiness metadata
-document, `conversation_batch_purge_jobs/_owner_scan_v1_readiness`. There is
-**no new collection**. This reserved ID cannot collide with SHA-256 job IDs; the
-marker has no `uid` or `due_at`, so old/new owner and due queries exclude it.
-Only the backend-sync scan consumer reads it; Release writes/revokes it. Neither the reconciler nor old
-consumers read it. It is separate from member obligations and has no due work.
-`all_consumers_new` must be the boolean `true`, with a timezone-aware
-`valid_until` timestamp in the next 24 hours. Absent, false, malformed or expired
-markers refuse coalescing and execute legacy purges. Read errors retry the task.
-The marker is re-read transactionally at seal, resume, every unit/checkpoint and
-completion. Revocation or expiry hands an active group back with its journals.
-The read-only `scripts/complete_half_deleted_conversations.py` diagnostic also
-counts this collection; it excludes underscore-prefixed control document IDs
-from pending-obligation totals (real obligations use SHA-256 hex IDs).
-This readiness requirement applies even while the default-on kill switch is on.
-Its read budget is one exact-document lookup at admission, plus one per
-enrollment/authority transaction (seal/resume, unit, checkpoint, journal chunk,
-completion). Purge consumers never write the marker. Include these reads in the
-canary metric; this adds no polling loop or owner-history query.
+The read-only `scripts/complete_half_deleted_conversations.py` diagnostic excludes
+underscore-prefixed metadata IDs from pending-obligation totals, including any
+readiness marker left by an earlier release.
 
 A worker seals at most 16 fresh obligations belonging to one UID in a transaction.
 Only the leader has `owner_scan` (epoch, token, immutable member identities,
@@ -45,7 +29,7 @@ completion transaction verifies that arm; a re-arm preserves the obligation and
 segment journals, clears the stale cursor and makes the next generation due.
 A cursor without an arm stamp is conservatively rewound once at legacy claim;
 a matching stamped cursor resumes intact. This also fixes the pre-existing
-legacy re-arm completion gap on main, including switch-off/readiness fallback. Candidate lookup reads at most 16 owner obligations;
+legacy re-arm completion gap on main, including switch-off fallback. Candidate lookup reads at most 16 owner obligations;
 a singleton takes the legacy path. Multiple waves/overflow require more groups.
 
 The two namespaces' owner pages, job-result lookups and owner-ID artifact fallback
@@ -91,32 +75,32 @@ and makes it due. The existing reconciler redrives ordinary per-conversation
 execution. A delivery observing an off-state group can perform this handback too.
 No member completes merely because handback or an HTTP acknowledgement happened.
 
-The pre-PR binary understands the task and ordinary obligation fields. Live
-leases and superseded generations prevent entry; after expiry it ignores the
-shared cursor and starts from the original legacy progress and member journal.
-A takeover changes its token and invalidates the shared run. This preserves
-rollback reachability, but **does not prove the new re-arm guarantee during a
-mixed roll**: old completion compares only generation/token, never the arming
-revision. An old worker that takes over, checkpoints and then observes a re-arm
-cannot fence that arm. Coalescing is therefore refused during mixed-version
-serving until Release explicitly attests all consumers are new.
+Release must enforce the rollback floor for every purge consumer. The workspace
+tooling must read the authoritative `backend/deploy/release_floor.json` from
+`BasedHardware/omi` main through the GitHub contents API and refuse admission
+when the policy cannot be loaded or validated.
+Use the floor-guarded workspace tooling for deploy and rollback admission. For
+other manual traffic moves, verify the target against the product floor first.
+The direct backend workflow checks the floor from product main for the requested
+release, traffic repair, integration-only canary rollback, and failed-promotion
+traffic restoration. Supply a floor-qualified retained revision when dispatching
+an integration-only canary.
+Keep renewing the readiness marker daily while marker-gated #25608 binaries
+still serve, until every purge consumer runs the marker-free release.
+Verify traffic, tagged revisions and queued revision-specific task targets before
+rolling out the marker-free worker. Pre-floor binaries lack the arm-revision
+completion fence and must stay out of service.
 
-Before enabling the marker, Release verifies the reviewed image on **every**
-backend-sync revision/consumer that can receive purge tasks, including queued
-revision-specific task targets. Drain or retarget old consumers first; a route
-presence probe is insufficient. Keep the switch off until that is established,
-then write the marker with a short expiry (at most 24 hours), record deployment
-evidence, and enable the canary. Refresh only after re-verifying the same claim.
-This PR does not create or assert a production readiness marker.
-
-For rollback, revoke the marker and switch off **before** restoring old traffic.
-Drain active groups through handback (or wait for their finite leases and redrive)
-before sending tasks to an old revision. Verify no active delegated groups remain.
-Do not leave an all-new attestation valid while routing old workers. Handback
-preserves an old takeover's nonempty legacy cursor as well as each member journal;
-it never revokes a replacement worker's lease. If a leader is already gone,
-followers still recover through finite leases. Legacy rollback may repeat owner
-scans. No member completes from handback or HTTP acknowledgement alone.
+For emergency rollback, roll out the kill switch set to off to every revision
+that receives purge tasks. Include tagged revisions and queued revision-specific
+targets. Running revisions keep their environment until they are replaced or
+drain. An off-state delivery can hand back a group still owned by its epoch and
+token. Allow finite leases to expire and redrive any remaining obligations, then
+verify handback and journal preservation. Handback preserves an old
+takeover's nonempty cursor and each member journal without revoking a replacement
+worker's lease. If a leader is gone, followers recover through finite leases.
+A product revert restores the readiness gate. Release must write a fresh
+readiness marker after re-verifying the consumer revision set to resume coalescing.
 
 ## Canary and owner
 
@@ -124,7 +108,7 @@ scans. No member completes from handback or HTTP acknowledgement alone.
 batch-custody contract and pre-merge review; margin-40 has no dependency on this
 train. This PR does not deploy or inspect production.
 
-After establishing all-consumer readiness above, enable one backend-sync canary
+After verifying all consumer targets against the release floor, enable one backend-sync canary
 revision for a full deletion lookback window. Measure **deletion purge reads per
 armed conversation**, origin
 `http:/v1/conversations/deletion-batch-purges/run`, including coordination,
@@ -133,7 +117,7 @@ aggregate evidence and the 24 hours before canary as the comparison baseline.
 Track group sizes, completion age and gate latency; local page-count reductions
 are not billed-read savings.
 
-Stop, revoke readiness and switch off if **any** of these occurs:
+Stop and switch off if **any** of these occurs:
 
 - An audit finds any completed member with rows remaining (also audit artifacts,
   exact WAL prefixes/all generations and both namespaces).
@@ -155,8 +139,27 @@ existing erasure helpers and synthetic unit/emulator tests. Replacement-boundary
 approval is supplied by David's explicit task approval; this adds no batch writer
 schema or replacement coordination service. Paged scan collections, TTL, new task
 protocols and historical backfills remain unnecessary: work stays on existing
-obligations/journals. The new bounded
-readiness control document is necessary because the actual pre-PR binary cannot
-fence re-arms after takeover; missing readiness retains legacy execution. Live
-sharing factor, read attribution, revision mix and savings remain canary questions; production
-inspection is outside this task's authorized scope.
+obligations/journals. Live sharing factor, read attribution, revision mix and
+savings remain canary questions.
+
+## Remainder audit
+
+Run `scripts/audit_conversation_purge_remainders.py` from the backend with
+read-only ADC and explicit `--project`, `--start` and `--end`. The script
+compares the half-open deletion-intent window with the immediately preceding
+window of equal length. It checks current state. A tombstone's `deleted_at`
+survives retries, and absence of an obligation gives no completion timestamp
+or execution-path attribution. Firestore needs a collection-group index on
+`deleted_conversations.deleted_at`. An unavailable index prevents enumeration.
+Missing coverage is reported separately from observed remainder counts.
+Content-free result ordering edges are an intended part of the purge contract.
+Associations discarded with successful bindings and the Postgres mirror
+require independent evidence.
+
+The worker emits `conversation_batch_purge_owner_scan_audit` at WARNING
+after a committed seal, completion, or handback. Join group events on
+`epoch_hash` and sum `members` for groups with a completed outcome. Handback
+counts describe the sealed group, including any members already taken over.
+These records give group and member totals. They carry no member identities.
+A process exit after the transaction commits and before logging, or a legacy
+takeover after lease expiry, can leave a seal without a terminal event.

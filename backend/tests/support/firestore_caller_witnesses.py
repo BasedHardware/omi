@@ -172,12 +172,6 @@ _FOLDER = (None, 'folder-1')
 _STARRED = (None, False, True)
 
 
-def _run_v3_live(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
-    _stub(monkeypatch, conversations_router, 'conversations_v3_enabled', lambda uid: True)
-    _stub(monkeypatch, conversations_router.v3_client_capability, 'note_capable', lambda uid: None)
-    trial(capture, conversations_router.get_live_conversation, uid='u1', channel=None)
-
-
 def _run_main_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     for statuses, sources in (
         ('completed', _SOURCES_QUERY),
@@ -556,14 +550,6 @@ def _run_wrapped(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> Non
 WITNESSES: dict[str, CallerWitness] = {
     witness.key: witness
     for witness in (
-        CallerWitness(
-            'routers/conversations.py:get_live_conversation:database.conversations.get_conversations_without_photos',
-            'database.conversations.get_conversations_without_photos',
-            'database.conversations.get_conversations_without_photos',
-            ('v3-live-conversation',),
-            1,
-            _run_v3_live,
-        ),
         CallerWitness(
             'routers/support.py:trace_support_recordings:database.conversations.get_conversations',
             'database.conversations.get_conversations',

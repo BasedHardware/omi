@@ -352,6 +352,8 @@ def _finish_destructive_operation_transaction(
             logger.info("destructive operation finish already recorded")
             return
         raise LegalHoldAuthorityUnavailable("destructive operation gate is already terminal")
+    if kind == "account_deletion" and gate.get("remote_inflight"):
+        raise LegalHoldAuthorityUnavailable("account deletion remote outcome is unresolved")
     transaction.set(gate_ref, {**gate, "state": outcome, "finished_at": now})
 
 

@@ -37,6 +37,7 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database import batch_pipeline_projection_outbox as outbox
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from database.batch_pipeline_projection_followup_backfill import (
     BACKFILL_KEY as FOLLOWUP_BACKFILL_KEY,
@@ -52,6 +53,7 @@ from database.batch_pipeline_store import (
     is_queue_dispositioned,
 )
 from database.firestore_transaction_retry import FirestoreContentionExhausted
+from config import batch_pipeline_packing as batch_packing
 
 import database.jobstore.codec as codec
 from database.jobstore.connection import Pool, sql
@@ -160,8 +162,7 @@ class PostgresTransaction:
         self.writes[(table, key)] = deepcopy(value)
 
     def patch(self, table: str, key: str, fields: dict) -> None:
-        if table != 'conversations' or set(fields) != {'record_lane_owner'}:
-            raise ValueError('only the conversation route owner may be patched by admission')
+        outbox.validate_batch_patch(table, fields)
         self.store.require_table(table)
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
@@ -173,6 +174,9 @@ class PostgresTransaction:
     def first_pending(self, owner_key: str) -> dict | None:
         row = self.store.first_pending_in(self.conn, owner_key)
         return self._locked_query_row(*row) if row else None
+
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        return [self._locked_query_row(*row) for row in self.store.pending_page_in(self.conn, owner_key, limit)]
 
     def first_ready_pending(self, owner_key: str) -> dict | None:
         """The owner's earliest-captured pending row that already has a result (bounded head wait)."""
@@ -254,6 +258,19 @@ class PostgresTransaction:
 
 
 class PostgresStore:
+    def packing_candidates(self, owner_key: str) -> list[dict]:
+        # The observer never waits for pool capacity or opens a new connection.
+        with self.pool.connection(timeout=0, existing_only=True) as conn, conn.transaction():
+            conn.execute('SET LOCAL statement_timeout = 1000')
+            rows = conn.execute(
+                "SELECT (SELECT COALESCE(jsonb_object_agg(field, jobs.doc -> field), '{}'::jsonb) "
+                'FROM unnest(%s::text[]) AS requested(field) WHERE jobs.doc ? field) FROM jobs '
+                'WHERE namespace = %s AND owner_key = %s AND merge_pending '
+                'ORDER BY capture_at, key COLLATE "C" LIMIT %s',
+                (list(batch_packing.JOB_FIELDS), self.namespace, owner_key, batch_packing.PAGE_ROWS),
+            ).fetchall()
+        return [row[0] for row in rows]
+
     def allowance_owners(self, now: float, limit: int) -> list[str]:
         with self._read_conn() as conn:
             rows = conn.execute(
@@ -660,6 +677,27 @@ class PostgresStore:
         exclude_async: bool = False,
         followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
+        page = self._projection_page(
+            limit,
+            after=after,
+            states=states,
+            due_before=due_before,
+            exclude_async=exclude_async,
+            followup_due_before=followup_due_before,
+        )
+        return page[0], page[1]
+
+    def _projection_page(
+        self,
+        limit: int = 100,
+        *,
+        after: tuple | None = None,
+        states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+        due_before: float | None = None,
+        exclude_async: bool = False,
+        followup_due_before: float | None = None,
+        include_outbox: bool = False,
+    ):
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
         if due_before is not None and followup_due_before is not None:
@@ -692,6 +730,8 @@ class PostgresStore:
                     )
                 )
                 params.extend(after)
+        if include_outbox:
+            fields.append(psycopg_sql.Identifier('doc'))
         with self._read_conn() as conn:
             rows = conn.execute(
                 psycopg_sql.SQL(
@@ -704,8 +744,42 @@ class PostgresStore:
                 ),
                 (*params, size),
             ).fetchall()
-        cursor = (*reversed(rows[-1][1:]), rows[-1][0]) if len(rows) == size else None
-        return [row[0] for row in rows], cursor
+        ids = [row[0] for row in rows]
+        cursor = None
+        if rows and len(rows) == size:
+            last = rows[-1][:-1] if include_outbox else rows[-1]
+            cursor = (*reversed(last[1:]), last[0])
+        if include_outbox:
+            return ids, cursor, {row[0] for row in rows if outbox.covered(row[0], row[-1])}
+        return ids, cursor
+
+    def projection_page_with_outbox(self, **scope):
+        return self._projection_page(include_outbox=True, **scope)
+
+    def projection_outbox_page(self, now: float, limit: int) -> list[outbox.DueObligation]:
+        # The partial index has the same numeric-type predicate as the query.
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT key, doc->'log_sequence', (doc->>'projection_outbox_due_at')::float8 AS due_at
+                FROM results
+                WHERE namespace = %s AND doc->>'projection_outbox_kind' = 'project_conversation_v1'
+                  AND jsonb_typeof(doc->'projection_outbox_due_at') = 'number'
+                  AND (doc->>'projection_outbox_due_at')::float8 <= %s
+                ORDER BY due_at, key COLLATE "C" LIMIT %s
+                """,
+                (self.namespace, now, max(1, min(limit, 200))),
+            ).fetchall()
+        return [
+            due
+            for segment, revision, at in rows
+            if (
+                due := outbox.due_obligation(
+                    segment, {outbox.KIND_FIELD: outbox.KIND, outbox.DUE_FIELD: at, 'log_sequence': revision}
+                )
+            )
+            is not None
+        ]
 
     # -- internals ---------------------------------------------------------------------------
     @contextmanager
@@ -756,6 +830,23 @@ class PostgresStore:
             .format(sql().SQL(state)),
             params,
         ).fetchone()
+
+    def pending_page_in(self, conn: Any, owner_key: str, limit: int) -> list[tuple[str, dict]]:
+        """``first_pending_in``'s rows, at most ``limit`` (capped at 160)."""
+        state = ''
+        params: tuple[Any, ...] = (self.namespace, owner_key)
+        if held_poll_skip_enabled():
+            state = 'AND state <> ALL(%s) '
+            params += (list(MERGE_POLL_TERMINAL_STATES),)
+        return conn.execute(
+            sql()
+            .SQL(
+                'SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending {}'
+                'ORDER BY capture_at, key COLLATE "C" LIMIT %s'
+            )
+            .format(sql().SQL(state)),
+            (*params, max(1, min(limit, 160))),
+        ).fetchall()
 
     def write_doc(self, conn: Any, table: str, key: str, value: dict) -> None:
         if table in _TYPED:

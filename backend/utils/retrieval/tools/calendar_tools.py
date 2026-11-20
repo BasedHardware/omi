@@ -5,7 +5,8 @@ Tools for accessing Google Calendar events.
 import asyncio
 import traceback
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from urllib.parse import quote
 
 import httpx
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -19,6 +20,7 @@ from utils.model_text import (
     format_span,
     truncation_note,
 )
+from utils.observability.fallback import record_fallback
 from utils.user_clock import clock_for_config
 from models.calendar_mutation import (
     CalendarMutationResult,
@@ -49,6 +51,8 @@ from utils.log_sanitizer import sanitize, sanitize_pii, sanitize_provider_error
 import logging
 
 from utils.retrieval.tools.calendar_render import render_calendar_event
+from utils.retrieval.google_calendar_selection import event_path, event_reference, read_ids
+from utils.retrieval import google_calendar_catalog_cache
 
 logger = logging.getLogger(__name__)
 
@@ -292,9 +296,10 @@ async def get_google_calendar_event(access_token: str, event_id: str) -> Dict[st
 
     event_data = await google_api_request(
         "GET",
-        f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
+        event_path(event_id),
         access_token,
     )
+    event_data['id'] = event_id
     return event_data
 
 
@@ -372,10 +377,11 @@ async def update_google_calendar_event(
 
     updated = await google_api_request(
         "PATCH",
-        f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
+        event_path(event_id),
         access_token,
         body=event_body,
     )
+    updated['id'] = event_id
     return updated
 
 
@@ -394,7 +400,7 @@ async def delete_google_calendar_event(access_token: str, event_id: str) -> bool
 
     await google_api_request(
         "DELETE",
-        f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
+        event_path(event_id),
         access_token,
         allow_204=True,
     )
@@ -407,61 +413,129 @@ async def get_google_calendar_events(
     time_max: Optional[datetime] = None,
     max_results: int = 10,
     search_query: Optional[str] = None,
+    *,
+    uid: Optional[str] = None,
+    selections: Optional[Dict[str, Any]] = None,
+    on_degraded: Optional[Callable[[], None]] = None,
 ) -> List[Dict[str, Any]]:
-    """
-    Fetch events from Google Calendar API.
+    try:
+        async with asyncio.timeout(20):
+            return await _get_selected_calendar_events(
+                access_token,
+                time_min,
+                time_max,
+                max_results,
+                search_query,
+                uid=uid,
+                selections=selections,
+                on_degraded=on_degraded,
+            )
+    except GoogleAPIError:
+        if uid:
+            google_calendar_catalog_cache.invalidate(uid)
+        raise
 
-    Args:
-        access_token: Google Calendar access token
-        time_min: Minimum time for events (defaults to now)
-        time_max: Maximum time for events (defaults to 7 days from now)
-        max_results: Maximum number of events to return
-        search_query: Optional search query to filter events by title, description, attendees, etc.
 
-    Returns:
-        List of calendar events
+async def _get_selected_calendar_events(
+    access_token: str,
+    time_min: Optional[datetime] = None,
+    time_max: Optional[datetime] = None,
+    max_results: int = 10,
+    search_query: Optional[str] = None,
+    *,
+    uid: Optional[str] = None,
+    selections: Optional[Dict[str, Any]] = None,
+    on_degraded: Optional[Callable[[], None]] = None,
+) -> List[Dict[str, Any]]:
+    """Read only the owner's selected calendars, globally ordered and bounded.
+
+    Each calendar has its own pagination cursor. Calendar-qualified references
+    preserve identity through linking, import dedupe and later event mutations.
+    Callers without an Omi owner retain the legacy primary-only helper contract.
     """
     now = datetime.now(timezone.utc)
     time_min = (time_min or now).astimezone(timezone.utc)
     time_max = (time_max or (time_min + timedelta(days=7))).astimezone(timezone.utc)
-
-    # Format times in RFC3339 format (UTC)
-    time_min_str = time_min.strftime('%Y-%m-%dT%H:%M:%SZ')  # not-model-facing: Google Calendar API parameter
-    time_max_str = time_max.strftime('%Y-%m-%dT%H:%M:%SZ')  # not-model-facing: Google Calendar API parameter
-
-    params: Dict[str, Any] = {
-        'timeMin': time_min_str,
-        'timeMax': time_max_str,
-        'singleEvents': 'true',
-        'orderBy': 'startTime',
-        'maxResults': 2500,
-    }
-    if search_query:
-        params['q'] = search_query
-
-    events: List[Dict[str, Any]] = []
-    page = None
-
-    while True:
-        if page:
+    calendars = await read_ids(uid, access_token, selections, on_degraded) if uid else ['primary']
+    collected: List[Dict[str, Any]] = []
+    for calendar_id in calendars:
+        params: Dict[str, Any] = {
+            'timeMin': time_min.strftime('%Y-%m-%dT%H:%M:%SZ'),  # not-model-facing: Google API
+            'timeMax': time_max.strftime('%Y-%m-%dT%H:%M:%SZ'),  # not-model-facing: Google API
+            'singleEvents': 'true',
+            'orderBy': 'startTime',
+            'maxResults': min(max(max_results, 1), 2500),
+        }
+        if search_query:
+            params['q'] = search_query
+        events: List[Dict[str, Any]] = []
+        seen_pages: set[str] = set()
+        seen_ids: set[str] = set()
+        for _ in range(100):
+            try:
+                data = await google_api_request(
+                    'GET',
+                    f'https://www.googleapis.com/calendar/v3/calendars/{quote(calendar_id, safe="")}/events',
+                    access_token,
+                    params=params,
+                )
+            except GoogleAPIError as error:
+                # A 403 is also how Google reports quota exhaustion, which is
+                # transient and not a lost grant. Dropping the calendar there
+                # would return a partial read as a successful one.
+                if calendar_id != 'primary' and error.status_code in {403, 404, 410} and not error.is_quota_error:
+                    if uid:
+                        google_calendar_catalog_cache.invalidate(uid)
+                    # The read still returns the remaining calendars, so the
+                    # caller reports success. Record the degradation, otherwise
+                    # sync-success telemetry cannot be distinguished from a
+                    # complete read that is missing a selected calendar.
+                    record_fallback(
+                        component='calendar_read',
+                        from_mode='selected_calendars',
+                        to_mode='reachable_selected_calendars',
+                        reason='not_authorized' if error.status_code == 403 else 'unavailable',
+                        outcome='degraded',
+                        log=logger,
+                    )
+                    if on_degraded is not None:
+                        on_degraded()
+                    # Access can disappear after catalog enumeration. Keep other
+                    # selected calendars; never substitute an unselected primary.
+                    break
+                raise
+            for row in data.get('items', []):
+                if not isinstance(row, dict):
+                    continue
+                provider_id = row.get('id')
+                if isinstance(provider_id, str):
+                    if provider_id in seen_ids:
+                        continue
+                    seen_ids.add(provider_id)
+                event = dict(row)
+                if calendar_id != 'primary' and isinstance(provider_id, str):
+                    event['id'] = event_reference(calendar_id, provider_id)
+                events.append(event)
+            page = data.get('nextPageToken')
+            if len(events) >= max_results or not page:
+                break
+            if not isinstance(page, str) or page in seen_pages:
+                raise ValueError('invalid_calendar_event_pagination')
+            seen_pages.add(page)
             params['pageToken'] = page
+        else:
+            raise ValueError('calendar_event_page_limit_exceeded')
+        collected.extend(events[:max_results])
+    if len(calendars) > 1:
 
-        data = await google_api_request(
-            "GET",
-            'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-            access_token,
-            params=params,
-        )
-        events.extend(data.get('items', []))
+        def starts_at(event: Dict[str, Any]) -> datetime:
+            start = event.get('start') or {}
+            return coerce_utc_datetime(start.get('dateTime') or start.get('date')) or datetime.max.replace(
+                tzinfo=timezone.utc
+            )
 
-        if len(events) >= max_results:
-            return events[:max_results]
-
-        page = data.get('nextPageToken')
-        if not page:
-            break
-
-    return events[:max_results]
+        collected.sort(key=starts_at)
+    return collected[:max_results]
 
 
 @tool
@@ -603,6 +677,7 @@ async def get_calendar_events_tool(
                 # With search_query, Google Calendar API filters server-side, so we can search entire range at once
                 logger.info(f"📅 search_query provided, using single API call for {days_range} day range")
                 events = await get_google_calendar_events(
+                    uid=uid,
                     access_token=access_token,
                     time_min=time_min,
                     time_max=time_max,
@@ -637,6 +712,7 @@ async def get_calendar_events_tool(
 
                     # Fetch events for this window
                     window_events = await get_google_calendar_events(
+                        uid=uid,
                         access_token=access_token,
                         time_min=search_start,
                         time_max=search_end,
@@ -675,6 +751,7 @@ async def get_calendar_events_tool(
                 # For smaller ranges (<=30 days), fetch normally
                 logger.info(f"📅 Fetching calendar events with time_min={time_min}, time_max={time_max}")
                 events = await get_google_calendar_events(
+                    uid=uid,
                     access_token=access_token,
                     time_min=time_min,
                     time_max=time_max,
@@ -690,6 +767,7 @@ async def get_calendar_events_tool(
                 if new_token:
                     try:
                         events = await get_google_calendar_events(
+                            uid=uid,
                             access_token=new_token,
                             time_min=time_min,
                             time_max=time_max,
@@ -1082,6 +1160,7 @@ async def delete_calendar_event_tool(
         # Search for matching events
         try:
             events = await get_google_calendar_events(
+                uid=uid,
                 access_token=access_token,
                 time_min=time_min,
                 time_max=time_max,
@@ -1143,6 +1222,7 @@ async def delete_calendar_event_tool(
                 if new_token:
                     try:
                         events = await get_google_calendar_events(
+                            uid=uid,
                             access_token=new_token,
                             time_min=time_min,
                             time_max=time_max,
@@ -1303,6 +1383,7 @@ async def update_calendar_event_tool(
             # Search for matching events
             try:
                 events = await get_google_calendar_events(
+                    uid=uid,
                     access_token=access_token,
                     time_min=time_min,
                     time_max=time_max,

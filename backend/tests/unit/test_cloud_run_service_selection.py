@@ -202,9 +202,12 @@ def test_step_census_refuses_an_unclassified_new_step():
     # A new step requires updating this census with a target-scope disposition.
     # Added routing composition is local-only, sync-scoped, and exercised by the
     # actual-shell test below; it never invokes a production transport.
+    # 2026-11-20 `Resolve live integration maxScale`: read-only (services list and
+    # revisions describe), integration-scoped with the integration deploy's exact `if`;
+    # its shell is exercised in test_cloud_run_live_caps.py.
     assert (
         hashlib.sha256(json.dumps([s['name'] for s in STEPS]).encode()).hexdigest()
-        == "d063de4eca0ba68df4fb289aade700b662aa7fa8330fdb0a385f17c524f14ccd"
+        == "87184a7a11dadd01fa57f86f22b4599fe0847073239510fa80703d0bbd5f2970"
     )
 
 

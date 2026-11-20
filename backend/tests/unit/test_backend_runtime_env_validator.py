@@ -23,6 +23,12 @@ from scripts.runtime_env_validation.manifest import (
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/validate-backend-runtime-env.py'
 RENDERER_SCRIPT = ROOT / 'scripts/render_backend_runtime_env.py'
+ALLOWANCE_INTAKE_PARK_BY_SERVICE = {
+    'backend': 'false',
+    'backend-sync': 'true',
+    'backend-sync-backfill': 'false',
+    'backend-integration': 'true',
+}
 READINESS_PROPOSAL_ARGS = (
     ' --proposal-output "$FIRESTORE_PROPOSAL_PATH"'
     ' --source-commit "$FIRESTORE_SOURCE_COMMIT"'
@@ -222,6 +228,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED", "value": "false"},
         {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS", "value": "24"},
         {"name": "BATCH_PIPELINE_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_PACKING_SAMPLE_RATE", "value": "0.001"},
         {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
         {"name": "FIRST_SUMMARY_DEADLINE_PERCENT", "value": "0"},
@@ -501,8 +508,8 @@ GOOGLE_OAUTH_SECRETS = '''\
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
         {"name": "GOOGLE_MAPS_API_KEY", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_MAPS_API_KEY", "key": "latest"}}},'''
 
-# POSTHOG_EVENTS_API_KEY is only declared for backend-integration in
-# deploy/runtime_env; deployed-state fixtures must scope it the same way.
+# POSTHOG_EVENTS_API_KEY is declared only for backend-integration and backend-projection-pump
+# in deploy/runtime_env; deployed-state fixtures must scope it the same way.
 INTEGRATION_EVENTS_SECRET = (
     '        {"name": "POSTHOG_EVENTS_API_KEY", "valueFrom": {"secretKeyRef": '
     '{"name": "POSTHOG_EVENTS_API_KEY", "key": "latest"}}}'
@@ -542,7 +549,8 @@ def with_conversations_v3_env(payload: str) -> str:
             rf'("{service}":\s*\{{.*?"env":\s*\[)',
             r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "all"},'
             r'\n        {"name": "CONVERSATIONS_V3_FIRST_APP_BUILD", "value": ""},'
-            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},',
+            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},'
+            r'\n        {"name": "CONVERSATIONS_V3_BACKFILL_QUEUE", "value": "conversations-v3-backfill"},',
             payload,
             count=1,
             flags=re.DOTALL,
@@ -656,6 +664,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         r'\n        {"name": "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED", "value": "true"},'
         r'\n        {"name": "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
+        r'\n        {"name": "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
         flags=re.DOTALL,
@@ -675,10 +684,18 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
-    # Carry each host's explicit ledger bindings.
+    # Carry the role-specific intake switch and explicit ledger bindings.
     payload = re.sub(
         r'("(?P<service>backend(?:-sync|-sync-backfill|-integration)?)":\s*\{.*?"env":\s*\[)',
         lambda match: match.group(1)
+        + '\n        '
+        + json.dumps(
+            {
+                'name': 'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED',
+                'value': ALLOWANCE_INTAKE_PARK_BY_SERVICE[match.group('service')],
+            }
+        )
+        + ','
         + '\n        '
         + json.dumps({'name': 'FIRESTORE_READ_LEDGER', 'value': '1'})
         + ',\n        '
@@ -734,6 +751,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
                 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S',
                 'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
                 'BATCH_INPUT_EXPIRING_ENABLED',
+                'BATCH_PROJECTION_OUTBOX',
                 'DREAM_AGENT_ELIGIBILITY',
                 'DREAM_ON_DEMAND_ENABLED',
                 'DEMAND_PROCESSING_ENABLED',
@@ -1401,7 +1419,7 @@ def test_automatic_firestore_readiness_contract_requires_current_main_then_admit
     stale_source_workflow = copy.deepcopy(workflow)
     current_main_checkout = next(
         step
-        for step in stale_source_workflow['jobs']['firestore_readiness']['steps']
+        for step in stale_source_workflow['jobs']['admit_source']['steps']
         if step.get('name') == 'Checkout current main for automatic source admission'
     )
     current_main_checkout['with']['ref'] = '${{ github.event.workflow_run.head_sha }}'
@@ -1719,8 +1737,12 @@ def test_soniox_live_retirement_bindings_keep_recovery_gate_integration_only():
         holders = {name for name, service in services.items() if 'SONIOX_API_KEY' in service.get('secrets', {})}
         # Lead 2026-11-02 17:42Z: reuse the existing key and runtime identity for
         # live GPU retirement; the independent recovery gate remains integration-only.
+        # SCA-3120: the prod projection pump derives from integration and runs the same
+        # main.py startup, whose streaming STT validation requires the key.
         assert holders == (
-            {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'} if stage == 'prod' else set()
+            {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration', 'backend-projection-pump'}
+            if stage == 'prod'
+            else set()
         )
         assert services['backend-integration']['env']['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'][
             'value'
@@ -2074,7 +2096,9 @@ def missing_gateway_cloud_run_state():
     'missing',
     [
         None,
+        'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
         'BATCH_INPUT_EXPIRING_ENABLED',
+        'BATCH_PROJECTION_OUTBOX',
         'BATCH_HELD_DEAD_LETTER_ENABLED',
         'SYNC_LINEAGE_LIVE_DEDUPE_ENABLED',
         'SYNC_WAL_AUDIO_COVERAGE_ENABLED',
@@ -3723,7 +3747,10 @@ def test_guarded_long_recovery_stays_disabled_and_hours_are_inert():
     for stage in ('dev', 'prod'):
         services = manifest['environments'][stage]['cloud_run']['services']
         cap = 'BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS'
-        assert {name for name, service in services.items() if cap in service.get('env', {})} == {'backend-integration'}
+        # SCA-3120: the prod projection pump derives integration's env (serving is off there).
+        assert {name for name, service in services.items() if cap in service.get('env', {})} == (
+            {'backend-integration', 'backend-projection-pump'} if stage == 'prod' else {'backend-integration'}
+        )
         assert services['backend-integration']['env'][cap] == {
             'value': '0',
             'category': 'ops_kill',
@@ -3732,6 +3759,52 @@ def test_guarded_long_recovery_stays_disabled_and_hours_are_inert():
             env = services[name]['env']
             assert env['SYNC_BACKFILL_GLOBAL_DAILY_HOURS']['value'] == '1665'
             assert env.get('SYNC_BACKFILL_ADMISSION_LIMITS', {}).get('value', 'false') == 'false'
+
+
+def _settings_named(node, key):
+    if isinstance(node, dict):
+        for name, child in node.items():
+            if name == key:
+                yield child
+            else:
+                yield from _settings_named(child, key)
+    elif isinstance(node, list):
+        for child in node:
+            yield from _settings_named(child, key)
+
+
+def test_prod_sync_backfill_lookback_is_sixty_days_and_no_release_reach_undercuts_it():
+    # The lookback is checked once, at upload admission; a backlog that older app builds
+    # or slow drains cannot clear within the window gets a terminal 422 on the phone.
+    # Prod admits 60 days. The batch backlog-release reach (capture-age based) must never
+    # hold back what admission accepted, on any prod surface (Cloud Run services and
+    # jobs, GKE). This covers the env seed only: the effective reach lives on the
+    # Firestore gate row, whose code floor is MIN_REACH_SECONDS (30 days).
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    prod = manifest['environments']['prod']
+    services = prod['cloud_run']['services']
+    lookback = 60 * 86400
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['SYNC_BACKFILL_MAX_AGE_SECONDS']['value'] == str(lookback)
+    assert len(list(_settings_named(prod, 'SYNC_BACKFILL_MAX_AGE_SECONDS'))) >= 2  # walker reaches service env
+    for setting in _settings_named(prod, 'BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS'):
+        reach = int(setting.get('value', '0') if isinstance(setting, dict) else setting)
+        assert reach == 0 or reach >= lookback
+
+
+def test_prod_unlimited_backfill_day_cap_is_on_at_24_hours_on_every_declaring_surface():
+    # Enforced only at sync upload (retryable 503 backfill_capacity); dev keeps it off.
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    for stage, expected in (('prod', 'true'), ('dev', 'false')):
+        environment = manifest['environments'][stage]
+        enabled = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED'))
+        hours = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS'))
+        assert len(enabled) == len(hours) >= 5
+        assert {setting['value'] for setting in enabled} == {expected}
+        assert {setting['value'] for setting in hours} == {'24'}
+    services = manifest['environments']['prod']['cloud_run']['services']
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED']['value'] == 'true'
 
 
 # M7: compose and validate declarations offline; no cloud clients or rollout writes.
@@ -3997,6 +4070,21 @@ def test_read_lever_unknown_declaration_is_rejected_from_actual_source_files(tmp
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_allowance_intake_parking_is_bound_only_to_upload_roles(environment, monkeypatch):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    state = render_cloud_run_state(config, monkeypatch)
+    rendered = {
+        service: [entry['value'] for entry in target['env'] if entry['name'] == 'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED']
+        for service, target in state['services'].items()
+    }
+    expected = dict(ALLOWANCE_INTAKE_PARK_BY_SERVICE)
+    if environment == 'prod':
+        # SCA-3120: the projection pump derives integration's env; it takes no uploads (internal ingress).
+        expected['backend-projection-pump'] = ALLOWANCE_INTAKE_PARK_BY_SERVICE['backend-integration']
+    assert rendered == {service: [value] for service, value in expected.items()}
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_post_seal_controls_are_rendered_on_every_cpu_reader(environment):
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='record_latency_renderer')
@@ -4007,7 +4095,8 @@ def test_post_seal_controls_are_rendered_on_every_cpu_reader(environment):
         'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     ]
     hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
-    assert len(hosts) == 5
+    # SCA-3120: prod adds the derived projection pump as a sixth reader.
+    assert len(hosts) == (6 if environment == 'prod' else 5)
     for host in hosts:
         for key in flags:
             value = 'false' if key in {'RECORD_FRESH_MERGE_ENABLED', 'RECORD_NOTES_EAGER_ENABLED'} else 'true'
@@ -4123,7 +4212,8 @@ def test_future_capture_admissions_default_off_until_reader_rollout(environment)
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
     expected = {'value': 'false', 'category': 'rollout'}
     hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
-    assert len(hosts) == 5
+    # SCA-3120: prod adds the derived projection pump as a sixth reader.
+    assert len(hosts) == (6 if environment == 'prod' else 5)
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
     for host in hosts:
         assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == expected
@@ -4142,6 +4232,13 @@ def test_control_sync_routing_validates_deployed_values_without_changing_manifes
 
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    # Exercise each validation against the same parsed input without reparsing
+    # the full fleet manifest on every call.
+    monkeypatch.setattr(
+        manifest_validation,
+        '_load_yaml',
+        lambda path: manifest if path == validator.DEFAULT_MANIFEST else validator._load_yaml(path),
+    )
     config = validator._get_env_config(manifest, 'prod')
     original = copy.deepcopy(config)
     overlay = tmp_path / 'routing.env'

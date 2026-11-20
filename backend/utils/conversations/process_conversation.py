@@ -81,7 +81,10 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from config.refactor_modes import serving_for
-from utils.conversations.empty_structure_minimum import apply_empty_structure_minimum
+from utils.conversations.empty_structure_minimum import (
+    apply_empty_structure_minimum,
+    recovery_minimum_would_drop_metadata,
+)
 from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
@@ -108,6 +111,7 @@ from utils.summary_quality import (
 )
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit, defer_held_budget_denial
+from utils.conversations import historical_minimum
 from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
 from utils.enrichment.admission import SyncConversationPersistenceFenced
 from utils.enrichment import early_abort
@@ -115,10 +119,12 @@ from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingT
 from utils.conversations.recovery import (
     RECOVERY_QUIET_MINIMUM_MAX_WORDS,
     RecoveryStructureUnavailableError,
+    recovery_batch_audio_pending,
     recovery_minimum_terminal_enabled,
     recovery_rule_discard,
     recovery_transcript_below_content_floor,
     recovery_transcript_word_count,
+    stored_structure_is_replaceable,
     structured_is_rich,
     verified_recovery_discard,
 )
@@ -386,6 +392,7 @@ def _get_structured(
     *,
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     user_kept: bool = False,
+    live_recap: bool = False,
     summary_app_selected: bool = False,
     relevance_observer: Optional[Callable[[RelevanceDecision], None]] = None,
     recovery_transcript_decoded: bool = True,
@@ -422,11 +429,12 @@ def _get_structured(
             if relevance_observer is not None:
                 relevance_observer(RelevanceDecision('discard' if hidden else 'keep', 'rule', 'content_kind', trigger))
             return media_minimum, hidden
-        task_intelligence_capture = _proposes_task_candidates(conversation)
+        task_intelligence_capture = not live_recap and _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
         user_language = resolve_output_language(uid, language_code, getattr(conversation, 'transcript_segments', None))
-        summary_app_selected = selected_summary_app(uid, summary_app_selected, redis_db.get_user_preferred_app)
+        if not live_recap:
+            summary_app_selected = selected_summary_app(uid, summary_app_selected, redis_db.get_user_preferred_app)
         minimum = (
             None
             if full_v3_notes
@@ -606,7 +614,9 @@ def _get_structured(
                     uid, main_conv.started_at, main_conv.finished_at
                 ),
             )
-            if recovery_rule_discard(ordinary):
+            # A batch-owned capture's live text is a preview; its audio still owes a transcript.
+            batch_audio_owed = recovery_rule_discard(ordinary) and recovery_batch_audio_pending(main_conv)
+            if recovery_rule_discard(ordinary) and not batch_audio_owed:
                 logger.info('selfheal recovery skipped paid notes reason=ordinary_rule_discard')
                 if relevance_observer is not None:
                     relevance_observer(
@@ -614,15 +624,12 @@ def _get_structured(
                     )
                 return Structured(), True
             stored_structured = getattr(main_conv, 'structured', None)
-            stored_title = getattr(stored_structured, 'title', '') or ''
-            stored_title_provenance = getattr(stored_structured, 'title_provenance', None)
-            stored_content_is_replaceable = not structured_is_rich(stored_structured) and (
-                not stored_title.strip() or stored_title_provenance == 'server_minimum'
-            )
-            if (
-                recovery_transcript_decoded
-                and stored_content_is_replaceable
-                and not getattr(main_conv, 'user_title', None)
+            stored_content_is_replaceable = stored_structure_is_replaceable(stored_structured)
+            # Batch audio still owed follows the existing handoff path. The short
+            # transcript minimum also needs to preserve prior notes metadata.
+            if stored_content_is_replaceable and (
+                batch_audio_owed
+                or recovery_transcript_decoded
                 and not is_release_probe_uid(uid)
                 and not user_kept
                 and not getattr(main_conv, 'photos', None)
@@ -630,11 +637,11 @@ def _get_structured(
                 and not summary_app_selected
                 and english_word_floor(main_conv, discard_transcript)
                 and recovery_transcript_below_content_floor(main_conv)
+                and not recovery_minimum_would_drop_metadata(main_conv)
             ):
+                reason = 'batch_audio_owed' if batch_audio_owed else 'content_below_floor'
                 if relevance_observer is not None:
-                    relevance_observer(
-                        RelevanceDecision('keep', 'rule', 'content_below_floor', ProcessingTrigger.SERVER_RECOVERY)
-                    )
+                    relevance_observer(RelevanceDecision('keep', 'rule', reason, ProcessingTrigger.SERVER_RECOVERY))
                 if recovery_minimum_fallback_observer is not None:
                     recovery_minimum_fallback_observer()
                 return (
@@ -649,7 +656,7 @@ def _get_structured(
         arm = relevance_arm(prompt_conversation_id)
         jev_discard: Optional[Callable[[], Optional[float]]] = None
         jev_transcript = relevance_transcript(segments)
-        if arm == 'jev' and not has_described_photos and not has_wake_word_marker:
+        if not live_recap and arm == 'jev' and not has_described_photos and not has_wake_word_marker:
             if jev_tier_applies(jev_transcript):
                 jev_discard = lambda: jev_discard_probability(jev_transcript, record_outcome=True)
 
@@ -662,7 +669,7 @@ def _get_structured(
             # Release-probe STT yield varies; every tier must retain it (run 35583992730).
             exempt=is_release_probe_uid(uid),
             trusted_wake_word=has_wake_word_marker,
-            model_discards=model_discards,
+            model_discards=None if live_recap else model_discards,
             occasion_retains=occasion_reason,
             calendar_retains=lambda: _calendar_overlap_retains_conversation(
                 uid, main_conv.started_at, main_conv.finished_at
@@ -688,20 +695,23 @@ def _get_structured(
         if revision_checkpoint is not None:
             # A newer sync revision owns this conversation; stop before the notes agent (the dominant LLM call).
             revision_checkpoint('pre_notes')
-        before_notes(uid, main_conv, trigger, finalization_fence=finalization_fence)
-
         conv_started_at = cast(datetime, main_conv.started_at)
 
-        roster: Optional[MeetingRoster] = None
-        roster, meeting_context_block, desktop_capture, screen_frames, screen_frame_count = rich_notes_inputs(
-            uid,
-            main_conv,
-            calendar_context,
-            tz_str,
-            include_background=not v3_policy.flag(conversation, 'v3_derived'),
-            include_screen_text=True,
-        )
-        if v3_policy.flag(conversation, 'v3_derived'):
+        if live_recap:
+            # Preview generation owns no merge, account context, or auxiliary
+            # model work. Finished notes use the full processing path.
+            roster, meeting_context_block, desktop_capture, screen_frames, screen_frame_count = None, None, False, [], 0
+        else:
+            before_notes(uid, main_conv, trigger, finalization_fence=finalization_fence)
+            roster, meeting_context_block, desktop_capture, screen_frames, screen_frame_count = rich_notes_inputs(
+                uid,
+                main_conv,
+                calendar_context,
+                tz_str,
+                include_background=not v3_policy.flag(conversation, 'v3_derived'),
+                include_screen_text=True,
+            )
+        if not live_recap and v3_policy.flag(conversation, 'v3_derived'):
             from utils.conversations.v3 import context as v3_context
 
             corrections_block = meeting_context_block or ''
@@ -727,7 +737,8 @@ def _get_structured(
         )
         from utils.conversations import llm_input_dedupe
 
-        member_notes.before_model(uid, main_conv, trigger, finalization_fence=finalization_fence)
+        if not live_recap:
+            member_notes.before_model(uid, main_conv, trigger, finalization_fence=finalization_fence)
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
             structured = llm_input_dedupe.notes(
                 uid,
@@ -740,7 +751,9 @@ def _get_structured(
                 output_language_code=user_language,
                 tz=tz_str,
                 task_intelligence_capture=task_intelligence_capture,
-                existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
+                existing_action_items=(
+                    [] if live_recap else _fetch_dedup_candidates_for_query(uid, transcript_text, conversation)
+                ),
                 trusted_wake_word_markers=has_wake_word_marker,
                 meeting_context=meeting_context_block,
                 rich_context_enabled=roster is not None,
@@ -2702,6 +2715,14 @@ def process_conversation(
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     bind_generation(uid, generated_conversation_id)
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
+    # A v3 backfill window runs the live notes path (same trigger, relevance, speakers, meeting
+    # context and floors) but is historical: like silent backfill it takes no derived effects.
+    historical_tier = historical_minimum.historical_tier.is_historical(conversation)
+    historical = (
+        silent_backfill
+        or historical_tier
+        or (v3_policy.flag(conversation, 'v3_derived') and v3_policy.flag(conversation, 'backfilled'))
+    )
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess = mode.run_now, mode.reprocess
@@ -2762,7 +2783,7 @@ def process_conversation(
         for settle in final_pass_settlements:
             settle(current)
         final_pass_settlements.clear()
-        if current and completed is not None:
+        if current and completed is not None and not historical:
             record_capture_loss(completed)
             _observe_owner_recognition_completion(completed)
         if persistence_observer is not None:
@@ -2771,10 +2792,32 @@ def process_conversation(
             derived_effects_disposition_observer(derived_effects)
         # Sync/REST callers finalize here; leased jobs defer this metadata work
         # to finalizer.py after the fanout fence, including completed replays.
-        if current and completed is not None and not defer_derived_effects and not silent_backfill:
+        if current and completed is not None and not defer_derived_effects and not historical:
             link_duplicate_captures(uid, completed)
             dispatch_primary_notes_refresh(uid, completed)
 
+    def persist_with_fences(payload: dict) -> bool:
+        # A capture-group or smart-merge refresh may only land on the revision it reserved.
+        if capture_group_refresh_fence is not None:
+            group_id, group_revision, reservation_id = capture_group_refresh_fence
+            return lifecycle_service.persist_processed_conversation(
+                uid,
+                payload,
+                expected_capture_group=(group_id, group_revision),
+                capture_group_notes_refresh=(group_id, reservation_id),
+            )
+        if smart_merge_refresh is not None:
+            return lifecycle_service.persist_processed_conversation(
+                uid, payload, smart_merge_refresh=smart_merge_refresh
+            )
+        return lifecycle_service.persist_processed_conversation(uid, payload)
+
+    if historical_minimum.short_circuits(conversation, trigger):
+        conversation.status = ConversationStatus.completed
+        payload = historical_minimum.payload(uid, cast(Conversation, conversation))
+        persisted = persist_with_fences(payload)
+        report_persistence(persisted, derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
+        return cast(Conversation, conversation)
     is_initial_creation = _is_ingress_create(conversation)
     if funded_processing.enabled(uid, 'batch'):
         waiting = bool(getattr(conversation, 'processing_deferred', False))
@@ -2922,7 +2965,7 @@ def process_conversation(
                 {
                     'event': 'selfheal_guard',
                     'outcome': 'kept_minimum',
-                    'reason': 'content_below_floor',
+                    'reason': decisions[-1].reason if decisions else 'content_below_floor',
                     'transcript_words': recovery_transcript_word_count(conversation),
                     'content_floor_words': RECOVERY_QUIET_MINIMUM_MAX_WORDS,
                 }
@@ -3033,7 +3076,7 @@ def process_conversation(
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()
-    if recovery_minimum_fallback or silent_backfill or empty_structure_minimum_applied:
+    if recovery_minimum_fallback or historical or empty_structure_minimum_applied:
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
     if conversation.processing_state is not None:
         # The payload merge-clears the stale state (an upgraded-then-reprocessed
@@ -3043,21 +3086,9 @@ def process_conversation(
     conversation.summary_retryable = None  # merge-cleared by the payload the same way
     if is_initial_creation:
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
-    elif capture_group_refresh_fence is not None:
-        group_id, group_revision, reservation_id = capture_group_refresh_fence
-        persisted = lifecycle_service.persist_processed_conversation(
-            uid,
-            payload,
-            expected_capture_group=(group_id, group_revision),
-            capture_group_notes_refresh=(group_id, reservation_id),
-        )
-    elif smart_merge_refresh is not None:
-        persisted = lifecycle_service.persist_processed_conversation(
-            uid, payload, smart_merge_refresh=smart_merge_refresh
-        )
     else:
-        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    if recovery_minimum_fallback or silent_backfill or content_excluded or empty_structure_minimum_applied:
+        persisted = persist_with_fences(payload)
+    if recovery_minimum_fallback or historical or content_excluded or empty_structure_minimum_applied:
         report_persistence(
             persisted,
             completed=conversation,
@@ -3073,11 +3104,21 @@ def process_conversation(
         )
         return conversation
 
-    if silent_backfill or content_excluded:
+    if historical or content_excluded:
         # Historical enrichment is summary-only. No extraction/reminder, app,
         # goal, webhook, lazy-effects queue or notification can escape this seam.
         if derived_effects_disposition_observer is not None:
             derived_effects_disposition_observer(DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
+        if historical_tier:
+            if explicit_app is not None:
+                # An explicitly chosen template is the summary the owner asked for.
+                trigger_conversation_apps(
+                    uid, conversation, True, app_id, explicit_app, app_usage_attribution, language_code, people
+                )
+                conversations_db.update_conversation(
+                    uid, conversation.id, {'apps_results': [r.dict() for r in conversation.apps_results]}
+                )
+            complete_explicit(uid, conversation, trigger)
         return conversation
 
     record_final(uid, conversation)

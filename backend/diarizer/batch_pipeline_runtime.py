@@ -24,6 +24,7 @@ from prometheus_client.parser import text_string_to_metric_families
 from prometheus_client.registry import Collector
 
 from config.stt_cap_dispatch import execution_admission_configured as cap_dispatch_enabled, offline_enforcement_enabled
+from utils.other.private_sync_get_metrics import OBJECT_GETS
 from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
 from utils.observability.firestore_probe_export import register_probe_collectors
 from utils.stt.allowance_metrics import COLLECTORS as ALLOWANCE_WATCH_COLLECTORS
@@ -31,6 +32,7 @@ from config.batch_pipeline import worker_pipeline_depth, worker_processes
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
+from database.firestore_document_probe import FIRESTORE_BILLED_READS_BY_ORIGIN
 from database.privacy_check_metrics import (
     NEGATIVE_LOOKUPS,
     COMPARISONS,
@@ -149,6 +151,8 @@ def health_server(
 ) -> ThreadingHTTPServer:
     register_runtime_percent(registry)
     register_probe_collectors(registry)  # Every child exports before the pod's merge_metrics.
+    registry.register(FIRESTORE_BILLED_READS_BY_ORIGIN)
+    registry.register(OBJECT_GETS)
     registry.register(LANGUAGE_ROUTES)
     registry.register(RESULT_PROTOCOL_REFUSED)
     for collector in WORKER_IO_COLLECTORS:

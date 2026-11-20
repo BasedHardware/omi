@@ -1,0 +1,5 @@
+# Upstream files are kept byte-identical to the pinned revision (see VENDORED.md),
+# so whitespace rules for first-party code do not apply here.
+* -whitespace
+*.onnx binary
+*.ort binary

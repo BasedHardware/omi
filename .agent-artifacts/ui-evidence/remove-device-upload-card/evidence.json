@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-device-settings.png",
+      "platform": "mobile-ios",
+      "description": "Device Settings with a stalled upload fixture after removing the redundant card",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

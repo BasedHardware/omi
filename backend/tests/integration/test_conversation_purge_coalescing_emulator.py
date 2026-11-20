@@ -19,9 +19,6 @@ from tests.integration.test_conversation_batch_purge_emulator import plane  # no
 @pytest.fixture
 def world(monkeypatch, plane):
     monkeypatch.delenv(scans.SWITCH, raising=False)
-    plane.client.collection(scans.READINESS_COLLECTION).document(scans.READINESS_DOCUMENT).set(
-        {'all_consumers_new': True, 'valid_until': jobs._now() + timedelta(hours=1)}
-    )
     monkeypatch.setattr(purge, 'conversation_objects', lambda *a, **k: [])
     monkeypatch.setattr(purge, 'purge_jobstore_owner', lambda *a: 0)
     monkeypatch.setattr(purge, 'mirror_refresh', lambda *a: None)
@@ -540,3 +537,62 @@ def test_rearm_at_retry_handoff_is_supersession_not_a_failed_task(monkeypatch, w
     for job in (leader, follower):
         row = world.client.collection(jobs.COLLECTION).document(job).get().to_dict()
         assert row and not row.get('scan_epoch') and row.get('last_outcome') != 'failed'
+
+
+def test_tombstone_audit_after_coalesced_completion(world, caplog):
+    from unittest.mock import Mock
+
+    from scripts import audit_conversation_purge_remainders as audit
+
+    start = jobs._now() - timedelta(seconds=1)
+    cids = ('synthetic-audit-done-a', 'synthetic-audit-done-b')
+    armed = [world.arm(cid) for cid in cids]
+    for cid in cids:
+        world.client.document(f'users/{world.uid}/deleted_conversations/{cid}').update({'deleted_at': jobs._now()})
+    _seed(world, cids)
+    assert _run(world, armed[0], _dispatch(world, armed[0])) == 'purged'
+
+    pending = 'synthetic-audit-pending'
+    world.arm(pending)
+    world.client.document(f'users/{world.uid}/deleted_conversations/{pending}').update({'deleted_at': jobs._now()})
+    gcs = Mock()
+    gcs.list_blobs.return_value = []
+    end = jobs._now() + timedelta(seconds=1)
+    report = audit.audit(world.client, gcs, start, end, audit.Budget(200))
+    assert (report['tombstones'], report['terminal_checked'], report['pending']) == (3, 2, 1)
+    assert not any(report['remainders'].values())
+
+    events = [
+        event for event in caplog.messages if event.startswith('event=conversation_batch_purge_owner_scan_audit ')
+    ]
+    assert len(events) == 2
+    assert 'kind=sealed outcome=sealed members=2' in events[0]
+    assert 'kind=terminal outcome=completed members=2' in events[1]
+    assert events[0].split('epoch_hash=')[1] == events[1].split('epoch_hash=')[1]
+    assert all(world.uid not in event and all(cid not in event for cid in cids) for event in events)
+
+
+def test_pending_artifact_defers_group_until_parked_receipt_replays(world):
+    leader = world.arm('one')
+    world.arm('two')
+    _seed(world, ['one', 'two'])
+    receipt = world.client.collection('batch_pipeline_prod_artifacts').document('mine-0')
+    receipt.update({'write_pending_until': jobs._now() + timedelta(minutes=5)})
+
+    generation = _dispatch(world, leader)
+    before = jobs._now()
+    assert _run(world, leader, generation) == 'artifact_pending'
+    leader_ref = jobs.job_ref(world.client, world.uid, 'one')
+    saved = leader_ref.get().to_dict()
+    assert saved['last_outcome'] == 'artifact_pending'
+    assert saved['attempts'] == 0 and saved['lease_until'] is None
+    assert saved['due_at'] >= before + timedelta(seconds=jobs.ARTIFACT_RETRY_SECONDS)
+    assert saved['owner_scan']['position']['phase'] == 'parked'
+    assert receipt.get().get('erasure_requested') is True
+    assert jobs.segment_records(leader, 'batch_pipeline_prod', firestore_client=world.client)
+
+    # Advance the pending receipt and dispatch clock without waiting or expiring the follower.
+    receipt.update({'write_pending_until': before - timedelta(seconds=1)})
+    leader_ref.update({'due_at': before})
+    assert _run(world, leader, _dispatch(world, leader)) == 'purged'
+    _assert_erased(world, ['one', 'two'])

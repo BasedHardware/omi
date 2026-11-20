@@ -4,11 +4,10 @@ import XCTest
 
 /// Regression coverage for SCA-8: `RewindDatabase.currentUserId` was a
 /// `nonisolated(unsafe) static var String?`, racy across the `RewindDatabase`
-/// actor, `MainActor` (`AgentVMService`), and the `nonisolated`
-/// `markCleanShutdown()` termination path. It is now lock-gated. These tests
-/// pin the race-free contract: every read returns a coherent value written by
-/// some writer (never a torn/garbage pointer), and round-trip get/set works
-/// from any executor.
+/// actor and the `nonisolated` `markCleanShutdown()` termination path. It is
+/// now lock-gated. These tests pin the race-free contract: every read returns a
+/// coherent value written by some writer (never a torn/garbage pointer), and
+/// round-trip get/set works from any executor.
 final class RewindDatabaseCurrentUserIdConcurrencyTests: XCTestCase {
 
   override func tearDown() async throws {

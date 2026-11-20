@@ -13,14 +13,17 @@ than field deletes: every consumer reads these fields through truthiness, and
 tombstones keep the strict Firestore test fixture's sentinel contract intact.
 """
 
+from collections.abc import Callable
 import logging
 import math
 import time
 from typing import Any, TypeGuard
+from uuid import uuid4
 
 from google.cloud import firestore
 
 from database.batch_pipeline_projection_protocol import normalized_binding
+from database.batch_pipeline_projection_outbox import arm as arm_projection
 from database.batch_pipeline_projection_finish import projection_finish_state_fields
 from database.batch_pipeline_projection import assignment_held_without_recovery, OPERATOR_INTENTS
 from database.batch_pipeline_shadow_hook import mirror_refresh
@@ -293,6 +296,7 @@ class ProjectionReleaseStore:
                             {
                                 'projection_state': 'ready',
                                 'ghost_settled_cohort': cohort,
+                                **arm_projection(entry, now),
                                 **projection_finish_state_fields(
                                     'ready',
                                     now,
@@ -356,6 +360,7 @@ class ProjectionReleaseStore:
                 'projection': {},
                 'projection_blocked_since': None,
                 'projection_block_type': None,
+                **arm_projection(entry, now),
             }
             if 'held_deadline_at' in entry and (expired or batch_held_dead_letter_enabled()):
                 reset['held_deadline_at'] = None
@@ -443,34 +448,83 @@ def assignment_held_page_ids(client: Any, namespace: str, limit: int, after_id: 
 # doc carries no scheduler field, so control-shard queries never select it.
 RELEASE_CURSOR_KEY = 'projection_release_cursor'
 ASSIGNMENT_RELEASE_CURSOR_KEY = 'projection_assignment_release_cursor'
+HELD_PARTIAL_CURSOR_KEY = 'projection_held_partial_cursor'
 
 
-def load_release_cursor(store, *, key=RELEASE_CURSOR_KEY) -> dict:
+def _read_cursor(store, key, event) -> dict | None:
     try:
-        row = store.ref('control', key).get().to_dict() or {}
+        return store.ref('control', key).get().to_dict() or {}
+    except Exception as error:
+        logger.warning('event=%s action=cursor_load outcome=retry exception_type=%s', event, type(error).__name__)
+        return None
+
+
+def cursor_after_id(row: dict) -> str | None:
+    after = row.get('after_id')
+    return after if isinstance(after, str) and after else None
+
+
+def load_release_cursor(store, *, key=RELEASE_CURSOR_KEY, event='batch_projection action=release_held') -> dict:
+    row = _read_cursor(store, key, event) or {}
+    return {**row, 'after_id': cursor_after_id(row)}
+
+
+def load_held_partial_cursor(store) -> dict | None:
+    """Return the raw checkpoint for comparison. An unreadable row has no baseline."""
+    return _read_cursor(store, HELD_PARTIAL_CURSOR_KEY, 'batch_held_partial')
+
+
+def advance_held_partial_cursor(
+    store, baseline: dict, after_id: str | None, now: float, *, record_read: Callable[[], None] | None = None
+) -> dict | None:
+    """Publish a page or wrap only while the checkpoint it followed is current."""
+    # A token per write fences repeated document IDs, including wraps and legacy
+    # rows that have no token. Keep it stable when the transaction retries.
+    proposed = {'after_id': after_id, 'updated_at': now, 'write_token': uuid4().hex}
+    ref = store.ref('control', HELD_PARTIAL_CURSOR_KEY)
+
+    @firestore.transactional
+    def put(transaction):
+        # The SDK or the store can re-enter the transaction body after contention.
+        if record_read is not None:
+            record_read()
+        current = ref.get(transaction=transaction).to_dict() or {}
+        if current == proposed:
+            return True
+        if current != baseline:
+            return False
+        transaction.set(ref, proposed)
+        return True
+
+    try:
+        return proposed if store.run(put) else None
     except Exception as error:
         logger.warning(
-            'event=batch_projection action=release_held action=cursor_load outcome=retry exception_type=%s',
-            type(error).__name__,
+            'event=batch_held_partial action=cursor_save outcome=retry exception_type=%s', type(error).__name__
         )
-        return {'after_id': None}
-    after = row.get('after_id')
-    return {**row, 'after_id': after if isinstance(after, str) and after else None}
+        return None
 
 
-def save_release_cursor(store, after_id: str | None, now: float, *, key=RELEASE_CURSOR_KEY, **extra) -> None:
+def save_release_cursor(
+    store,
+    after_id: str | None,
+    now: float,
+    *,
+    key=RELEASE_CURSOR_KEY,
+    event='batch_projection action=release_held',
+    **extra,
+) -> bool:
     @firestore.transactional
     def put(transaction):
         transaction.set(store.ref('control', key), {'after_id': after_id, 'updated_at': now, **extra})
 
     try:
         store.run(put)
+        return True
     except Exception as error:
         # Advisory: a lost write only repeats rows the next instance re-checks.
-        logger.warning(
-            'event=batch_projection action=release_held action=cursor_save outcome=retry exception_type=%s',
-            type(error).__name__,
-        )
+        logger.warning('event=%s action=cursor_save outcome=retry exception_type=%s', event, type(error).__name__)
+        return False
 
 
 def release_page_settled(

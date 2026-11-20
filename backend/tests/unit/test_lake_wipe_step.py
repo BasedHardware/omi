@@ -135,6 +135,7 @@ def test_lake_dark_still_tombstones_existing_or_absent_keys(world, monkeypatch, 
 
 @pytest.fixture
 def ceremony(monkeypatch, world):
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'false')
     monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners')
     monkeypatch.setenv('DIRECTORY_PG_DSN', 'synthetic-configured-directory')
     # Fake-before-import, as in test_delete_account_purge_storage. The ceremony
@@ -169,7 +170,8 @@ def ceremony(monkeypatch, world):
         def write(uid):
             events.append(value)
             marker(store, value)
-            return True
+            # The running transition returns whether the generation was already armed.
+            return value != 'running'
 
         return write
 
@@ -184,6 +186,11 @@ def ceremony(monkeypatch, world):
         '_delete_memory_maintenance_registry': 'memory_registry',
     }.items():
         monkeypatch.setattr(service, name, step(event))
+
+    def unexpected_go_erase(*args):
+        pytest.fail('an unarmed flag-off wipe must not call the Go queue barrier')
+
+    monkeypatch.setattr(service, 'require_committed_erase', unexpected_go_erase)
     monkeypatch.setattr(service.auth, 'delete_account', step('firebase_auth'))
     monkeypatch.setattr(
         service, 'MessagingStore', lambda: type('Messaging', (), {'delete_account': staticmethod(step('messaging'))})()

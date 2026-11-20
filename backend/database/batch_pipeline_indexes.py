@@ -14,6 +14,15 @@ def _desc(field):
 BATCH_PIPELINE_INDEX_REQUIREMENTS = (
     *(
         FirestoreIndexRequirement(
+            f'{stage}_batch_projection_outbox_due',
+            f'batch_pipeline_{stage}_results',
+            'COLLECTION',
+            tuple(_asc(field) for field in ('projection_outbox_kind', 'projection_outbox_due_at', '__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
             f'{stage}_batch_protected_{"ready" if ready else "retry"}',
             f'batch_pipeline_{stage}_jobs',
             'COLLECTION',

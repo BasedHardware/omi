@@ -913,7 +913,7 @@ actor TranscriptionStorage {
   func getStats() async throws -> (totalSessions: Int, pendingCount: Int, failedCount: Int, completedCount: Int) {
     let db = try await ensureInitialized()
 
-    return try await db.read { database in
+    let stats = try await db.read { database in
       let total = try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM transcription_sessions") ?? 0
       let pending =
         try Int.fetchOne(
@@ -936,6 +936,9 @@ actor TranscriptionStorage {
 
       return (total, pending, failed, completed)
     }
+    // This periodic health read replaces the retired AgentSync success signal.
+    await RewindDatabase.shared.reportQuerySuccess()
+    return stats
   }
 
   // MARK: - Backend Sync Operations
