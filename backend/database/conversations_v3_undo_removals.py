@@ -1,5 +1,7 @@
 """Content-free task-link fences for cards retired or removed by live re-derive."""
 
+from __future__ import annotations
+
 import hashlib
 
 from google.cloud import firestore
