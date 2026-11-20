@@ -573,18 +573,23 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     });
     _flushingTimer = _periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (t) async {
       final generation = _sessionGeneration;
-      await _enqueueBuffer(() => _flush(generation));
+      await _logTickFailure('flush', _enqueueBuffer(() => _flush(generation)));
     });
     _pendantTimer = _periodic(const Duration(seconds: 10), (t) async {
       final generation = _sessionGeneration;
-      await _drainPendantTail(generation);
-      await _drainPhoneTail(generation);
+      await _logTickFailure('pendant drain', _drainPendantTail(generation));
+      await _logTickFailure('phone-mic drain', _drainPhoneTail(generation));
       _maybeRecoverOrphanAudio();
     });
     try {
       WidgetsBinding.instance.addObserver(this);
     } catch (_) {}
   }
+
+  /// Timer ticks have no caller: a failed index save (e.g. disk full) keeps its rows for the next tick, never uncaught.
+  Future<void> _logTickFailure(String tick, Future<void> work) => work.catchError((Object e) {
+        Logger.debug('LocalWalSync: periodic $tick failed: $e');
+      });
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {

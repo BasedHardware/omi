@@ -113,6 +113,9 @@ _FINALIZATION_REPLAY_LISTEN_ONLY = frozenset(
 # none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
+        # Account protection, consent and erasure writers are mounted by the
+        # API. Pusher finalizes conversations without mutating account policy.
+        'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
         # Held expiry/requeue is owned by main.py maintenance/RPC and GPU workers;
         # pusher does not run the held maintenance loop or worker failure writer.
         'BATCH_HELD_DEAD_LETTER_ENABLED',
@@ -128,6 +131,8 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         'BATCH_CONTROL_CANDIDATE_FANOUT',
         'BATCH_ADMISSION_PARALLEL_CALLS',
         'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
+        # Packing telemetry belongs to sync intake and pull. Pusher owns neither.
+        'BATCH_PIPELINE_PACKING_SAMPLE_RATE',
         # Listen admits/suppresses managed live STT; pusher only retains audio.
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         'BATCH_PIPELINE_ENABLED',

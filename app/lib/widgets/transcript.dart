@@ -62,6 +62,7 @@ class TranscriptWidget extends StatefulWidget {
   final String layoutIdentity;
   final List<Widget> leadingItems;
   final List<String> leadingItemIds;
+  final Widget? trailingItem;
   final TranscriptSegmentBuilder? segmentBuilder;
 
   /// Counts render objects inspected by scroll geometry reporting in tests.
@@ -128,6 +129,7 @@ class TranscriptWidget extends StatefulWidget {
     this.layoutIdentity = 'transcript',
     this.leadingItems = const [],
     this.leadingItemIds = const [],
+    this.trailingItem,
     this.segmentBuilder,
     this.onScrollGeometryProbe,
     this.onScrollRevealProbe,
@@ -869,7 +871,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
       final segmentIndex = idx - widget.leadingItems.length - 1;
       if (segmentIndex == widget.segments.length) {
-        return SizedBox(key: const ValueKey('transcript_bottom_spacing'), height: widget.bottomMargin + 120);
+        const key = ValueKey('transcript_bottom_spacing');
+        final trailing = widget.trailingItem;
+        final height = widget.bottomMargin + 120;
+        if (trailing == null) return SizedBox(key: key, height: height);
+        return Column(
+          key: key,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [trailing, SizedBox(height: height)],
+        );
       }
 
       final segment = widget.segments[segmentIndex];

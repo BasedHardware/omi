@@ -38,6 +38,11 @@ VIOLATIONS: dict[str, str] = {
     "raw-spinner": "child: const CircularProgressIndicator(),",
     "three-dot-ellipsis": "hintText: 'Search conversations...',",
     "hardcoded-text": "child: const Text('Link Event'),",
+    # Outcome rules (§17, audit 2026-11-19).
+    "silent-catch": "try { await save(); } catch (e) { Logger.debug('save failed: $e'); }",
+    "generic-error": "OmiFeedback.error(context, context.l10n.somethingWentWrong);",
+    "material-page-route": "Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));",
+    "pop-before-await": "onPressed: () async { Navigator.pop(context); await provider.submitApp(); },",
 }
 
 
@@ -56,6 +61,10 @@ class RuleTests(unittest.TestCase):
             with self.subTest(rule=rule_id):
                 allowed = f"{snippet} // omi-ux-allow: {rule_id} -- fixed-scale illustration"
                 self.assertEqual(count_hits(allowed)[rule_id], 0)
+
+    def test_allow_comment_on_a_multi_line_hit_goes_on_the_first_line(self) -> None:
+        text = "try {\n  x();\n} catch (_) { // omi-ux-allow: silent-catch -- best-effort cache warm\n}\n"
+        self.assertEqual(count_hits(text)["silent-catch"], 0)
 
     def test_allow_comment_without_reason_is_ignored(self) -> None:
         line = VIOLATIONS["color-literal"] + " // omi-ux-allow: color-literal"
@@ -124,6 +133,80 @@ class PrecisionTests(unittest.TestCase):
     def test_date_helper_with_pattern_counts(self) -> None:
         self.assertEqual(count_hits("dateTimeFormat('MMM d', date)")["date-pattern"], 1)
         self.assertEqual(count_hits("dateTimeFormat(pattern, date)")["date-pattern"], 0)
+
+    def test_catch_that_reports_or_recovers_is_not_silent(self) -> None:
+        for snippet in (
+            "try { a(); } catch (e) { OmiFeedback.error(context, l10n.couldNotSave); }",
+            "try { a(); } catch (e) { setState(() => _error = e); }",
+            "try { a(); } catch (e) { Logger.debug('x'); rethrow; }",
+            "try { a(); } on StateError catch (_) { return null; }",
+        ):
+            with self.subTest(snippet=snippet):
+                self.assertEqual(count_hits(snippet)["silent-catch"], 0)
+
+    def test_empty_and_log_only_catches_are_silent(self) -> None:
+        for snippet in (
+            "try { a(); } catch (_) {}",
+            "try { a(); } catch (_) {\n  // Offline: ignore.\n}",
+            "try { a(); } on Exception catch (e, st) { Logger.error('a', e, st); debugPrint('b'); }",
+            "try { a(); } catch (e) { Logger.debug('braces { in } a string; $e'); }",
+        ):
+            with self.subTest(snippet=snippet):
+                self.assertEqual(count_hits(snippet)["silent-catch"], 1)
+
+    def test_silent_catch_applies_to_pages_and_providers_only(self) -> None:
+        snippet = VIOLATIONS["silent-catch"]
+        self.assertEqual(count_hits(snippet, "app/lib/pages/foo.dart")["silent-catch"], 1)
+        self.assertEqual(count_hits(snippet, "app/lib/providers/foo.dart")["silent-catch"], 1)
+        self.assertEqual(count_hits(snippet, "app/lib/services/foo.dart")["silent-catch"], 0)
+        self.assertEqual(compare("app/lib/services/foo.dart", snippet, None), [])
+
+    def test_generic_error_with_an_action_passes(self) -> None:
+        text = (
+            "OmiFeedback.error(\n  context,\n  l10n.somethingWentWrong,\n"
+            "  actionLabel: l10n.tryAgain,\n  onAction: retry,\n);"
+        )
+        self.assertEqual(count_hits(text)["generic-error"], 0)
+        self.assertEqual(count_hits("OmiErrorState(message: l10n.somethingWentWrongTryAgain)")["generic-error"], 1)
+        # A page state's retry is a way forward too.
+        self.assertEqual(
+            count_hits("OmiErrorState(message: l10n.somethingWentWrong, onRetry: load)")["generic-error"], 0
+        )
+        # A label with nothing to run renders no action, so it is still a dead end.
+        self.assertEqual(
+            count_hits("OmiFeedback.error(context, l10n.somethingWentWrong, actionLabel: l10n.tryAgain);")[
+                "generic-error"
+            ],
+            1,
+        )
+        # The action has to be in the same call, not a neighbouring one.
+        self.assertEqual(
+            count_hits("show(a(l10n.somethingWentWrong), b(actionLabel: l10n.tryAgain));")["generic-error"], 1
+        )
+
+    def test_commented_out_material_page_route_is_not_counted(self) -> None:
+        self.assertEqual(count_hits("// Navigator.push(context, MaterialPageRoute(builder: b));")["material-page-route"], 0)
+        self.assertEqual(count_hits("/* MaterialPageRoute(builder: b) */")["material-page-route"], 0)
+
+    def test_omi_page_route_is_not_material_page_route(self) -> None:
+        self.assertEqual(count_hits("Navigator.of(context).push(omiPageRoute((_) => page));")["material-page-route"], 0)
+        self.assertEqual(count_hits("Navigator.push<void>(context, MaterialPageRoute<void>(builder: b));")["material-page-route"], 1)
+
+    def test_pop_after_the_request_or_into_the_next_surface_passes(self) -> None:
+        for snippet in (
+            "onPressed: () async { final ok = await provider.submitApp(); if (ok) Navigator.pop(context); },",
+            "OmiDialogAction(label: l10n.cancel, onPressed: () => Navigator.pop(context, false)),",
+            "onTap: () async { Navigator.pop(context); await showOmiConfirm(context, title: t); await provider.clear(); },",
+            "onPressed: () async { Navigator.of(ctx).pop(); await openAppSettings(); },",
+            "void _pick(Choice c) => Navigator.of(context).pop(c);\nFuture<void> other() async { await api.load(); }",
+            "switch (o) {\n  case A.paid:\n    Navigator.of(context).pop(true);\n  case A.free:\n    await tell('free');\n}",
+        ):
+            with self.subTest(snippet=snippet):
+                self.assertEqual(count_hits(snippet)["pop-before-await"], 0)
+
+    def test_pop_then_request_in_the_same_block_counts(self) -> None:
+        text = "Future<void> _apply() async {\n  if (mounted) Navigator.of(context).pop();\n  await startSummary(provider, appId);\n}"
+        self.assertEqual(count_hits(text)["pop-before-await"], 1)
 
     def test_scope(self) -> None:
         self.assertTrue(is_contract_source("app/lib/pages/chat/page.dart"))

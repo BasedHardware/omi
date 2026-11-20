@@ -58,6 +58,7 @@ from utils.sync.receipt_clock import (
     FutureCaptureRetry,
 )
 from utils.batch_pipeline.repair_lineage import language_proof, lineage_record
+from utils.batch_pipeline.packing_counterfactual import IntakePacking
 from utils.capture.batch_coverage import covered_response
 from utils.sync.source_reuse_decode import decode_for_intake
 from config.refactor_modes import serving_for
@@ -882,6 +883,21 @@ async def accept_upload(
         )
         phase = 'artifact_setup'
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
+        upload_arguments = {
+            'uid': uid,
+            'job_id': job_id,
+            'content_id': content_id,
+            'paths': paths,
+            'lane': lane,
+            'recording_age_seconds': recording_age_seconds,
+            'source': source,
+            'should_lock': should_lock,
+            'conversation_id': conversation_id,
+            'client_device_id': client_device_id,
+            'client_platform': client_platform,
+            'byok_enabled': byok_enabled,
+            'intake_context': intake_context,
+        }
         held_response = await _coalescing_try_offer(
             store,
             artifacts,
@@ -904,21 +920,7 @@ async def accept_upload(
                 language,
                 input_language,
             ),
-            {
-                'uid': uid,
-                'job_id': job_id,
-                'content_id': content_id,
-                'paths': paths,
-                'lane': lane,
-                'recording_age_seconds': recording_age_seconds,
-                'source': source,
-                'should_lock': should_lock,
-                'conversation_id': conversation_id,
-                'client_device_id': client_device_id,
-                'client_platform': client_platform,
-                'byok_enabled': byok_enabled,
-                'intake_context': intake_context,
-            },
+            upload_arguments,
             evidence,
         )
         if held_response is not None:
@@ -1001,6 +1003,7 @@ async def accept_upload(
             queue, decisions = sample
         # A missing-input repair replays these exact decisions; it never probes again.
         repair_languages: dict[str, dict] = {}
+        packing = IntakePacking(upload_arguments, canonical_decode=decode is None)
         phase = 'decode'
         while unit := (
             queue.pop(0) if queue else None if sampled else await run_blocking(sync_executor, _next_unit, iterator)
@@ -1033,6 +1036,7 @@ async def accept_upload(
                     staged, proposal = alias
                     items.append(staged)
                     source_aliases[item.segment_id] = proposal
+                    packing.note_alias(item.segment_id)
                     continue
             if len(items) in decisions:
                 # This unit was classified above under fresh authority (silent units on their own audio).
@@ -1055,6 +1059,7 @@ async def accept_upload(
                 probe_guard.raise_if_denied()
             proof = _frozen_language_proof(input_language, language_decision)
             repair_languages[item.segment_id] = proof
+            packing.note(item.segment_id, unit, proof)
             phase = 'freeze_audio'
             frozen = await run_blocking(
                 sync_executor,
@@ -1103,13 +1108,25 @@ async def accept_upload(
         phase = 'admit'
         outbox = await run_blocking(db_executor, outbox_for, OutboxKind.PROVIDER_STT) if provider else None
         intake_refusal = await _probe_upload_allowance(store, uid, policy, lane, items, source_aliases)
+        accepted_at = time.time()
+        packing_observations = packing.observations(
+            subscription=user.get('subscription'),
+            protection=context,
+            policy=policy,
+            priority=seed.priority,
+            release=release,
+            now=accepted_at,
+            excluded=(provider, sampled, record_origin, repair_job_id, _coalescing_group, adopt, usage_period),
+            input_language=input_language,
+            language=language,
+        )
         outcome = await run_blocking(
             db_executor,
             admit,
             store,
             items,
             binding,
-            time.time(),
+            accepted_at,
             namespace=store.namespace,
             policy=policy,
             require_artifacts=True,
@@ -1135,6 +1152,7 @@ async def accept_upload(
             adopt=adopt,
             coalescing_group=_coalescing_group,
             source_aliases=source_aliases,
+            packing_observations=packing_observations,
             intake_refusal=intake_refusal,
         )
         phase = 'wake'

@@ -95,12 +95,12 @@ List<String> _dayTexts(WidgetTester tester, String date) =>
     [for (final t in tester.widgetList<Text>(find.descendant(of: _day(date), matching: find.byType(Text)))) t.data!];
 
 void main() {
-  testWidgets('old unresolved upload shows status unavailable with details action, never transcribing', (tester) async {
+  testWidgets('old unresolved upload shows waiting-on-server with details action, never transcribing', (tester) async {
     await _pump(tester, [
       _wal(_now.subtract(const Duration(days: 40)), 120, WalStatus.uploaded)..uploadedAt = 0,
       _wal(_now.subtract(const Duration(days: 40)), 60, WalStatus.miss)..isSyncing = true,
     ]);
-    expect(find.text('Transcription unavailable'), findsWidgets);
+    expect(find.text('Your audio is safe on your device or phone'), findsWidgets);
     expect(find.text('Transcribing…'), findsNothing);
     expect(find.byKey(const Key('on_the_way_stalled_details')), findsOneWidget);
   });

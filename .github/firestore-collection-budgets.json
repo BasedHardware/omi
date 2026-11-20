@@ -89,6 +89,16 @@
       "basis": "planning-bound",
       "source": "backend/utils/conversations/v3/backfill.py start_planned: one bounded collection-group list (at most 20 start markers under users/{uid}) per five-minute sweep, 288 ticks per day; the collection is empty except between an operator plan and the next tick.",
       "reviewed": "2026-11-18"
+    },
+    {
+      "collection": "conversations_v3_sync_custody_repairs",
+      "owner": "lane/conversations-v3",
+      "unit": "approved single-chain apply or rollback",
+      "reads_per_unit_budget": 3,
+      "reads_per_day_budget": 60,
+      "basis": "planning-bound",
+      "source": "backend/docs/runbooks/conversations-v3.md: one journal point read per transaction attempt, up to three attempts. No listing or scheduled reads. The daily planning envelope is twenty individually approved commands; the owner and source reads are bounded separately by the runbook.",
+      "reviewed": "2026-11-20"
     }
   ],
   "dynamic": [
@@ -301,6 +311,10 @@
     {
       "collection": "record_seal_repair_backlog_cursor_v1",
       "reason": "Document ID in the existing batch_pipeline_prod_maintenance collection, not a new collection. The computed-name scanner over-approximates .collection(collection_name) sites. Shards append count/index to encrypted document frontiers; no account state or plaintext identifiers are stored. One point read per lane per run and checkpoint writes per attempted metadata page."
+    },
+    {
+      "collection": "parakeet_batch",
+      "reason": "Not a Firestore collection. It is the STT adapter name in backend/testing/pipeline_lab/cassette/adapters.py (class attribute `name = 'parakeet_batch'`); the scanner resolves unrelated `.collection(name)` parameters in backend/database to it. The pipeline lab writes only to local emulators and adds no production collection."
     }
   ]
 }

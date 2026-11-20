@@ -1099,7 +1099,10 @@ def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depen
     if request.target_level != 'enhanced':
         raise HTTPException(status_code=400, detail="Invalid target_level. Only migration to 'enhanced' is supported.")
 
-    finalize_migration(uid, request.target_level)
+    try:
+        finalize_migration(uid, request.target_level)
+    except users_db.MigrationSuperseded as error:
+        raise HTTPException(status_code=409, detail='Migration is no longer current.') from error
     set_user_data_protection_level(uid, request.target_level)
     return {'status': 'ok'}
 

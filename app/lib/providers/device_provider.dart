@@ -1098,15 +1098,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     );
   }
 
-  /// The paired device's connection history from the phone's native BLE diagnostics (newest last).
-  /// Best-effort: no device or no history is an empty list.
-  Future<List<BleDisconnectEvent>> disconnectHistory() async {
-    final id = (pairedDevice?.id.isNotEmpty ?? false) ? pairedDevice!.id : connectedDevice?.id;
-    if (id == null || id.isEmpty) return const [];
-    final diagnostics = await _bleDiagnosticsLoader(id);
-    return diagnostics.disconnectHistory;
-  }
-
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
     if (pairedDevice == null || connectedDevice == null) {
       return ('No paired device is connected', false, '', {});
@@ -1120,12 +1111,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return ('Unable to determine current firmware version', false, '', {});
     }
     var latestFirmwareDetails = await getLatestFirmwareVersion(
-      deviceModelNumber: device.modelNumber,
-      firmwareRevision: device.firmwareRevision,
-      hardwareRevision: device.hardwareRevision,
-      manufacturerName: device.manufacturerName,
-      serialNumber: device.serialNumber,
-    );
+          deviceModelNumber: device.modelNumber,
+          firmwareRevision: device.firmwareRevision,
+          hardwareRevision: device.hardwareRevision,
+          manufacturerName: device.manufacturerName,
+          serialNumber: device.serialNumber,
+        ) ??
+        {};
 
     var (message, hasUpdate, version) = await DeviceUtils.shouldUpdateFirmware(
       currentFirmware: device.firmwareRevision,
@@ -1518,7 +1510,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Fetch latest stable version for rollback comparison
         String? latestStableFirmwareVersion;
         try {
-          var stableDetails = await getStableFirmwareVersion(deviceModelNumber: pairedDevice?.modelNumber ?? '');
+          var stableDetails = await getStableFirmwareVersion(deviceModelNumber: pairedDevice?.modelNumber ?? '') ?? {};
           if (!_isCurrent(generation) || !_isCurrentFirmwareCheckSession(checkSession)) {
             Logger.debug('Discarding stable firmware result from a stale device session');
             return false;

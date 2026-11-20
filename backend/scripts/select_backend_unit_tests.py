@@ -200,6 +200,9 @@ CENSUS_GUARD_PREFIXES = (
     'backend/database/batch_pipeline_',
     'backend/utils/observability/reasons.py',
     'backend/config/batch_census.py',
+    'backend/config/batch_census_selectors.py',
+    'backend/database/jobstore/',
+    'backend/tests/support/batch_census_sql_selectors.py',
     'backend/scripts/batch_pipeline_poll_state_census.py',
 )
 # Census exporter (W3 / SCA-2119): a change to the sampler, the gauge families or
@@ -279,6 +282,8 @@ FIRESTORE_INDEX_GUARD_CONTROL_PATHS = frozenset(
         'backend/tests/unit/conftest.py',
         'backend/tests/unit/memory_import_isolation.py',
         'backend/testing/hermetic_network.py',
+        'backend/config/batch_census_selectors.py',
+        'backend/tests/support/batch_census_selector_guard.py',
     }
 )
 
@@ -888,7 +893,14 @@ def tests_for_changed_paths(
     if any(path.startswith(('backend/database/', 'backend/utils/')) and path.endswith('.py') for path in changed_paths):
         selected.update(test for test in LIFECYCLE_INVARIANT_TESTS if test in all_tests)
     if any(path.startswith('backend/') and path.endswith('.py') for path in changed_paths):
-        selected.update(test for test in ('tests/unit/test_lifecycle_state_table_writers.py',) if test in all_tests)
+        selected.update(
+            test
+            for test in (
+                'tests/unit/test_lifecycle_state_table_writers.py',
+                'tests/unit/test_batch_account_authority_writers.py',
+            )
+            if test in all_tests
+        )
     for path in changed_paths:
         selected.update(test for test in LIFECYCLE_SOURCE_REGRESSION_TESTS.get(path, ()) if test in all_tests)
     if any(is_sync_legacy_ratchet_path(path) for path in changed_paths):

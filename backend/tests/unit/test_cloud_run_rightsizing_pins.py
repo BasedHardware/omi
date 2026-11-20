@@ -20,6 +20,14 @@ from scripts.ops import drift_check as dc
 
 RIGHTSIZED_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 REPO_ROOT = Path(__file__).resolve().parents[3]
+# Named literally so an ops-file edit selects this test through the data-path import graph
+# (dc.source_model reads them by computed path, which the selector cannot see).
+OPS_FILES = ('backend/deploy/ops/prod.yaml', 'backend/deploy/ops/staging.yaml')
+
+
+def test_source_model_reads_the_named_ops_files():
+    for ops_file in OPS_FILES:
+        assert (REPO_ROOT / ops_file).is_file(), ops_file
 
 
 def test_workflow_backend_sync_memory_fallback_is_the_costcut_value():
@@ -66,7 +74,8 @@ def test_prod_deploy_flags_match_the_margin20_target():
     integration = model['backend-integration'].scale
     # 2026-11-01 packing (#24308): LLM-bound enrichment runs 80 per instance with 64 postprocess threads.
     assert (integration['memory'], integration['cpu'], integration['concurrency']) == ('4Gi', '2', 80)
-    assert (integration['revision_min'], integration['revision_max']) == (3, 35)
+    # max-instances is live-resolved like sync (Resolve live integration maxScale, prod default 35).
+    assert (integration['revision_min'], integration['revision_max']) == (3, None)
 
 
 def test_ops_train_values_match_the_live_right_sizing():

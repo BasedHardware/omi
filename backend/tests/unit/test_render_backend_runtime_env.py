@@ -512,7 +512,9 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
         "--memory=${{ inputs.runtime_env == 'prod' && '4Gi' || '2Gi' }}",
         "--concurrency=${{ inputs.runtime_env == 'prod' && '80' || '40' }}",
         integration_min,
-        "--max-instances=${{ inputs.runtime_env == 'prod' && '35' || '50' }}",
+        # 2026-11-20: the cap is live-resolved (prod fresh-service default 35) so a capacity
+        # revision's cap survives the next train; test_cloud_run_live_caps.py runs the resolver.
+        '--max-instances=${{ steps.live-integration-max-scale.outputs.max_scale }}',
         '--no-cpu-throttling',
     ):
         assert flag in integration_flags, flag
@@ -780,6 +782,45 @@ def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
     }
 
 
+_LIVE_RECAP_COHORT = 'CONVERSATIONS_V3_LIVE_RECAP_COHORT'
+
+
+def _assert_cloud_run_live_recap_cohort_scope(manifest):
+    for env_name, env in manifest['environments'].items():
+        cloud_run = env.get('cloud_run') or {}
+        for kind in ('services', 'jobs'):
+            for name, spec in (cloud_run.get(kind) or {}).items():
+                workload = (env_name, kind, name)
+                assert _LIVE_RECAP_COHORT not in (spec.get('env') or {}), workload
+                if workload == ('prod', 'services', 'backend'):
+                    continue
+                for entry in _MODULE['_render_secret_entries'](spec.get('secrets') or {}):
+                    resource = entry['valueFrom']['secretKeyRef']['name'].rsplit('/', 1)[-1]
+                    assert _LIVE_RECAP_COHORT not in (entry['name'], resource), workload
+
+
+def test_cloud_run_live_recap_cohort_is_backend_only():
+    _assert_cloud_run_live_recap_cohort_scope(_MANIFEST)
+
+
+@pytest.mark.parametrize('env_name', ['dev', 'prod'])
+@pytest.mark.parametrize(
+    ('section', 'key', 'entry'),
+    [
+        ('env', _LIVE_RECAP_COHORT, {'value': 'fixture-cohort'}),
+        ('secrets', 'COHORT_ALIAS', {'secret': _LIVE_RECAP_COHORT, 'version': '1'}),
+        ('secrets', 'COHORT_ALIAS', {'secret': f'projects/example/secrets/{_LIVE_RECAP_COHORT}', 'version': '1'}),
+    ],
+    ids=['literal-env', 'aliased-secret', 'aliased-qualified-secret'],
+)
+def test_cloud_run_live_recap_cohort_rejects_job_bindings(monkeypatch, env_name, section, key, entry):
+    job = _MANIFEST['environments'][env_name]['cloud_run']['jobs']['notifications-job']
+    monkeypatch.setitem(job[section], key, entry)
+
+    with pytest.raises(AssertionError, match=rf"\('{env_name}', 'jobs', 'notifications-job'\)"):
+        _assert_cloud_run_live_recap_cohort_scope(_MANIFEST)
+
+
 def test_prod_cloud_run_secret_refs_match_approved_bindings():
     # Base mounts, prod-only dream salt and backend-only messaging provider credentials.
     # Preserve resource, env alias and version: aliases can introduce startup dependencies.
@@ -793,7 +834,7 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         'OMI_LLM_GATEWAY_SERVICE_TOKEN',
         'SONIOX_API_KEY',
     }
-    baseline = {
+    service_baseline = {
         'backend': common
         | {
             'METRICS_SECRET',
@@ -816,14 +857,47 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
         'backend-sync-backfill': common,
         'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
+        'backend-projection-pump': common | {'POSTHOG_EVENTS_API_KEY'},
+    }
+    job_baseline = {
+        'notifications-job': {
+            'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+            'OPENAI_API_KEY',
+            'ENCRYPTION_SECRET',
+            'PINECONE_API_KEY',
+        },
+        'x-connector-sync-job': {
+            'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+            'OPENAI_API_KEY',
+            'ENCRYPTION_SECRET',
+            'PINECONE_API_KEY',
+            'X_OAUTH_CLIENT_SECRET',
+            'RAPID_API_KEY',
+            'REDIS_DB_PASSWORD',
+        },
+        'frame-request-retention-job': {'POSTHOG_PROJECT_API_KEY', 'SERVICE_ACCOUNT_JSON'},
+        'day3-reengagement-email-job': {
+            'ENCRYPTION_SECRET',
+            'POSTHOG_PROJECT_API_KEY',
+            'RESEND_API_KEY',
+            'LIFECYCLE_EMAIL_SIGNING_SECRET',
+        },
+    }
+    # Version-pinned, single-role bindings. David 2026-11-20 (SCA-3063): the internal TestFlight
+    # live-recap cohort mounts version 1 on the conversation API role only; other roles must not bind it.
+    pinned = {
+        ('services', 'backend'): {(_LIVE_RECAP_COHORT, _LIVE_RECAP_COHORT, '1')},
     }
     prod = _MANIFEST['environments']['prod']
-    for service, names in baseline.items():
-        refs = _MODULE['_render_secret_entries'](prod['cloud_run']['services'][service]['secrets'])
-        assert {
-            (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
-            for entry in refs
-        } == {(name, name, 'latest') for name in names}, service
+    for kind, baseline in (('services', service_baseline), ('jobs', job_baseline)):
+        workloads = prod['cloud_run'][kind]
+        assert set(baseline) == set(workloads), f'baseline must name exactly the prod Cloud Run {kind}'
+        for workload, names in baseline.items():
+            refs = _MODULE['_render_secret_entries'](workloads[workload].get('secrets') or {})
+            assert {
+                (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
+                for entry in refs
+            } == {(name, name, 'latest') for name in names} | pinned.get((kind, workload), set()), (kind, workload)
     backend_env = prod['cloud_run']['services']['backend']['env']
     token = backend_env['PROACTIVITY_V2_POSTHOG_TOKEN']['value']
     assert token.startswith('phc_')
@@ -1334,7 +1408,8 @@ def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
         # which runs the finish sweep, and for prod backend-sync, which can reach the same sweep through
         # its reconcile and batch metrics routes (review SCA-2270). It was turned off in production at
         # 19:41Z and stays off by ruling. No other service or environment declares it (SCA-1993).
-        if environment == 'prod' and name in ('backend-integration', 'backend-sync'):
+        # SCA-3120: the prod projection pump derives integration's env, so it carries the same values.
+        if environment == 'prod' and name in ('backend-integration', 'backend-sync', 'backend-projection-pump'):
             assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {'value': 'false', 'category': 'rollout'}
         else:
             assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
@@ -1349,7 +1424,7 @@ def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
             # settled-SKU evidence) were never recorded, so the owner kept the
             # documented default-off rollback. See config/feature-flags.yaml.
             expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'false'
-            if name in ('backend-sync', 'backend-integration'):
+            if name in ('backend-sync', 'backend-integration', 'backend-projection-pump'):
                 expected['BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED'] = 'true'
         switches = {
             key: env[key]
@@ -1366,7 +1441,9 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
     """A base edit must neither enable unqualified readers nor miss CR overrides."""
     config = _MANIFEST['environments'][environment]
     cloud_run = config['cloud_run']['services']
-    assert set(cloud_run) == {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'}
+    assert set(cloud_run) == {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'} | (
+        {'backend-projection-pump'} if environment == 'prod' else set()
+    )
     expected = {
         'action_items_page': 100,
         'action_items_ttl120': 100,

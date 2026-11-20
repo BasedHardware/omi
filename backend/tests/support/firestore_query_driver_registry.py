@@ -158,6 +158,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.conversations_v3.commit_projection': 'ef2e983f527e4c07c35d5756b816405140fb88196bc819bc9f7a20012411c40e',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -202,7 +203,9 @@ BODY_DIGEST = {
     # Re-reviewed 2026-11-05: forward presentation visibility only; cursor/query/budget bounds unchanged.
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
-    'database.batch_pipeline_store.FirestoreStore.projection_page': '96f024578c9d338e4fb3a528f1c59801c928167da8ddf0d2747d686700b46ff5',
+    'database.batch_pipeline_store.FirestoreStore.projection_page': '4284286d5c06295eaea7b2bd915d0bdc5028bd24534e0426f08fd384b055e628',
+    'database.batch_pipeline_store.FirestoreStore.projection_page_with_outbox': 'f13299101963feeb96452b98bd9efa5df4d171133ecbf8179ea00ef2fee69140',
+    'database.batch_pipeline_store.FirestoreStore.projection_outbox_page': 'd14bfb2b36919dacd8c818eeaadb5c21120d7de1cd77c7a082b73e09ad0242c5',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
     'database.batch_pipeline_store.reseed_hinted_activation': 'b962f088769367e4902876ef9dd91de299238b945f13610829e5f1f1acd8d449',
@@ -3626,6 +3629,13 @@ for entry in (
     *batch_privacy_entries(),
     *home_feed_entries(),
     *conversations_v3_entries(),
+    CoveredByEntry(
+        'database.conversations_v3.commit_projection',
+        covered_by=('database.conversations_v3.merge_donors_have_tasks',),
+        reason='The projection is lease fenced. Its only collection query checks donor task links before writes.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
+    ),
     *memory_ledger_drivers(),
     *outside_drivers.DRIVERS.values(),
     *outside_drivers.COVERED_BY.values(),

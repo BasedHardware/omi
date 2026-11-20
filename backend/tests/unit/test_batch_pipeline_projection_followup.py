@@ -15,6 +15,7 @@ from database.batch_pipeline_projection import ProjectionBlocked, ProjectionRepl
 from utils.batch_pipeline import projection, projection_followup
 from utils.batch_pipeline.contracts import WorkItem, Priority, ProjectionBinding
 from utils.batch_pipeline.serving import Serving
+from utils.batch_pipeline.scheduler import owner_key as binding_owner_key
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
 
@@ -956,3 +957,195 @@ async def test_tail_handoff_waits_behind_discovery_and_reaches_complete_content(
         await asyncio.wait_for(asyncio.gather(*list(f.runner.tasks.values())), 2)
     assert [call.args[0] for call in f.projector.complete_content.call_args_list] == ['head', 'later']
     assert not f.runner.owed and not f.projector.chain_followups
+
+
+@pytest.fixture
+def ready_followup(followup, monkeypatch):
+    from datetime import datetime, timezone
+
+    from database import batch_pipeline_privacy
+    from database.batch_pipeline_privacy import PRIVACY_COLLECTION, privacy_owner_key
+    from database.batch_privacy_attempt import with_batch_privacy_attempt
+    from database.sync_ledger import sync_content_ledger_ref
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+
+    f = followup
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_generation_memo":100}')
+    monkeypatch.setattr(batch_pipeline_privacy, 'ttl_disabled', lambda: False)
+    monkeypatch.delenv('BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED', raising=False)
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='synthetic'))
+    f.projector.store = store
+    store.policy = Mock(return_value=ProjectionPolicy(async_projection=True))
+    store.check = Mock(wraps=store.check)
+    client.collection('users').document(f.binding.owner_id).create({'data_protection_level': 'standard'})
+    authority = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(f.binding.owner_id))
+    authority.create({'memo_token': '1' * 32, 'memo_schema': 1, 'generation': 0})
+    original_get = StrictFirestoreDocument.get
+
+    def read(ref, *args, **kwargs):
+        snapshot = original_get(ref, *args, **kwargs)
+        if ref.path == authority.path:
+            snapshot.update_time = datetime(2026, 11, 19, tzinfo=timezone.utc)
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', read)
+    for segment in f.binding.segment_ids:
+        # Synthetic older rows sharing a capture anchor. Distinct anchors below
+        # demonstrate that binding equality alone cannot cover a sibling.
+        job = {
+            **f.jobs[segment],
+            'capture_at': 1000,
+            'projection_binding': asdict(f.binding),
+            'privacy_generation': 0,
+            'result': {'outcome': 'success'},
+        }
+        store.ref('jobs', segment).create(job)
+        store.ref('results', segment).create(
+            {
+                'protocol_version': 1,
+                'owner_key': binding_owner_key(f.binding.owner_id),
+                'segment_id': segment,
+                'capture_at': 1000,
+                'previous_segment_id': None,
+                'result': job['result'],
+                'projection_state': 'ready',
+                'projection': {'state': 'ready'},
+            }
+        )
+    sync_content_ledger_ref(client, f.binding.owner_id, f.binding.content_id).create(
+        {
+            'dispatch_protocol': 'batch_v1',
+            'status': 'processing',
+            'job_id': f.binding.job_id,
+            'batch_pipeline': {'protocol_version': 1, 'namespace': 'synthetic', 'segment_ids': ['head', 'later']},
+        }
+    )
+    f.projector.complete_content.return_value = {'outcome': 'success'}
+    f.runner.pages.update({'head': 1, 'later': 1})
+    f.run = with_batch_privacy_attempt(f.runner._run)
+    return f, authority
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'case',
+    [
+        'same_page',
+        'different_page',
+        'invalidation',
+        'distinct_input',
+        'distinct_output',
+        'kill',
+        'targeted',
+        'expired',
+        'expired_during_read',
+    ],
+)
+async def test_early_followup_checks_fresh_privacy_version_and_covered_conversations(ready_followup, monkeypatch, case):
+    f, authority = ready_followup
+    store = f.projector.store
+    assert await f.run('head') == 'completed'
+    assert f.runner.completed_probes[1][f.binding].ids
+
+    if case == 'different_page':
+        f.runner.pages['later'] = 2
+    elif case == 'invalidation':
+        store.client.rows[authority.path]['memo_token'] = '2' * 32
+        store.client.collection('account_deletions').document(f.binding.owner_id).create({'wipe_status': 'pending'})
+    elif case == 'distinct_input':
+        store.client.rows[store.ref('jobs', 'later').path]['capture_at'] = 1001
+        store.client.rows[store.ref('results', 'later').path]['capture_at'] = 1001
+    elif case == 'distinct_output':
+        store.client.rows[store.ref('jobs', 'later').path]['conversation_ids'] = ['unverified-output']
+        store.client.rows[store.ref('results', 'later').path]['projection']['conversation_id'] = 'unverified-output'
+    elif case == 'kill':
+        monkeypatch.setenv('BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED', 'false')
+    elif case == 'targeted':
+        f.runner.forget_page('later')
+    elif case in {'expired', 'expired_during_read'}:
+        expiry = f.runner.completed_probes[1][f.binding].expires_at
+        times = [expiry] if case == 'expired' else [expiry - 0.5, expiry]
+        monkeypatch.setattr(projection_followup, 'time', SimpleNamespace(monotonic=Mock(side_effect=times)))
+
+    result = await f.run('later')
+    assert store.check.call_count == (1 if case == 'same_page' else 2)
+    assert result == (
+        'blocked' if case == 'invalidation' else 'completed' if case in {'targeted', 'different_page'} else 'coalesced'
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'case', ['missing', 'error', 'refusal', 'first_walk_refusal', 'no_proof', 'memo_only', 'token_error', 'inflight']
+)
+async def test_early_followup_falls_back_when_first_probe_is_unproven(ready_followup, monkeypatch, case):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    f, authority = ready_followup
+    store = f.projector.store
+    if case == 'inflight':
+        f.runner.completion_attempts.add((1, f.binding))
+    elif case == 'missing':
+        f.projector.complete_content.side_effect = [None, {'outcome': 'success'}]
+        assert await f.run('head') == 'incomplete'
+    elif case == 'error':
+        f.projector.complete_content.side_effect = [RuntimeError('synthetic'), {'outcome': 'success'}]
+        assert await f.run('head') == 'retry'
+    elif case == 'refusal':
+        f.projector.complete_content.side_effect = [
+            BatchPrivacyBlocked('account_deleted'),
+            {'outcome': 'success'},
+        ]
+        assert await f.run('head') == 'blocked'
+    elif case == 'first_walk_refusal':
+        store.client.collection('account_deletions').document(f.binding.owner_id).create({'wipe_status': 'pending'})
+        assert await f.run('head') == 'blocked'
+    elif case == 'no_proof':
+        store.client.rows[authority.path]['memo_schema'] = 0
+        assert await f.run('head') == 'completed'
+    elif case == 'memo_only':
+        from database import batch_pipeline_privacy
+        from database.batch_privacy_attempt import batch_privacy_attempt
+
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_generation_memo":100,"bpp_owner_memo_enforce":100}')
+        monkeypatch.setattr(batch_pipeline_privacy, 'PROCESS_OWNERS', batch_pipeline_privacy.BoundedTTLCache())
+        with batch_privacy_attempt(), pytest.raises(ProjectionReplay):
+            store.check(store.session('head', f.binding, 1000))
+        assert await f.run('head') == 'completed'
+        assert not f.runner.completed_probes
+    else:
+        assert await f.run('head') == 'completed'
+        from database import batch_pipeline_privacy
+
+        original = batch_pipeline_privacy.metrics.read_snapshot
+
+        def read_snapshot(family, reference, **kwargs):
+            if 'transaction' not in kwargs:
+                raise RuntimeError('synthetic')
+            return original(family, reference, **kwargs)
+
+        monkeypatch.setattr(batch_pipeline_privacy.metrics, 'read_snapshot', read_snapshot)
+    before = store.check.call_count
+    await f.run('later')
+    assert store.check.call_count == before + 1
+
+
+@pytest.mark.asyncio
+async def test_failed_first_claim_release_does_not_publish_proof(ready_followup, monkeypatch):
+    f, _ = ready_followup
+    previous_claim = projection_followup.projection_claim
+
+    @contextmanager
+    def failed_release(*_):
+        yield True
+        raise RuntimeError('synthetic release failure')
+
+    monkeypatch.setattr(projection_followup, 'projection_claim', failed_release)
+    with pytest.raises(RuntimeError, match='release failure'):
+        await f.run('head')
+    assert not f.runner.completed_probes
+    monkeypatch.setattr(projection_followup, 'projection_claim', previous_claim)
+    assert await f.run('later') == 'coalesced'
+    assert f.projector.store.check.call_count == 2

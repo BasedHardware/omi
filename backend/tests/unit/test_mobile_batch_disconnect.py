@@ -12,6 +12,7 @@ from starlette.websockets import WebSocketState
 from config import server_batch
 from models.conversation_enums import ConversationStatus
 from routers.listen.contracts import ListenRequest
+from routers.listen.conversations import LiveConversationController
 from routers.listen.runtime import ListenSessionRuntime
 from database import conversation_quiet_checks as checks
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
@@ -117,6 +118,11 @@ class Teardown:
             return deepcopy(self.row)
         if fn is self.arm:
             return fn(*args, **kwargs)
+        if name == 'close_server_batch_audio':
+            self.row['server_batch_audio_closed'] = True
+            return True
+        if name == 'attach_closed_batch_capture':
+            return None
         if name in {'update_conversation', 'get_in_progress_conversation_id', 'remove_in_progress_conversation_id'}:
             self.calls.append(name)
             return 'capture' if name == 'get_in_progress_conversation_id' else True
@@ -148,15 +154,32 @@ async def test_phone_socket_drop_keeps_batch_capture_open_and_arms_quiet_check(m
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('platform', ['ios', 'android'])
-async def test_phone_socket_drop_finalizes_when_the_reconnect_switch_is_off(monkeypatch, platform):
-    # With the switch off nothing can end a hold (no producer to drain), so a held row would never be
-    # sealed and every reconnect would roll into a new empty generation (11-16 22:06Z storm).
-    monkeypatch.delenv('LISTEN_BATCH_RECONNECT_ENABLED', raising=False)
-    row = capture(client_platform=platform)
+@pytest.mark.parametrize('source', ['omi', 'phone'])
+@pytest.mark.parametrize('reconnect', [None, 'false', 'true'])
+async def test_phone_socket_drop_schedules_finalization_only_with_reconnect_off(
+    monkeypatch, platform, source, reconnect
+):
+    if reconnect is None:
+        monkeypatch.delenv('LISTEN_BATCH_RECONNECT_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('LISTEN_BATCH_RECONNECT_ENABLED', reconnect)
+    row = capture(client_platform=platform, source=source)
     teardown = Teardown(monkeypatch, row, tail={'server_batch_audio_end': NOW.timestamp() + 2})
-    process = await teardown.run()
-    process.assert_awaited_once_with('capture')
-    assert 'archive_close' not in teardown.calls  # no hold: process_conversation owns the close barrier
+    # Keep the real legacy disconnect, process_conversation and archive-close path;
+    # mock only the finalization admission boundary and persistence side effects.
+    controller = LiveConversationController(teardown.runtime)
+    controller.schedule_finalization = AsyncMock(return_value=True)
+    teardown.runtime.conversations = controller
+    await teardown.run()
+    teardown.arm.assert_called_once_with('synthetic', 'capture', 120, requires_byok=False)
+    assert teardown.calls.count('archive_close') == 1
+    assert row['server_batch_audio_end'] == NOW.timestamp() + 2
+    if reconnect == 'true':
+        controller.schedule_finalization.assert_not_awaited()
+        assert 'server_batch_audio_closed' not in row
+    else:
+        controller.schedule_finalization.assert_awaited_once_with('capture')
+        assert row['server_batch_audio_closed'] is True
 
 
 @pytest.mark.asyncio

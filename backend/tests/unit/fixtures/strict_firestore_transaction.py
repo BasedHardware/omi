@@ -244,6 +244,10 @@ class StrictFirestoreCollection:
         self._path = path
 
     @property
+    def id(self) -> str:
+        return self._path[-1]
+
+    @property
     def parent(self) -> StrictFirestoreDocument | None:
         if len(self._path) == 1:
             return None
