@@ -12,7 +12,9 @@ import os
 import re
 import runpy
 import subprocess
+import sys
 from pathlib import Path
+from urllib.error import HTTPError
 
 import pytest
 import yaml
@@ -24,6 +26,13 @@ from scripts.cloud_run_scope import PROJECTION_PUMP, SELECTABLE, SERVICES, selec
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / 'backend'
+# Match direct execution of the workflow script without changing pytest's search path.
+sys.path.insert(0, str(BACKEND / 'scripts'))
+try:
+    import recover_projection_pump_cap as recovery
+finally:
+    sys.path.pop(0)
+
 WORKFLOW = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
 PUMP_ACTION = yaml.safe_load((ROOT / '.github/actions/deploy-projection-pump/action.yml').read_text())
 STACK_ACTION_TEXT = (ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text()
@@ -81,15 +90,21 @@ def _boundary(tmp_path, **overrides):
         SKIP_ELIGIBILITY='false',
         BREAK_GLASS_LOCK='false',
         GITHUB_OUTPUT=str(output),
+        GITHUB_STEP_SUMMARY=str(tmp_path / 'summary'),
+        GITHUB_SHA='b' * 40,
+        WORKFLOW_CONTROL_SHA='b' * 40,
+        PUMP_CONTROL_SHA='b' * 40,
+        PUMP_RELEASE_DISPOSITION='',
     )
     env.update(overrides)
     return subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True, timeout=10), output
 
 
 def test_boundary_admits_the_pump_for_a_manual_prod_cloud_run_only_deploy(tmp_path):
-    result, output = _boundary(tmp_path)
+    result, output = _boundary(tmp_path, PUMP_RELEASE_DISPOSITION=INVERSE_RECEIPT)
     assert result.returncode == 0, result.stderr
     assert 'integration_only=false' in output.read_text()
+    assert INVERSE_RECEIPT in (tmp_path / 'summary').read_text()
 
 
 @pytest.mark.parametrize(
@@ -100,6 +115,7 @@ def test_boundary_admits_the_pump_for_a_manual_prod_cloud_run_only_deploy(tmp_pa
         {'WORKFLOW_MODE': 'build-only'},
         {'BREAK_GLASS_LOCK': 'true'},
         {'SKIP_ELIGIBILITY': 'true'},
+        {'PUMP_CONTROL_SHA': 'c' * 40},
         {'SERVICE_IMAGES': f'{PROJECTION_PUMP}=gcr.io/based-hardware/backend@sha256:' + 'a' * 64},
         {'SERVICE_IMAGES': 'integration-canary=gcr.io/based-hardware/backend@sha256:' + 'a' * 64},
     ],
@@ -338,16 +354,20 @@ def test_pump_composite_never_builds_pushes_or_grants_an_invoker():
     assert names.index('runtime-env') < names.index('deploy-backend-projection-pump')
 
 
-def test_pump_composite_refuses_latest_revision_traffic_before_any_mutation():
+def test_pump_composite_orders_the_live_checks_before_mutation_and_snapshot():
     steps = PUMP_ACTION['runs']['steps']
     ids = [s.get('id') for s in steps]
-    detect = steps[ids.index('pump-service')]
-    assert '.latestRevision == true' in detect['run']
-    assert 'requested traffic differs from serving traffic' in detect['run']
-    assert '.spec.traffic | $routed' in detect['run'] and '.status.traffic | $routed' in detect['run']
-    assert 'exit 1' in detect['run'].split('following=', 1)[1]
-    assert 'update-traffic backend-projection-pump' in detect['run']
+    names = [s['name'] for s in steps]
     assert ids.index('pump-service') < ids.index('deploy-backend-projection-pump')
+    assert ids.index('pump-service') < names.index('Probe LLM gateway from the Cloud Run VPC before promotion')
+    assert names.index('Verify a newly created projection pump base before pinning') + 1 == names.index(
+        'Pin a newly created projection pump service to its base revision'
+    )
+    assert names.index('Verify the pinned first projection pump base') + 1 == names.index(
+        'Attach revision-aware Managed Prometheus to the projection pump candidate'
+    )
+    assert ids.index('pump-traffic-snapshot') < ids.index('shift-projection-pump-traffic')
+    assert 'verify_projection_pump_inverse.py' in steps[ids.index('pump-traffic-snapshot')]['run']
 
 
 def test_pump_composite_deploys_and_verifies_the_resolved_digest_not_the_tag():
@@ -382,6 +402,7 @@ def _live(**changes):
                 },
                 'spec': {
                     'timeoutSeconds': 3600,
+                    'containerConcurrency': 80,
                     'containers': [
                         {
                             'name': PROJECTION_PUMP,
@@ -420,6 +441,145 @@ def _evaluate(service, iam=PRIVATE, env=MANIFEST_ENV):
 def test_shape_readback_accepts_the_intended_service():
     assert _evaluate(_live()) == []
     assert _evaluate(_live(), iam={}) == []
+
+
+INVERSE_REVISION = f'{PROJECTION_PUMP}-aaaaaaa-17-1-base'
+INVERSE_IMAGE = 'gcr.io/based-hardware/backend@sha256:' + 'b' * 64
+INVERSE_RECEIPT = f'01a1f818-f3a6-7183-bd19-9bd0f7e7bb75 {INVERSE_REVISION} {"a" * 40} {INVERSE_IMAGE}'
+
+
+@pytest.fixture
+def inverse_readback():
+    service = _live()
+    revision = copy.deepcopy(service['spec']['template'])
+    revision['metadata'].update(name=INVERSE_REVISION, labels={'serving.knative.dev/service': PROJECTION_PUMP})
+    revision['status'] = {'conditions': [{'type': 'Ready', 'status': 'True'}], 'imageDigest': INVERSE_IMAGE}
+    app = revision['spec']['containers'][0]
+    app['image'] = INVERSE_IMAGE
+    app['env'].append({'name': 'OMI_BACKEND_RELEASE_SHA', 'value': 'a' * 40})
+    revision['spec']['containers'].pop()  # The first deploy stopped before adding the sidecar.
+    route = {'traffic': [{'revisionName': INVERSE_REVISION, 'percent': 100}]}
+    service['spec'].update(copy.deepcopy(route))
+    service['status'] = copy.deepcopy(route)
+    # Cloud Run may have a newer no-traffic template. Use the receiving Revision.
+    return service, revision, copy.deepcopy(PRIVATE)
+
+
+def _run_inverse_step(tmp_path, step, documents, receipt=INVERSE_RECEIPT):
+    service, revision, iam = documents
+    fixtures = {
+        'services list': [service],
+        f'services describe {PROJECTION_PUMP}': service,
+        f'revisions describe {INVERSE_REVISION}': revision,
+        f'services get-iam-policy {PROJECTION_PUMP}': iam,
+    }
+    (tmp_path / 'fixtures.json').write_text(json.dumps(fixtures))
+    gcloud = tmp_path / 'gcloud'
+    gcloud.write_text(
+        f'#!{sys.executable}\n'
+        'import json, sys\n'
+        'from pathlib import Path\n'
+        'assert sys.argv[1] == "run"\n'
+        'key = " ".join(arg for arg in sys.argv[2:] if not arg.startswith("--"))\n'
+        'path = Path(__file__).with_name("fixtures.json")\n'
+        'print(json.dumps(json.loads(path.read_text())[key]))\n'
+    )
+    gcloud.chmod(0o755)
+    script = step['run'].replace('${{ inputs.project_id }}', 'based-hardware')
+    script = script.replace('${{ inputs.region }}', 'us-central1')
+    script = script.replace('${{ inputs.admitted_sha }}', 'a' * 40)
+    script = script.replace('${{ steps.image-tag.outputs.revision_suffix }}', 'aaaaaaa-17-1')
+    script = script.replace('${{ steps.published-image.outputs.ref }}', INVERSE_IMAGE)
+    script = re.sub(r'\$\{\{ [^}]+ }}', 'unused-first-create-input', script)
+    env = dict(
+        os.environ,
+        PATH=f'{tmp_path}{os.pathsep}{Path(sys.executable).parent}{os.pathsep}{os.environ["PATH"]}',
+        RELEASE_DISPOSITION=receipt,
+        GITHUB_OUTPUT=str(tmp_path / 'steps.out'),
+        DEPLOY_CONTROL_SCRIPTS=str(BACKEND / 'scripts'),
+        PUMP_EXISTS='true',
+    )
+    return subprocess.run(['bash', '-c', script], cwd=tmp_path, env=env, text=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.parametrize(
+    'break_readback',
+    [
+        lambda s, r, i: r['status']['conditions'][0].update(status='False'),
+        lambda s, r, i: r['spec']['containers'][0]['env'][-1].update(value='c' * 40),
+        lambda s, r, i: r['spec']['containers'][0].update(image=INVERSE_IMAGE[:-1] + 'c'),
+        lambda s, r, i: r['status'].update(imageDigest='sha256:' + 'c' * 64),
+        lambda s, r, i: r['spec']['containers'][0]['env'][0].update(value='true'),
+        lambda s, r, i: r['spec']['containers'][0]['env'][1].update(value='true'),
+        lambda s, r, i: r['spec']['containers'][0]['env'][3].update(value='all'),
+        lambda s, r, i: r['spec'].update(containerConcurrency=81),
+        lambda s, r, i: s['metadata']['annotations'].update({'run.googleapis.com/ingress': 'all'}),
+        lambda s, r, i: s['metadata']['annotations'].update({'run.googleapis.com/invoker-iam-disabled': 'true'}),
+        lambda s, r, i: i['bindings'].append({'role': 'roles/run.invoker', 'members': ['allUsers']}),
+        lambda s, r, i: i['bindings'].append({'role': 'roles/run.servicesInvoker', 'members': ['user:x@example.com']}),
+        lambda s, r, i: s['status']['traffic'][0].update(latestRevision=True),
+        lambda s, r, i: s['spec']['traffic'][0].update(revisionName=PROJECTION_PUMP + '-elsewhere'),
+    ],
+)
+def test_pinned_but_unverified_base_blocks_retry_and_inverse(tmp_path, inverse_readback, break_readback):
+    break_readback(*inverse_readback)
+    for name in (
+        'Verify existing projection pump before any mutation',
+        'Reverify the projection pump inverse and capture its traffic snapshot',
+    ):
+        result = _run_inverse_step(tmp_path, _step_named(name), inverse_readback)
+        assert result.returncode != 0, result.stdout
+    assert not (tmp_path / 'steps.out').exists()
+    assert not (tmp_path / 'artifacts/projection-pump-pre-promotion-traffic-snapshot.json').exists()
+
+
+def test_pinned_base_requires_release_disposition_and_live_proof(tmp_path, inverse_readback):
+    step = _step_named('Verify existing projection pump before any mutation')
+    result = _run_inverse_step(tmp_path, step, inverse_readback, receipt='')
+    assert result.returncode != 0 and 'recorded Release disposition' in result.stderr
+    assert not (tmp_path / 'steps.out').exists()
+
+    result = _run_inverse_step(tmp_path, step, inverse_readback)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / 'steps.out').read_text() == 'exists=true\n'
+    assert INVERSE_IMAGE in result.stdout
+
+    snapshot_step = _step_named('Reverify the projection pump inverse and capture its traffic snapshot')
+    result = _run_inverse_step(tmp_path, snapshot_step, inverse_readback)
+    assert result.returncode == 0, result.stderr
+    snapshot = json.loads((tmp_path / 'artifacts/projection-pump-pre-promotion-traffic-snapshot.json').read_text())
+    assert snapshot['services'][PROJECTION_PUMP]['spec']['traffic'] == [
+        {'revisionName': INVERSE_REVISION, 'percent': 100}
+    ]
+
+
+def test_latest_is_allowed_only_for_the_new_base_before_its_first_pin(tmp_path, inverse_readback):
+    service, _, _ = inverse_readback
+    service['spec']['traffic'] = [{'percent': 100, 'latestRevision': True}]
+    service['status']['traffic'][0]['latestRevision'] = True
+    service['status'].update(latestReadyRevisionName=INVERSE_REVISION, latestCreatedRevisionName=INVERSE_REVISION)
+
+    existing = _step_named('Verify existing projection pump before any mutation')
+    assert _run_inverse_step(tmp_path, existing, inverse_readback).returncode != 0
+    before_pin = _step_named('Verify a newly created projection pump base before pinning')
+    result = _run_inverse_step(tmp_path, before_pin, inverse_readback, receipt='')
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize('workflow_sha', ['a' * 40, 'b' * 40])
+def test_control_boundary_requires_the_reviewed_dispatch_sha(workflow_sha):
+    script = _step_named('Validate projection pump deploy boundary')['run']
+    for name, value in {
+        'environment': 'prod',
+        'runtime_env': 'prod',
+        'project_id': 'based-hardware',
+        'region': 'us-central1',
+        'admitted_sha': 'c' * 40,
+    }.items():
+        script = script.replace('${{ inputs.' + name + ' }}', value)
+    env = dict(os.environ, GITHUB_SHA=workflow_sha, WORKFLOW_CONTROL_SHA=workflow_sha, REVIEWED_CONTROL_SHA='a' * 40)
+    result = subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True, timeout=10)
+    assert (result.returncode == 0) == (workflow_sha == env['REVIEWED_CONTROL_SHA']), result.stderr
 
 
 def _set_template_annotation(key, value):
@@ -541,3 +701,268 @@ def test_deploy_pin_and_sidecar_steps_name_the_same_base_revision():
     assert f'--base-revision="{BASE_REVISION}"' in attach['run']
     text = (ROOT / '.github/actions/deploy-projection-pump/action.yml').read_text()
     assert set(re.findall(r'backend-projection-pump-\$\{\{[^}]*\}\}-base', text)) == {BASE_REVISION}
+
+
+# SCA-3318 recovery uses the interrupted base, with one service-cap mismatch.
+def _recovery_fixture(inverse_readback):
+    service, revision, policy = inverse_readback
+    before = {
+        'name': recovery.RESOURCE,
+        'uid': 'pump-uid',
+        'generation': '7',
+        'observedGeneration': '7',
+        'etag': 'approved-version',
+        'terminalCondition': {'state': 'CONDITION_SUCCEEDED'},
+        'scaling': {'maxInstanceCount': 20},
+        'template': copy.deepcopy(revision['spec']),
+        'traffic': [{'type': 'TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST', 'percent': 100}],
+    }
+    service['metadata']['uid'] = before['uid']
+    policy['etag'] = 'policy-version'
+    for section in ('spec', 'status'):
+        service[section]['traffic'][0].update(latestRevision=True, revisionName=recovery.BASE.revision)
+    service['status'].update(
+        latestReadyRevisionName=recovery.BASE.revision, latestCreatedRevisionName=recovery.BASE.revision
+    )
+    revision['metadata']['name'] = recovery.BASE.revision
+    revision['status']['imageDigest'] = recovery.BASE.image
+    app = revision['spec']['containers'][0]
+    app['image'] = recovery.BASE.image
+    app['env'][-1]['value'] = recovery.BASE.source
+
+    class FakeRun:
+        def __init__(self):
+            self.state = before
+            self.cap_requests = []
+            self.validation_error = None
+            self.interrupted = False
+            self.drift_after_validation = False
+            self.drift_after_write = False
+            self.permission_denied = False
+
+        def permission_check(self):
+            if self.permission_denied:
+                raise ValueError('missing permission')
+
+        def service(self):
+            return copy.deepcopy(self.state)
+
+        def read(self, noun, verb, _name):
+            if noun == 'revisions':
+                return copy.deepcopy(revision)
+            if verb == 'get-iam-policy':
+                return copy.deepcopy(policy)
+            document = copy.deepcopy(service)
+            document['metadata']['annotations'][recovery.CAP_ANNOTATION] = str(
+                self.state['scaling']['maxInstanceCount']
+            )
+            return document
+
+        def patch(self, etag, cap, *, validate_only):
+            self.cap_requests.append((etag, cap, validate_only))
+            assert etag == self.state['etag']
+            if validate_only:
+                if len(self.cap_requests) == self.validation_error:
+                    raise ValueError('validation rejected')
+                if len(self.cap_requests) == 2 and self.drift_after_validation:
+                    self.state['etag'] = 'drifted'
+                return {}
+            self.state.update(etag='new-version', generation='8', observedGeneration='8')
+            self.state['scaling']['maxInstanceCount'] = cap
+            if self.drift_after_write:
+                self.state['template'] = {}
+            if self.interrupted:
+                raise TimeoutError('simulated lost response after submit')
+            return {}
+
+        def complete(self, _operation, _cap, *, submitted):
+            pass
+
+    return FakeRun()
+
+
+def test_cap_recovery_writes_once_and_validates_the_post_write_inverse(inverse_readback):
+    api = _recovery_fixture(inverse_readback)
+    recovery.recover(api, api.read, 'approved-version')
+    assert api.cap_requests == [
+        ('approved-version', 4, True),
+        ('approved-version', 20, True),
+        ('approved-version', 4, False),
+        ('new-version', 20, True),
+    ]
+
+
+@pytest.mark.parametrize('failure', ['permission', 'etag', 'drift', 'forward', 'inverse', 'shape'])
+def test_cap_recovery_refuses_before_submit(inverse_readback, failure):
+    api = _recovery_fixture(inverse_readback)
+    etag = 'approved-version'
+    if failure == 'permission':
+        api.permission_denied = True
+    elif failure == 'etag':
+        etag = 'wrong-version'
+    elif failure == 'drift':
+        api.drift_after_validation = True
+    elif failure in ('forward', 'inverse'):
+        api.validation_error = 1 if failure == 'forward' else 2
+    else:
+        inverse_readback[1]['status']['conditions'][0]['status'] = 'False'
+    with pytest.raises(ValueError):
+        recovery.recover(api, api.read, etag)
+    assert all(validate for _, _, validate in api.cap_requests)
+
+
+@pytest.mark.parametrize('failure', ['interruption', 'post_write_shape', 'post_write_inverse'])
+def test_cap_recovery_requires_reconciliation_after_any_ambiguous_write(inverse_readback, failure):
+    api = _recovery_fixture(inverse_readback)
+    api.interrupted = failure == 'interruption'
+    api.drift_after_write = failure == 'post_write_shape'
+    api.validation_error = 4 if failure == 'post_write_inverse' else None
+    with pytest.raises(ValueError, match='independent Release reconciliation'):
+        recovery.recover(api, api.read, 'approved-version')
+    with pytest.raises(ValueError):
+        recovery.recover(api, api.read, 'approved-version')
+    assert [item for item in api.cap_requests if not item[2]] == [('approved-version', 4, False)]
+
+
+def test_cap_recovery_requests_only_the_one_field(monkeypatch):
+    api = recovery.RunAPI('fixture-token')
+    requests = []
+    monkeypatch.setattr(api, 'request', lambda *args: requests.append(args))
+    api.patch('fixture-etag', 4, validate_only=False)
+    assert requests == [
+        (
+            'PATCH',
+            recovery.RESOURCE + '?updateMask=scaling.maxInstanceCount&validateOnly=false',
+            {'name': recovery.RESOURCE, 'etag': 'fixture-etag', 'scaling': {'maxInstanceCount': 4}},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    'operation',
+    [
+        {},
+        {'name': 'projects/other/locations/us-central1/operations/abc'},
+        {'done': True, 'error': {'code': 10}},
+        {'done': True, 'response': {'name': 'wrong-service'}},
+    ],
+)
+def test_cap_recovery_refuses_bad_operation(operation):
+    operation.setdefault('name', recovery.OPERATIONS + 'operation')
+    api = recovery.RunAPI('fixture-token')
+    if not operation.get('done') and operation['name'].startswith(recovery.OPERATIONS):
+        api.request = lambda *_args: {'name': recovery.OPERATIONS + 'wrong-operation'}
+    with pytest.raises(ValueError):
+        api.complete(operation, 4, submitted=True, sleep=lambda _: None)
+
+
+def test_cap_recovery_checks_server_response_cap():
+    api = recovery.RunAPI('fixture-token')
+    response = {
+        '@type': 'type.googleapis.com/google.cloud.run.v2.Service',
+        'name': recovery.RESOURCE,
+        'scaling': {'maxInstanceCount': 4},
+    }
+    operation = {'done': True, 'response': response}
+    api.complete(operation, 4, submitted=False)
+    with pytest.raises(ValueError, match='exact pump service and cap'):
+        api.complete(operation, 20, submitted=False)
+
+
+def test_cap_validation_accepts_only_completed_typed_empty_response():
+    api = recovery.RunAPI('fixture-token')
+    operation = {'done': True, 'response': {'@type': recovery.SERVICE_TYPE}}
+    api.complete(operation, 4, submitted=False)
+    with pytest.raises(ValueError):
+        api.complete({'done': True}, 4, submitted=False)
+
+
+def test_cap_recovery_polls_numeric_project_operation(monkeypatch):
+    api = recovery.RunAPI('fixture-token')
+    name = recovery.OPERATIONS.replace(recovery.PROJECT, recovery.PROJECT_NUMBER) + 'operation'
+    resource = recovery.RESOURCE.replace(recovery.PROJECT, recovery.PROJECT_NUMBER)
+
+    def complete(method, path):
+        assert (method, path) == ('GET', name)
+        return {
+            'name': name,
+            'done': True,
+            'response': {'@type': recovery.SERVICE_TYPE, 'name': resource, 'scaling': {'maxInstanceCount': 4}},
+        }
+
+    monkeypatch.setattr(api, 'request', complete)
+    api.complete({'name': name}, 4, submitted=True, sleep=lambda _: None)
+
+
+def test_cap_recovery_operation_404_is_not_validation_success(monkeypatch, capsys):
+    api = recovery.RunAPI('fixture-token')
+
+    def missing(*_args, **_kwargs):
+        raise HTTPError('private', 404, 'private', None, None)
+
+    monkeypatch.setattr(api.opener, 'open', missing)
+    with pytest.raises(ValueError):
+        api.complete({'name': recovery.OPERATIONS + 'operation'}, 4, submitted=False, sleep=lambda _: None)
+    assert capsys.readouterr().err == 'PUMP_CAP_API_ERROR stage=operation-read status=404\n'
+
+
+def test_cap_recovery_uses_existing_approval_and_lock():
+    job = WORKFLOW['jobs']['recover-projection-pump-cap']
+    assert job['environment'] == 'prod'
+    assert job['needs'] == 'validate-production-boundary'
+    assert job['permissions'] == {'contents': 'read', 'id-token': 'write'}
+    assert "inputs.mode == 'recover-pump-cap'" in job['if']
+    assert "!inputs.break_glass_lock" in job['if']
+    assert "refs/heads/main" in job['if']
+    assert job['steps'][0]['with']['ref'] == '${{ github.workflow_sha }}'
+    assert 'prod-train' in WORKFLOW['concurrency']['group']
+    assert WORKFLOW['concurrency']['cancel-in-progress'] is False
+
+
+@pytest.mark.parametrize(
+    'override',
+    [
+        {},
+        {'GITHUB_RUN_ATTEMPT': '2'},
+        {'GITHUB_REF': 'refs/heads/topic'},
+        {'CONTROL_SHA': 'b' * 40},
+        {'APPROVED_ETAG': ''},
+        {'CLOUD_RUN_SERVICE': 'backend-sync'},
+        {'break_glass_lock': 'true'},
+        {'skip_eligibility_proof': 'true'},
+        {'deploy_gateway': 'true'},
+    ],
+)
+def test_cap_recovery_preapproval_boundary(tmp_path, override):
+    script = WORKFLOW['jobs']['validate-production-boundary']['steps'][1]['run']
+    event = tmp_path / 'event.json'
+    summary = tmp_path / 'summary'
+    inputs = {
+        'break_glass_lock': 'false',
+        'skip_eligibility_proof': 'false',
+        'deploy_gateway': 'false',
+        'requested_by': 'release-owner',
+    }
+    env = {
+        **os.environ,
+        'GITHUB_EVENT_NAME': 'workflow_dispatch',
+        'GITHUB_REF': 'refs/heads/main',
+        'GITHUB_REPOSITORY': 'BasedHardware/omi',
+        'GITHUB_RUN_ATTEMPT': '1',
+        'DEPLOY_ENVIRONMENT': 'prod',
+        'DEPLOY_TARGETS': 'cloud-run-only',
+        'CLOUD_RUN_SERVICE': 'backend-projection-pump',
+        'CONTROL_SHA': 'a' * 40,
+        'WORKFLOW_CONTROL_SHA': 'a' * 40,
+        'GITHUB_SHA': 'a' * 40,
+        'RELEASE_SHA': 'f7060aa1a0c9e3481790d497140096ae99f9b062',
+        'APPROVED_ETAG': 'AQ==',
+        'GITHUB_EVENT_PATH': str(event),
+        'GITHUB_STEP_SUMMARY': str(summary),
+    }
+    for key, value in override.items():
+        (inputs if key in inputs else env)[key] = value
+    event.write_text(json.dumps({'inputs': inputs}))
+    run = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=10)
+    assert (run.returncode == 0) is (not override), run.stderr
+    assert summary.exists() is (not override)

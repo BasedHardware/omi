@@ -20,6 +20,7 @@ const gateAbandoned queue.Cause = "gate_abandoned"
 
 type config struct {
 	policy           queue.Config
+	erase            eraseConfig
 	databaseURL      string
 	firestoreProject string
 	encryptionSecret string
@@ -48,6 +49,9 @@ func readConfig(lookup lookupEnv, migrate bool) (config, error) {
 		return cfg, nil
 	}
 	if err := cfg.readWorkerConfig(lookup); err != nil {
+		return config{}, err
+	}
+	if err := cfg.readEraseConfig(lookup); err != nil {
 		return config{}, err
 	}
 	return cfg, nil

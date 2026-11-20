@@ -710,6 +710,7 @@
         "backend/scripts/sync_ledger_fence_cutover.py",
         "backend/scripts/verify_backend_release_vector.py",
         "backend/scripts/verify_projection_pump_shape.py",
+        "backend/scripts/verify_projection_pump_inverse.py",
         "backend/scripts/verify_sync_ledger_fence_transition.py",
         "backend/scripts/verify-llm-gateway-serving.py",
         "backend/scripts/probe-llm-gateway-from-cloud-run.sh",
@@ -739,6 +740,7 @@
         "tests/unit/test_sync_two_lane.py",
         "tests/unit/test_cloud_run_live_caps.py",
         "tests/unit/test_cloud_run_service_selection.py",
+        "tests/unit/test_cloud_run_rightsizing_pins.py",
         "tests/unit/test_firebase_release_probe_token.py",
         "tests/unit/test_transcription_capability_probe.py",
         "tests/unit/test_validate_x_connector_sync_scheduler.py",
@@ -1070,7 +1072,10 @@
         "backend/charts/batch-pipeline-worker/**"
       ],
       "tests": [
-        "tests/unit/test_cross_service_deploy_contract.py"
+        "tests/unit/test_cross_service_deploy_contract.py",
+        "tests/unit/test_batch_pipeline_hpa_capacity_replay.py",
+        "tests/unit/test_batch_pipeline_hpa_retune_replay.py",
+        "tests/unit/test_batch_pipeline_hpa_max_replay.py"
       ],
       "checks": [],
       "invariants": [

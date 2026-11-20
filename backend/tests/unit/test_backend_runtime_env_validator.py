@@ -508,8 +508,8 @@ GOOGLE_OAUTH_SECRETS = '''\
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
         {"name": "GOOGLE_MAPS_API_KEY", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_MAPS_API_KEY", "key": "latest"}}},'''
 
-# POSTHOG_EVENTS_API_KEY is only declared for backend-integration in
-# deploy/runtime_env; deployed-state fixtures must scope it the same way.
+# POSTHOG_EVENTS_API_KEY is declared only for backend-integration and backend-projection-pump
+# in deploy/runtime_env; deployed-state fixtures must scope it the same way.
 INTEGRATION_EVENTS_SECRET = (
     '        {"name": "POSTHOG_EVENTS_API_KEY", "valueFrom": {"secretKeyRef": '
     '{"name": "POSTHOG_EVENTS_API_KEY", "key": "latest"}}}'
