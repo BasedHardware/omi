@@ -121,3 +121,25 @@ def resume_source_cleanup(job: dict) -> bool:
         merge_conversations.delete_merged_source(owner, cid, target)
     dispatch_merge_completed(owner, target, job['conversation_ids'])
     return True
+
+
+def retract_go_merge_source(job_id: str, generation: int, epoch: int, index: int) -> bool:
+    """Reuse authoritative derived-data cleanup while Go retains source custody."""
+    from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
+    from utils.account_cutover.access import should_skip_background_account_mutation
+    from utils.conversations.merge_conversations import retract_sync_bridge_source
+
+    # Serialize duplicate HTTP deliveries across replicas. The durable lease
+    # is rechecked inside the receiver after acquiring this lock.
+    lock_key = f'go-merge-retraction:{job_id}'
+    token = try_acquire_job_run_lock(lock_key)
+    if not token:
+        return False
+    try:
+        source = store.resolve_go_cleanup_source(job_id, generation, epoch, index)
+        if source is None or should_skip_background_account_mutation(source[0]):
+            return False
+        retract_sync_bridge_source(*source)
+        return store.resolve_go_cleanup_source(job_id, generation, epoch, index) == source
+    finally:
+        release_job_run_lock(lock_key, token)

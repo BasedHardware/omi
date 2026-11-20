@@ -416,3 +416,48 @@ async def run_listen_finalization_job(
     finally:
         if release_lock:
             await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
+
+
+@router.post('/v1/conversation-finalization-jobs/retract-merge-source', include_in_schema=False)
+async def retract_go_merge_source(request: Request, _auth: int = Depends(verify_listen_finalization_cloud_tasks_oidc)):
+    """Invoke the canonical derived retraction under an opaque sealed merge lease."""
+    try:
+        payload = await request.json()
+    except (ValueError, TypeError):
+        payload = None
+    if not isinstance(payload, dict) or set(payload) != {
+        'job_id',
+        'dispatch_generation',
+        'lease_epoch',
+        'source_index',
+    }:
+        return JSONResponse(status_code=400, content={'status': 'invalid_merge_retraction'})
+    job_id, generation, epoch, index = (
+        payload['job_id'],
+        payload['dispatch_generation'],
+        payload['lease_epoch'],
+        payload['source_index'],
+    )
+    if (
+        not isinstance(job_id, str)
+        or not job_id.startswith('merge-')
+        or len(job_id) > 128
+        or '/' in job_id
+        or type(generation) is not int
+        or not 0 < generation < 2**63
+        or type(epoch) is not int
+        or not 0 < epoch < 2**63
+        or type(index) is not int
+        or not 0 <= index < 100
+    ):
+        return JSONResponse(status_code=400, content={'status': 'invalid_merge_retraction'})
+    try:
+        retracted = await run_blocking(
+            db_executor, lifecycle_service.merge_jobs.retract_go_merge_source, job_id, generation, epoch, index
+        )
+    except Exception as error:
+        logger.warning('event=merge_retract_source outcome=retry exception_type=%s', type(error).__name__)
+        return retry_response(RetryReason.PERSISTENCE_FENCED)
+    if not retracted:
+        return JSONResponse(status_code=409, content={'status': 'retraction_fenced'})
+    return JSONResponse(status_code=200, content={'status': 'retracted'})

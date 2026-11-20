@@ -148,8 +148,12 @@ func (s Store) ClaimMerge(ctx context.Context, a queue.Admitting, owner, id stri
 			ID: id, Owner: owner, Target: field[string](row, "merge_target_id"), Sources: sources,
 			Generation: generation, Epoch: offset + 1, Phase: rules.MergePhase(field[string](row, "phase")), LeaseUntil: now.Add(mergeLease),
 		}
-		return tx.Update(path, document{"status": leased, "lease_epoch": claim.Epoch, "attempt_count": attempts,
-			"lease_expires_at": claim.LeaseUntil, "reconcile_after_at": claim.LeaseUntil, "updated_at": now})
+		patch := document{"status": leased, "lease_epoch": claim.Epoch, "attempt_count": attempts,
+			"lease_expires_at": claim.LeaseUntil, "reconcile_after_at": claim.LeaseUntil, "updated_at": now}
+		if claim.Phase == rules.MergeSourceCleanup {
+			patch["go_cleanup_epoch"] = claim.Epoch
+		}
+		return tx.Update(path, patch)
 	})
 	return claim, err
 }
@@ -169,6 +173,7 @@ func (s Store) RenewMerge(ctx context.Context, a queue.Admitting, claim finaliza
 				return err
 			}
 			update["phase"] = string(rules.MergeSourceCleanup)
+			update["go_cleanup_epoch"] = claim.Epoch
 		}
 		return tx.Update(path, update)
 	})

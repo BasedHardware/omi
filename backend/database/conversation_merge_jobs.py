@@ -179,6 +179,55 @@ def renew(job_id: str, epoch: int, *, phase: str | None = None, firestore_client
     return commit(client.transaction())
 
 
+def resolve_go_cleanup_source(job_id: str, generation: int, epoch: int, index: int) -> tuple[str, str] | None:
+    """Resolve an opaque source ordinal only under the current Go cleanup lease."""
+    client = client_for(None)
+    ref = client.collection(COLLECTION).document(job_id)
+
+    @firestore.transactional
+    def resolve(transaction: Any) -> tuple[str, str] | None:
+        job = ref.get(transaction=transaction).to_dict() or {}
+        sources = job.get('conversation_ids')
+        if (
+            not owned(job, epoch, _now())
+            or job.get('phase') != 'source_cleanup'
+            or job.get('dispatch_generation') != generation
+            or job.get('go_cleanup_epoch') != epoch
+            or not isinstance(sources, list)
+            or not 0 <= index < len(sources) <= 100
+        ):
+            return None
+        owner, source, target = job.get('uid'), sources[index], job.get('merge_target_id')
+        if not isinstance(owner, str) or not isinstance(source, str) or not isinstance(target, str):
+            return None
+        if source == target or any(not value or '/' in value for value in (owner, source, target)):
+            return None
+        deletion = client.collection('account_deletions').document(owner).get(transaction=transaction)
+        if account_deletion_marker_blocks_access(
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+        ):
+            return None
+        user = client.collection('users').document(owner)
+        for cid in (source, target):
+            if user.collection('deleted_conversations').document(cid).get(transaction=transaction).exists:
+                return None
+        donor = user.collection('conversations').document(source).get(transaction=transaction).to_dict() or {}
+        survivor = user.collection('conversations').document(target).get(transaction=transaction).to_dict() or {}
+        if (
+            not survivor
+            or survivor.get('status') != 'completed'
+            or any(survivor.get(flag) for flag in ('deleted', 'is_deleted', 'discarded', 'is_locked'))
+            or donor.get('status') != 'merging'
+            or any(donor.get(flag) for flag in ('deleted', 'is_deleted', 'is_locked'))
+            or donor.get('merge_job_id') != job_id
+            or donor.get('transcript_corrections_moved_to') != target
+        ):
+            return None
+        return owner, source
+
+    return resolve(client.transaction())
+
+
 def finish(job_id: str, epoch: int, *, firestore_client: Any = None) -> bool:
     client = client_for(firestore_client)
     ref = client.collection(COLLECTION).document(job_id)

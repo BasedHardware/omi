@@ -44,15 +44,15 @@ func TestF19GCSInventoryRefusesRetainedOrIncompletePages(t *testing.T) {
 				calls.Add(1)
 				q := r.URL.Query()
 				if q.Get("prefix") != "chunks/owner/conversation/" || r.URL.Path != "/b/regional-fixture/o" {
-					writeArchiveResponse(t, w, "{}")
+					writeFixtureResponse(t, w, "{}")
 					return
 				}
 				if q.Get("pageToken") == "" {
-					writeArchiveResponse(t, w, `{"nextPageToken":"next"}`)
+					writeFixtureResponse(t, w, `{"nextPageToken":"next"}`)
 					return
 				}
 				w.WriteHeader(tt.code)
-				writeArchiveResponse(t, w, tt.page)
+				writeFixtureResponse(t, w, tt.page)
 			})
 			ref := finalization.Ref{Owner: "owner", ID: "conversation"}
 			empty, err := archive.Empty(t.Context(), queue.AdmittingForTest(t, ref.Owner), ref, "session")
@@ -67,7 +67,7 @@ func TestF19GCSInventoryRefusesRetainedOrIncompletePages(t *testing.T) {
 	}
 }
 
-func writeArchiveResponse(t *testing.T, w http.ResponseWriter, data string) {
+func writeFixtureResponse(t *testing.T, w http.ResponseWriter, data string) {
 	t.Helper()
 	if _, err := fmt.Fprint(w, data); err != nil {
 		t.Error(err)

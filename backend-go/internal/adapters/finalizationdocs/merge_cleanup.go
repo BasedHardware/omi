@@ -43,7 +43,7 @@ func (s Store) checkedMergeSource(ctx context.Context, a queue.Admitting, claim 
 		if err != nil {
 			return err
 		}
-		if !slices.Contains(sources, id) {
+		if !slices.Equal(sources, claim.Sources) || !slices.Contains(sources, id) {
 			return finalization.ErrInvalid
 		}
 		var source docstore.Ref
@@ -67,7 +67,8 @@ func (s Store) checkedMergeSource(ctx context.Context, a queue.Admitting, claim 
 func checkSealedMerge(tx *docstore.Tx, claim finalization.MergeJob, row document, now time.Time) ([]string, error) {
 	if field[string](row, "status") != leased || field[string](row, "phase") != string(rules.MergeSourceCleanup) ||
 		field[string](row, "merge_target_id") != claim.Target || dispatchGeneration(row) != claim.Generation ||
-		field[int64](row, "lease_epoch") != claim.Epoch || !field[time.Time](row, "lease_expires_at").After(now) {
+		field[int64](row, "lease_epoch") != claim.Epoch || field[int64](row, "go_cleanup_epoch") != claim.Epoch ||
+		!field[time.Time](row, "lease_expires_at").After(now) {
 		return nil, queue.ErrLease
 	}
 	ref := finalization.Ref{Owner: claim.Owner, ID: claim.Target}

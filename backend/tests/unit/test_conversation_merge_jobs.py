@@ -223,3 +223,47 @@ def test_semantic_duplicate_hint_without_transfer_receipt_remains_mergeable(stor
     job = admit(store)
     assert job is not None
     assert all(row(store, cid)['merge_job_id'] == job['job_id'] for cid in ('a', 'b'))
+
+
+@pytest.fixture(scope='module')
+def go_retraction_ports():
+    from database import sync_jobs
+    from utils.account_cutover import access
+    from utils.conversations import merge_conversations as merge
+    from utils.conversations import merge_conversations_job as worker
+
+    return sync_jobs, access, merge, worker
+
+
+def test_go_retraction_requires_current_sealed_lease_and_live_target(store, monkeypatch, go_retraction_ports):
+    from unittest.mock import Mock
+
+    sync_jobs, access, merge, worker = go_retraction_ports
+
+    client, owner = store
+    admitted = admit(store)
+    job_id, target = admitted['job_id'], admitted['merge_target_id']
+    assert jobs.claim(job_id, firestore_client=client)
+    jobrow(store, admitted).update(phase='source_cleanup', go_cleanup_epoch=1)
+    client.rows[('users', owner, 'conversations', target)] = {'status': 'completed'}
+    row(store, 'a')['transcript_corrections_moved_to'] = target
+    monkeypatch.setattr(jobs, 'client_for', lambda _client: client)
+    monkeypatch.setattr(access, 'should_skip_background_account_mutation', lambda _owner: False)
+    monkeypatch.setattr(sync_jobs, 'try_acquire_job_run_lock', lambda _key: 'lock')
+    release = Mock()
+    retract = Mock()
+    monkeypatch.setattr(sync_jobs, 'release_job_run_lock', release)
+    monkeypatch.setattr(merge, 'retract_sync_bridge_source', retract)
+
+    assert not worker.retract_go_merge_source(job_id, 1, 2, 0)
+    assert not worker.retract_go_merge_source(job_id, 2, 1, 0)
+    assert not worker.retract_go_merge_source(job_id, 1, 1, 1)
+    retract.assert_not_called()
+    assert worker.retract_go_merge_source(job_id, 1, 1, 0)
+    retract.assert_called_once_with(owner, 'a')
+    assert row(store, 'a')['merge_job_id'] == job_id
+    assert release.call_count == 4
+
+    del client.rows[('users', owner, 'conversations', target)]
+    assert not worker.retract_go_merge_source(job_id, 1, 1, 0)
+    retract.assert_called_once()
