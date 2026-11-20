@@ -213,11 +213,13 @@ def _live_run_ids(uid, *, firestore_client=None):
         cursor = page[-1]
 
 
-def purge_conversation_priors(uid, conversation_ids, reason, *, firestore_client=None):
+def purge_conversation_priors(uid, conversation_ids, reason, *, firestore_client=None, keep_level=None):
     """The owner deleted or re-protected these conversations: no undo copy of them is kept.
 
     Each existing prior becomes a stub with no content (``purged``: reason), in every live re-derive
-    run of the owner, so that run's undo refuses as a whole rather than restoring around them.
+    run of the owner, so that run's undo refuses as a whole rather than restoring around them. With
+    ``keep_level``, copies already at that protection level, and copies of created rows (which hold no
+    row), are kept.
     """
     client = firestore_client or get_firestore_client()
     ids = sorted(set(conversation_ids))
@@ -226,7 +228,15 @@ def purge_conversation_priors(uid, conversation_ids, reason, *, firestore_client
     @firestore.transactional
     def purge(tx, run_id, page):
         coll = _priors(client, uid, run_id)
-        found = [cid for cid in page if coll.document(cid).get(transaction=tx).exists]
+        found = []
+        for cid in page:
+            snapshot = coll.document(cid).get(transaction=tx)
+            data = (snapshot.to_dict() or {}) if snapshot.exists else None
+            if data is None or (keep_level and (data.get('purged') or data.get('created'))):
+                continue
+            if keep_level and (data.get('raw') or {}).get('data_protection_level', 'standard') == keep_level:
+                continue
+            found.append(cid)
         for cid in found:
             tx.set(coll.document(cid), {'id': cid, 'purged': reason, 'recorded_at': datetime.now(timezone.utc)})
         return len(found)

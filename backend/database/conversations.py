@@ -3044,10 +3044,11 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             current = doc_snapshot.reference.get(transaction=transaction).to_dict()
             if not current or current.get('deleted') or current.get('visibility') in ('public', 'shared'):
                 return False
+            if current.get('v3_rederive_live_run'):
+                # Recorded on every attempt, so a retry after a failed purge still purges.
+                rederived.add(doc_snapshot.id)
             if current.get('data_protection_level', 'standard') == target_level:
                 return False
-            if current.get('v3_rederive_live_run'):
-                rederived.add(doc_snapshot.id)
             payload = {'data_protection_level': target_level}
             had_match_scores = match_scores.FIELD in current
             if 'transcript_segments' in current and not isinstance(current['transcript_segments'], dict):
@@ -3090,12 +3091,6 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
         if not run_preloaded_transactional(db, _migrate):
             continue
-        if rederived and doc_snapshot.id in rederived:
-            from database import conversations_v3_backfill_runs
-
-            conversations_v3_backfill_runs.purge_conversation_priors(
-                uid, [doc_snapshot.id], 'protection', firestore_client=db
-            )
 
         # Photos retain their separate batched migration path.
         photos_ref = doc_snapshot.reference.collection('photos')
@@ -3126,6 +3121,13 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
     if batch_count > 0:
         batch.commit()
+    if rederived:
+        # After rows and photos: a live re-derive's undo copies stored at another level are emptied.
+        from database import conversations_v3_backfill_runs
+
+        conversations_v3_backfill_runs.purge_conversation_priors(
+            uid, sorted(rederived), 'protection', firestore_client=db, keep_level=target_level
+        )
 
 
 # **************************************

@@ -109,6 +109,7 @@ def entries():
         DriverEntry(
             'database.conversations_v3_backfill_runs.purge_conversation_priors',
             base={'uid': SHAPE_UID, 'conversation_ids': ['shape-conversation'], 'reason': 'deleted'},
+            neutrals={'keep_level': (None, 'only filters which existing prior documents are stubbed; no query shape')},
         ),
         DriverEntry('database.conversations_v3_backfill_runs.pending_starts', base={'limit': 20}),
         DriverEntry('database.conversations_v3_processing.pending_created', base={'uid': SHAPE_UID}),

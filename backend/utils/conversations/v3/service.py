@@ -628,9 +628,10 @@ async def reconcile(
                 retire=retire,
                 key=key,
             )
-        except Conflict:
+        except Exception:
             if live:
-                # Copies of rows this attempt did not write go; a resume records them again.
+                # Copies of rows this attempt did not write go, whatever failed; a resume records them
+                # again. If this cleanup fails too, the partition stays unfinished until resume or undo.
                 await run_blocking(db_executor, rederive_store.drop_unwritten_priors, uid, run_id, priors)
             raise
         report.update(

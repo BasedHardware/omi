@@ -660,8 +660,26 @@ def test_a_protection_change_empties_undo_copies_of_rederived_rows_after_migrati
 
     monkeypatch.setattr(runs, 'purge_conversation_priors', purge)
     conversations_db.migrate_conversations_level_batch(UID, ['c0', 'c1', 'c2'], 'enhanced')
-    # Only the re-derived row this migration re-protected, and only after it was re-protected.
-    assert calls == [(UID, ['c0'], 'protection', 'enhanced')]
+    # After re-protecting: every re-derived row it reached (copies at the new level are kept).
+    assert calls == [(UID, ['c0', 'c2'], 'protection', 'enhanced')]
+
+
+def test_a_protection_purge_keeps_copies_already_at_the_new_level(strict, monkeypatch):
+    monkeypatch.setattr(runs, '_live_run_ids', lambda uid, **kw: [RUN])
+    runs.save_priors(
+        UID,
+        RUN,
+        [
+            {'id': 'old', 'raw': {'id': 'old'}, 'claims': []},
+            {'id': 'new', 'raw': {'id': 'new', 'data_protection_level': 'enhanced'}, 'claims': []},
+            {'id': 'made', 'created': True, 'claims': []},
+        ],
+        firestore_client=strict,
+    )
+    ids = ['old', 'new', 'made']
+    assert runs.purge_conversation_priors(UID, ids, 'protection', firestore_client=strict, keep_level='enhanced') == 1
+    by_id = {e['id']: e for e in priors(strict)}
+    assert by_id['old'].get('purged') == 'protection' and 'raw' in by_id['new'] and by_id['made'].get('created')
 
 
 @pytest.mark.asyncio
@@ -739,6 +757,17 @@ async def test_a_failed_commit_keeps_no_copy_of_a_row_it_did_not_write(owner, st
     monkeypatch.setattr(service, '_commit', commit)
     # A changed row is a retry, not a block; every copy the failed attempt recorded goes with it.
     with pytest.raises(store.Conflict, match='source_changed'):
+        await rederive()
+    assert not priors(strict)
+
+    # Any other failure (here, Firestore unavailable) cleans up the same way.
+    def unavailable(*args, **kwargs):
+        raise RuntimeError('unavailable')
+
+    monkeypatch.setattr(service, '_commit', unavailable)
+    strict.rows.pop(('users', UID, 'deleted_conversations', 'c1'))
+    strict.rows[path('c2')]['data_protection_level'] = 'standard'
+    with pytest.raises(RuntimeError, match='unavailable'):
         await rederive()
     assert not priors(strict)
 
