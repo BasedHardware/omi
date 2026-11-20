@@ -816,6 +816,8 @@ def _retire_patch(survivor, run_id, prior):
     return {
         'deleted': True,
         'discarded': True,
+        # Owes no summary: the debt query must not keep selecting a row its repair refuses.
+        'summary_due_at': None,
         'sync_merged_into': survivor,
         'v3_derived': False,
         'v3_rederive_live_run': run_id,
@@ -933,8 +935,9 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
         'rows_retired': len(retire),
         'rows_kept_unabsorbed': kept,
         'priors_recorded': len(priors),
-        # The partition's settle step baselines these copies by id rather than listing the run's.
-        'prior_ids': sorted(entry['id'] for entry in priors),
+        # The partition's settle step baselines these rows' copies by id rather than listing the run's;
+        # a resumed partition's rows the failed attempt already wrote keep their first copy.
+        'prior_ids': sorted(touched),
         'segments_checked': len(before_speech),
     }
     return write, {**retire, **lineage}, touched, sources, priors, counts

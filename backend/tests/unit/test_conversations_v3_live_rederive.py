@@ -221,6 +221,7 @@ async def test_fragmented_lunch_folds_into_one_card_that_keeps_the_earliest_id(o
         assert retired['sync_merged_into'] == 'c0' and retired['v3_derived'] is False
         # As a sync merge's absorbed row: claims transferred, and cached copies see a new revision.
         assert retired['v3_claims_transferred_to'] == 'c0' and retired['sync_content_revision'] == 1
+        assert retired['summary_due_at'] is None
     # The survivor lists its bridges, so deleting it purges them (the sync merge contract).
     assert card['sync_merged_from'] == ['c1', 'c2', 'c3', 'c4', 'c5']
     # Every source names exactly the surviving card; no claim points at a retired row.
@@ -1091,6 +1092,8 @@ async def test_a_commit_that_fails_midway_resumes_and_undoes_exactly(owner, stri
     monkeypatch.setattr(store.firestore, 'transactional', run_transaction)
     outcome, report = await rederive()
     assert outcome == 'committed' and conversations(strict)['c1']['sync_merged_into'] == 'c0'
+    # Its settle step baselines the rows the failed attempt already wrote, too.
+    assert rederive_store.record_baselines(UID, RUN, report['prior_ids']) == len(priors(strict))
     assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
     assert conversations(strict) == before
 

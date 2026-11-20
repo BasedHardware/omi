@@ -421,7 +421,9 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     finished rather than refused. It also refuses once account deletion began (`account_deletion`),
     and before restoring anything when a group of rows sharing sources is too large for one
     transaction (`undo_group_too_large`). A later live speech append to a rebuilt row is
-    replaced by the restored document. Not undone: outline cache entries and gateway spend.
+    replaced by the restored document. Before a partition settles, the run's own notes may discard a
+    rebuilt card or add app results to it, so an owner discard or app run on that card in those few
+    minutes is not told apart from the run's; undo the run only after it settles. Not undone: outline cache entries and gateway spend.
 
 Rollout owner: lead2. Step 0: set CONVERSATIONS_V3_FIRST_APP_BUILD through the shared runtime source
 from the first TestFlight build containing this PR. Then dev named accounts,

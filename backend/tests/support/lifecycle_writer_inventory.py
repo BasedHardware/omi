@@ -263,6 +263,21 @@ FIELD_SITES = {
         ),
     ],
     'utils/conversations/v3/service.py': [
+        (
+            '_retire_patch',
+            'summary_due_at',
+            'None',
+            (
+                'deleted',
+                'discarded',
+                'summary_due_at',
+                'sync_content_revision',
+                'sync_merged_into',
+                'v3_claims_transferred_to',
+                'v3_derived',
+                'v3_rederive_live_run',
+            ),
+        ),
         ('reconcile.plan', 'status', "prior['status']", ('status',)),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
     ],
