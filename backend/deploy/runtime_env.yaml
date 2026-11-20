@@ -4100,6 +4100,9 @@ environments:
             SCREEN_FRAME_SIGNING_SECRET:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
+            CONVERSATIONS_V3_LIVE_RECAP_COHORT:
+              secret: CONVERSATIONS_V3_LIVE_RECAP_COHORT
+              version: '1'
             SONIOX_API_KEY:
               secret: SONIOX_API_KEY
               version: latest
