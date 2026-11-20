@@ -242,109 +242,116 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
             )
             result['vectors'] = apply_with_product(records, config.uid, vector_report).as_dict()
             phase('seed_vectors')
-        admission = admit(config.uid)
-        env.decisions.record('conversations_v3_admission', admission['admitted'], 'lab_admission_markers')
-        result['admission'] = admission
-        if not admission['admitted']:
-            raise RuntimeError('the lab uid is not admitted to conversations v3 under this overlay')
-        ops = ProductV3Ops(finalizer=ProductFinalizer(env.firestore), barrier=barrier)
-        driver = V3Driver(
-            uid=config.uid,
-            ops=ops,
-            tasks=tasks,
-            clock=clock,
-            horizon=default_horizon(plan.arrivals, spec.day_end, spec.tail),
-            max_events=spec.max_events,
-            sweeps=spec.sweeps,
-        )
-        report = await driver.run(plan.arrivals)
-        phase('driver')
-        write_json(
-            run_dir / 'v3_driver.json',
-            {
-                'plan': plan.summary(),
-                'arrivals': [
-                    {
-                        'recording_id': a.recording_id,
-                        'instant': a.instant.isoformat(),
-                        'instant_source': a.instant_source,
-                        'words': a.words,
-                        'backfill_donor': a.backfill_donor,
-                        'manual_end': a.manual_end,
-                        **({'segments': a.segments} if a.partial else {}),
-                    }
-                    for a in plan.arrivals
-                ],
-                'skipped': plan.skipped,
-                'tasks': {'created': tasks.created, 'duplicates': tasks.duplicates, 'left': tasks.pending()},
-                **report.as_dict(),
-            },
-        )
-        result['driver'] = report.summary()
-        derived, recordings = read_v3_rows(config.uid)
-        derived_all = derived
-        derived = replayed_rows(derived, {a.recording_id for a in plan.arrivals}, spec.day_start, spec.day_end)
-        exported = export_conversations(
-            run_dir, uid=config.uid, derived=derived, production=spec.production, store=ProductChainStore(), sinks=sinks
-        )
-        # Only the day's replayed recordings: earlier days' recordings are start state, claimed by earlier rows.
-        replayed = {a.recording_id for a in plan.arrivals}
-        fate = recording_fate(
-            [r for r in recordings if str(r.get('id')) in replayed],
-            derived_all,  # a claim by a next-day conversation still claims the recording
-            words={a.recording_id: a.words for a in plan.arrivals if not a.partial},
-        )
-        write_json(run_dir / 'v3_recordings.json', fate)
-        write_json(
-            run_dir / 'chain.json',
-            {
-                'summary': {
-                    'status': report.summary()['status'],
-                    'conversations': len(exported),
-                    'failed': sum(1 for c in exported if c['v3']['process_failed']),
-                    'exported': len(exported),
-                },
-                'pipeline': 'v3',
-                'conversations': [
-                    {
-                        'conversation_id': c['id'],
-                        'status': 'failed' if c['v3']['process_failed'] else 'ok',
-                        'lane': 'v3',
-                    }
-                    for c in exported
-                ],
-                'warnings': report.warnings,
-            },
-        )
-        result['conversations'] = {
-            'v3': len(exported),
-            'visible': sum(1 for c in exported if c['v3']['visible']),
-            'unclaimed_recordings': fate['unclaimed'],
-        }
-        phase('export')
-        if spec.day is not None:
-            from testing.pipeline_lab.day.run import run_day
-
-            kept = [str(r['id']) for r in derived if home_visible(r)]
-            day_payload = run_day(
+        try:
+            admission = admit(config.uid)
+            env.decisions.record('conversations_v3_admission', admission['admitted'], 'lab_admission_markers')
+            result['admission'] = admission
+            if not admission['admitted']:
+                raise RuntimeError('the lab uid is not admitted to conversations v3 under this overlay')
+            ops = ProductV3Ops(finalizer=ProductFinalizer(env.firestore), barrier=barrier)
+            driver = V3Driver(
                 uid=config.uid,
-                day=spec.day,
-                tz_name=spec.tz_name,
-                run_dir=run_dir,
+                ops=ops,
+                tasks=tasks,
                 clock=clock,
-                sinks=sinks,
-                memories_before=spec.start_state.memories if spec.start_state is not None else (),
-                goals_before=spec.start_state.goals if spec.start_state is not None else (),
-                kept_conversation_ids=kept,
-                vector_index=spec.vector_index,
-                production_recap_at=spec.production_recap_at,
+                horizon=default_horizon(plan.arrivals, spec.day_end, spec.tail),
+                max_events=spec.max_events,
+                sweeps=spec.sweeps,
             )
-            result['day'] = {
-                'recap': day_payload.get('recap'),
-                'chat_index_ready': day_payload['chat_index'].get('ready'),
+            report = await driver.run(plan.arrivals)
+            phase('driver')
+            write_json(
+                run_dir / 'v3_driver.json',
+                {
+                    'plan': plan.summary(),
+                    'arrivals': [
+                        {
+                            'recording_id': a.recording_id,
+                            'instant': a.instant.isoformat(),
+                            'instant_source': a.instant_source,
+                            'words': a.words,
+                            'backfill_donor': a.backfill_donor,
+                            'manual_end': a.manual_end,
+                            **({'segments': a.segments} if a.partial else {}),
+                        }
+                        for a in plan.arrivals
+                    ],
+                    'skipped': plan.skipped,
+                    'tasks': {'created': tasks.created, 'duplicates': tasks.duplicates, 'left': tasks.pending()},
+                    **report.as_dict(),
+                },
+            )
+            result['driver'] = report.summary()
+            derived, recordings = read_v3_rows(config.uid)
+            derived_all = derived
+            derived = replayed_rows(derived, {a.recording_id for a in plan.arrivals}, spec.day_start, spec.day_end)
+            exported = export_conversations(
+                run_dir,
+                uid=config.uid,
+                derived=derived,
+                production=spec.production,
+                store=ProductChainStore(),
+                sinks=sinks,
+            )
+            # Only the day's replayed recordings: earlier days' recordings are start state, claimed by earlier rows.
+            replayed = {a.recording_id for a in plan.arrivals}
+            fate = recording_fate(
+                [r for r in recordings if str(r.get('id')) in replayed],
+                derived_all,  # a claim by a next-day conversation still claims the recording
+                words={a.recording_id: a.words for a in plan.arrivals if not a.partial},
+            )
+            write_json(run_dir / 'v3_recordings.json', fate)
+            write_json(
+                run_dir / 'chain.json',
+                {
+                    'summary': {
+                        'status': report.summary()['status'],
+                        'conversations': len(exported),
+                        'failed': sum(1 for c in exported if c['v3']['process_failed']),
+                        'exported': len(exported),
+                    },
+                    'pipeline': 'v3',
+                    'conversations': [
+                        {
+                            'conversation_id': c['id'],
+                            'status': 'failed' if c['v3']['process_failed'] else 'ok',
+                            'lane': 'v3',
+                        }
+                        for c in exported
+                    ],
+                    'warnings': report.warnings,
+                },
+            )
+            result['conversations'] = {
+                'v3': len(exported),
+                'visible': sum(1 for c in exported if c['v3']['visible']),
+                'unclaimed_recordings': fate['unclaimed'],
             }
-            phase('day')
-        clear_admission(config.uid)
+            phase('export')
+            if spec.day is not None:
+                from testing.pipeline_lab.day.run import run_day
+
+                kept = [str(r['id']) for r in derived if home_visible(r)]
+                day_payload = run_day(
+                    uid=config.uid,
+                    day=spec.day,
+                    tz_name=spec.tz_name,
+                    run_dir=run_dir,
+                    clock=clock,
+                    sinks=sinks,
+                    memories_before=spec.start_state.memories if spec.start_state is not None else (),
+                    goals_before=spec.start_state.goals if spec.start_state is not None else (),
+                    kept_conversation_ids=kept,
+                    vector_index=spec.vector_index,
+                    production_recap_at=spec.production_recap_at,
+                )
+                result['day'] = {
+                    'recap': day_payload.get('recap'),
+                    'chat_index_ready': day_payload['chat_index'].get('ready'),
+                }
+                phase('day')
+        finally:
+            clear_admission(config.uid)  # never leave the app-capability markers behind
         result['notifications'] = len(sinks.notifications)
         result['network_refusals'] = list(env.network.refusals)
         if getattr(spec.vector_index, 'path', None):

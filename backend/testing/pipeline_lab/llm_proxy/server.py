@@ -66,6 +66,11 @@ _HOP = {
 }
 
 
+def _header_value(value: object) -> str:
+    """A response header value with no CR, LF or other control characters (upstream values are relayed)."""
+    return ''.join(ch for ch in str(value) if ch == '\t' or ' ' <= ch != '\x7f')
+
+
 def _is_loopback(host: str) -> bool:
     if host == 'localhost':
         return True
@@ -222,11 +227,11 @@ class _Handler(BaseHTTPRequestHandler):
         self, status: int, body: bytes, content_type: str = 'application/json', extra: dict | None = None
     ) -> None:
         self.send_response(status)
-        self.send_header('Content-Type', content_type)
+        self.send_header('Content-Type', _header_value(content_type))
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'no-store')
         for name, value in (extra or {}).items():
-            self.send_header(name, value)
+            self.send_header(_header_value(name), _header_value(value))
         self.end_headers()
         self.wfile.write(body)
 
@@ -235,7 +240,13 @@ class _Handler(BaseHTTPRequestHandler):
         if length is None:
             self._send(411, _error_body('invalid_request_error', 'length_required', 'Content-Length required'))
             return None
-        size = int(length)
+        try:
+            size = int(length)
+        except ValueError:
+            size = -1
+        if size < 0:
+            self._send(400, _error_body('invalid_request_error', 'bad_length', 'Content-Length is not a length'))
+            return None
         if size > self.owner.config.max_body_bytes:
             self._send(413, _error_body('invalid_request_error', 'too_large', 'request body over the lab cap'))
             return None
@@ -470,7 +481,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _relay_stream(self, response: http.client.HTTPResponse, content_type: str, call_id: str) -> bytes:
         """Relay upstream chunks to the client as they arrive; return the full body."""
         self.send_response(response.status)
-        self.send_header('Content-Type', content_type)
+        self.send_header('Content-Type', _header_value(content_type))
         self.send_header('Transfer-Encoding', 'chunked')
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Pipeline-Lab-Cache', 'miss')

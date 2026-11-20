@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import logging
 import os
 import stat
 import subprocess
@@ -203,6 +204,35 @@ def classify(row: Mapping[str, Any]) -> str:
     return 'other'
 
 
+@contextmanager
+def redact_uid(uid: str) -> Iterator[None]:
+    """No log record created during the export names the owner uid.
+
+    Product helpers log the uid on a failed decrypt (``utils.encryption.decrypt``). The record factory
+    rewrites such a record when it is made, so every handler, including one configured mid-export, sees
+    ``<owner>`` instead.
+    """
+    previous = logging.getLogRecordFactory()
+
+    def factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
+        record = previous(*args, **kwargs)
+        try:
+            message = record.getMessage()
+        except Exception:  # noqa: BLE001 - a malformed record is the logger's problem, not the redactor's
+            return record
+        if uid in message:
+            record.msg, record.args = message.replace(uid, '<owner>'), ()
+        if record.exc_info or record.exc_text:
+            record.exc_info, record.exc_text = None, None  # tracebacks may quote arguments
+        return record
+
+    logging.setLogRecordFactory(factory)
+    try:
+        yield
+    finally:
+        logging.setLogRecordFactory(previous)
+
+
 def decode(uid: str, snapshot: Any) -> dict[str, Any]:
     """A row as the v3 loader reads it; an undecodable row is kept raw, marked, without speech."""
     raw = snapshot.to_dict() or {}
@@ -322,7 +352,7 @@ def main(argv: list[str] | None = None) -> int:
     os.umask(0o077)
     snapshot = Path(args.snapshot).expanduser().resolve()
     out = resolve_output(snapshot)
-    with read_only_fence():
+    with read_only_fence(), redact_uid(uid):
         from database._client import get_firestore_client
 
         manifest = export(uid, get_firestore_client(), snapshot, out, margin=timedelta(hours=args.margin_hours))

@@ -13,6 +13,7 @@ from typing import Any
 
 from testing.pipeline_lab.baseline.compare import baseline_view, production_view
 from testing.pipeline_lab.stack.io import read_json, read_jsonl, write_json
+from testing.pipeline_lab.store import safe_segment
 
 
 def load_production(baseline_dir: Path, conversations_file: str = 'conversations.jsonl') -> list[dict[str, Any]]:
@@ -44,7 +45,8 @@ def build_baseline(
     production = load_production(baseline_dir, conversations_file)
     replay = load_replay(run_dir)
     for conversation in production:
-        write_json(Path(run_dir) / 'baseline' / 'conversations' / f'{conversation["id"]}.json', conversation)
+        name = safe_segment(str(conversation['id']), 'production conversation id')
+        write_json(Path(run_dir) / 'baseline' / 'conversations' / f'{name}.json', conversation)
     view = baseline_view(replay, production, min_iou=min_iou)
     write_json(Path(run_dir) / 'baseline.json', view)
     return view

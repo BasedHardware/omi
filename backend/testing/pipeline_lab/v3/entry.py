@@ -100,8 +100,10 @@ def run(root: Path, run_id: str, engine: str) -> dict[str, Any]:
         index = NumericVectorIndex.open(run_dir / 'vector_index.json', dimension=embedder.dimension)
         start_state = load_start_state(store, day.day_id)
         excluded = ((overlay.model_config or {}).get('v3') or {}).get('exclude_start_ids')
-        if drop_start_conversations(start_state, excluded):
-            print(f'v3: left {len(excluded)} start-state id prefix(es) out of the seed', file=sys.stderr)
+        if dropped := drop_start_conversations(start_state, excluded):
+            print(
+                f'v3: left {dropped} start-state row(s) out of the seed ({len(excluded)} prefix(es))', file=sys.stderr
+            )
         spec = V3RunSpec(
             run_dir=run_dir,
             day_start=window.start,

@@ -46,7 +46,7 @@ DEFAULT_ROOT = '/Volumes/Ephemeral/pipeline-lab'
 DEFAULT_VERDICTS = '~/.local/share/pipeline-lab/verdicts'
 DEFAULT_PORT = 8765
 STATIC_DIR = Path(__file__).resolve().parent / 'static'
-STATIC_NAME = re.compile(r'[a-z0-9][a-z0-9-]*\.(html|css|js|svg)')
+STATIC_NAME = re.compile(r'[a-z0-9][a-z0-9-]{0,63}\.(?:html|css|js|svg)')
 MAX_BODY = 64 * 1024
 CHUNK = 256 * 1024
 LOOPBACK_NAMES = {'localhost', '127.0.0.1', '::1'}
@@ -72,7 +72,7 @@ CSP = (
 )
 
 
-_RANGE = re.compile(r'\s*bytes\s*=\s*(\d*)\s*-\s*(\d*)\s*', re.IGNORECASE)
+_RANGE = re.compile(r'bytes=(\d{0,19})-(\d{0,19})', re.IGNORECASE)  # matched after whitespace is removed
 
 
 def parse_range(header: Optional[str], size: int) -> Optional[tuple[int, int]]:
@@ -80,7 +80,8 @@ def parse_range(header: Optional[str], size: int) -> Optional[tuple[int, int]]:
 
     Malformed, multi-range and non-byte headers are ignored (RFC 9110 14.2 allows serving the whole).
     """
-    match = _RANGE.fullmatch(header or '')
+    compact = ''.join((header or '')[:200].split())  # bounded input, no backtracking over spaces
+    match = _RANGE.fullmatch(compact)
     if not match:
         return None
     first, last = match.groups()
@@ -305,7 +306,7 @@ class InspectorHandler(BaseHTTPRequestHandler):
     # ---- files
 
     def _static(self, name: str) -> None:
-        if not STATIC_NAME.fullmatch(name):
+        if len(name) > 72 or not STATIC_NAME.fullmatch(name):
             raise NotFound('not found')
         path = self.server.static_dir / name
         if not path.is_file():

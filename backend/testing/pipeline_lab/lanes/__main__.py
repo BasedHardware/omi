@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 
@@ -96,6 +97,13 @@ def main(argv=None) -> int:
             parser.error('--provider and --model are required for the prerecorded adapter')
         print(json.dumps(_record(args)))
         return 0
+
+    # Replay plays recorded cassettes only: no vendor or cloud credential may reach the product code it runs.
+    from testing.pipeline_lab.stack.runtime_env import SECRETISH
+    from testing.pipeline_lab.worktrees import _SCRUB_EXACT
+
+    for key in [k for k in os.environ if k in _SCRUB_EXACT or SECRETISH.search(k)]:
+        del os.environ[key]
 
     from testing.pipeline_lab.lanes.day import STTSelection, replay_day
     from testing.pipeline_lab.store import ensure_private_dir, lab_root, safe_segment

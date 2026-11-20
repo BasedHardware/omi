@@ -24,6 +24,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from testing.pipeline_lab.baseline.compare import home_reason, on_home
 from testing.pipeline_lab.ideal.schema import load_lines
 from testing.pipeline_lab.ideal.score import conversations_partition, ideal_partition, score
 from testing.pipeline_lab.store import lab_root
@@ -45,10 +46,9 @@ def load_run(root: Path, run_id: str) -> list[dict[str, Any]]:
 def card(conversation: Mapping[str, Any]) -> Card:
     segments = conversation.get('segments') or conversation.get('transcript_segments') or []
     words = sum(len((s.get('text') or '').split()) for s in segments)
-    v3 = conversation.get('v3') or {}
-    home = v3.get('visible', not v3.get('home_hidden', False))
+    home = on_home(conversation)  # the scorer's predicate: v3 visibility, else not discarded (classic)
     start = _when(conversation['started_at'])
-    reason = str(v3.get('home_hidden_reason') or '')
+    reason = '' if home else home_reason(conversation)
     if conversation.get('finished_at'):
         end = _when(conversation['finished_at'])
     else:

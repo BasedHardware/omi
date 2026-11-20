@@ -30,7 +30,25 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Optional
 
 DEFAULT_DIMENSIONS = 3072
-_SCHEMA_BLOCK = re.compile(r'```(?:json)?\s*(\{.*?\})\s*```', re.DOTALL)
+
+
+def _schema_block(text: str) -> str | None:
+    """The first fenced ```json {...}``` block's object, found by a linear scan (no regex backtracking)."""
+    at = 0
+    while (start := text.find('```', at)) >= 0:
+        end = text.find('```', start + 3)
+        if end < 0:
+            return None
+        inner = text[start + 3 : end]
+        if inner.startswith('json'):
+            inner = inner[4:]
+        inner = inner.strip()
+        if inner.startswith('{') and inner.endswith('}'):
+            return inner
+        at = end + 3
+    return None
+
+
 _WORD = re.compile(r"[A-Za-z][A-Za-z'-]+")
 
 
@@ -131,10 +149,10 @@ def _schema_from_request(body: dict[str, Any]) -> tuple[Optional[dict], Optional
     if body.get('functions'):
         function = body['functions'][0]
         return function.get('parameters') or {}, function.get('name') or 'tool', 'function'
-    match = _SCHEMA_BLOCK.search(_prompt_text(body.get('messages') or []) + str(body.get('system') or ''))
-    if match:
+    block = _schema_block(_prompt_text(body.get('messages') or []) + str(body.get('system') or ''))
+    if block is not None:
         try:
-            schema = json.loads(match.group(1))
+            schema = json.loads(block)
         except json.JSONDecodeError:
             schema = None
         if isinstance(schema, dict) and ('properties' in schema or '$defs' in schema):

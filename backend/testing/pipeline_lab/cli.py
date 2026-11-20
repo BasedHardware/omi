@@ -145,9 +145,6 @@ def build_parser() -> argparse.ArgumentParser:
         help='gke or cloud_run service whose env to use (backend-sync runs the v3 reconcile and notes)',
     )
     from_env.add_argument(
-        '--owner-uid-env', help='name of an env var holding the owner uid, to resolve partial cohorts (never written)'
-    )
-    from_env.add_argument(
         '--owner-uid-file',
         help='0600 file holding the owner uid, to resolve cohorts and uid allow-lists (never written)',
     )
@@ -416,9 +413,7 @@ def _overlay_from_runtime_env(args: argparse.Namespace) -> Any:
         if args.runtime_env
         else Path(__file__).resolve().parents[2] / 'deploy' / 'runtime_env.yaml'
     )
-    owner_uid = os.environ.get(args.owner_uid_env) if args.owner_uid_env else None
-    if args.owner_uid_env and not owner_uid:
-        raise CliError(f'{args.owner_uid_env} is not set')
+    owner_uid = None  # from a 0600 file only, never the environment
     if args.owner_uid_file:
         owner_uid = read_private_value(Path(args.owner_uid_file))
     live_env = None

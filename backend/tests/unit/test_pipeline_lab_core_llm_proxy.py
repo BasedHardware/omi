@@ -412,3 +412,10 @@ def test_plain_http_upstream_is_only_allowed_on_loopback():
         ProxyConfig(upstream=ok)
     with pytest.raises(ValueError):
         ProxyConfig(upstream='http://gateway.example')
+
+
+def test_relayed_header_values_lose_control_characters():
+    from testing.pipeline_lab.llm_proxy.server import _header_value
+
+    assert _header_value('application/json\r\nSet-Cookie: x=1') == 'application/jsonSet-Cookie: x=1'
+    assert _header_value('text/event-stream; charset=utf-8') == 'text/event-stream; charset=utf-8'

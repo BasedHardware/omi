@@ -346,3 +346,18 @@ def test_stage_keys_carry_the_selected_pipeline(tmp_path):
     assert run_pipeline_kind(store, {'model_config': {'pipeline': 'v3'}}, 'd2') == 'refused'
     key = lambda pipeline: keys.stage_key('discard', backend_tree='t', inputs={'pipeline': pipeline})
     assert key('v3') != key('classic')
+
+
+def test_a_failed_decrypt_during_export_never_logs_the_owner_uid(caplog):
+    import logging
+
+    from utils.encryption import decrypt
+
+    uid = 'owner-uid-7f3a'
+    caplog.set_level(logging.ERROR)
+    with prod_export.redact_uid(uid):
+        assert decrypt('bm90LWNpcGhlcnRleHQ=', uid) == 'bm90LWNpcGhlcnRleHQ='  # malformed: returned as is
+        logging.getLogger('anything').error('plain %s', uid)
+    assert caplog.records, 'the failed decrypt should still be logged'
+    assert all(uid not in r.getMessage() for r in caplog.records)
+    assert any('<owner>' in r.getMessage() for r in caplog.records)
