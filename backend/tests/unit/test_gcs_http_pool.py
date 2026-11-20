@@ -1,7 +1,5 @@
 """The shared GCS client's pool matches executor concurrency; the drain cap is bounded."""
 
-import importlib
-
 import pytest
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import storage
@@ -49,7 +47,15 @@ def test_a_non_default_adapter_is_kept():
     assert client._http.get_adapter('https://storage.googleapis.com/') is keep
 
 
-def test_private_sync_gets_count_prepared_sdk_requests_and_restore_reader(monkeypatch):
+@pytest.fixture
+def private_sync_readers():
+    from utils.other import storage as storage_helpers
+    from utils.other.audio_chunks import AudioChunkReadSession
+
+    return storage_helpers, AudioChunkReadSession('synthetic', 'conversation')
+
+
+def test_private_sync_gets_count_prepared_sdk_requests_and_restore_reader(monkeypatch, private_sync_readers):
     from types import SimpleNamespace
     from unittest.mock import Mock
     from urllib.parse import parse_qs, urlsplit
@@ -57,9 +63,8 @@ def test_private_sync_gets_count_prepared_sdk_requests_and_restore_reader(monkey
     from requests import Response
 
     from utils.other import private_sync_get_metrics as usage
-    from utils.other import storage as storage_helpers
-    from utils.other.audio_chunks import AudioChunkReadSession
 
+    storage_helpers, speaker_session = private_sync_readers
     client = storage.Client(project='synthetic', credentials=AnonymousCredentials())
     bucket = client.bucket('private-synthetic')
     counter = Mock()
@@ -103,7 +108,6 @@ def test_private_sync_gets_count_prepared_sdk_requests_and_restore_reader(monkey
     monkeypatch.setattr(storage_helpers, '_get_signed_url', lambda *_: 'https://example.invalid/playback')
     assert storage_helpers.get_playback_artifact_signed_url('synthetic', 'conversation', 'artifact')
     chunk_path = 'audio-chunks/synthetic/capture.pcm'
-    speaker_session = AudioChunkReadSession('synthetic', 'conversation')
     speaker_session._chunks = [{'path': chunk_path, 'generation': 3, 'size': 7}]
     monkeypatch.setattr(storage_helpers, 'get_private_cloud_sync_bucket', lambda: bucket)
 
