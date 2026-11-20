@@ -13,9 +13,11 @@ import shutil
 import subprocess
 import tempfile
 import time
-import platform
 import copy
+import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import listen_runtime
 import yaml
 
 NS = 'prod-omi-backend'
@@ -37,7 +39,8 @@ DISPATCH_DEFAULTS = {'mode': 'evidence', 'environment': 'prod', 'branch': 'main'
                      'stt_service_models': '', 'translation_service_models': '', 'listen_edge_image_digest': '',
                      'break_glass_lock': 'false'}
 BINDING_FIELDS = {'chart_tree', 'values_sha256', 'producer_sha256', 'env_helper_sha256', 'workflow_sha256',
-                  'helm_sha256', 'helm_version', 'python_version', 'yaml_version', 'yaml_sha256', 'cluster_context'}
+                  'helm_sha256', 'helm_version', 'python_version', 'yaml_version', 'yaml_sha256', 'cluster_context',
+                  'runtime_manifest_sha256'}
 
 
 class Refused(Exception):
@@ -146,6 +149,11 @@ class Reader:
                         os.killpg(p.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
+                except PermissionError:
+                    # macOS can return EPERM for the group after the child exits
+                    # between poll and killpg. Never suppress denial for a live child.
+                    if p.poll() is None:
+                        raise
                 finally:
                     p.wait()
 
@@ -336,17 +344,18 @@ def bindings(root, reader):
     scripts = Path(__file__).resolve().parent
     helm = shutil.which('helm')
     require(helm is not None, 'tool_missing')
+    runtime_root = Path(os.environ['RUNNER_TEMP']) / 'listen-runtime'
+    raw = (scripts / 'listen_runtime_manifest.json').read_bytes()
+    observed = listen_runtime.running(raw, runtime_root)
+    require(Path(helm).resolve() == runtime_root / 'helm/linux-amd64/helm', 'runtime_helm_path')
     return {
         'chart_tree': reader.run(['git', '-C', str(root), 'rev-parse', 'HEAD:backend/charts/backend-listen']).decode().strip(),
         'values_sha256': sha((root / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml').read_bytes()),
         'producer_sha256': sha(Path(__file__).read_bytes()),
         'env_helper_sha256': sha((scripts / 'listen_helm_env_overrides.py').read_bytes()),
         'workflow_sha256': sha((scripts.parent / 'workflows/gcp_backend_listen_helm.yml').read_bytes()),
-        'helm_sha256': sha(Path(helm).read_bytes()),
+        **observed,
         'helm_version': reader.run(['helm', 'version', '--template', '{{.Version}}']).decode().strip(),
-        'python_version': platform.python_version(),
-        'yaml_version': yaml.__version__,
-        'yaml_sha256': sha(Path(yaml.__file__).read_bytes()),
         'cluster_context': reader.run(['kubectl', 'config', 'current-context']).decode().strip(),
     }
 
