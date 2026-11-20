@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 
 import pytest
@@ -11,17 +12,34 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 
 
-@pytest.fixture(params=[('deploy-backend-stack', 'sync', '50'), ('sync-backfill-lifecycle', 'sync-backfill', '40')])
+PROD_BRANCH = re.compile(r"^\$\{\{ inputs\.runtime_env == 'prod' && '([^']*)' \|\| '([^']*)' \}\}$")
+
+
+@pytest.fixture(
+    params=[
+        ('deploy-backend-stack', 'sync', '50', 'live-max-scale'),
+        # 2026-11-20: integration reads its live cap too, so a capacity revision (35 -> 45) is not
+        # reset by the next train. Prod fresh-service default stays the former 35 literal.
+        ('deploy-backend-stack', 'integration', '35', 'live-integration-max-scale'),
+        ('sync-backfill-lifecycle', 'sync-backfill', '40', 'live-max-scale'),
+    ]
+)
 def action(request):
-    name, suffix, fallback = request.param
+    name, suffix, fallback, step_id = request.param
     steps = yaml.safe_load((ROOT / '.github/actions' / name / 'action.yml').read_text())['runs']['steps']
-    resolver = next(step for step in steps if step.get('id') == 'live-max-scale')
+    resolver = next(step for step in steps if step.get('id') == step_id)
     deploy = next(step for step in steps if step.get('id') == f'deploy-backend-{suffix}')
     assert steps.index(resolver) < steps.index(deploy)
     assert resolver['env']['CLOUD_RUN_SERVICE'] == '${{ inputs.service }}-' + suffix
     assert resolver['env']['CLOUD_RUN_PROJECT'] == '${{ inputs.project_id }}'
     assert resolver['env']['CLOUD_RUN_REGION'] == '${{ inputs.region }}'
-    assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in deploy['with']['flags']
+    assert f'--max-instances=${{{{ steps.{step_id}.outputs.max_scale }}}}' in deploy['with']['flags']
+    if suffix == 'integration':
+        # The resolver runs exactly when the deploy it feeds runs; a skipped resolver would
+        # hand the deploy an empty cap.
+        assert resolver['if'] == deploy['if']
+        prod, dev = PROD_BRANCH.match(resolver['env']['DEFAULT_MAX_SCALE']).groups()
+        assert (prod, dev) == ('35', '50')
     if suffix == 'sync-backfill':
         # Worker/platform/dispatch retain their cap read; routing must leave
         # the omitted backfill worker uninspected. Exercise the actual shell
@@ -60,7 +78,10 @@ def resolve(tmp_path, action, *, service_cap=None, revision_cap=None, missing=Fa
     executable.chmod(0o755)
     output = tmp_path / 'output'
     env = dict(os.environ, PATH=str(tmp_path) + os.pathsep + os.environ['PATH'])
+    default = resolver['env'].get('DEFAULT_MAX_SCALE', '')
+    match = PROD_BRANCH.match(default)
     env.update(
+        DEFAULT_MAX_SCALE=match.group(1) if match else default,
         CLOUD_RUN_SERVICE=service,
         CLOUD_RUN_PROJECT='test-project',
         CLOUD_RUN_REGION='us-central1',
@@ -125,7 +146,9 @@ def test_cap_ceiling_before_shell_arithmetic(tmp_path, action, cap):
     assert output.splitlines()[0] == f'max_scale={expected}'
 
 
-@pytest.mark.parametrize('action', [('sync-backfill-lifecycle', 'sync-backfill', '40')], indirect=True)
+@pytest.mark.parametrize(
+    'action', [('sync-backfill-lifecycle', 'sync-backfill', '40', 'live-max-scale')], indirect=True
+)
 @pytest.mark.parametrize('cap,expected', [('1', 6), ('8', 48), ('16', 90), ('40', 90), ('501', 90)])
 @pytest.mark.parametrize('exists', [True, False])
 def test_backfill_queue_create_and_update_obey_live_capacity(tmp_path, action, cap, expected, exists):
