@@ -13,13 +13,13 @@ from config.firestore_read_levers import lever_enabled
 import uuid
 from database.fsr_read_cache import cache_writer, cached_read, memo, plane_id, ttl, user_snapshot, writing
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Optional, TypedDict
+from typing import Any, Literal, NotRequired, Optional, TypedDict
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
 from ._client import get_data_plane_firestore_client
-from database.go_queue_erase import ARMED_AT, mark_wipe_running, running_stale_window
+from database.go_queue_erase import ARMED_AT, PROTECTED_ATTEMPT, mark_wipe_running, running_stale_window
 from database.account_deletion_marker import (
     account_deletion_collection,
     account_deletion_document,
@@ -85,6 +85,7 @@ ONBOARDING_ADMISSION_TTL = timedelta(minutes=20)
 class DeletionWipeTaskResolution(TypedDict):
     outcome: Literal['resolved', 'missing', 'ambiguous', 'completed', 'not_actionable']
     uid: str | None
+    erase_armed: NotRequired[bool]
 
 
 class DeletionWipeIntent(TypedDict):
@@ -418,27 +419,38 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
 
 
 @cache_writer('deletion_marker_cache')
-def mark_user_deletion_wipe_running(
-    uid: str, job_id: str | None = None, claim: str | None = None, *, required: bool = False
-) -> bool:
-    """Read the current erase requirement and invalidate the previous attempt before running."""
+def mark_user_deletion_wipe_running(uid: str, job_id: str | None = None, claim: str | None = None) -> bool | None:
+    """Mark a legacy wipe running or bind a protected wipe to its current claim."""
     client = account_deletion_firestore_client()
     ref = account_deletion_document(uid, firestore_client=client)
-    return mark_wipe_running(client.transaction(), ref, job_id, claim, uuid.uuid4().hex, required)
+    if job_id is None:
+        merge_account_authority(client, ref, {'wipe_status': 'running', 'wipe_running_at': datetime.now(timezone.utc)})
+        return None
+    if claim is None:
+        raise RuntimeError('Go queue erase requires a durable task claim')
+    return mark_wipe_running(client.transaction(), ref, job_id, claim, uuid.uuid4().hex)
 
 
 @transactional
-def _heartbeat_user_deletion_wipe_txn(transaction, doc_ref) -> None:
+def _heartbeat_user_deletion_wipe_txn(transaction, doc_ref, protected: bool = False) -> None:
     snapshot = doc_ref.get(transaction=transaction)
-    if snapshot.exists and (snapshot.to_dict() or {}).get('wipe_status') == 'running':
-        transaction.update(doc_ref, {'wipe_running_at': datetime.now(timezone.utc)})
+    data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+    if data.get('wipe_status') == 'running':
+        now = datetime.now(timezone.utc)
+        fields = {'wipe_running_at': now}
+        previous = data.get('wipe_running_at')
+        if protected and previous and data.get(PROTECTED_ATTEMPT) == previous:
+            fields[PROTECTED_ATTEMPT] = now
+        transaction.update(doc_ref, fields)
 
 
 @cache_writer('deletion_marker_cache')
-def heartbeat_user_deletion_wipe(uid: str) -> None:
+def heartbeat_user_deletion_wipe(uid: str, protected: bool = False) -> None:
     """Refresh a live wipe without resurrecting a failed/completed marker."""
     client = account_deletion_firestore_client()
-    _heartbeat_user_deletion_wipe_txn(client.transaction(), account_deletion_document(uid, firestore_client=client))
+    _heartbeat_user_deletion_wipe_txn(
+        client.transaction(), account_deletion_document(uid, firestore_client=client), protected
+    )
 
 
 @cache_writer('deletion_marker_cache')
@@ -484,7 +496,6 @@ def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) 
             'wipe_status': 'pending',
             'wipe_intent_at': datetime.now(timezone.utc),
             'wipe_queued_at': datetime.now(timezone.utc),
-            'wipe_due_at': datetime.now(timezone.utc),
             'wipe_job_id': wipe_job_id,
         },
         merge=True,
@@ -673,6 +684,8 @@ def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution
         return {'outcome': 'completed', 'uid': None}
     if status in _DELETION_WIPE_TERMINAL_STATUSES:
         return {'outcome': 'not_actionable', 'uid': None}
+    if marker.get(ARMED_AT) is not None:
+        return {'outcome': 'resolved', 'uid': doc.id, 'erase_armed': True}
     return {'outcome': 'resolved', 'uid': doc.id}
 
 
@@ -1013,6 +1026,8 @@ def _claim_deletion_wipe_task_txn(
         return 'completed'
     if status in ('cancelled', 'deleting_auth'):
         return 'not_actionable'
+    if expected_job_id is None and data.get(ARMED_AT) is not None:
+        return 'erase_required'
     if status == ACCOUNT_DELETION_GRACE_STATUS:
         if not account_deletion_grace_db.grace_wipe_is_due(data, now):
             return 'not_actionable'

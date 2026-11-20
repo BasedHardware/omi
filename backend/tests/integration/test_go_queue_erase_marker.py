@@ -10,6 +10,7 @@ from google.cloud import firestore
 import pytest
 
 from database import go_queue_erase as receipts
+from database import users as users_db
 from database.legal_holds import acquire_destructive_operation, LegalHoldAuthorityUnavailable
 
 pytestmark = pytest.mark.integration
@@ -37,7 +38,7 @@ def test_go_queue_erase_receipt_requires_held_due_generation(monkeypatch):
         ref.update({'wipe_due_at': datetime.now(timezone.utc) + timedelta(days=1)})
         with pytest.raises(RuntimeError, match='due wipe generation'):
             arm('claim')
-        ref.update({'wipe_due_at': datetime.now(timezone.utc) - timedelta(days=1)})
+        ref.update({'wipe_due_at': firestore.DELETE_FIELD})
         with pytest.raises(RuntimeError, match='expired before arming'):
             arm('claim', -timedelta(seconds=1))
         arm('claim')
@@ -50,6 +51,7 @@ def test_go_queue_erase_receipt_requires_held_due_generation(monkeypatch):
         arm('new-claim')
         receipts.record(uid, 'job', 'new-claim', 'wipe')
         marker = ref.get().to_dict()
+        assert marker['wipe_due_at'] == marker[receipts.ARMED_AT]
         assert marker[receipts.ARMED_AT] <= marker[receipts.RECEIPT_AT] <= marker[receipts.WIPE_AT]
         assert marker[receipts.PATH] == 'workerd'
         assert receipts.readback(
@@ -72,13 +74,15 @@ def test_enabled_billing_retry_preserves_known_wipe_order():
     try:
         ref = db.collection('account_deletions').document(uid)
         ref.set({'wipe_job_id': 'job', 'wipe_status': 'retrying'})
-        assert not receipts.mark_wipe_running(db.transaction(), ref, 'job', 'first', 'first-attempt', True)
+        assert not receipts.mark_wipe_running(db.transaction(), ref, 'job', 'first', 'first-attempt')
+        users_db._heartbeat_user_deletion_wipe_txn(db.transaction(), ref, True)
         ref.update({'wipe_status': 'retrying'})
-        assert not receipts.mark_wipe_running(db.transaction(), ref, 'job', 'second', 'second-attempt', True)
+        assert not receipts.mark_wipe_running(db.transaction(), ref, 'job', 'second', 'second-attempt')
         assert receipts.ORDER_UNKNOWN not in ref.get().to_dict()
 
-        ref.update({'wipe_status': 'retrying', receipts.PROTECTED_ATTEMPT: False})
-        assert not receipts.mark_wipe_running(db.transaction(), ref, 'job', 'legacy', 'legacy-attempt', True)
+        users_db._heartbeat_user_deletion_wipe_txn(db.transaction(), ref)
+        ref.update({'wipe_status': 'retrying'})
+        assert not receipts.mark_wipe_running(db.transaction(), ref, 'job', 'legacy', 'legacy-attempt')
         assert ref.get().to_dict()[receipts.ORDER_UNKNOWN] is True
     finally:
         db.close()

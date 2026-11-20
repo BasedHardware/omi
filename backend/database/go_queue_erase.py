@@ -40,25 +40,23 @@ def claim_fingerprint(token: str) -> str:
 
 
 @transactional
-def mark_wipe_running(transaction, ref, job_id: str | None, claim: str | None, operation_id: str, required: bool):
+def mark_wipe_running(transaction, ref, job_id: str, claim: str, operation_id: str) -> bool:
     snapshot = ref.get(transaction=transaction)
     marker = (snapshot.to_dict() or {}) if snapshot.exists else {}
     armed = marker.get(ARMED_AT) is not None
-    if job_id is not None and (
-        marker.get('wipe_job_id') != job_id or marker.get('wipe_status') != 'retrying' or claim is None
-    ):
+    if marker.get('wipe_job_id') != job_id or marker.get('wipe_status') != 'retrying':
         raise RuntimeError('account deletion wipe claim generation changed')
-    if armed and claim is None:
-        raise RuntimeError('armed Go queue erase requires a durable task claim')
-    fields: dict[str, Any] = {'wipe_status': 'running', 'wipe_running_at': datetime.now(timezone.utc)}
-    if required or armed:
-        if marker.get('wipe_running_at') and not armed and marker.get(PROTECTED_ATTEMPT) is not True:
-            fields[ORDER_UNKNOWN] = True
-        fields[PROTECTED_ATTEMPT] = True
-    elif marker.get(PROTECTED_ATTEMPT) is True:
-        fields[PROTECTED_ATTEMPT] = False
-    if claim is not None and (required or armed):
-        fields.update({CLAIM: claim, CLAIM_EXPIRES_AT: None})
+    now = datetime.now(timezone.utc)
+    fields: dict[str, Any] = {
+        'wipe_status': 'running',
+        'wipe_running_at': now,
+        PROTECTED_ATTEMPT: now,
+        CLAIM: claim,
+        CLAIM_EXPIRES_AT: None,
+    }
+    previous = marker.get('wipe_running_at')
+    if previous and not armed and marker.get(PROTECTED_ATTEMPT) != previous:
+        fields[ORDER_UNKNOWN] = True
     write_account_authority(transaction, ref, fields, merge=True, preimage=snapshot, operation_id=operation_id)
     return armed
 
@@ -93,6 +91,8 @@ def _record(
         fields: dict[str, Any] = {CLAIM_EXPIRES_AT: expires}
         if marker.get(ARMED_AT) is None:
             fields.update({ARMED_AT: firestore.SERVER_TIMESTAMP, RECEIPT_AT: None})
+            if due is None:
+                fields['wipe_due_at'] = firestore.SERVER_TIMESTAMP
             if isinstance(marker.get('wipe_auth_deleted_at'), datetime):
                 fields[WIPE_AT] = marker['wipe_auth_deleted_at']
         transaction.update(ref, fields)

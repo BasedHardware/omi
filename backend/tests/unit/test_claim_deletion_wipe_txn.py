@@ -915,3 +915,33 @@ def test_stale_task_cannot_claim_a_replacement_deletion_generation():
     )
     assert txn._updates == []
     assert txn._sets == []
+
+
+def test_legacy_task_defers_if_wipe_arms_after_job_lookup():
+    result, updates = _run_task_claim(
+        {
+            'uid': 'uid1',
+            'wipe_status': 'failed',
+            'go_queue_erase_armed_at': datetime.now(timezone.utc),
+        }
+    )
+    assert result == 'erase_required'
+    assert updates == []
+
+
+def test_legacy_mark_running_uses_the_original_authority_merge():
+    from unittest.mock import Mock
+
+    client, document = Mock(), Mock()
+    with (
+        patch.object(users_db, 'account_deletion_firestore_client', return_value=client),
+        patch.object(users_db, 'account_deletion_document', return_value=document),
+        patch.object(users_db, 'merge_account_authority') as merge,
+    ):
+        assert users_db.mark_user_deletion_wipe_running('uid1') is None
+
+    merge.assert_called_once()
+    assert merge.call_args.args[:2] == (client, document)
+    assert set(merge.call_args.args[2]) == {'wipe_status', 'wipe_running_at'}
+    assert merge.call_args.args[2]['wipe_status'] == 'running'
+    client.transaction.assert_not_called()

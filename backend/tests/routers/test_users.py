@@ -148,7 +148,10 @@ def test_location_context_consent_requires_disclosure_before_enabling():
     assert exc.value.status_code == 422
 
 
-def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
+@pytest.mark.parametrize(('enabled', 'armed'), [(False, False), (True, False), (False, True)])
+def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch, enabled, armed):
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', str(enabled).lower())
+    protected = enabled or armed
     calls = []
 
     async def run_wipe(*args):
@@ -158,11 +161,11 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
     async def run_blocking(_executor, fn, *args, **kwargs):
         calls.append((fn, args))
         if fn is users_router.resolve_deletion_wipe_job_id:
-            return {'outcome': 'resolved', 'uid': 'uid1'}
+            return {'outcome': 'resolved', 'uid': 'uid1', 'erase_armed': armed}
         if fn is users_router.try_acquire_job_run_lock:
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
-            assert kwargs == {'expected_job_id': 'job-1'}
+            assert kwargs == ({'expected_job_id': 'job-1'} if protected else {})
             return 'claimed'
         if fn is users_router.release_job_run_lock:
             return None
@@ -178,16 +181,19 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
 
     assert response.status_code == 500
     assert json.loads(response.body) == {'status': 'retry'}
+    lease = (users_router.ERASE_LEASE_SECONDS,) if protected else ()
+    job = ('job-1',) if protected else ()
     assert calls == [
         (users_router.resolve_deletion_wipe_job_id, ('job-1',)),
-        (users_router.try_acquire_job_run_lock, ('account-deletion:uid1', users_router.ERASE_LEASE_SECONDS)),
+        (users_router.try_acquire_job_run_lock, ('account-deletion:uid1', *lease)),
         (users_router.claim_deletion_wipe_for_task, ('uid1',)),
-        (users_router.run_deletion_wipe_with_lease, ('uid1', 0, False, 'lock-token', 'job-1')),
+        (users_router.run_deletion_wipe_with_lease, ('uid1', 0, False, 'lock-token', *job)),
         (users_router.release_job_run_lock, ('account-deletion:uid1', 'lock-token')),
     ]
 
 
 def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'false')
     background_args = []
 
     async def run_wipe(*args):
@@ -217,7 +223,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
 
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'failed_final'}
-    assert background_args == [('uid1', 1, True, 'lock-token', 'job-1')]
+    assert background_args == [('uid1', 1, True, 'lock-token')]
 
 
 def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):

@@ -110,6 +110,43 @@ def test_worker_transport_distinguishes_tcp_availability_from_tls_trust(monkeypa
         assert context.minimum_version is erase.ssl.TLSVersion.TLSv1_2
 
 
+@pytest.mark.parametrize('interruption', ['disconnect', 'incomplete_read', 'short_content_length', 'tls_eof'])
+def test_interrupted_acknowledgement_uses_database_recovery(monkeypatch, interruption):
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv('GO_QUEUE_ERASE_URL', 'https://worker.example/internal/v1/tenant-erase')
+    monkeypatch.setenv('GO_QUEUE_ERASE_AUDIENCE', 'worker')
+    monkeypatch.setattr(erase, '_oidc_token', lambda _: 'token')
+    monkeypatch.setattr(erase.socket, 'create_connection', MagicMock())
+    monkeypatch.setattr(erase.ssl, 'create_default_context', MagicMock())
+    connection = MagicMock()
+    monkeypatch.setattr(erase.http.client, 'HTTPSConnection', lambda *_args: connection)
+    response = connection.getresponse.return_value.__enter__.return_value
+    response.status = 200
+    response.length = None
+    if interruption == 'disconnect':
+        connection.getresponse.side_effect = erase.http.client.RemoteDisconnected()
+    elif interruption == 'tls_eof':
+        connection.getresponse.side_effect = erase.ssl.SSLEOFError()
+    elif interruption == 'incomplete_read':
+        response.read.side_effect = erase.http.client.IncompleteRead(b'{', 20)
+    else:
+        response.read.return_value = b'{'
+        response.length = 20
+
+    expires = datetime.now(timezone.utc) + timedelta(seconds=25)
+    record = MagicMock(return_value={receipts.CLAIM_EXPIRES_AT: expires})
+    monkeypatch.setattr(receipts, 'record', record)
+    recover = MagicMock(return_value=True)
+    monkeypatch.setattr(erase, '_erase_at_postgres', recover)
+
+    erase.require_committed_erase('tenant', 'job', 'token', lambda: expires, lambda _: None)
+
+    connection.request.assert_called_once()
+    recover.assert_called_once_with('tenant', expires)
+    assert [call.args[3] for call in record.call_args_list] == ['arm', 'verify', 'receipt', 'wipe']
+
+
 def test_tls_context_setup_timeout_cannot_authorize_recovery(monkeypatch):
     from unittest.mock import MagicMock
 

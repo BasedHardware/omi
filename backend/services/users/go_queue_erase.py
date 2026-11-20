@@ -120,6 +120,10 @@ def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
                 with connection.getresponse() as response:
                     status = response.status
                     body = response.read(2049) if status == 200 else b''
+                    if status == 200 and len(body) <= 2048 and response.length:
+                        raise http.client.IncompleteRead(body, response.length)
+            except (http.client.IncompleteRead, http.client.RemoteDisconnected, ssl.SSLEOFError):
+                raise EraseUnavailable('Go queue erase acknowledgement was interrupted') from None
             except ssl.SSLError:
                 raise EraseRejected('Go queue erase TLS session failed') from None
             except OSError as error:
