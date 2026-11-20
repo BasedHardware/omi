@@ -114,6 +114,7 @@ func appendFirstPair(tx *docstore.Tx, rows absorbRows, donorRef finalization.Ref
 		"fragments": []document{inlineFragment(target, rows.targetRef.ID), inlineFragment(donor, donorRef.ID)}}
 	joinedRow := document{"transcript_segments": joined, "finished_at": field[time.Time](donor, "finished_at"), "has_content": true,
 		"sync_content_revision": rev + 1, "sync_merged_from": []string{donorRef.ID}, "smart_merge": state}
+	stageSummaryRearm(target, joinedRow, now)
 	if storedLowerBound(map[string]any(target))+storedLowerBound(map[string]any(joinedRow)) > 900<<10 {
 		return finalization.SmartAbsorbResult{}, finalization.ErrStale
 	}
