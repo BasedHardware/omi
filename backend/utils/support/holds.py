@@ -1,0 +1,212 @@
+"""``hold`` commands: place, release, inspect and list legal holds.
+
+A hold blocks Omi's destructive paths for one account (account wipe, cascade
+and single-conversation deletes, memory deletes, purges); it never blocks the
+user's product access (P7 Decision 4). Placement and release go through
+``database.legal_holds.place_legal_hold`` so they contend on the same gate as
+deletion and record ticket, actor, agent and reason on the hold and its event
+history.
+"""
+
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, time, timedelta, timezone
+from typing import Any
+
+from database import legal_holds
+from database.account_deletion_marker import account_deletion_firestore_client
+from database.support_actions import ActionContext, ActionRecord, digest
+
+HOLD_ISSUER = "admin"
+DEFAULT_REVIEW_DAYS = 180
+MAX_REVIEW_DAYS = 730
+_EVENTS_SHOWN = 20
+_TOMBSTONE_SCAN_LIMIT = 2000
+TOMBSTONES_COLLECTION = "deleted_conversations"
+
+
+class HoldCommandError(RuntimeError):
+    pass
+
+
+def _firestore_client() -> Any:
+    return account_deletion_firestore_client()
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _review_by(value: str | None, now: datetime) -> datetime:
+    if value is None:
+        return now + timedelta(days=DEFAULT_REVIEW_DAYS)
+    try:
+        day = datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise HoldCommandError("--review-by must be YYYY-MM-DD") from exc
+    review = datetime.combine(day, time(0, 0), tzinfo=timezone.utc)
+    if review <= now:
+        raise HoldCommandError("--review-by must be in the future")
+    if review > now + timedelta(days=MAX_REVIEW_DAYS):
+        raise HoldCommandError(f"--review-by must be within {MAX_REVIEW_DAYS} days")
+    return review
+
+
+def _document_dict(client: Any, path: str) -> dict[str, Any] | None:
+    snapshot = client.document(path).get()
+    return (snapshot.to_dict() or {}) if snapshot.exists else None
+
+
+def _events(client: Any, uid: str) -> list[dict[str, Any]]:
+    collection = client.collection(
+        f"{legal_holds.LEGAL_HOLDS_COLLECTION}/{uid}/{legal_holds.LEGAL_HOLD_EVENTS_SUBCOLLECTION}"
+    )
+    rows = [{"id": snapshot.id, **(snapshot.to_dict() or {})} for snapshot in collection.limit(_EVENTS_SHOWN).stream()]
+    return sorted(rows, key=lambda row: row["id"])
+
+
+def _held_deferred_deletes(client: Any, uid: str) -> dict[str, Any]:
+    """Conversations the user deleted while held: hidden and retained, erasure owed after release."""
+
+    collection = client.collection(f"users/{uid}/{TOMBSTONES_COLLECTION}")
+    scanned = 0
+    held: list[dict[str, Any]] = []
+    for snapshot in collection.limit(_TOMBSTONE_SCAN_LIMIT).stream():
+        scanned += 1
+        payload = snapshot.to_dict() or {}
+        if payload.get("legal_hold_deferred") is True:
+            held.append({"conversation_id": snapshot.id, "erasure_armed": payload.get("erasure_armed") is True})
+    return {
+        "count": len(held),
+        "without_armed_erasure": sum(1 for row in held if not row["erasure_armed"]),
+        "conversations": held,
+        "tombstones_scanned": scanned,
+        "capped": scanned >= _TOMBSTONE_SCAN_LIMIT,
+    }
+
+
+def _state(client: Any, uid: str) -> dict[str, Any]:
+    return {
+        "hold": legal_holds.read_legal_hold(uid, firestore_client=client),
+        "deletion_gate": _document_dict(client, f"{legal_holds.LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}"),
+        "account_deletion_exists": _document_dict(client, f"account_deletions/{uid}") is not None,
+        "events": _events(client, uid),
+        "held_deferred_deletes": _held_deferred_deletes(client, uid),
+    }
+
+
+def _audit(ctx: ActionContext, review_by: datetime | None) -> dict[str, Any]:
+    return {"ticket": ctx.ticket, "reason": ctx.reason, "actor": ctx.actor, "agent": ctx.agent, "review_by": review_by}
+
+
+def status(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) -> dict[str, Any]:
+    client = _firestore_client()
+    state = _state(client, args.uid)
+    hold = state["hold"] or {}
+    record.summary = {"hold_exists": state["hold"] is not None, "active": hold.get("active") is True}
+    return {"uid": args.uid, **state}
+
+
+def place(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) -> dict[str, Any]:
+    client = _firestore_client()
+    now = _now()
+    review_by = _review_by(args.review_by, now)
+    before = _state(client, args.uid)
+    record.before_digest = digest(before["hold"])
+    record.summary = {
+        "already_active": (before["hold"] or {}).get("active") is True,
+        "review_days": (review_by - now).days,
+    }
+    if not ctx.apply:
+        return {
+            "uid": args.uid,
+            "dry_run": True,
+            "would_place": {"issuer": HOLD_ISSUER, "review_by": review_by},
+            **before,
+        }
+    legal_holds.place_legal_hold(
+        args.uid, issuer=HOLD_ISSUER, active=True, firestore_client=client, now=now, audit=_audit(ctx, review_by)
+    )
+    after = _state(client, args.uid)
+    record.after_digest = digest(after["hold"])
+    _assert_fence(args.uid, client, expect_active=True)
+    record.summary["fence_verified"] = True
+    return {"uid": args.uid, "placed": True, **after}
+
+
+def release(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) -> dict[str, Any]:
+    client = _firestore_client()
+    before = _state(client, args.uid)
+    hold = before["hold"]
+    if not hold or hold.get("active") is not True:
+        raise HoldCommandError("no active legal hold to release")
+    record.before_digest = digest(hold)
+    record.summary = {"was_active": True}
+    if not ctx.apply:
+        return {"uid": args.uid, "dry_run": True, "would_release": True, **before}
+    legal_holds.place_legal_hold(
+        args.uid, issuer=HOLD_ISSUER, active=False, firestore_client=client, now=_now(), audit=_audit(ctx, None)
+    )
+    after = _state(client, args.uid)
+    record.after_digest = digest(after["hold"])
+    _assert_fence(args.uid, client, expect_active=False)
+    record.summary["fence_verified"] = True
+    deferred = after["held_deferred_deletes"]
+    record.summary["held_deferred_without_erasure"] = deferred["without_armed_erasure"]
+    follow_up = None
+    if deferred["without_armed_erasure"]:
+        follow_up = (
+            f"{deferred['without_armed_erasure']} conversation(s) the user deleted while held have no armed erasure. "
+            "Erase them per backend/docs/runbooks/support-operator-cli.md (hold release follow-up)."
+        )
+    return {"uid": args.uid, "released": True, "follow_up": follow_up, **after}
+
+
+def list_holds(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) -> dict[str, Any]:
+    client = _firestore_client()
+    now = _now()
+    holds = legal_holds.list_legal_holds(active_only=not args.all, firestore_client=client)
+    for hold in holds:
+        review_by = hold.get("review_by")
+        hold["review_overdue"] = isinstance(review_by, datetime) and review_by <= now
+        hold["missing_audit"] = not hold.get("ticket")
+    record.summary = {
+        "holds": len(holds),
+        "review_overdue": sum(1 for hold in holds if hold["review_overdue"]),
+        "missing_audit": sum(1 for hold in holds if hold["missing_audit"]),
+    }
+    return {"holds": holds}
+
+
+def _assert_fence(uid: str, client: Any, *, expect_active: bool) -> None:
+    try:
+        legal_holds.assert_account_deletion_permitted(uid, firestore_client=client)
+    except legal_holds.LegalHoldActive:
+        if expect_active:
+            return
+        raise HoldCommandError("hold release did not take effect: deletion is still fenced")
+    if expect_active:
+        raise HoldCommandError("hold placement did not take effect: deletion is still permitted")
+
+
+def register(groups: Any) -> None:
+    group = groups.add_parser("hold", help="place, release, inspect and list legal holds")
+    actions = group.add_subparsers(dest="action", required=True)
+
+    status_parser = actions.add_parser("status", help="show the hold, deletion gate and hold history")
+    status_parser.add_argument("uid")
+    status_parser.set_defaults(handler=status)
+
+    place_parser = actions.add_parser("place", help="place (or refresh the audit fields of) a legal hold")
+    place_parser.add_argument("uid")
+    place_parser.add_argument("--review-by", help=f"YYYY-MM-DD; default {DEFAULT_REVIEW_DAYS} days from now")
+    place_parser.set_defaults(handler=place)
+
+    release_parser = actions.add_parser("release", help="release an active legal hold")
+    release_parser.add_argument("uid")
+    release_parser.set_defaults(handler=release)
+
+    list_parser = actions.add_parser("list", help="list holds; flags overdue reviews and missing audit fields")
+    list_parser.add_argument("--all", action="store_true", help="include released holds")
+    list_parser.set_defaults(handler=list_holds)

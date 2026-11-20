@@ -59,7 +59,14 @@ def _tombstone_payload(conversation_id: str, row: dict) -> dict:
 
 
 @cache_writer('tombstone_negative_cache')
-def accept_deletion(uid: str, conversation_id: str, *, firestore_client: Any = None) -> None:
+def accept_deletion(
+    uid: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+    legal_hold_deferred: bool = False,
+    arm_erasure: bool = True,
+) -> None:
     """Accept a delete without the account gate: hide it now, owe its erasure durably.
 
     One transaction writes the tombstone (kept if a retry already wrote it), marks
@@ -68,12 +75,20 @@ def accept_deletion(uid: str, conversation_id: str, *, firestore_client: Any = N
     which also arms the batch purge. Nothing is erased here. An active legal hold
     rejects the request as before; a hold placed after this commit stops the
     erasure and the conversation stays hidden but retained.
+
+    ``legal_hold_deferred`` is the held-account path (P7 Decision 4: a hold
+    blocks physical disposal, never product access): the caller has confirmed
+    an active hold, so the delete is accepted, hidden and retained instead of
+    rejected. The tombstone records it so release can account for it. With
+    ``arm_erasure=False`` (a non-cascade delete) no cascade obligation is
+    armed, because the runner's erasure is a cascade the user did not ask for.
     """
     from database._client import get_firestore_client
     from database.conversation_batch_purge_jobs import accept_fields, erasure_job_ref
     from database.legal_holds import assert_account_deletion_permitted
 
-    assert_account_deletion_permitted(uid)
+    if not legal_hold_deferred:
+        assert_account_deletion_permitted(uid)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user = client.collection('users').document(uid)
     conversation_ref = user.collection('conversations').document(conversation_id)
@@ -85,18 +100,24 @@ def accept_deletion(uid: str, conversation_id: str, *, firestore_client: Any = N
             field_paths=['external_data', 'created_at', 'deleted', 'sync_merged_from'], transaction=transaction
         )
         tombstone_exists = tombstone_ref.get(transaction=transaction).exists
-        owed = obligation_ref.get(transaction=transaction)
+        owed = obligation_ref.get(transaction=transaction) if arm_erasure else None
         row = (row_snapshot.to_dict() or {}) if row_snapshot.exists else {}
         # Merge donors are read now, while the row exists: their canonical audio is erased with it.
         # A retry after the row is gone keeps the donors an earlier acceptance recorded.
-        sources = list((owed.to_dict() or {}).get('audio_source_ids') or []) if owed.exists else []
+        sources = list((owed.to_dict() or {}).get('audio_source_ids') or []) if owed is not None and owed.exists else []
         for source in row.get('sync_merged_from') or []:
             if source and source != conversation_id and str(source) not in sources:
                 sources.append(str(source))
         if not tombstone_exists:
-            transaction.create(tombstone_ref, _tombstone_payload(conversation_id, row))
+            payload = _tombstone_payload(conversation_id, row)
+            if legal_hold_deferred:
+                payload['legal_hold_deferred'] = True
+                payload['erasure_armed'] = arm_erasure
+            transaction.create(tombstone_ref, payload)
         if row_snapshot.exists and not row.get('deleted'):
             transaction.update(conversation_ref, {'deleted': True})
+        if owed is None:
+            return
         owed_fields = accept_fields(uid, conversation_id, audio_source_ids=sources)
         if owed.exists:
             transaction.update(obligation_ref, owed_fields)  # generation/attempts/lease survive a re-accept

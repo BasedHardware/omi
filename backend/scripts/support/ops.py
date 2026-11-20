@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""omi-support-ops: the audited operator CLI for customer support writes and data access.
+
+Not the read-only ``omi-support`` harness CLI (``scripts/support/cli.py``, a support
+person's own Firebase session against ``/v1/support/*``). This one runs on operator
+cloud credentials, for holds, retention checks, DSAR exports and account operations.
+
+    python scripts/support/ops.py --ticket T --actor A --reason R hold status UID
+    python scripts/support/ops.py --ticket T --actor A --reason R hold place UID --review-by 2027-05-20 --apply
+    python scripts/support/ops.py --ticket T --actor A --reason R hold release UID --apply
+    python scripts/support/ops.py --ticket T --actor A --reason R hold list
+    python scripts/support/ops.py --ticket T --actor A --reason R retention check UID [--conversation CID] [--month 2025-08]
+    python scripts/support/ops.py --ticket T --actor A --reason R dsar export UID --approval NOTE_ID --apply
+    python scripts/support/ops.py --ticket T --actor A --reason R account summary UID
+
+Every command, read or write, first writes ``support_actions/{id}`` (ticket,
+actor, agent, reason, command, argument digest) and finishes it with the outcome;
+if that audit write fails the command does not run. Writes are dry runs unless
+``--apply`` is passed. ``--agent`` (or ``SUPPORT_AGENT_ID``) names the operator
+identity that ran the command; ``--actor`` is the human who asked for it.
+
+Runs with the operator's ADC (``prod-operator`` tier for production today; the
+support operator service account once provisioned). Runbook:
+``backend/docs/runbooks/support-operator-cli.md``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import getpass
+import json
+import os
+import socket
+import sys
+from pathlib import Path
+from typing import Any, Callable
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from database import support_actions  # noqa: E402
+from utils.support import account, dsar_export, holds, retention  # noqa: E402
+
+Handler = Callable[[argparse.Namespace, support_actions.ActionContext, support_actions.ActionRecord], dict[str, Any]]
+MODULES = (holds, retention, dsar_export, account)
+
+
+def _default_agent() -> str:
+    return os.environ.get("SUPPORT_AGENT_ID") or f"{getpass.getuser()}@{socket.gethostname()}"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="omi-support-ops", description=__doc__.split("\n\n")[0])
+    parser.add_argument("--ticket", required=True, help="Intercom conversation id the action serves")
+    parser.add_argument("--actor", required=True, help="the human who asked for this action")
+    parser.add_argument("--reason", required=True, help="why, in one line (no customer content)")
+    parser.add_argument("--agent", default=None, help="operator identity that runs it (default SUPPORT_AGENT_ID)")
+    parser.add_argument("--apply", action="store_true", help="perform writes (default: dry run)")
+    groups = parser.add_subparsers(dest="group", required=True)
+    for module in MODULES:
+        module.register(groups)
+    return parser
+
+
+def _command_args(args: argparse.Namespace) -> dict[str, Any]:
+    skip = {"ticket", "actor", "reason", "agent", "apply", "handler"}
+    return {key: value for key, value in vars(args).items() if key not in skip}
+
+
+def main(argv: list[str] | None = None, *, firestore_client: Any | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    ctx = support_actions.ActionContext(
+        ticket=args.ticket,
+        actor=args.actor,
+        reason=args.reason,
+        agent=args.agent or _default_agent(),
+        apply=args.apply,
+    )
+    command_args = _command_args(args)
+    command = f"{args.group} {getattr(args, 'action', '')}".strip()
+    handler: Handler = args.handler
+    with support_actions.record_action(ctx, command, command_args, firestore_client=firestore_client) as record:
+        result = handler(args, ctx, record)
+    print(
+        json.dumps({"action_id": record.action_id, "apply": ctx.apply, **result}, indent=1, sort_keys=True, default=str)
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

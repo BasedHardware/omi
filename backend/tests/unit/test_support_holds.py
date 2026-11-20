@@ -1,0 +1,250 @@
+"""Support operator hold commands and their audit trail (support_actions, hold events)."""
+
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from database import legal_holds, support_actions
+from scripts.support import ops
+from utils.support import account, holds
+
+UID = "uid-held"
+NOW = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+
+
+class _Snapshot:
+    def __init__(self, path, payload):
+        self.id = path.rsplit("/", 1)[-1]
+        self.exists = payload is not None
+        self._payload = payload
+
+    def to_dict(self):
+        return dict(self._payload) if self._payload is not None else None
+
+
+class _Reference:
+    def __init__(self, client, path):
+        self.client, self.path = client, path
+
+    def get(self, transaction=None, field_paths=None):
+        del transaction, field_paths
+        return _Snapshot(self.path, self.client.docs.get(self.path))
+
+    def set(self, payload, merge=False):
+        if self.client.fail_writes_under and self.path.startswith(self.client.fail_writes_under):
+            raise RuntimeError("write refused")
+        current = dict(self.client.docs.get(self.path, {})) if merge else {}
+        self.client.docs[self.path] = {**current, **payload}
+
+
+class _Collection:
+    def __init__(self, client, path, limit=None):
+        self.client, self.path, self._limit = client, path, limit
+
+    def document(self, document_id):
+        return _Reference(self.client, f"{self.path}/{document_id}")
+
+    def limit(self, count):
+        return _Collection(self.client, self.path, count)
+
+    def stream(self):
+        depth = self.path.count("/") + 1
+        rows = [
+            _Snapshot(path, payload)
+            for path, payload in sorted(self.client.docs.items())
+            if path.startswith(f"{self.path}/") and path.count("/") == depth
+        ]
+        return iter(rows[: self._limit] if self._limit is not None else rows)
+
+
+class _Transaction:
+    def __init__(self, client):
+        self.client = client
+
+    def set(self, reference, payload, merge=False):
+        reference.set(payload, merge=merge)
+
+
+class _Client:
+    def __init__(self, docs=None):
+        self.docs = dict(docs or {})
+        self.fail_writes_under = None
+
+    def document(self, path):
+        return _Reference(self, path)
+
+    def collection(self, path):
+        return _Collection(self, path)
+
+    def transaction(self):
+        return _Transaction(self)
+
+
+@pytest.fixture
+def client(monkeypatch):
+    fake = _Client({f"users/{UID}": {"created_at": NOW, "language": "en", "email": "secret@example.com"}})
+    monkeypatch.setattr(holds, "_firestore_client", lambda: fake)
+    monkeypatch.setattr(account, "_firestore_client", lambda: fake)
+    monkeypatch.setattr(holds, "_now", lambda: NOW)
+    monkeypatch.setattr(support_actions, "account_deletion_firestore_client", lambda firestore_client=None: fake)
+    monkeypatch.setattr(legal_holds, "account_deletion_firestore_client", lambda firestore_client=None: fake)
+    # The real writer runs inside Firestore's retrying decorator; drive its body directly.
+    monkeypatch.setattr(legal_holds, "_place_legal_hold_transaction", legal_holds._place_legal_hold_transaction.to_wrap)
+    return fake
+
+
+def _ctx(apply=False, ticket="ic-1"):
+    return support_actions.ActionContext(
+        ticket=ticket, actor="aryan", reason="litigation hold notice", agent="support-vm", apply=apply
+    )
+
+
+def _run(handler, ctx, **kwargs):
+    args = argparse.Namespace(uid=UID, **kwargs)
+    with support_actions.record_action(ctx, handler.__name__, vars(args), now=lambda: NOW) as record:
+        result = handler(args, ctx, record)
+    return result, record
+
+
+def _actions(client):
+    return {path: row for path, row in client.docs.items() if path.startswith("support_actions/")}
+
+
+def test_place_dry_run_writes_only_the_audit_record(client):
+    result, record = _run(holds.place, _ctx(), review_by=None)
+    assert result["dry_run"] is True
+    assert f"legal_holds/{UID}" not in client.docs
+    (audit,) = _actions(client).values()
+    assert audit["status"] == "succeeded" and audit["apply"] is False and audit["ticket"] == "ic-1"
+    assert audit["summary"] == {"already_active": False, "review_days": holds.DEFAULT_REVIEW_DAYS}
+
+
+def test_place_apply_records_ticket_actor_review_date_and_an_event_and_fences_deletion(client):
+    result, record = _run(holds.place, _ctx(apply=True), review_by="2027-05-01")
+    hold = client.docs[f"legal_holds/{UID}"]
+    assert hold["active"] is True and hold["issuer"] == "admin"
+    assert hold["ticket"] == "ic-1" and hold["placed_by"] == "aryan" and hold["reason"] == "litigation hold notice"
+    assert hold["review_by"] == datetime(2027, 5, 1, tzinfo=timezone.utc)
+    events = [row for path, row in client.docs.items() if path.startswith(f"legal_holds/{UID}/events/")]
+    assert [event["action"] for event in events] == ["place"] and events[0]["agent"] == "support-vm"
+    with pytest.raises(legal_holds.LegalHoldActive):
+        legal_holds.assert_account_deletion_permitted(UID, firestore_client=client)
+    assert record.summary["fence_verified"] is True
+    assert record.before_digest != record.after_digest
+
+
+def test_place_refreshes_audit_fields_on_a_legacy_hold(client):
+    client.docs[f"legal_holds/{UID}"] = {"schema_version": "legal_hold.v1", "issuer": "admin", "active": True}
+    result, record = _run(holds.place, _ctx(apply=True), review_by=None)
+    assert record.summary["already_active"] is True
+    assert client.docs[f"legal_holds/{UID}"]["ticket"] == "ic-1"
+
+
+def test_place_cannot_overtake_a_running_deletion(client):
+    client.docs[f"legal_hold_deletion_gates/{UID}"] = {
+        "schema_version": "legal_hold_deletion_gate.v1",
+        "uid": UID,
+        "kind": "account_deletion",
+        "token": "t",
+        "state": "running",
+        "started_at": NOW,
+    }
+    with pytest.raises(legal_holds.DestructiveOperationInProgress):
+        _run(holds.place, _ctx(apply=True), review_by=None)
+    assert f"legal_holds/{UID}" not in client.docs
+    (audit,) = _actions(client).values()
+    assert audit["status"] == "failed" and audit["error_type"] == "DestructiveOperationInProgress"
+
+
+@pytest.mark.parametrize("value", ["2026-11-01", "2030-01-01", "May 1"])
+def test_place_rejects_bad_review_dates(client, value):
+    with pytest.raises(holds.HoldCommandError):
+        _run(holds.place, _ctx(apply=True), review_by=value)
+
+
+def test_release_requires_an_active_hold(client):
+    with pytest.raises(holds.HoldCommandError):
+        _run(holds.release, _ctx(apply=True))
+
+
+def test_release_records_who_and_why_and_flags_held_deletes_without_erasure(client):
+    _run(holds.place, _ctx(apply=True), review_by=None)
+    client.docs[f"users/{UID}/deleted_conversations/c1"] = {"legal_hold_deferred": True, "erasure_armed": False}
+    client.docs[f"users/{UID}/deleted_conversations/c2"] = {"legal_hold_deferred": True, "erasure_armed": True}
+    client.docs[f"users/{UID}/deleted_conversations/c3"] = {"conversation_id": "c3"}
+
+    result, record = _run(holds.release, _ctx(apply=True, ticket="ic-2"))
+
+    hold = client.docs[f"legal_holds/{UID}"]
+    assert hold["active"] is False and hold["released_by"] == "aryan" and hold["release_reason"]
+    legal_holds.assert_account_deletion_permitted(UID, firestore_client=client)
+    events = sorted(row["action"] for path, row in client.docs.items() if path.startswith(f"legal_holds/{UID}/events/"))
+    assert events == ["place", "release"]
+    assert result["held_deferred_deletes"]["count"] == 2
+    assert record.summary["held_deferred_without_erasure"] == 1
+    assert "1 conversation" in result["follow_up"]
+
+
+def test_list_flags_overdue_reviews_and_holds_missing_audit(client):
+    client.docs["legal_holds/a"] = {"schema_version": "legal_hold.v1", "issuer": "admin", "active": True}
+    client.docs["legal_holds/b"] = {
+        "schema_version": "legal_hold.v1",
+        "issuer": "admin",
+        "active": True,
+        "ticket": "ic-9",
+        "review_by": NOW - timedelta(days=1),
+    }
+    client.docs["legal_holds/c"] = {"schema_version": "legal_hold.v1", "issuer": "admin", "active": False}
+    result, record = _run(holds.list_holds, _ctx(), all=False)
+    assert [hold["uid"] for hold in result["holds"]] == ["a", "b"]
+    assert record.summary == {"holds": 2, "review_overdue": 1, "missing_audit": 1}
+
+
+def test_audit_write_failure_stops_the_command_before_it_runs(client):
+    client.fail_writes_under = "support_actions/"
+    with pytest.raises(support_actions.SupportActionError):
+        _run(holds.place, _ctx(apply=True), review_by=None)
+    assert f"legal_holds/{UID}" not in client.docs
+
+
+def test_audit_summary_never_stores_long_or_structured_values(client):
+    ctx = _ctx()
+    with support_actions.record_action(ctx, "x", {}, now=lambda: NOW) as record:
+        record.summary = {"count": 3, "blob": {"transcript": "secret"}, "text": "x" * 500}
+    (audit,) = _actions(client).values()
+    assert audit["summary"]["count"] == 3
+    assert set(audit["summary"]["blob"]) == {"digest"} and set(audit["summary"]["text"]) == {"digest"}
+
+
+@pytest.mark.parametrize("missing", ["ticket", "actor", "reason", "agent"])
+def test_action_context_requires_every_field(missing):
+    fields = {"ticket": "t", "actor": "a", "reason": "r", "agent": "g", missing: " "}
+    with pytest.raises(support_actions.SupportActionError):
+        support_actions.ActionContext(**fields)
+
+
+def test_account_summary_returns_allowlisted_fields_only(client):
+    result, record = _run(account.summary, _ctx())
+    assert result["exists"] is True and result["profile"] == {"created_at": NOW, "language": "en"}
+    assert "email" not in str(result["profile"])
+    assert record.summary == {"exists": True, "legal_hold_active": False}
+
+
+def test_operator_cli_wires_every_group_and_audits_the_run(client, capsys):
+    parser = ops.build_parser()
+    groups = {action.dest: action for action in parser._actions}["group"].choices
+    assert set(groups) == {"hold", "retention", "dsar", "account"}
+    with pytest.raises(SystemExit):
+        parser.parse_args(["hold", "list"])  # --ticket/--actor/--reason are required
+
+    code = ops.main(
+        ["--ticket", "ic-1", "--actor", "aryan", "--reason", "triage", "--agent", "vm", "hold", "status", UID]
+    )
+
+    assert code == 0
+    assert '"action_id"' in capsys.readouterr().out
+    (audit,) = _actions(client).values()
+    assert audit["command"] == "hold status" and audit["status"] == "succeeded"

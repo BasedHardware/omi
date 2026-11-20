@@ -29,7 +29,12 @@ from database.account_deletion_marker import account_deletion_blocks_user_work
 import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
 from database import conversation_tombstones
-from database.legal_holds import destructive_operation_gate
+from database.legal_holds import (
+    LegalHoldActive,
+    LegalHoldAuthorityUnavailable,
+    assert_account_deletion_permitted,
+    destructive_operation_gate,
+)
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.list_version_check import ListVersionCheck
@@ -1645,6 +1650,8 @@ def delete_conversation(
         and conversations_db.get_conversation_raw_snapshot(uid, conversation_id, field_paths=['id']) is None
     ):
         return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'already_deleted'})
+    if _legal_hold_defers_delete(uid):
+        return _accept_held_conversation_delete(uid, conversation_id, cascade, http_request)
     db_client = getattr(db_client_module, 'db', None) if cascade else None
     memory_service = MemoryService(db_client=db_client) if cascade else None
     # Acquire before recording delete intent, so a delete that can neither run nor be
@@ -1715,6 +1722,40 @@ def _gate_busy_with_same_account_delete(error: BaseException, uid: str, db_clien
         return gate_busy_with_peer(error, uid, kind='explicit_memory_deletion', firestore_client=db_client) is True
     except Exception:  # noqa: BLE001 - an unreadable gate keeps the retryable 409
         return False
+
+
+def _legal_hold_defers_delete(uid: str) -> bool:
+    """True when the account is under an active legal hold and deferral is on.
+
+    P7 Decision 4: a hold blocks physical disposal, never product access. Without
+    this, a non-cascade delete never consulted the hold and physically erased the
+    record, audio and frames. Kill switch: ``LEGAL_HOLD_DEFER_SINGLE_DELETE=false``
+    restores the previous behavior. An unreadable hold authority raises, and the
+    caller maps it to ``account_gate_busy`` like every other fenced delete.
+    """
+    if os.getenv('LEGAL_HOLD_DEFER_SINGLE_DELETE', 'true').strip().lower() in ('0', 'false', 'off', 'no'):
+        return False
+    try:
+        assert_account_deletion_permitted(uid)
+    except LegalHoldActive:
+        return True
+    except LegalHoldAuthorityUnavailable as error:
+        raise account_gate_busy_http_exception() from error
+    return False
+
+
+def _accept_held_conversation_delete(uid: str, conversation_id: str, cascade: bool, http_request: Request) -> Response:
+    """Hide and retain a held account's conversation; physical erasure waits for release.
+
+    A cascade delete still owes its erasure: the runner finishes it ``held`` and
+    re-checks hourly, then erases after release. A non-cascade delete arms no
+    erasure (the runner only cascades); the tombstone marks it for release review.
+    """
+    conversation_tombstones.accept_deletion(uid, conversation_id, legal_hold_deferred=True, arm_erasure=cascade)
+    logger.info('event=conversation_delete outcome=held_deferred cascade=%s', cascade)
+    record_product_event('conversation_deleted', request=http_request)
+    # 204, no body: released mobile clients gate delete success on exactly 204.
+    return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'held_deferred'})
 
 
 def _accept_conversation_delete(uid: str, conversation_id: str, http_request: Request) -> Response:
