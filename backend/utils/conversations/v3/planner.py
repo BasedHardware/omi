@@ -27,6 +27,10 @@ def late_rewrite(*, previous_words, new_words, ended_at, now, rewrites):
     )
 
 
+def _held_by_none(line):
+    return None
+
+
 def _capped(lines, sections=(), held=None):
     """Cut a stretch over two hours after the longest prefix that ends within two hours of its start; repeat.
 
@@ -41,11 +45,12 @@ def _capped(lines, sections=(), held=None):
     straddles it, and the cap counts from there. Only ownership of this stretch's own lines counts;
     a locked row that holds none of them never cuts it.
     """
+    holder = held or _held_by_none
     parts, offset = [], 0
     while max(line['end'] for line in lines[offset:]) - lines[offset]['start'] > CAP:
-        owner = held(lines[offset]) if held else None
+        owner = holder(lines[offset])
         if owner is not None:
-            cut = next((i for i in range(offset + 1, len(lines)) if held(lines[i]) != owner), None)
+            cut = next((i for i in range(offset + 1, len(lines)) if holder(lines[i]) != owner), None)
             if cut is None:
                 break  # the locked row holds the rest
             parts.append(lines[offset:cut])
