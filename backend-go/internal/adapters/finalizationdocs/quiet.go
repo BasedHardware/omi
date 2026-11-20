@@ -99,10 +99,10 @@ func armQuiet(tx *docstore.Tx, ref finalization.Ref, now time.Time, timeout time
 func (s Store) WakeQuiet(ctx context.Context, a queue.Admitting, check finalization.QuietCheck) (finalization.QuietWake, error) {
 	now := s.Clock.Now().UTC()
 	wake, candidate, err := s.evaluateQuiet(ctx, a, check, now, archiveProof{})
-	if err != nil || candidate.session == "" {
+	if err != nil || candidate.recording.id == "" {
 		return wake, classify(err)
 	}
-	empty, proofErr := s.Archive.Empty(ctx, a, check.Ref, candidate.session)
+	empty, proofErr := s.Archive.Empty(ctx, a, check.Ref, candidate.recording.id)
 	candidate.checked, candidate.empty = true, empty && proofErr == nil
 	wake, _, err = s.evaluateQuiet(ctx, a, check, s.Clock.Now().UTC(), candidate)
 	return wake, classify(err)
@@ -133,10 +133,11 @@ func (s Store) wakeQuiet(tx *docstore.Tx, check finalization.QuietCheck, now tim
 		return finalization.QuietWake{Check: check, Action: rules.QuietWait}, archiveProof{}, nil
 	}
 
-	lease, err := recordingExpiry(tx, check.Ref, row)
+	recording, err := readRecordingLease(tx, check.Ref, row)
 	if err != nil {
 		return finalization.QuietWake{}, archiveProof{}, err
 	}
+	lease := recording.expiry
 	timeout := rules.QuietTimeout(quietSeconds(job, "quiet_timeout_seconds"))
 	action, due := rules.PlanQuietWake(now, quietDeadline(row, timeout), lease, quietEligible(row), s.hasInlineContent(check.Ref.Owner, row))
 	wake := finalization.QuietWake{Action: action}
@@ -144,8 +145,7 @@ func (s Store) wakeQuiet(tx *docstore.Tx, check finalization.QuietCheck, now tim
 	case rules.QuietRetire:
 		return wake, archiveProof{}, retireQuiet(tx, rows.jobPath, job, now, "")
 	case rules.QuietRepair:
-		session := field[string](field[map[string]any](row, "external_data"), "recording_session_id")
-		return s.resolveQuietEmpty(tx, rows, check, wake, session, now, lease, proof)
+		return s.resolveQuietEmpty(tx, rows, check, wake, recording, now, proof)
 	case rules.QuietStale:
 		return wake, archiveProof{}, nil
 	case rules.QuietWait, rules.QuietReady:
@@ -233,22 +233,37 @@ func quietSeconds(row document, key string) float64 {
 	}
 }
 
+// recordingLease binds an archive read to an exact recording document version,
+// including custody changes that do not move the deadline.
+type recordingLease struct {
+	path            docstore.Ref
+	id              string
+	written, expiry time.Time
+	sequence        int64
+}
+
 func recordingExpiry(tx *docstore.Tx, ref finalization.Ref, row document) (time.Time, error) {
+	lease, err := readRecordingLease(tx, ref, row)
+	return lease.expiry, err
+}
+
+func readRecordingLease(tx *docstore.Tx, ref finalization.Ref, row document) (recordingLease, error) {
 	external := field[map[string]any](row, "external_data")
 	sessionID := field[string](external, "recording_session_id")
 	if sessionID == "" {
-		return time.Time{}, nil
+		return recordingLease{}, nil
 	}
 	path, err := docstore.Doc("users", ref.Owner, "recording_sessions", sessionID)
 	if err != nil {
-		return time.Time{}, err
+		return recordingLease{}, err
 	}
 	var session document
-	found, err := tx.Get(path, &session)
-	if err != nil || !found || field[string](session, "uid") != ref.Owner ||
+	written, err := tx.GetVersion(path, &session)
+	if err != nil || written.IsZero() || field[string](session, "uid") != ref.Owner ||
 		field[string](session, "recording_session_id") != sessionID || field[string](session, "conversation_id") != ref.ID ||
 		field[string](session, "lifecycle_phase") != string(rules.InProgress) {
-		return time.Time{}, err
+		return recordingLease{}, err
 	}
-	return field[time.Time](session, "lease_expires_at"), nil
+	return recordingLease{path: path, id: sessionID, written: written, expiry: field[time.Time](session, "lease_expires_at"),
+		sequence: field[int64](session, "lifecycle_sequence")}, nil
 }

@@ -2,6 +2,7 @@ package finalizationdocs
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/BasedHardware/omi/backend-go/internal/finalization"
@@ -40,32 +41,32 @@ func emptyValue(value any) bool {
 }
 
 type archiveProof struct {
-	session         string
-	written, expiry time.Time
-	checked, empty  bool
+	recording      recordingLease
+	written        time.Time
+	checked, empty bool
 }
 
-func (s Store) resolveQuietEmpty(tx *docstore.Tx, rows quietRows, check finalization.QuietCheck, wake finalization.QuietWake, session string, now, lease time.Time, proof archiveProof) (finalization.QuietWake, archiveProof, error) {
-	if s.Archive != nil && emptyBatch(rows.row) && session != "" {
+func (s Store) resolveQuietEmpty(tx *docstore.Tx, rows quietRows, check finalization.QuietCheck, wake finalization.QuietWake, recording recordingLease, now time.Time, proof archiveProof) (finalization.QuietWake, archiveProof, error) {
+	if s.Archive != nil && emptyBatch(rows.row) && recording.id != "" {
 		_, allowed, err := privateCloudAuthority(tx, check.Ref, rows.row)
 		allowed = allowed && field[string](rows.row, "sync_merged_into") == ""
 		if err != nil {
 			return wake, archiveProof{}, err
 		}
 		if allowed && !proof.checked {
-			return wake, archiveProof{session: session, written: rows.written, expiry: lease}, nil
+			return wake, archiveProof{recording: recording, written: rows.written}, nil
 		}
 		if !allowed {
 			proof.empty = false
 		}
 	}
-	action, err := removeQuietEmpty(tx, rows, check.Ref, session, now, lease, proof)
+	action, err := removeQuietEmpty(tx, rows, check.Ref, recording, now, proof)
 	wake.Action = action
 	return wake, archiveProof{}, err
 }
 
-func removeQuietEmpty(tx *docstore.Tx, rows quietRows, ref finalization.Ref, session string, now, lease time.Time, proof archiveProof) (rules.QuietAction, error) {
-	if !proof.checked || !proof.empty || !emptyBatch(rows.row) || session != proof.session || !rows.written.Equal(proof.written) || !lease.Equal(proof.expiry) {
+func removeQuietEmpty(tx *docstore.Tx, rows quietRows, ref finalization.Ref, recording recordingLease, now time.Time, proof archiveProof) (rules.QuietAction, error) {
+	if !proof.checked || !proof.empty || !emptyBatch(rows.row) || recording != proof.recording || !rows.written.Equal(proof.written) || recording.sequence < 0 || recording.sequence == math.MaxInt64 {
 		return rules.QuietRepair, retireQuiet(tx, rows.jobPath, rows.job, now, "record_orphan_repair")
 	}
 	linked, err := emptyHasSidecars(tx, rows.conversationPath, ref)
@@ -75,7 +76,7 @@ func removeQuietEmpty(tx *docstore.Tx, rows quietRows, ref finalization.Ref, ses
 	if linked {
 		return rules.QuietRepair, retireQuiet(tx, rows.jobPath, rows.job, now, "record_orphan_repair")
 	}
-	if err := deleteQuietEmpty(tx, rows.conversationPath, ref, session, now); err != nil {
+	if err := deleteQuietEmpty(tx, rows.conversationPath, ref, recording, now); err != nil {
 		return rules.QuietWait, err
 	}
 	return rules.QuietRetire, retireQuiet(tx, rows.jobPath, rows.job, now, "")
@@ -94,24 +95,12 @@ func emptyHasSidecars(tx *docstore.Tx, path docstore.Ref, ref finalization.Ref) 
 	return tx.Get(link, &row)
 }
 
-func deleteQuietEmpty(tx *docstore.Tx, path docstore.Ref, ref finalization.Ref, sessionID string, now time.Time) error {
-	session, err := docstore.Doc("users", ref.Owner, "recording_sessions", sessionID)
-	if err != nil {
-		return err
-	}
-	var row document
-	found, err := tx.Get(session, &row)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return finalization.ErrStale
-	}
+func deleteQuietEmpty(tx *docstore.Tx, path docstore.Ref, ref finalization.Ref, recording recordingLease, now time.Time) error {
 	tombstone, err := docstore.Doc("users", ref.Owner, "deleted_conversations", ref.ID)
 	if err != nil {
 		return err
 	}
-	if err := tx.Update(session, document{"lifecycle_phase": "discarded", "lifecycle_sequence": field[int64](row, "lifecycle_sequence") + 1, "updated_at": now}); err != nil {
+	if err := tx.Update(recording.path, document{"lifecycle_phase": "discarded", "lifecycle_sequence": recording.sequence + 1, "updated_at": now}); err != nil {
 		return err
 	}
 	if err := tx.Set(tombstone, document{"conversation_id": ref.ID, "deleted_at": now}); err != nil {

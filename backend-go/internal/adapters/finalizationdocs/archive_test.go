@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+
 	"sync/atomic"
 	"testing"
 
@@ -11,6 +13,9 @@ import (
 	gcs "google.golang.org/api/storage/v1"
 
 	"github.com/BasedHardware/omi/backend-go/internal/finalization"
+	"github.com/BasedHardware/omi/backend-go/internal/finalization/rules"
+	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
+
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
 
@@ -71,5 +76,45 @@ func writeFixtureResponse(t *testing.T, w http.ResponseWriter, data string) {
 	t.Helper()
 	if _, err := fmt.Fprint(w, data); err != nil {
 		t.Error(err)
+	}
+}
+
+// The receiver can observe a successor session publication with the same lease
+// deadline while GCS is listing an empty prefix.
+func TestF19ArchiveReadFencesRecordingCustodyChanges(t *testing.T) {
+	t.Parallel()
+	store, bench, ref := quietFixture(t)
+	start := store.Clock.Now()
+	row := read(t, bench, conversationPath)
+	delete(row, "transcript_segments")
+	row["record_lane_owner"], row["server_batch_audio_closed"], row["server_batch_audio_received"] = "batch_live_v1", true, false
+	row["private_cloud_sync_enabled"] = true
+	put(t, bench, "users/"+ref.Owner, document{"private_cloud_sync_enabled": true})
+	put(t, bench, conversationPath, row)
+	a := queue.AdmittingForTest(t, ref.Owner)
+	check, err := store.ArmQuiet(t.Context(), a, ref, 1, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setRecordingLease(t, bench, ref, start)
+	path := "users/" + ref.Owner + "/recording_sessions/session"
+	session := read(t, bench, path)
+	session["lifecycle_sequence"] = int64(2)
+	var once sync.Once
+	store.Clock = clock.Fixed{T: check.Due}
+	store.Archive = archiveFixture(t, func(w http.ResponseWriter, _ *http.Request) {
+		once.Do(func() {
+			if _, writeErr := bench.Raw.Doc(path).Set(t.Context(), session); writeErr != nil {
+				t.Error(writeErr)
+			}
+		})
+		writeFixtureResponse(t, w, "{}")
+	})
+	wake, err := store.WakeQuiet(t.Context(), a, check)
+	if err != nil || wake.Action != rules.QuietRepair || !bench.Exists(t, conversationPath) {
+		t.Fatalf("stale storage proof finalized new custody: %v %v", wake.Action, err)
+	}
+	if got := read(t, bench, path); got["lifecycle_sequence"] != int64(2) || got["lifecycle_phase"] != "in_progress" {
+		t.Fatal("stale storage proof changed the recording session")
 	}
 }
