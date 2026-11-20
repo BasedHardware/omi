@@ -13,6 +13,8 @@ Open windows and the recordings they hold remain with the live builder.
 - Changed cards use the backfill notes lane. The repair suppresses derived effects
   and created fanout. Window, coverage, source eligibility and size guards may refuse
   a partition. A failed partition and its reason remain visible in the run ledger.
+  Calendar confirmations protect older cards from rebuild. Late repair notes retain
+  calendar edits, including cleared confirmations.
 - Before replacing rows, the repair records their prior documents and claim positions.
   Undo restores groups sharing a source together. It refuses when deletion, a
   protection change, intervening owner edits or a newer run makes restoration unsafe.

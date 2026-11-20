@@ -145,6 +145,8 @@ logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
 ACTION_ITEMS_EDIT_REVISION = 'user_action_items_revision'
+EVENTS_EDIT_REVISION = 'user_events_revision'
+
 
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
 # Top-level fields behind the Typesense conversation projection (see
@@ -1722,11 +1724,15 @@ def persist_processing_result_with_lifecycle(
 
         _quality_processing_notes(uid, write_data, existing)
 
-        if existing.get('v3_rederive_live_run') and existing.get(ACTION_ITEMS_EDIT_REVISION):
-            # Notes from the repair may settle after an owner edit, including removal of the last item.
-            structured = write_data.get('structured')
-            if isinstance(structured, dict):
-                structured['action_items'] = (existing.get('structured') or {}).get('action_items', [])
+        structured = write_data.get('structured')
+        if existing.get('v3_rederive_live_run') and isinstance(structured, dict):
+            # Late repair notes must retain the owner's current embedded state.
+            stored = existing.get('structured')
+            stored = stored if isinstance(stored, dict) else {}
+            if existing.get(ACTION_ITEMS_EDIT_REVISION):
+                structured['action_items'] = stored.get('action_items', [])
+            if existing.get(EVENTS_EDIT_REVISION) or has_created_calendar_events(stored):
+                structured['events'] = stored.get('events', [])
 
         _reapply_current_manual_assignments(uid, write_data, existing)
         _stage_notes_identity(transaction, user_ref, write_data, existing)
@@ -3591,8 +3597,16 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str, *, retur
 # *********************************
 
 
+def has_created_calendar_events(structured: object) -> bool:
+    """Historical calendar confirmations can predate the owner revision marker."""
+    events = structured.get('events') if isinstance(structured, dict) else None
+    return isinstance(events, list) and any(
+        isinstance(event, dict) and event.get('created') is True for event in events
+    )
+
+
 def update_conversation_events(uid: str, conversation_id: str, events: List[dict]):
-    update_conversation(uid, conversation_id, {'structured.events': events})
+    update_conversation(uid, conversation_id, {'structured.events': events, EVENTS_EDIT_REVISION: uuid.uuid4().hex})
 
 
 # *********************************

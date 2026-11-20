@@ -22,6 +22,8 @@ from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
 from database import conversations_v3_rederive as rederive_store
 from database.account_deletion_marker import account_deletion_document
+from models.conversation import SetConversationEventsStateRequest
+from routers import conversations as conversation_routes
 from scripts import conversations_v3_backfill as script
 from services import conversation_frame_evidence
 from utils.conversations import merge_conversations
@@ -212,6 +214,34 @@ def edit_embedded_items(strict, monkeypatch):
     return conversations_db.update_conversation_action_items
 
 
+@pytest.fixture
+def set_event_created(strict, monkeypatch):
+    @store.firestore.transactional
+    def write(tx, ref, patch):
+        tx.update(ref, patch)
+
+    monkeypatch.setattr(
+        StrictFirestoreDocument, 'update', lambda ref, patch: write(strict.transaction(), ref, patch), raising=False
+    )
+    monkeypatch.setattr(conversations_db, 'db', strict)
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda uid: None)
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda uid, cid: None)
+
+    def read_card(uid, cid):
+        # The synthetic projection only stubs audio, which this PATCH does not use.
+        card = deepcopy(strict.rows[path(cid)])
+        card['audio_files'] = []
+        return card
+
+    monkeypatch.setattr(conversation_routes, '_get_valid_conversation_by_id', read_card)
+
+    def patch_event(cid, created):
+        data = SetConversationEventsStateRequest(events_idx=[0], values=[created])
+        assert conversation_routes.set_conversation_events_state(cid, data, uid=UID) == {'status': 'Ok'}
+
+    return patch_event
+
+
 def claims_by_row(rows):
     found = {}
     for cid, row in rows.items():
@@ -272,6 +302,26 @@ async def test_rederive_preserves_cards_with_embedded_owner_items(owner, strict,
     assert after['c0'] == before['c0']
     assert after['r0']['claims'] == before['r0']['claims']
     reason = 'protected_edited' if marked_deletion else 'protected_action_items'
+    assert report[reason] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('clear_confirmation', [False, True], ids=['unmarked-confirmation', 'marked-clear'])
+async def test_rederive_preserves_cards_with_owner_events(owner, strict, set_event_created, clear_confirmation):
+    sources, rows = lunch(count=3)
+    rows[0]['structured']['events'] = [{'title': 'Team follow-up', 'start': AT, 'created': True}]
+    owner(*sources, *rows)
+    if clear_confirmation:
+        set_event_created('c0', False)
+        assert strict.rows[path('c0')][conversations_db.EVENTS_EDIT_REVISION]
+    before = conversations(strict)
+
+    _, report = await rederive()
+
+    after = conversations(strict)
+    assert after['c0'] == before['c0']
+    assert after['r0']['claims'] == before['r0']['claims']
+    reason = 'protected_edited' if clear_confirmation else 'protected_calendar_events'
     assert report[reason] == 1
 
 
@@ -551,6 +601,36 @@ async def test_embedded_item_changes_block_undo(owner, strict, ledger, edit_embe
         rederive_store.record_baselines(UID, RUN)
         prior = next(entry for entry in priors(strict) if entry['id'] == 'c0')
         assert prior['baseline'] == rederive_store.CHANGED_BEFORE_SETTLE
+        assert backfill.undo_run(UID, RUN) == refused
+    assert conversations(strict) == after
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('settled', [False, True], ids=['pending-baseline', 'recorded-baseline'])
+@pytest.mark.parametrize('edit', ['confirm', 'clear', 'legacy-confirmation'])
+async def test_calendar_confirmation_blocks_undo(owner, strict, ledger, set_event_created, settled, edit):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    await rederive()
+    card = strict.rows[path('c0')]
+    card['structured']['events'] = [{'title': 'Team follow-up', 'start': AT, 'created': edit == 'clear'}]
+    if settled:
+        rederive_store.record_baselines(UID, RUN)
+
+    if edit == 'legacy-confirmation':
+        card['structured']['events'][0]['created'] = True
+    else:
+        set_event_created('c0', edit == 'confirm')
+        assert card[conversations_db.EVENTS_EDIT_REVISION]
+    after = conversations(strict)
+    assert after['c0']['structured']['events'][0]['created'] is (edit != 'clear')
+    refused = {'outcome': 'busy', 'reason': 'owner_edited_rebuilt_row'}
+    assert backfill.undo_run(UID, RUN) == refused
+    if not settled:
+        rederive_store.record_baselines(UID, RUN)
+        assert next(entry for entry in priors(strict) if entry['id'] == 'c0')['baseline'] == (
+            rederive_store.CHANGED_BEFORE_SETTLE
+        )
         assert backfill.undo_run(UID, RUN) == refused
     assert conversations(strict) == after
 

@@ -93,6 +93,24 @@ def test_repair_notes_keep_the_latest_embedded_owner_items(writer, owner_items):
     assert writer.commits[0]['structured']['overview'] == notes['structured']['overview']
 
 
+@pytest.mark.parametrize(
+    'created,marked', [(True, True), (False, True), (True, False)], ids=['confirmed', 'cleared', 'legacy-confirmed']
+)
+def test_repair_notes_keep_the_latest_calendar_confirmation(writer, created, marked):
+    start = datetime(2026, 11, 20, tzinfo=timezone.utc)
+    owner_events = [{'title': 'Original event', 'start': start, 'created': created}]
+    writer.document.update(v3_rederive_live_run='repair', structured={'events': owner_events})
+    if marked:
+        writer.document[db.EVENTS_EDIT_REVISION] = 'edit'
+    notes = payload()
+    notes['structured']['events'] = [{'title': 'Generated event', 'start': start, 'created': False}]
+
+    assert db.persist_processing_result_with_lifecycle('u', notes)
+
+    assert writer.commits[0]['structured']['events'] == owner_events
+    assert writer.commits[0]['structured']['overview'] == notes['structured']['overview']
+
+
 @pytest.mark.parametrize('sections_only', [False, True])
 def test_long_notes_use_the_lifecycle_summary_ledger_writer(writer, sections_only):
     notes = payload()
