@@ -89,6 +89,16 @@
       "basis": "planning-bound",
       "source": "backend/utils/conversations/v3/backfill.py start_planned: one bounded collection-group list (at most 20 start markers under users/{uid}) per five-minute sweep, 288 ticks per day; the collection is empty except between an operator plan and the next tick.",
       "reviewed": "2026-11-18"
+    },
+    {
+      "collection": "conversations_v3_sync_custody_repairs",
+      "owner": "lane/conversations-v3",
+      "unit": "approved single-chain apply or rollback",
+      "reads_per_unit_budget": 3,
+      "reads_per_day_budget": 60,
+      "basis": "planning-bound",
+      "source": "backend/docs/runbooks/conversations-v3.md: one journal point read per transaction attempt, up to three attempts. No listing or scheduled reads. The daily planning envelope is twenty individually approved commands; the owner and source reads are bounded separately by the runbook.",
+      "reviewed": "2026-11-20"
     }
   ],
   "dynamic": [
