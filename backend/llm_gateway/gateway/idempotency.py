@@ -88,10 +88,10 @@ async def _storage(work: Awaitable[T]) -> T:
 
 
 def _claim(
-    operation: Operation, body: dict[str, Any], credentials: CredentialContext, environment: str
+    operation: Operation, body: dict[str, Any], credentials: CredentialContext
 ) -> tuple[Store, StoredResponse | None]:
     store = Store(operation)
-    return store, store.claim_or_replay(Operation.canonical_request(body, credentials), environment)
+    return store, store.claim_or_replay(Operation.canonical_request(body, credentials))
 
 
 def _error(exc: IdempotencyError, method: str) -> JSONResponse:
@@ -134,14 +134,14 @@ async def complete(
             raise IdempotencyError(400, 'idempotency_proactivity_unsupported')
         if environment not in ENVIRONMENTS:
             raise IdempotencyError(503, 'idempotency_environment_unavailable')
-        operation = Operation.for_caller(caller, key)
+        operation = Operation.for_caller(caller, key, environment)
         if not _settlement_slots.acquire(blocking=False):
             raise IdempotencyError(503, 'idempotency_store_busy', retry_after='2')
         settlement: Future[None] | None = None
         try:
             body = await _request_body(request)
             store, replay = await _storage(
-                run_blocking(gateway_idempotency_executor, _claim, operation, body, credentials, environment)
+                run_blocking(gateway_idempotency_executor, _claim, operation, body, credentials)
             )
             if replay is not None:
                 OUTCOMES.labels('post', 'replay').inc()
@@ -182,8 +182,11 @@ def _lookup(operation: Operation) -> StoredResponse:
 async def lookup(caller: ServiceCaller, value: str) -> Response:
     try:
         key = _key(value)
+        environment = os.getenv(ENVIRONMENT_SETTING, '').strip()
+        if environment not in ENVIRONMENTS:
+            raise IdempotencyError(503, 'idempotency_environment_unavailable')
         response = await _storage(
-            run_blocking(gateway_idempotency_executor, _lookup, Operation.for_caller(caller, key))
+            run_blocking(gateway_idempotency_executor, _lookup, Operation.for_caller(caller, key, environment))
         )
         if response.status != 200:
             # A deterministic error can be replayed by POST, but has no completion.

@@ -14,12 +14,12 @@ from fastapi.testclient import TestClient
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
-from database import account_deletion_marker
+from database import _client as firestore_clients, account_deletion_marker
 from llm_gateway.gateway import idempotency, idempotency_store
 from llm_gateway.gateway.accounting import build_accounting_event
 from llm_gateway.gateway.executor import ProviderRegistry
-from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
-from llm_gateway.gateway.schemas import FailureClass, RetryPolicy
+from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure, fake_success_response
+from llm_gateway.gateway.schemas import FailureClass, ProviderRef, RetryPolicy
 from llm_gateway.main import app
 from llm_gateway.routers import dependencies, openai_compatible
 
@@ -34,8 +34,11 @@ def db(monkeypatch) -> Iterator[firestore.Client]:
     if not endpoint:
         pytest.skip('requires Firestore emulator')
     assert urlsplit('http://' + endpoint).hostname in {'127.0.0.1', 'localhost', '::1'}
-    client = firestore.Client(project='demo-gateway-idempotency', credentials=AnonymousCredentials())
-    monkeypatch.setattr(idempotency_store, '_customer_firestore_client', lambda: client)
+    client = firestore.Client(project='based-hardware', credentials=AnonymousCredentials())
+    monkeypatch.setenv(idempotency_store.DATA_PLANE_ENV, client.project)
+    monkeypatch.setattr(
+        firestore_clients, 'get_pinned_data_plane_firestore_client', {client.project: client}.__getitem__
+    )
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'test-gateway-service-token')
     monkeypatch.delenv('LLM_GATEWAY_IDEMPOTENCY_ENABLED', raising=False)
     monkeypatch.setenv(idempotency.ENVIRONMENT_SETTING, 'prod')
@@ -136,6 +139,65 @@ def test_replay_and_lookup_use_one_dispatch_across_clients(db, headers, monkeypa
     assert result['expires_at'] == claim['result_expires_at']
     assert timedelta(hours=24) <= result['expires_at'] - claim['started_at'] < timedelta(hours=24, minutes=1)
     assert committed.content not in result['sealed']
+
+
+def test_dev_and_prod_isolate_operations_in_shared_customer_project(db, headers, monkeypatch):
+    model = ProviderRef(provider='openai', model='test-model')
+    provider = FakeChatCompletionProvider([fake_success_response(model, content=env) for env in ('dev', 'prod')])
+    use_providers(monkeypatch, provider)
+    headers = {**headers, 'X-Omi-Tenant-Id': 'shared-test-tenant'}
+
+    with TestClient(app) as dev, TestClient(app) as prod:
+        monkeypatch.setenv(idempotency.ENVIRONMENT_SETTING, 'dev')
+        dev_result = dev.post(POST, json=BODY, headers=headers)
+        assert dev_result.status_code == 200
+        assert dev_result.json()['choices'][0]['message']['content'] == 'dev'
+
+        monkeypatch.setenv(idempotency.ENVIRONMENT_SETTING, 'prod')
+        assert prod.get(lookup(headers), headers=headers).status_code == 404
+        prod_result = prod.post(POST, json=BODY, headers=headers)
+        assert prod_result.status_code == 200
+        assert prod_result.json()['choices'][0]['message']['content'] == 'prod'
+        assert prod.get(lookup(headers), headers=headers).content == prod_result.content
+        assert prod.post(POST, json=BODY, headers=headers).content == prod_result.content
+
+        monkeypatch.setenv(idempotency.ENVIRONMENT_SETTING, 'dev')
+        assert dev.get(lookup(headers), headers=headers).content == dev_result.content
+        assert dev.post(POST, json=BODY, headers=headers).content == dev_result.content
+
+    assert len(provider.calls) == 2
+    claims = {doc.get('environment'): doc.id for doc in docs(db, headers, idempotency_store.CLAIMS).stream()}
+    results = {doc.get('environment'): doc.id for doc in docs(db, headers, idempotency_store.RESULTS).stream()}
+    assert claims == results
+    assert set(claims) == {'dev', 'prod'}
+    assert claims['dev'] != claims['prod']
+
+
+@pytest.mark.parametrize('collection', [idempotency_store.CLAIMS, idempotency_store.RESULTS])
+def test_replay_and_lookup_reject_wrong_environment_records(db, headers, monkeypatch, collection):
+    provider = FakeChatCompletionProvider()
+    use_providers(monkeypatch, provider)
+
+    with TestClient(app) as client:
+        assert client.post(POST, json=BODY, headers=headers).status_code == 200
+        (record,) = docs(db, headers, collection).stream()
+        record.reference.update({'environment': 'dev'})
+        for response in (client.get(lookup(headers), headers=headers), client.post(POST, json=BODY, headers=headers)):
+            assert response.status_code == 503
+            assert response.json()['error']['code'] == 'idempotency_store_unavailable'
+    assert len(provider.calls) == 1
+
+
+def test_settlement_rejects_a_claim_from_another_environment(db, headers):
+    operation = idempotency_store.Operation(headers['X-Omi-User-Uid'], uuid4().hex, 'prod')
+    store = idempotency_store.Store(operation, client=db)
+    assert store.claim_or_replay(b'test-request') is None
+    store.claim.update({'environment': 'dev'})
+
+    with pytest.raises(idempotency_store.IdempotencyError, match='idempotency_store_unavailable'):
+        store.finish(idempotency_store.StoredResponse(200, b'{}'))
+    assert store.claim.get().get('state') == 'pending'
+    assert not store.result.get().exists
 
 
 def test_provider_timeout_and_result_expiry_keep_the_claim(db, headers, monkeypatch):
@@ -242,17 +304,17 @@ def test_deletion_started_during_dispatch_prevents_settlement(db, headers, monke
 
 
 def test_claim_expiry_does_not_renew_or_allow_a_stale_settlement(db, headers):
-    operation = idempotency_store.Operation(headers['X-Omi-User-Uid'], uuid4().hex)
+    operation = idempotency_store.Operation(headers['X-Omi-User-Uid'], uuid4().hex, 'local')
     original = idempotency_store.Store(operation, client=db)
     canonical = b'test-request'
     response = idempotency_store.StoredResponse(200, b'{}')
-    assert original.claim_or_replay(canonical, 'local') is None
+    assert original.claim_or_replay(canonical) is None
     expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
     original.claim.update({'expires_at': expires_at})
     replacement = idempotency_store.Store(operation, client=db)
 
     for invoke in (
-        lambda: replacement.claim_or_replay(canonical, 'local'),
+        lambda: replacement.claim_or_replay(canonical),
         replacement.lookup,
         lambda: original.finish(response),
     ):
@@ -262,7 +324,7 @@ def test_claim_expiry_does_not_renew_or_allow_a_stale_settlement(db, headers):
 
     # The emulator does not run the Firestore TTL sweeper. Model its deletion.
     original.claim.delete()
-    assert replacement.claim_or_replay(canonical, 'local') is None
+    assert replacement.claim_or_replay(canonical) is None
     with pytest.raises(idempotency_store.IdempotencyError, match='idempotency_indeterminate'):
         original.finish(response)
     replacement.finish(response)
@@ -270,14 +332,14 @@ def test_claim_expiry_does_not_renew_or_allow_a_stale_settlement(db, headers):
 
 
 def test_concurrent_fresh_claims_have_one_winner(db, headers):
-    operation = idempotency_store.Operation(headers['X-Omi-User-Uid'], uuid4().hex)
+    operation = idempotency_store.Operation(headers['X-Omi-User-Uid'], uuid4().hex, 'local')
     stores = [idempotency_store.Store(operation, client=db) for _ in range(2)]
     start = Barrier(2, timeout=10)
 
     def compete(store):
         start.wait()
         try:
-            assert store.claim_or_replay(b'same-request', 'local') is None
+            assert store.claim_or_replay(b'same-request') is None
         except idempotency_store.IdempotencyError as exc:
             assert exc.status == 409
             return exc.code

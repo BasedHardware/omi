@@ -96,14 +96,15 @@ def _structured_property_orders(body: dict[str, Any]) -> Iterator[tuple[tuple[st
 class Operation:
     owner: str
     document_id: str
+    environment: str
 
     @classmethod
-    def for_caller(cls, caller: ServiceCaller, key: str) -> 'Operation':
+    def for_caller(cls, caller: ServiceCaller, key: str, environment: str) -> 'Operation':
         owner = caller.user_uid
         if owner is None or owner in {'.', '..'} or '/' in owner or owner.startswith('__') and owner.endswith('__'):
             raise IdempotencyError(400, 'idempotency_owner_required')
-        scope = json.dumps([caller.name, owner, caller.tenant_id, key], separators=(',', ':'))
-        return cls(owner, hashlib.sha256(scope.encode()).hexdigest())
+        scope = json.dumps([environment, caller.name, owner, caller.tenant_id, key], separators=(',', ':'))
+        return cls(owner, hashlib.sha256(scope.encode()).hexdigest(), environment)
 
     @staticmethod
     def canonical_request(body: dict[str, Any], credentials: CredentialContext) -> bytes:
@@ -192,14 +193,12 @@ class Store:
         if account_deletion_blocks_access(status):
             raise IdempotencyError(403, 'idempotency_owner_unavailable')
 
-    def _read(
-        self, transaction: Any, canonical: bytes | None, *, environment: str | None = None
-    ) -> StoredResponse | None:
+    def _read(self, transaction: Any, canonical: bytes | None, *, create: bool = False) -> StoredResponse | None:
         self._fence(transaction)
         snapshot = self.claim.get(transaction=transaction, timeout=5)
         now = datetime.now(timezone.utc)
         if not snapshot.exists:
-            if environment is None or canonical is None:
+            if not create or canonical is None:
                 raise IdempotencyError(404, 'idempotency_not_found')
             transaction.create(
                 self.claim,
@@ -208,7 +207,7 @@ class Store:
                     'key_version': self.keys.active_version,
                     'claim_token': self.claim_token,
                     'state': 'pending',
-                    'environment': environment,
+                    'environment': self.operation.environment,
                     'started_at': now,
                     'expires_at': now + CLAIM_TTL,
                 },
@@ -216,6 +215,8 @@ class Store:
             return None
 
         claim = snapshot.to_dict() or {}
+        if claim.get('environment') != self.operation.environment:
+            raise IdempotencyError(503, 'idempotency_store_unavailable')
         if now >= claim['expires_at']:
             raise IdempotencyError(410, 'idempotency_expired')
         version = claim['key_version']
@@ -231,7 +232,7 @@ class Store:
             raise IdempotencyError(410, 'idempotency_expired')
 
         response = self.result.get(transaction=transaction, timeout=5).to_dict()
-        if response is None:
+        if response is None or response.get('environment') != self.operation.environment:
             raise IdempotencyError(503, 'idempotency_store_unavailable')
         packed = response['sealed']
         plaintext = AESGCM(self.keys.key(version, b'result')).decrypt(
@@ -239,10 +240,10 @@ class Store:
         )
         return StoredResponse(int.from_bytes(plaintext[:2], 'big'), plaintext[2:])
 
-    def claim_or_replay(self, canonical: bytes, environment: str) -> StoredResponse | None:
+    def claim_or_replay(self, canonical: bytes) -> StoredResponse | None:
         run = firestore.transactional(self._read)
         try:
-            return run(self.client.transaction(), canonical, environment=environment)
+            return run(self.client.transaction(), canonical, create=True)
         except AlreadyExists:
             # A concurrently created claim can surface as a failed create precondition.
             return run(self.client.transaction(read_only=True), canonical)
@@ -264,6 +265,8 @@ class Store:
             now = datetime.now(timezone.utc)
             if not claim or claim['state'] != 'pending' or claim['claim_token'] != self.claim_token:
                 raise IdempotencyError(409, 'idempotency_indeterminate')
+            if claim.get('environment') != self.operation.environment:
+                raise IdempotencyError(503, 'idempotency_store_unavailable')
             if now >= claim['expires_at']:
                 raise IdempotencyError(410, 'idempotency_expired')
             if response is None or oversized:
@@ -275,7 +278,9 @@ class Store:
                 nonce, plaintext, self.operation.document_id.encode()
             )
             expires_at = min(now + RESULT_TTL, claim['expires_at'])
-            transaction.create(self.result, {'sealed': sealed, 'expires_at': expires_at})
+            transaction.create(
+                self.result, {'sealed': sealed, 'expires_at': expires_at, 'environment': self.operation.environment}
+            )
             transaction.update(self.claim, {'state': 'committed', 'result_expires_at': expires_at})
 
         settle(self.client.transaction())
