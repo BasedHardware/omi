@@ -281,6 +281,9 @@ void main() {
       expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
       expect(find.text(en.firmwareUpdateCheckUnavailable), findsNothing);
       expect(find.text(en.unableToDetermineFirmwareVersion), findsOneWidget);
+      // Re-running the server lookup cannot fix a revision that failed to read over BLE, so no
+      // in-place retry is offered for this outcome.
+      expect(find.byKey(const Key('firmware_update_check_retry')), findsNothing);
       debugDefaultTargetPlatformOverride = null;
     });
   }

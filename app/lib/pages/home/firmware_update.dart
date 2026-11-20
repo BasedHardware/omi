@@ -521,8 +521,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           ),
         ],
 
-        // Retry when the lookup could not confirm the result (the inconclusive row promises "try again")
-        if (!shouldUpdate && !isConfirmedCurrent) ...[
+        // Retry when the lookup could not confirm the result (the inconclusive row promises "try again").
+        // Not offered for an unknown device revision: re-running the server lookup reuses the same
+        // unreadable revision, so it could only reproduce the same message.
+        if (!shouldUpdate && !isConfirmedCurrent && !isCurrentVersionUnknown) ...[
           const SizedBox(height: OmiSpacing.sm),
           OmiButton(
             key: const Key('firmware_update_check_retry'),
