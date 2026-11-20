@@ -9099,7 +9099,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Цей запис завантажено, але Omi ще створює розмову. Якщо видалити його зараз і обробка не вдасться, відновити буде неможливо. Усе одно видалити?';
+      'Цей запис уже завантажено, і Omi його обробляє. Видалення тут прибирає копію на телефоні. Якщо обробка не вдасться, Omi не зможе повторити спробу з цього телефона.';
 
   @override
   String get syncCardAllBackedUp => 'Усі записи синхронізовано';
@@ -14521,14 +14521,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Нещодавно';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Відключено на $duration';
-  }
-
-  @override
   String get deviceControls => 'Керування';
 
   @override
@@ -15469,6 +15461,11 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Оновлення не встановилося. Ваш кулон і далі працює на поточній прошивці ($version). Будь ласка, зверніться до підтримки, а не повторюйте оновлення.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15510,7 +15507,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15594,4 +15591,166 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Робота за даними сервера';
+
+  @override
+  String get finishNothingToProcess => 'Поки що нічого обробляти.';
+
+  @override
+  String get finishStillProcessing => 'Ще обробляється. З\'явиться на головній.';
+
+  @override
+  String get finishBackToHome => 'На головну';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Підсумок, коли ця розмова завершиться';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Завантаження, що очікують на сервері';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ваше аудіо у безпеці на вашому пристрої або телефоні';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Підсумок станом на $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Останній транскрипт';
+
+  @override
+  String get finishAlreadySaved => 'Вже збережено. На головній.';
+
+  @override
+  String get finishAudioNotReceived => 'Аудіо ще в дорозі.';
+
+  @override
+  String get finishFailedOffline => 'Не вдалося надіслати. Ваше аудіо в безпеці.';
+
+  @override
+  String get finishFailed => 'Не вдалося надіслати. Ваше аудіо в безпеці.';
+
+  @override
+  String get micBlockedCannotRecord => 'Дозвольте мікрофону записувати.';
+
+  @override
+  String get couldNotStartRecording => 'Не вдалося почати запис.';
+
+  @override
+  String get restorePurchasesFailed => 'Не вдалося перевірити ваш план.';
+
+  @override
+  String get firmwareCheckFailed => 'Не вдалося перевірити оновлення.';
+
+  @override
+  String get conversationStillPublic => 'Досі доступно за посиланням.';
+
+  @override
+  String get goalSaveFailed => 'Не вдалося зберегти вашу ціль.';
+
+  @override
+  String get goalDeleteFailed => 'Не вдалося видалити. Ціль відновлено.';
+
+  @override
+  String get goalsLoadFailed => 'Не вдалося завантажити ваші цілі.';
+
+  @override
+  String get missingTargetEndedRecording => 'Цей запис уже завершено.';
+
+  @override
+  String get missingTargetMemory => 'Того спогаду більше немає.';
+
+  @override
+  String get missingTargetTask => 'Того завдання більше немає.';
+
+  @override
+  String get missingTargetConversation => 'Не вдалося відкрити цю розмову.';
+
+  @override
+  String get couldNotRefreshConversations => 'Не вдалося оновити.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Підключіть свій Omi, щоб синхронізувати.';
+
+  @override
+  String get useDifferentAccountMessage => 'Ви вийдете з акаунта, а налаштування Omi на цьому телефоні буде скинуто.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Окуляри не знайдено. Вони увімкнені?';
+
+  @override
+  String get couldNotMoveTask => 'Не вдалося перемістити завдання.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Видалено. $count заблокованих завдань залишилося.',
+      one: 'Видалено. 1 заблоковане завдання залишилося.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Не вдалося зберегти цю зміну.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Не вдалося завантажити ваші налаштування.';
+
+  @override
+  String get waitForOmiToFinish => 'Зачекайте, доки Omi завершить.';
+
+  @override
+  String get voiceNoteTooShort => 'Занадто коротко. Утримуйте кнопку, щоб записати.';
+
+  @override
+  String get submitAppMissingFields => 'Щоб надіслати, додайте назву, опис, зображення, категорію та здібність.';
+
+  @override
+  String get appSetupNotFinished => 'Налаштування ще не завершено.';
+
+  @override
+  String get finishNothingKeptTitle => 'Немає чого зберігати';
+
+  @override
+  String get submitAppFinishDetails => 'Щоб надіслати, дозаповніть відомості про здібність і ціни вище.';
+
+  @override
+  String get finishNothingNew => 'Поки що нічого нового.';
+
+  @override
+  String get takingLongerThanUsual => 'Триває довше, ніж зазвичай. Незабаром з\'явиться на головній.';
+
+  @override
+  String get couldNotCheckOnIt => 'Не вдалося перевірити. Спробуйте ще раз.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Оновіть план, щоб відкрити її.';
+
+  @override
+  String get missingTargetConversationGone => 'Ту розмову видалено.';
+
+  @override
+  String get cantConnectRightNow => 'Зараз не вдається з\'єднатися.';
+
+  @override
+  String get loadOlderFailed => 'Не вдалося завантажити старіші. Торкніться, щоб спробувати знову.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Слухає · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Зачекайте на завершення, щоб змінити її.';
+
+  @override
+  String get finishedSummaryReady => 'Підсумок готовий';
+
+  @override
+  String get writingSummaryStatus => 'Пишемо підсумок…';
+
+  @override
+  String get stillWorkingOnIt => 'Ще працюємо над цим.';
 }

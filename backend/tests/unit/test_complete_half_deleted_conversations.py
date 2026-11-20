@@ -39,11 +39,10 @@ def test_dry_run_reports_counts_and_the_runtime_digest(runtime, capsys):
 
 
 def test_pending_count_excludes_readiness_control_metadata(runtime, capsys):
-    from database.batch_pipeline_conversation_purge_scans import READINESS_DOCUMENT
 
     runtime.client.collection.return_value.select.return_value.stream.return_value = [
         SimpleNamespace(id='a' * 64),
-        SimpleNamespace(id=READINESS_DOCUMENT),
+        SimpleNamespace(id='_owner_scan_v1_readiness'),
         SimpleNamespace(id='b' * 64),
     ]
     assert cleanup.main([]) == 0

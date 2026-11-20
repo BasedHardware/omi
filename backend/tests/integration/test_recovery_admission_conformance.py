@@ -125,7 +125,7 @@ def test_pl057_provider_failure_retains_speech_and_never_replays_paid_intent(h, 
     assert job(h) == failed
     provider.assert_called_once()
     second.assert_not_called()
-    assert artifacts.method_calls == [call.fetch_audio(provider.call_args.args[0])]
+    assert artifacts.method_calls == [call.fetch_audio(provider.call_args.args[0], confirm_retained_digest=True)]
 
 
 def test_pl057_lost_result_ack_reconciles_same_object_without_a_second_paid_call(h):
@@ -164,7 +164,7 @@ def test_pl072_account_deletion_cancels_recovery_before_paid_work_or_upload(h, p
         h.customer.delete_account(work.owner_id)
     else:
 
-        def download(_item):
+        def download(_item, *, confirm_retained_digest=False):
             h.customer.delete_account(work.owner_id)
             return wav_bytes()
 

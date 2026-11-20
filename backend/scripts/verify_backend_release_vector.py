@@ -26,7 +26,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 if str(Path(__file__).resolve().parents[1]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scripts.cloud_run_scope import selected
+from scripts.cloud_run_scope import SELECTABLE, selected
 
 CLOUD_RUN_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 LISTENER_SERVICE = 'backend-listen'
@@ -701,7 +701,7 @@ def main() -> int:
     )
     parser.add_argument('--evidence-path', type=Path)
     parser.add_argument('--integration-only', action='store_true')
-    parser.add_argument('--cloud-run-service', choices=('all', *CLOUD_RUN_SERVICES), default='all')
+    parser.add_argument('--cloud-run-service', choices=('all', *SELECTABLE), default='all')
     args = parser.parse_args()
     try:
         if args.cloud_run_service != 'all' and not args.cloud_run_only:

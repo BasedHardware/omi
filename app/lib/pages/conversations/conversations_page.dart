@@ -21,6 +21,9 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
+import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
@@ -396,7 +399,13 @@ class _ConversationsPageState extends State<ConversationsPage>
     _v3Watching = want;
     if (want) {
       // Skip ticks while a pushed page (a conversation, settings) covers Home.
-      _v3!.watch(when: () => mounted && (ModalRoute.of(context)?.isCurrent ?? true));
+      _v3!.watch(
+        when: () => mounted && (ModalRoute.of(context)?.isCurrent ?? true),
+        // X7: a row still transcribing or writing re-reads the list on the same 15 s tick.
+        rowsPending: () =>
+            mounted && ConversationsV3Provider.anyMidPipeline(context.read<ConversationProvider>().conversations),
+        refreshRows: () => context.read<ConversationProvider>().fetchConversations(),
+      );
     } else {
       _v3?.unwatch();
       _stopV3Quick();
@@ -953,7 +962,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             for (final entry in conversationsByDate.entries)
               entry.key: [
                 for (final c in entry.value)
-                  if (!isFailedHomeConversation(c) &&
+                  if (!isFailedConversation(c) &&
                       (!showRecordings ||
                           convoProvider.isSelectionModeActive ||
                           localHomeDay(c.startedAt ?? c.createdAt) == today ||
@@ -969,7 +978,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             for (final entry in conversationsByDate.entries)
               entry.key: [
                 for (final c in entry.value)
-                  if (c.id != v3Live?.id && c.v3?.homeHidden != true && c.v3?.recording != true) c,
+                  if (c.id != v3Live?.id && shownOnV3Home(c)) c,
               ],
           };
           if (v3Live != null &&
@@ -1142,7 +1151,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                                     .any((card) => card.kind == 'episode' && card.detailId == c.episodeId))) &&
                         !projectedMemberIds.contains(c.id) &&
                         (!_pendingWork.homeProcessingToday ||
-                            (!isFailedHomeConversation(c) && localHomeDay(c.startedAt ?? c.createdAt) == localToday)))
+                            (!isFailedConversation(c) && localHomeDay(c.startedAt ?? c.createdAt) == localToday)))
                       c,
                 ],
                 clock.now())
@@ -1205,6 +1214,15 @@ class _ConversationsPageState extends State<ConversationsPage>
                   when review.availability != ReviewAvailability.off)
                 review.load(),
             ]);
+            // The reader pulled; a refresh that failed says so above the rows it kept (§17.4).
+            if (context.mounted && convoProvider.conversationsLoadFailed && convoProvider.conversations.isNotEmpty) {
+              OmiFeedback.error(
+                context,
+                context.l10n.couldNotRefreshConversations,
+                actionLabel: context.l10n.tryAgain,
+                onAction: () => unawaited(convoProvider.getInitialConversations()),
+              );
+            }
             final historyReady = await history;
             if (mounted && historyReady) {
               if (_initialOverlayReady case final ready? when !ready.isCompleted) ready.complete();
@@ -1218,11 +1236,24 @@ class _ConversationsPageState extends State<ConversationsPage>
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               // The live capture row: recording, a call, or a conversation being captured. With episodes
-              // on, a streaming capture is the live episode row in Today instead.
+              // on, a streaming capture is the live episode row in Today instead. On v3 Home a streaming
+              // capture is always the live conversation row: the server's window once it has one, and a
+              // placeholder row until then (or between windows), never the pendant capture card, so the
+              // two do not swap each time the live read comes back empty.
               SliverToBoxAdapter(
-                child:
-                    ConversationCaptureWidget(showsCall: true, deferStreamingToEpisode: episodeLive || v3Live != null),
+                child: ConversationCaptureWidget(
+                    showsCall: true, deferStreamingToEpisode: episodeLive || v3Live != null || (v3Home && streaming)),
               ),
+              // An Omi call is shown as the call card above (a call also marks the phone capture
+              // interrupted, which reads as streaming); the placeholder never doubles it.
+              if (v3Home &&
+                  streaming &&
+                  v3Live == null &&
+                  !context.select<PhoneCallProvider?, bool>((p) => switch (p?.callState) {
+                        PhoneCallState.active || PhoneCallState.connecting || PhoneCallState.ringing => true,
+                        _ => false,
+                      }))
+                const SliverToBoxAdapter(child: V3LivePlaceholderRow()),
               // A declined renewal the user can still pay: one row, Update opens Stripe's billing portal.
               const SliverToBoxAdapter(child: PaymentIssueRow()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
@@ -1333,6 +1364,18 @@ class _ConversationsPageState extends State<ConversationsPage>
                       if (cardsOn) return feed.loading ? _buildLoadMoreShimmer() : const SizedBox(height: 20);
                       if (convoProvider.isLoadingConversations) {
                         return _buildLoadMoreShimmer();
+                      }
+                      // A failed older page ends the list with one quiet line, not silence (X6);
+                      // scrolling does not retry it on its own.
+                      if (convoProvider.loadMoreFailed) {
+                        return OmiLoadMoreFailed(
+                          key: const Key('conversations_load_more_failed'),
+                          onRetry: () async {
+                            _lastLoadMoreRequestKey = null;
+                            final provider = context.read<ConversationProvider>();
+                            if (provider.hasMoreConversations) await provider.getMoreConversationsFromServer();
+                          },
+                        );
                       }
                       // widget.loadMoreMemories(); // CALL this only when visible
                       return VisibilityDetector(

@@ -138,6 +138,8 @@ LIVE_MANAGED_ENV_ALLOWLIST: dict[str, frozenset[str]] = {
         }
     ),
     'backend-integration': frozenset({'OMI_BACKEND_RELEASE_SHA', 'BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST'}),
+    # SCA-3120: derived from backend-integration, deployed only by its explicit selection.
+    'backend-projection-pump': frozenset({'OMI_BACKEND_RELEASE_SHA', 'BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST'}),
 }
 
 

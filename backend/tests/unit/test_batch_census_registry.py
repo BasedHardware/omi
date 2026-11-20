@@ -30,6 +30,8 @@ from config.batch_census import (
 from tests.support.lifecycle_ast import constant_names, literal_key
 from tests.support.lifecycle_state_table import STATES
 from tests.support.lifecycle_writer_inventory import FIELD_SITES
+from tests.support.batch_census_sql_selectors import RecordingConnection, RecordingPool, source_sites, state_page
+from tests.support.firestore_serving_query_inventory import serving_function_body_digest
 
 BACKEND = Path(__file__).resolve().parents[2]
 ROOT = BACKEND.parent
@@ -39,6 +41,96 @@ BATCH_SCOPE = ('database/batch_pipeline', 'utils/batch_pipeline/', 'database/rec
 
 def _in_batch_scope(module: str) -> bool:
     return module.startswith(BATCH_SCOPE)
+
+
+def test_postgres_batch_selector_contract():
+    from datetime import datetime, timezone
+
+    from config.batch_census_selectors import SQL_EXCEPTIONS
+    from database.jobstore.outbox_pg import PostgresOutbox
+    from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
+    from database.outbox import OutboxKind
+
+    connection = RecordingConnection()
+    store = PostgresStore('batch_pipeline_test_census', pool=RecordingPool(connection), customer_client=None)
+    tx = PostgresTransaction(store, connection)
+    outbox = PostgresOutbox(OutboxKind.PROVIDER_STT, store, create_wake=lambda *args: None)
+    owner, segment, now = 'synthetic-owner', 'synthetic-segment', 10.0
+    profiles = {
+        store.packing_candidates: [((owner,), {})],
+        store.allowance_owners: [((now, 20), {})],
+        store.allowance_page: [((owner, (0, segment), 100), {}), ((None, None, 100), {})],
+        store.due: [((state, now), {}) for state in ('leased', 'retry', 'result_ready', 'record_pending')],
+        store.protected_page_in: [
+            ((connection, 'ready', now, 8), {'owner_key': owner, 'priority': 1}),
+            ((connection, 'retry', now, 100), {'after': (0, segment)}),
+        ],
+        store.oldest: [((0,), {'ready_only': ready}) for ready in (True, False)],
+        store.ready_for_capacity: [((0, now), {})],
+        store.oldest_admissible_ready: [((0, now), {})],
+        store.longest_ready_pending: [((owner,), {})],
+        store.fresh_pending: [((owner, 32), {})],
+        store.ready_pending: [((owner, 160), {'after': after}) for after in (None, (0, segment))],
+        store.ready_owners: [((None, 100), {}), ((owner, 100), {'ceiling_owner_key': 'z'})],
+        store.held_merge_owners: [((100,), {'after': owner})],
+        store.oldest_retry: [((0,), {})],
+        store._projection_page: [
+            ((), {}),
+            ((), {'include_outbox': True}),
+            ((), {'due_before': now}),
+            ((), {'followup_due_before': now, 'after': (0, 0, segment)}),
+        ],
+        store.first_pending_in: [((connection, owner), {'result_ready': ready}) for ready in (True, False)],
+        store.pending_page_in: [((connection, owner, 160), {})],
+        tx._fresh_first: [((owner,), {'ready': ready}) for ready in (True, False)],
+        tx.ready_predecessor: [((owner, 0, segment), {})],
+        outbox._enqueue: [((connection, segment, owner, {}, now, None, 'max', now), {})],
+        outbox.claim: [((10, 60), {'now': now})],
+        outbox.claim_key: [(('1', 'synthetic-token', 60), {'now': now})],
+        outbox.wake: [(('1', 'synthetic-token'), {})],
+        outbox.sweep: [((), {'now': now})],
+    }
+    discovered = {
+        '.'.join((*path.relative_to(BACKEND).with_suffix('').parts, name))
+        for path in (BACKEND / 'database' / 'jobstore').rglob('*.py')
+        for name in source_sites(path.read_text())
+    }
+    keys = {f'{fn.__module__}.{fn.__qualname__}' for fn in profiles}
+    assert discovered == keys, f'Add executable SQL selector profiles for {discovered - keys}'
+
+    needed = set()
+    for fn, variants in profiles.items():
+        key = f'{fn.__module__}.{fn.__qualname__}'
+        for args, kwargs in variants:
+            connection.statements.clear()
+            fn(*args, **kwargs)
+            assert connection.statements, f'{key} profile did not execute SQL'
+            for statement, parameters in connection.statements:
+                uncovered, limit = state_page(statement, parameters)
+                if uncovered:
+                    needed.add(key)
+                    entry = SQL_EXCEPTIONS.get(key)
+                    assert entry, f'{key} has no actionable due bound or reviewed exception'
+                    assert type(limit) is int and 0 < limit <= entry.max_rows, (key, limit)
+
+    assert needed == set(SQL_EXCEPTIONS), f'Remove unused SQL selector exceptions: {set(SQL_EXCEPTIONS) - needed}'
+    for key, entry in SQL_EXCEPTIONS.items():
+        assert entry.expiry >= datetime.now(timezone.utc).date(), f'{key} expired on {entry.expiry}'
+        assert entry.owner and entry.reason and entry.cadence and entry.removal
+        assert entry.body_digest == serving_function_body_digest(key), key
+
+
+def test_postgres_cursor_and_enqueue_time_do_not_prove_due_selection():
+    enqueued = 'SELECT key FROM jobs WHERE state=%s AND enqueued_at<=%s ORDER BY enqueued_at LIMIT %s'
+    assert state_page(enqueued, ('ready', 10, 20)) == (True, 20)
+    assert state_page(enqueued.replace('enqueued_at', 'available_at'), ('ready', 10, 20)) == (False, None)
+    assert state_page('SELECT key FROM jobs WHERE state=%s AND key>%s ORDER BY key', ('ready', 'cursor')) == (
+        True,
+        None,
+    )
+    assert list(source_sites('class Store:\n def new(self):\n  sql = "SELECT doc FROM jobs WHERE state=%s"\n')) == [
+        'Store.new'
+    ]
 
 
 @lru_cache(maxsize=None)

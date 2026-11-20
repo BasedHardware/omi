@@ -485,6 +485,11 @@ class RecordingPiece(BaseModel):
     end: float = Field(ge=0)
 
 
+class LiveSummaryPreview(BaseModel):
+    structured: Structured
+    summary_covers_through: datetime
+
+
 class Conversation(BaseModel):
     title_content_units: float = Field(default=0, exclude=True)
     notes_quality_filter_input_hash: Optional[str] = Field(default=None, exclude=True)
@@ -520,12 +525,18 @@ class Conversation(BaseModel):
     recording_pieces: Optional[List[RecordingPiece]] = None
     manual_end: Optional[bool] = None
     summary_covers_through: Optional[datetime] = None
+    live_summary: Optional[LiveSummaryPreview] = None
     v3_pending: SkipJsonSchema[Optional[bool]] = Field(default=None, exclude=True)
     v3_derived: SkipJsonSchema[Optional[bool]] = None
     v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
     v3_process_pending: SkipJsonSchema[Optional[bool]] = None
     v3_rewrites: SkipJsonSchema[Optional[int]] = None
     backfilled: SkipJsonSchema[Optional[bool]] = None
+    # Server-authored at create, never changed: old backfill (T1+, config/historical_tier.py)
+    # carries a transcript and deterministic title; its summary runs only on open.
+    processing_tier: Optional[Literal['historical']] = None
+    # Read projection, never stored: open this row through POST .../summary/open.
+    summary_on_open: Optional[bool] = None
 
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
@@ -663,8 +674,13 @@ class Conversation(BaseModel):
         data = handler(self)
         if not self.processing_deferred and 'processing_deferred' not in self.model_fields_set:
             data.pop('processing_deferred', None)
+        if self.live_summary is None:
+            data.pop('live_summary', None)
         if self.home_step is None:
             data.pop('home_step', None)
+        for name in ('processing_tier', 'summary_on_open'):
+            if getattr(self, name) is None:
+                data.pop(name, None)
         if info.mode == 'python' and self.owner_recognition_diagnostics:
             excluded = info.exclude or ()
             included = info.include
@@ -1130,6 +1146,9 @@ class LiveConversation(BaseModel):
     created_at: datetime
     status: ConversationStatus
     tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done', 'failed']] = None
+
+    is_locked: SkipJsonSchema[Optional[bool]] = None
+    v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
 
 
 class ConversationsLiveResponse(BaseModel):

@@ -11,6 +11,7 @@ import json
 from collections import OrderedDict
 from dataclasses import dataclass
 
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.other import raw_audio_read
 from utils.other.audio_frame_table import (
     FRAME_SCHEMA,
@@ -46,6 +47,7 @@ _proofs: OrderedDict[ProofKey, tuple[float, list[dict]]] = OrderedDict()
 _lock = threading.Lock()
 
 
+@object_get_reader(Reader.ARCHIVE_RECONCILE)
 def validated_uncovered_packs(bucket, uid, cid, chunks):
     deadline = time.monotonic() + 20
     packs = raw_audio_read.list_packs(bucket, uid, cid, fresh=True, deadline=deadline, max_count=4096, strict=True)
