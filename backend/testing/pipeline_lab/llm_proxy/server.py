@@ -135,6 +135,8 @@ class LlmProxy:
         self._locks_guard = threading.Lock()
         self._server: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
+        self._active = 0  # handlers still running: a call is answered before its spend is settled
+        self._idle = threading.Condition()
 
     # ---- lifecycle ---------------------------------------------------------------
 
@@ -175,6 +177,11 @@ class LlmProxy:
     def stop(self) -> None:
         if self._server is not None:
             self._server.shutdown()
+            # Wait for in-flight handlers, so the ledger and call log hold every answered call.
+            deadline = time.monotonic() + self.config.timeout + 5
+            with self._idle:
+                while self._active and time.monotonic() < deadline:
+                    self._idle.wait(timeout=0.1)
             self._server.server_close()
         if self._thread is not None:
             self._thread.join(timeout=5)
@@ -270,6 +277,17 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(405, _error_body('invalid_request_error', 'method_not_allowed', 'lab proxy serves POST only'))
 
     def do_POST(self) -> None:
+        owner = self.owner
+        with owner._idle:
+            owner._active += 1
+        try:
+            self._do_post()
+        finally:
+            with owner._idle:
+                owner._active -= 1
+                owner._idle.notify_all()
+
+    def _do_post(self) -> None:
         body = self._read_body()
         if body is None:
             return
