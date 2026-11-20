@@ -98,7 +98,11 @@ func serve(ctx context.Context, cfg config, store *queue.Store, kit *kitstore.St
 	defer client.Close()
 
 	var listener net.ListenConfig
-	ln, err := listener.Listen(ctx, "tcp", ":"+cfg.port)
+	address := ":" + cfg.port
+	if cfg.replayListen {
+		address = "127.0.0.1:0"
+	}
+	ln, err := listener.Listen(ctx, "tcp", address)
 	if err != nil {
 		return errors.New("listen failed")
 	}
@@ -122,6 +126,11 @@ func serve(ctx context.Context, cfg config, store *queue.Store, kit *kitstore.St
 	server := &http.Server{Handler: api.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second,
 		WriteTimeout: 90 * time.Second, IdleTimeout: 75 * time.Second, MaxHeaderBytes: 32 << 10,
 		BaseContext: func(net.Listener) context.Context { return ctx },
+	}
+	if cfg.replayListen {
+		if _, err := fmt.Fprintln(os.Stdout, ln.Addr().String()); err != nil {
+			return errors.Join(errors.New("publish replay listener"), ln.Close())
+		}
 	}
 	stopped := make(chan error, 1)
 	go func() { stopped <- server.Serve(ln) }()

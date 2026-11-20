@@ -32,8 +32,7 @@ import '../../helpers/sfpro_font_fixtures.dart';
 
 // Device Settings stays calm: routine BLE drops are not listed on the page (the WAL keeps
 // recording through them; the raw history lives in Diagnostics and its Send to support bundle),
-// and an upload the server has not accepted yet reads as waiting, not as transcription being
-// unavailable. The layout assertions run
+// and uploads awaiting server acceptance are handled through Offline Sync. The layout assertions run
 // everywhere; with --dart-define=DEVICE_SETTINGS_RENDER_OUTPUT=<dir> the PNG used as PR evidence is
 // written there too. All data is synthetic.
 
@@ -262,16 +261,20 @@ void main() {
     await tester.pump(const Duration(milliseconds: 120));
   }
 
-  testWidgets('Device Settings lists no disconnects and calls a stalled upload waiting', (tester) async {
+  testWidgets('Device Settings omits routine disconnects and the stalled upload card', (tester) async {
     await pumpDevice(tester);
     final en = lookupAppLocalizations(const Locale('en'));
     expect(find.text('Recently'), findsNothing, reason: 'routine BLE drops are not a device-page section');
     expect(find.textContaining('Disconnected for'), findsNothing);
-    final row = find.byKey(const Key('device_stalled_upload_details'));
-    expect(row, findsOneWidget);
-    expect(find.descendant(of: row, matching: find.text(en.deviceUploadsWaitingOnServer)), findsOneWidget);
-    expect(find.descendant(of: row, matching: find.text(en.deviceUploadsWaitingOnServerSubtitle)), findsOneWidget);
+    expect(find.text(en.deviceUploadsWaitingOnServer), findsNothing);
+    expect(find.text(en.deviceUploadsWaitingOnServerSubtitle), findsNothing);
     expect(find.text(en.transcriptionUnavailable), findsNothing);
     await writeFrame(tester, '002-mobile-ios-device-settings-after');
+
+    final offlineSync = find.byWidgetPredicate((widget) => widget is OmiSettingsRow && widget.title == en.offlineSync);
+    await tester.scrollUntilVisible(offlineSync, 200);
+    await Scrollable.ensureVisible(tester.element(offlineSync), alignment: 0.5);
+    await tester.pump();
+    expect(tester.widget<OmiSettingsRow>(offlineSync.hitTestable()).onTap, isNotNull);
   });
 }

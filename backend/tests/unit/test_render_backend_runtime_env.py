@@ -512,7 +512,9 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
         "--memory=${{ inputs.runtime_env == 'prod' && '4Gi' || '2Gi' }}",
         "--concurrency=${{ inputs.runtime_env == 'prod' && '80' || '40' }}",
         integration_min,
-        "--max-instances=${{ inputs.runtime_env == 'prod' && '35' || '50' }}",
+        # 2026-11-20: the cap is live-resolved (prod fresh-service default 35) so a capacity
+        # revision's cap survives the next train; test_cloud_run_live_caps.py runs the resolver.
+        '--max-instances=${{ steps.live-integration-max-scale.outputs.max_scale }}',
         '--no-cpu-throttling',
     ):
         assert flag in integration_flags, flag
