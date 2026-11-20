@@ -39,11 +39,12 @@ def _capped(lines, sections=(), held=None):
     stranded the lines between cuts as one-line cards. Line starts are append-only for live speech, so
     this cut stays put. ``sections`` is accepted for callers and ignored on purpose.
 
-    ``held(line)`` names the locked row that already holds a line, if any. A part whose first line a
-    locked row holds keeps that row's cut: it ends at the first line the row does not hold, so rows
-    locked by earlier code (main cut at the middle) or an earlier pass keep their cut even when a turn
-    straddles it, and the cap counts from there. Only ownership of this stretch's own lines counts;
-    a locked row that holds none of them never cuts it.
+    ``held(line)`` names the locked row that owns a line, if any: it holds the exact segment, or the
+    line lies wholly inside the row's audio claim (a revised turn gets a new id but keeps its audio).
+    A part whose first line a locked row owns keeps that row's cut: it ends at the first line the row
+    does not own, so rows locked by earlier code (main cut at the middle) or an earlier pass keep their
+    cut when a turn straddles it or a held turn is revised, and the cap counts from there. Only
+    ownership of this stretch's own lines counts; a locked row that owns none of them never cuts it.
     """
     holder = held or _held_by_none
     parts, offset = [], 0
@@ -221,11 +222,14 @@ def _cohesive_groups(
             start = end
 
 
-def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topic_lock=False, locked=()):
-    """``locked``: locked derived rows, whose cuts the two-hour cap reuses for lines they hold (``_capped``)."""
+def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topic_lock=False, locked=(), claims=None):
+    """``locked``: locked derived rows, whose cuts the two-hour cap reuses for lines they own (``_capped``).
+
+    ``claims``: the source recordings (their ``claims`` show which row owns which audio).
+    """
     result = []
     sitdown = is_sitdown(silence_gap)
-    held = _holder(locked)
+    held = _holder(locked, claims)
     pairs = _cohesive_groups(groups, outlines, sitdown, held) if cohesion else zip(groups, outlines)
     for group, entries in pairs:
         first_result = len(result)
@@ -576,16 +580,34 @@ def _holds_line(row, line, keys=None):
     return (segment_id, start, end, text) in (keys if keys is not None else _segment_keys(row))
 
 
-def _holder(rows):
-    """line -> id of the locked row that holds it (exact segment), computed only when the cap asks."""
+def _holder(rows, recordings=None):
+    """line -> id of the locked row that owns it, computed only when the cap asks.
+
+    A row owns a line it holds exactly (id and timing) or one lying wholly inside its audio claim on
+    that recording, so revising a held turn (new id, same audio) does not hand the line away.
+    """
     rows = [r for r in rows if r.get('started_at') and r.get('finished_at')]
     if not rows:
         return None
     keys, seen = {r['id']: _segment_keys(r) for r in rows}, {}
+    spans: dict[str, dict[str, list]] = {}
+    ids = {r['id'] for r in rows}
+    for rid, recording in (recordings or {}).items():
+        for claim in recording.get('claims') or ():
+            if claim.get('conversation_id') in ids:
+                spans.setdefault(claim['conversation_id'], {}).setdefault(rid, []).append(
+                    (claim['start'], claim['end'])
+                )
+
+    def owns(row, line):
+        if _holds_line(row, line, keys[row['id']]):
+            return True
+        claimed = spans.get(row['id'], {}).get(line['conversation_id'], ())
+        return any(a <= line['start'] and line['end'] <= b for a, b in claimed)
 
     def held(line):
         if id(line) not in seen:
-            seen[id(line)] = next((r['id'] for r in rows if _holds_line(r, line, keys[r['id']])), None)
+            seen[id(line)] = next((r['id'] for r in rows if owns(r, line)), None)
         return seen[id(line)]
 
     return held

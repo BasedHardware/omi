@@ -499,3 +499,59 @@ def test_a_full_write_that_changes_no_speech_keeps_the_landing_time(strict, monk
     first[-1]['text'] += 'more '
     assert db.update_conversation_segments(UID, 'r', deepcopy(first))
     assert strict.rows[path('r')]['v3_speech_landed_at'] == clock['now']
+
+
+def boundaries_and_claims(strict, rows):
+    claims = strict.rows[path('r')].get('claims') or []
+    return {
+        r['id']: (
+            r['started_at'],
+            r['finished_at'],
+            sorted((c['start'], c['end']) for c in claims if c['conversation_id'] == r['id']),
+        )
+        for r in rows
+        if not planner_open(r)
+    }
+
+
+def revised(segments, *indices):
+    out = deepcopy(segments)
+    for i in indices:
+        out[i] = {**out[i], 'id': out[i]['id'] + '-rev', 'text': 'revised ' * 12}
+    return out
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('gap, lock', [(300, 300), (900, 900)])
+async def test_a_revised_held_turn_does_not_move_a_committed_cut(strict, monkeypatch, gap, lock):
+    # A transcript revision gives a held turn a new id but keeps its audio inside the locked row's
+    # claim. The cut must stay: revising the first held turn and an interior one keeps the locked
+    # boundary, its claims and the open card's id (#25829 review).
+    from utils.conversations.v3 import planner
+
+    timing(monkeypatch, gap, lock)
+    segments = speech(300)
+    end = T0 + timedelta(seconds=segments[-1]['end'])
+    put_recording(strict, segments, status='in_progress', landed=end + timedelta(seconds=30))
+    with monkeypatch.context() as old:
+        old.setattr(planner, '_capped', main_capped)
+        assert await reconcile_at(strict, monkeypatch, end + timedelta(seconds=30)) == 'committed'
+    rows = derived(strict)
+    before = boundaries_and_claims(strict, rows)
+    assert len(before) == 1 and len(rows) == 2
+    tail = next(r for r in rows if planner_open(r))
+    for count, indices in ((330, (0,)), (360, (0, 10))):
+        more = revised(speech(count), *indices)
+        later = T0 + timedelta(seconds=more[-1]['end'])
+        put_recording(strict, more, status='in_progress', landed=later + timedelta(seconds=30))
+        assert await reconcile_at(strict, monkeypatch, later + timedelta(seconds=30)) == 'committed'
+        rows = derived(strict)
+        assert boundaries_and_claims(strict, rows) == before
+        assert len(rows) == 2 and rows[1]['id'] == tail['id'] and planner_open(rows[1]), [
+            (r['started_at'], r['finished_at'], planner_open(r)) for r in rows
+        ]
+        owners = ownership(rows)
+        assert all(len(ids) == 1 for ids in owners.values()), owners
+        assert {owners[f's{i}-rev'][0] for i in indices} == set(before)
+        spans = claim_spans(strict)
+        assert all(left[1] <= right[0] for left, right in zip(spans, spans[1:])), spans

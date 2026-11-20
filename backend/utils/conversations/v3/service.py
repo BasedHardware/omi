@@ -376,6 +376,7 @@ async def reconcile(
                 silence_gap=silence_gap,
                 defer_topic_lock=custom_timing,
                 locked=locked_rows,
+                claims=recordings,
             )
             merge = refinement.candidate(proposed, existing, recordings) if refine_locked else None
             if merge and await run_blocking(db_executor, store.merge_donors_have_tasks, uid, merge[1]['_v3_absorbed']):
