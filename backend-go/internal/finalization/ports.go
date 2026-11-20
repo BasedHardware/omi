@@ -158,6 +158,7 @@ type Effects interface {
 type Target struct {
 	AppID                      string
 	Enabled, Created, Disabled bool
+	OwnedByOwner               bool
 	URL                        string
 	Body                       []byte
 	Headers                    map[string]string
@@ -176,8 +177,15 @@ type IntegrationTargets interface {
 	Resolve(ctx context.Context, g queue.Guarded, claim Claim, snapshot Conversation) ([]Target, error)
 }
 
+// DeliveryBudget carries the active finalization attempt to integrations.
+type DeliveryBudget struct {
+	Attempt int
+	Epoch   int64
+	Final   bool
+}
+
 // Integrations sends each eligible target under the current guard using the
 // revision key. On the final attempt a transient delivery is reported as dropped.
 type Integrations interface {
-	Deliver(ctx context.Context, g queue.Guarded, event IntegrationEvent, targets []Target, finalAttempt bool) (bool, error)
+	Deliver(ctx context.Context, g queue.Guarded, event IntegrationEvent, targets []Target, budget DeliveryBudget) (bool, error)
 }

@@ -67,7 +67,8 @@ func (s *Service) deliver(ctx context.Context, run *queue.Run, claim Claim, fano
 			return resolveErr
 		}
 		var deliveryErr error
-		dropped, deliveryErr = s.Integrations.Deliver(ctx, g, event, targets, run.FinalAttempt())
+		budget := DeliveryBudget{Attempt: run.Job().Attempts, Epoch: claim.Epoch, Final: run.FinalAttempt()}
+		dropped, deliveryErr = s.Integrations.Deliver(ctx, g, event, targets, budget)
 		return deliveryErr
 	})
 	return dropped, err

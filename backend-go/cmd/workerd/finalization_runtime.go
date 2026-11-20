@@ -13,7 +13,9 @@ import (
 
 	"github.com/BasedHardware/omi/backend-go/internal/adapters/conversations"
 	"github.com/BasedHardware/omi/backend-go/internal/adapters/finalizationdocs"
+	"github.com/BasedHardware/omi/backend-go/internal/adapters/integrations"
 	"github.com/BasedHardware/omi/backend-go/internal/finalization"
+	"github.com/BasedHardware/omi/backend-go/internal/integrationfanout"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
@@ -24,6 +26,7 @@ import (
 
 func workerdKinds() []queue.Kind {
 	causes := append(finalizationdocs.Causes(), conversations.Causes()...)
+	causes = append(causes, integrationfanout.Causes()...)
 	return []queue.Kind{finalization.Declaration(causes...)}
 }
 
@@ -44,6 +47,7 @@ type finalizationRuntime struct {
 	docs    *docstore.Store
 	scan    *finalizationdocs.SummaryScan
 	retract *httpx.Client
+	sender  *integrations.Sender
 }
 
 func openFinalizationRuntime(ctx, startup context.Context, cfg config, q *queue.Store) (finalizationRuntime, error) {
@@ -69,6 +73,9 @@ func openFinalizationRuntime(ctx, startup context.Context, cfg config, q *queue.
 		offload = reader
 	}
 	wireFinalizationDocuments(runtime.family, store, offload, cfg.notesDedupe)
+	if wireErr := runtime.bindIntegrationDelivery(clk); wireErr != nil {
+		return finalizationRuntime{}, errors.Join(wireErr, runtime.close())
+	}
 	if cfg.summaryRepair {
 		runtime.scan = &finalizationdocs.SummaryScan{Docs: docs, Family: runtime.family, Clock: clk, MaxAge: cfg.summaryMaxAge}
 	}
@@ -120,7 +127,22 @@ func (m *finalizationRuntime) bindMaintenanceAdapters(ctx, startup context.Conte
 	return nil
 }
 
+func (m *finalizationRuntime) bindIntegrationDelivery(clk clock.Clock) error {
+	sender, err := integrations.NewSender(10*time.Second, clk)
+	if err != nil {
+		return err
+	}
+	m.sender = sender
+	m.family.Integrations = integrationDelivery{service: integrationfanout.Service{
+		Sender: sender, Receipts: integrations.Receipts{Store: m.docs},
+	}}
+	return nil
+}
+
 func (m *finalizationRuntime) close() error {
+	if m.sender != nil {
+		m.sender.Close()
+	}
 	if m.retract != nil {
 		m.retract.Close()
 	}

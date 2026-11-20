@@ -204,14 +204,14 @@ func (p *fakePorts) Resolve(_ context.Context, g queue.Guarded, _ Claim, _ Conve
 	return []Target{{Enabled: true, Created: true}}, g.Err()
 }
 
-func (p *fakePorts) Deliver(_ context.Context, g queue.Guarded, event IntegrationEvent, _ []Target, final bool) (bool, error) {
+func (p *fakePorts) Deliver(_ context.Context, g queue.Guarded, event IntegrationEvent, _ []Target, budget DeliveryBudget) (bool, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if event.FanoutKey != "fixture-revision-fanout" {
 		return false, errors.New("incorrect fanout key")
 	}
 	p.deliveries++
-	if p.integrationTransient && !final {
+	if p.integrationTransient && !budget.Final {
 		return false, queue.Classify(errors.New("fixture receiver timed out"), queue.Retry(causeTestReject, 0))
 	}
 	return p.dropDelivery || p.integrationTransient, g.Err()

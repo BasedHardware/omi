@@ -44,7 +44,7 @@ func (syntheticEffects) DeleteEmpty(_ context.Context, g queue.Guarded, _ finali
 	return g.Err()
 }
 
-func (syntheticEffects) Deliver(_ context.Context, g queue.Guarded, _ finalization.IntegrationEvent, _ []finalization.Target, _ bool) (bool, error) {
+func (syntheticEffects) Deliver(_ context.Context, g queue.Guarded, _ finalization.IntegrationEvent, _ []finalization.Target, _ finalization.DeliveryBudget) (bool, error) {
 	return false, g.Err()
 }
 
