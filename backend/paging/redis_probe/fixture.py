@@ -5,8 +5,10 @@ From the repository root, pass the local image tag as argv[1].
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
+from hashlib import sha256
 import json
 from pathlib import Path
+from secrets import token_hex
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
@@ -19,12 +21,14 @@ from uuid import uuid4
 from . import probe as probe_module
 from .probe import ATTEMPT_METRIC, SUCCESS_METRIC, TARGET
 
-PASSWORD = 'redis-probe-local-fixture-only'
 USER = 'omi-redis-serving-probe'
+PROBE_CREDENTIAL = '/run/probe-auth/password'
 
 
-def docker(*args: str, check: bool = True) -> str:
-    return subprocess.run(['docker', *args], check=check, stdout=subprocess.PIPE, text=True, timeout=30).stdout.strip()
+def docker(*args: str, check: bool = True, stdin: str | None = None) -> str:
+    return subprocess.run(
+        ['docker', *args], check=check, input=stdin, stdout=subprocess.PIPE, text=True, timeout=30
+    ).stdout.strip()
 
 
 def sample(prometheus: str, expression: str) -> float | None:
@@ -110,16 +114,16 @@ def run(image: str) -> None:
         root = Path(path)
         check_attempt_deadlines(root)
 
+        password = token_hex(32)
         acl = root / 'redis.acl'
-        acl.write_text(f'user default off\nuser {USER} on >{PASSWORD} +ping\n')
-        password = root / 'password'
-        password.write_text(PASSWORD)
+        password_hash = sha256(password.encode('ascii')).hexdigest()
+        acl.write_text(f'user default off\nuser {USER} on #{password_hash} +ping\n')
         prometheus_config = root / 'prometheus.yml'
         prometheus_config.write_text(
             f'scrape_configs:\n  - job_name: {USER}\n    scrape_interval: 2s\n'
             f'    static_configs:\n      - targets: ["{probe}:9090"]\n'
         )
-        for file in (acl, password, prometheus_config):
+        for file in (acl, prometheus_config):
             file.chmod(0o444)
 
         docker('network', 'create', '--internal', name)
@@ -141,8 +145,8 @@ def run(image: str) -> None:
         start(
             probe,
             '--read-only',
-            '-v',
-            f'{password}:/run/probe-password:ro',
+            '--tmpfs',
+            '/run/probe-auth:rw,noexec,nosuid,nodev,size=64k,mode=0700,uid=65532,gid=65532',
             '-e',
             f'REDIS_DB_HOST={redis}',
             '-e',
@@ -150,8 +154,22 @@ def run(image: str) -> None:
             '-e',
             f'REDIS_PROBE_USERNAME={USER}',
             '-e',
-            'REDIS_PROBE_PASSWORD_FILE=/run/probe-password',
+            f'REDIS_PROBE_PASSWORD_FILE={PROBE_CREDENTIAL}',
+            '--entrypoint',
+            'sh',
             image,
+            '-c',
+            'while [ ! -f "$REDIS_PROBE_PASSWORD_FILE" ]; do sleep 0.1; done; exec python probe.py',
+        )
+        # Publish the credential only after stdin has closed and the file is complete.
+        docker(
+            'exec',
+            '-i',
+            probe,
+            'sh',
+            '-c',
+            'umask 077; cat > "$REDIS_PROBE_PASSWORD_FILE.tmp" && mv "$REDIS_PROBE_PASSWORD_FILE.tmp" "$REDIS_PROBE_PASSWORD_FILE"',
+            stdin=password,
         )
         start(
             prometheus,
@@ -161,9 +179,9 @@ def run(image: str) -> None:
         )
         healthy = await_state(prometheus, expression, 1, 0)
         assert 'NOAUTH' in docker('exec', redis, 'redis-cli', 'PING')
-        assert 'NOPERM' in docker(
-            'exec', '-e', f'REDISCLI_AUTH={PASSWORD}', redis, 'redis-cli', '--user', USER, 'GET', 'fixture'
-        )
+        acl_check = docker('exec', '-i', redis, 'redis-cli', '--raw', stdin=f'AUTH {USER} {password}\nGET fixture\n')
+        auth_status, _, get_status = acl_check.partition('\n')
+        assert auth_status == 'OK' and get_status.startswith('NOPERM')
 
         docker('pause', redis)
         try:
