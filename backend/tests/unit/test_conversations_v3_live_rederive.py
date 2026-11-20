@@ -6,16 +6,21 @@ strict in-memory Firestore; only the outline model, speaker evidence and the sta
 """
 
 import json
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
-from types import SimpleNamespace
+from google.api_core.exceptions import InvalidArgument
 
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
 from database import conversations_v3_rederive as rederive_store
+from database.account_deletion_marker import account_deletion_document
+from scripts import conversations_v3_backfill as script
 from utils.conversations.v3 import backfill, service
 from tests.unit.fixtures.strict_firestore_transaction import (
     StrictFirestoreCollection,
@@ -591,8 +596,6 @@ async def test_undo_of_a_later_run_over_an_earlier_runs_rows_can_be_rerun(owner,
 
 @pytest.mark.asyncio
 async def test_undo_refuses_once_the_owner_account_deletion_began(owner, strict, ledger):
-    from database.account_deletion_marker import account_deletion_document
-
     sources, rows = lunch(count=3)
     owner(*sources, *rows)
     await rederive()
@@ -640,8 +643,6 @@ async def test_a_deleted_or_reprotected_conversation_keeps_no_undo_copy(
 
 
 def test_a_protection_change_empties_undo_copies_of_rederived_rows_after_migrating(strict, monkeypatch):
-    from unittest.mock import MagicMock
-
     conversations_db = backfill.conversations_db
     strict.rows[path('c0')] = {'id': 'c0', 'v3_rederive_live_run': RUN, 'data_protection_level': 'standard'}
     strict.rows[path('c1')] = {'id': 'c1', 'data_protection_level': 'standard'}
@@ -805,8 +806,6 @@ async def test_a_card_with_app_results_is_left_alone(owner, strict):
 
 @pytest.mark.asyncio
 async def test_undo_reapplies_the_recurring_voice_fence_to_restored_rows(owner, strict, ledger, monkeypatch):
-    import database.recurring_voice_privacy as voice_privacy
-
     sources, rows = lunch(count=3)
     owner(*sources, *rows)
     await rederive()
@@ -814,7 +813,7 @@ async def test_undo_reapplies_the_recurring_voice_fence_to_restored_rows(owner, 
     def scrub(tx, user, data):
         data['voice_fence_applied'] = True
 
-    monkeypatch.setattr(voice_privacy, 'filter_processing_write', scrub)
+    monkeypatch.setattr(rederive_store, 'filter_processing_write', scrub)
     assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
     assert all(conversations(strict)[cid].get('voice_fence_applied') for cid in ('c0', 'c1', 'c2'))
 
@@ -935,8 +934,6 @@ def test_a_resumed_attempt_keeps_the_first_copy_of_a_row(strict):
 
 
 def test_priors_are_never_written_once_the_owner_account_deletion_began(strict, monkeypatch):
-    from database.account_deletion_marker import account_deletion_document
-
     strict.rows[account_deletion_document(UID, firestore_client=strict).path] = {'status': 'pending'}
     with pytest.raises(store.Conflict, match='account_deletion'):
         runs.save_priors(UID, RUN, [{'id': 'c0', 'raw': {'id': 'c0'}, 'claims': []}], firestore_client=strict)
@@ -1048,8 +1045,6 @@ async def test_a_claims_update_that_would_grow_a_source_past_the_limit_blocks_be
 
 @pytest.mark.asyncio
 async def test_a_commit_that_fails_midway_resumes_and_undoes_exactly(owner, strict, ledger, monkeypatch):
-    from google.api_core.exceptions import InvalidArgument
-
     sources, rows = lunch()
     extra = source('r9', AT + timedelta(minutes=30), words=400)
     owner(*sources, *rows, extra)
@@ -1132,8 +1127,6 @@ def test_dry_run_preview_counts_before_and_after_and_writes_nothing(owner, stric
 
 
 def test_operator_dry_run_prints_the_preview_without_uids(tmp_path, monkeypatch, capsys):
-    from scripts import conversations_v3_backfill as script
-
     secret_uid = 'synthetic-owner-uid-123'
     owners = tmp_path / 'owners.txt'
     owners.write_text(secret_uid + '\n')
@@ -1211,3 +1204,77 @@ def test_undo_takes_the_backfill_lease_before_anything_else(monkeypatch):
     monkeypatch.setattr(leases, 'acquire', lambda uid, key, **kw: seen.append(key) or None)
     assert backfill.undo_live_run(UID, RUN) == {'outcome': 'busy', 'reason': 'backfill_pass_in_flight'}
     assert seen == [store.BACKFILL_LEASE]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('lost_lease', [None, 'builder', store.BACKFILL_LEASE])
+async def test_undo_renews_both_leases_during_long_preflight(owner, strict, ledger, monkeypatch, lost_lease):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    original = conversations(strict)
+    assert (await rederive())[0] == 'committed'
+    before_undo = conversations(strict)
+
+    class Clock:
+        now_value = datetime.now(timezone.utc)
+
+        @classmethod
+        def now(cls, tz):
+            return cls.now_value.astimezone(tz)
+
+    monkeypatch.setattr(leases, 'datetime', Clock)
+    monkeypatch.setattr(rederive_store, 'datetime', Clock)
+    active = {}
+
+    @contextmanager
+    def keepalive(uid, key, token, *, firestore_client, max_seconds):
+        assert firestore_client is strict and max_seconds is None
+        active[key] = token
+        try:
+            yield
+        finally:
+            del active[key]
+
+    monkeypatch.setattr(leases, 'keepalive', keepalive)
+    original_blocker = rederive_store.live_undo_blocker
+
+    def slow_preflight(uid, run_id, entries, *, firestore_client):
+        # Tick the enrolled heartbeats on a fake clock, then finish beyond the initial TTL.
+        for _ in range(4):
+            Clock.now_value += timedelta(seconds=leases.LEASE_SECONDS / 3)
+            for key, token in active.items():
+                leases.renew(uid, key, token, firestore_client=firestore_client)
+        if lost_lease:
+            strict.rows[leases.lease_ref(strict, uid, lost_lease).path]['token'] = 'new-owner'
+        return original_blocker(uid, run_id, entries, firestore_client=firestore_client)
+
+    monkeypatch.setattr(rederive_store, 'live_undo_blocker', slow_preflight)
+    if lost_lease:
+        monkeypatch.setattr(rederive_store, 'undo_live_rederive', lambda *a, **kw: pytest.fail('restoration started'))
+        assert backfill.undo_run(UID, RUN, firestore_client=strict) == {'outcome': 'busy', 'reason': 'lease_lost'}
+        assert conversations(strict) == before_undo
+        assert priors(strict)
+        assert strict.rows[leases.lease_ref(strict, UID, lost_lease).path]['token'] == 'new-owner'
+    else:
+        assert backfill.undo_run(UID, RUN, firestore_client=strict)['outcome'] == 'undone'
+        assert conversations(strict) == original
+    assert not active
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('lost_lease', ['builder', store.BACKFILL_LEASE])
+async def test_undo_transaction_checks_both_builder_tokens(owner, strict, ledger, monkeypatch, lost_lease):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    assert (await rederive())[0] == 'committed'
+    before_undo = conversations(strict)
+    restore = rederive_store.undo_live_rederive
+
+    def lose_lease_before_transaction(uid, held_leases, run_id, entries, *, firestore_client):
+        strict.rows[leases.lease_ref(strict, uid, lost_lease).path]['token'] = 'new-owner'
+        return restore(uid, held_leases, run_id, entries, firestore_client=firestore_client)
+
+    monkeypatch.setattr(rederive_store, 'undo_live_rederive', lose_lease_before_transaction)
+    assert backfill.undo_run(UID, RUN, firestore_client=strict) == {'outcome': 'busy', 'reason': 'lease_lost'}
+    assert conversations(strict) == before_undo
+    assert priors(strict)

@@ -20,6 +20,7 @@ from database import conversations_v3_leases as leases
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
+from database.recurring_voice_privacy import filter_processing_write
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from utils.conversations.v3 import Conflict, policy
 
@@ -402,7 +403,7 @@ SOURCE_CLAIMS_BYTES = 64_000
 
 
 def undo_group_fits(entries):
-    """One undo group's restore (rows, their sources and the lease read) fits one transaction."""
+    """One undo group's restore (rows, their sources and the lease reads) fits one transaction."""
     sources = {c['recording_id'] for e in entries for c in e.get('claims') or []}
     sources.update(rid for e in entries for rid in e.get('sources') or [])
     size = sum(stored_bytes(e.get('raw') or {}) + stored_bytes(e.get('claims') or []) for e in entries)
@@ -477,7 +478,7 @@ def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
     return None
 
 
-def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
+def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=None):
     """Restore one source-connected group of a live re-derive exactly, in one transaction.
 
     ``entries`` are the run's priors: ``raw`` (the row as stored before the run), or ``created`` for a
@@ -489,13 +490,12 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
     """
     client = firestore_client or store.get_firestore_client()
     coll = store.user_conversations(client, uid)
-    held = leases.lease_ref(client, uid, store.BACKFILL_LEASE)
+    lease_refs = [(leases.lease_ref(client, uid, key), token) for key, token in held_leases]
     deleted = client.collection('users').document(uid).collection('deleted_conversations')
     ids = [e['id'] for e in entries]
 
     @firestore.transactional
     def undo(tx):
-        lease = held.get(transaction=tx).to_dict() or {}
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
             marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
@@ -503,8 +503,6 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
             raise Conflict('account_deletion')
         docs = {cid: coll.document(cid).get(transaction=tx) for cid in ids}
         tombstones = {cid: deleted.document(cid).get(transaction=tx) for cid in ids}
-        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
-            raise Conflict('lease_lost')
         current = {cid: (snapshot.to_dict() or {}) if snapshot.exists else None for cid, snapshot in docs.items()}
         if purged_reason(entries):
             raise Conflict(purged_reason(entries))
@@ -524,8 +522,6 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
         }
         if any(owner_changed(current[cid] or {}, by_id[cid]) for cid in ours):
             raise Conflict('owner_edited_rebuilt_row')
-        from database.recurring_voice_privacy import filter_processing_write
-
         # A recurring voice the owner revoked since the run is never written back.
         user = client.collection('users').document(uid)
         restore = {}
@@ -540,6 +536,10 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
         if any(not snapshot.exists for snapshot in sources.values()):
             # A source the run's claims name is gone: the rows cannot get their claims back.
             raise Conflict('undo_source_missing')
+        for ref, token in lease_refs:
+            lease = ref.get(transaction=tx).to_dict() or {}
+            if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+                raise Conflict('lease_lost')
         restored = 0
         created = [cid for cid in sorted(done) if current[cid] is not None and by_id[cid].get('created')]
         for entry in entries:
