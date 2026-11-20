@@ -693,3 +693,245 @@ def test_deploy_pin_and_sidecar_steps_name_the_same_base_revision():
     assert f'--base-revision="{BASE_REVISION}"' in attach['run']
     text = (ROOT / '.github/actions/deploy-projection-pump/action.yml').read_text()
     assert set(re.findall(r'backend-projection-pump-\$\{\{[^}]*\}\}-base', text)) == {BASE_REVISION}
+
+
+# SCA-3318 recovery uses the interrupted base, with one service-cap mismatch.
+@pytest.fixture
+def recovery_module(monkeypatch):
+    monkeypatch.syspath_prepend(str(BACKEND / 'scripts'))
+    import recover_projection_pump_cap
+
+    return recover_projection_pump_cap
+
+
+def _recovery_fixture(inverse_readback, recovery):
+
+    service, revision, policy = inverse_readback
+    before = {
+        'name': recovery.RESOURCE,
+        'uid': 'pump-uid',
+        'generation': '7',
+        'observedGeneration': '7',
+        'etag': 'approved-version',
+        'terminalCondition': {'state': 'CONDITION_SUCCEEDED'},
+        'scaling': {'maxInstanceCount': 20},
+        'template': copy.deepcopy(revision['spec']),
+        'traffic': [{'type': 'TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST', 'percent': 100}],
+    }
+    service['metadata']['uid'] = before['uid']
+    policy['etag'] = 'policy-version'
+    for section in ('spec', 'status'):
+        service[section]['traffic'][0].update(latestRevision=True, revisionName=recovery.BASE.revision)
+    service['status'].update(
+        latestReadyRevisionName=recovery.BASE.revision, latestCreatedRevisionName=recovery.BASE.revision
+    )
+    revision['metadata']['name'] = recovery.BASE.revision
+    revision['status']['imageDigest'] = recovery.BASE.image
+    app = revision['spec']['containers'][0]
+    app['image'] = recovery.BASE.image
+    app['env'][-1]['value'] = recovery.BASE.source
+
+    class FakeRun:
+        def __init__(self):
+            self.state = before
+            self.cap_requests = []
+            self.validation_error = None
+            self.interrupted = False
+            self.drift_after_validation = False
+            self.drift_after_write = False
+            self.permission_denied = False
+
+        def permission_check(self):
+            if self.permission_denied:
+                raise ValueError('missing permission')
+
+        def service(self):
+            return copy.deepcopy(self.state)
+
+        def read(self, noun, verb, _name):
+            if noun == 'revisions':
+                return copy.deepcopy(revision)
+            if verb == 'get-iam-policy':
+                return copy.deepcopy(policy)
+            document = copy.deepcopy(service)
+            document['metadata']['annotations'][recovery.CAP_ANNOTATION] = str(
+                self.state['scaling']['maxInstanceCount']
+            )
+            return document
+
+        def patch(self, etag, cap, *, validate_only):
+            self.cap_requests.append((etag, cap, validate_only))
+            assert etag == self.state['etag']
+            if validate_only:
+                if len(self.cap_requests) == self.validation_error:
+                    raise ValueError('validation rejected')
+                if len(self.cap_requests) == 2 and self.drift_after_validation:
+                    self.state['etag'] = 'drifted'
+                return {}
+            self.state.update(etag='new-version', generation='8', observedGeneration='8')
+            self.state['scaling']['maxInstanceCount'] = cap
+            if self.drift_after_write:
+                self.state['template'] = {}
+            if self.interrupted:
+                raise TimeoutError('simulated lost response after submit')
+            return {}
+
+        def complete(self, _operation, _cap, *, submitted):
+            pass
+
+    return recovery, FakeRun()
+
+
+def test_cap_recovery_writes_once_and_validates_the_post_write_inverse(inverse_readback, recovery_module):
+    recovery, api = _recovery_fixture(inverse_readback, recovery_module)
+    recovery.recover(api, api.read, 'approved-version')
+    assert api.cap_requests == [
+        ('approved-version', 4, True),
+        ('approved-version', 20, True),
+        ('approved-version', 4, False),
+        ('new-version', 20, True),
+    ]
+
+
+@pytest.mark.parametrize('failure', ['permission', 'etag', 'drift', 'forward', 'inverse', 'shape'])
+def test_cap_recovery_refuses_before_submit(inverse_readback, recovery_module, failure):
+    recovery, api = _recovery_fixture(inverse_readback, recovery_module)
+    etag = 'approved-version'
+    if failure == 'permission':
+        api.permission_denied = True
+    elif failure == 'etag':
+        etag = 'wrong-version'
+    elif failure == 'drift':
+        api.drift_after_validation = True
+    elif failure in ('forward', 'inverse'):
+        api.validation_error = 1 if failure == 'forward' else 2
+    else:
+        inverse_readback[1]['status']['conditions'][0]['status'] = 'False'
+    with pytest.raises(ValueError):
+        recovery.recover(api, api.read, etag)
+    assert all(validate for _, _, validate in api.cap_requests)
+
+
+@pytest.mark.parametrize('failure', ['interruption', 'post_write_shape', 'post_write_inverse'])
+def test_cap_recovery_requires_reconciliation_after_any_ambiguous_write(inverse_readback, recovery_module, failure):
+    recovery, api = _recovery_fixture(inverse_readback, recovery_module)
+    api.interrupted = failure == 'interruption'
+    api.drift_after_write = failure == 'post_write_shape'
+    api.validation_error = 4 if failure == 'post_write_inverse' else None
+    with pytest.raises(ValueError, match='independent Release reconciliation'):
+        recovery.recover(api, api.read, 'approved-version')
+    with pytest.raises(ValueError):
+        recovery.recover(api, api.read, 'approved-version')
+    assert [item for item in api.cap_requests if not item[2]] == [('approved-version', 4, False)]
+
+
+def test_cap_recovery_requests_only_the_one_field(monkeypatch, recovery_module):
+    recovery = recovery_module
+
+    api = recovery.RunAPI('fixture-token')
+    requests = []
+    monkeypatch.setattr(api, 'request', lambda *args: requests.append(args))
+    api.patch('fixture-etag', 4, validate_only=False)
+    assert requests == [
+        (
+            'PATCH',
+            recovery.RESOURCE + '?updateMask=scaling.maxInstanceCount&validateOnly=false',
+            {'name': recovery.RESOURCE, 'etag': 'fixture-etag', 'scaling': {'maxInstanceCount': 4}},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    'operation',
+    [
+        {},
+        {'name': 'projects/other/locations/us-central1/operations/abc'},
+        {'done': True, 'error': {'code': 10}},
+        {'done': True, 'response': {'name': 'wrong-service'}},
+    ],
+)
+def test_cap_recovery_refuses_bad_operation(operation, recovery_module):
+    recovery = recovery_module
+
+    operation.setdefault('name', recovery.OPERATIONS + 'operation')
+    api = recovery.RunAPI('fixture-token')
+    if not operation.get('done') and operation['name'].startswith(recovery.OPERATIONS):
+        api.request = lambda *_args: {'name': recovery.OPERATIONS + 'wrong-operation'}
+    with pytest.raises(ValueError):
+        api.complete(operation, 4, submitted=True, sleep=lambda _: None)
+
+
+def test_cap_recovery_checks_server_response_cap(recovery_module):
+    recovery = recovery_module
+    api = recovery.RunAPI('fixture-token')
+    response = {
+        '@type': 'type.googleapis.com/google.cloud.run.v2.Service',
+        'name': recovery.RESOURCE,
+        'scaling': {'maxInstanceCount': 4},
+    }
+    operation = {'done': True, 'response': response}
+    api.complete(operation, 4, submitted=False)
+    with pytest.raises(ValueError, match='exact pump service and cap'):
+        api.complete(operation, 20, submitted=False)
+
+
+def test_cap_recovery_uses_existing_approval_and_lock():
+    job = WORKFLOW['jobs']['recover-projection-pump-cap']
+    assert job['environment'] == 'prod'
+    assert job['needs'] == 'validate-production-boundary'
+    assert job['permissions'] == {'contents': 'read', 'id-token': 'write'}
+    assert "inputs.mode == 'recover-pump-cap'" in job['if']
+    assert "!inputs.break_glass_lock" in job['if']
+    assert "refs/heads/main" in job['if']
+    assert job['steps'][0]['with']['ref'] == '${{ github.workflow_sha }}'
+    assert 'prod-train' in WORKFLOW['concurrency']['group']
+    assert WORKFLOW['concurrency']['cancel-in-progress'] is False
+
+
+@pytest.mark.parametrize(
+    'override',
+    [
+        {},
+        {'GITHUB_RUN_ATTEMPT': '2'},
+        {'GITHUB_REF': 'refs/heads/topic'},
+        {'CONTROL_SHA': 'b' * 40},
+        {'APPROVED_ETAG': ''},
+        {'CLOUD_RUN_SERVICE': 'backend-sync'},
+        {'break_glass_lock': 'true'},
+        {'skip_eligibility_proof': 'true'},
+        {'deploy_gateway': 'true'},
+    ],
+)
+def test_cap_recovery_preapproval_boundary(tmp_path, override):
+    script = WORKFLOW['jobs']['validate-production-boundary']['steps'][1]['run']
+    event = tmp_path / 'event.json'
+    summary = tmp_path / 'summary'
+    inputs = {
+        'break_glass_lock': 'false',
+        'skip_eligibility_proof': 'false',
+        'deploy_gateway': 'false',
+        'requested_by': 'release-owner',
+    }
+    env = {
+        **os.environ,
+        'GITHUB_EVENT_NAME': 'workflow_dispatch',
+        'GITHUB_REF': 'refs/heads/main',
+        'GITHUB_REPOSITORY': 'BasedHardware/omi',
+        'GITHUB_RUN_ATTEMPT': '1',
+        'DEPLOY_ENVIRONMENT': 'prod',
+        'DEPLOY_TARGETS': 'cloud-run-only',
+        'CLOUD_RUN_SERVICE': 'backend-projection-pump',
+        'CONTROL_SHA': 'a' * 40,
+        'WORKFLOW_CONTROL_SHA': 'a' * 40,
+        'GITHUB_SHA': 'a' * 40,
+        'RELEASE_SHA': 'f7060aa1a0c9e3481790d497140096ae99f9b062',
+        'APPROVED_ETAG': 'AQ==',
+        'GITHUB_EVENT_PATH': str(event),
+        'GITHUB_STEP_SUMMARY': str(summary),
+    }
+    for key, value in override.items():
+        (inputs if key in inputs else env)[key] = value
+    event.write_text(json.dumps({'inputs': inputs}))
+    run = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=10)
+    assert (run.returncode == 0) is (not override), run.stderr
+    assert summary.exists() is (not override)
