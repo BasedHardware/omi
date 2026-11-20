@@ -9,6 +9,7 @@ from database import conversations_v3_leases as leases
 from database import conversations_v3_processing as writers
 
 import asyncio
+from collections.abc import Collection
 import hashlib
 import logging
 import re
@@ -19,13 +20,23 @@ from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud.firestore_v1 import FieldFilter
 
-from config.conversations_v3 import stretch_cohesion_enabled
+from config.conversations_v3 import DEFAULT_BOUNDARY_SECONDS, boundary_seconds, stretch_cohesion_enabled
 from utils.conversations.v3.triggers import enqueue, changed
 from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
-from utils.conversations.v3 import Conflict, outline, planner, models, metrics, policy, visibility, context
+from utils.conversations.v3 import (
+    Conflict,
+    outline,
+    planner,
+    models,
+    metrics,
+    policy,
+    visibility,
+    context,
+)
+from utils.conversations.v3 import refinement, preview_wakes
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
 
@@ -129,7 +140,7 @@ def recording_short_path(fn):
     return guarded
 
 
-def _match(window, existing, used):
+def _match(window, existing, used, *, preferred=None):
     start, end = window['lines'][0]['start'], window['lines'][-1]['end']
     published = window.get('_published_ids', ())
     candidates = [
@@ -144,7 +155,7 @@ def _match(window, existing, used):
     ]
     # Published claimants are assigned by the planner. Time matching is the fallback
     # for live rows, legacy rows without claims or playback, and deletion tombstones.
-    return min(candidates, key=lambda r: r['started_at']) if candidates else None
+    return min(candidates, key=lambda r: (r['id'] != preferred, r['started_at'])) if candidates else None
 
 
 def _backfill_runs(window, recordings):
@@ -181,6 +192,7 @@ async def reconcile(
     key = store.BACKFILL_LEASE if derive else 'builder'
     blocked = None
     moved = set()
+    deferred: dict[str, datetime] = {}
     # Live passes call the outline-cache writers exactly as before; only a backfill names its lease.
     keyed = {'key': key} if derive else {}
     if not on_open and not derive:
@@ -215,7 +227,12 @@ async def reconcile(
         now = datetime.now(timezone.utc)
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
         cohesion = stretch_cohesion_enabled()
-        groups = outline.stretches(eligible, now)
+        silence_seconds, lock_seconds = boundary_seconds(cohesion=cohesion and not derive)
+        custom_timing = (silence_seconds, lock_seconds) != (DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS)
+        silence_gap, lock_delay = timedelta(seconds=silence_seconds), timedelta(seconds=lock_seconds)
+        groups = outline.stretches(
+            eligible, now, silence_gap=silence_gap, lock_delay=lock_delay, settle_on_landing=custom_timing
+        )
         if on_open and conversation_id:
             target = existing.get(conversation_id)
             if target is None:
@@ -232,11 +249,16 @@ async def reconcile(
                 return 'stored'
         # Keep a bounded cache; every fingerprint is checked even for finished stretches.
         saved = {row['fingerprint']: row for row in cached}
+        preview_prefix = f'{silence_seconds}:'
+        scoped_preview_keys = {f"{preview_prefix}{group['key']}" for group in groups} if custom_timing else set()
+        previews = {row['preview_key']: row for row in cached if row.get('preview_key', '').startswith(preview_prefix)}
+        unmatched_previews = {key: row for key, row in previews.items() if key not in scoped_preview_keys}
+        consumed_previews = set()
         outlines, cache = [], []
         background = await run_blocking(db_executor, context.outline_sources, uid, groups)
         for group in groups:
             await run_blocking(db_executor, leases.renew, uid, key, token)
-            messages = outline.messages(group, timezone.utc, cohesion=cohesion)
+            messages = outline.messages(group, timezone.utc, cohesion=cohesion, silence_gap=silence_gap)
             messages.append(
                 (
                     'human',
@@ -251,17 +273,46 @@ async def reconcile(
                 messages.append(('human', 'Preceding conversation: ' + previous['title'] + '\n' + previous['line']))
             fingerprint = context.cache_key(group, messages)
             hit = saved.get(fingerprint)
+            preview_key = f"{preview_prefix}{group['key']}" if custom_timing else None
+            preview = previews.get(preview_key) if preview_key else None
+            if preview_key and preview is None and hit is None:
+                matched_key = outline.matching_preview(group, unmatched_previews)
+                if matched_key is not None:
+                    preview = unmatched_previews.pop(matched_key)
+                    consumed_previews.add(matched_key)
+            preview_fields = {}
             if hit:
                 entries = hit['entries']
                 report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
-            elif group['finished'] or on_open:
+            elif preview is not None:
+                entries = outline.reuse_preview(group, preview)
+                report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
+            elif group['outline_ready'] or on_open:
                 if await run_blocking(db_executor, store.outline_attempt, uid, token, fingerprint, **keyed):
                     metrics.MODEL_CALLS.labels('outline').inc()
                     report['outline_calls'] = report.get('outline_calls', 0) + 1
                     content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
                     try:
                         entries = outline.parse(content, group)
-                        await run_blocking(db_executor, store.save_outline, uid, token, fingerprint, entries, **keyed)
+                        if preview_key and not group['locked']:
+                            preview_fields = {
+                                'preview_key': preview_key,
+                                'anchors': outline.preview_anchors(group, entries),
+                            }
+                            await run_blocking(
+                                db_executor,
+                                store.save_outline,
+                                uid,
+                                token,
+                                fingerprint,
+                                entries,
+                                key=key,
+                                preview=preview_fields,
+                            )
+                        else:
+                            await run_blocking(
+                                db_executor, store.save_outline, uid, token, fingerprint, entries, **keyed
+                            )
                     except (ValueError, KeyError, TypeError):
                         entries = outline.fallback(group)
                         entries = [{**entry, '_outline_failed': True} for entry in entries]
@@ -283,34 +334,126 @@ async def reconcile(
                     }
                 ]
             outlines.append(entries)
-            if group['finished'] or on_open:
-                cache.append({'fingerprint': fingerprint, 'entries': entries})
+            if group['outline_ready'] or on_open or preview is not None:
+                if preview_key and not group['locked'] and not any(e.get('_outline_failed') for e in entries):
+                    preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
+                cache.append({'fingerprint': fingerprint, 'entries': entries, **preview_fields})
+
+        if custom_timing and on_open:
+            replaced = {row['fingerprint'] for row in cache}
+            replaced_previews = scoped_preview_keys | consumed_previews
+            cache = [
+                row
+                for row in cached
+                if row.get('preview_key') not in replaced_previews and row['fingerprint'] not in replaced
+            ] + cache
+
+        preferred = conversation_id if on_open and custom_timing else None
+        refine_locked = (
+            custom_timing
+            and not (derive or on_open)
+            and not any(row.get('v3_pending') and row.get('v3_manual_end') for row in eligible)
+        )
+
+        eligible_ids = {row['id'] for row in eligible}
+        unavailable = {
+            row['id']: row
+            for row in existing.values()
+            if not (derive or on_open)
+            and row.get('v3_unlocked')
+            and not row.get('deleted')
+            and not eligible_ids.intersection(row.get('v3_recording_ids') or ())
+        }
 
         async def plan():
-            windows = planner.preserve_finished_windows(
-                planner.windows(groups, outlines, cohesion=cohesion), existing, recordings
+            # One ownership index per plan (adoption can add rows before a replan), shared by the
+            # two-hour cap and both projections below.
+            ownership = planner.Ownership(existing, recordings)
+            proposed = planner.windows(
+                groups,
+                outlines,
+                cohesion=cohesion,
+                silence_gap=silence_gap,
+                defer_topic_lock=custom_timing,
+                ownership=ownership,
             )
+            merge = refinement.candidate(proposed, existing, recordings) if refine_locked else None
+            if merge and await run_blocking(db_executor, store.merge_donors_have_tasks, uid, merge[1]['_v3_absorbed']):
+                merge = None
+            reserved = set()
+            candidates = proposed
+            if merge is not None:
+                index, merged = merge
+                reserved = {merged['id'], *merged['_v3_absorbed']}
+                candidates = proposed[:index] + proposed[index + 1 :]
+            windows = planner.preserve_finished_windows(
+                candidates, existing, recordings, protect_provisional=custom_timing, ownership=ownership
+            )
+            if reserved.intersection(window.get('existing_id') for window in windows):
+                merge = None
+                reserved.clear()
+                windows = planner.preserve_finished_windows(
+                    proposed, existing, recordings, protect_provisional=custom_timing, ownership=ownership
+                )
             # A retained finished conversation owns its id by claim evidence; a fresh window that sorts
             # before it (late speech overlapping its start) must not time-match the same id. Two planned
             # rows with one id each re-add the source's held claims, doubling them every pass until the
             # recording outgrows Firestore's 1 MiB document limit (document_too_large).
-            rows, used = [], {window['existing_id'] for window in windows if window.get('existing_id')}
+            rows = []
+            used = (
+                reserved
+                | unavailable.keys()
+                | {window['existing_id'] for window in windows if window.get('existing_id')}
+            )
+            used.update(
+                row['id'] for row in existing.values() if row.get('v3_refined') and row.get('v3_claims_transferred_to')
+            )
+            locked_ids = (
+                {row['id'] for row in existing.values() if not planner.is_unlocked(row) and not row.get('deleted')}
+                if custom_timing
+                else set()
+            )
             taken = set()
             allocated = {}
             await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
             for window in windows:
                 # An affirmative transcription failure is terminal even before the silence deadline.
-                if any(policy.transcription_failed(recordings[line['conversation_id']]) for line in window['lines']):
+                transcription_failed = any(
+                    policy.transcription_failed(recordings[line['conversation_id']]) for line in window['lines']
+                )
+                if transcription_failed:
                     window['finished'] = True
-                prior = existing.get(window.get('existing_id')) or _match(window, existing, used)
+                # A preview cannot take over a locked card by time matching alone.
+                deferred_lock = (
+                    custom_timing
+                    and not transcription_failed
+                    and (not window['finished'] or window.get('_defer_lock', False))
+                )
+                excluded = used | locked_ids if deferred_lock else used
+                prior = existing.get(window.get('existing_id')) or _match(
+                    window, existing, excluded, preferred=preferred
+                )
                 if prior:
                     used.add(prior['id'])
+                opening = on_open and prior and prior['id'] == conversation_id and custom_timing
+                if opening:
+                    window['finished'] = True
+                    deferred_lock = False
+                if deferred_lock:
+                    window['_title_preview'] = True
                 row = planner.build(uid, window, recordings, prior, allocated=allocated)
+                if opening and prior and planner.is_unlocked(prior):
+                    row['v3_open_locked'] = True
+                row.pop('v3_unlocked', None)
+                if deferred_lock:
+                    row['v3_unlocked'] = True
+                    lock_end = window.get('_lock_end', row['finished_at'])
+                    row['_v3_preview_due_at'] = max(lock_end + lock_delay, now + RACE_RETRY)
                 published_ids = window.get('_published_ids', ())
-                if not prior and (row['id'] in used | taken or row['id'] in published_ids):
+                if not prior and (row['id'] in excluded | taken or row['id'] in published_ids):
                     first = window['lines'][0]['conversation_id']
                     seed = f"v3:{uid}:{row['started_at'].isoformat()}:{first}"
-                    blocked_ids = used | taken | set(published_ids)
+                    blocked_ids = excluded | taken | set(published_ids)
                     # Preserve the recording-qualified ID when free. Same-clock windows can also
                     # share a recording, so probe deterministic suffixes in planner order.
                     identifier = str(uuid5(NAMESPACE_URL, seed))
@@ -335,8 +478,8 @@ async def reconcile(
                     continue
                 before = sum(len(s.get('text', '').split()) for s in (prior or {}).get('transcript_segments') or [])
                 new_words = max(0, sum(len(s.get('text', '').split()) for s in row['transcript_segments']) - before)
-                ended = window['finished']
-                was_ended = prior and prior.get('status') != 'in_progress'
+                ended = window['finished'] and not deferred_lock
+                was_ended = prior and not planner.is_unlocked(prior)
                 promoted = bool(
                     prior
                     and not row.get('home_hidden')
@@ -347,11 +490,16 @@ async def reconcile(
                         and row['kind'] == 'conversation'
                     )
                 )
+                if promoted and custom_timing and prior:
+                    covers = prior.get('summary_covers_through')
+                    if covers and covers >= row['finished_at']:
+                        promoted = False
                 if promoted:
                     row['summary_covers_through'] = None
                 rewrite = bool(
                     prior is not None
                     and was_ended
+                    and not custom_timing
                     and planner.late_rewrite(
                         previous_words=before,
                         new_words=new_words,
@@ -367,9 +515,6 @@ async def reconcile(
                 if prior is not None and was_ended and not rewrite and not promoted:
                     row['status'] = prior['status']
                     row['tile_state'] = prior.get('tile_state', 'done')
-                transcription_failed = any(
-                    policy.transcription_failed(recordings[l['conversation_id']]) for l in window['lines']
-                )
                 waiting = not transcription_failed and any(
                     policy.transcription_pending(recordings[l['conversation_id']]) for l in window['lines']
                 )
@@ -413,6 +558,9 @@ async def reconcile(
                 rows.append(row)
                 for rid, claims in row['_v3_claims'].items():
                     allocated.setdefault(rid, []).extend((claim['start'], claim['end']) for claim in claims)
+            if merge is not None:
+                rows.append(merge[1])
+            rows.extend(planner.unavailable_preview(row, recordings) for row in unavailable.values())
             return rows
 
         rows = await plan()
@@ -467,12 +615,12 @@ async def reconcile(
             metrics.RACES.labels('source_moved').inc()
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RACE_RETRY)
         for group in groups if not derive else ():
-            if not group['finished']:
+            if not (group['locked'] if custom_timing else group['finished']):
                 # A different minute than the currently executing task avoids
                 # Cloud Tasks' completed-name dedupe swallowing the continuation.
-                await run_blocking(
-                    db_executor, enqueue, uid, at=max(group['end'] + outline.SILENCE, now + timedelta(minutes=1))
-                )
+                delay = lock_delay if group['outline_ready'] else min(silence_gap, lock_delay)
+                settle_from = group.get('settle_from', group['end'])
+                await run_blocking(db_executor, enqueue, uid, at=max(settle_from + delay, now + timedelta(minutes=1)))
         for row in rows:
             prior = existing.get(row['id']) or {}
             if (
@@ -484,6 +632,7 @@ async def reconcile(
             if row['id'] not in existing:
                 metrics.VISIBLE_LATENCY.observe(max(0, (now - row['started_at']).total_seconds()))
         metrics.RECONCILES.labels('committed').inc()
+        deferred = preview_wakes(rows, recordings)
     except Conflict as error:
         reason = str(error)
         if reason in RACES and not derive:
@@ -535,7 +684,12 @@ async def reconcile(
     await drain_processing(uid)
     if moved:
         return 'committed'
-    if not derive and await run_blocking(db_executor, has_pending, uid):
+    pending = (
+        await run_blocking(db_executor, has_pending, uid, deferred)
+        if deferred
+        else await run_blocking(db_executor, has_pending, uid)
+    )
+    if pending:
         if _pass < 2:
             return await reconcile(uid, _pass=_pass + 1)
         else:
@@ -847,16 +1001,12 @@ async def measure_legacy_users():
     return {'active_legacy_users': count, 'measured_at': datetime.now(timezone.utc).isoformat()}
 
 
-def has_pending(uid):
-    return (
-        next(
-            iter(
-                store.user_conversations(store.get_firestore_client(), uid)
-                .where(filter=FieldFilter('v3_pending', '==', True))
-                .limit(1)
-                .stream()
-            ),
-            None,
-        )
-        is not None
+def has_pending(uid: str, deferred: Collection[str] = ()) -> bool:
+    # One beyond the deferred sources is enough to find any newly owed work.
+    pending = (
+        store.user_conversations(store.get_firestore_client(), uid)
+        .where(filter=FieldFilter('v3_pending', '==', True))
+        .limit(len(deferred) + 1)
+        .stream()
     )
+    return any(doc.id not in deferred for doc in pending)

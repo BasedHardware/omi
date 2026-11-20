@@ -11,6 +11,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversations/home_rows.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
 import 'package:omi/pages/conversation_detail/widgets/note_sections_sliver.dart';
@@ -205,7 +206,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
 /// otherwise the tab would offer "Generate Summary", which can only be answered 409 again.
 bool summaryRetrySlotApplies(ServerConversation conversation) =>
     TranscriptionPendingConversations.contains(conversation.id) ||
-    conversation.homeStep == 'failed' ||
+    (isFailedConversation(conversation) && !conversation.discarded && !conversation.isLocked) ||
     conversation.showsSummaryRetry ||
     (conversation.status == ConversationStatus.failed && !conversation.discarded && !conversation.isLocked);
 

@@ -11,8 +11,9 @@ from database.batch_pipeline_leader import LeaseLost
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, ProjectionPredecessorPending
 from database.batch_privacy_attempt import with_batch_privacy_attempt
+from database.firestore_transaction_retry import FirestoreAborted
 from utils.batch_pipeline.leader import PROJECTION_OUTBOX_SCAN, TABLE, LeaderLease
-from utils.batch_pipeline.projection import Projector
+from utils.batch_pipeline.projection import Projector, error_type
 from utils.batch_pipeline.projection_delivery import fenced_delivery
 from utils.batch_pipeline.projection_followup import MAX_FOLLOWUPS, ProjectionFollowups
 from utils.executors import db_executor, run_blocking, sync_executor
@@ -127,8 +128,12 @@ class ProjectionOutbox:
         except (ProjectionBlocked, BatchPrivacyBlocked):
             outcome = 'blocked'
         except Exception as error:
-            logger.warning('event=batch_projection_outbox outcome=retry exception_type=%s', type(error).__name__)
-            outcome = 'retry'
+            # Covered rows are skipped by legacy discovery. An aborted commit
+            # should get a fresh claim before the generic follow-up backoff.
+            exception_type = error_type(error)
+            contention = isinstance(error, FirestoreAborted) or exception_type == 'FirestoreContentionExhausted'
+            outcome = 'contention' if contention else 'retry'
+            logger.warning('event=batch_projection_outbox outcome=%s exception_type=%s', outcome, exception_type)
         settled = await run_blocking(db_executor, rows.settle, self.store, key, token, self.clock, outcome)
         if settled is not None:
             OUTCOMES.labels(settled).inc()

@@ -5,18 +5,24 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:flutter_provider_utilities/flutter_provider_utilities.dart' hide NotificationListener;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
+import 'package:omi/pages/conversation_detail/widgets/live_summary_section.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/pages/episodes/live_transcript_view.dart' show LivePreviewTail;
+import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_preview_coverage.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
@@ -47,6 +53,8 @@ import 'conversation_detail_provider.dart';
 import 'conversation_summary_selection.dart';
 import 'widgets.dart' show summaryRetrySlotApplies;
 import 'share.dart';
+import 'conversation_live_guard.dart';
+import 'share_flow.dart';
 import 'test_prompts.dart';
 import 'live_conversation_refresher.dart';
 import 'widgets/audio_download_progress_sheet.dart';
@@ -158,8 +166,27 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
   bool _providerInitialized = false;
+  late final String _routeUid;
+  late final int _routeIdentityEpoch;
+
+  void _onRouteIdentityChanged() {
+    if (mounted) setState(() {});
+  }
+
   bool _didInitialSeek = false;
   bool _hasExplicitTabSelection = false;
+  bool _summaryOpenPending = false;
+  bool _summaryOpenCheckQueued = false;
+  bool _tabScrollInProgress = false;
+  bool _tabDragStartedOnTranscript = false;
+  bool _initialLiveHydrationFinished = false;
+  Timer? _liveSummaryTimer;
+  String? _liveSummaryInterval;
+  int _liveSummaryTick = 0;
+  int _summaryOpen = 0;
+  int _claimedSummaryOpen = 0;
+  ServerConversation? _summaryOpenSnapshot;
+  bool _liveEndRequested = false;
   bool _resultViewedRecorded = false;
 
   /// When the summary of this conversation first showed; leaving after [ValueMomentPaywall.summaryDwell]
@@ -264,6 +291,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   /// Brings the Summary tab forward. A reprocess started elsewhere (the ⋯ menu on Transcript,
   /// a failed-transcript retry) shows its progress and, with the v2 gate, its failure card there.
   void _openSummaryTab() {
+    _summaryOpenPending = false;
     _hasExplicitTabSelection = true;
     setState(() => selectedTab = ConversationTab.summary);
     _controller?.animateTo(_summaryTabIndex);
@@ -274,7 +302,119 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     _controller!.addListener(_onTabChanged);
   }
 
+  bool _summaryTabIsVisible() {
+    final controller = _controller;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    return mounted &&
+        (lifecycle == null || lifecycle == AppLifecycleState.resumed) &&
+        controller != null &&
+        controller.index == _summaryTabIndex &&
+        !controller.indexIsChanging &&
+        controller.offset.abs() < 0.001 &&
+        !_tabScrollInProgress &&
+        !_liveEndRequested &&
+        ModalRoute.isCurrentOf(context) != false &&
+        SharedPreferencesUtil().uid == _routeUid &&
+        AnalyticsManager.identityEpoch == _routeIdentityEpoch;
+  }
+
+  bool get _viewingLiveSummary {
+    final c = _detailProvider.conversationOrNull;
+    return c != null &&
+        c.id == widget.conversation.id &&
+        _isLiveV3(c) &&
+        !c.isLocked &&
+        !c.discarded &&
+        c.v3?.homeHidden != true &&
+        LiveSummarySection.speechEligible(c) &&
+        _detailProvider.hasHydratedDetail(c.id) &&
+        _summaryTabIsVisible();
+  }
+
+  void _syncLiveSummaryTimer() {
+    if (!_viewingLiveSummary) {
+      _liveSummaryTimer?.cancel();
+      _liveSummaryTimer = null;
+      _liveSummaryInterval = null;
+      return;
+    }
+    _liveSummaryInterval ??= const Uuid().v4();
+    _liveSummaryTimer ??= Timer.periodic(const Duration(minutes: 5), (_) {
+      if (_viewingLiveSummary) {
+        setState(() => _liveSummaryTick++);
+      } else {
+        _syncLiveSummaryTimer();
+      }
+    });
+  }
+
+  String? _liveSummaryIntervalForDispatch() => _viewingLiveSummary ? _liveSummaryInterval : null;
+
+  bool _claimSummaryOpen(int open) {
+    if (open != _summaryOpen || open <= _claimedSummaryOpen) return false;
+    _claimedSummaryOpen = open;
+    final snapshot = _summaryOpenSnapshot;
+    _summaryOpenSnapshot = null;
+    return _summaryTabIsVisible() && identical(snapshot, _detailProvider.conversationOrNull);
+  }
+
+  void _onDetailTabTap(int index) {
+    _hasExplicitTabSelection = true;
+    _summaryOpenPending = index == _summaryTabIndex;
+    _scheduleSummaryOpen();
+  }
+
+  bool _onDetailTabScroll(ScrollNotification notification) {
+    if (notification.depth != 0 || notification.metrics is! PageMetrics) return false;
+    if (notification is ScrollStartNotification) {
+      _tabScrollInProgress = true;
+      if (notification.dragDetails != null) {
+        _summaryOpenPending = false;
+        _tabDragStartedOnTranscript = _controller?.index == _transcriptTabIndex;
+      }
+    } else if (notification is ScrollEndNotification) {
+      _tabScrollInProgress = false;
+      if (_tabDragStartedOnTranscript && _controller?.index == _summaryTabIndex) {
+        _hasExplicitTabSelection = true;
+        _summaryOpenPending = true;
+      }
+      _tabDragStartedOnTranscript = false;
+      _scheduleSummaryOpen();
+    }
+    _syncLiveSummaryTimer();
+    return false;
+  }
+
+  void _scheduleSummaryOpen() {
+    if (!_summaryOpenPending || _summaryOpenCheckQueued || !_initialLiveHydrationFinished) return;
+    _summaryOpenCheckQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _summaryOpenCheckQueued = false;
+      if (!mounted || !_summaryOpenPending) return;
+      if (ModalRoute.isCurrentOf(context) == false) {
+        _summaryOpenPending = false;
+        return;
+      }
+      if (!_summaryTabIsVisible()) return;
+      _summaryOpenPending = false;
+      final current = _detailProvider.conversationOrNull;
+      if (current == null ||
+          !_detailProvider.hasHydratedDetail(current.id) ||
+          current.id != widget.conversation.id ||
+          !_isLiveV3(current)) {
+        return;
+      }
+      setState(() {
+        _summaryOpenSnapshot = current;
+        _summaryOpen++;
+      });
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
   void _onTabChanged() {
+    _syncLiveSummaryTimer();
+    _scheduleSummaryOpen();
     final tab = _tabForIndex(_controller!.index);
     if (tab == selectedTab) return;
     setState(() {
@@ -290,6 +430,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   @override
   void initState() {
     super.initState();
+    _routeUid = SharedPreferencesUtil().uid;
+    _routeIdentityEpoch = AnalyticsManager.identityEpoch;
+    AnalyticsManager.identityChanges.addListener(_onRouteIdentityChanged);
     _detailProvider = context.read<ConversationDetailProvider>();
     _liveRefresher = LiveConversationRefresher(
         read: () => _detailProvider.conversationOrNull,
@@ -339,12 +482,15 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
 
       await provider.initConversation();
       _recordResultViewed(provider, identityEpoch);
-      if (_awaitsTranscript(provider.conversation)) {
+      if (_awaitsTranscript(provider.conversation) || _isLiveV3(provider.conversation)) {
         // Opened from a copy without its lines (a search hit, a locked-then-unlocked row): fetch the
         // full conversation and let the Transcript tab say it is loading, or offer Try Again.
         unawaited(
-          provider.refreshConversation(trackLoad: true).then((_) {
+          provider.refreshConversation(trackLoad: true).then((hydrated) {
             if (!mounted || identityEpoch != AnalyticsManager.identityEpoch) return;
+            _initialLiveHydrationFinished = true;
+            if (!hydrated) _summaryOpenPending = false;
+            _scheduleSummaryOpen();
             _selectInitialTabIfNeeded(provider.conversation);
             _recordResultViewed(provider, identityEpoch);
           }),
@@ -486,17 +632,24 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _syncLiveSummaryTimer();
+    if (state != AppLifecycleState.resumed) {
+      _summaryOpenPending = false;
+      _tabDragStartedOnTranscript = false;
+    }
     if (state == AppLifecycleState.paused) {
       _detailProvider.confirmSpeakerLabelingSession(conversationId: widget.conversation.id);
     } else if (state == AppLifecycleState.resumed) {
       // The list refresh on resume does not carry the transcript; re-read what is on screen.
-      unawaited(_detailProvider.refreshConversation());
+      final open = _detailProvider.conversationOrNull;
+      unawaited(_detailProvider.refreshConversation(trackLoad: open != null && _isLiveV3(open)));
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    AnalyticsManager.identityChanges.removeListener(_onRouteIdentityChanged);
     final summaryShownAt = _summaryShownAt;
     if (summaryShownAt != null && DateTime.now().difference(summaryShownAt) >= ValueMomentPaywall.summaryDwell) {
       ValueMomentPaywall.offer(PaywallMoment.ahaFirstSummary,
@@ -506,6 +659,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     _detailProvider.leaveSpeakerLabelingSession(widget.conversation.id);
     unawaited(SiriIntegration.instance.setCurrentScreen("", null));
     _cancelOwnedTimers();
+    _liveSummaryTimer?.cancel();
     _liveRefresher.dispose();
     _separation.dispose();
     _controller?.dispose();
@@ -646,6 +800,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   };
 
   void _handleMenuSelection(BuildContext context, String value, ConversationDetailProvider provider) async {
+    if (refuseWhileLive(context, provider.conversation, value)) return; // X11
     // Track the menu action selection
     PlatformManager.instance.analytics.conversationThreeDotsMenuActionSelected(
       conversationId: provider.conversation.id,
@@ -876,48 +1031,49 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   /// agrees ("Anyone with the link can view"), and goes back to private if the share sheet reports
   /// that it was dismissed without sharing.
   Future<void> _shareConversation(ConversationDetailProvider provider) async {
+    if (refuseWhileLive(context, provider.conversation, 'share')) return; // X11
     HapticFeedback.mediumImpact();
     final conversation = provider.conversation;
-    final wasPrivate = conversation.visibility != ConversationVisibility.shared;
-    if (wasPrivate) {
-      final confirmed = await showOmiConfirm(
-        context,
-        title: context.l10n.shareConversationQuestion,
-        message: context.l10n.anyoneWithLinkCanView,
-        confirmLabel: context.l10n.share,
-      );
-      if (!confirmed || !mounted) return;
-    }
-
-    setState(() => _isSharing = true);
-    try {
-      if (wasPrivate) {
-        final shared = await setConversationVisibility(conversation.id);
-        if (!mounted) return;
-        if (!shared) {
-          OmiFeedback.error(context, context.l10n.conversationUrlNotShared);
-          return;
-        }
-        provider.updateVisibilityLocally(ConversationVisibility.shared);
-      }
-      final origin = shareSheetOrigin(_shareButtonKey);
-      // The sheet is up once the call is made; the button stops spinning while it is shown.
-      final result = shareConversationLink(conversation, sharePositionOrigin: origin);
-      await _delay(const Duration(milliseconds: 150));
-      if (mounted) setState(() => _isSharing = false);
-      final outcome = await result;
-      if (wasPrivate && outcome.status == ShareResultStatus.dismissed) {
-        final reverted = await setConversationVisibility(
-          conversation.id,
-          visibility: ConversationVisibility.private_.value,
+    final end = await runConversationShare(
+      wasPrivate: conversation.visibility != ConversationVisibility.shared,
+      confirm: () async {
+        final confirmed = await showOmiConfirm(
+          context,
+          title: context.l10n.shareConversationQuestion,
+          message: context.l10n.anyoneWithLinkCanView,
+          confirmLabel: context.l10n.share,
         );
-        if (reverted && mounted) provider.updateVisibilityLocally(ConversationVisibility.private_);
-      }
-    } catch (e) {
-      Logger.debug('Failed to share conversation: $e');
-      if (mounted) OmiFeedback.error(context, context.l10n.conversationUrlNotShared);
-    } finally {
-      if (mounted && _isSharing) setState(() => _isSharing = false);
+        if (confirmed && mounted) setState(() => _isSharing = true);
+        return confirmed && mounted;
+      },
+      setVisibility: (visibility) => setConversationVisibility(conversation.id, visibility: visibility.value),
+      onVisibility: (visibility) {
+        if (mounted) provider.updateVisibilityLocally(visibility);
+      },
+      openSheet: () async {
+        if (mounted) setState(() => _isSharing = true);
+        final origin = shareSheetOrigin(_shareButtonKey);
+        // The sheet is up once the call is made; the button stops spinning while it is shown.
+        final result = shareConversationLink(conversation, sharePositionOrigin: origin);
+        await _delay(const Duration(milliseconds: 150));
+        if (mounted) setState(() => _isSharing = false);
+        return (await result).status;
+      },
+    );
+    if (!mounted) return;
+    if (_isSharing) setState(() => _isSharing = false);
+    showShareFlowEnd(context, end, makePrivate: () => _makePrivate(provider));
+  }
+
+  Future<void> _makePrivate(ConversationDetailProvider provider) async {
+    final ok =
+        await setConversationVisibility(provider.conversation.id, visibility: ConversationVisibility.private_.value);
+    if (!mounted) return;
+    if (ok) {
+      provider.updateVisibilityLocally(ConversationVisibility.private_);
+      OmiFeedback.confirm(context, context.l10n.onlyYouCanSeeConversation);
+    } else {
+      showShareFlowEnd(context, ShareFlowEnd.stillPublic, makePrivate: () => _makePrivate(provider));
     }
   }
 
@@ -1128,6 +1284,55 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       (context.read<ConversationsV3Provider?>()?.v3 ?? false) &&
       conversation.v3?.tileState == ConversationTileState.live;
 
+  Widget? _livePreviewTail(ServerConversation conversation, CaptureProvider? capture, {Widget? whenEmpty}) {
+    final preview = capture?.livePreview;
+    final startedAt = conversation.startedAt;
+    if (capture == null || preview == null || startedAt == null) return null;
+
+    bool isVerified() {
+      if (!mounted ||
+          _routeUid.isEmpty ||
+          _routeUid != SharedPreferencesUtil().uid ||
+          _routeIdentityEpoch != AnalyticsManager.identityEpoch ||
+          !identical(capture.livePreview, preview) ||
+          !capture.localPreviewAdmitted ||
+          !preview.admitted ||
+          !capture.pendantCaptureVerified) {
+        return false;
+      }
+      final current = _providerInitialized ? _detailProvider.conversationOrNull : widget.conversation;
+      if (current == null ||
+          (_providerInitialized && _detailProvider.detailAccessUnavailable) ||
+          current.startedAt != startedAt ||
+          current.id != conversation.id ||
+          current.id != widget.conversation.id ||
+          current.isLocked ||
+          current.isHiddenFromDefaultList ||
+          current.status != ConversationStatus.in_progress ||
+          !_isLiveV3(current)) {
+        return false;
+      }
+      final recordingId = capture.verifiedLiveServerRecordingId;
+      return recordingId != null && (current.v3?.recordingIds.contains(recordingId) ?? false);
+    }
+
+    if (!isVerified()) return null;
+    return LivePreviewTail(
+      preview: preview,
+      coverage: LivePreviewCoverage.forFinals(conversation.transcriptSegments, startedAt),
+      includeBottomInset: false,
+      whenEmpty: whenEmpty,
+      lines: () {
+        if (!isVerified()) return const [];
+        return [
+          for (final line in preview.lines)
+            if (line.startedAt case final lineStart?)
+              if (!lineStart.isBefore(startedAt)) line,
+        ];
+      },
+    );
+  }
+
   /// Header actions: Star and Share as 44pt icon buttons, then one overflow holding the summary
   /// template, Rename, Move to Folder, Recordings and the rest, Delete last. Ask Omi is the bottom bar.
   /// While the conversation is still going, Share is hidden until it ends.
@@ -1217,6 +1422,29 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     // post-frame); after init, an unresolved conversation pops the route.
     final detailProvider = context.watch<ConversationDetailProvider>();
     final conversation = detailProvider.conversationOrNull;
+    context.select<CaptureProvider?, (LivePreviewController?, bool, bool, String?)>((capture) => (
+          capture?.livePreview,
+          capture?.localPreviewAdmitted ?? false,
+          capture?.pendantCaptureVerified ?? false,
+          capture?.verifiedLiveServerRecordingId,
+        ));
+    final capture = context.read<CaptureProvider?>();
+    context.select<ConversationsV3Provider?, bool>((provider) => provider?.v3 ?? false);
+    _syncLiveSummaryTimer();
+    if (!_providerInitialized) {
+      final preview = selectedTab == ConversationTab.transcript ? _livePreviewTail(widget.conversation, capture) : null;
+      return Scaffold(
+        backgroundColor: OmiColors.surface0,
+        body: preview == null
+            ? null
+            : SafeArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                  child: preview,
+                ),
+              ),
+      );
+    }
     if (conversation == null) {
       if (_providerInitialized) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1315,62 +1543,72 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                     ConversationDetailHeader(onOpenRecordings: _openRecordings),
                     if (conversation.processingDeferred)
                       const Padding(padding: EdgeInsets.all(OmiSpacing.xs), child: ProcessingDeferredMarker()),
-                    ConversationDetailTabs(controller: _controller!, onTap: (_) => _hasExplicitTabSelection = true),
+                    ConversationDetailTabs(controller: _controller!, onTap: _onDetailTabTap),
                     ConversationActivityStrip(summaryTabVisible: selectedTab == ConversationTab.summary),
                     Expanded(
                       // Each tab owns the page's side margin, so a section can scroll edge to edge
                       // (the Summary tab's screenshot strip) instead of clipping at the margin.
-                      child: TabBarView(
-                        controller: _controller,
-                        children: [
-                          SummaryTab(
-                            onOpenSource: (id) {
-                              final segments = detailProvider.conversation.transcriptSegments;
-                              final segment = segments.where((segment) => segment.id == id).firstOrNull;
-                              if (segment == null) return;
-                              _hasExplicitTabSelection = true;
-                              setState(() => selectedTab = ConversationTab.transcript);
-                              _controller!.animateTo(_transcriptTabIndex);
-                              _playbackController.updateSegments(segments);
-                              _playbackController.seek(segment.start, strict: true);
-                            },
-                            reviewEnabled: !widget.isFromOnboarding &&
-                                widget.initialSeekStart == null &&
-                                selectedTab == ConversationTab.summary &&
-                                !_controller!.indexIsChanging &&
-                                !_isSearching &&
-                                !_isSharing &&
-                                !_isDownloadingAudio &&
-                                !_reviewInterrupted,
-                            searchQuery: _searchQuery,
-                            currentResultIndex: getCurrentResultIndexForHighlighting(),
-                            summarySearchResultOffset: _summaryContentSearchResults,
-                            onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                            onShowActionItemInTranscript: _showActionItemInTranscript,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                            child: TranscriptWidgets(
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: _onDetailTabScroll,
+                        child: TabBarView(
+                          controller: _controller,
+                          children: [
+                            SummaryTab(
+                              liveSummaryOpen: _summaryOpen,
+                              liveSummaryTick: _liveSummaryTick,
+                              claimLiveSummaryOpen: _claimSummaryOpen,
+                              isLiveSummaryVisible: _summaryTabIsVisible,
+                              liveSummaryInterval: _liveSummaryIntervalForDispatch,
+                              onOpenSource: (id) {
+                                final segments = detailProvider.conversation.transcriptSegments;
+                                final segment = segments.where((segment) => segment.id == id).firstOrNull;
+                                if (segment == null) return;
+                                _hasExplicitTabSelection = true;
+                                setState(() => selectedTab = ConversationTab.transcript);
+                                _controller!.animateTo(_transcriptTabIndex);
+                                _playbackController.updateSegments(segments);
+                                _playbackController.seek(segment.start, strict: true);
+                              },
+                              reviewEnabled: !widget.isFromOnboarding &&
+                                  widget.initialSeekStart == null &&
+                                  selectedTab == ConversationTab.summary &&
+                                  !_controller!.indexIsChanging &&
+                                  !_isSearching &&
+                                  !_isSharing &&
+                                  !_isDownloadingAudio &&
+                                  !_reviewInterrupted,
                               searchQuery: _searchQuery,
                               currentResultIndex: getCurrentResultIndexForHighlighting(),
+                              summarySearchResultOffset: _summaryContentSearchResults,
                               onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                              onSegmentTap: (segment) async {
-                                if (selectedTab != ConversationTab.transcript) {
-                                  setState(() {
-                                    selectedTab = ConversationTab.transcript;
-                                  });
-                                  _controller!.animateTo(_transcriptTabIndex);
-                                }
-
-                                // Seek to segment start; playback keeps running past the segment end.
-                                if (_seekToSegmentCallback != null) {
-                                  await _seekToSegmentCallback!(segment.start, segment.end);
-                                }
-                              },
-                              playbackController: _playbackController,
+                              onShowActionItemInTranscript: _showActionItemInTranscript,
                             ),
-                          ),
-                        ],
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                              child: TranscriptWidgets(
+                                searchQuery: _searchQuery,
+                                currentResultIndex: getCurrentResultIndexForHighlighting(),
+                                onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                                onSegmentTap: (segment) async {
+                                  if (selectedTab != ConversationTab.transcript) {
+                                    setState(() {
+                                      selectedTab = ConversationTab.transcript;
+                                    });
+                                    _controller!.animateTo(_transcriptTabIndex);
+                                  }
+
+                                  // Seek to segment start; playback keeps running past the segment end.
+                                  if (_seekToSegmentCallback != null) {
+                                    await _seekToSegmentCallback!(segment.start, segment.end);
+                                  }
+                                },
+                                playbackController: _playbackController,
+                                livePreviewTail: (row, whenEmpty) =>
+                                    _livePreviewTail(row, capture, whenEmpty: whenEmpty),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -1413,9 +1651,17 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                       });
                     },
                     onTabSelected: (tab) {
-                      _hasExplicitTabSelection = true;
                       final index = _indexForTab(tab);
-                      if (index < _controller!.length) _controller!.animateTo(index);
+                      if (index < _controller!.length) {
+                        _onDetailTabTap(index);
+                        _controller!.animateTo(index);
+                      }
+                    },
+                    onLiveEndSuppressionChanged: (suppressed) {
+                      if (!mounted) return;
+                      _liveEndRequested = suppressed;
+                      _summaryOpenPending = false;
+                      _syncLiveSummaryTimer();
                     },
                     onStopPressed: () {
                       // Empty since we don't show the stop button in detail mode

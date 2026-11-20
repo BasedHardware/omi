@@ -27,10 +27,12 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// button is still on screen meanwhile; taps before that settles are ignored rather than starting a
 /// second finalize, as the pendant's double-tap gate does.
 class LiveConversationEndButton extends StatefulWidget {
-  const LiveConversationEndButton({super.key, required this.conversation, this.leadingGap = 10});
+  const LiveConversationEndButton(
+      {super.key, required this.conversation, this.leadingGap = 10, this.onEndSuppressionChanged});
 
   final ServerConversation conversation;
   final double leadingGap;
+  final ValueChanged<bool>? onEndSuppressionChanged;
 
   /// True when [conversation] holds any of this phone's captured segments.
   static bool ownsCapture(ServerConversation conversation, Iterable<String> capturedIds) {
@@ -78,9 +80,16 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 // Checked again at the tap: the capture may have moved on since the last build.
                 if (!LiveConversationEndButton.ownsCapture(conversation, capture.segments.map((s) => s.id))) return;
                 _ended = true;
+                final setEndSuppressed = widget.onEndSuppressionChanged;
+                setEndSuppressed?.call(true);
                 // Settled: on success the capture has cleared and End is gone; after a failed drain the
                 // capture keeps its segments, and End works again.
-                unawaited(capture.forceProcessingCurrentConversation().whenComplete(() => _ended = false));
+                unawaited(capture.forceProcessingCurrentConversation().whenComplete(() {
+                  _ended = false;
+                  if (LiveConversationEndButton.ownsCapture(conversation, capture.segments.map((s) => s.id))) {
+                    setEndSuppressed?.call(false);
+                  }
+                }));
               },
               // At most half the bar, so Ask Omi keeps its room; a long translation scales down on one
               // line, then ellipsizes, rather than overflowing a 320pt screen.

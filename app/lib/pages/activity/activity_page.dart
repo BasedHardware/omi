@@ -17,6 +17,7 @@ import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/activity/needs_attention_section.dart';
 import 'package:omi/pages/activity/past_processing_section.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/conversations/widgets/capture_continuity_dogfood_banner.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
@@ -255,7 +256,10 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   Widget build(BuildContext context) {
     final l = context.l10n;
     final provider = context.watch<ConversationProvider?>();
-    final failures = _pendingWork.homeProcessingToday
+    // A failed v3 conversation leaves Home and is listed here, with Try Again (X5), whether or not
+    // the server's Home-processing placement is on; that switch still gates the legacy failures.
+    final v3 = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false);
+    final failures = _pendingWork.homeProcessingToday || v3
         ? failedActivityConversations(
             pending: _pendingWork.pendingForActivity,
             conversations: [
@@ -265,8 +269,13 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
             ],
             episodes: context.watch<EpisodeProvider?>()?.homeEpisodes ?? const [],
             attentionIds: _pendingWork.attentionConversationIds,
+            v3Only: !_pendingWork.homeProcessingToday,
           )
         : <ServerConversation>[];
+    if (failures.isNotEmpty) {
+      final ids = [for (final c in failures) c.id];
+      WidgetsBinding.instance.addPostFrameCallback((_) => _pendingWork.markFailedConversationsSeen(ids));
+    }
     final attention = NeedsAttentionSection(
         store: _pendingWork,
         captureMonitor: _captureMonitor,

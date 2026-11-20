@@ -1559,6 +1559,7 @@ export interface Conversation {
   is_locked?: boolean;
   kind?: "conversation" | "voice_work" | "media" | "background" | null;
   language?: string | null;
+  live_summary?: LiveSummaryPreview | null;
   manual_end?: boolean | null;
   meeting_dedup_speech_s?: number | null;
   meeting_duration_s?: number | null;
@@ -1785,6 +1786,7 @@ export interface ConversationSearchItem {
   is_locked?: boolean;
   kind?: "conversation" | "voice_work" | "media" | "background" | null;
   language?: string | null;
+  live_summary?: LiveSummaryPreview | null;
   manual_end?: boolean | null;
   match_snippets?: Array<TranscriptMatchSnippet>;
   meeting_dedup_speech_s?: number | null;
@@ -3459,6 +3461,11 @@ export interface LiveConversation {
   status: ConversationStatus;
   structured: Structured;
   tile_state?: "live" | "transcribing" | "writing" | "done" | "failed" | null;
+}
+
+export interface LiveSummaryPreview {
+  structured: Structured;
+  summary_covers_through: string;
 }
 
 export interface LlmTotalCostResponse {
@@ -7237,6 +7244,7 @@ export interface OmiApiSchemas {
   "LegacyProactiveIntent": LegacyProactiveIntent;
   "LinkCalendarEventRequest": LinkCalendarEventRequest;
   "LiveConversation": LiveConversation;
+  "LiveSummaryPreview": LiveSummaryPreview;
   "LlmTotalCostResponse": LlmTotalCostResponse;
   "LlmUsageFeatureResponse": LlmUsageFeatureResponse;
   "LlmUsageRecordResponse": LlmUsageRecordResponse;
@@ -9275,6 +9283,17 @@ export interface OmiApiPaths {
       operationId: "patch_conversation_summary_v1_conversations__conversation_id__summary_patch";
       responses: {
         "200": ConversationStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/summary/live-catchup/stream": {
+    get: {
+      operationId: "conversation_live_catchup_stream_v1_conversations__conversation_id__summary_live_catchup_stream_get";
+      responses: {
+        "200": unknown;
         "401": void;
         "404": void;
         "422": HTTPValidationError;

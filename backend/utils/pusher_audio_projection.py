@@ -179,7 +179,11 @@ class PusherAudioProjection:
             if chunks is None:
                 if enabled():
                     discovery = discover(
-                        self.uid, conversation_id, strict_raw=force and durable_debt_enabled(), fallback=record_fallback
+                        self.uid,
+                        conversation_id,
+                        strict_raw=force and durable_debt_enabled(),
+                        fallback=record_fallback,
+                        reuse_manifest_bodies=not force,
                     )
                     if discovery is None:
                         self.inventory.pop(conversation_id, None)
@@ -195,7 +199,7 @@ class PusherAudioProjection:
                 # Raw fragments can shrink or split as encoded coverage grows;
                 # re-derive them, never append yesterday's projected fragments.
                 try:
-                    listed = projected_chunks(self.uid, conversation_id, chunks)
+                    listed = projected_chunks(self.uid, conversation_id, chunks, reuse_manifest_bodies=True)
                 except Exception:
                     # An incremental encoded view is not a full fallback.
                     # Rediscover encoded siblings before matching main's

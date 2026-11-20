@@ -651,13 +651,24 @@ def _validate_firestore_readiness_workflow_contract(
         errors.append(ValidationError(scope, 'backend deploy must depend on the isolated Firestore readiness job'))
 
     is_manual_deploy = Path(workflow_file).name == 'gcp_backend.yml'
+    source_job = readiness_job if is_manual_deploy else _as_config_dict(jobs.get('admit_source')) or {}
     permissions = _as_config_dict(readiness_job.get('permissions')) or {}
-    # Both lanes resolve their source from the Release Eligibility run listing,
-    # which needs actions:read. Beyond that and the repository read its
-    # checkouts require, only the id-token the keyless index check mints
-    # through the deploy pool is allowed — never a content write or a
-    # deployer-scoped permission.
-    expected_permissions = {'actions': 'read', 'contents': 'read', 'id-token': 'write'}
+    # Source admission needs actions:read for the Release Eligibility run listing.
+    # The Firestore check needs an id-token for the index-reader identity.
+    # The automatic workflow runs those operations in separate jobs.
+    expected_permissions = {'contents': 'read', 'id-token': 'write'}
+    if is_manual_deploy:
+        expected_permissions['actions'] = 'read'
+    else:
+        source_permissions = _as_config_dict(source_job.get('permissions')) or {}
+        if source_permissions != {'actions': 'read', 'contents': 'read'} or 'environment' in source_job:
+            errors.append(ValidationError(scope, 'automatic source admission must be GitHub read-only'))
+        if readiness_job.get('needs') != ['scope', 'admit_source'] or readiness_job.get('if') != (
+            "needs.scope.outputs.applies == 'true'"
+        ):
+            errors.append(
+                ValidationError(scope, 'automatic Firestore readiness must follow admission for backend deploys')
+            )
     if permissions != expected_permissions:
         errors.append(
             ValidationError(
@@ -674,7 +685,16 @@ def _validate_firestore_readiness_workflow_contract(
         errors.append(ValidationError(scope, 'Firestore readiness must not receive backend deployment credentials'))
     resolved_workflow_root = workflow_root or ROOT
     checkout_steps = [step for step in parsed_steps if step.get('uses') == 'actions/checkout@v7']
-    admitted_readiness_ref = '${{ steps.admitted_source.outputs.admitted_sha }}'
+    admitted_readiness_ref = (
+        '${{ steps.admitted_source.outputs.admitted_sha }}'
+        if is_manual_deploy
+        else '${{ needs.admit_source.outputs.admitted_sha }}'
+    )
+    admission_checkouts = [
+        step
+        for step in (_as_config_list(source_job.get('steps')) or [])
+        if isinstance(step, dict) and step.get('uses') == 'actions/checkout@v7'
+    ]
     admission_checkout_name = (
         'Checkout current main for source admission'
         if is_manual_deploy
@@ -684,7 +704,9 @@ def _validate_firestore_readiness_workflow_contract(
         f"{'manual' if is_manual_deploy else 'automatic'} Firestore readiness must check out "
         f"{'main' if is_manual_deploy else 'current main'} then the admitted SHA"
     )
-    admission_checkout = next((step for step in checkout_steps if step.get('name') == admission_checkout_name), None)
+    admission_checkout = next(
+        (step for step in admission_checkouts if step.get('name') == admission_checkout_name), None
+    )
     admitted_checkout = next(
         (step for step in checkout_steps if step.get('name') == 'Checkout admitted Firestore source'), None
     )
@@ -696,7 +718,7 @@ def _validate_firestore_readiness_workflow_contract(
     admitted_with = _as_config_dict((admitted_checkout or {}).get('with')) or {}
     control_with = _as_config_dict((control_checkout or {}).get('with')) or {}
     if (
-        len(checkout_steps) != 3
+        len(checkout_steps) != (3 if is_manual_deploy else 2)
         or admission_with.get('ref') != 'main'
         or admission_with.get('fetch-depth') != 0
         or admitted_with.get('ref') != admitted_readiness_ref

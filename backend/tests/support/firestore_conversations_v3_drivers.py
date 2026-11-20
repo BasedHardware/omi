@@ -3,7 +3,14 @@
 from datetime import timedelta
 from unittest.mock import patch
 
-from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID, FROZEN_NOW, FROZEN_LATER, ref_collection
+from tests.support.firestore_query_drivers import (
+    DriverEntry,
+    SHAPE_UID,
+    FROZEN_NOW,
+    FROZEN_LATER,
+    ref_collection,
+    ref_transaction,
+)
 from utils.other.list_budget import ListReadBudget
 
 
@@ -83,12 +90,21 @@ def entries():
             base={'uid': SHAPE_UID, 'now': FROZEN_NOW, 'max_idle': timedelta(hours=2)},
             neutrals={'pick': (_pick_none, 'row selection only; no window is live, so both bands read')},
         ),
+        DriverEntry(
+            'database.conversations_v3.merge_donors_have_tasks',
+            base={'uid': SHAPE_UID, 'donor_ids': ['donor-one', 'donor-two']},
+            domains={'transaction': [None, ref_transaction()]},
+        ),
         DriverEntry('database.conversations_v3.pending_backfill_processing', base={'uid': SHAPE_UID}),
         DriverEntry('database.conversations_v3.backfill_run_documents', base={'uid': SHAPE_UID, 'run_id': 'shape-run'}),
         DriverEntry('database.conversations_v3_backfill_runs.list_runs', base={'uid': SHAPE_UID}),
         DriverEntry('database.conversations_v3_backfill_runs.pending_starts', base={'limit': 20}),
         DriverEntry('database.conversations_v3_processing.pending_created', base={'uid': SHAPE_UID}),
-        DriverEntry('utils.conversations.v3.service.has_pending', base={'uid': SHAPE_UID}),
+        DriverEntry(
+            'utils.conversations.v3.service.has_pending',
+            base={'uid': SHAPE_UID},
+            domains={'deferred': [(), ('preview-source',)]},
+        ),
         DriverEntry('utils.conversations.v3.service.pending_processing', base={'uid': SHAPE_UID}),
         DriverEntry('utils.conversations.v3.service.sweep'),
         DriverEntry('utils.conversations.v3.service.measure_legacy_users'),

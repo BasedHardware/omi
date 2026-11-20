@@ -9,6 +9,7 @@ import pytest
 from database import batch_pipeline_projection_outbox as rows
 from database.batch_pipeline_leader import LeaseLost
 from database.batch_pipeline_projection_followup_clock import DUE_FIELD as FOLLOWUP_DUE_FIELD
+from database.firestore_transaction_retry import FirestoreAborted
 from testing.pipeline_sim.store import CustomerData, SimStore
 from utils.batch_pipeline.leader import PROJECTION_OUTBOX_SCAN, TABLE
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
@@ -176,6 +177,44 @@ async def test_outbox_uses_followup_due_and_owns_retry_settlement(monkeypatch):
     await outbox.deliver(key)
     finish.assert_awaited_once()
     assert store.run(lambda tx: tx.get('results', key.segment_id)) == row
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('state', ['pending', 'ready'])
+async def test_outbox_retries_firestore_commit_contention_before_the_generic_backoff(monkeypatch, state):
+    customer = CustomerData()
+    customer.add_user('synthetic-owner')
+    store = SimStore(customer)
+    now = [10.0]
+    outbox = coordinator(store, lambda: now[0])
+    key = rows.Obligation('covered', 1)
+    store.apply(('jobs', key.segment_id), {'owner_id': 'synthetic-owner', 'privacy_generation': 0})
+    pending(store, key.segment_id, projection_state=state)
+    outbox.scan(10)
+    assert ProjectionDiscovery(store, outbox_coverage=outbox.has_coverage).next() == []
+
+    def project(key, token):
+        if now[0] == 10.0:
+            raise ValueError('Failed to commit transaction in 5 attempts.') from FirestoreAborted('contention')
+
+        def complete(tx):
+            row = tx.get('results', key.segment_id)
+            assert rows.holds_claim(row, key, token, now[0])
+            tx.put('results', key.segment_id, {**row, 'projection_state': 'completed'})
+
+        store.run(complete)
+        return 'incomplete'
+
+    monkeypatch.setattr(outbox, '_assign_or_project', project)
+    await outbox.deliver(key)
+    row = store.run(lambda tx: tx.get('results', key.segment_id))
+    assert (row[rows.REASON_FIELD], row[rows.DUE_FIELD], row[rows.TOKEN_FIELD]) == ('contention', 20.0, None)
+
+    now[0] = 20.0
+    assert [entry.key for entry in outbox.scan(10)] == [key]
+    await outbox.deliver(key)
+    row = store.run(lambda tx: tx.get('results', key.segment_id))
+    assert (row['projection_state'], row[rows.REASON_FIELD], row[rows.DUE_FIELD]) == ('completed', 'completed', None)
 
 
 def test_projection_outbox_skip_keeps_raw_page_cursor_and_observer(monkeypatch):

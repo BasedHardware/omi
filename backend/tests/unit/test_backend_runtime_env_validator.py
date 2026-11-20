@@ -228,6 +228,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED", "value": "false"},
         {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS", "value": "24"},
         {"name": "BATCH_PIPELINE_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_PACKING_SAMPLE_RATE", "value": "0.001"},
         {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
         {"name": "FIRST_SUMMARY_DEADLINE_PERCENT", "value": "0"},
@@ -1418,7 +1419,7 @@ def test_automatic_firestore_readiness_contract_requires_current_main_then_admit
     stale_source_workflow = copy.deepcopy(workflow)
     current_main_checkout = next(
         step
-        for step in stale_source_workflow['jobs']['firestore_readiness']['steps']
+        for step in stale_source_workflow['jobs']['admit_source']['steps']
         if step.get('name') == 'Checkout current main for automatic source admission'
     )
     current_main_checkout['with']['ref'] = '${{ github.event.workflow_run.head_sha }}'
