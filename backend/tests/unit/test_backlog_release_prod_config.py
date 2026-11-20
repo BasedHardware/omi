@@ -16,13 +16,17 @@ from scripts.cloud_run_scope import PROJECTION_PUMP
 
 ROOT = Path(__file__).resolve().parents[3]
 LEGACY = 'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED'
-# One-way owner_key() digests of the four support owners approved 2026-11-18 (never raw identifiers).
+# One-way owner_key() digests of the support owners held on the provider backlog: four approved
+# 2026-11-18, three more approved 2026-11-20 (never raw identifiers).
 APPROVED_OWNER_KEYS = frozenset(
     {
         '70a8958da857b008477b9ab8ba52205bf5d4f7f61b4ed18d1e48b70344a3e80d',
         'c68953b9fdbdcd5528b856fd4d50097e14c6b5eb4f48968115783ade222e59b1',
         'cbf55865bc7f785d18a634a4615a21f052bbea40f4b9d5e726dec3dcbae40c26',
         'f5d5e95afa2e18b4073f43099f4499f99326a2d3f2c50219dfa26013060cb177',
+        '30a9aadced4e2bc0aec94b34ebd9c4563f37e64b84399557fd24a0377dd8e223',
+        'aac672257a5b347976517c0d65483bc11538a6c75cf3d16523cf6a4f884bf5e1',
+        'cc49ba0944135998f50e3a8c1655ff8ce39ed6e6177e0fa2d9a5b7a83af99d87',
     }
 )
 
