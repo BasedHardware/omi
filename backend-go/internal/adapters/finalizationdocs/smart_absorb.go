@@ -105,7 +105,12 @@ func absorbProtected(row document) bool {
 func sameAbsorbPartition(target, donor document) bool {
 	device := field[string](donor, "client_device_id")
 	level := field[string](target, "data_protection_level")
-	return (level == "standard" || level == "enhanced") && level == field[string](donor, "data_protection_level") &&
+	donorLevel := field[string](donor, "data_protection_level")
+	// An existing enhanced survivor can seal a standard donor's inline speech
+	// without rewriting the survivor's other derived data.
+	compatible := donorLevel == "standard" && (level == "standard" || level == "enhanced") ||
+		donorLevel == "enhanced" && level == "enhanced"
+	return compatible &&
 		field[string](target, "status") == string(rules.Completed) && field[string](donor, "status") == string(rules.Completed) &&
 		field[string](donor, "source") == field[string](target, "source") && device != "" && device == field[string](target, "client_device_id")
 }
