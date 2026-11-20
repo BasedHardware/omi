@@ -344,3 +344,52 @@ async def test_agentic_stream_runner_sees_overlay_history_tools_and_scope(
 
     assert callback_data["answer"] == "hi"
     assert chunks[-1] is None
+
+
+@pytest.mark.asyncio
+async def test_custom_instructions_storage_error_reaches_chat_error_path():
+    selected_app = _app(capabilities=("chat",), chat_prompt=CHAT_APP_MARKER)
+    history = [_message("who are you")]
+    session = SimpleNamespace(id="session-1", file_ids=[], custom_instructions_enabled=True)
+    callback_data = {}
+    runner = AsyncMock()
+
+    with patch.object(graph, "_current_prompt_metadata", AsyncMock(return_value=("<dt/>", "UTC"))), patch.object(
+        llm_chat.users_db,
+        "get_custom_instructions",
+        side_effect=RuntimeError("firestore unavailable"),
+    ), patch.object(agentic, "get_user_timezone", lambda _uid: "UTC"), patch.object(
+        agentic, "get_mobile_city", AsyncMock(return_value=None)
+    ), patch.object(
+        agentic, "load_app_tools", lambda _uid: []
+    ), patch.object(
+        agentic, "get_current_datetime_block", lambda _uid, tz=None, location=None: "<dt/>"
+    ), patch.object(
+        agentic, "_run_openai_agent_stream", runner
+    ), patch.object(
+        llm_chat, "get_user_name", MagicMock(return_value="Alice")
+    ), patch.object(
+        llm_chat.notification_db, "get_user_time_zone", MagicMock(return_value="UTC")
+    ), patch.object(
+        llm_chat.goals_db, "get_user_goals", MagicMock(return_value=[])
+    ), patch.object(
+        langsmith_prompts,
+        "get_agentic_system_prompt_template",
+        MagicMock(return_value=_template()),
+    ):
+        chunks = [
+            chunk
+            async for chunk in graph.execute_chat_stream(
+                "uid-1",
+                history,
+                app=selected_app,
+                callback_data=callback_data,
+                chat_session=session,
+                platform="ios",
+            )
+        ]
+
+    runner.assert_not_called()
+    assert callback_data["error"] == "RuntimeError"
+    assert callback_data["answer"] == agentic.AGENT_STREAM_FAILURE_MESSAGE
+    assert chunks == [f"error: {agentic.AGENT_STREAM_FAILURE_MESSAGE}", None]
