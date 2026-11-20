@@ -145,7 +145,7 @@ from utils.cloud_tasks import (
     verify_account_deletion_cloud_tasks_oidc,
     verify_conversation_batch_purge_cloud_tasks_oidc,
 )
-from database import conversation_batch_purge_jobs
+from database import batch_pipeline_conversation_purge_scans, conversation_batch_purge_jobs
 from utils.executors import db_executor, erasure_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
@@ -426,7 +426,7 @@ async def run_conversation_batch_purge(
 
         run = functools.partial(conversation_batch_purge_jobs.run_erasure_job, erase=erase_accepted_conversation)
     else:
-        run = conversation_batch_purge_jobs.run_job
+        run = batch_pipeline_conversation_purge_scans.run_job
     try:
         outcome = await run_blocking(erasure_executor, run, job_id, generation)
     except Exception as e:
@@ -796,7 +796,7 @@ def delete_followup_question_endpoint(memory_id: str, uid: str = Depends(auth.ge
             raise HTTPException(status_code=400, detail='No memory in progres')
     else:
         memory = get_conversation(uid, memory_id)
-    if not memory or memory.get('deleted', False):
+    if not memory or memory.get('deleted', False) or memory.get('recording'):
         raise HTTPException(status_code=404, detail='Conversation not found')
     if memory.get('is_locked', False):
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
@@ -1099,7 +1099,10 @@ def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depen
     if request.target_level != 'enhanced':
         raise HTTPException(status_code=400, detail="Invalid target_level. Only migration to 'enhanced' is supported.")
 
-    finalize_migration(uid, request.target_level)
+    try:
+        finalize_migration(uid, request.target_level)
+    except users_db.MigrationSuperseded as error:
+        raise HTTPException(status_code=409, detail='Migration is no longer current.') from error
     set_user_data_protection_level(uid, request.target_level)
     return {'status': 'ok'}
 

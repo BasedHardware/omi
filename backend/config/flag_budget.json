@@ -26,6 +26,21 @@
   "seed_review_by": "2026-11-15",
   "budget": 161,
   "names": {
+    "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED": {
+      "owner": "batch-custody / lead2",
+      "review_by": "2026-12-16",
+      "registry": "config/feature-flags.yaml"
+    },
+    "BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED": {
+      "owner": "Goal: Margin / Sol",
+      "review_by": "2026-12-12",
+      "reason": "David R9 explicitly requires a reversible silence read optimization; SCA-1757"
+    },
+    "MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS": {
+      "owner": "quality-lead / q12-mcp-paging",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED": {
       "owner": "Goal: Pipeline",
       "review_by": "2026-12-14"
@@ -42,6 +57,11 @@
       "owner": "Goal: Pipeline",
       "review_by": "2026-12-14"
     },
+    "BATCH_ALLOWANCE_INTAKE_PARK_ENABLED": {
+      "owner": "batch-pipeline",
+      "review_by": "2026-12-14",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_CONTROL_CANDIDATE_FANOUT": {
       "owner": "planscost",
       "review_by": "2026-11-30"
@@ -53,8 +73,9 @@
     },
     "BATCH_HELD_POLL_SKIP_ENABLED": {
       "owner": "firestore-lead",
-      "review_by": "2026-11-18",
-      "registry": "config/feature-flags.yaml"
+      "review_by": "2026-12-02",
+      "registry": "config/feature-flags.yaml",
+      "reason": "2026-11-18: turned off on all four prod workloads because the registry's enable gates (replay, integration-first ramp, terminal-loss/SLA/read and D+2 settled-SKU evidence) were never recorded. Indexes READY and state census PASS (0) verified. Renewed to 2026-12-02 for a recorded gated ramp; delete the flag if that ramp does not happen."
     },
     "BATCH_LEGACY_CAPACITY_FALLBACK_ENABLED": {
       "owner": "overflow / two-lane lead",
@@ -188,6 +209,16 @@
     "BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS": {
       "seeded": "2026-10-25"
     },
+    "BATCH_PIPELINE_MERGE_STALE_HEAD_PROMOTE_ENABLED": {
+      "owner": "q12-post-seal",
+      "review_by": "2026-12-18",
+      "registry": "config/feature-flags.yaml"
+    },
+    "BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST": {
+      "owner": "q12-post-seal",
+      "review_by": "2026-12-18",
+      "reason": "Canary: skip the 60 s head wait behind starved heads for listed owners; fleet ramp or removal by review"
+    },
     "BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED": {
       "owner": "SCA-2015",
       "review_by": "2026-12-14",
@@ -217,6 +248,10 @@
       "owner": "planscost / gpu efficiency sprint",
       "review_by": "2026-12-02"
     },
+    "BATCH_PIPELINE_PACKING_SAMPLE_RATE": {
+      "owner": "batch owner-state / lead2",
+      "review_by": "2026-12-18"
+    },
     "BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS": {
       "owner": "cl2-gpueff",
       "review_by": "2026-12-05"
@@ -242,6 +277,11 @@
     "BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED": {
       "owner": "Goal: Pipeline",
       "review_by": "2026-12-14"
+    },
+    "BATCH_PIPELINE_PROJECTION_OVERLAP_DIAGNOSTICS": {
+      "owner": "firestore-cost / projection overlap source owner",
+      "review_by": "2026-11-24",
+      "reason": "Default-on diagnostic off switch requested by PR25596 review; review after the first qualified overlap readout. Does not change discovery or the seeded flag budget."
     },
     "BATCH_PIPELINE_PROJECTION_PREFETCH": {
       "seeded": "2026-10-25"
@@ -286,10 +326,6 @@
     "BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS": {
       "owner": "provider-stt drain",
       "review_by": "2026-12-12"
-    },
-    "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {
-      "owner": "omi-pipeline",
-      "review_by": "2026-11-30"
     },
     "BATCH_PIPELINE_PUBLISH_CONCURRENCY": {
       "seeded": "2026-10-25"
@@ -339,6 +375,11 @@
     },
     "BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS": {
       "seeded": "2026-10-25"
+    },
+    "BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED": {
+      "owner": "Goal: Pipeline",
+      "review_by": "2026-12-19",
+      "registry": "config/feature-flags.yaml"
     },
     "BATCH_PIPELINE_REUSE_LIVE_ENABLED": {
       "seeded": "2026-10-25"
@@ -447,6 +488,11 @@
       "owner": "firestore-lead / SCA-2280",
       "review_by": "2026-12-14"
     },
+    "BATCH_PROJECTION_OUTBOX": {
+      "owner": "omi-pipeline / lead2",
+      "review_by": "2026-12-18",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_PULL_BUSY_BORROW_ENABLED": {
       "owner": "cl2-gpueff / batch rollout lead",
       "review_by": "2026-12-04"
@@ -502,6 +548,10 @@
       "review_by": "2026-11-29"
     },
     "BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS": {
+      "owner": "overflow / two-lane lead",
+      "review_by": "2026-11-29"
+    },
+    "BATCH_VENDOR_OVERFLOW_PRIORITIES": {
       "owner": "overflow / two-lane lead",
       "review_by": "2026-11-29"
     },
@@ -1116,7 +1166,8 @@
     },
     "SYNC_EARLY_CAPTURE_CLAMP_ENABLED": {
       "owner": "earlyclamp / two-lane transcription",
-      "review_by": "2026-11-17"
+      "review_by": "2026-12-16",
+      "reason": "Renewed 2026-11-18: registry decision keep/terminal keep, default-on ops kill switch for pre-2024 V2 sync stamps; expiry turned main's unit tests red"
     },
     "SYNC_EMPTY_SUCCESS_GUARD_ENABLED": {
       "seeded": "2026-10-25"
@@ -1225,6 +1276,11 @@
       "owner": "quality-lead",
       "review_by": "2026-12-15",
       "registry": "config/feature-flags.yaml"
+    },
+    "BATCH_RESULT_PROTOCOL_GUARD_ENABLED": {
+      "owner": "pipeline-driver",
+      "review_by": "2026-12-17",
+      "registry": "config/feature-flags.yaml"
     }
   },
   "retired_history": "docs/history/retired-pipeline-flags.json",
@@ -1259,6 +1315,10 @@
     },
     "MENTOR_PIPELINE": {
       "on": "2026-10-26",
+      "replaced_by": null
+    },
+    "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {
+      "on": "2026-11-16",
       "replaced_by": null
     }
   }

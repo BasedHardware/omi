@@ -1,4 +1,4 @@
-"""A phone socket drop keeps its batch capture open; only desktop treats close as stop."""
+"""With LISTEN_BATCH_RECONNECT_ENABLED on, a phone socket drop keeps its batch capture open; off, it finalizes."""
 
 import asyncio
 from copy import deepcopy
@@ -131,6 +131,8 @@ class Teardown:
 @pytest.mark.parametrize('platform', ['ios', 'android'])
 @pytest.mark.parametrize('source', ['omi', 'phone'])
 async def test_phone_socket_drop_keeps_batch_capture_open_and_arms_quiet_check(monkeypatch, platform, source):
+    # The hold is part of the reconnect protocol: only with the switch on does a drop keep the capture open.
+    monkeypatch.setenv('LISTEN_BATCH_RECONNECT_ENABLED', 'true')
     row = capture(client_platform=platform, source=source)
     teardown = Teardown(monkeypatch, row, tail={'server_batch_audio_end': NOW.timestamp() + 2})
     process = await teardown.run()
@@ -142,6 +144,19 @@ async def test_phone_socket_drop_keeps_batch_capture_open_and_arms_quiet_check(m
     assert row['server_batch_audio_end'] == NOW.timestamp() + 2
     assert 'server_batch_audio_closed' not in row
     teardown.runtime.transcripts.flush_speaker_assignments.assert_awaited_once_with('capture')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('platform', ['ios', 'android'])
+async def test_phone_socket_drop_finalizes_when_the_reconnect_switch_is_off(monkeypatch, platform):
+    # With the switch off nothing can end a hold (no producer to drain), so a held row would never be
+    # sealed and every reconnect would roll into a new empty generation (11-16 22:06Z storm).
+    monkeypatch.delenv('LISTEN_BATCH_RECONNECT_ENABLED', raising=False)
+    row = capture(client_platform=platform)
+    teardown = Teardown(monkeypatch, row, tail={'server_batch_audio_end': NOW.timestamp() + 2})
+    process = await teardown.run()
+    process.assert_awaited_once_with('capture')
+    assert 'archive_close' not in teardown.calls  # no hold: process_conversation owns the close barrier
 
 
 @pytest.mark.asyncio
@@ -168,6 +183,8 @@ async def test_desktop_batch_socket_close_still_finalizes_immediately(monkeypatc
     ],
 )
 async def test_phone_drop_without_a_quiet_owner_or_audio_keeps_immediate_finalization(monkeypatch, case):
+    # With the switch on, these guards are what keep the drop hold from engaging.
+    monkeypatch.setenv('LISTEN_BATCH_RECONNECT_ENABLED', 'true')
     row = capture()
     options = {}
     if case == 'quiet_check_refused':

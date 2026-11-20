@@ -126,12 +126,25 @@ extension _CaptureLiveRecovery on CaptureController {
     }
   }
 
-  bool _orphanAudioAdmitted(String deviceId) {
+  bool _orphanAudioAdmitted(String deviceId, {bool ignoreMute = false}) {
+    if (_captureControllerDisposed) return false;
     final device = _recordingDevice;
-    if (_captureControllerDisposed || device == null || device.id != deviceId) return false;
-    if (device.type != DeviceType.omi && device.type != DeviceType.openglass) return false;
-    if (_preferences.capturePolicy.muted || _preferences.batchModeEnabled) return false;
-    if (_liveRecovery.deviceStoppedByCaller || _pendantSuspension != null) return false;
+    final suspension = _pendantSuspension;
+    final reconnect = suspension?.reason == SuspendReason.reconnect &&
+        suspension?.deviceId == deviceId &&
+        suspension?.accountId == _preferences.uid &&
+        _auth.isSignedIn();
+    // The physical link can return before the provider's debounced connect.
+    // Retain received frames for the exact account/device even while its
+    // recordingDevice mirror is null. Only a later start may restore identity.
+    if (device?.id != deviceId && !(device == null && reconnect)) return false;
+    final type = device?.type ?? (reconnect ? suspension?.deviceType : null);
+    if (type != DeviceType.omi && type != DeviceType.openglass) return false;
+    if ((!ignoreMute && (_preferences.capturePolicy.muted || (reconnect && suspension!.wasPaused))) ||
+        _preferences.batchModeEnabled) {
+      return false;
+    }
+    if (_liveRecovery.deviceStoppedByCaller || (suspension != null && !reconnect)) return false;
     final staged = _capture.stagedReadModel;
     return !staged.phoneOwnsCapture && !staged.callActive;
   }
@@ -203,17 +216,22 @@ extension _CaptureLiveRecovery on CaptureController {
       if (_recordingDevice != null) _deferDeviceStartPastSyncPass(trigger: CaptureRecoveryObservedTrigger.appResumed);
       return;
     }
-    _startIdlePendantCapture(CaptureRecoveryObservedTrigger.appResumed);
+    // A muted pendant left idle (a failed or skipped start) is started too: a
+    // muted device start lands paused with its button listener, so the Paused
+    // card and the double-tap unmute come back without an app reinstall.
+    _startIdlePendantCapture(CaptureRecoveryObservedTrigger.appResumed, admitMuted: true);
   }
 
-  bool get _idlePendantNeedsCapture {
+  bool _idlePendantNeedsCapture({bool admitMuted = false}) {
     final device = _recordingDevice;
-    if (_captureControllerDisposed || device == null || !_orphanAudioAdmitted(device.id)) return false;
-    return _capture.stagedReadModel.phase == CapturePhase.idle && !isPaused;
+    if (_captureControllerDisposed || device == null || !_orphanAudioAdmitted(device.id, ignoreMute: admitMuted)) {
+      return false;
+    }
+    return _capture.stagedReadModel.phase == CapturePhase.idle && (admitMuted || !isPaused);
   }
 
-  void _startIdlePendantCapture(CaptureRecoveryObservedTrigger trigger) {
-    if (!_idlePendantNeedsCapture) return;
+  void _startIdlePendantCapture(CaptureRecoveryObservedTrigger trigger, {bool admitMuted = false}) {
+    if (!_idlePendantNeedsCapture(admitMuted: admitMuted)) return;
     Logger.debug('[Capture] pendant connected with capture idle; starting device capture (${trigger.wireName})');
     _emitCaptureRecovery(CaptureRecoveryObservedKind.captureStartRedriven, trigger);
     unawaited(streamDeviceRecording(device: _recordingDevice).catchError((Object error) {

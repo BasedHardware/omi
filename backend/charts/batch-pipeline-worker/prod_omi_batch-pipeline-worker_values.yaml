@@ -12,15 +12,21 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-# Preserve the 2026-11-06 live 4/8 bounds (David D4, coordinator ask bc18db).
-# replicaCount and autoscaling.minReplicas are one floor setting; change both.
-# Rollback: restore both floors to 6 and maxReplicas to 12 if GPU queue depth
-# or ready_units climbs back past 50k. OD-first placement stays unchanged.
-replicaCount: 4
+# Floor 6 (David, 2026-11-20, superseding D4's floor 4 of 2026-11-06): over the
+# prior 3 days the HPA never asked for fewer than 6 workers, so the floor costs
+# ~0 extra machine-hours at current demand and keeps 6 L4s standing through an
+# L4 stockout (incident SCA-3274). The batch-pipeline-pool node minimum matches
+# it (operator-managed, docs/runbooks/batch-vendor-routing-capacity.md).
+# Ceiling 16 (David, 2026-11-16 16:41Z: backlog 25k ready at 8 pods; applied
+# live 16:50Z and persisted here so a worker Helm upgrade keeps it; node pool
+# max is 18). replicaCount and autoscaling.minReplicas are one floor setting;
+# change both. Rollback: floor 4 (both values and the node pool minimum);
+# ceiling rollback maxReplicas 8. OD-first placement stays unchanged.
+replicaCount: 6
 autoscaling:
   enabled: true
-  minReplicas: 4
-  maxReplicas: 8
+  minReplicas: 6
+  maxReplicas: 16
   balancedPools:
     enabled: false
 # OD-first placement: the worker pins to the on-demand pool so the guaranteed
@@ -58,6 +64,8 @@ borrowedNodePools:
 worker:
   RECORD_FRESH_MERGE_ENABLED: false
   # Staged OFF until every merge writer runs the sibling guard.
+  # Stale-head merge skip canary (#25673): same canary uid as backend-integration; inert until the image reads it.
+  mergeStaleHeadUidAllowlist: viUv7GtdoHXbK1UBCDlPuTDuPgJ2
   heldDeadLetterEnabled: true
   inputExpiringEnabled: true
   # Two pump processes share each L4 (cl2-gpueff 2026-11-04, data/run-2026-11-04-gpueff
@@ -74,7 +82,12 @@ worker:
   # lanes 124.7 vs x 4 lanes 180 audio-h/GPU-h. One step to 3 first to watch shard-claim contention.
   # Decoded memory stays inside each process's shared 1800 audio-second prepare budget and the
   # 7200 audio-second bound. Kill switch / rollback: pipelineDepth 2.
-  pipelineDepth: 3
+  # Four lanes (2026-11-16, L4 stockout caps the fleet at ~9 pods while ready grows):
+  # 9 pods complete ~880 units/min against ~1,220 leases/min with GPU util ~37% and
+  # chain-busy ~35% of target, so per-pod claim overlap is the lever. Bench 2p x 4
+  # lanes 180 audio-h/GPU-h. 4 is the worker's WORKER_PIPELINE_DEPTH_MAX.
+  # Rollback: pipelineDepth 3 (values-only Helm roll).
+  pipelineDepth: 4
   servingMetricsMinRefreshSeconds: 60
   # Matches the prod backend hosts (deploy contract reader-split invariant):
   # window allocation 100, replica recovery explicitly off, and the

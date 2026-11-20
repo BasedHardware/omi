@@ -1,8 +1,8 @@
-"""Is the GPU ring past its fresh-backlog SLO? The capacity input to overflow at admission.
+"""Is the GPU ring past a priority's backlog SLO? The capacity input to overflow at admission.
 
-``saturated(store)`` answers from a process cache and never blocks: a stale entry schedules one
-background read on the rollout executor (as ``utils.rollout.runtime_percent`` does) and the call
-returns the last answer. Each read takes two numbers for the fresh priority: the enqueue time of the
+``saturated(store, priority=Priority.FRESH)`` answers from a per-priority process cache and never
+blocks: a stale entry schedules one background read on the rollout executor (as ``utils.rollout.runtime_percent`` does) and the call
+returns the last answer. Each read takes two numbers for that priority: the enqueue time of the
 oldest admissible ready unit (``oldest_admissible_ready``: never allowance holds or deferred retries)
 and the admissible ready count (``ready_for_capacity``, the HPA's own signal). Saturation starts when
 the age reaches the enter threshold with at least ``min_ready_units`` waiting, and stops once the
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 REFRESH_SECONDS = 30.0
 
-# now -> (enqueue time of the oldest admissible fresh unit or None, admissible fresh ready count)
+# now -> (enqueue time of the oldest admissible unit or None, admissible ready count for one priority)
 Sample = Callable[[float], tuple[float | None, int]]
 
 
@@ -45,10 +45,12 @@ class GpuOverflow:
         self,
         sample: Sample,
         *,
+        priority: int = Priority.FRESH,
         clock: Callable[[], float] = time.time,
         monotonic: Callable[[], float] = time.monotonic,
         submit: Callable[[Callable[[], None]], Any] | None = None,
     ) -> None:
+        self._priority = Priority(priority)
         self._sample = sample
         self._clock = clock
         self._monotonic = monotonic
@@ -99,31 +101,41 @@ class GpuOverflow:
             self._active = active
             self._expires = self._monotonic() + REFRESH_SECONDS
             self._inflight = False
-        metrics.gpu_overflow(active, age)
+        metrics.gpu_overflow(active, age, self._priority)
 
 
 _Oldest = Callable[[int, float], 'float | None']
 _Count = Callable[[int, float], int]
 
 
-def _fresh_sample(oldest: _Oldest, count: _Count) -> Sample:
-    fresh = int(Priority.FRESH)
-    return lambda now: (oldest(fresh, now), count(fresh, now))
+def _priority_sample(oldest: _Oldest, count: _Count, priority: int) -> Sample:
+    return lambda now: (oldest(priority, now), count(priority, now))
 
 
-_overflow: GpuOverflow | None = None
+_overflows: dict[int, GpuOverflow] = {}
 _bind_lock = Lock()
 
 
-def saturated(store: Any) -> bool:
-    """The process's answer for ``store`` (bound once). A store without the reads never saturates."""
-    global _overflow
-    if _overflow is None:
+def saturated(store: Any, priority: int = Priority.FRESH) -> bool:
+    """The process's answer for a priority (store bound once per priority).
+
+    Unknown priorities and stores without the reads never saturate. At most three samplers exist.
+    """
+    try:
+        priority = Priority(priority)
+    except (ValueError, TypeError):
+        return False
+    overflow = _overflows.get(priority)
+    if overflow is None:
         oldest = getattr(store, 'oldest_admissible_ready', None)
         count = getattr(store, 'ready_for_capacity', None)
         if not callable(oldest) or not callable(count):
             return False
         with _bind_lock:
-            if _overflow is None:
-                _overflow = GpuOverflow(_fresh_sample(cast(_Oldest, oldest), cast(_Count, count)))
-    return _overflow.saturated()
+            overflow = _overflows.get(priority)
+            if overflow is None:
+                overflow = GpuOverflow(
+                    _priority_sample(cast(_Oldest, oldest), cast(_Count, count), priority), priority=priority
+                )
+                _overflows[priority] = overflow
+    return overflow.saturated()

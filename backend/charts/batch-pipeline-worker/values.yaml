@@ -26,6 +26,15 @@ dataPlaneProject: ""
 bucket: ""
 secretName: ""
 replicaCount: 1
+# Worker rolls replace pods in place with maxSurge 0 (no surge GPU). This is the
+# share of replicas that may be draining or starting at once; Kubernetes rounds
+# it down and never below one pod. 50% finishes a roll in two drain-plus-startup
+# waves, which fits the deploy workflow's single-wave rollout wait the way
+# Recreate did, while half the fleet keeps serving (Recreate stopped all of it).
+# Rollback: 100% replaces every pod at once (Recreate's capacity drop, but each
+# replacement still keeps its node).
+rollout:
+  maxUnavailable: 50%
 # Operator-managed L4 (g2-standard-8) pool; never share the live diarizer pool.
 nodeSelector:
   cloud.google.com/gke-nodepool: batch-pipeline-pool
@@ -75,6 +84,7 @@ worker:
   shardSpreadEnabled: true
   # One shard transaction leases up to the pull batch; false leases one per transaction.
   pullMultiLeaseEnabled: true
+  packingSampleRate: '0.001'
   # Ship-on: a pump's non-first lanes take recent/deep backfill when every fresh
   # shard is claimed by another puller; lane 0 stays fresh-first. false restores
   # strict fresh-first on every lane.
@@ -112,6 +122,7 @@ worker:
   # shared 1800-audio-second decode budget, not only the first, so the GPU
   # section does not wait on artifact fetches. false restores first-only.
   prepareFlightEnabled: true
+  projectionOutbox: true
   shadowPercent: 0
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: ""

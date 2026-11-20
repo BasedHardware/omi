@@ -49,6 +49,8 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'BATCH_RESULT_PROTOCOL_GUARD_ENABLED',
+    'MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS',
     'BATCH_ORIGINAL_IDENTITY_EVIDENCE_ENABLED',
     'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED',
     'HOME_SETTLED_EMPTY_WIRE_ENABLED',
@@ -66,12 +68,15 @@ HELPER_KILL_SWITCHES = {
     'RECORD_FOLLOWUP_WAKE_ENABLED',
     'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
+    'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
     'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
+    'BATCH_PROJECTION_OUTBOX',
     'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF',
     'PROJECTION_DRAIN_CLAIM_AWARE',
     'PROJECTION_DRAIN_PRIVACY_BACKOFF',
     'PROJECTION_PRIVACY_REFUSAL_RESUME',
     'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
+    'BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED',
     'CONVERSATION_OCCASION_RELEVANCE_ENABLED',
     'LATE_AUDIO_SYNC_INTAKE_ENABLED',
     'EPISODE_RECORDED_TIME_ENABLED',
@@ -224,6 +229,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         'STT_FREE_ALLOWANCE_WATCH_ENABLED',
         'PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED',
         'CONVERSATION_TERMINAL_FAMILY_MODE',
+        'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED',
         'BATCH_HELD_DEAD_LETTER_ENABLED',
         'BATCH_HELD_POLL_SKIP_ENABLED',
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
@@ -236,6 +242,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         'BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED',
         'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED',
         'BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED',
+        'BATCH_PIPELINE_MERGE_STALE_HEAD_PROMOTE_ENABLED',
         'BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED',
         'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED',
         'BATCH_SOURCE_REUSE_ENABLED',
@@ -290,6 +297,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         if name == 'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED':
             assert entry['owner'] == flag['owner'] == 'Pipeline / SCA-1894'
             assert entry['review_by'] == '2026-11-23'
+        elif name == 'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED':
+            assert entry['owner'] == flag['owner'] == 'batch-custody / lead2'
+            assert entry['review_by'] == '2026-12-16'
         elif name == 'BATCH_PIPELINE_FRESH_GUARD_ENABLED':
             assert entry['owner'] == 'Goal: Pipeline'
             assert entry['review_by'] == '2026-12-13'
@@ -314,9 +324,18 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         elif name.startswith('PUSHER_RECORD_CLOSE_') or name == 'PUSHER_RECORD_SEAL_WAKE_ENABLED':
             assert entry['owner'] == flag['owner'] == 'quality-12h/Q12-A'
             assert entry['review_by'] == '2026-12-15'
+        elif name == 'BATCH_RESULT_PROTOCOL_GUARD_ENABLED':
+            assert entry['owner'] == flag['owner'] == 'pipeline-driver'
+            assert entry['review_by'] == '2026-12-17'
         elif name == 'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED':
             assert entry['owner'] == 'Goal: Pipeline'
             assert entry['review_by'] == '2026-12-13'
+        elif name == 'BATCH_PROJECTION_OUTBOX':
+            assert entry['owner'] == flag['owner'] == 'omi-pipeline / lead2'
+            assert entry['review_by'] == '2026-12-18'
+        elif name == 'BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED':
+            assert entry['owner'] == flag['owner'] == 'Goal: Pipeline'
+            assert entry['review_by'] == '2026-12-19'
         elif name in {
             'EPISODE_COMPOSER_THRIFT',
             'SUMMARY_PROJECTION_DEBT_ENABLED',
@@ -336,6 +355,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert entry['review_by'] == (
                 '2026-11-22' if name == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else '2026-12-15'
             )
+        elif name == 'MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS':
+            assert entry['owner'] == flag['owner'] == 'quality-lead / q12-mcp-paging'
+            assert entry['review_by'] == '2026-12-15'
         elif name.startswith('RECORD_'):
             assert entry['owner'] == 'q12-post-seal'
             assert entry['review_by'] == '2026-12-14'
@@ -358,6 +380,10 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert flag['lifecycle'] == 'config_switch'
             assert flag['fail'] == 'closed'
             assert flag['summary'].startswith('Default off')
+        elif name == 'MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS':
+            assert flag['lifecycle'] == 'config_switch'
+            assert flag['fail'] == 'open'
+            assert '500' in flag['summary'] and '120' in flag['summary']
         elif name == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED':
             assert flag['lifecycle'] == 'config_switch'
             assert flag['fail'] == 'closed'

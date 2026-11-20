@@ -269,7 +269,7 @@ class ArtifactsModel:
         self.objects[uri] = payload
         return uri
 
-    def fetch_audio(self, item) -> bytes:
+    def fetch_audio(self, item, *, confirm_retained_digest=False) -> bytes:
         return b'synthetic-audio-placeholder'
 
     def find_recovery_result(self, item, token):

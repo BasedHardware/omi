@@ -88,6 +88,23 @@ void main() {
     expect((fallback['battery_history'] as List).single['charging'], isNull);
   });
 
+  test('disconnect export preserves historical ring read metadata and legacy unknown', () {
+    final records = [
+      {'ring_read_active': true, 'ring_read_age_ms': 4500},
+      {'ring_read_active': false},
+      <String, dynamic>{},
+    ];
+    final history = bundle({'disconnect_history_v2': records})['disconnect_history'] as List;
+    expect(history[0]['ring_read_active'], true);
+    expect(history[0]['ring_read_age_ms'], 4500);
+    expect(history[1]['ring_read_active'], false);
+    expect(history[1]['ring_read_age_ms'], isNull);
+    expect(history[2].containsKey('ring_read_active'), true);
+    expect(history[2]['ring_read_active'], isNull);
+    expect(history[2]['ring_read_age_ms'], isNull);
+    expect(jsonDecode(jsonEncode(history)), history);
+  });
+
   test('firmware outcome is independent of an empty ring and age does not declare lost audio', () {
     for (final outcome in ['attempted', 'succeeded', 'timeout', 'rejected', 'unsupported', 'skipped']) {
       final exported = bundle({

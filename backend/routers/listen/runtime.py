@@ -38,6 +38,7 @@ from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
 from config.server_batch import owned as server_batch_owned
+from config import listen_reconnect
 from routers.listen.batch_close import resumable_after_drop
 from routers.listen.local_preview import renew_local_preview, restore_non_preview_path
 from utils.observability.fallback import record_fallback
@@ -1457,6 +1458,8 @@ class ListenSessionRuntime:
                 note_ws_close(self.state, 'server', self.state.close_code)
             except Exception:
                 pass
+        if not owner_persistence_blocked and hasattr(getattr(self, 'conversations', None), 'drain_rotations'):
+            await self.conversations.drain_rotations()  # per-row errors are contained; leftovers keep their quiet check
         conversation_id = self.state.current_conversation_id
         if conversation_id and not owner_persistence_blocked:
             try:
@@ -1498,10 +1501,15 @@ class ListenSessionRuntime:
                         )
                     if batch_disconnect == 'held':
                         await self.transcripts.flush_speaker_assignments(conversation_id)
-                    elif batch_disconnect == 'legacy' and await resumable_after_drop(
-                        self, conversation_id, conversation, quiet_owned=quiet_armed
+                    elif (
+                        batch_disconnect == 'legacy'
+                        and listen_reconnect.enabled()
+                        and await resumable_after_drop(self, conversation_id, conversation, quiet_owned=quiet_armed)
                     ):
-                        # Preserve main's drop recovery for older/identity-less sessions.
+                        # Holding a dropped capture open is part of the reconnect protocol. With the
+                        # protocol off nothing can end the hold (no producer to drain), so the row
+                        # never gets its close barrier and every reconnect rolls into a new empty
+                        # generation. Off means finalize on drop, as before the protocol shipped.
                         await self.transcripts.flush_speaker_assignments(conversation_id)
                     elif (
                         conversation

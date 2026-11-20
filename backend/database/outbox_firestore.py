@@ -288,6 +288,17 @@ class FirestoreEnrichmentOutbox:
                 pending_writes.append((ref, new))
         return result
 
+    def expedite(self, row_id: str, *, now: float, tx: Any, pending_writes: list | None = None) -> str | None:
+        """Make an open obligation due now inside the caller's transaction; the new wake token, if any.
+
+        For a recording whose transcript became complete: the obligation already
+        exists and would otherwise wait for its first-summary deadline. Never
+        creates, reopens or interrupts one (``outbox.expedite_update``). The
+        caller passes the token to ``wake`` after its commit.
+        """
+        row = self._mutate_in(tx, row_id, _outbox().expedite_update(now), pending_writes=pending_writes)
+        return row['task_token'] if row and self._can_wake(row) else None
+
     def wake(self, row_id: str, wake_token: str) -> None:
         """Create the named task for ``wake_token`` if the row still wants it; repeat calls are harmless."""
         outbox = _outbox()

@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-eager-metric-label-product",
+  "family": "observability-gap",
   "violated_contract": "A metrics exporter must spend series capacity on observed events or a documented alert liveness contract, not the Cartesian product of bounded labels on every replica. Eager children, Prometheus _created companions, and pod churn multiplied idle journey and audio metrics enough to OOM the 4 GiB production Prometheus on 2026-09-28.",
   "canonical_prevention": "Create multidimensional metric children on observed events unless a specific alert needs idle zeros, disable prometheus_client _created exports at the common metrics import, and keep event label axes closed or remove unused open axes. Test the exported child count and names so an eager product cannot return unnoticed.",
   "canonical_prevention_artifact": [

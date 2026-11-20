@@ -140,6 +140,9 @@ class BatchStack(Stack):
         if role == 'batch-serving':
             return {
                 'BATCH_PIPELINE_SERVING_ENABLED': 'true',
+                # Match backend-integration's bounded fresh-transaction retries
+                # when concurrent projection writers contend in the emulator.
+                'SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED': 'true',
                 # Only the owning serving role stamps these onto each job.
                 'BATCH_PIPELINE_RECOVERY_MODE': 'on',
                 'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED': 'true',
@@ -505,7 +508,10 @@ def _drive_to_status(stack: BatchStack, upload: Upload, wanted: str, *, timeout:
         time.sleep(STATUS_POLL_SECONDS)
         return False
 
-    _wait_until(done, label=f'{upload.job_id} status {wanted} (observed {observed})', timeout=timeout)
+    try:
+        _wait_until(done, label=f'{upload.job_id} status {wanted}', timeout=timeout)
+    except StackFailure as error:
+        raise StackFailure(f'{error} (observed {observed})') from error
     _record_job_event({'event': 'batch_status_path', 'job_id': upload.job_id, 'statuses': observed})
     return result
 

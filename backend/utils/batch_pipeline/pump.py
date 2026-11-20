@@ -38,6 +38,7 @@ from utils.batch_pipeline import worker_metrics
 from utils.batch_pipeline.leader import LeaderLease
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
 from utils.batch_pipeline.stage_timings import StageTimings
 from utils.executors import admission_executor, db_executor, run_blocking, sync_executor
 
@@ -294,7 +295,13 @@ class Pump:
             if self.leader is None or await self._run_blocking('maintenance', db_executor, self.leader.acquire):
                 if self.project_pending:
                     await self._run_blocking('projection', sync_executor, self.project_pending)
-                await self._run_blocking('maintenance', db_executor, self.scheduler.recover, time.time())
+                await self._run_blocking(
+                    'maintenance',
+                    db_executor,
+                    self.scheduler.recover,
+                    time.time(),
+                    caller=RecoveryCaller.PUMP,
+                )
                 page = await self._run_blocking('maintenance', db_executor, self.ready_discovery.page)
                 if page is not None:
                     while owner := await self._run_blocking(

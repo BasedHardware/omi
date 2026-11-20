@@ -24,7 +24,7 @@ from database.jobstore.dual_store import DualStore
 
 SEAMS = [
     ('diarizer.batch_pipeline_runtime', 'main'),
-    ('utils.batch_pipeline.serving', 'serving_for_stage'),
+    ('utils.batch_pipeline.serving', '_serving_for_stage'),
     ('utils.batch_pipeline.live', 'register_recording'),
     ('utils.batch_pipeline.intake', 'accept_upload'),
 ]

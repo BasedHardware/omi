@@ -6,6 +6,36 @@ and the aggregate producer required before replacing the P90 laptop owner.
 It does not modify the Parakeet serving pod template or deploy its chart.
 The lead deploys after review; developing/testing this chart requires no cloud credentials.
 
+## Parakeet retirement and observer coverage
+
+`parakeetSuspended=true` skips only the Parakeet section inside each scheduled
+reading. The CronJob remains unsuspended every five minutes. It still samples
+batch queue age/retry age and metric freshness, logs `batch_safety`, and updates
+its state ConfigMap. Parakeet is recorded as `SKIPPED`; no Parakeet HPA,
+deployment, events, floor schedule or rollback API is read or written. Existing
+Parakeet state is preserved. Production HPA RBAC remains read-only and the
+separate Cloud Run batch rollback writer stays disabled.
+The streaming GPU teardown tool requires the CronJob to be unsuspended and
+verifies this setting in both the CronJob and every referenced active Job.
+The chart stamps `omi.me/guard-script-sha256` on its script ConfigMap and pod
+template. The tool verifies the actual mounted ConfigMap content and those
+annotations against `files/guard.py` in the same reviewed checkout. A partial
+apply that updates the env/spec without the script ConfigMap fails closed.
+Batch-only Jobs with the reviewed hash and mount can remain active; an older
+Job without this contract must finish before teardown proceeds.
+
+The batch observer records a fresh oldest uncommitted age over thirty minutes
+as TRIP; missing, stale or incomplete metrics as BLIND; other usable readings
+as PARTIAL. These observations would help diagnose a stalled queue or a blind
+metric producer. They remain evidence only, with no batch automatic rollback.
+This script does not inspect privacy kill switches, and it cannot detect a
+tripped privacy cache switch. Verify alert delivery independently.
+
+Applying this chart changes the guard CronJob spec and its script ConfigMap,
+so future scheduled Jobs run the independent observer. It does not restart
+serving workloads. Verify the first new Job and state `last-observed-at`,
+`parakeet-verdict=SKIPPED` and `batch-verdict` after application.
+
 ## Deployment and kill switch
 
 Dispatch `.github/workflows/gcp_incluster_guards.yml` on `main` after merge:

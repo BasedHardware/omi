@@ -1691,10 +1691,16 @@ def test_jobs_age_filter_and_page_bounds_remain_local(monkeypatch):
     assert all(q.cap <= 128 for q in client.queries)
 
 
-@pytest.mark.parametrize('setting', ['off', 'false', '0'])
-def test_jobs_kill_switch_restores_exact_old_hash_scan(monkeypatch, setting):
+@pytest.fixture(scope='module')
+def legacy_job_test_helpers():
     from tests.unit.test_record_pending_repair import JobsClient, job_doc
 
+    return JobsClient, job_doc
+
+
+@pytest.mark.parametrize('setting', ['off', 'false', '0'])
+def test_jobs_kill_switch_restores_exact_old_hash_scan(monkeypatch, setting, legacy_job_test_helpers):
+    JobsClient, job_doc = legacy_job_test_helpers
     monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', setting)
     # Ages deliberately oppose hash order. Compare the old adapter's result,
     # page limits and cursor exactly, including resumption from a legacy cursor.

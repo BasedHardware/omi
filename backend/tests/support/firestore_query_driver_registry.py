@@ -53,6 +53,7 @@ from tests.support.firestore_composer_default_context_drivers import entries as 
 from tests.support.firestore_memory_ledger_drivers import registry_extension as memory_ledger_drivers
 from tests.support.firestore_lifecycle_metrics_drivers import entries as lifecycle_metrics_entries
 from tests.support.firestore_task_filter_drivers import entries as task_filter_entries
+from tests.support.firestore_conversations_v3_drivers import entries as conversations_v3_entries
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -157,6 +158,9 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.conversations_v3.commit_projection': 'ef2e983f527e4c07c35d5756b816405140fb88196bc819bc9f7a20012411c40e',
+    'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
+    'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
     'database.batch_census_export._filtered': '6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
@@ -164,9 +168,9 @@ BODY_DIGEST = {
     'database.batch_pipeline_allowance_migration.candidates': '04c9beae56ec6091544a2ec69a8ba170032dbe3670697b704db2f88d513bc5cb',
     'database.conversation_batch_purge_jobs.RunProgress.pending_segments': '86b3d882fe3c575b3a540bb00d1845c941c5256d99848c4dc89917eb707ff3cc',
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
-    'database.conversation_batch_purge_jobs._drop_segment_records': '53f3a9444e2caee3f79c05d68d1dd3876c42e6445f6ba42037140276558ae39a',
+    'database.conversation_batch_purge_jobs._drop_segment_records': '2db3123e6e11d177d434326668969249a7fd4e0aade9788d045056fbdefe8c9d',
     'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
-    'database.conversation_batch_purge_jobs.run_job': 'b53f24db0b73ea39f9f0fcdfa18971a0c256cdf5ac30115723c461601ea5f829',
+    'database.conversation_batch_purge_jobs.run_job': '2c963aa7f8692928c6d1892b87992ea3b369bbb9547b71b48a4ddb21c35cd09b',
     'database.batch_pipeline_store.promote_record_recoveries': 'ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
     'database.record_custody_receipts.prune': 'a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
     'database.user_usage._s4_month_cache': '14a6b7d82ee83ec56f552ab798b0021e2342ffd920dcdbe2a8e851ec32029f28',
@@ -197,14 +201,16 @@ BODY_DIGEST = {
     # Re-reviewed 2026-11-01: intake-outcome evidence kwarg only; no query or read added.
     'database.batch_ramp.ramp_admission_policy': '2d702e87308e65426820bbe9b4b89f492a966a01bc056fa39d63ed3a8545d649',
     # Re-reviewed 2026-11-05: forward presentation visibility only; cursor/query/budget bounds unchanged.
-    'database.conversations._collect_cursor_conversation_page': 'bd16ecd16fae8402a6abd848e94163c38f1272e64bdbbb3131df863cddc79018',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
-    'database.batch_pipeline_store.FirestoreStore.projection_page': '96f024578c9d338e4fb3a528f1c59801c928167da8ddf0d2747d686700b46ff5',
+    'database.batch_pipeline_store.FirestoreStore.projection_page': '4284286d5c06295eaea7b2bd915d0bdc5028bd24534e0426f08fd384b055e628',
+    'database.batch_pipeline_store.FirestoreStore.projection_page_with_outbox': 'f13299101963feeb96452b98bd9efa5df4d171133ecbf8179ea00ef2fee69140',
+    'database.batch_pipeline_store.FirestoreStore.projection_outbox_page': 'd14bfb2b36919dacd8c818eeaadb5c21120d7de1cd77c7a082b73e09ad0242c5',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
     'database.batch_pipeline_store.reseed_hinted_activation': 'b962f088769367e4902876ef9dd91de299238b945f13610829e5f1f1acd8d449',
-    'database.batch_pipeline_store.FirestoreStore.run': 'd7cced46951bbfea06f7c501288ee41c76d972f6149aa7ead6e3c31573055b52',
+    # Re-reviewed 2026-11-17: optional pre-begin pacing only; reseed query ownership is unchanged.
+    'database.batch_pipeline_store.FirestoreStore.run': '20a0e3fdea5dd2194d7c806216e36c644fccbeca46bd5a6489e132ae902d8e32',
     'database.batch_pipeline_store.FirestoreStore.control_candidates': 'c1ce9e8170a7fde0e6a82c44a2db0c0c18909cba723e9cefd402cfe1f7993df9',
     'database.batch_pipeline_store.FirestoreStore.control_candidate': 'd82ee8b1c03be61b104e25304d6a0a732a9b59453fd302f4e7794a75622d65ad',
     'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
@@ -213,6 +219,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.oldest': 'ce672d79f4c8c453f5096d0ff9a6a074277caff55c0ae5cb80900698125f0327',
     'database.batch_pipeline_store.FirestoreStore.due': '6082abc15cee6736e23fa3554fbaa74ce65f751082a884e67416eda0757bc5ea',
     'database.batch_pipeline_store.FirestoreTransaction.first_pending': '48a4a9544add4433487df790e5884203eec835b9f8b16ed977c4743b88b596ea',
+    'database.batch_pipeline_store.FirestoreTransaction.pending_page': 'b7bcced82f592d8f14f8cdae8f7bde59e27b63c90e165ec175b762e30876cb5c',
     'database.batch_pipeline_store.FirestoreTransaction.fresh_first_pending': '3eda52b96735afad17b1471efc6e912998c1d9720a02fff4ce80260099bd7f59',
     'database.batch_pipeline_store.FirestoreTransaction.fresh_first_ready_pending': 'bd2a5ddf5a4c4b1d0bbc6145621622530adb9b1a158c13f8f1691fa2786725ec',
     'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending': '9999bc14a1c88206f5d98e34284f7895c179c73ab563bf813b179faa417076ba',
@@ -405,6 +412,27 @@ _add(
         domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
     )
 )
+# Sealed owner groups use an existing single-field uid index on obligations.
+_add(
+    DriverEntry(
+        'database.batch_pipeline_conversation_purge_scans.owner_candidates',
+        base={'uid': UID},
+    )
+)
+for _name in ('_claim', 'run_job'):
+    _function = 'database.batch_pipeline_conversation_purge_scans.' + _name
+    _add(
+        CoveredByEntry(
+            _function,
+            covered_by=(
+                'database.batch_pipeline_conversation_purge_scans.owner_candidates',
+                'database.conversation_batch_purge_jobs.segment_records',
+            ),
+            reason='delegates owner discovery to owner_candidates and member journals to segment_records',
+            expect_observed=False,
+            body_digest=BODY_DIGEST[_function],
+        )
+    )
 # Its durable per-segment erasure work: one equality filter inside a single obligation.
 _add(
     DriverEntry(
@@ -514,6 +542,14 @@ _add(
 
 _add(DriverEntry('database.account_deletion_transitions.read_agent_vm_migration_journals', base={'uid': UID}))
 
+_add(
+    DriverEntry(
+        'database.conversation_deletion_feed.get_deleted_conversations_page',
+        base={'uid': UID},
+        domains={'deleted_since': [None, T0], 'after': [None, (T0, 'doc-1')]},
+        neutrals={'limit': _LIMIT},
+    )
+)
 _add(
     DriverEntry(
         'database.action_item_sync.get_action_items_sync_page',
@@ -1283,14 +1319,12 @@ _add(
 )
 _add(
     CoveredByEntry(
-        'database.conversations._collect_cursor_conversation_page',
+        'database.conversations._PageFill._run',
         covered_by=(
             'database.conversations.get_conversations',
             'database.conversations.get_conversations_without_photos',
         ),
-        reason='cursor page collector only runs when the conversation_list_cursor lever is on; drivers run with levers off',
-        expect_observed=False,
-        body_digest=BODY_DIGEST['database.conversations._collect_cursor_conversation_page'],
+        reason='shared page fill for the offset and cursor paths (the cursor collector only builds its start_after bookmark query); offset window and start_after refills observed inside both listed consumers',
     )
 )
 _add(
@@ -1467,6 +1501,10 @@ _add(
         'database.conversations.get_conversations_count',
         base={'uid': UID},
         profiles=COUNT_PROFILES,
+        domains={
+            'hide_home': [False, True],
+            'include_recordings': [False, True],
+        },
     )
 )
 _add(
@@ -1489,6 +1527,10 @@ _add(
         ),
         profiles=WITHOUT_PHOTOS_PROFILES,
         neutrals={
+            'include_recordings': (False, 'post-read visibility only; same query'),
+            'hide_home': (False, 'post-read visibility only; same query'),
+            'capture_only': (False, 'post-read visibility only; same query'),
+            'show_held': (False, 'post-read visibility only; same query'),
             'limit': _LIMIT,
             'offset': _OFFSET,
             'budget': _BUDGET,
@@ -1521,7 +1563,7 @@ _add(
         'database.conversations.iter_all_conversations',
         base={'uid': UID},
         domains={'include_discarded': [True, False]},
-        neutrals={'batch_size': _PAGE},
+        neutrals={'batch_size': _PAGE, 'include_recordings': (False, 'post-read visibility only')},
     )
 )
 _add(
@@ -3269,7 +3311,7 @@ _add(
     DriverEntry(
         'database.monthly_usage_totals.read_monthly_totals',
         base={'uid': UID, 'date': T0},
-        domains={'start_date': [None, T0]},
+        domains={'start_date': [None, T0], 'ready_only': [False, True]},
         setup=_monthly_total_user,
         patchers=(
             _stub('database.monthly_usage_totals.lever_enabled', True),
@@ -3586,6 +3628,14 @@ for entry in (
     *lifecycle_metrics_entries(),
     *batch_privacy_entries(),
     *home_feed_entries(),
+    *conversations_v3_entries(),
+    CoveredByEntry(
+        'database.conversations_v3.commit_projection',
+        covered_by=('database.conversations_v3.merge_donors_have_tasks',),
+        reason='The projection is lease fenced. Its only collection query checks donor task links before writes.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
+    ),
     *memory_ledger_drivers(),
     *outside_drivers.DRIVERS.values(),
     *outside_drivers.COVERED_BY.values(),

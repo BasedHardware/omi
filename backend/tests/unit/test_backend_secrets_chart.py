@@ -118,7 +118,11 @@ def test_metrics_scrape_secret_cross_chart_contract(stage, tmp_path):
         serving = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
         monitors = [doc for doc in serving if doc['kind'] == 'PodMonitoring']
         roles = [doc for doc in serving if doc['kind'] == 'Role']
-        assert len(monitors) == len(roles) == 1
+        expected_names = {f'{stage}-omi-{chart}'}
+        if stage == 'prod':
+            expected_names.add(f'{stage}-omi-{chart}-bulk')
+        assert {m['metadata']['name'] for m in monitors} == expected_names
+        assert len(roles) == 1
         for monitor in monitors:
             for endpoint in monitor['spec']['endpoints']:
                 assert endpoint['authorization']['credentials']['secret']['name'] == target_name

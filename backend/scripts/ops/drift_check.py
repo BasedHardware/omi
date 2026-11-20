@@ -83,7 +83,7 @@ LIVE_DIFF_ALLOWLIST: dict[str, str] = {
 # Present on only one side without failing (names, with the reason).
 LIVE_ONE_SIDED_ALLOWLIST: dict[str, str] = {
     'OMI_RELEASE_TREE': 'staging deploy.sh stamps it; the prod train does not yet (B7)',
-    'OMI_BACKEND_RELEASE_SHA': 'staging stamps every service; the prod train stamps backend only (B7)',
+    'OMI_BACKEND_RELEASE_SHA': 'release identity is stamped per Cloud Run role; older revisions can lack the marker',
     '*_UID_ALLOWLIST': 'prod-only UID cohort',
     '*_UIDS': 'prod-only UID cohort',
     'BATCH_JOBSTORE_MODE': 'A2 job-store shadow is staging-only',

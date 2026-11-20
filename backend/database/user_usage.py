@@ -691,6 +691,12 @@ def get_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime
     return stats
 
 
+def get_ready_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime) -> dict | None:
+    return monthly_usage_totals.read_monthly_totals(
+        uid, date, firestore_client=db, start_date=start_date, ready_only=True
+    )
+
+
 def get_yearly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given year from Firestore."""
     user_ref = db.collection('users').document(uid)

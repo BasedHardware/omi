@@ -111,11 +111,12 @@ def test_every_record_token_alert_metric_survives_its_producer_scrape_filters(en
     )
     assert result.returncode == 0, result.stderr
     pusher_monitors = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'PodMonitoring']
-    assert len(pusher_monitors) == 1
+    assert {m['metadata']['name'] for m in pusher_monitors} == {'prod-omi-pusher', 'prod-omi-pusher-bulk'}
+    primary_monitor = next(m for m in pusher_monitors if m['metadata']['name'] == 'prod-omi-pusher')
     repair = repair_documents()['PodMonitoring', 'record-seal-repair']
     paths = {
         'sync': sync_relabels,
-        'pusher': pusher_monitors[0]['spec']['endpoints'][0].get('metricRelabeling', []),
+        'pusher': primary_monitor['spec']['endpoints'][0].get('metricRelabeling', []),
         'repair': repair['spec']['endpoints'][0].get('metricRelabeling', []),
     }
     for metric in queried:

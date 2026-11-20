@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-fake-rejects-explicit-no-retry",
+  "family": "test-fidelity",
   "violated_contract": "A service-boundary fake must accept the real API's explicit no-retry control when it delegates the same local write semantics. The hermetic document-set wrapper rejected retry=None, so a real bounded projection-debt write raised TypeError before the subsequent durable audio-content marker could be recorded.",
   "canonical_prevention": "Accept the explicit retry=None keyword at the hermetic document-set adapter without forwarding it to the third-party in-memory fake, which performs no RPC. Preserve timeout, replacement, merge and subcollection behavior; reject non-None retry policies rather than pretending to simulate them. Exercise the real projection-debt writer against the adapter and verify persisted fields, plus merge/child retention and explicit rejection of unsupported retry policies.",
   "canonical_prevention_artifact": [

@@ -11,6 +11,7 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.other import storage
 from utils.other.raw_audio import CapturePack, decode_capture
 from utils.other.audio_outbox_metrics import CUSTODY_COMMITS, record_failure
@@ -149,6 +150,7 @@ def commit_capture(
         raise
 
 
+@object_get_reader(Reader.RECEIPT_READBACK)
 def read_pcm(uid: str, receipt: AudioReceipt) -> bytes:
     """Hydrate only the pinned generation and verify actual decoded PCM bytes."""
     bucket = storage.get_private_cloud_sync_bucket()

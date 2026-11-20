@@ -128,8 +128,9 @@ The agentic lane's hand-written submit schema does not request these fields yet,
 so long agent-written meetings currently extract none.
 
 The open-loop daily pass (PR 2) runs as a fail-open sibling step of the daily
-recap job (`utils/other/notifications`): one usage-tracked call on the
+recap job (`utils/other/notifications`): one usage-tracked result on the
 `open_loop_daily` lane (Luna, reasoning pinned low) per user per local day,
+with one retry on provider timeout under the same claim,
 over the recap's own render of the day plus the loop store (`store.py` rules:
 expiry, task-aware dedupe — link, never drop — cooldown, ≤3 value-≥3 slots).
 Cards persist per day server-side and are not served until PR 3.
