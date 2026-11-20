@@ -1233,10 +1233,11 @@ runs:
         # cap survives the next train instead of being reset to the former 35 literal (2026-11-20).
         # The cap is the minimum of the service cap (when set) and the cap of every revision
         # receiving traffic (the headroom gate's min-of-caps rule), never the latest template (it can
-        # be a no-traffic candidate). Unlike the gate, which refuses them, an uncapped receiving
-        # revision, no receiving revision, or a fresh service contributes the default (35 in prod),
-        # and a cap over 500 also falls back to the default. Each cap is validated whole before any
-        # arithmetic; the headroom gate still bounds admission. Any lookup failure stops the deploy.
+        # be a no-traffic candidate). Unlike the gate, which refuses these cases, an uncapped
+        # receiving revision contributes the default (35 in prod), and with no service cap and no
+        # receiving revision (including a fresh service) the cap is the default. A cap over 500 also
+        # falls back to the default; that bound is the resolver's own, not the gate's. Each cap is
+        # validated whole before any arithmetic. Any lookup failure stops the deploy.
         LISTING="$(gcloud run services list \
           --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
           --filter="metadata.name=$CLOUD_RUN_SERVICE" \

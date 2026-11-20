@@ -41,7 +41,8 @@ queues fall, and drain stays near 11 rows/s; otherwise restore the previous cap 
 before the 2026-11-05 hold) with a capacity revision. Since 2026-11-20
 `.github/actions/deploy-backend-stack/action.yml` live-resolves the cap (the minimum of
 the service cap, when set, and the cap of every revision receiving traffic; an uncapped
-revision or a fresh service counts as the default, 35 in prod and 50 elsewhere), so the next deploy preserves whatever cap is live. Change or roll back
+receiving revision, or no service cap and no receiving revision, or a cap above 500 counts
+as the default, 35 in prod and 50 elsewhere), so the next deploy preserves whatever cap is live. Change or roll back
 the cap with a capacity revision (omi-workspace `infra/rollout/bin/cr_apply.sh backend-integration
 --image=<serving digest> --max-instances=N`); no source edit is needed.
 
