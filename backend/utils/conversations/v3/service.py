@@ -622,6 +622,7 @@ async def reconcile(
         try:
             if live:
                 # The undo ledger is durable before the commit that changes its rows.
+                await run_blocking(db_executor, rederive_store.drop_stale_priors, uid, run_id)
                 await run_blocking(db_executor, backfill_runs.save_priors, uid, run_id, priors)
             await run_blocking(db_executor, leases.renew, uid, key, token)
             moved = await run_blocking(

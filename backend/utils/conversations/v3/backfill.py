@@ -678,6 +678,8 @@ def undo_live_run(uid, run_id, *, firestore_client=None):
                 return _undo_refused(uid, run_id, reason, firestore_client)
             held.append((key, token))
         token = held[0][1]
+        # Copies of rows the run never stamped (a stopped attempt) restore nothing; they go first.
+        rederive_store.drop_stale_priors(uid, run_id, firestore_client=firestore_client)
         priors = runs.list_priors(uid, run_id, firestore_client=firestore_client)
         if any(leases.held(uid, 'summary-' + e['id'], firestore_client=firestore_client) for e in priors):
             return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client)

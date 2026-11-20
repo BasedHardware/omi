@@ -407,21 +407,38 @@ def undo_group_fits(entries):
 
 
 def drop_unwritten_priors(uid, run_id, entries, *, firestore_client=None):
-    """After a failed commit, keep copies only of rows the run wrote (stamped); drop the rest.
+    """Keep copies only of rows a run has stamped since the copy; drop the rest.
 
-    So every undo copy belongs to a row its run stamped, and the deletion and protection paths,
-    which act on stamped rows, always reach it. A resume records the dropped rows again.
+    A row no run stamped after its copy (its stamp is still the copy's) was never written by this
+    run, or was already restored by its undo; a row that is gone has nothing to restore. So every
+    kept copy belongs to a row a run stamped, which the deletion and protection paths reach, and a
+    row a newer run restamped keeps its copy, so undo still waits for that run.
     """
     client = firestore_client or store.get_firestore_client()
     coll = store.user_conversations(client, uid)
     unwritten = []
     for entry in entries:
+        if entry.get('purged'):
+            continue
         snapshot = coll.document(entry['id']).get()
-        if not snapshot.exists or (snapshot.to_dict() or {}).get('v3_rederive_live_run') != run_id:
+        row = (snapshot.to_dict() or {}) if snapshot.exists else None
+        stamp = (row or {}).get('v3_rederive_live_run')
+        if row is None or (not entry.get('created') and stamp == (entry.get('raw') or {}).get('v3_rederive_live_run')):
             unwritten.append(entry['id'])
     if unwritten:
         runs.drop_priors(uid, run_id, unwritten, firestore_client=client)
     return len(unwritten)
+
+
+def drop_stale_priors(uid, run_id, *, firestore_client=None):
+    """Before an attempt or an undo: drop this run's copies of rows it never stamped.
+
+    A process that stopped between recording copies and stamping their rows leaves such copies;
+    undo never restores an unstamped row, so they are only ever retained content.
+    """
+    client = firestore_client or store.get_firestore_client()
+    entries = runs.list_priors(uid, run_id, firestore_client=client)
+    return drop_unwritten_priors(uid, run_id, entries, firestore_client=client) if entries else 0
 
 
 def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):

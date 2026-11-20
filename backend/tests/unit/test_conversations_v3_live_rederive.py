@@ -162,6 +162,8 @@ def owner(strict, monkeypatch):
 
     monkeypatch.setattr(service.visibility, 'hydrate_recognition', hydrate)
     monkeypatch.setattr(service.models, 'outline', lambda *a: ONE_CHAPTER)
+    # The strict fixture models no ordered pages; the run's priors are read straight from its rows.
+    monkeypatch.setattr(runs, 'list_priors', lambda uid, run_id, **kw: priors(strict, run_id))
 
     def seed(*docs):
         for doc in docs:
@@ -877,6 +879,22 @@ def test_a_copy_is_never_recorded_at_a_protection_level_the_row_left(strict):
     with pytest.raises(store.Conflict, match='source_changed'):
         runs.save_priors(UID, RUN, [{'id': 'c0', 'raw': {'id': 'c0'}, 'claims': []}], firestore_client=strict)
     assert not priors(strict)
+
+
+@pytest.mark.asyncio
+async def test_copies_left_by_a_stopped_attempt_are_dropped_by_the_next_attempt_or_undo(owner, strict, ledger):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    stale = {'id': 'c1', 'raw': deepcopy(rows[1]), 'claims': []}
+    # A process stopped after recording c1's copy and before stamping c1; the owner then deletes it.
+    runs.save_priors(UID, RUN, [stale], firestore_client=strict)
+    strict.rows[('users', UID, 'deleted_conversations', 'c1')] = {'conversation_id': 'c1'}
+    assert rederive_store.drop_stale_priors(UID, RUN) == 1 and not priors(strict)
+    # Undo drops them too before it looks for refusals.
+    runs.save_priors(UID, 'other-run', [{'id': 'c2', 'raw': deepcopy(rows[2]), 'claims': []}], firestore_client=strict)
+    ledger.run['run_id'] = 'other-run'
+    assert backfill.undo_run(UID, 'other-run')['outcome'] == 'undone' and not priors(strict, 'other-run')
+    assert conversations(strict)['c2'] == rows[2]
 
 
 def test_a_resumed_attempt_keeps_the_first_copy_of_a_row(strict):
