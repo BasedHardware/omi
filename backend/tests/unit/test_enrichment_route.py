@@ -17,7 +17,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
+from database import _client as firestore_client
 from database.outbox_firestore import ENRICHMENT_OUTBOX
+from database.summary_processing import EmptyFailureOutcome
+import database.summary_processing as summary_processing
 from routers import enrichment as route
 from tests.unit.test_sync_reprocess_coalesce import state, sweep_query  # noqa: F401
 from utils.enrichment import callback  # noqa: F401 (heavy import at collection time, not in a test call)
@@ -932,7 +935,6 @@ def _empty_output(*_):
 
 def _bounded_empty_failure(rows):
     """The real strike budget, without a Firestore transaction in a unit test."""
-    from database.summary_processing import EmptyFailureOutcome
 
     def record(_client, _collection, document_id, _owner, _token):
         row = rows[0][document_id]
@@ -946,9 +948,6 @@ def _bounded_empty_failure(rows):
 
 
 def test_empty_output_then_success_delivers_the_summary(rows, monkeypatch):
-    import database._client as firestore_client
-    import database.summary_processing as summary_processing
-
     monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
     monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
     first = _deliver(rows, _empty_output)
@@ -961,9 +960,6 @@ def test_empty_output_then_success_delivers_the_summary(rows, monkeypatch):
 
 
 def test_empty_output_twice_records_a_bounded_retry_then_blocks(rows, monkeypatch):
-    import database._client as firestore_client
-    import database.summary_processing as summary_processing
-
     monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
     monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
     for expected in (1, 2):

@@ -114,6 +114,17 @@ def test_empty_model_result_cannot_commit_or_emit(writer, monkeypatch):
     emit.assert_not_called()
 
 
+def test_empty_model_result_from_a_finalization_owned_row_keeps_the_job_retryable(writer, monkeypatch):
+    """The finalizer's job is the only repair owner: the raise must survive so it retries."""
+    writer.document['finalization_job_id'] = 'job-1'
+    emit = Mock()
+    monkeypatch.setattr(delivery, 'emit', emit)
+    with pytest.raises(delivery.SummaryOutputUnavailable):
+        db.persist_processing_result_with_lifecycle('u', payload(''))
+    assert not writer.commits
+    emit.assert_not_called()
+
+
 def test_empty_model_result_from_a_request_path_commits_with_debt(writer, monkeypatch):
     """from-segments and finalize have no consumer to catch the fence: commit, keep the debt."""
     emit = Mock()

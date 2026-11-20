@@ -187,6 +187,32 @@ def test_empty_model_output_retains_debt_and_prior_good_output(enabled):
     assert empty_write['summary_due_at'] is None
 
 
+def test_empty_output_on_a_finalization_owned_row_keeps_the_job_retryable(enabled):
+    """The repair pass refuses a generation-owned row, so the raise must survive."""
+    row = {**debt(), 'finalization_job_id': 'job-1'}
+    assert delivery.refusal(row) == 'generation_owned'
+    with pytest.raises(delivery.SummaryOutputUnavailable):
+        delivery.merge_result(row, minimum(), 'u', now=300)
+
+
+def test_empty_output_on_a_projection_verified_row_commits_with_debt(enabled):
+    """A verified batch-projection handoff is repair-eligible, so the empty attempt commits."""
+    row = {
+        **debt(),
+        'finalization_job_id': 'job-1',
+        'finalization_revision': 4,
+        'record_lane_owner': 'batch_live_v1',
+        'record_projection_revision': 4,
+        'summary_projection_finalization': {'job_id': 'job-1', 'revision': 4},
+    }
+    assert delivery.refusal(row) is None
+    write = minimum()
+    receipt = delivery.merge_result(row, write, 'u', now=300)
+    assert receipt is not None and receipt['reason'] == 'empty_output' and not receipt['present']
+    assert write['summary_due_at'] == 220
+    assert not write.get('summary_completed_at')
+
+
 def test_lost_ack_does_not_emit_second_terminal_receipt(enabled):
     row = debt()
     write = {'status': 'completed', 'summary_output_present': True}

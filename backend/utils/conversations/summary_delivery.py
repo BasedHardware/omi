@@ -328,6 +328,17 @@ def projection_owns_finalization(row: Row) -> bool:
     )
 
 
+def retryable_finalization_owns(row: Row) -> bool:
+    """A finalization job owns this row's summary debt and the repair pass refuses it.
+
+    ``_refusal`` returns ``generation_owned`` for a row with a finalization job
+    and no verified batch-projection handoff, so repair discovery and redrive
+    both skip it. Only the job's own retry can still deliver a summary, which is
+    why an empty attempt must keep raising instead of committing.
+    """
+    return bool(row.get('finalization_job_id')) and not projection_owns_finalization(row)
+
+
 def _refusal(row: Row) -> str | None:
     if row.get('status') != 'completed' or row.get('deleted') or row.get('discarded'):
         return 'lifecycle'
@@ -510,11 +521,18 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
             # A consumer owns this write and records the bounded empty-output
             # strike (``record_empty_failure``) before releasing the lease.
             raise SummaryOutputUnavailable('kept first-summary output is empty')
-        # No consumer owns this write: a request path (from-segments, finalize)
-        # or a direct sync persist. Raising here aborts the completed write and
-        # surfaces as a 500, so commit the empty attempt with the debt still
-        # armed. The repair pass re-wakes the row and the consumer's empty
-        # budget bounds the retries; an empty structured is never a delivery.
+        if retryable_finalization_owns(existing):
+            # The finalization job is the only repair owner: the repair pass
+            # refuses this row as ``generation_owned``. Committing the empty
+            # attempt would let the finalizer complete its job and leave the
+            # armed debt with no owner, so keep the raise and the job retryable.
+            raise SummaryOutputUnavailable('kept first-summary output is empty')
+        # No consumer and no retryable job owns this write: a request path
+        # (from-segments) or a direct sync persist. Raising here aborts the
+        # completed write and surfaces as a 500, so commit the empty attempt
+        # with the debt still armed. The repair pass re-wakes the row and the
+        # consumer's empty budget bounds the retries; an empty structured is
+        # never a delivery.
         if write.get('summary_due_at') is None:
             write['summary_due_at'] = current + deadline_seconds()
         return dict(lane=lane(existing), reason='empty_output', present=False, latency=None)
