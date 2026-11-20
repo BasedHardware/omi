@@ -345,10 +345,14 @@ jobs:
           PR_NUMBER="${{ steps.changelog-pr.outputs.number }}"
           CHANGELOG_COMMIT="${{ steps.changelog.outputs.commit }}"
 
-          # Re-read the head immediately before merging. The wait proved the
-          # status on this SHA, and --match-head-commit makes the merge itself
-          # conditional on the same SHA, so a force-push cannot slip through.
-          test "$(gh pr view "$PR_NUMBER" --json headRefOid --jq '.headRefOid')" = "$CHANGELOG_COMMIT"
+          # Re-read the full merge precondition immediately before merging. The
+          # wait proved the status on this SHA, but the base can change after the
+          # final poll, so one snapshot keeps state, base and head consistent.
+          # --match-head-commit then binds the merge itself to the same SHA.
+          PR_SNAPSHOT=$(gh pr view "$PR_NUMBER" \
+            --json state,baseRefName,headRefOid \
+            --jq '.state + " " + .baseRefName + " " + .headRefOid')
+          test "$PR_SNAPSHOT" = "OPEN main $CHANGELOG_COMMIT"
 
           # The approval wait above is the gate. This loop only absorbs
           # transient merge API errors; every attempt is bound to the same head.

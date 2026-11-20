@@ -368,7 +368,8 @@ class WorkflowContractTests(unittest.TestCase):
         step = self.by_name["Merge the approved changelog PR at the exact head"]
         run = step["run"]
         self.assertIn('--match-head-commit "$CHANGELOG_COMMIT"', run)
-        self.assertIn('--json headRefOid', run)
+        self.assertIn('--json state,baseRefName,headRefOid', run)
+        self.assertIn('test "$PR_SNAPSHOT" = "OPEN main $CHANGELOG_COMMIT"', run)
         self.assertIn('test "$(git rev-parse "${MERGED_MAIN_SHA}^2")" = "$CHANGELOG_COMMIT"', run)
         self.assertIn("needs_merge == 'true'", step["if"])
 
