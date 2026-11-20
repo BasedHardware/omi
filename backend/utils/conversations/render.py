@@ -29,7 +29,6 @@ from utils.model_text import (
     untrusted_block,
 )
 
-from utils.llm.meeting_notes_validation import repair_note_citations
 from utils.speakers.display import display_participants, developer_speaker_names
 
 logger = logging.getLogger(__name__)
@@ -173,6 +172,9 @@ def present_generated_note_sections(conversation: dict[str, Any]) -> dict[str, A
     sections = structured.get('sections')
     if not isinstance(sections, list) or not sections:
         return conversation
+
+    # Generic renderers are also imported by callers outside the notes pipeline.
+    from utils.llm.meeting_notes_validation import repair_note_citations
 
     transcript_ids = {
         segment['id']
