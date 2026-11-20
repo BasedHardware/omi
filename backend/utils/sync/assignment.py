@@ -1137,7 +1137,7 @@ def assign_in_transaction(
                     custody_anchor=own_custody_anchor,
                 )
             if custody_updates:
-                result.update(custody_updates.pop(canonical))
+                result['claims'] = custody_updates.pop(canonical)['claims']
                 result['v3_pending'] = True
                 result['v3_pending_since'] = result.get('v3_pending_since') or datetime.now(timezone.utc)
                 for cid in custody_donors:
