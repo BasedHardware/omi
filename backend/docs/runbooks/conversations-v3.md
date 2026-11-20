@@ -427,6 +427,7 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
   - Blocked: `rederive_live_open` (speech within five minutes of now), `rederive_live_boundary` (a
     rebuilt window would cross `since` or `until`), `rederive_live_outline_failed` (the outline fell
     back; never committed as failed tiles), `rederive_live_coverage` (a row's speech would be lost),
+    `rederive_live_donor_tasks` (a planned retirement would strand standalone tasks),
     `document_too_large` (a source's planned claims would cross the document limit; checked before
     any write), `backfill_partition_budget` (the final commit would exceed the write cap) and
     `rederive_live_range_overflow` (the partition's time range holds more documents than one pass
@@ -437,8 +438,10 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
   - Undo: before each commit, the run writes every changed, created or retired row's stored document
     and claim positions to `conversations_v3_backfill_runs/{run_id}/conversations_v3_rederive_priors` (purged with the account
     and after a finished undo; never written for a conversation already deleted or once account
-    deletion began). When the owner deletes a stamped conversation or changes its protection level,
-    its priors in every live run are emptied to a `purged` stub, and that run's undo then refuses.
+    deletion began). Conversation deletion checks for priors by the requested ID and known bridge
+    IDs, including when the worker stopped before stamping a row. Re-protection empties old-level
+    priors for the survivor and its recorded bridges. Both use an owner-scoped run scan and point
+    reads for the affected IDs. Emptied priors become `purged` stubs and undo refuses those runs.
     A failed commit drops the copies of rows it did not write (a resume records them again).
     Each partition reads only its own copies, by id; `resume` and `undo` check every copy of the run
     once. A run whose undo refuses for good keeps its copies until the owner deletes the touched

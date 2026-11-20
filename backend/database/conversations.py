@@ -3031,8 +3031,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
         ],
     )
 
-    # Rows a live re-derive stamped when this migration re-protected them (every undo copy of a row
-    # belongs to a run that stamped it); their copies are at the old level and are emptied after.
+    # Stamped survivors and their recorded bridges may hold undo copies at the old protection level.
     rederived = set()
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
@@ -3047,6 +3046,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             if current.get('v3_rederive_live_run'):
                 # Recorded on every attempt, so a retry after a failed purge still purges.
                 rederived.add(doc_snapshot.id)
+                rederived.update(current.get('sync_merged_from') or [])
             if current.get('data_protection_level', 'standard') == target_level:
                 return False
             payload = {'data_protection_level': target_level}

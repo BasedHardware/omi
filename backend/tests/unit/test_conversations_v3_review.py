@@ -1168,6 +1168,10 @@ def test_merge_donor_task_guard_is_scoped_and_bounded():
     client = MemoryQuery(rows)
     assert store.merge_donors_have_tasks('synthetic', ['other', 'donor'], firestore_client=client)
     assert not store.merge_donors_have_tasks('synthetic', ['other'], firestore_client=client)
+    assert store.merge_donors_have_tasks(
+        'synthetic', [f'd{i:02}' for i in range(31)] + ['donor'], firestore_client=client
+    )
+    assert len(client.calls) == 4
     assert all(limit == 1 for _filters, limit, _after in client.calls)
 
 

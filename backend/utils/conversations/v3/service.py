@@ -74,6 +74,7 @@ BLOCKED = frozenset(
         'rederive_live_boundary',
         'rederive_live_outline_failed',
         'rederive_live_coverage',
+        'rederive_live_donor_tasks',
         'rederive_live_range_overflow',
     }
 )
@@ -617,6 +618,9 @@ async def reconcile(
             rows, retire, touched, sources, priors, outcome = _live_outcome(
                 rows, existing, recordings, since=since, until=until, run_id=run_id
             )
+            donors = [cid for cid, patch in retire.items() if patch.get('sync_merged_into')]
+            if donors and await run_blocking(db_executor, store.merge_donors_have_tasks, uid, donors):
+                raise Conflict('rederive_live_donor_tasks')
             report.update(outcome)
             commit_existing = {cid: existing[cid] for cid in touched if cid in existing}
             commit_recordings = {rid: recordings[rid] for rid in sources}

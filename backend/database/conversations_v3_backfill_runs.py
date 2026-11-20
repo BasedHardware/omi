@@ -163,7 +163,10 @@ def save_priors(uid, run_id, entries, *, firestore_client=None):
             if entry.get('raw') is None:
                 continue
             current = user.collection('conversations').document(entry['id']).get(transaction=tx)
-            level = (current.to_dict() or {}).get('data_protection_level', 'standard') if current.exists else None
+            row = (current.to_dict() or {}) if current.exists else {}
+            if row.get('deleted'):
+                raise Conflict('target_deleted')
+            level = row.get('data_protection_level', 'standard') if current.exists else None
             if level is not None and level != entry['raw'].get('data_protection_level', 'standard'):
                 raise Conflict('source_changed')
         # A resumed attempt keeps the first copy: it holds the row and claim positions from before the run.
@@ -232,7 +235,11 @@ def purge_conversation_priors(uid, conversation_ids, reason, *, firestore_client
         for cid in page:
             snapshot = coll.document(cid).get(transaction=tx)
             data = (snapshot.to_dict() or {}) if snapshot.exists else None
-            if data is None or (keep_level and (data.get('purged') or data.get('created'))):
+            if (
+                data is None
+                or data.get('purged') == reason
+                or (keep_level and (data.get('purged') or data.get('created')))
+            ):
                 continue
             if keep_level and (data.get('raw') or {}).get('data_protection_level', 'standard') == keep_level:
                 continue

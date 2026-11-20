@@ -67,16 +67,19 @@ def user_conversations(client, uid):
 def merge_donors_have_tasks(uid, donor_ids, *, firestore_client=None, transaction=None):
     """Preserve standalone task links by checking the donor IDs without loading item content."""
     client = firestore_client or get_firestore_client()
-    query = (
-        client.collection('users')
-        .document(uid)
-        .collection('action_items')
-        .where(filter=FieldFilter('conversation_id', 'in', list(donor_ids)))
-        .select(('conversation_id',))
-        .limit(1)
-    )
-    matches = query.stream() if transaction is None else query.stream(transaction=transaction)
-    return next(iter(matches), None) is not None
+    tasks = client.collection('users').document(uid).collection('action_items')
+    donors = sorted(set(donor_ids))
+    # Firestore allows up to 30 disjuncts in one in-filter.
+    for start in range(0, len(donors), 30):
+        query = (
+            tasks.where(filter=FieldFilter('conversation_id', 'in', donors[start : start + 30]))
+            .select(('conversation_id',))
+            .limit(1)
+        )
+        matches = query.stream() if transaction is None else query.stream(transaction=transaction)
+        if next(iter(matches), None) is not None:
+            return True
+    return False
 
 
 def decode_row(uid, snapshot) -> dict[str, Any] | None:
@@ -618,6 +621,7 @@ def commit_projection(
             or len(all_absorbed) != len(set(all_absorbed))
         ):
             raise Conflict('source_changed')
+    retired = {cid for cid, patch in retire.items() if patch.get('sync_merged_into')}
     failure_transitions = {
         r['id']: r.get('v3_process_failed') and not (existing.get(r['id']) or {}).get('v3_process_failed') for r in rows
     }
@@ -677,6 +681,8 @@ def commit_projection(
         absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
         if absorbed and merge_donors_have_tasks(uid, absorbed, firestore_client=client, transaction=tx):
             raise Conflict('source_changed')
+        if retired and merge_donors_have_tasks(uid, retired, firestore_client=client, transaction=tx):
+            raise Conflict('rederive_live_donor_tasks')
         for cid in [*(row['id'] for row in batch_rows), *absorbed, *(retire if final else ())]:
             tombstone = (
                 client.collection('users')
@@ -729,7 +735,6 @@ def commit_projection(
             for cid, patch in retire.items():
                 if cid not in written:
                     tx.update(coll.document(cid), patch)
-        retired = {cid for cid, patch in retire.items() if patch.get('sync_merged_into')}
         replaced = {r['id'] for r in batch_rows} | set(absorbed) | (set(remove) | retired if final else set())
         for rid, recording in recordings.items():
             if recording.get('deleted') or recording.get('sync_merged_into'):

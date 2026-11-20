@@ -21,7 +21,10 @@ from database import conversations_v3_leases as leases
 from database import conversations_v3_rederive as rederive_store
 from database.account_deletion_marker import account_deletion_document
 from scripts import conversations_v3_backfill as script
+from services import conversation_frame_evidence
+from utils.conversations import merge_conversations
 from utils.conversations.v3 import backfill, service
+from utils.other import lake_wipe
 from tests.unit.fixtures.strict_firestore_transaction import (
     StrictFirestoreCollection,
     StrictFirestoreDocument,
@@ -143,6 +146,7 @@ def owner(strict, monkeypatch):
     monkeypatch.setattr(StrictFirestoreCollection, 'where', where)
     for module in (store, runs):
         monkeypatch.setattr(module, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: False)
     monkeypatch.setattr(store, 'decrypt', lambda value, uid: value)
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
     monkeypatch.setattr(
@@ -668,6 +672,45 @@ def test_a_protection_change_empties_undo_copies_of_rederived_rows_after_migrati
     assert calls == [(UID, ['c0', 'c2'], 'protection', 'enhanced')]
 
 
+@pytest.mark.parametrize('batch', [False, True], ids=['single', 'batch'])
+def test_protection_migration_purges_retired_donor_priors(strict, monkeypatch, batch):
+    conversations_db = backfill.conversations_db
+    strict.rows[path('survivor')] = {
+        'v3_rederive_live_run': RUN,
+        'sync_merged_from': ['donor'],
+        'data_protection_level': 'standard',
+    }
+    strict.rows[path('donor')] = {
+        'data_protection_level': 'standard',
+    }
+    runs.save_priors(
+        UID,
+        RUN,
+        [{'id': cid, 'raw': {'data_protection_level': 'standard'}, 'claims': []} for cid in ('survivor', 'donor')],
+        firestore_client=strict,
+    )
+    strict.rows[path('donor')].update(deleted=True, sync_merged_into='survivor', v3_rederive_live_run=RUN)
+    monkeypatch.setattr(runs, '_live_run_ids', lambda uid, **kw: [RUN])
+    monkeypatch.setattr(conversations_db, 'db', strict)
+    monkeypatch.setattr(
+        strict, 'get_all', lambda refs, **kw: [SimpleNamespace(exists=True, id=r.id, reference=r) for r in refs]
+    )
+    monkeypatch.setattr(strict, 'batch', MagicMock, raising=False)
+    monkeypatch.setattr(
+        StrictFirestoreCollection, 'select', lambda *args: SimpleNamespace(stream=lambda: []), raising=False
+    )
+
+    ids = ['survivor', 'donor'] if batch else ['survivor']
+    conversations_db.migrate_conversations_level_batch(UID, ids, 'enhanced')
+    assert strict.rows[path('survivor')]['data_protection_level'] == 'enhanced'
+    assert strict.rows[path('donor')]['deleted']
+    assert {prior['id']: prior['purged'] for prior in priors(strict)} == {
+        'survivor': 'protection',
+        'donor': 'protection',
+    }
+    assert all('raw' not in prior for prior in priors(strict))
+
+
 def test_a_protection_purge_keeps_copies_already_at_the_new_level(strict, monkeypatch):
     monkeypatch.setattr(runs, '_live_run_ids', lambda uid, **kw: [RUN])
     runs.save_priors(
@@ -774,6 +817,87 @@ async def test_a_failed_commit_keeps_no_copy_of_a_row_it_did_not_write(owner, st
     with pytest.raises(RuntimeError, match='unavailable'):
         await rederive()
     assert not priors(strict)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('missing_metadata', [False, True], ids=['normal', 'retry'])
+async def test_app_delete_purges_a_stopped_attempt_prior(owner, strict, ledger, monkeypatch, missing_metadata):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+
+    class WorkerStopped(BaseException):
+        pass
+
+    def stop_before_stamp(*args, **kwargs):
+        assert any(prior['id'] == 'c1' and 'raw' in prior for prior in priors(strict))
+        raise WorkerStopped()
+
+    monkeypatch.setattr(service, '_commit', stop_before_stamp)
+    with pytest.raises(WorkerStopped):
+        await rederive()
+    assert not strict.rows[path('c1')].get('v3_rederive_live_run')
+
+    # The app records this tombstone before entering its frame/lake and conversation deletion service.
+    strict.rows[('users', UID, 'deleted_conversations', 'c1')] = {'conversation_id': 'c1'}
+    if missing_metadata:
+        strict.rows.pop(path('c1'))
+    monkeypatch.setattr(runs, '_live_run_ids', lambda uid, **kw: [RUN])
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db,
+        'get_conversation_raw_snapshot',
+        lambda uid, cid: strict.rows.get(path(cid)),
+    )
+    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_photos', lambda *a: [])
+    for method in (
+        'list_all_frame_request_storage_ids',
+        'persist_conversation_frame_deletion_outbox',
+        'delete_frame_requests_for_conversation',
+    ):
+        monkeypatch.setattr(conversation_frame_evidence.frame_requests_db, method, MagicMock(return_value=[]))
+    monkeypatch.setattr(lake_wipe, 'purge_conversation_lake_objects', MagicMock())
+    monkeypatch.setattr(merge_conversations, 'record_survivor_deleted', MagicMock())
+
+    conversation_frame_evidence.delete_conversation_and_frame_evidence(UID, 'c1')
+    by_id = {prior['id']: prior for prior in priors(strict)}
+    assert by_id['c1']['purged'] == 'deleted' and 'raw' not in by_id['c1']
+    assert 'raw' in by_id['c0']
+    assert path('c1') not in strict.rows
+    conversation_frame_evidence.delete_conversation_and_frame_evidence(UID, 'c1')
+    assert {prior['id']: prior for prior in priors(strict)} == by_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('late', [False, True], ids=['already-present', 'before-commit'])
+async def test_live_rederive_preserves_task_bearing_donor(owner, strict, monkeypatch, late):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    task_path = ('users', UID, 'action_items', 'standalone')
+    task = {'conversation_id': 'c1'}
+    checks = []
+
+    def has_tasks(uid, donor_ids, *, firestore_client=None, transaction=None):
+        assert uid == UID and set(donor_ids) == {'c1', 'c2'}
+        checks.append(transaction is not None)
+        return strict.rows.get(task_path) == task
+
+    monkeypatch.setattr(store, 'merge_donors_have_tasks', has_tasks)
+    if late:
+        commit = service._commit
+
+        def add_task_and_commit(*args, **kwargs):
+            strict.rows[task_path] = task
+            return commit(*args, **kwargs)
+
+        monkeypatch.setattr(service, '_commit', add_task_and_commit)
+    else:
+        strict.rows[task_path] = task
+
+    outcome, report = await rederive()
+    assert outcome == 'blocked' and report['blocked_reason'] == 'rederive_live_donor_tasks'
+    assert checks == ([False, True] if late else [False])
+    assert conversations(strict) == before and not priors(strict)
+    assert strict.rows[task_path] == task
 
 
 @pytest.mark.asyncio
