@@ -312,6 +312,8 @@ jobs:
             ([.service_images, .pump_release_disposition, .break_glass_confirm,
               .break_glass_reason, .release_version] | all(. == "" or . == null)) and
             (.requested_by | test("[^[:space:]]"))' "$GITHUB_EVENT_PATH" >/dev/null
+          # Cloud Run v2 can return literal outer quotes as part of the etag.
+          etag_pattern='^([A-Za-z0-9_+/=-]{1,200}|"[A-Za-z0-9_+/=-]{1,200}")$'
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" == refs/heads/main &&
              "$GITHUB_REPOSITORY" == BasedHardware/omi && "$GITHUB_RUN_ATTEMPT" == 1 &&
              "$DEPLOY_ENVIRONMENT" == prod && "$DEPLOY_TARGETS" == cloud-run-only &&
@@ -319,7 +321,7 @@ jobs:
              "$CONTROL_SHA" =~ ^[0-9a-f]{40}$ && "$CONTROL_SHA" == "$WORKFLOW_CONTROL_SHA" &&
              "$WORKFLOW_CONTROL_SHA" == "$GITHUB_SHA" &&
              "$RELEASE_SHA" == f7060aa1a0c9e3481790d497140096ae99f9b062 &&
-             "$APPROVED_ETAG" =~ ^[A-Za-z0-9_+/=-]{1,200}$ ]]
+             "$APPROVED_ETAG" =~ $etag_pattern ]]
           jq -n --arg control "$CONTROL_SHA" --arg etag "$APPROVED_ETAG" --arg source "$RELEASE_SHA" \
             '{issue:"SCA-3318", service:"backend-projection-pump", control:$control, etag:$etag,
               base_source:$source, forward_max:4, inverse_max:20}' >> "$GITHUB_STEP_SUMMARY"
