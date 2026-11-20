@@ -110,7 +110,7 @@ class Operation:
         # The provider keys and request body live only in memory. A keyed digest
         # keeps anyone reading the claim from testing candidate prompt text.
         try:
-            canonical = [body, credentials.source.value, credentials.forwarded_provider_keys]
+            canonical: list[object] = [body, credentials.source.value, credentials.forwarded_provider_keys]
             property_orders = list(_structured_property_orders(body))
             if property_orders:
                 canonical.append(property_orders)
