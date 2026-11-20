@@ -882,19 +882,46 @@ def test_a_copy_is_never_recorded_at_a_protection_level_the_row_left(strict):
 
 
 @pytest.mark.asyncio
-async def test_copies_left_by_a_stopped_attempt_are_dropped_by_the_next_attempt_or_undo(owner, strict, ledger):
+async def test_copies_left_by_a_stopped_attempt_are_dropped_by_resume_or_undo(owner, strict, ledger, monkeypatch):
     sources, rows = lunch(count=3)
     owner(*sources, *rows)
     stale = {'id': 'c1', 'raw': deepcopy(rows[1]), 'claims': []}
     # A process stopped after recording c1's copy and before stamping c1; the owner then deletes it.
     runs.save_priors(UID, RUN, [stale], firestore_client=strict)
     strict.rows[('users', UID, 'deleted_conversations', 'c1')] = {'conversation_id': 'c1'}
-    assert rederive_store.drop_stale_priors(UID, RUN) == 1 and not priors(strict)
+    ledger.run.update(status='blocked', partitions=[{'since': SINCE, 'until': UNTIL, 'status': 'blocked'}])
+    monkeypatch.setattr(runs, 'mark_start', lambda *a, **kw: None)
+    assert backfill.resume_run(UID, RUN)['outcome'] == 'resumed' and not priors(strict)
     # Undo drops them too before it looks for refusals.
     runs.save_priors(UID, 'other-run', [{'id': 'c2', 'raw': deepcopy(rows[2]), 'claims': []}], firestore_client=strict)
     ledger.run['run_id'] = 'other-run'
     assert backfill.undo_run(UID, 'other-run')['outcome'] == 'undone' and not priors(strict, 'other-run')
     assert conversations(strict)['c2'] == rows[2]
+
+
+@pytest.mark.asyncio
+async def test_a_partition_reads_only_its_own_copies(owner, strict, monkeypatch):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    # Another partition's copy: neither the attempt nor its settle step lists the run's copies.
+    runs.save_priors(UID, RUN, [{'id': 'elsewhere', 'raw': None, 'created': True}], firestore_client=strict)
+    monkeypatch.setattr(runs, 'list_priors', lambda *a, **kw: pytest.fail('a partition lists every copy'))
+    outcome, report = await rederive()
+    assert outcome == 'committed' and report['prior_ids'] == ['c0', 'c1', 'c2']
+    assert rederive_store.record_baselines(UID, RUN, report['prior_ids']) == 3
+    held = {e['id']: e for e in priors(strict)}
+    assert all(held[cid].get('baseline') for cid in report['prior_ids']) and 'baseline' not in held['elsewhere']
+
+
+@pytest.mark.asyncio
+async def test_a_range_too_large_for_one_pass_blocks_with_its_own_reason(owner, strict, monkeypatch):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    monkeypatch.setattr(rederive_store, 'REDERIVE_LIVE_LIMIT', 2)
+    outcome, report = await rederive()
+    assert outcome == 'blocked' and report['blocked_reason'] == 'rederive_live_range_overflow'
+    assert conversations(strict) == before and not priors(strict)
 
 
 def test_a_resumed_attempt_keeps_the_first_copy_of_a_row(strict):
@@ -1142,6 +1169,7 @@ async def test_a_live_run_step_replans_with_the_live_loader(monkeypatch):
 
     async def reconcile(uid, **kw):
         calls.append(kw)
+        kw['report']['prior_ids'] = ['c0']
         return 'committed'
 
     async def blocking(pool, fn, *args, **kwargs):
@@ -1158,14 +1186,16 @@ async def test_a_live_run_step_replans_with_the_live_loader(monkeypatch):
     monkeypatch.setattr(runs, 'update_run', lambda *a, **kw: run)
     monkeypatch.setattr(service, 'reconcile', reconcile)
     baselines = []
-    monkeypatch.setattr(backfill.rederive_store, 'record_baselines', lambda uid, run_id: baselines.append(run_id))
+    monkeypatch.setattr(
+        backfill.rederive_store, 'record_baselines', lambda uid, run_id, ids=None: baselines.append((run_id, ids))
+    )
     monkeypatch.setattr(
         service, 'drain_backfill', lambda *a, **kw: _done({'processed': 0, 'failed': 0, 'remaining': 0})
     )
     await backfill.run_step(UID, RUN, 0, 'derive')
     assert calls[0]['live'] is True and calls[0]['derive'] is True and calls[0]['rederive'] is False
-    # The settled partition records the owner-surface baselines undo compares against.
-    assert baselines == [RUN]
+    # The settled partition records the owner-surface baselines undo compares against, for its own copies.
+    assert baselines == [(RUN, ['c0'])]
 
 
 async def _done(value):

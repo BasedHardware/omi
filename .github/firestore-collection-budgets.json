@@ -87,7 +87,7 @@
       "reads_per_unit_budget": 2000,
       "reads_per_day_budget": 40000,
       "basis": "planning-bound",
-      "source": "backend/database/conversations_v3_backfill_runs.py list_priors: read only by an operator undo or undo --dry-run, one page of 200 per round; one owner-day touches about 100-300 rows, and the 31-day window cap bounds a run at a few thousand. Planning cap 20 operator runs per day.",
+      "source": "backend/database/conversations_v3_backfill_runs.py get_priors/list_priors: each partition reads its own copies by id (at most 256 loaded rows) before its commit and again when it settles; list_priors runs once per resume and once per undo or undo --dry-run, one page of 200 per round. One owner-day touches about 100-300 rows, and the 31-day window cap bounds a run at a few thousand. Planning cap 20 operator runs per day.",
       "reviewed": "2026-11-20"
     },
     {

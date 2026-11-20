@@ -74,6 +74,7 @@ BLOCKED = frozenset(
         'rederive_live_boundary',
         'rederive_live_outline_failed',
         'rederive_live_coverage',
+        'rederive_live_range_overflow',
     }
 )
 
@@ -622,7 +623,9 @@ async def reconcile(
         try:
             if live:
                 # The undo ledger is durable before the commit that changes its rows.
-                await run_blocking(db_executor, rederive_store.drop_stale_priors, uid, run_id)
+                # A stopped attempt's copies are of rows this partition loads again (or they are gone).
+                stale = sorted({*existing, *(entry['id'] for entry in priors)})
+                await run_blocking(db_executor, rederive_store.drop_stale_priors, uid, run_id, stale)
                 await run_blocking(db_executor, backfill_runs.save_priors, uid, run_id, priors)
             await run_blocking(db_executor, leases.renew, uid, key, token)
             moved = await run_blocking(
@@ -930,6 +933,8 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
         'rows_retired': len(retire),
         'rows_kept_unabsorbed': kept,
         'priors_recorded': len(priors),
+        # The partition's settle step baselines these copies by id rather than listing the run's.
+        'prior_ids': sorted(entry['id'] for entry in priors),
         'segments_checked': len(before_speech),
     }
     return write, {**retire, **lineage}, touched, sources, priors, counts

@@ -390,7 +390,9 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     rebuilt window would cross `since` or `until`), `rederive_live_outline_failed` (the outline fell
     back; never committed as failed tiles), `rederive_live_coverage` (a row's speech would be lost),
     `document_too_large` (a source's planned claims would cross the document limit; checked before
-    any write) and `backfill_partition_budget` (the final commit would exceed the write cap). A
+    any write), `backfill_partition_budget` (the final commit would exceed the write cap) and
+    `rederive_live_range_overflow` (the partition's time range holds more documents than one pass
+    loads; plan smaller partitions). A
     commit that fails after earlier batches landed leaves the partition blocked: `resume` replans it
     (rows this run already wrote are replanned, their first prior kept), and `undo` is exact from
     either state.
@@ -400,6 +402,10 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     deletion began). When the owner deletes a stamped conversation or changes its protection level,
     its priors in every live run are emptied to a `purged` stub, and that run's undo then refuses.
     A failed commit drops the copies of rows it did not write (a resume records them again).
+    Each partition reads only its own copies, by id; `resume` and `undo` check every copy of the run
+    once. A run whose undo refuses for good keeps its copies until the owner deletes the touched
+    conversations or the account; delete the run's `conversations_v3_rederive_priors` only with the
+    owner's approval, since it gives up the undo.
     A capture longer than one partition crosses both partitions' edges: the dry-run reports it as
     `windows_crossing_edge`; widen `since`/`until` around it or leave it.
     Restores are exact apart from the commit hook's `home_source_version` and

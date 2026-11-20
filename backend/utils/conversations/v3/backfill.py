@@ -267,6 +267,9 @@ def resume_run(uid, run_id, *, firestore_client=None):
     )
     if not updated:
         return {'outcome': 'not_resumable'}
+    if run.get('mode') == LIVE_MODE:
+        # A partition's attempt re-checks the rows it loads; this also reaches copies of rows gone since.
+        rederive_store.drop_stale_priors(uid, run_id, firestore_client=firestore_client)
     runs.mark_start(uid, run_id, firestore_client=firestore_client)
     return {'outcome': 'resumed', 'partition': index}
 
@@ -357,7 +360,7 @@ async def run_step(uid, run_id, index, phase):
             partition=(index, {'status': 'notes', **report}),
             expect=active,
         )
-        part = {**part, 'status': 'notes'}
+        part = {**part, 'status': 'notes', 'prior_ids': report.get('prior_ids')}
     if part.get('status') == 'committed' and run.get('status') in active:
         # Redelivery after the commit: the successor's dispatch may have failed. Its name is fixed, so
         # dispatching again is a no-op when it already went out.
@@ -395,7 +398,7 @@ async def run_step(uid, run_id, index, phase):
     if run.get('mode') == LIVE_MODE:
         # The partition's notes are settled: anything that changes these rows from here on is not the
         # run's, and undo refuses to overwrite it.
-        await run_blocking(db_executor, rederive_store.record_baselines, uid, run_id)
+        await run_blocking(db_executor, rederive_store.record_baselines, uid, run_id, part.get('prior_ids'))
     if await run_blocking(
         db_executor,
         runs.update_run,

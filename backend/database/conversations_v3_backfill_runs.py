@@ -248,6 +248,18 @@ def purge_conversation_priors(uid, conversation_ids, reason, *, firestore_client
     return purged
 
 
+def get_priors(uid, run_id, conversation_ids, *, firestore_client=None):
+    """The priors of these conversations in one run (by-id reads; missing ones are left out)."""
+    client = firestore_client or get_firestore_client()
+    coll = _priors(client, uid, run_id)
+    found = []
+    for cid in sorted(set(conversation_ids)):
+        snapshot = coll.document(cid).get()
+        if snapshot.exists:
+            found.append({**(snapshot.to_dict() or {}), 'id': cid})
+    return found
+
+
 def list_priors(uid, run_id, *, firestore_client=None):
     """Every prior of one run, in id-ordered pages."""
     client = firestore_client or get_firestore_client()

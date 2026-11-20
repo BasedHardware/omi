@@ -157,7 +157,7 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
         .stream()
     )
     if len(snapshots) > REDERIVE_LIVE_LIMIT:
-        raise Conflict('backfill_partition_budget')
+        raise Conflict('rederive_live_range_overflow')
     counts = {'rows_eligible': 0, 'visible_before': 0}
 
     def count(name):
@@ -355,19 +355,23 @@ def purged_reason(entries):
     return None
 
 
-def record_baselines(uid, run_id, *, firestore_client=None):
+def _run_priors(uid, run_id, ids, client):
+    """A partition's own copies by id, so a long run reads each copy a bounded number of times."""
+    if ids is None:
+        return runs.list_priors(uid, run_id, firestore_client=client)
+    return runs.get_priors(uid, run_id, ids, firestore_client=client)
+
+
+def record_baselines(uid, run_id, ids=None, *, firestore_client=None):
     """After a partition settles its notes, digest the owner surface of every row the run stamped.
 
-    A row the owner already changed between the commit and now (checked against the prior, as
-    before a baseline exists) gets a baseline that never matches, so undo keeps refusing it.
+    ``ids`` are the partition's copies (every copy of the run when None). A row the owner already
+    changed between the commit and now (checked against the prior, as before a baseline exists)
+    gets a baseline that never matches, so undo keeps refusing it.
     """
     client = firestore_client or store.get_firestore_client()
     coll = store.user_conversations(client, uid)
-    pending = [
-        e
-        for e in runs.list_priors(uid, run_id, firestore_client=client)
-        if not e.get('baseline') and not e.get('purged')
-    ]
+    pending = [e for e in _run_priors(uid, run_id, ids, client) if not e.get('baseline') and not e.get('purged')]
     recorded = 0
     for start in range(0, len(pending), runs.PRIORS_PAGE_DOCS):
         page = pending[start : start + runs.PRIORS_PAGE_DOCS]
@@ -430,14 +434,15 @@ def drop_unwritten_priors(uid, run_id, entries, *, firestore_client=None):
     return len(unwritten)
 
 
-def drop_stale_priors(uid, run_id, *, firestore_client=None):
+def drop_stale_priors(uid, run_id, ids=None, *, firestore_client=None):
     """Before an attempt or an undo: drop this run's copies of rows it never stamped.
 
     A process that stopped between recording copies and stamping their rows leaves such copies;
-    undo never restores an unstamped row, so they are only ever retained content.
+    undo never restores an unstamped row, so they are only ever retained content. A partition's
+    attempt checks the rows it loaded (``ids``); resume and undo check every copy of the run.
     """
     client = firestore_client or store.get_firestore_client()
-    entries = runs.list_priors(uid, run_id, firestore_client=client)
+    entries = _run_priors(uid, run_id, ids, client)
     return drop_unwritten_priors(uid, run_id, entries, firestore_client=client) if entries else 0
 
 
