@@ -157,7 +157,7 @@ def test_interrupted_rejection_headers_cannot_authorize_recovery(monkeypatch, st
     monkeypatch.setattr(erase.socket, 'create_connection', MagicMock())
     tls = MagicMock()
     monkeypatch.setattr(erase.ssl, 'create_default_context', lambda: tls)
-    wire = tls.wrap_socket.return_value.__enter__.return_value.makefile.return_value
+    wire = tls.wrap_socket.return_value.makefile.return_value
     wire.readline.side_effect = [f'HTTP/1.1 {status} Rejected\r\n'.encode(), TimeoutError()]
     monkeypatch.setattr(receipts, 'record', MagicMock(return_value={}))
     recover = MagicMock()
