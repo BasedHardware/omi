@@ -5,6 +5,7 @@ strict in-memory Firestore; only the outline model, speaker evidence and the sta
 (which the strict fixture does not model) are stood in for.
 """
 
+import asyncio
 import json
 from contextlib import contextmanager, nullcontext
 from copy import deepcopy
@@ -22,6 +23,7 @@ from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
 from database import conversations_v3_rederive as rederive_store
 from database.account_deletion_marker import account_deletion_document
+from database.conversations_v3_undo_removals import removal_ref
 from models.conversation import SetConversationEventsStateRequest
 from routers import conversations as conversation_routes
 from scripts import conversations_v3_backfill as script
@@ -692,14 +694,7 @@ async def test_an_undo_interrupted_before_erasing_a_created_row_finishes_on_reru
 
 
 @pytest.fixture
-async def undo_task_card(owner, strict, ledger, monkeypatch):
-    sources, rows = lunch(count=3)
-    extra = source('r9', AT + timedelta(minutes=30), words=400)
-    owner(*sources, *rows, extra)
-    before = conversations(strict)
-    assert (await rederive())[0] == 'committed'
-    rederive_store.record_baselines(UID, RUN)
-    cid = next(entry['id'] for entry in priors(strict) if entry.get('created'))
+def task_writes(strict, monkeypatch):
     monkeypatch.setattr(tasks_db, 'db', strict)
     monkeypatch.setattr(tasks_db, 'fenced_action_item_commit', lambda uid: nullcontext())
     monkeypatch.setattr(tasks_db, 'bump_action_items_list_version', lambda uid: None)
@@ -714,6 +709,17 @@ async def undo_task_card(owner, strict, ledger, monkeypatch):
         return document(self, name)
 
     monkeypatch.setattr(StrictFirestoreCollection, 'document', allocate)
+
+
+@pytest.fixture
+async def undo_task_card(owner, strict, ledger, task_writes):
+    sources, rows = lunch(count=3)
+    extra = source('r9', AT + timedelta(minutes=30), words=400)
+    owner(*sources, *rows, extra)
+    before = conversations(strict)
+    assert (await rederive())[0] == 'committed'
+    rederive_store.record_baselines(UID, RUN)
+    cid = next(entry['id'] for entry in priors(strict) if entry.get('created'))
     return cid, before
 
 
@@ -1197,36 +1203,73 @@ async def test_protection_migration_purges_stopped_attempt_priors(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('late', [False, True], ids=['already-present', 'before-commit'])
-async def test_live_rederive_preserves_task_bearing_donor(owner, strict, monkeypatch, late):
+async def test_live_rederive_preserves_task_bearing_donor(owner, strict, monkeypatch, task_writes, late):
     sources, rows = lunch(count=3)
     owner(*sources, *rows)
     before = conversations(strict)
-    task_path = ('users', UID, 'action_items', 'standalone')
-    task = {'conversation_id': 'c1'}
+    task_path = ('users', UID, 'action_items', 'linked-task')
     checks = []
+    query = store.merge_donors_have_tasks
 
     def has_tasks(uid, donor_ids, *, firestore_client=None, transaction=None):
         assert uid == UID and set(donor_ids) == {'c1', 'c2'}
         checks.append(transaction is not None)
-        return strict.rows.get(task_path) == task
+        return query(uid, donor_ids, firestore_client=firestore_client, transaction=transaction)
+
+    def create_task():
+        task_service.create_action_item(UID, {'description': 'Donor task', 'conversation_id': 'c1'})
 
     monkeypatch.setattr(store, 'merge_donors_have_tasks', has_tasks)
     if late:
         commit = service._commit
 
         def add_task_and_commit(*args, **kwargs):
-            strict.rows[task_path] = task
+            create_task()
             return commit(*args, **kwargs)
 
         monkeypatch.setattr(service, '_commit', add_task_and_commit)
     else:
-        strict.rows[task_path] = task
+        create_task()
 
     outcome, report = await rederive()
     assert outcome == 'blocked' and report['blocked_reason'] == 'rederive_live_donor_tasks'
     assert checks == ([False, True] if late else [False])
     assert conversations(strict) == before and not priors(strict)
-    assert strict.rows[task_path] == task
+    assert strict.rows[task_path]['conversation_id'] == 'c1'
+    assert not removal_ref(strict.document(f'users/{UID}'), 'c1').get().exists
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('batch', [False, True], ids=['single', 'batch'])
+async def test_task_create_validated_before_retirement_cannot_commit(
+    owner, strict, ledger, task_writes, monkeypatch, batch
+):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    monkeypatch.setenv(task_source_validation.SOURCE_LINKS_ENABLED_ENV, 'true')
+    run = tasks_db.FirestoreActionItems._run_contention
+
+    def retire_after_validation(self, *args, **kwargs):
+        # The shared service has validated c1. Finish the repair before opening the task transaction.
+        assert asyncio.run(rederive())[0] == 'committed'
+        donor = strict.rows[path('c1')]
+        assert donor['deleted'] and donor['sync_merged_into'] == 'c0'
+        return run(self, *args, **kwargs)
+
+    payload = {'description': 'Paused task', 'conversation_id': 'c1'}
+    with monkeypatch.context() as patch:
+        patch.setattr(tasks_db.FirestoreActionItems, '_run_contention', retire_after_validation)
+        with pytest.raises(task_source_validation.TaskSourceValidationError):
+            if batch:
+                await asyncio.to_thread(
+                    task_service.create_action_items_batch, UID, [{'description': 'Standalone'}, payload]
+                )
+            else:
+                await asyncio.to_thread(task_service.create_action_item, UID, payload)
+    assert not any(doc[:3] == ('users', UID, 'action_items') for doc in strict.rows)
+    assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
+    assert not strict.rows[path('c1')].get('deleted')
+    assert task_service.create_action_item(UID, payload)
 
 
 @pytest.mark.asyncio
@@ -1456,6 +1499,36 @@ async def test_a_partition_over_the_transaction_write_cap_blocks(owner, strict, 
     outcome, report = await rederive()
     assert outcome == 'blocked' and report['blocked_reason'] == 'backfill_partition_budget'
     assert conversations(strict) == before and not priors(strict)
+
+
+@pytest.mark.asyncio
+async def test_partition_write_budget_includes_donor_markers(owner, strict, monkeypatch):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    # Three sources, two donors and their markers, one lineage patch, one row and the lease.
+    monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 9)
+    outcome, report = await rederive()
+    assert outcome == 'blocked' and report['blocked_reason'] == 'backfill_partition_budget'
+    assert conversations(strict) == before and not priors(strict)
+
+
+@pytest.mark.asyncio
+async def test_final_batch_reserves_donor_marker_writes(owner, strict, monkeypatch):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows, source('r9', AT + timedelta(minutes=30), words=400))
+    cap = 11
+    monkeypatch.setattr(store, 'BATCH_MAX_WRITES', cap)
+    assert (await rederive())[0] == 'committed'
+
+    batches = [tx for tx in strict.transactions if any('claims' in patch for _, patch in tx.updates)]
+    assert len(batches) == 2
+    first, final = batches
+    marker_paths = {removal_ref(strict.document(f'users/{UID}'), cid).path for cid in ('c1', 'c2')}
+    assert not marker_paths.intersection(doc for doc, _ in first.sets)
+    assert marker_paths <= {doc for doc, _ in final.sets}
+    assert {path('c1'), path('c2')} <= {doc for doc, patch in final.updates if patch.get('deleted')}
+    assert len(final.sets) + len(final.updates) + len(final.deletes) <= cap
 
 
 def padded(src, total):

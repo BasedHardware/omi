@@ -1,4 +1,4 @@
-"""Content-free task-link fences for cards removed by live re-derive undo."""
+"""Content-free task-link fences for cards retired or removed by live re-derive."""
 
 import hashlib
 

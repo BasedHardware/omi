@@ -479,8 +479,9 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     restamped one (`undo_newer_run_first`: undo that one first). A standalone task linked to a card
     scheduled for removal also blocks undo (`undo_created_row_has_tasks`). The run checks all such
     cards before restoring any group and rechecks each group inside its transaction, including
-    cards already hidden by an interrupted undo. Undo writes a content-free, owner-scoped
-    removal marker before hard deletion. A linked task create reads that marker in its write
+    cards already hidden by an interrupted undo. Repair retirement and undo each write
+    a content-free, owner-scoped marker in the same transaction that hides the card.
+    A linked task create reads that marker in its write
     transaction and checks the card itself only on a hit. The source-link switch leaves
     ordinary missing links alone when off. Account erasure removes the markers.
     An interrupted undo is rerun as is:
