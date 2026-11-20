@@ -84,7 +84,7 @@ void main() {
 
     await _pumpPage(tester, sync, wal);
 
-    expect(find.text('Progress unknown'), findsOneWidget);
+    expect(find.text('Unknown'), findsOneWidget);
     expect(find.text('0%'), findsNothing);
     expect(find.text('88%'), findsNothing);
     final bar = tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator));

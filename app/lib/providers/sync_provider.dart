@@ -917,8 +917,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _keepAlive.acquire();
     final work = _syncWorkToken = lagWork.begin(LagWork.sync);
     try {
-      _admittedWorkGeneration = generation;
-    _updateSyncState(_syncState.toSyncing(), generation);
+      _updateSyncState(_syncState.toSyncing(), generation);
 
       // Check for SD card WALs - if present, log two-phase sync
       final sdCardWals = missingWals.where((w) => w.storage == WalStorage.sdcard).toList();

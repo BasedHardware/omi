@@ -209,7 +209,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
             // Center content - Transfer UI
             Expanded(
               child: Center(
-                child: Padding(
+                child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 40),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -253,7 +253,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(4),
                           child: LinearProgressIndicator(
-                            value: (transferProgress != null && transferProgress > 0) ? transferProgress : null,
+                            value: transferProgress,
                             backgroundColor: Colors.grey.shade800,
                             color: OmiColors.accent,
                             minHeight: 6,
@@ -266,7 +266,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                           runSpacing: 4,
                           children: [
                             Text(
-                              transferProgress != null ? '${(transferProgress * 100).toInt()}%' : 'Progress unknown',
+                              transferProgress != null ? '${(transferProgress * 100).toInt()}%' : context.l10n.unknown,
                               style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
                             ),
                             if (transferSpeedKBps != null && transferSpeedKBps > 0)
