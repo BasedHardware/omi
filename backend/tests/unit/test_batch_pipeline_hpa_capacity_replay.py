@@ -1,4 +1,4 @@
-"""Keep historical 4/16 retune witnesses separate from the live 6/16 bounds (#25509, #25842)."""
+"""Keep historical retune witnesses separate from the approved live 4/16 bounds (#25509)."""
 
 import importlib.util
 from pathlib import Path
@@ -21,13 +21,11 @@ def test_historical_volume_capacity_retains_the_retune_witness():
 
 
 def test_current_volume_capacity_stays_cool_and_at_the_audited_floor():
-    # #25842 (SCA-3274, 2026-11-20) raised the live GPU floor 4 -> 6 as L4 stockout
-    # insurance. At current volume the fleet sits on that floor. This pins the live
-    # bounds and the floor's headroom; the queueing witness is the 4/16 test above.
     result = FRONTIER.stats(FRONTIER.series, FRONTIER.cfg)
+    # The worker rollout safety change (#25842) raised the live floor to six.
     assert FRONTIER.cfg['min_replicas'] == 6
     assert FRONTIER.cfg['max_replicas'] == 16
-    assert result['mean'] == pytest.approx(6.0, abs=0.01)
+    assert result['mean'] == 6
     assert result['max'] == 6
     # The floor alone keeps current volume cool: peak 5m chain demand per pod stays
     # under HOT_CHAIN_PER_WORKER * min_replicas, so hot == 0 follows from that margin.
@@ -40,7 +38,7 @@ def test_current_volume_capacity_stays_cool_and_at_the_audited_floor():
 def test_historical_full_volume_sensitivity_retains_the_leads_hot_minute_budget():
     # A synthetic 3.7x fleet-total model, not full-volume qualification. At cap16
     # even the prior 32/0.5 shape has hot minutes; never call this zero-hot safe.
-    # This remains the 4/16 retune witness, not qualification of the live 6/16
+    # This remains the 4/16 retune witness, not qualification of the live 4/16
     # bounds at full volume. Live bounds need a separate capacity assessment.
     result = FRONTIER.stats(FRONTIER.full, HISTORICAL_CFG)
     assert result['mean'] == pytest.approx(11.46, abs=0.01)

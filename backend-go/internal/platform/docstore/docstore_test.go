@@ -225,3 +225,82 @@ func TestAGuardForOneTenantCannotWriteForAnother(t *testing.T) {
 		t.Fatal("a document was written under another tenant's guard")
 	}
 }
+
+func TestReadDeletionMarker(t *testing.T) {
+	t.Parallel()
+	b := open(t)
+	ctx := t.Context()
+	wipeDueAt := time.Date(2026, 11, 20, 4, 0, 0, 123000000, time.UTC)
+	wipeClaimedAt := time.Date(2026, 11, 20, 4, 1, 0, 456000000, time.UTC)
+	want := map[string]any{
+		"uid":                      "wiping",
+		"wipe_status":              "retrying",
+		"wipe_job_id":              "generation-2",
+		"wipe_due_at":              wipeDueAt,
+		"wipe_claimed_at":          wipeClaimedAt,
+		"grace_actions_complete":   true,
+		"wipe_requested_erase_now": false,
+		"late_agent_vm_cleanup": map[string]any{
+			"vmName":             "worker-7",
+			"zone":               "us-central1-a",
+			"expectedInstanceId": "1234567890",
+		},
+	}
+	b.Mark(t, "wiping", want)
+	got, err := b.Store.ReadDeletionMarker(ctx, "wiping")
+	if err != nil {
+		t.Fatalf("read existing marker: got %v, err %v", got, err)
+	}
+	uid, uidOK := got["uid"].(string)
+	status, statusOK := got["wipe_status"].(string)
+	jobID, jobIDOK := got["wipe_job_id"].(string)
+	dueAt, dueAtOK := got["wipe_due_at"].(time.Time)
+	claimedAt, claimedAtOK := got["wipe_claimed_at"].(time.Time)
+	actionsComplete, actionsCompleteOK := got["grace_actions_complete"].(bool)
+	eraseNow, eraseNowOK := got["wipe_requested_erase_now"].(bool)
+	cleanup, cleanupOK := got["late_agent_vm_cleanup"].(map[string]any)
+	vmName, vmNameOK := cleanup["vmName"].(string)
+	zone, zoneOK := cleanup["zone"].(string)
+	instanceID, instanceIDOK := cleanup["expectedInstanceId"].(string)
+	if len(got) != len(want) ||
+		!uidOK || uid != "wiping" ||
+		!statusOK || status != "retrying" ||
+		!jobIDOK || jobID != "generation-2" ||
+		!dueAtOK || !dueAt.Equal(wipeDueAt) ||
+		!claimedAtOK || !claimedAt.Equal(wipeClaimedAt) ||
+		!actionsCompleteOK || !actionsComplete ||
+		!eraseNowOK || eraseNow ||
+		!cleanupOK || len(cleanup) != 3 ||
+		!vmNameOK || vmName != "worker-7" ||
+		!zoneOK || zone != "us-central1-a" ||
+		!instanceIDOK || instanceID != "1234567890" {
+		t.Fatalf("decoded marker has unexpected types or fields: %#v", got)
+	}
+	b.Mark(t, "empty", map[string]any{})
+	got, err = b.Store.ReadDeletionMarker(ctx, "empty")
+	if err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("read empty document: got %v, err %v", got, err)
+	}
+	got, err = b.Store.ReadDeletionMarker(ctx, "absent")
+	if err != nil || got != nil {
+		t.Fatalf("read absent document: got %v, err %v", got, err)
+	}
+	for _, tenant := range []string{"", ".", "..", "wiping/nested/id"} {
+		got, err = b.Store.ReadDeletionMarker(ctx, tenant)
+		if !errors.Is(err, docstore.ErrPath) || got != nil {
+			t.Errorf("malformed tenant %q: got %v, err %v", tenant, got, err)
+		}
+	}
+}
+
+func TestReadDeletionMarkerClassifiesFailedRead(t *testing.T) {
+	t.Parallel()
+	b := open(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	got, err := b.Store.ReadDeletionMarker(ctx, "owner")
+	failure, ok := errors.AsType[*docstore.CallError](err)
+	if got != nil || !ok || failure.Kind != docstore.KindTransient || failure.Code != "Canceled" {
+		t.Fatalf("canceled read: got %v, err %v", got, err)
+	}
+}
