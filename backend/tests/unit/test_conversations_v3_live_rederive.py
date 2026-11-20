@@ -834,7 +834,9 @@ async def stopped_attempt(owner, strict, monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('missing_metadata', [False, True], ids=['normal', 'retry'])
-async def test_app_delete_purges_a_stopped_attempt_prior(stopped_attempt, strict, ledger, monkeypatch, missing_metadata):
+async def test_app_delete_purges_a_stopped_attempt_prior(
+    stopped_attempt, strict, ledger, monkeypatch, missing_metadata
+):
     # The app records this tombstone before entering its frame/lake and conversation deletion service.
     strict.rows[('users', UID, 'deleted_conversations', 'c1')] = {'conversation_id': 'c1'}
     if missing_metadata:
