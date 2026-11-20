@@ -329,7 +329,8 @@ _STRIPE_REASON_ALIASES = {'payment_failed': 'payment_failure'}
 def _resolve_cancellation_reason(subscription_obj: Mapping[str, Any]) -> str:
     details = subscription_obj.get('cancellation_details')
     reason = details.get('reason') if isinstance(details, Mapping) else None
-    reason = _STRIPE_REASON_ALIASES.get(reason, reason)
+    if isinstance(reason, str):
+        reason = _STRIPE_REASON_ALIASES.get(reason, reason)
     return reason if reason in _REASONS else 'none'
 
 
