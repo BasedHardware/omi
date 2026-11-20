@@ -321,8 +321,21 @@ class PagerFixture(unittest.TestCase):
             receipts = list(pool.map(lambda _: self.admit(alert, retry_unavailable=True), range(6)))
             self.assertEqual(Counter(r['state'] for r in receipts), {'queued': 1, 'duplicate': 5})
             self.assertEqual(len({r['delivery_id'] for r in receipts}), 1)
-            counts = list(pool.map(lambda _: self.drain().get_json()['attempted'], range(6)))
-        self.assertEqual(sum(counts), 1)
+            drains = list(pool.map(lambda _: self.drain(), range(6)))
+        attempted = 0
+        for response in drains:
+            if response.status_code == 503:
+                # The emulator can exhaust its transaction retries under
+                # contention. Check the exact retryable result, then retry
+                # after all competing claims have finished.
+                self.assertEqual(response.get_json(), {'error': 'store_unavailable'})
+            else:
+                self.assertEqual(response.status_code, 200, response.get_json())
+                attempted += response.get_json()['attempted']
+        retry = self.drain()
+        self.assertEqual(retry.status_code, 200, retry.get_json())
+        self.assertEqual(attempted + retry.get_json()['attempted'], 1)
+        self.assertEqual(self.delivery(receipts[0])['state'], 'provider_accepted')
         self.restart()
         self.assertEqual(self.admit(alert)['state'], 'duplicate')
         self.assertEqual(self.drain().get_json(), {'attempted': 0})

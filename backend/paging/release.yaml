@@ -70,14 +70,58 @@ iam:
 grafana:
   instance: https://monitor.omi.me
   receiver: Omi - Redis phone wake
-  publisherPath: /v1/publish/grafana-redis
-  signatureHeader: X-Grafana-Alerting-Signature
-  timestampHeader: X-Grafana-Alerting-Timestamp
+  contactPoint:
+    uid: omi-redis-phone-wake
+    name: Omi - Redis phone wake
+    type: webhook
+    disableResolveMessage: false
+    settings:
+      url: reviewed-cloud-run-origin-required/v1/publish/grafana-redis
+      httpMethod: POST
+      hmacConfig:
+        header: X-Grafana-Alerting-Signature
+        timestampHeader: X-Grafana-Alerting-Timestamp
+  hmacSecretRef: projects/omi-paging-ops-prod/secrets/pager-grafana-redis-hmac/versions/REVIEWED_VERSION
   ruleUid: omi-redis-cache-conn-page
   targetLabel: paging_target
   target: prod-serving-redis
-  disableResolveMessage: false
   removeRuleMuteReference: omi-tier-silent
+redisProbe:
+  cluster: prod-omi-gke
+  namespace: prod-omi-backend
+  chart: backend/charts/redis-serving-probe
+  workload: deployment/omi-redis-serving-probe
+  identity: system:serviceaccount:prod-omi-backend:omi-redis-serving-probe
+  image: reviewed-head-digest-required
+  dockerfile: backend/paging/redis_probe/Dockerfile
+  endpoint:
+    hostRef: configmap/prod-omi-backend-config:REDIS_DB_HOST
+    port: 13151
+    transport: Redis RESP over TCP
+  credential:
+    redisUsername: omi-redis-serving-probe
+    permission: PING only
+    passwordRef: secret/omi-redis-serving-probe-auth:password
+  networkPolicy:
+    name: omi-redis-serving-probe
+    redisAddresses: requires-verified-addresses-of-serving-host
+    dnsResolverAddresses: requires-verified-workload-resolver-addresses
+  attemptIntervalSeconds: 30
+  attemptDeadlineSeconds: 2
+  scrape:
+    podMonitor: omi-redis-serving-probe
+    intervalSeconds: 15
+    datasourceUid: prometheus
+    success: 'omi_redis_authenticated_ping_success{job="omi-redis-serving-probe",target="prod-serving-redis"}'
+    attemptedAt: 'omi_redis_authenticated_ping_last_attempt_seconds{job="omi-redis-serving-probe",target="prod-serving-redis"}'
+    freshnessSeconds: 90
+    healthQuery: >-
+      (
+      (min(up{job="omi-redis-serving-probe"}) == bool 1)
+      * on() (count(omi_redis_authenticated_ping_success{job="omi-redis-serving-probe",target="prod-serving-redis"}
+      and (omi_redis_authenticated_ping_last_attempt_seconds{job="omi-redis-serving-probe",target="prod-serving-redis"} >= time() - 90)
+      and (omi_redis_authenticated_ping_last_attempt_seconds{job="omi-redis-serving-probe",target="prod-serving-redis"} <= time())) > bool 0)
+      ) or on() vector(0)
 recipient:
   route: redis-wake
   id: oncall-primary
