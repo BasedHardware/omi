@@ -13,11 +13,10 @@ receivers continue to fence late writes after a queue database session disappear
 
 ## Enablement and rollback
 
-1. Ship with the shared barrier off. In the authoritative account-deletion Firestore
-   database, `account_deletion_settings/dev` and `account_deletion_settings/prod`
-   each control their own environment. A missing document or a boolean
-   `go_queue_erase_required: false` retains legacy deletion behavior. Configure the
-   private HTTPS listener
+1. Ship with the barrier off. The deployment manifest renders one
+   `go_queue_erase_required` boolean into `GO_QUEUE_ERASE_REQUIRED` for all backend
+   runtimes in that environment. An unset or false value preserves legacy deletion,
+   including the same reads and writes. Configure the private HTTPS listener
    and give it normal queue access. Set `ERASE_FIRESTORE_PROJECT` and
    `ERASE_FIRESTORE_DATABASE` to the authoritative project and database resolved by the
    Python deletion executor. Use `(default)` explicitly for the default database. Omit
@@ -40,24 +39,25 @@ receivers continue to fence late writes after a queue database session disappear
    wipe-start timestamp ordering. The queue and Firestore fences must both be active.
 4. Let wipes that began removing data under the old behavior finish before enabling the
    barrier. Preserve and audit existing wipe-start evidence for any legacy retry.
-   In the first live family's release, verify that public admission, restore, grace
-   reconciliation, and the Cloud Tasks executor resolve the same authoritative database
-   and `OMI_ENV_STAGE`. Configure Cloud Tasks dispatch and supply `GO_QUEUE_ERASE_URL`
-   and `GO_QUEUE_ERASE_AUDIENCE` to its executor. Then set the environment's shared
-   `go_queue_erase_required` field to boolean `true`. Wait for deletion requests and
-   tasks that already read the old value to finish before admitting live Go tenant
-   traffic. Verify with synthetic accounts that admission retains credentials and a
-   worker outage leaves them untouched.
+   In the first live family's release, configure Cloud Tasks dispatch and supply
+   `GO_QUEUE_ERASE_URL` and `GO_QUEUE_ERASE_AUDIENCE` to the executor. The erase URL
+   is a private TLS endpoint at `/internal/v1/tenant-erase`; the audience is that
+   service's configured OIDC audience. Set `overlay.go_queue_erase_required: true`
+   in the target environment's source overlay under `backend/deploy/runtime_env/`
+   and regenerate the deployment manifest. Leave service-level overrides unset.
 
-   Each runtime reads the document directly, so there is no per-service barrier override
-   or cached value. A failed read or malformed document prevents credential deletion in
-   admission and prevents an unarmed wipe from starting. With the barrier on, only the
-   executor deletes credentials, after the receipt. The erase URL is a private TLS
-   endpoint at `/internal/v1/tenant-erase` and the audience is that service's configured
-   OIDC audience.
+   Roll all revisions and pods that serve admission, restore, grace reconciliation,
+   or Cloud Tasks execution from the same rendered configuration. Verify the
+   effective value on each serving revision and pod. Drain older revisions and
+   in-flight work that saw the off value before admitting live Go tenant traffic.
+   Verify with synthetic accounts that admission retains credentials and a worker
+   outage leaves them untouched. With the barrier enabled, the executor deletes
+   credentials after the committed erase receipt.
 5. Roll back the switch only as part of disabling all live Go tenant traffic. Stop new
    work, drain or erase remaining tenant queue rows, and finish armed deletions before
-   turning it off. Already armed generations continue to require a receipt.
+   turning it off. Set `overlay.go_queue_erase_required: false` explicitly and roll the
+   same runtimes. Omission can preserve a previously deployed environment value.
+   Already armed generations continue to require a receipt.
 
 ## Verify the recovery queue binding
 

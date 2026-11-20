@@ -143,6 +143,7 @@ def _configure_durable_account_deletion(monkeypatch) -> None:
     """Enable the production Cloud Tasks path with only local configuration."""
 
     monkeypatch.setenv("ACCOUNT_DELETION_DISPATCH_MODE", "cloud_tasks")
+    monkeypatch.setenv("GO_QUEUE_ERASE_REQUIRED", "false")
     monkeypatch.setenv("SYNC_TASKS_PROJECT", _PROJECT)
     monkeypatch.setenv("SYNC_TASKS_LOCATION", _LOCATION)
     monkeypatch.setenv("SYNC_TASKS_INVOKER_SA", _INVOKER_SERVICE_ACCOUNT)

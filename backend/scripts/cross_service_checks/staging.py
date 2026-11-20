@@ -58,6 +58,7 @@ STAGING_DIFF_ALLOWLIST: tuple[str, ...] = (
     'SUBSCRIPTION_LAUNCH_DATE',
     'SYNC_DISPATCH_MODE',
     'ACCOUNT_DELETION_DISPATCH_MODE',
+    'GO_QUEUE_ERASE_REQUIRED',
     # A2 job-store shadow: staging-only (prod stays on the Firestore store).
     'BATCH_JOBSTORE_MODE',
     'JOBSTORE_*',

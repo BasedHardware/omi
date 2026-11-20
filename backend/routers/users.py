@@ -361,11 +361,7 @@ async def run_account_deletion_wipe(
         )
 
     lock_key = f'account-deletion:{uid}'
-    try:
-        needs_erase = resolution.get('erase_armed') is True or await run_blocking(db_executor, go_queue_erase_required)
-    except Exception as e:
-        logger.error(f'account_deletion handler: barrier setting unavailable, will retry: {sanitize(str(e))}')
-        return JSONResponse(status_code=500, content={'status': 'retry'})
+    needs_erase = resolution.get('erase_armed') is True or go_queue_erase_required()
     lease = (ERASE_LEASE_SECONDS,) if needs_erase else ()
     lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key, *lease)
     if not lock_token:

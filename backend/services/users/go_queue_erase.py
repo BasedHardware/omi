@@ -29,13 +29,8 @@ class EraseRejected(RuntimeError):
 
 
 def go_queue_erase_required() -> bool:
-    """Read the same uncached, environment-scoped switch in every deletion runtime."""
-    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
-    if stage in {'', 'local', 'offline'} and not (os.getenv('K_SERVICE') or os.getenv('CLOUD_RUN_JOB')):
-        return False
-    if stage not in {'dev', 'prod'}:
-        raise RuntimeError('account deletion requires a known OMI_ENV_STAGE')
-    return receipt.read_barrier_required(stage)
+    """Use the rollout value rendered into every deletion runtime at deploy time."""
+    return os.getenv('GO_QUEUE_ERASE_REQUIRED', '').strip().lower() == 'true'
 
 
 def _oidc_token(audience: str) -> str:
