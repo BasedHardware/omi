@@ -253,7 +253,7 @@ func siblingGuard(t *testing.T) siblingGuardSession {
 	// connection pinned with those locks through the other harness's erase.
 	// This must be its final query so pg_stat_activity keeps the same query text
 	// as the guard session in the main test database.
-	if _, err := conn.Exec(t.Context(), "SELECT queue_acquire_guard($1,$2,$3)", "owner", "u1", int64(1)); err != nil {
+	if _, err := conn.Exec(t.Context(), "SELECT queue_acquire_guard($1,$2,$3)", "owner", "owner/sibling-u1", int64(1)); err != nil {
 		t.Fatal(err)
 	}
 	return siblingGuardSession{conn: conn, pid: pid}
