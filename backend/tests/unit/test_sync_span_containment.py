@@ -17,8 +17,9 @@ from utils.sync.live_overlap import span_contained
 
 ORIGIN = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 
-# L7a ships no config module; L7b wires the configured tolerance. The matrix
-# pins zero and the reviewed 0.5 s so a stricter setting can only refuse more.
+# L7b wires the configured tolerance in config/sync_bridge_containment.py. The
+# matrix pins zero and the reviewed 0.5 s so a stricter setting can only refuse
+# more.
 TOLERANCES = {
     'zero': 0.0,
     'reviewed': 0.5,

@@ -8,9 +8,12 @@ assignment transaction does, even when a walk skips the pre-check.
 
 import asyncio
 import itertools
+import json
+import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import pytest_asyncio
@@ -18,12 +21,17 @@ import pytest_asyncio
 from config.batch_pipeline import projection_drain_claim_aware_enabled, projection_prefetch_depth
 from config.policy.kill_switches import KILL_SWITCHES
 from database import conversations as conversations_db
+from database.batch_pipeline_intake import admit
+from dataclasses import replace
+from datetime import datetime, timezone
+from tests.unit.test_batch_pipeline_scheduler import item
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_batch_pipeline_owner_chain_projection import BURST, ResultLog, chain, projector_for
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from tests.unit.test_sync_assignment_contention_retry import sdk_assignment  # noqa: F401 (fixture)
 from tests.unit.test_sync_cross_job_assignment import chunk
 from utils.batch_pipeline import projection, projection_drain, projection_followup, projection_prefetch
+from utils.batch_pipeline import projection_drain_diagnostics as diagnostic
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.serving import Serving
@@ -111,11 +119,236 @@ async def settle(projector):
     """Wait until the process drain has nothing running or queued."""
     for _ in range(1000):
         drains = projector.drains
-        if drains is None or (not drains.tasks and not drains.queue):
+        if drains is None or (not drains.tasks and not drains.queue and not drains.backlog):
             return
         await asyncio.gather(*list(drains.tasks.values()), return_exceptions=True)
         await asyncio.sleep(0)
     raise AssertionError('owner drain did not settle')
+
+
+@pytest.mark.asyncio
+async def test_admission_diagnostics_on_off_preserve_real_admissions_rows_and_order(monkeypatch, claims, caplog):
+    """Real chain walk; a fresh commit lands after exhaustion but before finished()."""
+    caplog.set_level('INFO', logger=diagnostic.__name__)
+    monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 1)
+    monkeypatch.setattr(projection, 'OWNER_DRAIN_STEP_ROWS', 1)
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PREFETCH', '0')
+    observations = []
+    costs = []
+    for enabled in ('0', '1'):
+        monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', enabled)
+        log = ResultLog()
+        expected = chain(log, 'heavy', 'h', 3) + chain(log, 'light', 'l', 1)
+        projector = projector_for(log)
+        projector.store.read = Mock(wraps=projector.store.read)
+        log.projection_successor = Mock(wraps=log.projection_successor)
+        drains = projector.drains = projection_drain.OwnerDrains(projector)
+        admissions = []
+        real_admit, real_run = drains.admit_and_run, drains.run
+        fresh = False
+        repeated = False
+        empty_replay = False
+
+        async def admit(owner, *, continuation=False):
+            admissions.append((owner, continuation))
+            return await real_admit(owner, continuation=continuation)
+
+        async def bounded_run(owner, **kwargs):
+            nonlocal fresh, repeated, empty_replay
+            more = await real_run(owner, turn_seconds=0)  # one real row per turn, deterministic
+            if owner == 'heavy' and not repeated:
+                repeated = True
+                projector.request_drain(owner, reason='targeted_wake')
+                projector.start_drains()  # continuation and again must coalesce
+            if owner == 'light' and not fresh and not more:
+                fresh = True
+                chain(log, owner, 'fresh', 1)
+                projector.request_drain(owner, reason='targeted_wake')
+                projector.request_drain(owner, reason='predecessor_replay')
+                projector.start_drains()
+            elif owner == 'light' and fresh and not more and not empty_replay:
+                empty_replay = True
+                projector.request_drain(owner, reason='targeted_wake')
+                projector.start_drains()
+            return more
+
+        drains.admit_and_run, drains.run = admit, bounded_run
+        projector.request_drain('heavy', reason='discovery_after_assignment')
+        projector.request_drain('heavy', reason='predecessor_replay')
+        projector.request_drain('light', reason='discovery_after_assignment')
+        started = time.perf_counter()
+        projector.start_drains()
+        await settle(projector)
+        costs.append(time.perf_counter() - started)
+        assert set(log.persist_order) == set(expected + ['fresh-0'])
+        assert not claims.overlaps and not log.blocked_checks
+        observations.append(
+            (admissions, log.persist_order[:], projector.store.read.call_count, log.projection_successor.call_count)
+        )
+        if enabled == '0':
+            assert drains.diagnostics is None and projector.drain_request_counts is None
+            assert not [r for r in caplog.records if 'action=admission_diagnostics' in r.getMessage()]
+        else:
+            stats = drains.diagnostics
+            assert not stats.active and not stats.pending
+            assert sum(cell['n'] for cell in stats.cells.values()) == len(admissions)
+            assert sum(cell['rows'] for cell in stats.cells.values()) == len(expected) + 1
+            # The fresh wake survived exhaustion and reached its own turn, after the old one.
+            assert any(key[0] == 'again' and key[1] == 12 and key[2] for key in stats.cells)
+            assert stats.cells[('again', 8, 0, 'end', True)]['n'] == 1
+            assert any(key[0] == 'continuation' and key[1] == 14 for key in stats.cells)
+            assert stats.counts['handoff_coalesced'] == 2
+            assert all('claim_acquire' in cell['timing_ms'] for cell in stats.cells.values())
+            stats.flush()
+            records = [r.getMessage() for r in caplog.records if 'action=admission_diagnostics' in r.getMessage()]
+            assert len(records) == 1
+            assert all(owner not in records[0] for owner in ('heavy', 'light', 'fresh-0'))
+        drains.close()
+    assert observations[0] == observations[1]
+    print(f'diagnostic parity: off={costs[0]:.6f}s on={costs[1]:.6f}s; identical admissions/rows/order/read counts')
+
+
+def test_admission_origins_at_actual_discovery_replay_and_targeted_sites(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', '1')
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    projector.sweep(limit=1)
+    assert projector.drain_requests[BURST] == diagnostic.ORIGINS['discovery_after_assignment']
+    projector.drain_requests.clear()
+    projector.project_owner(BURST, limit=1)
+    assert projector.drain_requests[BURST] == diagnostic.ORIGINS['targeted_wake']
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    monkeypatch.setattr(projector.assignment_discovery, 'next', lambda **kwargs: [ids[-1]])
+    projector.sweep()
+    assert projector.drain_requests[BURST] == diagnostic.ORIGINS['predecessor_replay']
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_claim_and_retry_admissions(monkeypatch, claims, drain_timers):
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', '1')
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 1)
+    projector = projector_for(log)
+    drains = projector.drains = projection_drain.OwnerDrains(projector)
+    claims.busy.add(owner_key(BURST))
+    drains.request({BURST: diagnostic.ORIGINS['targeted_wake']})
+    await settle(projector)
+    stats = drains.diagnostics
+    assert stats.cells[('external', 8, 0, 'claim_held', False)]['n'] == 1
+    assert not projector.store.store.persist_order
+    drains.request([BURST] * 3)
+    assert stats.counts['deferred'] == 3
+    claims.busy.clear()
+    _, retry, _ = drain_timers.pop()
+    retry()
+    await settle(projector)
+    assert log.persist_order == ids
+    assert stats.cells[('retry', 24, 1, 'end', True)]['n'] == 1
+    assert not stats.active and not stats.pending
+    drains.close()
+
+
+def test_diagnostic_bounds_stop_safety_flush_interval_and_shutdown(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', '1')
+    monkeypatch.setattr(diagnostic, 'MAX_OWNERS', 1)
+    monkeypatch.setattr(diagnostic, 'MAX_CELLS', 1)
+    clock = [0.0]
+    monkeypatch.setattr(diagnostic.time, 'monotonic', lambda: clock[0])
+    sink = Mock()
+    monkeypatch.setattr(diagnostic.logger, 'info', sink)
+    projector = projector_for(ResultLog())
+    projector.request_drain('first', reason='targeted_wake')
+    projector.request_drain('second', reason='discovery_after_assignment')
+    assert list(projector.drain_requests) == ['first', 'second']
+    assert projector.drain_requests == {'first': 8, 'second': None}
+    assert projector.drain_request_counts['handoff_overflow'] == 1
+    stats = diagnostic.Diagnostics()
+    stats.request('secret-owner', 2, 'queued')
+    stats.request('overflow-owner', 8, 'queued')
+    assert len(stats.pending) == 1 and stats.counts['owner_overflow'] == 1
+    turn = stats.begin('secret-owner')
+    turn.stop = 'unsafe-owner-task-content'
+    turn.elapsed('prefetch_wait', 0.002)
+    stats.finish('secret-owner')
+    assert stats.begin('overflow-owner').trigger == 'unknown'
+    stats.finish('overflow-owner', 'claim_held')
+    assert len(stats.cells) == 1 and stats.counts['cell_overflow'] == 1
+    sink.assert_not_called()
+    clock[0] = 60
+    stats.begin('later')
+    stats.finish('later', 'end')
+    sink.assert_called_once()
+    payload = json.loads(sink.call_args.args[1])
+    assert payload['cells'][0]['stop'] == 'other'
+    assert payload['cells'][0]['timing_buckets']['prefetch_wait'] == [0, 1, 0, 0, 0, 0]
+    assert 'secret-owner' not in sink.call_args.args[1]
+    stats.begin('cancel')
+    stats.finish('cancel', cancelled=True)
+    stats.close()
+    assert sink.call_count == 1  # shutdown neither awaits nor writes to a sink
+    assert not stats.cells and not stats.pending and not stats.active
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_privacy_early_exit_and_prefetch_timings(monkeypatch, drain_timers):
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', '1')
+    projector, drains, step, snapshot, read, _ = privacy_version_drain(monkeypatch)
+    drains.request([BURST])
+    await settle(projector)
+    drains.request([BURST])
+    await settle(projector)
+    assert drains.diagnostics.cells[('external', 1, 0, 'privacy_unchanged', False)]['n'] == 1
+    assert read.call_count == 1 and step.call_count == 1
+    drains.close()
+    log = ResultLog()
+    ids = chain(log, BURST, 'prefetch', 3)
+    projector = projector_for(log)
+    projector.request_drain(BURST, reason='targeted_wake')
+    projector.start_drains()
+    await settle(projector)
+    assert log.persist_order == ids
+    cells = projector.drains.diagnostics.cells.values()
+    assert any('prefetch_wait' in cell['timing_ms'] for cell in cells)
+    projector.drains.close()
+
+
+def test_diagnostic_sink_failure_does_not_interrupt_or_retry_per_turn(monkeypatch):
+    clock = [0.0]
+    monkeypatch.setattr(diagnostic.time, 'monotonic', lambda: clock[0])
+    sink = Mock(side_effect=RuntimeError('sink unavailable'))
+    monkeypatch.setattr(diagnostic.logger, 'info', sink)
+    stats = diagnostic.Diagnostics()
+    clock[0] = 60
+    for _ in range(3):
+        stats.begin('owner')
+        stats.finish('owner', 'end')
+    assert sink.call_count == 1 and stats.counts['completed'] == 3
+    assert stats.counts['sink_failures'] == 1
+    clock[0] = 120
+    stats.begin('owner')
+    stats.finish('owner', cancelled=True, flush=False)
+    assert sink.call_count == 1
+    clock[0] = 180
+    sink.side_effect = None
+    stats.flush()
+    payload = json.loads(sink.call_args.args[1])
+    assert payload['window_ms'] == 180000  # retained counters retain their full denominator
+    assert payload['counts']['completed'] == 4 and payload['counts']['sink_failures'] == 1
+    stats.close()
+
+
+@pytest.mark.parametrize('value, expected', [(None, True), ('0', False), ('off', False), ('false', False), ('1', True)])
+def test_admission_diagnostics_switch(monkeypatch, value, expected):
+    from config.batch_pipeline import owner_drain_admission_diagnostics_enabled
+
+    if value is None:
+        monkeypatch.delenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', value)
+    assert owner_drain_admission_diagnostics_enabled() is expected
 
 
 def owner_rows(log, owner):
@@ -123,13 +356,34 @@ def owner_rows(log, owner):
     return [sid for sid in log.persist_order if log.results[sid]['owner_key'] == key]
 
 
+@pytest.fixture
+def serial_owner_steps(monkeypatch):
+    """Deterministic cross-owner persist order for the fairness assertions.
+
+    Owner turns persist their steps through the 16-worker sync executor, so
+    which of two concurrent turns' steps reaches ``persist_order`` first is
+    thread timing, not scheduler order: on a loaded hosted runner a backlog
+    continuation's step overtook the newly admitted owner's (SCA-2182,
+    completion index 9 vs the asserted 7 — the scheduler had admitted the new
+    owner first). Fairness tests below pin the order the scheduler actually
+    controls by serializing steps (one FIFO executor worker) and skipping the
+    executor claim hop only a first turn pays; claim-aware admission itself
+    has its own tests below.
+    """
+    monkeypatch.setenv('PROJECTION_DRAIN_CLAIM_AWARE', 'off')
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        monkeypatch.setattr(projection_drain, 'sync_executor', executor)
+        yield
+
+
 # --- fairness and scheduling -------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_heavy_owners_cannot_starve_a_light_owner(monkeypatch, claims):
+async def test_heavy_owners_cannot_starve_a_light_owner(monkeypatch, claims, serial_owner_steps):
     """One slot, one two-row step per turn: owners take FIFO turns, in chain order."""
     monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 1)
+    monkeypatch.setattr(projection_drain, 'FIRST_TURN_SECONDS', 0.0)  # The single FIFO queue.
     monkeypatch.setattr(projection, 'OWNER_DRAIN_STEP_ROWS', 2)
     # Each read jumps past any turn deadline, so every turn is exactly one step.
     ticks = itertools.count(0.0, 10_000.0)
@@ -149,6 +403,89 @@ async def test_heavy_owners_cannot_starve_a_light_owner(monkeypatch, claims):
     # second turn, after 8 heavy rows instead of all 24.
     assert log.persist_order.index(light[-1]) == 10
     assert claims.overlaps == 0 and not projector.draining
+
+
+@pytest.mark.asyncio
+async def test_backlog_owners_do_not_hold_a_new_owner_behind_them(monkeypatch, claims, serial_owner_steps):
+    """2026-11-13: a few hundred backlog owners held every slot for two minutes a turn and
+    owners with a few fresh rows waited behind them. A new owner now goes before queued
+    backlog owners; every chain still projects whole and in order."""
+    monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 2)
+    monkeypatch.setattr(projection, 'OWNER_DRAIN_STEP_ROWS', 2)
+    ticks = itertools.count(0.0, 10_000.0)
+    monkeypatch.setattr(projection_drain, 'time', Mock(monotonic=lambda: next(ticks)))
+    log = ResultLog()
+    heavy = {name: chain(log, name, name, 12) for name in ('h1', 'h2', 'h3')}
+    light = chain(log, 'light', 'l', 2)
+    projector = projector_for(log)
+    projector.drain_requests = dict.fromkeys(['h1', 'h2', 'h3', 'light'])
+    projector.start_drains()
+    await settle(projector)
+    for name, rows in heavy.items():
+        assert owner_rows(log, name) == rows
+    assert owner_rows(log, 'light') == light
+    # The light owner is done after one first turn of each heavy owner ahead of it in the
+    # queue (6 rows), before any heavy owner gets a second turn.
+    assert log.persist_order.index(light[-1]) == 7
+    assert claims.overlaps == 0 and not projector.draining
+
+
+def test_new_owners_launch_first_and_the_backlog_still_advances(monkeypatch):
+    monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 2)
+    monkeypatch.setattr(projection_drain, 'BACKLOG_OWED_TURNS', 1)
+    drains = projection_drain.OwnerDrains(projector_for(ResultLog()))
+    drains.backlog.extend(['b1', 'b2'])
+    drains.queue.extend(['n1', 'n2', 'n3'])
+    assert [drains.next_owner(), drains.next_owner()] == ['n1', 'n2']
+    # One round of new owners with no backlog owner running: the backlog is owed a turn.
+    assert drains.next_owner() == 'b1' and drains.backlog_running == {'b1'}
+    assert drains.next_owner() == 'n3'
+    # No new owner waiting: backlog owners may use any free slot.
+    assert drains.next_owner() == 'b2'
+    assert drains.next_owner() is None
+
+
+def test_a_backlog_turn_yields_only_for_a_new_owner_without_a_slot(monkeypatch):
+    monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 3)
+    drains = projection_drain.OwnerDrains(projector_for(ResultLog()))
+    drains.tasks = dict.fromkeys(['b1', 'b2', 'b3'])
+    drains.backlog_running = {'b1', 'b2', 'b3'}
+    assert drains.should_yield('b1') is False  # Nobody is waiting.
+    drains.queue.append('n1')
+    assert drains.should_yield('b1') is True
+    assert drains.should_yield('b2') is False  # One waiting owner takes one slot.
+    drains.queue.append('n2')
+    assert drains.should_yield('b2') is True
+    drains.queue.append('n3')
+    assert drains.should_yield('b3') is False  # Never the last backlog turn running.
+    # A free slot serves the waiting owner without ending anyone's turn.
+    drains.yielding.clear()
+    drains.tasks.pop('b3')
+    drains.backlog_running.discard('b3')
+    drains.queue.clear()
+    drains.queue.append('n1')
+    assert drains.should_yield('b1') is False
+    # A new owner's own first turn is never ended early.
+    drains.queue.extend(['n2', 'n3'])
+    assert drains.should_yield('n9') is False
+
+
+def test_first_turn_zero_keeps_the_single_fifo_queue(monkeypatch):
+    monkeypatch.setattr(projection_drain, 'FIRST_TURN_SECONDS', 0.0)
+    drains = projection_drain.OwnerDrains(projector_for(ResultLog()))
+    assert drains.classes() is False
+    monkeypatch.setattr(projection_drain, 'FIRST_TURN_SECONDS', 15.0)
+    assert drains.classes() is True
+
+
+def test_first_turn_seconds_setting(monkeypatch):
+    from config.batch_pipeline import owner_drain_first_turn_seconds
+
+    monkeypatch.delenv('BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS', raising=False)
+    assert owner_drain_first_turn_seconds() == 15
+    for raw, want in (('0', 0), ('30', 30), ('999', 120), ('-5', 0), ('junk', 15)):
+        monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS', raw)
+        assert owner_drain_first_turn_seconds() == want
 
 
 @pytest.mark.asyncio
@@ -268,7 +605,40 @@ def test_drain_step_holds_the_owner_claim_and_skips_only_the_pre_checks(claims):
     assert claims.entered == [owner_key(BURST)]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('case', ['recent', 'old', 'multipart', 'partial', 'upload', 'off', 'wake_error'])
+async def test_recent_single_record_followup_wakes_at_persist_without_discovery(monkeypatch, case):
+    monkeypatch.setenv('RECORD_FOLLOWUP_WAKE_ENABLED', 'false' if case == 'off' else 'true')
+    log = ResultLog()
+    ids = chain(log, BURST, 'record', 2 if case == 'multipart' else 1)
+    for sid in ids:
+        log.jobs[sid].update(
+            fresh_capture=True,
+            record_finished_at=1000 - (1801 if case == 'old' else 700),
+            projection_binding={'native_record': case != 'upload', 'partial_record': case == 'partial'},
+        )
+    projector = projector_for(log)
+    projector.clock = lambda: 1000
+    projector.start_followups = AsyncMock()
+    if case == 'wake_error':
+        projector.start_followups.side_effect = RuntimeError('synthetic wake failure')
+    drains = projection_drain.OwnerDrains(projector)
+    try:
+        await drains.run(BURST)
+        assert log.persist_order == ids
+        if case in {'recent', 'wake_error'}:
+            projector.start_followups.assert_awaited_once_with(tuple(ids), discover=False)
+        else:
+            projector.start_followups.assert_not_awaited()
+        # Queued wakes need no duplicate hint; rollback retains the old hints.
+        # The result receipt remains durable in either case.
+        assert projector.chain_followups == ([] if case == 'recent' else ids)
+    finally:
+        drains.close()
+
+
 def test_drain_off_walk_keeps_every_pre_check(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'false')
     log = CountingLog()
     ids = chain(log, BURST, 'a', 4)
@@ -298,7 +668,8 @@ def test_predecessor_fence_still_stops_a_drain_without_pre_checks():
 
 
 @pytest.mark.parametrize('fresh_read_saw_receipt', [True, False])
-def test_a_row_persisted_elsewhere_is_a_replay_with_or_without_the_pre_check(fresh_read_saw_receipt):
+def test_a_row_persisted_elsewhere_is_a_replay_with_or_without_the_pre_check(fresh_read_saw_receipt, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', 'false')
     log = CountingLog()
     ids = chain(log, BURST, 'a', 2)
     projector = projector_for(log)
@@ -342,6 +713,7 @@ async def test_drained_catch_up_final_state_equals_the_sweep_walk(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'false')
     legacy, _ = catch_up_log()
     projector = projector_for(legacy)
+    projector.clock = lambda: 1000.0
     for _ in range(10):
         projector.sweep()
     assert legacy.persisted(BURST) and legacy.persisted('other')
@@ -349,6 +721,7 @@ async def test_drained_catch_up_final_state_equals_the_sweep_walk(monkeypatch):
     monkeypatch.delenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
     drained, _ = catch_up_log()
     projector = projector_for(drained)
+    projector.clock = lambda: 1000.0
     service = Serving(MemoryStore(), projector=projector)
     for _ in range(3):
         await service.reconcile_async(periodic=True)
@@ -1252,17 +1625,17 @@ async def test_ttl_during_unchanged_early_check_cannot_lose_the_retry(monkeypatc
     drains.request([BURST])
     await settle(projector)
     checked, release = asyncio.Event(), asyncio.Event()
-    real_run_blocking = projection_drain.run_blocking
+    real_blocking = drains.blocking
 
-    async def pause_check(executor, fn, *args, **kwargs):
+    async def pause_check(fn, *args, **kwargs):
         if fn == drains.privacy_head_unchanged:
             result = fn(*args, **kwargs)
             checked.set()
             await release.wait()
             return result
-        return await real_run_blocking(executor, fn, *args, **kwargs)
+        return await real_blocking(fn, *args, **kwargs)
 
-    monkeypatch.setattr(projection_drain, 'run_blocking', pause_check)
+    monkeypatch.setattr(drains, 'blocking', pause_check)
     drains.request([BURST])
     await checked.wait()
     drain_timers[0][1]()
@@ -1561,3 +1934,43 @@ async def test_live_target_defer_refusal_preserves_active_rerequest(monkeypatch,
     # re-request alone produced the second turn.
     assert not list(projector.drain_requests)
     drains.close()
+
+
+@pytest.mark.asyncio
+async def test_real_intake_with_fresh_merge_off_still_wakes_recent_record_followup(monkeypatch):
+    monkeypatch.delenv('RECORD_FRESH_MERGE_ENABLED', raising=False)
+    monkeypatch.delenv('RECORD_NOTES_EAGER_ENABLED', raising=False)
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', BURST)
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    now = 100_000.0
+    log = ResultLog()
+    ids = chain(log, BURST, 'record', 1)
+    sid = ids[0]
+    binding = replace(log.bindings[sid], record_origin=True, native_record=True, target_conversation_id='capture')
+    intake = MemoryStore()
+    intake.rows['conversations', f'{BURST}/capture'] = {
+        'status': 'completed',
+        'record_audio_closed': True,
+        'record_lane_owner': 'batch_sync_v1',
+        'record_upload_revision': 1,
+        'finished_at': datetime.fromtimestamp(now - 900, timezone.utc),
+    }
+    work = replace(item(sid, owner=BURST, capture=now - 2000, duration=60), privacy_generation=0)
+    admit(intake, [work], binding, now, namespace='test')
+    admitted = intake.rows['jobs', sid]
+    assert admitted['fresh_capture'] is False
+    assert 'record_notes_after_complete' not in admitted
+    log.jobs[sid].update(admitted)
+    log.bindings[sid] = binding
+    projector = projector_for(log)
+    # Keep the existing hermetic persist seam; urgency reads the real admitted job.
+    projector.assign_record_silence = lambda work, binding, session, **_: session.persist_empty()
+    projector.clock = lambda: now
+    projector.start_followups = AsyncMock()
+    drains = projection_drain.OwnerDrains(projector)
+    try:
+        await drains.run(BURST)
+        projector.start_followups.assert_awaited_once_with(tuple(ids), discover=False)
+    finally:
+        drains.close()

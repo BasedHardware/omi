@@ -127,6 +127,34 @@ def test_missing_secret_stops_binding_migration_and_traffic_repair(monkeypatch, 
     repair.assert_not_called()
 
 
+def test_traffic_preflight_passes_the_floor_checker_to_repair(monkeypatch):
+    preflight = load_preflight()
+    repair_module = preflight.repair_cloud_run_traffic
+    repair = Mock(return_value=[repair_module.RepairResult('backend-sync', 'failed', 'backend-sync-old', 'candidate')])
+    monkeypatch.setattr(repair_module, 'repair_live', repair)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            str(SCRIPT),
+            '--env=prod',
+            '--project=based-hardware',
+            '--service=backend-sync',
+            '--repair-traffic',
+            '--release-floor-check=floor.py',
+        ],
+    )
+
+    assert preflight.main() == 1
+    repair.assert_called_once_with(
+        project='based-hardware',
+        region='us-central1',
+        services=('backend-sync',),
+        repair=True,
+        release_floor_check='floor.py',
+    )
+
+
 def test_check_rendered_secrets_passes_when_secrets_exist(monkeypatch: pytest.MonkeyPatch) -> None:
     preflight = load_preflight()
     monkeypatch.setattr(preflight, '_secret_exists', lambda **kwargs: True)
@@ -729,3 +757,55 @@ def test_backend_deploy_workflows_do_not_materialize_an_ignored_service_account_
         text = (repo_root / '.github' / 'workflows' / workflow).read_text(encoding='utf-8')
         assert 'GCP_SERVICE_ACCOUNT' not in text
         assert 'backend/google-credentials.json' not in text
+
+
+def test_selected_secret_check_ignores_missing_omitted_service(monkeypatch, tmp_path):
+    preflight = load_preflight()
+    manifest = tmp_path / 'manifest.yaml'
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                'environments': {
+                    'prod': {
+                        'cloud_run': {
+                            'services': {
+                                'backend': {'secrets': {'ONLY_BACKEND': {'secret': 'omitted', 'version': 'latest'}}},
+                                'backend-sync': {'secrets': {'ONLY_SYNC': {'secret': 'selected', 'version': 'latest'}}},
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    )
+    seen = []
+
+    def exists(**kwargs):
+        seen.append(kwargs['secret_name'])
+        return kwargs['secret_name'] == 'selected'
+
+    monkeypatch.setattr(preflight, '_secret_exists', exists)
+    assert (
+        preflight.check_rendered_secrets(
+            env='prod', manifest_path=manifest, project='synthetic', services=('backend-sync',)
+        )
+        == []
+    )
+    assert seen == ['selected']
+    seen.clear()
+    missing = preflight.check_rendered_secrets(env='prod', manifest_path=manifest, project='synthetic')
+    assert [m.secret_name for m in missing] == ['omitted']
+    assert set(seen) == {'omitted', 'selected'}
+
+
+def test_selected_secret_cli_passes_its_scope_to_secret_preflight(monkeypatch):
+    preflight = load_preflight()
+    check = Mock(return_value=[])
+    monkeypatch.setattr(preflight, 'check_rendered_secrets', check)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['preflight', '--env', 'prod', '--project', 'synthetic', '--service', 'backend-sync', '--check-secrets'],
+    )
+    assert preflight.main() == 0
+    assert check.call_args.kwargs['services'] == ('backend-sync',)

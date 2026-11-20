@@ -23,6 +23,7 @@ returns ``EpisodeConflict`` and the caller decides whether to retry.
 from __future__ import annotations
 
 from database import transcript_pointer
+from utils.summary_quality import episode_quality
 
 import json
 import uuid
@@ -31,6 +32,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from google.cloud import firestore
 from config.recorded_time import recorded_episodes_enabled
+from config import episode_live_members as live_members
 from config.episode_attach import membership_dedupe_enabled
 from config.episodes import (
     MAX_EPISODE_SECONDS,
@@ -46,6 +48,7 @@ from database.transcript_pointer import run_preloaded_transactional as run_trans
 from database.conversations import decode_transcript_segments_verified
 from database.conversation_revisions import firestore_revision_datetime
 from utils.encryption import decrypt, encrypt
+from utils.home_feed.projection import DISPLAY_FIELDS, stamp as stamp_home_display
 
 CURRENT = 'current'
 LAST_CLOSED = 'last_closed'
@@ -84,13 +87,16 @@ def seal(uid: str, episode: Mapping[str, Any]) -> dict[str, Any]:
     stored = {key: value for key, value in episode.items() if key not in CONTENT_FIELDS}
     content = {key: episode.get(key) for key in CONTENT_FIELDS if key in episode}
     stored['content'] = encrypt(json.dumps(content, ensure_ascii=False, default=_json_default), uid)
+    stored.update(stamp_home_display(uid, episode, 'episode'))
     return stored
 
 
 def unseal(uid: str, raw: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
     if not raw:
         return None
-    episode = {key: value for key, value in raw.items() if key != 'content'}
+    # Compact encrypted display belongs to the list projection, never to a
+    # hydrated episode or the next logical-state mutation.
+    episode = {key: value for key, value in raw.items() if key != 'content' and key not in DISPLAY_FIELDS}
     blob = raw.get('content')
     content: dict[str, Any] = {}
     if isinstance(blob, str) and blob:
@@ -235,8 +241,19 @@ def _merge_state(raw: Mapping[str, Any], updates: Mapping[str, Any]) -> dict[str
     excluded = hidden | set(merged.get('duplicate_conversation_ids') or [])
     for field in ('moments', 'provisional_items'):
         merged[field] = [item for item in merged.get(field) or [] if item.get('conversation_id') not in excluded]
+    clear_notes = all(key in updates for key in ('title', 'bullets', 'moments')) and not any(
+        updates[key] for key in ('title', 'bullets', 'moments')
+    )
     if hidden - set(raw.get('discarded_conversation_ids') or []):
         merged.update(_cleared_notes())
+    elif not clear_notes:
+        removed = set(raw.get('conversation_ids') or []) - set(merged.get('conversation_ids') or [])
+        merged = episode_quality({} if removed else raw, merged)
+        if merged.get('title') != raw.get('title'):
+            merged['title_changed_at'] = datetime.now(timezone.utc)
+            if removed:
+                merged['title_change_reason'] = 'membership_removed'
+
     return merged
 
 
@@ -772,7 +789,11 @@ def _close(
     current_id = _link_target(client, uid, CURRENT, transaction)
     if not raw or raw.get('status') != 'live':
         return None
-    if reason == 'idle' and expected_activity_at is not None and raw.get('last_activity_at') != expected_activity_at:
+    if (
+        reason in {'idle', 'gap'}
+        and expected_activity_at is not None
+        and raw.get('last_activity_at') != expected_activity_at
+    ):
         return None  # Speech won the race with a lazy reader's stale idle decision.
     if expected_conversation_ids is not None and set(raw.get('conversation_ids') or []) != set(
         expected_conversation_ids
@@ -915,7 +936,7 @@ def _update(
     link_conversation_ids: Sequence[str],
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
     recovery_conversation_id: Optional[str] = None,
-    expected_member_revisions: Optional[Mapping[str, Optional[datetime]]] = None,
+    expected_member_revisions: Optional[Mapping[str, live_members.MemberRevision]] = None,
 ) -> dict[str, Any]:
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
@@ -949,6 +970,8 @@ def _update(
     # another replica even when it has not updated the episode yet. None means
     # the member was absent; missing revision metadata on an existing row fails
     # closed rather than trusting a client-written updated_at field.
+    home_member_versions = {}
+    excluded_live_ids = []
     for cid, revision in (expected_member_revisions or {}).items():
         member = (
             client.collection('users')
@@ -958,12 +981,27 @@ def _update(
             .get(transaction=transaction)
         )
         if member.exists:
+            home_member_versions[cid] = (member.to_dict() or {}).get('home_source_version')
+            if revision == live_members.CAPTURING_REVISION:
+                # Continuous audio appends do not invalidate a finished-subset
+                # summary. Finishing/hiding this member still fences the write.
+                if (
+                    not live_members.enabled()
+                    or not live_members.capturing(member.to_dict() or {})
+                    or is_relevance_discarded(member.to_dict() or {})
+                ):
+                    raise EpisodeConflict('member_revision_changed')
+                excluded_live_ids.append(cid)
+                continue
             current_revision = firestore_revision_datetime(getattr(member, 'update_time', None))
             if revision is None or current_revision != revision:
                 raise EpisodeConflict('member_revision_changed')
         elif revision is not None:
             raise EpisodeConflict('member_revision_changed')
     merged = _merge_state(unseal(uid, raw) or {}, updates)
+    if expected_member_revisions is not None:
+        merged['home_content_member_versions'] = home_member_versions
+        merged['compose_excluded_live_member_ids'] = excluded_live_ids
     if retained_bounds_changed(raw, merged):
         merged = retained_bounds(transaction, client, uid, raw, merged)
     _drop_legacy_receipts(merged, segment_receipts)
@@ -1007,7 +1045,7 @@ def update_episode(
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
     firestore_client: Any = None,
     recovery_conversation_id: Optional[str] = None,
-    expected_member_revisions: Optional[Mapping[str, Optional[datetime]]] = None,
+    expected_member_revisions: Optional[Mapping[str, live_members.MemberRevision]] = None,
 ) -> dict[str, Any]:
     """CAS update of any episode (open or closed). Raises ``EpisodeConflict`` on a lost race.
 

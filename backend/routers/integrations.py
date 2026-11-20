@@ -196,6 +196,9 @@ class IntegrationResponse(BaseModel):
 
     connected: bool = Field(description="Whether the integration is connected")
     app_key: str = Field(description="Integration app key")
+    read_selection_configured: Optional[bool] = Field(
+        default=None, description="Google Calendar has an explicit saved read scope, even if its grant is disconnected"
+    )
 
 
 class IntegrationMutationResponse(BaseModel):
@@ -290,7 +293,12 @@ async def synthesize_connector_data(
     )
 
 
-@router.get("/v1/integrations/{app_key}", response_model=IntegrationResponse, tags=['integrations'])
+@router.get(
+    "/v1/integrations/{app_key}",
+    response_model=IntegrationResponse,
+    response_model_exclude_none=True,
+    tags=['integrations'],
+)
 def get_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get integration connection status for the current user.
 
@@ -304,6 +312,17 @@ def get_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid))
         return IntegrationResponse(connected=connected, app_key=app_key)
 
     integration = users_db.get_integration(uid, app_key)
+
+    if app_key == 'google_calendar':
+        from database.google_calendar_preferences import get_selections
+
+        # A disconnected grant must not make native readers forget an explicit
+        # read scope and silently fall through to another browser account.
+        return IntegrationResponse(
+            connected=bool(integration and integration.get('connected')),
+            app_key=app_key,
+            read_selection_configured=bool(get_selections(uid)),
+        )
 
     if integration and integration.get('connected'):
         return IntegrationResponse(connected=True, app_key=app_key)

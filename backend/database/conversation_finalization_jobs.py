@@ -18,7 +18,7 @@ from typing import Any, Callable, Literal, Mapping, NotRequired, TypedDict
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from config import server_batch
+from config import server_batch, listen_reconnect
 from config.episodes import home_transcription_deadline_seconds
 from config.firestore_read_levers import lever_enabled
 from config.account_cutover import cutover_enforcement_enabled
@@ -68,8 +68,9 @@ from utils.conversations.recovery import (
     structured_has_protected_content,
 )
 
+from database.conversation_finalization_schema import FINALIZATION_JOBS_COLLECTION
+
 CONVERSATIONS_COLLECTION = 'conversations'
-FINALIZATION_JOBS_COLLECTION = 'conversation_finalization_jobs'
 # This projection starts at the first release that writes terminal outcomes.
 # It intentionally does not backfill historical jobs: terminal writes for rows
 # without this generation remain durable on the job itself but cannot move the
@@ -381,7 +382,11 @@ def recovery_admission_refusal(
     source = getattr(conversation.get('source'), 'value', conversation.get('source'))
     if source != 'omi' and not (source == 'phone' and quiet_finalization_enabled()):
         return 'source'
-    if structured_has_protected_content(conversation.get('structured'), conversation.get('user_title')):
+    if structured_has_protected_content(
+        conversation.get('structured'), conversation.get('user_title')
+    ) and not listen_reconnect.end_due(conversation, recovery_cutoff):
+        # A drained explicit capture end still owes normal processing when the
+        # user edited its title during the grace. This is not orphan inference.
         return 'protected_content'
     if conversation.get('finalization_job_id'):
         return 'has_job'
@@ -621,7 +626,12 @@ def _create_or_get_finalization_intent_txn(
                 # Use the candidate-selection clock, including speech-only v2 rows.
                 finished_at = speech_clock(uid, loaded)
                 assert finished_at is not None  # recovery_admission_refusal checked it above
-                if finished_at + timedelta(seconds=continuation_timeout(loaded, timeout)) > now:
+                if (
+                    listen_reconnect.deadline(
+                        loaded, finished_at + timedelta(seconds=continuation_timeout(loaded, timeout)), now=now
+                    )
+                    > now
+                ):
                     intent = _no_finalization_intent('refused_not_quiet')
                     return intent
             lease_expiry = recording_session_lease_expiry(

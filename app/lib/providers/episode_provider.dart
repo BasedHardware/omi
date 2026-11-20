@@ -114,6 +114,7 @@ class EpisodeProvider extends ChangeNotifier {
 
   void invalidateHome() {
     _openedEpisodes.clear();
+    _openProblems.clear();
     _byConversation.clear();
     _cachedAt.clear();
     _opening.clear();
@@ -165,6 +166,7 @@ class EpisodeProvider extends ChangeNotifier {
     required bool bootstrap,
     Set<String>? heldIds,
   }) async {
+    if (_off) return true; // v3: no episodes to read, so the overlay is complete and empty.
     if (!_enabled && !bootstrap) return false;
     final key = '${from.toIso8601String()}|${to.toIso8601String()}';
     if (!force &&
@@ -290,7 +292,7 @@ class EpisodeProvider extends ChangeNotifier {
   final EpisodeLookupFetcher _lookup;
   final EpisodeDetailFetcher _detail;
   final Map<String, Episode> _openedEpisodes = {};
-  Episode? openedEpisode(String id) => _ownerUid == SharedPreferencesUtil().uid ? _openedEpisodes[id] : null;
+  Episode? openedEpisode(String id) => !_off && _ownerUid == SharedPreferencesUtil().uid ? _openedEpisodes[id] : null;
   final EpisodeWrapUpCall _wrapUp;
   final EpisodeDismissCall _dismiss;
   final DateTime Function() _clock;
@@ -315,7 +317,13 @@ class EpisodeProvider extends ChangeNotifier {
   final LiveStartAnchor liveAnchor = LiveStartAnchor();
 
   bool _enabled = false;
-  bool get enabled => _enabled && _ownerUid == SharedPreferencesUtil().uid;
+  bool get enabled => _enabled && !_off && _ownerUid == SharedPreferencesUtil().uid;
+
+  /// True while the server runs recordings and conversations (v3) for this account: episodes are
+  /// retired for it, so the app makes no episode calls at all (the server's episode-call counter
+  /// decides when the old code can be deleted).
+  bool Function()? suppressed;
+  bool get _off => suppressed?.call() == true;
 
   Episode? _live;
   Episode? get live => _ownerUid == SharedPreferencesUtil().uid ? _live : null;
@@ -364,6 +372,7 @@ class EpisodeProvider extends ChangeNotifier {
     _homeGeneration++;
     _byConversation.clear();
     _openedEpisodes.clear();
+    _openProblems.clear();
     _opening.clear();
     _openTokens.clear();
     _cachedAt.clear();
@@ -422,7 +431,7 @@ class EpisodeProvider extends ChangeNotifier {
     final uid = SharedPreferencesUtil().uid;
     final id =
         conversationId ?? (uid.isEmpty ? '' : SharedPreferencesUtil().getString('previousEpisodeConversation:$uid'));
-    if (id.isEmpty || _recovering.contains(id)) return;
+    if (_off || id.isEmpty || _recovering.contains(id)) return;
     _recovering.add(id);
     try {
       final result = await _lookup(id);
@@ -515,6 +524,18 @@ class EpisodeProvider extends ChangeNotifier {
   /// Re-reads the live episode. A failed read keeps what was shown; a 404 means no episodes here.
   Future<void> refreshLive() async {
     _ensureOwner();
+    if (_off) {
+      // Episodes are retired for this account (or the switch has not answered yet): drop anything an
+      // earlier read cached, so no episode UI or write follows from it.
+      if (_enabled || _live != null || _previous != null || _byConversation.isNotEmpty) {
+        _enabled = false;
+        _live = null;
+        _previous = null;
+        invalidateHome();
+        notifyListeners();
+      }
+      return;
+    }
     final uid = _ownerUid;
     final generation = ++_generation;
     final result = await _fetchLive();
@@ -557,12 +578,13 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   /// The conversations the existing live row stands for on Home.
-  Set<String> get liveConversationIds => _enabled && live != null ? live!.conversationIds.toSet() : const {};
+  Set<String> get liveConversationIds => enabled && live != null ? live!.conversationIds.toSet() : const {};
 
   /// The episode [conversationId] belongs to. Coalesce reads and keep only a short-lived cache:
   /// finalization can add moments even after the episode closes and another one starts.
   Future<Episode?> episodeFor(String conversationId) {
     _ensureOwner();
+    if (_off) return Future.value(null);
     final uid = _ownerUid;
     final cachedAt = _cachedAt[conversationId];
     if (_byConversation.containsKey(conversationId) &&
@@ -586,22 +608,25 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   Episode? cachedEpisodeFor(String conversationId) =>
-      _ownerUid == SharedPreferencesUtil().uid ? _byConversation[conversationId] : null;
+      !_off && _ownerUid == SharedPreferencesUtil().uid ? _byConversation[conversationId] : null;
 
   static const openComposePolls = 8;
   static const openComposePollInterval = Duration(seconds: 5);
   static const openComposeReadTimeout = Duration(seconds: 4);
   final Map<String, Future<Episode?>> _opening = {};
+  final Map<String, ApiProblem> _openProblems = {};
+  ApiProblem? openProblem(String id) => _ownerUid == SharedPreferencesUtil().uid ? _openProblems[id] : null;
   final Map<String, Object> _openTokens = {};
 
   /// One read per open, with at most eight more reads only while the server says
   /// notes are deferred. Concurrent opens coalesce; leaving the page cancels polling.
   Future<Episode?> openEpisode(String episodeId) {
     _ensureOwner();
-    if (_disposed || episodeId.isEmpty) return Future.value(null);
+    if (_off || _disposed || episodeId.isEmpty) return Future.value(null);
     final existing = _opening[episodeId];
     if (existing != null) return existing;
     final token = Object();
+    _openProblems.remove(episodeId);
     _openTokens[episodeId] = token;
     final future = _readOpened(episodeId, token).whenComplete(() {
       if (identical(_openTokens[episodeId], token)) {
@@ -636,10 +661,29 @@ class EpisodeProvider extends ChangeNotifier {
           episodeId,
         ).timeout(remaining < openComposeReadTimeout ? remaining : openComposeReadTimeout);
       } on TimeoutException {
+        if (active()) {
+          _openProblems[episodeId] = const ApiProblem(ApiProblemKind.transport);
+          notifyListeners();
+        }
         break;
       }
       if (!active()) return null;
-      if (result is! ApiSuccess<Episode>) break;
+      if (result is! ApiSuccess<Episode>) {
+        if (result is ApiFailure<Episode>) {
+          _openProblems[episodeId] = result.problem;
+          if ({
+            ApiProblemKind.authTerminal,
+            ApiProblemKind.forbidden,
+            ApiProblemKind.paymentRequired,
+            ApiProblemKind.notFound
+          }.contains(result.problem.kind)) {
+            _openedEpisodes.remove(episodeId);
+          }
+          notifyListeners();
+        }
+        break;
+      }
+      _openProblems.remove(episodeId);
       episode = result.data;
       _mergeOpened(episode);
       if (episode.live || !episode.composeDeferred) break;
@@ -684,7 +728,7 @@ class EpisodeProvider extends ChangeNotifier {
     _ensureOwner();
     final uid = _ownerUid;
     final episode = _live;
-    if (episode == null || _wrappingUp) return false;
+    if (_off || episode == null || _wrappingUp) return false;
     _wrappingUp = true;
     notifyListeners();
     try {
@@ -709,7 +753,7 @@ class EpisodeProvider extends ChangeNotifier {
     _ensureOwner();
     final now = _clock();
     liveAnchor.restart(now);
-    final episode = _live;
+    final episode = _off ? null : _live;
     if (episode != null) {
       _remember(episode);
       _ended.add(episode.id);
@@ -727,7 +771,7 @@ class EpisodeProvider extends ChangeNotifier {
   /// Undo on a captured item: hidden at once, dismissed on the server; restored if that fails.
   Future<bool> dismissItem(String itemId) async {
     final episode = _live;
-    if (episode == null) return false;
+    if (_off || episode == null) return false;
     _live = episode.copyWith(
       items: [
         for (final item in episode.items) item.id == itemId ? item.withStatus(EpisodeItemStatus.dismissed) : item,

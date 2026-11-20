@@ -47,6 +47,11 @@ def vendor_payload(duration=5.0, turns=None):
 
 @pytest.fixture(autouse=True)
 def switch_default(monkeypatch):
+    from utils.stt import allowance_watch
+
+    # Speaker payload tests use synthetic owners, not a subscription/account
+    # fixture. Exercise the real operation path with an explicit exempt plan.
+    monkeypatch.setattr(allowance_watch, 'entitlement', lambda *a, **kw: ('paid_or_trial', None))
     monkeypatch.delenv(flags.VENDOR_SPEAKER_TURNS_ENV, raising=False)
 
 

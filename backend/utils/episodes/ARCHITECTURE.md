@@ -268,8 +268,19 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   10/20/40 minutes and stops after four until the evidence changes.
 - Chapter clock times are mapped on the same clock as the transcript labels and
   must fall inside the episode's transcript span (two-minute slack).
-- Background close/finalize triggers wait for ten quiet minutes, capped at 25
-  minutes from the first pending arrival. `compose_pending_since` and
+- With `EPISODE_LIVE_MEMBER_CLOSE_ENABLED` (default on), a closed episode excludes
+  still-capturing live members from readiness and summary inputs. The compose tick
+  rehomes post-gap live members atomically; true pre-boundary members retain their
+  owner and recompose after finishing.
+- A pending member transcript waits for `episode_compose_transcript_wait_seconds()`
+  (20 minutes by default), measured from its pending stamp. After expiry the
+  episode can compose the available speech; a later transcript receipt schedules
+  one refresh for its new evidence. `EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS`
+  overrides the deadline (clamped to 0–86400 seconds); setting it to 21600 restores
+  the former six-hour wait without a build.
+- Background close/finalize triggers wait for `COMPOSER_SETTLE_SECONDS` (two
+  quiet minutes), capped at `COMPOSER_MAX_SETTLE_SECONDS` (five minutes) from
+  the first pending arrival. `compose_pending_since` and
   `compose_activity_at` track arrival time without changing recorded boundaries.
   A tracked async task requeues process-local due work without occupying composer
   workers; shutdown cancels it. Finalizes and reads recover pending work after
@@ -299,7 +310,9 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   `omi_episode_compose_trigger_skipped_total{reason="evidence_unchanged"}` counts
   avoided triggers. All have bounded labels and no user identifiers.
 - Triggers: close, member finalize (including `sync_update`, gated on the changed
-  member already loaded by finalization), and a
+  member already loaded by finalization), a late member attaching to an
+  already-composed closed episode (`EPISODE_COMPOSE_LATE_ATTACH_ENABLED`, default
+  on; the attach memo can suppress the later finalize), and a
   read-side safety net in `home_read.project_episodes` for a closed episode that
   is uncomposed, drifted or whose visible members changed, closed over a minute
   ago (at most two per read, each episode at most every ten minutes per process).
@@ -577,3 +590,30 @@ The unlabeled overdue-read counter counts observations, not unique members.
 Its info alert is staged beside the existing batch timeliness rules; idle
 members remain covered by queue timeliness monitoring. No production alert
 or runtime configuration is changed here.
+## One Home processing row (owner ruling, 2026-11-15)
+
+Home shows at most one processing row directly below the live episode, or at
+the top of Today without live capture. It represents every pending recording
+and closed episode for that day, even across finished rows. Finished episodes
+keep their own rows; terminal failures never enter the processing aggregate.
+The aggregate's page must retain links to every source episode and recording.
+The one-row invariant holds before capability negotiation and through 404/read
+errors. Server capability controls date/failure policy, never the row limit.
+Without confirmed day policy, pending work across days joins Today's one row;
+unknown steps say Transcribing and subtitles show a pending recording count.
+Processing Delete rechecks its initially displayed IDs against current cards,
+owners and conversations after confirmation. Any changed scope cancels the
+whole action with a notice; Undo only receives the exact current records that
+were staged. A READY member or composed replacement cannot be deleted through
+a stale processing confirmation.
+
+This is a client presentation contract. The episode API preserves distinct
+episode IDs and membership, and the conversation list preserves `episode_id`.
+Released clients reconstruct owners from those fields and sort by recording
+time independently of server response order. Rewriting them into a synthetic
+owner would also change detail, delete and acknowledgement semantics. A blank
+client aggregate must not resolve its page to the first overlapping episode:
+that would lose the other members. Server queue and compose waits can expose
+more pending objects, but cannot enforce this display rule on an old client.
+`tests/unit/test_home_pending_identity_contract.py` pins source identity and
+step preservation; Flutter Home tests own aggregation, placement and reachability.

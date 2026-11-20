@@ -9,9 +9,10 @@ The host-side repair loop remains an operator fallback. This job reuses the
 worker image, KSA/GSA and encryption-secret reference. It runs on CPU nodes,
 independently of the unchanged 240-second sweeper. No GPU is allocated.
 
-When unsuspended: 16 disposable row processes (production values), 270 seconds per row (configurable
-1–270), 1500 seconds per cycle, 1680-second Kubernetes Job ceiling, every five
-minutes with `concurrencyPolicy: Forbid`. Rows that exhaust a budget are counted
+When unsuspended: 8 disposable row processes per pod (live and pinned production values),
+270 seconds per row (configurable1–270), 1500 seconds per cycle, and a1680-second
+Kubernetes Job ceiling. Schedule: every minute after the first-shipment patch;
+every five minutes before it, with `concurrencyPolicy: Forbid`. Rows that exhaust a budget are counted
 and skipped; all other rows continue. A timed-out transaction might have
 committed: the next canonical plan reconciles the row instead of blindly
 replaying a write. The controller kills/reaps each row's process group, including
@@ -82,22 +83,14 @@ recordSealRepair:
     # Also preserve the collected final-pass policy inputs and cohort allowlists.
 ```
 
-This is a shape example, not current production flags. Never commit or print
-cohort allowlists. At each ramp rung, lead refreshes the map with the same
-already-deployed chart/image and retained release values:
-
-```sh
-helm upgrade prod-omi-batch-pipeline-worker backend/charts/batch-pipeline-worker \
-  --namespace prod-omi-backend --reuse-values \
-  --values /private/repair-flags.yaml --wait --timeout 15m
-```
-
-Render before apply and require that only `CronJob/record-seal-repair` changes.
-The offline chart regression compares 0% and 100% maps and proves identical
-worker Deployments, sweeper and RBAC. No rollout/restart is needed per rung.
-Existing repair Jobs retain their startup map for at most 1680 seconds; new Jobs
-use the refreshed map. Lead should settle/stop the old repair Job before the
-next rung if that overlap is unacceptable.
+This is a shape example, not current production flags. The stock-drain packet
+procedure in backend/docs/listen_pusher_pipeline/changes/2026-11-15-sharded-seal-stock-drain.md
+**preserves the live environment and does not refresh RECORD_SEAL_REPAIR_SERVER_FLAGS**.
+It deliberately ignores a newly rendered policy map. Do not use it for ramp or
+final-pass policy refreshes. A separate target-only, UID/resourceVersion-guarded
+policy-map refresh procedure is future work and is not part of this change.
+Existing Jobs retain their startup map for up to1680s; new stock-drain Jobs use
+the same preserved map. No full worker-chart apply or GPU rollout is permitted.
 
 When live `_ramp` values override revision env defaults, use those effective
 percentages in the repair map. Copying only revision env fallbacks is stale.
@@ -107,7 +100,8 @@ capture. Tests prove registration succeeds at both 0% and 100%; however its
 immutable job policy records different `batch_percent`, `retire_percent`,
 `live_stt_retired` and `policy_id`. During the minutes between a rung and the
 refresh (or while the previous Job finishes), repaired registrations can freeze
-the earlier values. The refresh prevents extending that drift to new Jobs; it
+the earlier values. Until the separate policy-refresh procedure exists and is executed, that drift
+extends to new stock-drain Jobs too. A policy refresh would prevent it; it
 does not rewrite already-created policies. Final-pass inputs must also match
 the serving role. Existing pending jobs retain their original admission policy.
 
@@ -211,3 +205,9 @@ is not served on Cloud Run; the `omi_.*` GMP keep list also covers the metric
 name. Set `recordSealRepair.jobsDiscovery=off` to pass `RECORD_SEAL_REPAIR_JOBS=off`
 to the CronJob and restore the prior discovery and partial-retry behavior. Existing
 custody owners stay unchanged.
+
+
+The November 15 stock drain adds independent hash partitions, continuous fresh
+priority and newest-first refills. Production placement/resources, the separate
+repair image pin, read/capacity estimates and exact target-only patch/rollback
+commands are in [the stock-drain change note](../../docs/listen_pusher_pipeline/changes/2026-11-15-sharded-seal-stock-drain.md).

@@ -12,9 +12,13 @@ cost and contention control only, never a correctness fence:
   identity: a live row naming this process is adopted with its stored token
   (so a lost commit acknowledgement heals next tick); a row naming another
   holder makes this process follow until that TTL lapses.
-- Any lease-store error fails open: the caller runs its loop exactly as it did
+- Advisory lease-store errors fail open: the caller runs its loop exactly as it did
   before this lease existed. ``BATCH_PIPELINE_LEADER_LEASE_ENABLED=false`` does
   the same unconditionally.
+
+The upload coalescing and projection outbox scan roles always elect, fail
+closed on errors, and supply transactional token witnesses for scan progress.
+Delivery and custody claims survive discovery takeover.
 """
 
 import logging
@@ -23,8 +27,11 @@ import time
 import uuid
 from collections.abc import Callable
 
-from config.batch_pipeline_leader import leader_lease_enabled
+from prometheus_client import Counter
+
+from config.batch_pipeline_leader import leader_lease_enabled, UPLOAD_COALESCING_SCAN
 from config.batch_timeliness import MAX_INTERVAL_SECONDS
+from database.batch_pipeline_leader import LeaseGuard, LeaseLost
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +42,13 @@ PUMP_RECOVERY = 'pump_recovery'
 SERVING_MAINTENANCE = 'serving_maintenance'
 QUEUE_METRICS = 'queue_metrics'
 TIMELINESS_METRICS = 'timeliness_metrics'
+PROJECTION_OUTBOX_SCAN = 'projection_outbox_scan'
+STRICT_ROLES = frozenset({UPLOAD_COALESCING_SCAN, PROJECTION_OUTBOX_SCAN})
 # Cover supervised tick jitter and sample RPCs between configured samples;
 # the default sampling cadence remains 300s.
 TIMELINESS_LEASE_GRACE_SECONDS = 60.0
-ROLES = frozenset({PUMP_RECOVERY, SERVING_MAINTENANCE, QUEUE_METRICS, TIMELINESS_METRICS})
+ROLES = STRICT_ROLES | {PUMP_RECOVERY, SERVING_MAINTENANCE, QUEUE_METRICS, TIMELINESS_METRICS}
+LEASE_EVENTS = Counter('omi_batch_leader_lease_total', 'Lease checks by static role and outcome', ['role', 'outcome'])
 
 
 class LeaderLease:
@@ -68,7 +78,7 @@ class LeaderLease:
 
     def acquire(self) -> bool:
         """True when this replica should run the guarded loop this tick."""
-        if not leader_lease_enabled():
+        if self.role not in STRICT_ROLES and not leader_lease_enabled():
             return True
         # One process-local holder may be acquired from several executor
         # threads (serving supervisor and /metrics); serialize so a losing
@@ -77,11 +87,13 @@ class LeaderLease:
             return self._acquire()
 
     def _acquire(self) -> bool:
-        now = self.clock()
+        LEASE_EVENTS.labels(role=self.role, outcome='attempt').inc()
         current, candidate = self.token, uuid.uuid4().hex  # Minted outside the retryable body.
 
         def body(tx):
+            LEASE_EVENTS.labels(role=self.role, outcome='transaction_attempt').inc()
             row = tx.get(TABLE, self.role)
+            now = self.clock()  # A retried acquisition never extends an already stale clock.
             expires_at = float(row.get('expires_at') or 0)
             live = bool(row) and expires_at > now
             if live and row.get('holder') != self.holder:
@@ -107,12 +119,18 @@ class LeaderLease:
         try:
             token = self.store.run(body)
         except Exception as error:
+            strict = self.role in STRICT_ROLES
+            LEASE_EVENTS.labels(role=self.role, outcome='error').inc()
             logger.warning(
-                'event=batch_leader_lease role=%s outcome=fail_open exception_type=%s',
+                'event=batch_leader_lease role=%s outcome=%s exception_type=%s',
                 self.role,
+                'fail_closed' if strict else 'fail_open',
                 type(error).__name__,
             )
-            return True
+            if strict:
+                self.token = None
+            return not strict
+        LEASE_EVENTS.labels(role=self.role, outcome='leader' if token is not None else 'follower').inc()
         if token != current:
             logger.info(
                 'event=batch_leader_lease role=%s outcome=%s',
@@ -121,3 +139,9 @@ class LeaderLease:
             )
         self.token = token
         return token is not None
+
+    def guard(self) -> LeaseGuard:
+        """Immutable token for a strict scan, never the mutable next acquisition."""
+        if self.role not in STRICT_ROLES or self.token is None:
+            raise LeaseLost('strict scan ownership required')
+        return LeaseGuard(self.role, self.holder, self.token, self.clock)

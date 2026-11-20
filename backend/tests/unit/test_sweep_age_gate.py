@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from config.policy import sweep_age
+from config.batch_pipeline_retention import LIFECYCLE_DAYS, LIFECYCLE_SECONDS
 from tests.unit.test_sync_reprocess_coalesce import state, sweep_query  # noqa: F401
 from utils.enrichment import outbox
 from utils.observability.sweep_age import SKIPPED, skip_ancient
@@ -16,7 +17,7 @@ from utils.observability.sweep_age import SKIPPED, skip_ancient
 def test_malformed_age_config_uses_default(monkeypatch, queue, raw):
     name = 'BATCH_PIPELINE_' + queue.upper().replace('-', '_') + '_SWEEP_MAX_AGE_DAYS'
     monkeypatch.setenv(name, raw)
-    assert sweep_age.max_age_seconds(queue) == 14 * 86400
+    assert sweep_age.max_age_seconds(queue) == (LIFECYCLE_SECONDS if queue == 'provider-stt' else 14 * 86400)
 
 
 @pytest.mark.parametrize('raw', ['', 'invalid', 'false', '0', 'on'])
@@ -29,6 +30,16 @@ def test_only_off_disables_gate(monkeypatch, raw):
 @pytest.mark.parametrize('value', [None, 'bad', True, 0, -1, float('nan'), float('inf')])
 def test_unknown_age_keeps_wake(queue, field, value):
     assert not skip_ancient({field: value}, queue, now=2_000_000)
+
+
+@pytest.mark.parametrize('age_days', [29, 51, 58, 59, LIFECYCLE_DAYS - 0.01, LIFECYCLE_DAYS, LIFECYCLE_DAYS + 0.01])
+def test_provider_stt_gate_repairs_held_rows_but_never_past_the_staged_audio(age_days):
+    """Lost-wake repair covers the final 2h recheck and stops at the shared lifecycle."""
+    from utils.batch_pipeline.input_retention import TERMINAL_SECONDS
+
+    assert TERMINAL_SECONDS + 7200 < sweep_age.max_age_seconds('provider-stt') == LIFECYCLE_SECONDS
+    now = 100 * 86400.0
+    assert skip_ancient({'created_at': now - age_days * 86400}, 'provider-stt', now=now) is (age_days > LIFECYCLE_DAYS)
 
 
 @pytest.mark.parametrize(
@@ -109,10 +120,10 @@ def test_skip_counter_passes_existing_gmp_keep_lists(config):
                 assert not matched
 
 
-def test_per_queue_limits_are_independent(monkeypatch):
+def test_provider_lifecycle_cannot_be_overridden_by_retired_setting(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS', '20')
     monkeypatch.setenv('BATCH_PIPELINE_ENRICHMENT_FRESH_SWEEP_MAX_AGE_DAYS', '7')
-    assert sweep_age.max_age_seconds('provider-stt') == 20 * 86400
+    assert sweep_age.max_age_seconds('provider-stt') == LIFECYCLE_SECONDS
     assert sweep_age.max_age_seconds('enrichment-fresh') == 7 * 86400
 
 

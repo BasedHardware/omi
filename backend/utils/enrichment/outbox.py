@@ -40,6 +40,8 @@ from config.policy import FirstSummaryPolicy, resolve_stage_policy
 from config.sync_reprocess import settle_seconds
 from utils.sync import processing_hold
 
+from config.record_latency import record_notes_eager_enabled
+from database import record_notes_hold
 from database._client import get_firestore_client
 from database.summary_processing import record_empty_failure, EmptyFailureOutcome
 
@@ -225,6 +227,11 @@ def _conversation_finished_at(uid: str, conversation_id: str) -> object:
     )
     data = snapshot.to_dict() or {}
     return data.get('finished_at') if data.get('finished_at') is not None else data.get('created_at')
+
+
+def conversation_finished_at(uid: str, conversation_id: str) -> object:
+    """Public read of the freshness clock (``finished_at``, else ``created_at``) for lane checks."""
+    return _conversation_finished_at(uid, conversation_id)
 
 
 def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
@@ -492,7 +499,7 @@ def mark_update(
             if merge_hold:
                 row['merge_hold'] = True
             row['due_at'] = min(
-                max(row.get('due_at') or 0, current + processing_hold.QUIET_SECONDS),
+                max(row.get('due_at') or 0, current + processing_hold.quiet_seconds()),
                 row['first_pending_at'] + processing_hold.MAX_HOLD_SECONDS,
             )
 
@@ -520,6 +527,34 @@ def mark_update(
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             wake = True
         return row, ({**row, '_wake': wake}, old is not None)
+
+    return update
+
+
+def expedite_update(now: float) -> Callable[[Row | None], tuple[Row | None, Row | None]]:
+    """The CAS operation behind ``FirestoreEnrichmentOutbox.expedite``: an open obligation becomes due now.
+
+    It never creates, reopens or re-leases a row, so it cannot start an extra
+    processing run: a missing, dormant, parked, empty-blocked, leased or already
+    due row is returned unchanged. Moving the wake re-arms its named task under a
+    new token; the old task fails its stale-token check.
+    """
+
+    def update(old: Row | None) -> tuple[Row | None, Row | None]:
+        from utils.enrichment.age_gate import parked
+
+        if (
+            not old
+            or old.get('dormant')
+            or parked(old)
+            or old.get('summary_blocked_reason') in summary_delivery.EMPTY_BLOCKED_REASONS
+            or float(old.get('lease_until') or 0) > now
+            or float(old.get('due_at') or 0) <= now
+        ):
+            return old, None
+        row = dict(old)
+        row.update(due_at=now, task_due_at=now, task_token=uuid.uuid4().hex, version=int(old.get('version') or 0) + 1)
+        return row, row
 
     return update
 
@@ -609,9 +644,13 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     owner = uuid.uuid4().hex
     cache: dict[str, FirstSummaryPolicy] = {}
     stamps: list[tuple[str, str]] = []
+    expired_sources = []
+    claim_owner = []
 
     def claim(old: Row | None) -> tuple[Row | None, tuple[str, Row | None]]:
         stamps.clear()
+        expired_sources.clear()
+        claim_owner.clear()
         if old is None or old.get('dormant') or old['task_token'] != task_token:
             return old, ('stale', None)
         if old.get('lease_until', 0) > current:
@@ -624,6 +663,15 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             return row, ('deferred', row)
 
+        if record_notes_eager_enabled() and row.get('record_notes_producers'):
+            status, blocked = record_notes_hold.admit(row, get_firestore_client(), now=current)
+            if status == 'stale':
+                expired_sources.extend(blocked)
+                claim_owner.append(row['uid'])
+                return row, ('stale', None)
+            if status == 'deferred':
+                return row, ('deferred', row)
+
         first_summary = first_summary_pending(row)
         lease_seconds = FIRST_SUMMARY_LEASE_SECONDS if first_summary else LEASE_SECONDS
         row.update(lease_until=current + lease_seconds, owner=owner)
@@ -631,6 +679,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
 
     status, row = _mutate(document_id, claim)
     record_summary_stamps(stamps)
+    if expired_sources:
+        record_notes_hold.record_timeout(get_firestore_client(), claim_owner[0], expired_sources, now=current)
     if status == 'deferred':
         assert row is not None
         _enqueue(row)
@@ -833,6 +883,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                     summary_repair=False,
                     summary_expected_revision=None,
                 )
+                if 'record_notes_producers' in settled:
+                    settled['record_notes_producers'] = {}
                 return settled, None
             return None, None
         pending = dict(old)
@@ -954,6 +1006,7 @@ def sweep(
                 and fresh_queue
                 and enrichment_config.route() == 'enrichment_queue'
                 and first_summary_pending(row)
+                and not row.get('fresh_demoted')
                 and valid_dispatch_binding(row.get('dispatch'))
                 and row['dispatch']['queue'] == enrichment_config.primary_queue()
             ):

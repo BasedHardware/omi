@@ -1,7 +1,6 @@
 """Attach retained batch audio before its transcript/finalization work starts."""
 
 import logging
-import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
@@ -15,22 +14,11 @@ from config.recorded_time import (
 from config.server_batch import has_audio, owned
 from database import conversations
 from utils.conversations.fragment_visibility import is_relevance_discarded
+from utils.conversations.recorded_time import admitted_start
 from utils.episodes import service, late_member
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
-
-
-def _admitted_start(row: Mapping[str, Any]) -> datetime | None:
-    """The recorded start known at admission: committed audio bounds, else the row clock."""
-    value = row.get('server_batch_audio_start')
-    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
-        return datetime.fromtimestamp(value, timezone.utc)
-    for key in ('started_at', 'created_at'):
-        candidate = row.get(key)
-        if isinstance(candidate, datetime):
-            return candidate if candidate.tzinfo is not None else candidate.replace(tzinfo=timezone.utc)
-    return None
 
 
 def _admissible(row: Mapping[str, Any]) -> bool:
@@ -65,7 +53,7 @@ def attach_admitted_batch_capture(
         return 'disabled'
     if not conversation_id or not _admissible(row):
         return 'skipped'
-    started = _admitted_start(row)
+    started = admitted_start(row)
     if started is None:
         return 'skipped'
     try:

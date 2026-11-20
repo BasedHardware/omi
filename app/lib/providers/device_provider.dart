@@ -103,7 +103,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   final Set<String> _intentionalDisconnectDevices = {};
 
   void markDisconnectIntentional(String deviceId) {
-    _intentionalDisconnectDevices.add(deviceId);
+    // A marker belongs to the connected episode. An already-down action
+    // still retires capture below, but has no later disconnect to classify.
+    if (connectedDevice?.id.toUpperCase() == deviceId.toUpperCase()) {
+      _intentionalDisconnectDevices.add(deviceId.toUpperCase());
+    }
+    // The link may already be down, with no further native callback owed.
+    captureProvider?.updateRecordingDevice(null);
     _wedgeMonitor.dismissDeviceEpisode(deviceId);
   }
 
@@ -365,7 +371,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         capture!.recordingState == RecordingState.deviceRecord &&
         !capture.isPaused &&
         !SharedPreferencesUtil().batchModeEnabled;
-    final endedSessionWasIntentional = endedDevice != null && _intentionalDisconnectDevices.remove(endedDevice.id);
+    final endedSessionWasIntentional =
+        endedDevice != null && _intentionalDisconnectDevices.remove(endedDevice.id.toUpperCase());
     final isNewConnection = device != null && connectedDevice?.id != device.id;
     if (isNewConnection || device == null) _resetBatteryState();
     connectedDevice = device;
@@ -993,7 +1000,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     super.dispose();
   }
 
-  void onDeviceDisconnected() async {
+  void onDeviceDisconnected({bool captureLinkAlreadyHandled = false}) async {
     final generation = _sessionGeneration;
     // Capture before setConnectedDevice(null) clears both device references.
     final disconnectedDeviceId = pairedDevice?.id ?? connectedDevice?.id;
@@ -1002,6 +1009,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     // Link loss is not an unplug. Keep this device's alert; another device does not inherit it.
     if (disconnectedDeviceId != null) _fullyChargedAlert.onLinkLost(disconnectedDeviceId);
+    if (!captureLinkAlreadyHandled) _notifyCaptureLinkLost(disconnectedDeviceId);
     BatteryWidgetService().updateChargingState(false);
     unawaited(setConnectedDevice(null));
     unawaited(setisDeviceStorageSupport());
@@ -1010,9 +1018,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Recovery changes the link, not the user's capture intent. Retain the
     // session (and Resume control) while native reports the physical link down.
-    if (disconnectedDeviceId == null || !BleBridge.instance.preservesCaptureIntent(disconnectedDeviceId)) {
-      captureProvider?.updateRecordingDevice(null);
-    }
 
     // Batch mode: the native writer finalizes the in-progress recording on
     // disconnect (.bin.part -> .bin). Rescan shortly after the rename completes
@@ -1055,6 +1060,18 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     SyncHealthWatchdog.instance.evaluateSyncHealth();
   }
 
+  void _notifyCaptureLinkLost(String? deviceId) {
+    final intentional = deviceId != null && _intentionalDisconnectDevices.contains(deviceId.toUpperCase());
+    if (!intentional && deviceId != null && BleBridge.instance.preservesCaptureIntent(deviceId)) return;
+    captureProvider?.updateRecordingDevice(null,
+        reconnectDeviceId: !intentional &&
+                deviceId != null &&
+                !SyncWakeScope.syncOnly &&
+                BleBridge.instance.allowsRecordingReconnect(deviceId)
+            ? deviceId
+            : null);
+  }
+
   /// Emits the enriched Device Disconnected analytics event with the reason
   /// native persisted for this disconnect. Both platforms persist the event
   /// before notifying Dart, so the freshest history entry is the one that
@@ -1081,15 +1098,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     );
   }
 
-  /// The paired device's connection history from the phone's native BLE diagnostics (newest last).
-  /// Best-effort: no device or no history is an empty list.
-  Future<List<BleDisconnectEvent>> disconnectHistory() async {
-    final id = (pairedDevice?.id.isNotEmpty ?? false) ? pairedDevice!.id : connectedDevice?.id;
-    if (id == null || id.isEmpty) return const [];
-    final diagnostics = await _bleDiagnosticsLoader(id);
-    return diagnostics.disconnectHistory;
-  }
-
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
     if (pairedDevice == null || connectedDevice == null) {
       return ('No paired device is connected', false, '', {});
@@ -1103,12 +1111,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return ('Unable to determine current firmware version', false, '', {});
     }
     var latestFirmwareDetails = await getLatestFirmwareVersion(
-      deviceModelNumber: device.modelNumber,
-      firmwareRevision: device.firmwareRevision,
-      hardwareRevision: device.hardwareRevision,
-      manufacturerName: device.manufacturerName,
-      serialNumber: device.serialNumber,
-    );
+          deviceModelNumber: device.modelNumber,
+          firmwareRevision: device.firmwareRevision,
+          hardwareRevision: device.hardwareRevision,
+          manufacturerName: device.manufacturerName,
+          serialNumber: device.serialNumber,
+        ) ??
+        {};
 
     var (message, hasUpdate, version) = await DeviceUtils.shouldUpdateFirmware(
       currentFirmware: device.firmwareRevision,
@@ -1501,7 +1510,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Fetch latest stable version for rollback comparison
         String? latestStableFirmwareVersion;
         try {
-          var stableDetails = await getStableFirmwareVersion(deviceModelNumber: pairedDevice?.modelNumber ?? '');
+          var stableDetails = await getStableFirmwareVersion(deviceModelNumber: pairedDevice?.modelNumber ?? '') ?? {};
           if (!_isCurrent(generation) || !_isCurrentFirmwareCheckSession(checkSession)) {
             Logger.debug('Discarding stable firmware result from a stale device session');
             return false;
@@ -1688,12 +1697,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Check if this is the paired device or currently connected device
         // Coz connectedDevice and pairedDevice are the same but connectedDevice becomes null after disconnect
         if (deviceId == connectedDevice?.id || deviceId == pairedDevice?.id) {
+          // Capture sees the loss before a sub-500ms reconnect can cancel the
+          // UI debounce. Native published its reason before this callback.
+          _notifyCaptureLinkLost(deviceId);
           // Invalidate immediately, before disconnect UI/capture work is debounced.
           _resetBatteryState();
           notifyListeners();
           _disconnectDebouncer.run(() {
             if (!_isCurrent(generation)) return;
-            onDeviceDisconnected();
+            onDeviceDisconnected(captureLinkAlreadyHandled: true);
           });
         }
         break;

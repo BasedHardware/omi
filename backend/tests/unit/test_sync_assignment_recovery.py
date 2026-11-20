@@ -303,3 +303,44 @@ def test_missing_live_target_keeps_legacy_fallback_without_batch_marker():
     store = StrictFirestore()
     result, created, _ = intake(store, chunk('wal', 1000), target_id='live')
     assert result['id'] == 'wal' and created
+
+
+@pytest.mark.parametrize('target', [False, True])
+def test_batch_transcript_marker_commits_with_assignment_and_exact_retry_preserves_it(target):
+    store = StrictFirestore()
+    target_id = None
+    if target:
+        target_id = 'existing'
+        intake(store, chunk(target_id, 1000))
+    incoming = dict(chunk('batch', 1060), _episode_transcript_receipt=True)
+    first, _, speech = intake(store, incoming, target_id=target_id)
+    marker = _row(store, first['id'])['episode_transcript_updated_at']
+    assert speech and marker == first['episode_transcript_updated_at']
+    assert '_episode_transcript_receipt' not in _row(store, first['id'])
+    retried, _, speech = intake(store, incoming, target_id=target_id)
+    assert not speech and retried['episode_transcript_updated_at'] == marker
+    assert _row(store, first['id'])['episode_transcript_updated_at'] == marker
+
+
+@pytest.mark.parametrize('target', [False, True])
+def test_v3_landing_time_commits_with_assigned_speech_and_exact_retry_preserves_it(target):
+    # Custom v3 lock timing counts from this stamp; a reconcile can run before the post-commit re-arm,
+    # so the assignment transaction itself must write it, and only when speech lands.
+    store = StrictFirestore()
+    target_id = None
+    if target:
+        target_id = 'existing'
+        intake(store, dict(chunk(target_id, 1000), recording=True))
+        _row(store, target_id).pop('v3_speech_landed_at', None)
+    incoming = dict(chunk('batch', 1060), recording=True)
+    first, _, speech = intake(store, incoming, target_id=target_id)
+    stamp = _row(store, first['id'])['v3_speech_landed_at']
+    assert speech and stamp
+    retried, _, speech = intake(store, incoming, target_id=target_id)
+    assert not speech and _row(store, first['id'])['v3_speech_landed_at'] == stamp
+
+
+def test_assignment_without_a_recording_writes_no_landing_time():
+    store = StrictFirestore()
+    first, _, speech = intake(store, chunk('batch', 1060))
+    assert speech and 'v3_speech_landed_at' not in _row(store, first['id'])

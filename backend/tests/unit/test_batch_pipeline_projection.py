@@ -582,6 +582,7 @@ def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch)
 
 
 def test_dark_control_preserves_empty_race_failure_boundary(monkeypatch, binding):
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', 'false')
     from dataclasses import asdict
     from utils.batch_pipeline.contracts import WorkItem, Priority
     from utils.batch_pipeline.projection import Projector
@@ -824,6 +825,91 @@ def test_separate_output_guards_preserve_distinct_document_budget(binding, delet
     session.guard(transaction, ['later-input'])
 
 
+@pytest.mark.parametrize('case', ['allowed', 'deleted', 'budget'])
+def test_decision_only_guard_checks_capture_source_and_counts_it_in_prepare(binding, monkeypatch, case):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_capture_source_privacy'))
+    user = client.collection('users').document(binding.owner_id)
+    user.create({'data_protection_level': 'standard'})
+    session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
+    session.job['capture_source_conversation_id'] = 'capture-source'
+    session._privacy_fence_ids = {f'prior-{index}' for index in range(255)} if case == 'budget' else set()
+    if case == 'deleted':
+        user.collection('deleted_conversations').document('capture-source').create({'deleted': True})
+    transaction = client.transaction()
+    if case == 'allowed':
+        session.guard(transaction, ['output'])
+    else:
+        reason = 'conversation_deleted' if case == 'deleted' else 'conversation_fence_budget'
+        with pytest.raises(BatchPrivacyBlocked, match=reason):
+            session.guard(transaction, ['output'])
+    assert {'capture-source', 'output'} <= session._privacy_fence_ids
+
+
+def test_prepare_fence_counts_redirect_survivors_across_guards(binding, monkeypatch):
+    """Two redirect chains each fit the per-call cap, together they must not."""
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_hops'))
+    user = client.collection('users').document(binding.owner_id)
+    user.create({'data_protection_level': 'standard'})
+
+    def chain(prefix, hops):
+        for index in range(hops):
+            user.collection('conversations').document(f'{prefix}-{index}').create(
+                {'deleted': True, 'sync_merged_into': f'{prefix}-{index + 1}'}
+            )
+        user.collection('conversations').document(f'{prefix}-{hops}').create({})
+
+    chain('first', 129)  # 130 distinct documents: under the walk's per-call cap
+    chain('second', 129)
+    session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
+    session._privacy_fence_ids = set()
+    transaction = client.transaction()
+    session.guard(transaction, ['first-0'])
+    with pytest.raises(BatchPrivacyBlocked, match='conversation_fence_budget'):
+        session.guard(transaction, ['second-0'])
+    assert len(session._privacy_fence_ids) == 260
+
+
+def test_prepare_fence_counts_blocked_redirect_prefixes_across_guards(binding, monkeypatch):
+    """A deletion refusal still charges every redirect row read to the prepare."""
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_blocked_hops'))
+    user = client.collection('users').document(binding.owner_id)
+    user.create({'data_protection_level': 'standard'})
+
+    def blocked_chain(prefix, redirects):
+        for index in range(redirects):
+            user.collection('conversations').document(f'{prefix}-{index}').create(
+                {'deleted': True, 'sync_merged_into': f'{prefix}-{index + 1}'}
+            )
+        target = f'{prefix}-{redirects}'
+        user.collection('deleted_conversations').document(target).create({'deleted': True})
+
+    blocked_chain('first', 126)  # 126 conversation rows plus the refusing tombstone ID = 127
+    blocked_chain('second', 129)  # 129 rows plus the refusing tombstone ID = 130; aggregate = 257
+    session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
+    session._privacy_fence_ids = set()
+    transaction = client.transaction()
+
+    with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
+        session.guard(transaction, ['first-0'])
+    assert len(session._privacy_fence_ids) == 127
+
+    with pytest.raises(BatchPrivacyBlocked, match='conversation_fence_budget'):
+        session.guard(transaction, ['second-0'])
+    assert len(session._privacy_fence_ids) == 257
+
+
 @pytest.mark.parametrize('reason', ['conversation_fence_budget', 'conversation_deleted', 'private-text-not-a-reason'])
 def test_assignment_privacy_fence_logs_bounded_reason(binding, monkeypatch, caplog, reason):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -1035,3 +1121,48 @@ def test_transcription_writer_is_fail_open_and_needs_a_capture_identity(monkeypa
     store._observe_transcription(binding, 2.0, {'seconds': 4.5}, {'outcome': 'success'})
     monkeypatch.setattr(pipeline_ledger, 'advance', Mock(side_effect=RuntimeError('synthetic outage')))
     store._observe_transcription(_recording_binding(), 2.0, {'seconds': 4.5}, {'outcome': 'success'})
+
+
+def test_committed_transcript_signals_episode_before_playback_or_enrichment(binding, monkeypatch):
+    from utils.batch_pipeline.contracts import WorkItem, Priority
+    from utils.episodes import transcript_receipts
+    from utils.capture import batch_coverage
+
+    events = []
+    item = WorkItem('segment', binding.owner_id, 0, 'gs://synthetic/audio', 1, Priority.DEEP)
+    payload = {
+        'words': [{'word': 'Fixture.', 'timestamp': [0, 1]}],
+        'audio_seconds': 1,
+        'speech_seconds': 1,
+        'diarization': {'turns': []},
+    }
+    projector = projection.Projector(Mock(), Mock(return_value=payload))
+    projector.store = Mock()
+    session = projector.store.session.return_value
+    receipt = {'state': 'persisted', 'conversation_id': 'record'}
+    session.persist.return_value = receipt
+    row = {'id': 'record', 'transcript_segments': [{'text': 'Recovered decision.', 'speaker_id_scope': 'sync:fixture'}]}
+    monkeypatch.setattr(
+        projection,
+        'build_incoming',
+        lambda *a, **kw: {**row, 'started_at': Mock(timestamp=lambda: 0), 'finished_at': Mock(timestamp=lambda: 1)},
+    )
+    monkeypatch.setattr(projection.conversations_db, 'get_closest_conversation_to_timestamps', lambda *a: None)
+
+    def assign(uid, incoming, **kwargs):
+        kwargs['after_assign'](Mock(), (row, False, []))
+        events.append('commit')
+        return row, False, []
+
+    monkeypatch.setattr(projection.conversations_db, 'assign_sync_conversation', assign)
+    monkeypatch.setattr(batch_coverage, 'record_projection', Mock())
+
+    def signal(uid, committed, **kwargs):
+        assert committed is row
+        assert kwargs['firestore_client'] is projector.store.client
+        events.append('signal')
+
+    monkeypatch.setattr(transcript_receipts, 'enqueue', signal)
+    projector.finish_part = lambda *a, **kw: events.append('finish')
+    projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding)
+    assert events == ['commit', 'signal', 'finish']

@@ -28,6 +28,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/siri_integration.dart';
@@ -60,6 +61,7 @@ class ConversationDetailProvider extends ChangeNotifier
     Future<RecordingTranscript?> Function(String)? fetchRecording,
     ConversationReprocessCall? reprocess,
     ConversationDetailFetchCall? fetchConversation,
+    Future<ConversationByIdResult> Function(String)? fetchConversationResult,
     SpeakerRejectionCall? rejectSpeaker,
     EnabledSummaryAppsFetch? fetchEnabledSummaryApps,
     SuggestedSummaryAppsFetch? fetchSuggestedSummaryApps,
@@ -84,7 +86,13 @@ class ConversationDetailProvider extends ChangeNotifier
                 : (_) async => null),
         _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
         _reprocess = reprocess ?? reProcessConversationServer,
-        _fetchConversation = fetchConversation ?? ((id) => getConversationById(id, userInitiated: true)),
+        _fetchConversationResult = fetchConversationResult ??
+            (fetchConversation == null
+                ? ((id) => getConversationDetailReadResult(id, userInitiated: true))
+                : ((id) async {
+                    final value = await fetchConversation(id);
+                    return (item: value, ok: value != null, inaccessible: false);
+                  })),
         enabledSummaryAppsFetch = fetchEnabledSummaryApps ?? fetchInstalledSummaryApps,
         suggestedSummaryAppsFetch = fetchSuggestedSummaryApps ?? fetchConversationSuggestedSummaryApps,
         preferredSummaryAppWrite = writePreferredSummaryApp ?? writeServerPreferredSummaryApp,
@@ -112,7 +120,7 @@ class ConversationDetailProvider extends ChangeNotifier
   final SuggestedSummaryAppsFetch suggestedSummaryAppsFetch;
   @override
   final PreferredSummaryAppWrite preferredSummaryAppWrite;
-  final ConversationDetailFetchCall _fetchConversation;
+  final Future<ConversationByIdResult> Function(String) _fetchConversationResult;
   final SpeakerRejectionCall _rejectSpeaker;
   String? _speakerSummaryConversationId;
   int _speakerEditGeneration = 0;
@@ -560,7 +568,7 @@ class ConversationDetailProvider extends ChangeNotifier
       }
       // This also follows a safety-WAL donor's bridge redirect. Reprocess
       // itself does not follow that redirect or accept a deleted conversation.
-      final current = await _fetchConversation(conversationId);
+      final current = (await _fetchConversationResult(conversationId)).item;
       if (current == null ||
           current.deleted ||
           _speakerConversationDeleted(conversationId) ||
@@ -707,6 +715,18 @@ class ConversationDetailProvider extends ChangeNotifier
 
   /// The last [refreshConversation] that the page asked to track ([trackLoad]).
   ConversationDetailLoad detailLoad = ConversationDetailLoad.idle;
+  bool _detailAccessUnavailable = false;
+  bool get detailAccessUnavailable => _detailAccessUnavailable;
+  ({String owner, ServerConversation row})? _hydratedDetail;
+
+  bool hasHydratedDetail(String id) {
+    final detail = _hydratedDetail;
+    return !_detailAccessUnavailable &&
+        detail != null &&
+        detail.owner == SharedPreferencesUtil().uid &&
+        detail.row.id == id &&
+        identical(detail.row, conversationOrNull);
+  }
 
   /// Whether the open conversation is being reprocessed right now.
   bool get isReprocessingOpenConversation =>
@@ -1122,13 +1142,26 @@ class ConversationDetailProvider extends ChangeNotifier
       }
       PlatformManager.instance.analytics.reProcessConversation(target);
       final updatedConversation = result.conversation;
-      if (updatedConversation == null || !conversationHasRequestedSummary(updatedConversation, appId)) {
+      if (result is ReprocessTranscriptionPending) {
+        // A 409 has no copy, so remember it; a 200 copy is the server's own waiting state, shown as is.
+        final waiting = result.conversation;
+        if (waiting == null) TranscriptionPendingConversations.mark(target.id);
+        if (waiting != null) conversationProvider?.updateConversation(waiting, preserveHomeStep: false);
+        if (waiting != null && conversationOrNull?.id == target.id) {
+          _cachedConversation = waiting;
+          _refreshGeneration++;
+        }
+      }
+      if (updatedConversation == null ||
+          result is ReprocessTranscriptionPending ||
+          !conversationHasRequestedSummary(updatedConversation, appId)) {
         _failReprocess(
           target,
           appId,
           switch (result) {
             ReprocessBusy() => SummaryFailureKind.busy,
             ReprocessRateLimited() => SummaryFailureKind.rateLimited,
+            ReprocessTranscriptionPending() => SummaryFailureKind.transcriptionPending,
             _ when appId != null => SummaryFailureKind.template,
             _ => SummaryFailureKind.generic,
           },
@@ -1136,6 +1169,7 @@ class ConversationDetailProvider extends ChangeNotifier
         return false;
       }
 
+      TranscriptionPendingConversations.unmark(target.id);
       conversationProvider?.updateConversation(updatedConversation, preserveHomeStep: false);
       SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
 
@@ -1214,7 +1248,10 @@ class ConversationDetailProvider extends ChangeNotifier
     lastFailedReprocessConversationId = target.id;
     lastFailedReprocessAppId = appId;
     recordSummaryFailure(SummaryFailure(conversationId: target.id, kind: kind, appId: appId));
-    notifyError('REPROCESS_FAILED');
+    // Not transcribed is not an error: a summary retry cannot change it.
+    kind == SummaryFailureKind.transcriptionPending
+        ? notifyInfo('REPROCESS_TRANSCRIPTION_PENDING')
+        : notifyError('REPROCESS_FAILED');
     notifyListeners();
   }
 
@@ -1251,11 +1288,13 @@ class ConversationDetailProvider extends ChangeNotifier
     }
     if (_cachedConversationId != conversation.id) {
       detailLoad = ConversationDetailLoad.idle;
+      _detailAccessUnavailable = false;
       _refreshGeneration++;
       resetSuggestedSummaryApps();
     }
     _cachedConversation = conversation;
     _cachedConversationId = conversation.id;
+    _hydratedDetail = null;
     _endedSpeakerLabelingSessionIds.remove(conversation.id);
     notifyListeners();
   }
@@ -1265,6 +1304,7 @@ class ConversationDetailProvider extends ChangeNotifier
   /// silent and never overwrite a tracked failure with "loading".
   Future<bool> refreshConversation({bool trackLoad = false}) async {
     final openedId = conversationOrNull?.id;
+    final ownerUid = SharedPreferencesUtil().uid;
     if (openedId == null) return false;
     if (openedId.startsWith('ondevice-')) {
       detailLoad = ConversationDetailLoad.idle;
@@ -1278,8 +1318,11 @@ class ConversationDetailProvider extends ChangeNotifier
       notifyListeners();
     }
     ServerConversation? updatedConversation;
+    var inaccessible = false;
     try {
-      updatedConversation = await _fetchConversation(openedId);
+      final result = await _fetchConversationResult(openedId);
+      updatedConversation = result.item;
+      inaccessible = result.inaccessible;
       if (updatedConversation != null) {
         updatedConversation = OnDeviceTranscriptionController.instance.displayConversation(updatedConversation);
       }
@@ -1289,11 +1332,13 @@ class ConversationDetailProvider extends ChangeNotifier
     // A newer read, another conversation or a reprocess result superseded this one: it owns the
     // page now, including [detailLoad].
     if (_isDisposed ||
+        SharedPreferencesUtil().uid != ownerUid ||
         generation != _refreshGeneration ||
         speakerGeneration != _speakerEditGeneration ||
         conversationOrNull?.id != openedId) {
       return false;
     }
+    if (updatedConversation != null || inaccessible) _detailAccessUnavailable = inaccessible;
     if (updatedConversation != null) {
       if (updatedConversation.id != openedId) {
         if (!_syncConversationId.hasMatch(openedId)) return false;
@@ -1305,8 +1350,12 @@ class ConversationDetailProvider extends ChangeNotifier
                 updatedConversation.status == ConversationStatus.merging)) {
           updatedConversation = updatedConversation.withHomeStep('failed');
         }
+        // A transcript in the detail copy proves transcription finished; a missing Home step proves nothing.
+        TranscriptionPendingConversations.observe(updatedConversation);
         conversationProvider?.updateConversation(updatedConversation);
         _cachedConversation = updatedConversation;
+        _hydratedDetail = (owner: ownerUid, row: conversationOrNull ?? updatedConversation);
+        clearSettledSummaryFailure(updatedConversation);
         resetRecordingTranscript();
       }
     }

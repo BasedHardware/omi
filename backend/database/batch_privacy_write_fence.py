@@ -21,21 +21,29 @@ from google.cloud.firestore_v1.types import (
     CommitResponse,
     Document,
     DocumentMask,
+    Precondition,
     Value,
     Write,
     WriteResult,
 )
 from google.rpc import status_pb2
+from database.batch_account_authority_schema import (
+    ACCOUNT_DELETION_COLLECTION,
+    ACCOUNT_EPOCH,
+    ACCOUNT_FIELD_GROUPS,
+    ACCOUNT_HEAD,
+    ACCOUNT_OPERATIONS,
+    ACCOUNT_STATE_COLLECTION,
+    PRIVACY_COLLECTION,
+    USER_POLICY_FIELDS,
+)
+from database.home_feed_writer import augment_home_writes, affects_home, bulk_erasure_scope
 from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS, TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
 
 # Protobuf builds this class dynamically; the installed module has no typed declaration.
 Status = cast(Any, status_pb2).Status
 
-PRIVACY_COLLECTION = 'batch_pipeline_privacy'
-_ROOT_AUTHORITIES = frozenset({'account_deletions', 'legal_holds', 'legal_hold_deletion_gates'})
-_USER_FIELDS = frozenset(
-    {'data_protection_level', 'migration_status', 'private_cloud_sync_enabled', 'speaker_auto_enroll_privacy_version'}
-)
+_ROOT_AUTHORITIES = frozenset({ACCOUNT_DELETION_COLLECTION, 'legal_holds', 'legal_hold_deletion_gates'})
 _CONVERSATION_FIELDS = CONVERSATION_AUTHORITY_FIELDS
 _AUTHORITY_STATE_TYPES = {'generation': 'integer_value', 'blocked': 'boolean_value', 'purging': 'boolean_value'}
 
@@ -112,7 +120,7 @@ def authority_tokens(writes: Any) -> set[str]:
             family == 'users'
             and (len(parts) == 7 or len(parts) == 9 and parts[7] in {'conversations', 'deleted_conversations'})
         ):
-            if family == 'users' and len(parts) == 7 and not _changes_answer(write, _USER_FIELDS):
+            if family == 'users' and len(parts) == 7 and not _changes_answer(write, USER_POLICY_FIELDS):
                 continue
             if family == 'users' and len(parts) == 9 and parts[7] == 'conversations':
                 if not _changes_answer(write, _CONVERSATION_FIELDS):
@@ -120,6 +128,101 @@ def authority_tokens(writes: Any) -> set[str]:
             key = hashlib.sha256(owner.encode()).hexdigest()
             tokens.add(f'{root}/{PRIVACY_COLLECTION}/{key}')
     return tokens
+
+
+def _write_path(write: Write) -> str:
+    return write.delete or write.update.name or write.transform.document
+
+
+def _account_write_group(write: Write, family: str) -> str | None:
+    if write.delete or write.update.name and not Write.pb(write).HasField('update_mask'):
+        return 'existence'
+    groups = ACCOUNT_FIELD_GROUPS[family]
+    paths = (
+        list(write.update_mask.field_paths)
+        + [item.field_path for item in write.update_transforms]
+        + [item.field_path for item in write.transform.field_transforms]
+    )
+    # The SDK emits escaped paths. Classify the top-level root, including
+    # transform-only writes and a masked field deletion (no update value).
+    affected = {groups.get(_authority_path(path)[0]) for path in paths} - {None}
+    if len(affected) > 1:
+        return 'protection_and_sync'
+    if affected:
+        return next(iter(affected))
+    if not (write.current_document.exists or write.current_document.update_time):
+        return 'existence'
+    return None
+
+
+def _written_epoch(write: Write, path: str, *, create: bool = False) -> int | None:
+    if write.update.name != path or write.update_transforms:
+        return None
+    current = write.current_document
+    creates_document = Precondition.pb(current).WhichOneof('condition_type') == 'exists' and not current.exists
+    if (create and not creates_document) or (
+        not creates_document and ACCOUNT_EPOCH not in write.update_mask.field_paths
+    ):
+        return None
+    value = write.update.fields.get(ACCOUNT_EPOCH)
+    if value is None or Value.pb(value).WhichOneof('value_type') != 'integer_value' or value.integer_value < 1:
+        return None
+    return value.integer_value
+
+
+def account_write_observations(request: Any) -> list[tuple[str, str, bool]]:
+    """Observe the primitive's source, owner patch, durable head and create receipt.
+
+    A legacy generation update, a receipt for a different owner or a second raw
+    write to the same account cannot certify the classified source write.
+    """
+    raw_writes = request.get('writes') if isinstance(request, dict) else request.writes
+    transaction = request.get('transaction') if isinstance(request, dict) else request.transaction
+    writes = [Write(raw) if isinstance(raw, dict) else raw for raw in raw_writes or ()]
+    observations = []
+    for index, write in enumerate(writes):
+        parts = _write_path(write).split('/')
+        if len(parts) != 7 or parts[0] != 'projects' or parts[2] != 'databases' or parts[4] != 'documents':
+            continue
+        family, uid = parts[5:]
+        if family not in ACCOUNT_FIELD_GROUPS:
+            continue
+        group = _account_write_group(write, family)
+        if group is None:
+            continue
+        certified = False
+        if transaction and index + 3 < len(writes):
+            key = hashlib.sha256(uid.encode()).hexdigest()
+            owner = '/'.join([*parts[:5], PRIVACY_COLLECTION, key])
+            stamp, head, receipt = writes[index + 1 : index + 4]
+            receipt_path = _write_path(receipt)
+            receipt_prefix = f'{owner}/{ACCOUNT_OPERATIONS}/'
+            receipt_id = receipt_path.removeprefix(receipt_prefix)
+            epoch = _written_epoch(stamp, owner)
+            certified = (
+                epoch is not None
+                and _written_epoch(head, f'{owner}/{ACCOUNT_STATE_COLLECTION}/{ACCOUNT_HEAD}') == epoch
+                and receipt_path.startswith(receipt_prefix)
+                and len(receipt_id) == 64
+                and all(char in '0123456789abcdef' for char in receipt_id)
+                and _written_epoch(receipt, receipt_path, create=True) == epoch
+            )
+        observations.append((family, group, certified))
+    return observations
+
+
+def _observe_account_writes(request: Any) -> None:
+    # Observation must not turn a successful Commit into a caller-visible
+    # failure. No client, authority read or identifier enters the metric.
+    try:
+        observations = account_write_observations(request)
+        if observations:
+            from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
+
+            for family, group, certified in observations:
+                ACCOUNT_AUTHORITY_WRITES.labels(family, group, 'true' if certified else 'false').inc()
+    except Exception:
+        pass
 
 
 def token_write(path: str) -> Write:
@@ -135,10 +238,13 @@ def token_write(path: str) -> Write:
 def augment_commit(request: Any) -> tuple[Any, int]:
     writes = (request.get('writes') if isinstance(request, dict) else request.writes) or ()
     count = len(writes)
+    home_writes = augment_home_writes(writes)
     tokens = authority_tokens(writes)
-    if not tokens:
+    if not tokens and len(home_writes) == count:
         return request, count
     prepared = CommitRequest(request)
+    del prepared.writes[:]
+    prepared.writes.extend(home_writes)
     # Appending after source writes also handles authority field updates.
     # Authority deletion is rejected above; account-subtree erasure retains it.
     # The final token is unique after source wipe/recreation;
@@ -159,7 +265,9 @@ def _wrap_commit(original: Any) -> Any:
         fields = {key: kwargs.pop(key) for key in ('database', 'writes', 'transaction') if key in kwargs}
         if request is not None and any(value is not None for value in fields.values()):
             raise ValueError('request and flattened commit fields cannot both be supplied')
-        return augment_commit(request if request is not None else fields)
+        source = request if request is not None else fields
+        prepared, count = augment_commit(source)
+        return prepared, count, source
 
     def response(value, count):
         if len(value.write_results) == count:
@@ -172,8 +280,10 @@ def _wrap_commit(original: Any) -> Any:
 
         @functools.wraps(original)
         async def async_wrapped(client, request=None, **kwargs):
-            prepared, count = prepare(request, kwargs)
-            return response(await original(client, request=prepared, **kwargs), count)
+            prepared, count, source = prepare(request, kwargs)
+            result = await original(client, request=prepared, **kwargs)
+            _observe_account_writes(source)
+            return response(result, count)
 
         wrapped = async_wrapped
 
@@ -181,8 +291,10 @@ def _wrap_commit(original: Any) -> Any:
 
         @functools.wraps(original)
         def sync_wrapped(client, request=None, **kwargs):
-            prepared, count = prepare(request, kwargs)
-            return response(original(client, request=prepared, **kwargs), count)
+            prepared, count, source = prepare(request, kwargs)
+            result = original(client, request=prepared, **kwargs)
+            _observe_account_writes(source)
+            return response(result, count)
 
         wrapped = sync_wrapped
 
@@ -199,7 +311,7 @@ def _bulk_parts(request, kwargs):
     # BatchWrite is non-atomic and forbids duplicate documents. Relevant writes
     # become independent atomic Commits, each containing its own fence. Unrelated
     # writes retain BatchWrite, its labels and its per-write status semantics.
-    indices = [i for i, write in enumerate(prepared.writes) if authority_tokens([write])]
+    indices = [i for i, write in enumerate(prepared.writes) if authority_tokens([write]) or affects_home(write)]
     return supplied, prepared, indices
 
 
@@ -284,6 +396,7 @@ def _wrap_bulk(original: Any) -> Any:
 
         wrapped = sync_wrapped
 
+    wrapped = bulk_erasure_scope(wrapped)
     setattr(wrapped, '_omi_batch_privacy_fence', True)
     return wrapped
 

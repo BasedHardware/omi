@@ -175,8 +175,12 @@ PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict><key>PROJECT_ID</key><string>based-hardware</string></dict></plist>
 PLIST
+  local pinned_node_version="${OMI_AGENT_NODE_VERSION:-}"
+  if [[ -z "$pinned_node_version" ]]; then
+    pinned_node_version="$(sed -n 's/^NODE_VERSION="\${OMI_AGENT_NODE_VERSION:-\(v[0-9.]*\)}"$/\1/p' "$MACOS_DIR/scripts/prepare-agent-runtime.sh" | head -1)"
+  fi
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/MacOS/Omi Computer"
-  printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+  printf '#!/usr/bin/env bash\nprintf "%s\\n" "%s"\n' "$pinned_node_version" > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/ffmpeg"
   chmod +x "$app/Contents/MacOS/Omi Computer" \
     "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node" \
@@ -230,7 +234,11 @@ fi
 SH
 cat > "$mock_bin/file" <<'SH'
 #!/usr/bin/env bash
-printf '%s: Mach-O 64-bit executable arm64 x86_64\n' "${1:-fixture}"
+if [[ "${OMI_TEST_THIN_NODE:-0}" == 1 && "${1:-}" == */node ]]; then
+  printf '%s: Mach-O 64-bit executable arm64\n' "$1"
+else
+  printf '%s: Mach-O 64-bit executable arm64 x86_64\n' "${1:-fixture}"
+fi
 SH
 cat > "$mock_bin/otool" <<'SH'
 #!/usr/bin/env bash
@@ -366,6 +374,39 @@ if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$missing_tool_manifest_app" \
 fi
 grep -q "agent/dist/runtime/omi-tool-manifest.js" /tmp/omi-smoke-missing-tool-manifest.err \
   || fail "compiled tool manifest rejection should name the missing component"
+
+mkdir -p "$tmp_root/stale-bundled-node"
+stale_bundled_node_app="$tmp_root/stale-bundled-node/Omi.app"
+cp -R "$canonical_dmg_app" "$stale_bundled_node_app"
+printf '#!/usr/bin/env bash\nprintf "v22.14.0\\n"\n' \
+  > "$stale_bundled_node_app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+chmod +x "$stale_bundled_node_app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$stale_bundled_node_app" \
+  "$SMOKE" --app "$stale_bundled_node_app" --tag v0.12.34+12034-macos \
+  >/tmp/omi-smoke-stale-node.out 2>/tmp/omi-smoke-stale-node.err; then
+  fail "smoke must reject an artifact whose bundled Node.js runtime does not match the pinned release version"
+fi
+grep -q "bundled node version mismatch" /tmp/omi-smoke-stale-node.err \
+  || fail "bundled node version mismatch rejection should be explicit"
+
+if PATH="$mock_bin:$PATH" OMI_TEST_THIN_NODE=1 \
+  "$SMOKE" --app "$canonical_dmg_app" --tag v0.12.34+12034-macos \
+  >"$tmp_root/thin-node.out" 2>"$tmp_root/thin-node.err"; then
+  fail "smoke must reject a thin bundled Node binary"
+fi
+grep -q "bundled node binary is missing x86_64 architecture" "$tmp_root/thin-node.err" \
+  || fail "thin Node rejection should identify the missing architecture"
+
+PATH="$mock_bin:$PATH" "$SMOKE" --app "$canonical_dmg_app" --tag v0.12.34+12034-macos \
+  --result-json "$tmp_root/runtime-smoke.json" >"$tmp_root/runtime-smoke.out"
+python3 "$MACOS_DIR/../../.github/scripts/desktop-changelog.py" latest-release \
+  --runtime-smoke-result "$tmp_root/runtime-smoke.json" >"$tmp_root/runtime-notes.md"
+python3 - "$tmp_root/runtime-smoke.json" "$tmp_root/runtime-notes.md" <<'PYTEST'
+import json, pathlib, sys
+result = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert result["ok"] is True
+assert f"Bundled Node.js runtime: {result['bundled_node_version']}" in pathlib.Path(sys.argv[2]).read_text()
+PYTEST
 
 # Regression (v0.12.91 build failure): macOS mktemp creates the LITERAL template
 # file when characters follow the final XXXXXX, so the second smoke invocation

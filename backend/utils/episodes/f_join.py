@@ -17,6 +17,7 @@ Owns the F cohort and its fail-open contract: any failure keeps today's time-onl
 """
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 import logging
 from datetime import datetime
@@ -223,7 +224,9 @@ def previous_transcript(
         or previous in hidden
     ):
         return ''
-    row = conversations_db.get_conversation_raw_snapshot(uid, str(previous), firestore_client=c.firestore_client)
+    row = read_product_conversation(
+        conversations_db.get_conversation_raw_snapshot, uid, str(previous), firestore_client=c.firestore_client
+    )
     if not row or not _may_feed_llm(uid, row):
         return ''
     segments = conversations_db.decode_transcript_segments_blob(
@@ -344,7 +347,9 @@ def _candidate_refusal_reason(
 ) -> Optional[str]:
     """The candidate's own privacy gate. A caller that holds the row passes it; otherwise one snapshot read."""
     if row is None:
-        row = conversations_db.get_conversation_raw_snapshot(uid, conversation_id, firestore_client=c.firestore_client)
+        row = read_product_conversation(
+            conversations_db.get_conversation_raw_snapshot, uid, conversation_id, firestore_client=c.firestore_client
+        )
     return gate_refusal_reason(uid, row) if row else 'other'
 
 

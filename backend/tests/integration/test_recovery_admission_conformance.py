@@ -125,7 +125,7 @@ def test_pl057_provider_failure_retains_speech_and_never_replays_paid_intent(h, 
     assert job(h) == failed
     provider.assert_called_once()
     second.assert_not_called()
-    assert artifacts.method_calls == [call.fetch_audio(provider.call_args.args[0])]
+    assert artifacts.method_calls == [call.fetch_audio(provider.call_args.args[0], confirm_retained_digest=True)]
 
 
 def test_pl057_lost_result_ack_reconciles_same_object_without_a_second_paid_call(h):
@@ -164,7 +164,7 @@ def test_pl072_account_deletion_cancels_recovery_before_paid_work_or_upload(h, p
         h.customer.delete_account(work.owner_id)
     else:
 
-        def download(_item):
+        def download(_item, *, confirm_retained_digest=False):
             h.customer.delete_account(work.owner_id)
             return wav_bytes()
 
@@ -230,7 +230,9 @@ def test_pl086_refusal_backoff_survives_restart_and_completion_resets_it(h):
 
 
 @pytest.mark.parametrize('delay,expected', [(3600, 3600), (86400, 86400), (100000, 86400)])
-def test_pl086_policy_wait_survives_restart_without_blocking_same_owner(h, delay, expected):
+@pytest.mark.parametrize('park', [False, True], ids=['rollback', 'parked'])
+def test_pl086_policy_wait_survives_restart_without_blocking_same_owner(h, delay, expected, park, monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'on' if park else 'off')
     queue = Scheduler(h.store)
     work = item(h)
     assert queue.enqueue(work, T0)
@@ -249,4 +251,8 @@ def test_pl086_policy_wait_survives_restart_without_blocking_same_owner(h, delay
     restarted.recover(T0 + expected - 1)
     assert restarted.pull(T0 + expected - 1) == []
     restarted.recover(T0 + expected)
-    assert restarted.pull(T0 + expected)[0].item.segment_id == work.segment_id
+    if park:
+        assert restarted.pull(T0 + expected) == []
+        assert job(h)['state'] == 'allowance_held'
+    else:
+        assert restarted.pull(T0 + expected)[0].item.segment_id == work.segment_id

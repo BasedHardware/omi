@@ -19,6 +19,7 @@ from config.jev_decisions import (
 from llm_gateway.gateway.dream_lanes import DREAM_LANES, dream_lane_items, validate_dream_route
 from llm_gateway.gateway.schemas import FeatureBundle, GeneratedRouteOverride, LaneConfig, RouteArtifact
 from utils.llm import vertex_pt_routing as ptr
+from utils.llm.model_constants import LUNA_MODEL
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.model_config import (
     get_all_configured_features,
@@ -27,6 +28,13 @@ from utils.llm.model_config import (
     get_route_options,
     is_structured_output_feature,
 )
+
+# Conversations v3 gateway-only features (never part of the legacy route fingerprint).
+V3_FEATURES = {
+    'conversation_v3_outline': (LUNA_MODEL, 'openai'),
+    'conversation_v3_summary': (LUNA_MODEL, 'openai'),
+    'conversation_v3_summary_open': (LUNA_MODEL, 'openai'),
+}
 
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[1] / 'config'
 PROD_ENV_VAR = 'OMI_LLM_GATEWAY_PROD'
@@ -101,7 +109,7 @@ def load_generated_route_overrides(
         resolved_config_dir / GENERATED_ROUTE_OVERRIDES_FILE,
         'generated_route_overrides',
     )
-    configured_features = get_all_configured_features()
+    configured_features = get_all_configured_features() | V3_FEATURES.keys()
     overrides: dict[str, GeneratedRouteOverride] = {}
     for item in items:
         override = GeneratedRouteOverride.model_validate(item)
@@ -239,9 +247,9 @@ def _generated_feature_route_items(
     lanes: list[dict[str, Any]] = []
     artifacts: list[dict[str, Any]] = []
     bundles: list[dict[str, Any]] = []
-    for feature in sorted(get_all_configured_features()):
-        legacy_model = get_model(feature)
-        legacy_provider = get_provider(feature)
+    for feature in sorted(get_all_configured_features() | V3_FEATURES.keys()):
+        legacy_model = V3_FEATURES[feature][0] if feature in V3_FEATURES else get_model(feature)
+        legacy_provider = V3_FEATURES[feature][1] if feature in V3_FEATURES else get_provider(feature)
         override = route_overrides.get(feature)
         model = override.primary.model if override is not None else legacy_model
         provider = override.primary.provider if override is not None else legacy_provider
@@ -558,7 +566,7 @@ def _surface_for_feature(feature: str, provider: str) -> str:
 
 
 def _capabilities_for_feature(feature: str, *, provider: str, surface: str) -> dict[str, Any]:
-    structured_output = 'json_schema' if is_structured_output_feature(feature) else 'none'
+    structured_output = 'json_schema' if is_structured_output_feature(feature) or feature in V3_FEATURES else 'none'
     anthropic_messages = surface == 'anthropic.messages'
     return {
         'text_input': True,

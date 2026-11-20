@@ -1128,6 +1128,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Имя успешно обновлено!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Читать выбранные календари. Новые события используют $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Настройки календаря';
 
   @override
@@ -1994,6 +1999,15 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get memoryHistory => 'История';
+
+  @override
+  String get recordingWithYourPhone => 'Запись на телефон';
+
+  @override
+  String get wrapUp => 'Завершить';
+
+  @override
+  String get recordingDiscarded => 'Запись удалена';
 
   @override
   String get undo => 'Отменить';
@@ -7050,6 +7064,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Не удалось войти через Apple, пожалуйста, попробуйте снова.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Не удалось войти через Apple. Попробуйте ещё раз или продолжите с Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Не удалось получить токен Firebase, пожалуйста, попробуйте снова.';
 
   @override
@@ -9096,7 +9114,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Эта запись загружена, но Omi ещё создаёт разговор. Если удалить её сейчас и обработка не удастся, восстановить будет невозможно. Всё равно удалить?';
+      'Эта запись уже загружена, и Omi её обрабатывает. Удаление здесь убирает копию на телефоне. Если обработка не удастся, Omi не сможет повторить попытку с этого телефона.';
 
   @override
   String get syncCardAllBackedUp => 'Все записи синхронизированы';
@@ -12256,7 +12274,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'С момента сопряжения: обрывов — $drops, неудачных подключений — $failed.';
+    return 'С момента сопряжения: $drops повторных подключений, $failed неудачных подключений.';
   }
 
   @override
@@ -13448,6 +13466,9 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Есть код Omi Pro? Введите его на следующем экране.';
+
+  @override
   String get paywallTrialCancelNote => 'Отменить в любое время. Без комиссий и штрафов.';
 
   @override
@@ -13494,16 +13515,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Преобразование $amount в разговоры';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Готово $done из $total · можно покинуть этот экран';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount готово к синхронизации';
   }
@@ -13527,7 +13538,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Ожидает на этом телефоне';
 
   @override
-  String get syncDetailsTranscribing => 'Расшифровывается в Omi';
+  String get syncDetailsTranscribing => 'Загружено, ожидание сервера';
 
   @override
   String get syncDetailsAudioFiles => 'Аудиофайлы';
@@ -13985,6 +13996,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi уже работает над этим разговором. Сводка появится здесь, когда будет готова.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Ещё не расшифровано';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Сводка появится, когда будет готова расшифровка.';
 
   @override
   String get summaryCheckAgain => 'Проверить снова';
@@ -14519,14 +14536,6 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done из $total мин';
-  }
-
-  @override
-  String get deviceRecently => 'Недавно';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Отключено на $duration';
   }
 
   @override
@@ -15447,6 +15456,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get paymentDeclinedTitle => 'Ваша карта отклонена';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Обновите карту или верните $plan за $price в месяц';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Обновите карту, чтобы вернуть $plan';
   }
@@ -15463,6 +15477,11 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Обновление не установилось. Ваш кулон продолжает работать на текущей прошивке ($version). Пожалуйста, обратитесь в поддержку, а не повторяйте обновление.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15471,4 +15490,285 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Перейти на ежемесячный';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price в месяц';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Заменяет неоплаченный годовой платёж $yearly. Продлевается ежемесячно. Отменить можно в любой момент.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Платёж отклонён. Ваш план не изменился.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Переход сейчас недоступен. Вместо этого обновите карту.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Теперь вы платите ежемесячно';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Сегодня оплачено $price. Продлевается ежемесячно.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Список обработки изменился. Проверьте его и попробуйте снова.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Вы использовали $minutes минут этого месяца';
+  }
+
+  @override
+  String get freeCapBody => 'Omi продолжает запись. Выберите, как продолжить расшифровку.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Неограниченная облачная расшифровка';
+
+  @override
+  String get freeCapProAccuracy => 'Наилучшая точность';
+
+  @override
+  String get freeCapProWaiting => 'Расшифровывает ожидающие записи';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Бесплатно. Остаётся включённым, пока вы не переключитесь обратно.';
+
+  @override
+  String get transcribingOnThisPhone => 'Расшифровка на этом телефоне';
+
+  @override
+  String get getPro => 'Получить Pro';
+
+  @override
+  String get unlock => 'Разблокировать';
+
+  @override
+  String get transcribeWith => 'Расшифровка через';
+
+  @override
+  String get omiCloud => 'Облако Omi';
+
+  @override
+  String get thisPhone => 'Этот телефон';
+
+  @override
+  String get onDeviceReady => 'Готово';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Осталось $left из $limit мин · обновление $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Доступно $minutes мин в облаке';
+  }
+
+  @override
+  String get switchBack => 'Вернуться';
+
+  @override
+  String get setUpThisPhone => 'Настройка этого телефона';
+
+  @override
+  String get speechRecognition => 'Распознавание речи';
+
+  @override
+  String get audioStaysOnPhone => 'Аудио остаётся на телефоне';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Загрузка $size МБ';
+  }
+
+  @override
+  String get downloadNow => 'Скачать сейчас';
+
+  @override
+  String get onWifiLater => 'Позже по Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Пишем ваше резюме…';
+
+  @override
+  String get onTheWayServerWork => 'Работа по данным сервера';
+
+  @override
+  String get finishNothingToProcess => 'Пока нечего обрабатывать.';
+
+  @override
+  String get finishStillProcessing => 'Ещё обрабатывается. Появится на главной.';
+
+  @override
+  String get finishBackToHome => 'На главную';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Сводка появится, когда разговор закончится';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Загрузки, ожидающие на сервере';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ваше аудио в безопасности на устройстве или телефоне';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Сводка до $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Последняя расшифровка';
+
+  @override
+  String get finishAlreadySaved => 'Уже сохранено. Доступно на вкладке «Главная».';
+
+  @override
+  String get finishAudioNotReceived => 'Аудио ещё в пути.';
+
+  @override
+  String get finishFailedOffline => 'Не получилось. Ваше аудио в безопасности.';
+
+  @override
+  String get finishFailed => 'Не получилось. Ваше аудио в безопасности.';
+
+  @override
+  String get micBlockedCannotRecord => 'Разрешите микрофону вести запись.';
+
+  @override
+  String get couldNotStartRecording => 'Не удалось начать запись.';
+
+  @override
+  String get restorePurchasesFailed => 'Не удалось проверить ваш тарифный план.';
+
+  @override
+  String get firmwareCheckFailed => 'Не удалось проверить обновления.';
+
+  @override
+  String get conversationStillPublic => 'Доступ по ссылке всё ещё открыт.';
+
+  @override
+  String get goalSaveFailed => 'Не удалось сохранить вашу цель.';
+
+  @override
+  String get goalDeleteFailed => 'Не удалось удалить. Цель восстановлена.';
+
+  @override
+  String get goalsLoadFailed => 'Не удалось загрузить ваши цели.';
+
+  @override
+  String get missingTargetEndedRecording => 'Эта запись завершена.';
+
+  @override
+  String get missingTargetMemory => 'Этого воспоминания больше нет.';
+
+  @override
+  String get missingTargetTask => 'Этой задачи больше нет.';
+
+  @override
+  String get missingTargetConversation => 'Не удалось открыть этот разговор.';
+
+  @override
+  String get couldNotRefreshConversations => 'Не удалось обновить.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Подключите Omi для синхронизации.';
+
+  @override
+  String get useDifferentAccountMessage => 'Вы выйдете из аккаунта, а настройки Omi на этом телефоне будут сброшены.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Очки не найдены. Они включены?';
+
+  @override
+  String get couldNotMoveTask => 'Не удалось переместить задачу.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Удалено. Заблокированные задачи ($count) оставлены.',
+      one: 'Удалено. 1 заблокированная задача оставлена.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Не удалось сохранить это изменение.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Не удалось загрузить ваши настройки.';
+
+  @override
+  String get waitForOmiToFinish => 'Подождите, пока Omi закончит.';
+
+  @override
+  String get voiceNoteTooShort => 'Слишком коротко. Удерживайте для записи.';
+
+  @override
+  String get submitAppMissingFields =>
+      'Добавьте название, описание, изображение, категорию и возможность, чтобы отправить.';
+
+  @override
+  String get appSetupNotFinished => 'Настройка ещё не завершена.';
+
+  @override
+  String get finishNothingKeptTitle => 'Нечего сохранять';
+
+  @override
+  String get submitAppFinishDetails => 'Заполните указанные выше сведения о возможности и ценах, чтобы отправить.';
+
+  @override
+  String get finishNothingNew => 'Пока ничего нового.';
+
+  @override
+  String get takingLongerThanUsual =>
+      'Это занимает больше времени, чем обычно. Скоро оно появится на вкладке «Главная».';
+
+  @override
+  String get couldNotCheckOnIt => 'Не удалось проверить. Попробуйте снова.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Улучшите тариф, чтобы открыть его.';
+
+  @override
+  String get missingTargetConversationGone => 'Этот разговор удалён.';
+
+  @override
+  String get cantConnectRightNow => 'Не удаётся подключиться прямо сейчас.';
+
+  @override
+  String get loadOlderFailed => 'Не удалось загрузить предыдущие. Нажмите, чтобы повторить.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Слушаю · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Дождитесь завершения, чтобы изменить.';
+
+  @override
+  String get finishedSummaryReady => 'Сводка готова';
+
+  @override
+  String get writingSummaryStatus => 'Пишем сводку…';
+
+  @override
+  String get stillWorkingOnIt => 'Всё ещё работаем над этим.';
 }

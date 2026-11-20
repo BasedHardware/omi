@@ -36,6 +36,7 @@ Entry points (all synchronous, fail-open, run on a worker thread by callers):
 """
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 import logging
 import threading
@@ -54,6 +55,8 @@ from utils.sync.repeat_work_metrics import conversation_scope
 from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
 from utils.episodes.timeline import episode_at as episode_at, episodes_between as episodes_between
 from database import episode_timeline, episode_attach_memo
+from database import episode_live_members as live_members_db
+from config import episode_live_members as live_members
 from database._client import get_firestore_client
 
 from config.episodes import (
@@ -94,6 +97,7 @@ from utils.episodes.recorded_recovery import (
     unconsumed_moments,
 )
 from utils.observability.fallback import record_fallback
+from utils.summary_quality import episode_quality, title_or_fallback, content_units
 
 logger = logging.getLogger(__name__)
 
@@ -364,7 +368,11 @@ def _close(
     ``closing`` keeps that member's items for finalization without reopening.
     ``preserve_for_reconciliation`` keeps other members' provisional items.
     """
-    expected_activity_at = policy.utc(episode.get('last_activity_at')) if reason == 'idle' else None
+    expected_activity_at = (
+        policy.utc(episode.get('last_activity_at'))
+        if reason == 'idle' or (reason == 'gap' and live_members.enabled())
+        else None
+    )
     # Fold unapplied WAL speech into these notes before close, explicitly
     # targeting this episode to avoid recursion or reassignment.
     if synced_f:
@@ -382,7 +390,9 @@ def _close(
     for cid in episode.get('recovered_conversation_ids') or []:
         if cid == detach:
             continue
-        row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        row = read_product_conversation(
+            conversations_db.get_conversation, uid, cid, firestore_client=c.firestore_client
+        )
         if row and not any(row.get(key) for key in ('deleted', 'discarded', 'sync_merged_into')):
             _record_recovered(uid, str(episode['id']), cid, row, c)
     if not synced_f:
@@ -1092,7 +1102,12 @@ def _record_moment_once(
     end_offset = max((_segment_end(s) for s in segments), default=0.0)
     start_offset = min((_segment_start(s) for s in segments), default=0.0)
     changes = (composer.no_changes if compose_owns else apply_update)(
-        base, result.update, conversation_id=moment.conversation_id, segment_offset=end_offset, now=now
+        base,
+        result.update,
+        conversation_id=moment.conversation_id,
+        segment_offset=end_offset,
+        now=now,
+        content_word_units=int(base.get("content_word_units") or 0) + content_units([*carried_segments, *segments]),
     )
     detected_output_language = (
         episode_language.detected_state_language({**base, **changes}, hint_language=output_language)
@@ -1248,6 +1263,10 @@ def on_conversation_finalized(
     collaborators: Optional[Collaborators] = None,
 ) -> str:
     """After the conversation's normal processing. Returns an outcome label; never raises."""
+    if row.get('recording') or row.get('v3_derived'):
+        return 'skipped_recording_layer'
+    if row.get('capture_time_trust') == 'untrusted':
+        return 'skipped_unknown_date'
     c = collaborators or Collaborators()
     if not episodes_enabled_for(uid) or trigger not in RECONCILE_TRIGGERS:
         return 'skipped'
@@ -1498,7 +1517,9 @@ def _synced_f_verdict(
         # Unknown/blocked candidate metadata never permits naming or a model call.
         # Outside the cohort or killed: no owner read and no model call, so today's placement is untouched.
         return None
-    fresh = conversations_db.get_conversation_raw_snapshot(uid, conversation_id, firestore_client=c.firestore_client)
+    fresh = read_product_conversation(
+        conversations_db.get_conversation_raw_snapshot, uid, conversation_id, firestore_client=c.firestore_client
+    )
     if not fresh or not f_join.may_feed_llm(uid, fresh):
         # Intake may precede a lock/deletion: check stored privacy before constructing or naming speech.
         return None
@@ -1693,6 +1714,26 @@ def attach_recorded(
     )
     template['sources'] = [source] if (source := getattr(row.get('source'), 'value', row.get('source'))) else []
     template |= f_join.arm_fields(uid)
+    if recorded_episodes_enabled() and live_members.enabled() and live_members.capturing(row):
+        placed = live_members_db.place(
+            uid,
+            conversation_id,
+            template=template,
+            firestore_client=c.firestore_client if c.firestore_client is not None else get_firestore_client(),
+            admission=admission,
+            pending_at=template['created_at'] if pending_transcription else None,
+            deadline_floor=deadline_floor,
+        )
+        if placed is not None:
+            if isinstance(placed, str):
+                raise AdmissionClosed()
+            if closed := placed.pop('_live_member_closed_episode', None):
+                composer.schedule_after_close(uid, str(closed['id']), episode=closed, collaborators=c, trigger='close')
+            if refusal := placed.pop('_live_member_clock_refusal', None):
+                metrics.record_live_member_clock_refusal(refusal)
+            if placed.pop('_live_member_rehomed', False):
+                metrics.record_live_member('rehomed')
+            return placed
     placed = episode_timeline.attach_recorded(
         uid,
         conversation_id,
@@ -1712,6 +1753,38 @@ def attach_recorded(
         raise AdmissionClosed()
     placed.pop('_recorded_windows', None)
     return placed
+
+
+def repair_closed_live_members(uid: str, episode: Mapping[str, Any], c: Collaborators) -> bool:
+    """Lazy repair; uncertainty retains membership, while composition excludes active captures."""
+    if (
+        not recorded_episodes_enabled()
+        or not live_members.enabled()
+        or policy.is_live(episode)
+        or episode.get('close_reason') not in {'gap', 'idle'}
+    ):
+        return False
+    boundary = policy.utc(episode.get('closed_at'))
+    changed = False
+    for cid in episode.get('conversation_ids') or []:
+        row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        if not row or not live_members.capturing(row) or not boundary:
+            continue
+        start = policy.utc(row.get('started_at')) or boundary
+        try:
+            placed = attach_recorded(uid, cid, row, start, start + timedelta(seconds=1), c)
+            changed |= placed.get('id') != episode.get('id')
+        except Exception as error:
+            logger.warning('event=episode_live_member_repair exception_type=%s', type(error).__name__)
+            record_fallback(
+                component='conversation_notes',
+                from_mode='episode_live_member_rehome',
+                to_mode='episode_finished_member_compose',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+    return changed
 
 
 def _record_recovered(
@@ -1780,6 +1853,10 @@ def attach_synced_intake(
     episode (live or closed) never moves.
     Fail-open; returns a bounded outcome label; never raises.
     """
+    if row.get('recording') or row.get('v3_derived'):
+        return 'skipped_recording_layer'
+    if row.get('capture_time_trust') == 'untrusted':
+        return 'skipped_unknown_date'
     c = collaborators or Collaborators()
     if not episodes_enabled_for(uid) or not conversation_id:
         return 'disabled'
@@ -1833,6 +1910,10 @@ def _on_finalized(
     absorbed_from: Optional[str],
     c: Collaborators,
 ) -> str:
+    if row.get('recording') or row.get('v3_derived'):
+        return 'skipped_recording_layer'
+    if row.get('capture_time_trust') == 'untrusted':
+        return 'skipped_unknown_date'
     if row.get('deleted') or is_relevance_discarded(row):
         _end_discarded(uid, conversation_id, row, trigger, c)
         return 'skipped_discarded'
@@ -1849,7 +1930,12 @@ def _on_finalized(
     if trigger == SYNC_UPDATE:
         # Absorb callbacks carry the donor row; notes must read the survivor.
         sync_row = (
-            (conversations_db.get_conversation(uid, conversation_id, firestore_client=c.firestore_client) or {})
+            (
+                read_product_conversation(
+                    conversations_db.get_conversation, uid, conversation_id, firestore_client=c.firestore_client
+                )
+                or {}
+            )
             if absorbed_from
             else row
         )
@@ -2168,13 +2254,14 @@ def episode_by_id(
 
 def _wire_heading(heading: Any) -> str:
     text = clean_text(heading, 240)
-    return '' if is_placeholder_heading(text) else text
+    return text if text.startswith('Discussion ') else title_or_fallback(text)
 
 
 def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
     """Only the client-visible projection; applied offsets, usage and speaker keys stay server-side."""
     if not episode:
         return None
+    episode = episode_quality({}, episode)
     return {
         'id': episode['id'],
         'status': episode.get('status') or 'closed',

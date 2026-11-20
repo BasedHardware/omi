@@ -59,20 +59,41 @@ class StackFailure(AssertionError):
     """An actionable scenario assertion failure."""
 
 
+def _reserved_emulator_port() -> int | None:
+    """The Firestore emulator's own port, which no stack child may bind.
+
+    The kernel only withholds ports that are *bound right now*. If the emulator
+    has exited (or has not bound yet), a stack child could be handed its port
+    and then answer the Firestore gRPC client with HTTP/1.1, which surfaces as
+    ``Trying to connect an http1.x server (HTTP status 400)`` instead of an
+    honest connection refusal. Excluding the port keeps that failure legible.
+    """
+    host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
+    _, _, port = host.rpartition(':')
+    return int(port) if port.isdigit() else None
+
+
 def _free_ports(count: int) -> list[int]:
     """Reserve and return `count` distinct ephemeral ports on loopback.
 
     Holding all probe sockets open simultaneously guarantees that the kernel
     allocates non-conflicting, unique port numbers across the stack's services (#19802).
+    The Firestore emulator's port is skipped explicitly; see
+    ``_reserved_emulator_port``.
     """
+    reserved = _reserved_emulator_port()
     probes = []
     ports = []
     try:
-        for _ in range(count):
+        while len(ports) < count:
             probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             probe.bind(('127.0.0.1', 0))
+            port = int(probe.getsockname()[1])
+            if port == reserved:
+                probe.close()
+                continue
             probes.append(probe)
-            ports.append(int(probe.getsockname()[1]))
+            ports.append(port)
         return ports
     finally:
         for probe in probes:
@@ -1263,15 +1284,21 @@ async def _rest_finalization_survives_listener_restart(stack: Stack) -> None:
     duplicate_task_events = [
         event for event in stack.finalization_task_events if event.get('event') == 'task_already_exists'
     ]
-    expected_duplicates = stack.rest_finalization_race_parties - 1
-    if len(duplicate_task_events) != expected_duplicates:
+    rest_events = [event for event in stack.finalization_task_events if event.get('admission_origin') == 'rest']
+    rest_created = [event for event in rest_events if event.get('event') == 'task_enqueued']
+    rest_duplicates = [event for event in rest_events if event.get('event') == 'task_already_exists']
+    if (
+        len(rest_events) != stack.rest_finalization_race_parties
+        or len(rest_created) > 1
+        or len(rest_duplicates) != stack.rest_finalization_race_parties - len(rest_created)
+    ):
         raise StackFailure(
-            f'concurrent REST finalization expected {expected_duplicates} named-task AlreadyExists events, '
-            f'observed {len(duplicate_task_events)}'
+            'concurrent REST finalization did not attempt every admission at the same named task: '
+            f'{len(rest_events)} attempts, {len(rest_created)} creates, {len(rest_duplicates)} duplicates'
         )
     if any(
         event.get('task_name') != task.get('task_name') or event.get('payload') != task.get('payload')
-        for event in duplicate_task_events
+        for event in [*duplicate_task_events, *rest_events]
     ):
         raise StackFailure('duplicate REST admission changed the durable Cloud Tasks identity')
     if len(stack.finalization_tasks) != 1 or len(stack.jobs_for(uid, conversation_id)) != 1:

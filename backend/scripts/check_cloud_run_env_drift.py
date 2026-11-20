@@ -120,13 +120,10 @@ LIVE_MANAGED_ENV_ALLOWLIST: dict[str, frozenset[str]] = {
             'BATCH_PIPELINE_UID_ALLOWLIST',
         }
     ),
-    'backend': frozenset(
-        {
-            'OMI_BACKEND_RELEASE_SHA',
-        }
-    ),
+    'backend': frozenset({'OMI_BACKEND_RELEASE_SHA'}),
     'backend-sync': frozenset(
         {
+            'OMI_BACKEND_RELEASE_SHA',
             'SYNC_BACKFILL_ORDER_UID_ALLOWLIST',
             'FAIR_USE_EXEMPT_UIDS',
             'DREAM_AGENT_FULL_CONTEXT_UIDS',
@@ -134,12 +131,15 @@ LIVE_MANAGED_ENV_ALLOWLIST: dict[str, frozenset[str]] = {
     ),
     'backend-sync-backfill': frozenset(
         {
+            'OMI_BACKEND_RELEASE_SHA',
             'SYNC_BACKFILL_ORDER_UID_ALLOWLIST',
             'FAIR_USE_EXEMPT_UIDS',
             'DREAM_AGENT_FULL_CONTEXT_UIDS',
         }
     ),
-    'backend-integration': frozenset(),
+    'backend-integration': frozenset({'OMI_BACKEND_RELEASE_SHA', 'BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST'}),
+    # SCA-3120: derived from backend-integration, deployed only by its explicit selection.
+    'backend-projection-pump': frozenset({'OMI_BACKEND_RELEASE_SHA', 'BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST'}),
 }
 
 
