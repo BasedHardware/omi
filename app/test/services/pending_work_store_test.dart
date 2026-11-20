@@ -75,7 +75,7 @@ void main() {
     }
   });
 
-  test('every failed read restores old Home after a successful opt-in', () async {
+  test('every failed read keeps the last good answer after a successful opt-in (X17)', () async {
     for (final kind in ApiProblemKind.values) {
       var failing = false;
       final store = PendingWorkStore(
@@ -89,12 +89,12 @@ void main() {
       expect(store.homeProcessingToday, isTrue);
       failing = true;
       await store.refresh();
-      expect(store.homeProcessingToday, isFalse, reason: kind.name);
+      expect(store.homeProcessingToday, kind != ApiProblemKind.notFound, reason: kind.name);
       store.dispose();
     }
   });
 
-  test('thrown reads and account reset restore old placement', () async {
+  test('thrown reads keep the last answer (X17); account reset restores old placement', () async {
     var throwing = false;
     final store = PendingWorkStore(
         loadPending: () async {
@@ -106,7 +106,10 @@ void main() {
     await store.refresh();
     throwing = true;
     await store.refresh();
-    expect(store.homeProcessingToday, isFalse);
+    expect(store.homeProcessingToday, isTrue);
+    store.reset();
+    await store.refresh();
+    expect(store.homeProcessingToday, isFalse, reason: 'a new account with no answer keeps old Home');
     throwing = false;
     await store.refresh();
     store.reset();

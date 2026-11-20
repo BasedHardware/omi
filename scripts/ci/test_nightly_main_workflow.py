@@ -30,6 +30,8 @@ INTENTIONAL_BUDGET_CHANGES = {
     # the pinned nightly, and its PR and main-push budget is fixed here.
     ("backend-go-checks.yml", "port-tasks", "runs-on"): "ubuntu-latest",
     ("backend-go-checks.yml", "port-tasks", "timeout-minutes"): "15",
+    # #25814 adds locked Python setup and an emulator replay to the Go check.
+    ("backend-go-checks.yml", "check", "timeout-minutes"): "30",
     # iOS Compile Check: the 40-min ceiling sat below the measured cold path
     # (39:25 real steps + ~1 min post-job Post Setup Flutter cache save, run
     # 39634604539 attempt 1), cancelling a healthy cold job after every real

@@ -60,6 +60,7 @@ against Postgres, each test in its own database (`internal/platform/pgtest`).
 | The watcher sleeps until the next timer, and backs off on work it cannot claim | `rules.IdleWait`, `Workers.idle` | `TestIdleWaitSleepsUntilDueWithinBounds` |
 | A cause no kind declared is recorded as `unknown` | `registry.known` | `TestUndeclaredCauseIsRecordedAsUnknown` |
 | Admission acquires its barrier and checks for erasure in one client statement, reading the tombstone after the lock | `Store.Tenant`, `queue_acquire_tenant` | `TestAdmissionSeesEraseCommittedWhileWaitingForLock`, `TestTenantScopeTakesTwoClientStatements` |
+| Queue-only erase waits for guards, purges tenant queue rows, and records the tombstone while preserving the remote-cleanup completion bit | `Store.EraseQueue` | `TestEraseQueueWaitsForGuardAndCascades`, `TestEraseQueueIncludesAdmissionThatCommitsWhileItWaits`, `TestQueueOnlyErasePreservesRemoteCompletion` |
 | Every job field is scanned from its matching column | `columns`, `scan` | `TestJobScanMatchesItsProjection` |
 | A database whose applied migration differs from the embedded file is refused | `Store.Migrate`, `Store.Ready` | `TestMigrateRefusesAnEditedMigration` |
 
@@ -78,6 +79,28 @@ the write. `internal/platform/docstore` does that for Firestore, and
 kills the session mid-call to prove it. A sink that cannot do this gets the weaker guarantee, and
 its adapter's README must say so.
 
+### Queue-only account erasure
+
+Workerd can call `Store.EraseQueue(ctx, tenant)` after authenticating the deletion executor
+and validating its armed wipe generation. The equivalent SQL is
+`SELECT queue_erase_tenant($1::text)` in the queue schema. Both paths wait for shared
+guards, delete the tenant and its dependent rows, and record the salted tombstone even if
+the tenant never had jobs. Repeating the call after a lost response is safe.
+
+Use a bounded READ COMMITTED transaction. The exclusive transaction lock lasts through commit.
+The Go method uses autocommit. An explicit SQL transaction must commit successfully before the
+caller acknowledges the wipe generation. The returned boolean is the existing remote-cleanup
+completion bit. Both values mean that the SQL operation succeeded. Only `Store.Erase` runs
+remote cleanup and marks it complete, under its exclusive session lock.
+
+Migration 003 installs a SECURITY DEFINER function owned by the queue migrator. It binds
+the table names to the installation schema and revokes PUBLIC execution. The workerd
+runtime needs schema usage and EXECUTE as described in its deployment contract. Check those
+privileges before deploying a separately owned runtime. The dedicated recovery role and
+its grants require David's approval. The [recovery access migration](access/erase_recovery.sql)
+is separate from automatic queue migrations and expects an approved, pre-existing role.
+The executor owns rollout, generation checks, and acknowledgement persistence.
+
 ## Schema
 
 [`migrations/001_queue.sql`](migrations/001_queue.sql). An applied file is never edited; a change
@@ -92,6 +115,7 @@ refuse a mismatch.
 | `queue_lease_token` | The fencing sequence. Gaps are fine; it only grows. |
 | `queue_settings`, `queue_erasure` | The deployment's erasure salt, and one salted hash per erased tenant. |
 | `queue_acquire_tenant` | `Store.Tenant` takes the shared tenant barrier, then reads the erasure tombstone with a fresh snapshot. |
+| `queue_erase_tenant` | Exclusive transaction barrier, cascading queue purge and salted tombstone. Preserves the remote-cleanup completion bit. |
 | `queue_acquire_guard` | The function `Run.Guard` calls: both locks, then a fresh read of the lease. |
 
 ## How a claim works

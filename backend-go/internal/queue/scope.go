@@ -228,6 +228,18 @@ WHERE uid=$1 AND job_key=$2 AND initializing AND attempts=0 AND state<>'leased'`
 	return nil
 }
 
+const eraseTenantSQL = "SELECT queue_erase_tenant($1)"
+
+// EraseQueue waits for the tenant's guards and commits the queue purge and
+// tombstone. It is safe to repeat after a lost acknowledgement. Only Erase
+// owns remote cleanup and its completion bit.
+func (s *Store) EraseQueue(ctx context.Context, tenant string) error {
+	if _, err := s.pool.Exec(ctx, eraseTenantSQL, tenant); err != nil {
+		return fmt.Errorf("erase queue: %w", err)
+	}
+	return nil
+}
+
 // Erase removes every row of the tenant and records a salted tombstone, all under the
 // exclusive barrier, which first waits for the tenant's in-flight guarded calls to finish.
 // It then runs eraseRemote, still under the barrier. A repeated call resumes an erase whose
@@ -235,9 +247,7 @@ WHERE uid=$1 AND job_key=$2 AND initializing AND attempts=0 AND state<>'leased'`
 func (s *Store) Erase(ctx context.Context, tenant string, eraseRemote func() error) error {
 	return s.withTenant(ctx, tenant, true, func(sc *Scope) error {
 		var complete bool
-		err := sc.conn.QueryRow(ctx, `WITH purge AS (DELETE FROM queue_tenants WHERE uid=$1)
-INSERT INTO queue_erasure(tenant_hash) VALUES (`+tenantHashSQL+`)
-ON CONFLICT(tenant_hash) DO UPDATE SET tenant_hash=EXCLUDED.tenant_hash RETURNING completed`, tenant).Scan(&complete)
+		err := sc.conn.QueryRow(ctx, eraseTenantSQL, tenant).Scan(&complete)
 		if err != nil {
 			return fmt.Errorf("erase: %w", err)
 		}

@@ -416,7 +416,7 @@ class _Home {
       _conversation('c-yesterday', DateTime(2026, 11, 15, 15, 0), 'Design review', v3: _done),
       _conversation('c-yesterday-2', DateTime(2026, 11, 15, 11, 10), 'Lunch with Sam',
           v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.done)),
-      // Its summary failed for good: a warning tile, never the emoji.
+      // Its summary failed for good: it belongs to Activity, not Home (X5).
       _conversation('c-failed', DateTime(2026, 11, 15, 9, 30), 'Vendor call',
           v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.failed)),
     ]
@@ -548,8 +548,8 @@ void main() {
       expect(home.liveReads, greaterThanOrEqualTo(1));
 
       expect(_rowIds(tester),
-          ['live-1', 'c-call', 'c-transcribing', 'c-writing', 'c-today', 'c-yesterday', 'c-yesterday-2', 'c-failed'],
-          reason: 'the live conversation leads Today; the hidden one is only off Home');
+          ['live-1', 'c-call', 'c-transcribing', 'c-writing', 'c-today', 'c-yesterday', 'c-yesterday-2'],
+          reason: 'the live conversation leads Today; the hidden and failed ones are off Home (X5)');
       expect(find.byType(LiveEpisodeRow), findsNothing);
       expect(find.byKey(const Key('conversation_tile_live')), findsOneWidget);
       expect(find.byKey(const Key('conversation_tile_writing')), findsOneWidget);

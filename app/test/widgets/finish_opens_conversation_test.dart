@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -19,6 +20,8 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
+import 'package:omi/services/capture/finish_outcome.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -129,10 +132,11 @@ class _Capture extends CaptureProvider {
   String? get liveCaptureSource => 'omi';
 
   @override
-  Future<CreateConversationResponse?> finishCaptureWithResult() async {
+  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
     finishes++;
     await answerDelay;
-    return answer;
+    final reply = answer;
+    return InProgressProcessOutcome(response: reply, absence: reply == null ? ProcessAbsence.transport : null);
   }
 }
 
@@ -274,19 +278,25 @@ void main() {
     expect(harness.home.selectedIndex, HomeProvider.homeTab);
     expect(page?.recordingId, 'rec-1', reason: 'v3 answers with the recording; wait for its conversation');
     expect(find.byKey(const Key('finished_capture_processing')), findsOneWidget);
-    expect(find.text('Processing conversation…'), findsOneWidget);
+    expect(find.text('Writing your summary…'), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(LiveEpisodePage), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 
   test('the conversation Process Now returns opens its own page; a recording waits; none goes Home', () {
-    final page = finishedCapturePageFor(_conversation('c-1'));
+    Widget? pageFor(ServerConversation? conversation) => finishedPageFor(FinishOutcome.fromProcess(
+        InProgressProcessOutcome(
+          response:
+              conversation == null ? null : CreateConversationResponse(messages: const [], conversation: conversation),
+        ),
+        heardSomething: true));
+    final page = pageFor(_conversation('c-1'));
     expect(page, isA<ConversationDetailPage>());
     expect((page as ConversationDetailPage).conversation.id, 'c-1');
-    expect((finishedCapturePageFor(_recordingDoc('rec-1')) as FinishedCapturePage).recordingId, 'rec-1');
-    expect(finishedCapturePageFor(null), isNull);
-    expect(finishedCapturePageFor(_conversation('c-2', extra: {'discarded': true})), isNull);
+    expect((pageFor(_recordingDoc('rec-1')) as FinishedCapturePage).recordingId, 'rec-1');
+    expect(pageFor(null), isNull);
+    expect(pageFor(_conversation('c-2', extra: {'discarded': true})), isNull);
   });
 
   testWidgets('Finish right after the server closed the recording opens that one', (tester) async {
@@ -320,7 +330,7 @@ void main() {
     await tester.pump();
 
     expect(harness.capture.finishes, 0);
-    expect(find.text('Nothing to process yet.'), findsWidgets);
+    expect(find.text('Nothing new yet.'), findsWidgets);
     expect(harness.home.selectedIndex, HomeProvider.tasksTab);
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(LiveEpisodePage), findsNothing);
@@ -355,27 +365,24 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('a Finish that failed offline is sent again by the next Finish', (tester) async {
+  testWidgets('a Finish that failed offline stays on the page and the next Finish sends it again', (tester) async {
     final harness = await _pump(tester, _Capture(preview: _Preview(const [_line], 4)));
-    // Offline: Process Now has no answer, and the page goes back to Home as before.
+    // Offline: Process Now has no answer. The reader stays on the live page with Try Again (C1).
     final first = await _finishAndCapturePushed(tester, harness.capture);
     expect(harness.capture.finishes, 1);
     expect(first, isNull);
     await tester.pump(const Duration(seconds: 1));
-    expect(find.byType(LiveEpisodePage), findsNothing);
+    expect(find.byType(LiveEpisodePage), findsOneWidget, reason: 'never a silent pop to Home (C1, X2)');
+    expect(find.text("Didn't go through. Your audio is safe."), findsOneWidget, reason: 'an error, not silence (X2)');
+    expect(find.text('Try Again'), findsOneWidget);
 
     // Back online, same preview lines, no new words: the retry still has something to process.
-    harness.capture
-      ..answer = CreateConversationResponse(messages: const [], conversation: _recordingDoc('rec-1'))
-      ..tapped = false;
-    await tester.tap(find.text('home'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    harness.capture.answer = CreateConversationResponse(messages: const [], conversation: _recordingDoc('rec-1'));
     final second = await _finishAndCapturePushed(tester, harness.capture) as FinishedCapturePage?;
 
     expect(harness.capture.finishes, 2, reason: 'the failed Finish processed nothing');
     expect(second?.recordingId, 'rec-1');
-    expect(find.text('Nothing to process yet.'), findsNothing);
+    expect(find.text('Nothing new yet.'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -401,14 +408,14 @@ void main() {
     await tester.pump();
 
     expect(harness.capture.finishes, 1, reason: 'no new words since the last Finish');
-    expect(find.text('Nothing to process yet.'), findsWidgets);
+    expect(find.text('Nothing new yet.'), findsWidgets);
     expect(find.byType(FinishedCapturePage), findsNothing);
 
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('a recording the server could not process says so instead of waiting', (tester) async {
+  testWidgets('a recording the server has none of yet says so, keeps the page, and does not wait', (tester) async {
     final harness = await _pump(
       tester,
       _Capture(
@@ -422,12 +429,14 @@ void main() {
     final page = await _finishAndCapturePushed(tester, harness.capture);
 
     expect(harness.capture.finishes, 1);
-    expect(page, isNull, reason: 'no conversation will come from it');
-    expect(find.text('Nothing to process yet.'), findsWidgets);
+    expect(page, isNull, reason: 'no conversation will come from it yet');
+    // C5 (audit 2026-11-19): the page shows words, so "Nothing to process yet" was false.
+    expect(find.text('Nothing new yet.'), findsNothing);
+    expect(find.text("Audio's still on its way."), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
-    expect(find.byType(LiveEpisodePage), findsNothing);
-    expect(harness.home.selectedIndex, HomeProvider.homeTab);
+    expect(find.byType(LiveEpisodePage), findsOneWidget, reason: 'the recording carries on');
     await tester.pump(const Duration(seconds: 5));
+    await tester.pumpWidget(const SizedBox());
   });
 
   group('FinishedCapturePage', () {
@@ -499,7 +508,7 @@ void main() {
 
       await tester.pump(const Duration(seconds: 15));
       expect(find.byKey(const Key('finished_capture_expired')), findsOneWidget);
-      expect(find.text('Still processing. It will appear on Home.'), findsOneWidget);
+      expect(find.text("Taking longer than usual. We'll have it on Home."), findsOneWidget);
       final readsAtExpiry = reads;
       await tester.pump(const Duration(seconds: 30));
       expect(reads, readsAtExpiry, reason: 'no polling after it gave up');
@@ -558,7 +567,7 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.text('Processing conversation…'), findsOneWidget);
+      expect(find.text('Writing your summary…'), findsOneWidget);
       expect(opened, isNull);
 
       await tester.pump(const Duration(seconds: 5));
