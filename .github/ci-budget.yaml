@@ -87,13 +87,13 @@
       "display_name": "check",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 3,
+      "expected_runs_per_day": 6,
       "if": "${{ !cancelled() && (github.event_name != 'push' || inputs.nightly_main_sha != '' || needs.port-tasks.outputs.go_changed == 'true') }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "port-tasks",
       "owner": "CI maintainers",
-      "rationale": "SCA-3180: retain a 5-minute Go-check budget, account for the existing pinned nightly, and allow one extra PR run from the port script path. Main pushes select Go checks only when Go paths or the workflow change.",
+      "rationale": "SCA-3180: retain a 5-minute Go-check budget, account for the existing pinned nightly, and allow one extra PR run from the port script path. Main pushes select Go checks only when Go paths or the workflow change. Forecast three additional daily PR runs for replay reference changes from 21 first-parent changes to the selected Python sources over seven days.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -105,13 +105,13 @@
       "budget_p50_minutes": 5,
       "display_name": "port-tasks",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 4,
       "if": "inputs.nightly_main_sha == ''",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "SCA-3180: one forecast PR run per day for a checkout and focused Python tests. Main pushes also inspect merge metadata with read-only access. The job stays off the pinned nightly.",
+      "rationale": "SCA-3180: one forecast PR run per day for a checkout and focused Python tests. Main pushes also inspect merge metadata with read-only access. The job stays off the pinned nightly. Forecast three additional daily PR runs for replay reference changes from 21 first-parent changes to the selected Python sources over seven days.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3667,11 +3667,17 @@
     "backend-go-checks.yml": {
       "name": "Backend Go Checks",
       "owner": "CI maintainers",
-      "rationale": "SCA-3180: path-selected PR validation and read-only port task drafts on main pushes.",
+      "rationale": "SCA-3180: path-selected PR validation and read-only port task drafts on main pushes. Replay coverage includes the Python driver and direct finalization and storage entry points.",
       "triggers": {
         "pull_request": {
           "paths": [
             "backend-go/**",
+            "backend/testing/finalization_replay/**",
+            "backend/utils/conversations/finalizer.py",
+            "backend/utils/conversations/process_conversation.py",
+            "backend/utils/conversations/lifecycle.py",
+            "backend/database/conversation_finalization_jobs.py",
+            "backend/database/conversations.py",
             ".github/scripts/go_port_tasks.py",
             ".github/scripts/test_go_port_tasks.py",
             ".github/workflows/backend-go-checks.yml"
