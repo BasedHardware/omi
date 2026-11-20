@@ -47,15 +47,22 @@ def events(caplog):
     ]
 
 
+@pytest.fixture
+def recap_gateway_model(monkeypatch):
+    # Builds the real SDK client before measuring the recap request path.
+    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'https://synthetic.invalid')
+    return get_or_create_omi_gateway_llm(
+        'omi:auto:conversation-v3-summary-open', feature='conversation_v3_summary_open'
+    )
+
+
 @pytest.mark.asyncio
-async def test_recap_provider_receipts_join_across_foreground_intervals(catchup, monkeypatch, caplog):
+async def test_recap_provider_receipts_join_across_foreground_intervals(
+    catchup, monkeypatch, caplog, recap_gateway_model
+):
     caplog.set_level(logging.INFO, logger=recap_telemetry.logger.name)
     now = [299.0]
     monkeypatch.setattr(recap_telemetry, 'time', SimpleNamespace(time=lambda: now[0]))
-    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'https://synthetic.invalid')
-    model = get_or_create_omi_gateway_llm(
-        'omi:auto:conversation-v3-summary-open', feature='conversation_v3_summary_open'
-    )
     receipts = []
     should_fail = [False]
 
@@ -102,7 +109,7 @@ async def test_recap_provider_receipts_join_across_foreground_intervals(catchup,
 
     def write(uid, row, emit):
         async def invoke():
-            async with shaped_notes_transport.isolated_notes_model(model) as isolated:
+            async with shaped_notes_transport.isolated_notes_model(recap_gateway_model) as isolated:
                 return await isolated.ainvoke('synthetic prompt')
 
         return {'overview': str(asyncio.run(invoke()).content)}
