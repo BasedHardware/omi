@@ -31,18 +31,54 @@ def baseline_counts():
 
 # Preserve main's slow full sweep; short fast trajectories fit the 0.30s CPU guard.
 _BASELINE_SEEDS = [seed if seed < 10 else pytest.param(seed, marks=pytest.mark.slow) for seed in range(200)]
+_SHORT_HORIZON = 2000
+_LONG_HORIZON = 20000
 
 
-@pytest.mark.parametrize('sessions', [2000, pytest.param(20000, marks=pytest.mark.slow)])
-@pytest.mark.parametrize('rate', [0.03, 0.05, 0.075])
-@pytest.mark.parametrize('seed', _BASELINE_SEEDS)
-def test_seeded_session_baseline(rate, seed, sessions, baseline_counts):
-    rng, state = random.Random(seed), GateState()
-    for n in range(sessions):
+@pytest.fixture(scope='module')
+def baseline_prefixes(request):
+    """Only pair horizons that this pytest process actually selected."""
+    selected = {_SHORT_HORIZON: set(), _LONG_HORIZON: set()}
+    for item in request.session.items:
+        if item.parent is request.node and item.originalname == 'test_seeded_session_baseline':
+            params = item.callspec.params
+            selected[params['sessions']].add((params['rate'], params['seed']))
+    return dict.fromkeys(selected[_SHORT_HORIZON] & selected[_LONG_HORIZON])
+
+
+def _replay_baseline(rate, rng, state, benches, start, stop):
+    for n in range(start, stop):
         state = transition(state, rng.random() < rate, n, witness=f'{n:016x}')
         if state.stage == 0:
-            baseline_counts[rate] += 1
+            benches += 1
             state = GateState()
+    return state, benches
+
+
+def _baseline_result(rate, seed, sessions, prefixes):
+    key = (rate, seed)
+    rng = random.Random(seed)
+    if key not in prefixes:
+        return _replay_baseline(rate, rng, GateState(), 0, 0, sessions)
+
+    prefix = prefixes[key]
+    if prefix is None:
+        state, benches = _replay_baseline(rate, rng, GateState(), 0, 0, _SHORT_HORIZON)
+        prefixes[key] = (rng.getstate(), state, benches)
+    else:
+        # Restoring the step number alone would change the random trajectory.
+        random_state, state, benches = prefix
+        rng.setstate(random_state)
+        del prefixes[key]
+    return _replay_baseline(rate, rng, state, benches, _SHORT_HORIZON, sessions)
+
+
+@pytest.mark.parametrize('sessions', [_SHORT_HORIZON, pytest.param(_LONG_HORIZON, marks=pytest.mark.slow)])
+@pytest.mark.parametrize('rate', [0.03, 0.05, 0.075])
+@pytest.mark.parametrize('seed', _BASELINE_SEEDS)
+def test_seeded_session_baseline(rate, seed, sessions, baseline_counts, baseline_prefixes):
+    state, benches = _baseline_result(rate, seed, sessions, baseline_prefixes)
+    baseline_counts[rate] += benches
     assert state.n <= sessions
 
 
