@@ -875,6 +875,46 @@ def test_cap_recovery_checks_server_response_cap(recovery_module):
         api.complete(operation, 20, submitted=False)
 
 
+def test_cap_validation_accepts_only_completed_typed_empty_response(recovery_module):
+    api = recovery_module.RunAPI('fixture-token')
+    operation = {'done': True, 'response': {'@type': recovery_module.SERVICE_TYPE}}
+    api.complete(operation, 4, submitted=False)
+    with pytest.raises(ValueError):
+        api.complete({'done': True}, 4, submitted=False)
+
+
+def test_cap_recovery_polls_numeric_project_operation(recovery_module, monkeypatch):
+    recovery = recovery_module
+    api = recovery.RunAPI('fixture-token')
+    name = recovery.OPERATIONS.replace(recovery.PROJECT, recovery.PROJECT_NUMBER) + 'operation'
+    resource = recovery.RESOURCE.replace(recovery.PROJECT, recovery.PROJECT_NUMBER)
+
+    def complete(method, path):
+        assert (method, path) == ('GET', name)
+        return {
+            'name': name,
+            'done': True,
+            'response': {'@type': recovery.SERVICE_TYPE, 'name': resource, 'scaling': {'maxInstanceCount': 4}},
+        }
+
+    monkeypatch.setattr(api, 'request', complete)
+    api.complete({'name': name}, 4, submitted=True, sleep=lambda _: None)
+
+
+def test_cap_recovery_operation_404_is_not_validation_success(recovery_module, monkeypatch, capsys):
+    from urllib.error import HTTPError
+
+    api = recovery_module.RunAPI('fixture-token')
+
+    def missing(*_args, **_kwargs):
+        raise HTTPError('private', 404, 'private', None, None)
+
+    monkeypatch.setattr(api.opener, 'open', missing)
+    with pytest.raises(ValueError):
+        api.complete({'name': recovery_module.OPERATIONS + 'operation'}, 4, submitted=False, sleep=lambda _: None)
+    assert capsys.readouterr().err == 'PUMP_CAP_API_ERROR stage=operation-read status=404\n'
+
+
 def test_cap_recovery_uses_existing_approval_and_lock():
     job = WORKFLOW['jobs']['recover-projection-pump-cap']
     assert job['environment'] == 'prod'

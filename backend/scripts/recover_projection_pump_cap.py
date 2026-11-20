@@ -8,7 +8,7 @@ import re
 import subprocess
 import sys
 import time
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -16,9 +16,15 @@ from verify_projection_pump_inverse import ExpectedInverse, _read, verify
 from verify_projection_pump_shape import SERVICE
 
 PROJECT = 'based-hardware'
+PROJECT_NUMBER = '208440318997'
 REGION = 'us-central1'
 RESOURCE = f'projects/{PROJECT}/locations/{REGION}/services/{SERVICE}'
+RESOURCE_NAMES = {RESOURCE, f'projects/{PROJECT_NUMBER}/locations/{REGION}/services/{SERVICE}'}
 OPERATIONS = f'projects/{PROJECT}/locations/{REGION}/operations/'
+OPERATION_NAME = re.compile(
+    rf'(?:{re.escape(OPERATIONS)}|projects/{PROJECT_NUMBER}/locations/{REGION}/operations/)[a-zA-Z0-9_-]+'
+)
+SERVICE_TYPE = 'type.googleapis.com/google.cloud.run.v2.Service'
 ORIGIN = 'https://run.googleapis.com/v2/'
 BASE = ExpectedInverse(
     'backend-projection-pump-f7060aa-44736735776-1-base',
@@ -53,6 +59,12 @@ class RunAPI:
         self.opener = build_opener(NoRedirect())
 
     def request(self, method, path, body=None):
+        if method == 'PATCH':
+            stage = 'validate' if path.endswith('validateOnly=true') else 'submit'
+        elif OPERATION_NAME.fullmatch(path):
+            stage = 'operation-read'
+        else:
+            stage = 'service-permissions' if method == 'POST' else 'service-read'
         request = Request(
             ORIGIN + path,
             data=None if body is None else json.dumps(body).encode(),
@@ -65,7 +77,11 @@ class RunAPI:
             if len(data) > 2_000_000:
                 raise ValueError('Cloud Run response exceeded the read limit')
             doc = json.loads(data)
+        except HTTPError as error:
+            print(f'PUMP_CAP_API_ERROR stage={stage} status={error.code}', file=sys.stderr, flush=True)
+            raise ValueError('Cloud Run request was refused') from None
         except (URLError, OSError, UnicodeError, ValueError):
+            print(f'PUMP_CAP_API_ERROR stage={stage} status=unconfirmed', file=sys.stderr, flush=True)
             raise ValueError('Cloud Run request failed or response was unreadable') from None
         if not isinstance(doc, dict):
             raise ValueError('Cloud Run response was not an object')
@@ -95,20 +111,28 @@ class RunAPI:
     def complete(self, operation, cap, *, submitted, sleep=time.sleep):
         name = operation.get('name')
         if submitted or operation.get('done') is not True:
-            if not isinstance(name, str) or not re.fullmatch(re.escape(OPERATIONS) + r'[a-zA-Z0-9_-]+', name):
+            if not isinstance(name, str) or not OPERATION_NAME.fullmatch(name):
                 raise ValueError('Cloud Run returned no bound operation identity')
         if submitted:
             print(f'PUMP_CAP_OPERATION {name}', flush=True)
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             if 'error' in operation:
+                error = operation['error']
+                if isinstance(error, dict) and type(error.get('code')) is int:
+                    print(f'PUMP_CAP_OPERATION_ERROR code={error["code"]}', file=sys.stderr, flush=True)
                 raise ValueError('Cloud Run operation reported failure')
             if operation.get('done') is True:
                 response = operation.get('response')
+                # AIP-151 allows an error-free terminal validation with a
+                # typed, empty response. If the server returns a preview,
+                # each echoed identity/cap must agree with the request.
+                if not submitted and response == {'@type': SERVICE_TYPE}:
+                    return
                 if (
                     not isinstance(response, dict)
-                    or response.get('@type') != 'type.googleapis.com/google.cloud.run.v2.Service'
-                    or response.get('name') != RESOURCE
+                    or response.get('@type') != SERVICE_TYPE
+                    or response.get('name') not in RESOURCE_NAMES
                     or response.get('scaling', {}).get('maxInstanceCount') != cap
                 ):
                     raise ValueError('Cloud Run operation did not return the exact pump service and cap')
@@ -123,7 +147,7 @@ class RunAPI:
 def assert_service(service, cap):
     scaling = service.get('scaling', {})
     if (
-        service.get('name') != RESOURCE
+        service.get('name') not in RESOURCE_NAMES
         or not service.get('uid')
         or not service.get('generation')
         or not service.get('etag')
