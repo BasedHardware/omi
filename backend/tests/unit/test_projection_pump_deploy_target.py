@@ -82,15 +82,21 @@ def _boundary(tmp_path, **overrides):
         SKIP_ELIGIBILITY='false',
         BREAK_GLASS_LOCK='false',
         GITHUB_OUTPUT=str(output),
+        GITHUB_STEP_SUMMARY=str(tmp_path / 'summary'),
+        GITHUB_SHA='b' * 40,
+        WORKFLOW_CONTROL_SHA='b' * 40,
+        PUMP_CONTROL_SHA='b' * 40,
+        PUMP_RELEASE_DISPOSITION='',
     )
     env.update(overrides)
     return subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True, timeout=10), output
 
 
 def test_boundary_admits_the_pump_for_a_manual_prod_cloud_run_only_deploy(tmp_path):
-    result, output = _boundary(tmp_path)
+    result, output = _boundary(tmp_path, PUMP_RELEASE_DISPOSITION=INVERSE_RECEIPT)
     assert result.returncode == 0, result.stderr
     assert 'integration_only=false' in output.read_text()
+    assert INVERSE_RECEIPT in (tmp_path / 'summary').read_text()
 
 
 @pytest.mark.parametrize(
@@ -101,6 +107,7 @@ def test_boundary_admits_the_pump_for_a_manual_prod_cloud_run_only_deploy(tmp_pa
         {'WORKFLOW_MODE': 'build-only'},
         {'BREAK_GLASS_LOCK': 'true'},
         {'SKIP_ELIGIBILITY': 'true'},
+        {'PUMP_CONTROL_SHA': 'c' * 40},
         {'SERVICE_IMAGES': f'{PROJECTION_PUMP}=gcr.io/based-hardware/backend@sha256:' + 'a' * 64},
         {'SERVICE_IMAGES': 'integration-canary=gcr.io/based-hardware/backend@sha256:' + 'a' * 64},
     ],
@@ -501,6 +508,7 @@ def _run_inverse_step(tmp_path, step, documents, receipt=INVERSE_RECEIPT):
         lambda s, r, i: s['metadata']['annotations'].update({'run.googleapis.com/ingress': 'all'}),
         lambda s, r, i: s['metadata']['annotations'].update({'run.googleapis.com/invoker-iam-disabled': 'true'}),
         lambda s, r, i: i['bindings'].append({'role': 'roles/run.invoker', 'members': ['allUsers']}),
+        lambda s, r, i: i['bindings'].append({'role': 'roles/run.servicesInvoker', 'members': ['user:x@example.com']}),
         lambda s, r, i: s['status']['traffic'][0].update(latestRevision=True),
         lambda s, r, i: s['spec']['traffic'][0].update(revisionName=PROJECTION_PUMP + '-elsewhere'),
     ],

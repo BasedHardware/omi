@@ -182,6 +182,9 @@ jobs:
           RELEASE_SHA: ${{ github.event.inputs.release_sha }}
           SKIP_ELIGIBILITY: ${{ github.event.inputs.skip_eligibility_proof }}
           BREAK_GLASS_LOCK: ${{ github.event.inputs.break_glass_lock }}
+          PUMP_CONTROL_SHA: ${{ inputs.pump_control_sha }}
+          PUMP_RELEASE_DISPOSITION: ${{ inputs.pump_release_disposition }}
+          WORKFLOW_CONTROL_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
           CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-all}"
@@ -190,9 +193,27 @@ jobs:
             [[ "$WORKFLOW_MODE" == deploy && "$DEPLOY_TARGETS" == cloud-run-only && "$DEPLOY_ENVIRONMENT" == prod && "$BREAK_GLASS_LOCK" != true && "$SKIP_ELIGIBILITY" != true ]] || exit 1
           fi
           # SCA-3120: the projection pump ships the admitted fat image only, never a role-image opt-in.
-          if [[ "$CLOUD_RUN_SERVICE" == backend-projection-pump && -n "${SERVICE_IMAGES//[[:space:],]/}" ]]; then
-            echo 'backend-projection-pump takes no service_images.' >&2
-            exit 1
+          if [[ "$CLOUD_RUN_SERVICE" == backend-projection-pump ]]; then
+            if [[ -n "${SERVICE_IMAGES//[[:space:],]/}" ]]; then
+              echo 'backend-projection-pump takes no service_images.' >&2
+              exit 1
+            fi
+            if [[ ! "$PUMP_CONTROL_SHA" =~ ^[0-9a-f]{40}$ ||
+                  "$PUMP_CONTROL_SHA" != "$WORKFLOW_CONTROL_SHA" ||
+                  "$WORKFLOW_CONTROL_SHA" != "$GITHUB_SHA" ]]; then
+              echo 'backend-projection-pump requires the reviewed workflow control SHA.' >&2
+              exit 1
+            fi
+            # Publish the actual inputs before the prod environment approval so the
+            # approver can compare the recovery disposition with the Release order.
+            {
+              echo '### Projection pump approval inputs'
+              echo '```json'
+              jq -n --arg control "$WORKFLOW_CONTROL_SHA" --arg source "$RELEASE_SHA" \
+                --arg disposition "$PUMP_RELEASE_DISPOSITION" \
+                '{dispatch_control: $control, requested_source: $source, release_disposition: $disposition}'
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
           INTEGRATION_ONLY=false
           INTEGRATION_IMAGE=''

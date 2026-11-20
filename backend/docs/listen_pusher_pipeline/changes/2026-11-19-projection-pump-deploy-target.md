@@ -182,7 +182,8 @@ A base already pinned at the time of interruption requires the same verification
 For an existing service, include
 `-f pump_release_disposition="$comment_uuid $revision $inverse_source $inverse_image"` in the
 new dispatch. The production approver verifies that the referenced Release comment authorizes
-resuming with that revision and identity, using `repository@sha256:digest` for the image.
+resuming with that revision and identity, using the actual inputs in the workflow's
+pre-approval summary. Use `repository@sha256:digest` for the image.
 Use the serving revision's own admitted source and digest from Release evidence, which may
 predate the new candidate. The workflow binds the dispatch input to live data and stops before
 mutation unless requested and serving traffic agree on exactly that Ready dark revision.
@@ -211,7 +212,7 @@ Record the run ID and independent serving and dark baseline readback in the Rele
   every reconcile incomplete, so it lands as its own change after the dark deploy is read back
   and before the pump flag is enabled. Owner: SCA-3120.
 - **Inherited invoker grants.** The pre-traffic check reads the service's own IAM policy and
-  refuses any `roles/run.invoker` member there. It does not read project or folder policy: a
+  permits direct bindings only for private Cloud Run viewers. It does not read project or folder policy: a
   principal granted `roles/run.invoker` at the project can invoke every Cloud Run service in
   it, this one included, and that cannot be narrowed per service. The boundary this service
   relies on is internal ingress plus no service-level invoker; the routes it mounts keep their

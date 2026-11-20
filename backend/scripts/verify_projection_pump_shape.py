@@ -24,7 +24,7 @@ TIMEOUT_SECONDS = 3600
 CONCURRENCY = 80
 CPU_LIMIT = '2'
 MEMORY_LIMIT = '4Gi'
-INVOKER_ROLE = 'roles/run.invoker'
+NON_INVOKING_ROLES = frozenset({'roles/run.viewer'})
 PUBLIC_MEMBERS = frozenset({'allUsers', 'allAuthenticatedUsers'})
 PROCESS_ROLE = 'projection_pump'
 # Unconditional: the pump never runs the serving loops, and its startup is always the pump's
@@ -96,9 +96,11 @@ def evaluate(
         public = sorted(members & PUBLIC_MEMBERS)
         if public:
             errors.append(f'IAM role {_mapping(binding).get("role")} grants public members {public}')
-        # Nothing calls this service: any invoker, public or private, breaks the contract.
-        if _mapping(binding).get('role') == INVOKER_ROLE and members:
-            errors.append(f'{INVOKER_ROLE} must have no members, found {sorted(members)}')
+        # Restrict direct bindings to known read-only permissions. Cloud Run
+        # admin, developer, editor and custom roles can also grant route invocation.
+        role = _mapping(binding).get('role')
+        if members and role not in NON_INVOKING_ROLES:
+            errors.append(f'{role} must have no members, found {sorted(members)}')
     if template_metadata.get('name') != revision:
         errors.append(f'template revision is not {revision}')
     for key in ('autoscaling.knative.dev/minScale', 'autoscaling.knative.dev/maxScale'):
