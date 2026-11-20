@@ -371,5 +371,35 @@ def install_planner_trace(stack: ExitStack, target: str | None = None) -> None:
         )
         return result
 
+    from utils.conversations.v3 import outline
+
+    original_stretches = outline.stretches
+
+    def stretches(members: Any, now: Any, *args: Any, **kwargs: Any) -> Any:
+        groups = original_stretches(members, now, *args, **kwargs)
+        write(
+            {
+                'event': 'stretches',
+                'now': iso(now),
+                'kwargs': {k: str(v) for k, v in kwargs.items()},
+                'groups': [
+                    {
+                        'start': iso(g['lines'][0]['start']),
+                        'end': iso(g['end']),
+                        'n': len(g['lines']),
+                        'locked': g.get('locked'),
+                        'finished': g.get('finished'),
+                        'outline_ready': g.get('outline_ready'),
+                        'manual_end': g.get('manual_end'),
+                        'rids': sorted({str(l['conversation_id'])[:8] for l in g['lines']}),
+                    }
+                    for g in groups
+                    if g.get('lines')
+                ],
+            }
+        )
+        return groups
+
     stack.enter_context(patch.object(store, 'load', load))
     stack.enter_context(patch.object(planner, 'preserve_finished_windows', preserve))
+    stack.enter_context(patch.object(outline, 'stretches', stretches))
