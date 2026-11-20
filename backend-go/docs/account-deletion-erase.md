@@ -7,7 +7,8 @@ Lane B's committed queue-only purge, and returns the generation and claim. The e
 records a receipt and then a wipe-start timestamp under the same generation and lease.
 
 An unavailable workerd leaves the wipe pending unless the recovery connection can commit
-the same Postgres operation. A mismatched or unauthorized request fails closed. Firestore
+the same Postgres operation. A connection or handshake timeout is an availability failure. TLS verification, identity,
+and claim rejections fail closed. Firestore
 receivers continue to fence late writes after a queue database session disappears.
 
 ## Enablement and rollback

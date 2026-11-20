@@ -88,7 +88,7 @@ def test_older_receipt_is_reused_under_new_claim(monkeypatch):
         (ConnectionRefusedError(errno.ECONNREFUSED, 'refused'), False, erase.EraseUnavailable),
         (PermissionError(errno.EACCES, 'forbidden'), False, erase.EraseRejected),
         (erase.ssl.SSLCertVerificationError('bad certificate'), True, erase.EraseRejected),
-        (TimeoutError(), True, erase.EraseRejected),
+        (TimeoutError(), True, erase.EraseUnavailable),
     ],
 )
 def test_worker_transport_distinguishes_tcp_availability_from_tls_trust(monkeypatch, failure, during_tls, expected):

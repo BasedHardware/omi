@@ -97,6 +97,8 @@ def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
     with raw:
         try:
             secured = ssl.create_default_context().wrap_socket(raw, server_hostname=parsed.hostname)
+        except TimeoutError:
+            raise EraseUnavailable('Go queue erase TLS handshake timed out') from None
         except OSError:
             raise EraseRejected('Go queue erase TLS handshake failed') from None
         with secured:
