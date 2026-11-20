@@ -148,6 +148,8 @@ A silence gap above 300 seconds also switches on sit-down cutting:
   Media, background, longer dictation and manual-end stretches keep their own
   cards.
 - Each card meets the Home word minimum on its own words, not the stretch's.
+- A stretch over two hours is cut at the last boundary within two hours of its
+  start, not at its middle, so live speech never moves a locked part's edge.
 
 Setting the gap back to 300 seconds turns sit-down cutting off for later passes.
 

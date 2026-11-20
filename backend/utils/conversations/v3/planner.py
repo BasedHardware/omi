@@ -27,16 +27,40 @@ def late_rewrite(*, previous_words, new_words, ended_at, now, rewrites):
     )
 
 
-def _capped(lines, sections):
+def _capped(lines, sections, *, anchored=False):
     end = max(line['end'] for line in lines)
     if end - lines[0]['start'] <= CAP:
         return [lines]
+    if anchored:
+        return _capped_from_start(lines, sections)
     middle = lines[0]['start'] + (end - lines[0]['start']) / 2
     candidates = [i for i in sections if 0 < i < len(lines)] or list(range(1, len(lines)))
     if not candidates:
         raise ValueError('single_transcript_segment_exceeds_two_hours')
     cut = min(candidates, key=lambda i: abs((lines[i]['start'] - middle).total_seconds()))
     return _capped(lines[:cut], []) + _capped(lines[cut:], [])
+
+
+def _capped_from_start(lines, sections):
+    """Cut an over-long stretch at the last boundary within two hours of its start, then repeat.
+
+    A middle cut moves every time live speech extends the stretch. Every part but the last locks, so
+    each pass froze a different prefix and the lines between the old and new cut became one-line
+    cards. Anchored at the start, later speech never moves an earlier cut.
+    """
+    parts, offset = [], 0
+    pending = sorted(i for i in set(sections) if 0 < i < len(lines))
+    while max(line['end'] for line in lines[offset:]) - lines[offset]['start'] > CAP:
+        limit = lines[offset]['start'] + CAP
+        inside = [i for i in pending if offset < i and lines[i]['start'] <= limit]
+        inside = inside or [i for i in range(offset + 1, len(lines)) if lines[i]['start'] <= limit]
+        if not inside:
+            raise ValueError('single_transcript_segment_exceeds_two_hours')
+        cut = inside[-1]
+        parts.append(lines[offset:cut])
+        offset = cut
+    parts.append(lines[offset:])
+    return parts
 
 
 def _as_sections(entries: list[dict[str, Any]], *, primary: dict[str, Any] | None = None) -> list[dict[str, Any]]:
@@ -151,7 +175,7 @@ def _cohesive_groups(groups, outlines, sitdown=False) -> Iterator[tuple[dict[str
             for section in entry.get('sections') or []
             if isinstance(section.get('first_line'), int)
         )
-        parts = _capped(group['lines'], cut_points)
+        parts = _capped(group['lines'], cut_points, anchored=sitdown)
         start = 1
         for index, part in enumerate(parts):
             end = start + len(part)
@@ -201,7 +225,7 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
             sections = [
                 s['first_line'] - 1 - begin for s in entry.get('sections', []) if isinstance(s.get('first_line'), int)
             ]
-            capped = _capped(lines, sections)
+            capped = _capped(lines, sections, anchored=sitdown)
             for part_index, part in enumerate(capped):
                 candidate = {
                     **entry,
