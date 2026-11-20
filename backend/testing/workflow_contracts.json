@@ -734,6 +734,8 @@
         "tests/unit/test_verify_llm_gateway_serving.py",
         "tests/unit/test_llm_gateway_deploy_contract.py",
         "tests/unit/test_sync_two_lane.py",
+        "tests/unit/test_cloud_run_live_caps.py",
+        "tests/unit/test_cloud_run_service_selection.py",
         "tests/unit/test_firebase_release_probe_token.py",
         "tests/unit/test_transcription_capability_probe.py",
         "tests/unit/test_validate_x_connector_sync_scheduler.py",

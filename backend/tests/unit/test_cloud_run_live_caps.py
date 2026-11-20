@@ -70,7 +70,13 @@ def resolve(
     serving = action[1].endswith('-integration')
     if serving and traffic is None:
         # Integration reads the cap of the revision receiving traffic, never the latest template.
-        traffic = [{'revisionName': 'serving-rev', 'percent': 100}, {'revisionName': 'candidate-rev', 'percent': 0}]
+        # Without a revision cap in a shared case, no revision receives traffic, so the service cap
+        # (or the default) is the only input.
+        traffic = (
+            [{'revisionName': 'serving-rev', 'percent': 100}, {'revisionName': 'candidate-rev', 'percent': 0}]
+            if revision_cap is not None
+            else []
+        )
         revisions = {'serving-rev': revision_cap, 'candidate-rev': '35'} if revisions is None else revisions
     if payload is None:
         payload = (
@@ -129,7 +135,9 @@ def resolve(
 def test_service_cap_wins_over_stale_revision(tmp_path, action, cap):
     result, output = resolve(tmp_path, action, service_cap=cap, revision_cap='40')
     assert result.returncode == 0, result.stderr
-    assert output.splitlines()[0] == f'max_scale={cap}'
+    # Integration mirrors the headroom gate: min(service cap, receiving revision caps).
+    expected = str(min(int(cap), 40)) if action[1].endswith('-integration') else cap
+    assert output.splitlines()[0] == f'max_scale={expected}'
 
 
 def test_legacy_revision_cap_is_preserved(tmp_path, action):
@@ -291,6 +299,31 @@ def test_integration_uncapped_receiving_revision_counts_as_default(tmp_path, act
     traffic = [{'revisionName': 'uncapped', 'percent': 50}, {'revisionName': 'cap45', 'percent': 50}]
     result, output = resolve(
         tmp_path, action, traffic=traffic, revisions={'uncapped': None, 'cap45': '45'}, branch=branch
+    )
+    assert result.returncode == 0, result.stderr
+    assert output.splitlines()[0] == f'max_scale={expected}'
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+@pytest.mark.parametrize('service_cap,revision_cap', [('45\n3', None), ('45', '45\n3'), ('', None), ('45', '')])
+def test_integration_rejects_a_cap_that_is_not_one_whole_number(tmp_path, action, service_cap, revision_cap):
+    # Panel F2/F6: a multi-line or empty cap fails as a whole instead of splitting into caps.
+    traffic = [{'revisionName': 'serving', 'percent': 100}] if revision_cap is not None else []
+    result, output = resolve(
+        tmp_path, action, service_cap=service_cap, traffic=traffic, revisions={'serving': revision_cap}
+    )
+    assert result.returncode != 0
+    assert output == ''
+    assert 'Invalid Cloud Run maxScale' in result.stderr
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+@pytest.mark.parametrize('service_cap,revision_cap,expected', [('50', '35', '35'), ('40', '45', '40')])
+def test_integration_service_and_revision_caps_take_the_minimum(tmp_path, action, service_cap, revision_cap, expected):
+    # Panel F3: matches deploy_headroom caps(), which takes min(service cap, receiving revision caps).
+    traffic = [{'revisionName': 'serving', 'percent': 100}]
+    result, output = resolve(
+        tmp_path, action, service_cap=service_cap, traffic=traffic, revisions={'serving': revision_cap}
     )
     assert result.returncode == 0, result.stderr
     assert output.splitlines()[0] == f'max_scale={expected}'

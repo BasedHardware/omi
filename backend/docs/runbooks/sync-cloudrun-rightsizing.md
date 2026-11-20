@@ -37,7 +37,8 @@ Memory-only rollout: backfill 8 → 4 GiB, keep 2 vCPU, concurrency 3, min/max 3
 The standing production `backend-integration` cap is 35 (David, 2026-11-05 16:01Z;
 coordinator `ac3408`); read the live value from the serving revision, since a
 temporary capacity revision can raise it (45 for one train, approved 2026-11-20). Hold only while CPU p50 stays below approximately 0.75,
-queues fall, and drain stays near 11 rows/s; otherwise restore 50. Since 2026-11-20
+queues fall, and drain stays near 11 rows/s; otherwise restore the previous cap (50
+before the 2026-11-05 hold) with a capacity revision. Since 2026-11-20
 `.github/actions/deploy-backend-stack/action.yml` live-resolves the cap (service cap,
 else the cap of the revisions receiving traffic; fresh-service default 35 in prod,
 50 elsewhere), so the next deploy preserves whatever cap is live. Change or roll back
