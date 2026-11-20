@@ -1229,25 +1229,51 @@ runs:
         DEFAULT_MAX_SCALE: ${{ inputs.runtime_env == 'prod' && '35' || '50' }}
       run: |
         set -euo pipefail
-        # Service-level caps are the live ops control; older services may only have a revision cap.
         # Integration carries its cap on the serving revision (no service cap), so a capacity revision's
         # cap survives the next train instead of being reset to the former 35 literal (2026-11-20).
+        # Order: service-level cap; else the cap of the revisions receiving traffic (never the latest
+        # template, which can be a no-traffic candidate); else the fresh-service default.
         # Listing distinguishes a fresh service from an API/auth failure, which must stop deployment.
-        MAX_SCALE="$(gcloud run services list \
+        SOURCE="$(gcloud run services list \
           --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
           --filter="metadata.name=$CLOUD_RUN_SERVICE" \
-          --format='json(metadata.name,metadata.annotations,spec.template.metadata.annotations)' \
-          | jq -er --arg service "$CLOUD_RUN_SERVICE" --arg default "$DEFAULT_MAX_SCALE" '
+          --format='json(metadata.name,metadata.annotations,status.traffic)' \
+          | jq -er --arg service "$CLOUD_RUN_SERVICE" '
             [.[] | select(.metadata.name == $service)]
-            | if length > 1 then error("Duplicate Cloud Run service") else
-                (.[0].metadata.annotations["run.googleapis.com/maxScale"]
-                 // .[0].spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"]
-                 // $default) end
-            | if type == "string" and test("^[1-9][0-9]*$") then .
-              else error("Invalid Cloud Run maxScale") end
-            # Bound digits before shell arithmetic; oversized annotations use the fresh-service default.
-            | if length > 3 then $default
-              elif tonumber > 500 then $default else . end')"
+            | if length > 1 then error("Duplicate Cloud Run service")
+              elif length == 0 then "default"
+              elif .[0].metadata.annotations["run.googleapis.com/maxScale"] != null
+                then .[0].metadata.annotations["run.googleapis.com/maxScale"]
+                  | if type == "string" then "cap " + . else error("Invalid Cloud Run maxScale") end
+              else [.[0].status.traffic[]? | select((.percent // 0) > 0) | .revisionName]
+                | if length == 0 then "default"
+                  elif any(.[]; type != "string" or test("^[a-z][a-z0-9-]{0,62}$") | not)
+                    then error("Invalid serving revision") else "revisions " + join(" ") end end')"
+        CAPS=()
+        case "$SOURCE" in
+          default) ;;
+          "cap "*) CAPS=("${SOURCE#cap }") ;;
+          "revisions "*)
+            read -r -a REVISIONS <<< "${SOURCE#revisions }"
+            for REVISION in "${REVISIONS[@]}"; do
+              CAP="$(gcloud run revisions describe "$REVISION" \
+                --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
+                --format='json(metadata.annotations)' \
+                | jq -er '.metadata.annotations["autoscaling.knative.dev/maxScale"] // "default"
+                  | if type == "string" then . else error("Invalid Cloud Run maxScale") end')"
+              [[ "$CAP" == default ]] || CAPS+=("$CAP")
+            done ;;
+          *) echo 'Unexpected cap source' >&2; exit 1 ;;
+        esac
+        MAX_SCALE="$DEFAULT_MAX_SCALE"
+        if ((${#CAPS[@]})); then
+          # Admission uses the smallest receiving cap; preserve that, validated before arithmetic.
+          MAX_SCALE="$(printf '%s\n' "${CAPS[@]}" | jq -Rer --arg default "$DEFAULT_MAX_SCALE" -s '
+            split("\n") | map(select(length > 0))
+            | if all(.[]; test("^[1-9][0-9]*$")) then . else error("Invalid Cloud Run maxScale") end
+            | map(if length > 3 then $default elif tonumber > 500 then $default else . end)
+            | min_by(tonumber)')"
+        fi
         echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
 
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run

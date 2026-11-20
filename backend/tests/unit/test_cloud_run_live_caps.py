@@ -52,8 +52,26 @@ def action(request):
     return resolver, 'custom-' + suffix, fallback
 
 
-def resolve(tmp_path, action, *, service_cap=None, revision_cap=None, missing=False, exit_code=0, payload=None):
+def resolve(
+    tmp_path,
+    action,
+    *,
+    service_cap=None,
+    revision_cap=None,
+    missing=False,
+    exit_code=0,
+    payload=None,
+    traffic=None,
+    revisions=None,
+    revision_exit=0,
+    branch='prod',
+):
     resolver, service, _fallback = action
+    serving = action[1].endswith('-integration')
+    if serving and traffic is None:
+        # Integration reads the cap of the revision receiving traffic, never the latest template.
+        traffic = [{'revisionName': 'serving-rev', 'percent': 100}, {'revisionName': 'candidate-rev', 'percent': 0}]
+        revisions = {'serving-rev': revision_cap, 'candidate-rev': '35'} if revisions is None else revisions
     if payload is None:
         payload = (
             []
@@ -64,14 +82,21 @@ def resolve(tmp_path, action, *, service_cap=None, revision_cap=None, missing=Fa
                     'spec': {
                         'template': {'metadata': {'annotations': {'autoscaling.knative.dev/maxScale': revision_cap}}}
                     },
+                    'status': {'traffic': traffic or []},
                 }
             ]
         )
     (tmp_path / 'response.json').write_text(json.dumps(payload))
+    for name, cap in (revisions or {}).items():
+        annotations = {} if cap is None else {'autoscaling.knative.dev/maxScale': cap}
+        (tmp_path / f'rev-{name}.json').write_text(json.dumps({'metadata': {'annotations': annotations}}))
     executable = tmp_path / 'gcloud'
     executable.write_text(
         '#!/bin/bash\n'
         'printf "%s\\n" "$@" > "$CAP_TEST_DIR/args"\n'
+        'printf "%s\\n" "$*" >> "$CAP_TEST_DIR/calls"\n'
+        'if [[ "$2" == revisions ]]; then cat "$CAP_TEST_DIR/rev-$4.json"; exit "$CAP_TEST_REVISION_EXIT"; fi\n'
+        'cp "$CAP_TEST_DIR/args" "$CAP_TEST_DIR/list-args"\n'
         'cat "$CAP_TEST_DIR/response.json"\n'
         'exit "$CAP_TEST_EXIT"\n'
     )
@@ -81,16 +106,18 @@ def resolve(tmp_path, action, *, service_cap=None, revision_cap=None, missing=Fa
     default = resolver['env'].get('DEFAULT_MAX_SCALE', '')
     match = PROD_BRANCH.match(default)
     env.update(
-        DEFAULT_MAX_SCALE=match.group(1) if match else default,
+        DEFAULT_MAX_SCALE=match.group(1 if branch == 'prod' else 2) if match else default,
         CLOUD_RUN_SERVICE=service,
         CLOUD_RUN_PROJECT='test-project',
         CLOUD_RUN_REGION='us-central1',
         GITHUB_OUTPUT=str(output),
         CAP_TEST_DIR=str(tmp_path),
         CAP_TEST_EXIT=str(exit_code),
+        CAP_TEST_REVISION_EXIT=str(revision_exit),
     )
     result = subprocess.run(['bash', '-c', resolver['run']], env=env, capture_output=True, text=True)
-    args = (tmp_path / 'args').read_text().splitlines()
+    args = (tmp_path / 'list-args').read_text().splitlines()
+    assert (tmp_path / 'calls').read_text().splitlines()[0].startswith('run services list ')
     assert args[:3] == ['run', 'services', 'list']
     assert '--project=test-project' in args
     assert '--region=us-central1' in args
@@ -197,3 +224,57 @@ def test_backfill_queue_create_and_update_obey_live_capacity(tmp_path, action, c
         assert (
             calls[3] == 'tasks queues update sync-jobs --location=us-central1 --project=test-project --max-attempts=5'
         )
+
+
+INTEGRATION = ('deploy-backend-stack', 'integration', '35', 'live-integration-max-scale')
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+def test_integration_ignores_no_traffic_candidate_cap(tmp_path, action):
+    # A failed or held train leaves a no-traffic candidate as the latest template; its cap
+    # must not replace the cap of the revision actually serving (panel F1, 2026-11-20).
+    traffic = [{'revisionName': 'cap45', 'percent': 100}, {'revisionName': 'candidate', 'percent': 0}]
+    result, output = resolve(tmp_path, action, traffic=traffic, revisions={'cap45': '45', 'candidate': '35'})
+    assert result.returncode == 0, result.stderr
+    assert output.splitlines()[0] == 'max_scale=45'
+    calls = (tmp_path / 'calls').read_text()
+    assert 'revisions describe cap45 ' in calls
+    assert 'candidate' not in calls
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+def test_integration_split_traffic_keeps_smallest_receiving_cap(tmp_path, action):
+    traffic = [{'revisionName': 'a', 'percent': 90}, {'revisionName': 'b', 'percent': 10}]
+    result, output = resolve(tmp_path, action, traffic=traffic, revisions={'a': '45', 'b': '40'})
+    assert result.returncode == 0, result.stderr
+    assert output.splitlines()[0] == 'max_scale=40'
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+@pytest.mark.parametrize('branch,expected', [('prod', '35'), ('dev', '50')])
+def test_integration_without_serving_revision_uses_branch_default(tmp_path, action, branch, expected):
+    result, output = resolve(tmp_path, action, traffic=[], revisions={}, branch=branch)
+    assert result.returncode == 0, result.stderr
+    assert output.splitlines()[0] == f'max_scale={expected}'
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+def test_integration_dev_fresh_service_uses_dev_default(tmp_path, action):
+    result, output = resolve(tmp_path, action, missing=True, branch='dev')
+    assert result.returncode == 0, result.stderr
+    assert output.splitlines()[0] == 'max_scale=50'
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+def test_integration_revision_read_failure_stops_deploy(tmp_path, action):
+    result, output = resolve(tmp_path, action, revision_cap='45', revision_exit=1)
+    assert result.returncode != 0
+    assert output == ''
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+@pytest.mark.parametrize('name', ['Bad_Name', 'a b', '-x', 7])
+def test_integration_invalid_serving_revision_stops_deploy(tmp_path, action, name):
+    result, output = resolve(tmp_path, action, traffic=[{'revisionName': name, 'percent': 100}], revisions={})
+    assert result.returncode != 0
+    assert output == ''
