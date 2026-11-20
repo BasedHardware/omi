@@ -703,7 +703,6 @@
         ".github/workflows/gcp_x_connector_sync_job.yml",
         ".github/workflows/sync_ledger_fence_cutover.yml",
         "backend/deploy/runtime_env.yaml",
-        "backend/deploy/ops/**",
         "backend/deploy/cloud_run_gmp_projection_pump.yaml",
         "backend/scripts/preflight-cloud-run-deploy.py",
         "backend/scripts/check_cloud_run_env_drift.py",
