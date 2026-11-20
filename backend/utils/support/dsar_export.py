@@ -54,6 +54,7 @@ RECORDING_EXTENSIONS = (".wav",)
 # the unencrypted variant the pipeline writes).
 _DECRYPTED_SUFFIX = {"batch.enc": ".batch.bin", "opus.enc": ".opus", "enc": ".bin"}
 _SUMMARY_SECTIONS = ("conversations", "memories", "chat_messages", "action_items", "people")
+_SINGLE_RECORD_SECTIONS = frozenset({"profile"})
 _COPY_CHUNK = 1024 * 1024
 _TICKET_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 _CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
@@ -214,7 +215,8 @@ class SectionCounter:
                 self.counts[keys[0]] = self.counts.get(keys[0], 0) + 1
         elif stack == ["{", "{"]:
             top, sub = keys[0], keys[1]
-            if top is not None and sub is not None and ch == "[":
+            # A single-record section (the profile) may hold arrays of its own; it stays one record.
+            if top is not None and sub is not None and ch == "[" and top not in _SINGLE_RECORD_SECTIONS:
                 section = self.counts.get(top)
                 if not isinstance(section, dict):
                     section = {}
@@ -331,7 +333,8 @@ def _readme(
         lines.append(f"    {name}: {sections[name]} record(s)")
     if include_audio:
         lines += [
-            "- audio/: retained audio objects for this account.",
+            "- audio/: stored recording chunks, playback MP3s and per-conversation WAV recordings",
+            "  for this account (see Not included for audio this export does not yet cover).",
             "  audio/chunks/: stored recording chunks, decrypted. *.bin and *.batch.bin are raw",
             "  16-bit little-endian mono PCM; *.opus are Opus packets, each prefixed with",
             "  a 4-byte big-endian length (the format Omi stores).",
@@ -353,6 +356,12 @@ def _readme(
         "- Operational records that are not part of the in-app export (logs, billing",
         "  records held by our payment processor, support conversations).",
         "- Data held by third-party integrations you connected; request it from them.",
+        "- Audio not yet covered by this export: live-capture packs (raw-live), regional",
+        "  playback copies and derived audio (for example cleaned or enhanced versions).",
+        "  Ask support if you need these; they are provided on request.",
+        "- Conversations you deleted that we are keeping under a legal preservation",
+        "  obligation: they are hidden from your account and not in export.json; their",
+        "  audio, if any, is in audio/. Ask support for their records.",
         "",
     ]
     return "\n".join(lines)

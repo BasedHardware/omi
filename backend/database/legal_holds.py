@@ -227,7 +227,7 @@ def _hold_audit_fields(audit: dict[str, Any] | None) -> dict[str, Any]:
         if value is None:
             continue
         if key == "review_by":
-            if not isinstance(value, datetime) or value.tzinfo is None:
+            if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
                 raise LegalHoldAuthorityUnavailable("legal-hold review_by must be a timezone-aware datetime")
         elif not isinstance(value, str) or not value.strip() or len(value) > 500:
             raise LegalHoldAuthorityUnavailable(f"legal-hold {key} must be a non-empty string")
@@ -1106,4 +1106,6 @@ __all__ = [
     "gate_busy_with_peer",
     "same_kind_gate_running",
     "place_legal_hold",
+    "read_legal_hold",
+    "list_legal_holds",
 ]

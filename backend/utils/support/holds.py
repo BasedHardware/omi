@@ -191,7 +191,7 @@ def list_holds(args: argparse.Namespace, ctx: ActionContext, record: ActionRecor
     holds = scanned if args.all else [hold for hold in scanned if hold.get("active") is True]
     for hold in holds:
         review_by = hold.get("review_by")
-        hold["review_overdue"] = isinstance(review_by, datetime) and review_by <= now
+        hold["review_overdue"] = hold.get("active") is True and isinstance(review_by, datetime) and review_by <= now
         hold["missing_audit"] = not hold.get("ticket")
     record.summary = {
         "holds": len(holds),

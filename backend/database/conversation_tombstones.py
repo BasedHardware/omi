@@ -5,7 +5,7 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any, Iterator, List, Optional, Tuple
 
-from google.api_core.exceptions import AlreadyExists
+from google.api_core.exceptions import AlreadyExists, NotFound
 
 from database._client import db
 from database.fsr_read_cache import cache_writer
@@ -145,7 +145,10 @@ def clear_legal_hold_deferral(uid: str, conversation_id: str, *, firestore_clien
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
     tombstone_ref = client.collection('users').document(uid).collection(COLLECTION).document(conversation_id)
-    tombstone_ref.update({'legal_hold_deferred': False})
+    try:
+        tombstone_ref.update({'legal_hold_deferred': False})
+    except NotFound:
+        pass  # Gone already (an account wipe or another delete): nothing left to reconcile.
 
 
 def _in_transaction(client: Any, body: Any) -> Any:

@@ -32,7 +32,7 @@ python scripts/support/ops.py --ticket 215476871538429 --actor "Aryan Gupta" \
 
 ## Legal holds
 
-A legal hold blocks Omi's destructive paths for one account: account wipe,
+A legal hold blocks Omi's destructive paths for one account (the app delete route only; the developer API conversation delete does not check holds yet): account wipe,
 conversation deletes (cascade or not), memory deletes, batch purges and
 retention sweeps. It never blocks product access (P7 Decision 4). A held user
 can still delete a conversation in the app: it disappears for them at once

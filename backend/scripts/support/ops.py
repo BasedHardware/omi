@@ -82,8 +82,15 @@ def _command_args(args: argparse.Namespace) -> dict[str, Any]:
     return {key: value for key, value in vars(args).items() if key not in skip}
 
 
+def _hoist_apply(argv: list[str]) -> list[str]:
+    """Accept ``--apply`` anywhere: argparse hands tokens after the subcommand to the leaf parser."""
+    if "--apply" not in argv:
+        return argv
+    return ["--apply", *(token for token in argv if token != "--apply")]
+
+
 def main(argv: list[str] | None = None, *, firestore_client: Any | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    args = build_parser().parse_args(_hoist_apply(list(sys.argv[1:] if argv is None else argv)))
     ctx = support_actions.ActionContext(
         ticket=args.ticket,
         actor=args.actor,

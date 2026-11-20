@@ -164,6 +164,12 @@ def test_section_counter_ignores_scalars_and_empty_objects():
     assert counter.counts == {"profile": 1, "a": 0, "jit_data": 1}
 
 
+def test_profile_with_array_fields_is_one_record():
+    counter = dsar_export.SectionCounter()
+    counter.feed('{"profile": {"platforms_used": ["ios", "macos"], "name": "x"}, "memories": [{}]}')
+    assert counter.counts == {"profile": 1, "memories": 1}
+
+
 def test_dry_run_writes_nothing(seams):
     record = ActionRecord(action_id="a1")
     result = dsar_export.export(_args(), _ctx(apply=False), record)
@@ -242,6 +248,7 @@ def test_manifest_matches_every_file_and_audio_is_decrypted(seams):
     assert "Generated at (UTC): 2026-11-20T12:30:00Z" in readme
     assert "Decrypted objects: 2" in readme
     assert "Not included:" in readme
+    assert "raw-live" in readme and "derived audio" in readme
 
 
 def test_signing_failure_uploads_nothing(seams, monkeypatch):

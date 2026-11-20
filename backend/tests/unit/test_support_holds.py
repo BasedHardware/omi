@@ -284,6 +284,28 @@ def test_account_summary_returns_allowlisted_fields_only(client):
     assert record.summary == {"exists": True, "legal_hold_active": False}
 
 
+def test_apply_is_accepted_after_the_subcommand_as_the_runbook_documents():
+    for argv in (
+        ["--ticket", "t", "--actor", "a", "--reason", "r", "hold", "place", UID, "--apply"],
+        ["--ticket", "t", "--actor", "a", "--reason", "r", "--apply", "hold", "release", UID],
+        ["--ticket", "t", "--actor", "a", "--reason", "r", "dsar", "export", UID, "--approval", "n1", "--apply"],
+    ):
+        assert ops.build_parser().parse_args(ops._hoist_apply(argv)).apply is True
+    plain = ["--ticket", "t", "--actor", "a", "--reason", "r", "hold", "status", UID]
+    assert ops.build_parser().parse_args(ops._hoist_apply(plain)).apply is False
+
+
+def test_released_hold_is_never_review_overdue(client):
+    client.docs["legal_holds/r"] = {
+        "schema_version": "legal_hold.v1",
+        "issuer": "admin",
+        "active": False,
+        "review_by": NOW - timedelta(days=3),
+    }
+    result, record = _run(holds.list_holds, _ctx(), all=True)
+    assert [hold["review_overdue"] for hold in result["holds"]] == [False]
+
+
 def test_operator_cli_wires_every_group_and_audits_the_run(client, capsys, monkeypatch):
     parser = ops.build_parser()
     groups = {action.dest: action for action in parser._actions}["group"].choices
