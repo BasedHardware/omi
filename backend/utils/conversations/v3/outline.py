@@ -49,13 +49,38 @@ Return one JSON object: {"conversations": [ ... ]} where each conversation has
 Write in English unless the speech is mostly in another language."""
 
 SILENCE = timedelta(minutes=5)
+# A silence gap longer than this default (CONVERSATIONS_V3_SILENCE_GAP_SECONDS) cuts at sit-downs: the
+# outline sees pauses as marker lines and finds sit-downs instead of treating silence as a hard boundary.
+GAP_MARK = timedelta(minutes=2)
+
+HARD_BOUNDARY_RULE = (
+    '{silence_boundary} of recorded silence is a hard boundary, even if the same people or topic return. '
+    'Set resumes_previous only to continue the same activity with the same people before that silence boundary.'
+)
+SITDOWN_RULE = (
+    'Find the sit-downs first: stretches where the wearer is with the same people in the same place. '
+    'A pause marked "min without speech", a new topic or a tangent does not end a sit-down; '
+    'people leaving or arriving, a call ending, or getting up to go somewhere else does. '
+    'Unclear, garbled or foreign-language lines between the lines of a sit-down belong to it: use "background" '
+    'only for a stretch in which the wearer takes no part from start to finish. '
+    'Set resumes_previous only to continue the same activity with the same people.'
+)
+
+
+def sitdown(silence_gap):
+    """Sit-down cutting applies whenever the silence gap is longer than the five-minute default."""
+    return silence_gap > SILENCE
 
 
 # Clock slack when matching the same speech captured by two recordings.
 DUPLICATE_OVERLAP_SLACK = timedelta(seconds=2)
 
 
-def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE):
+def group_rids(group):
+    return {line['conversation_id'] for line in group['lines']}
+
+
+def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_on_landing=False):
     lines = []
     seen = []
     for row in sorted(
@@ -142,7 +167,17 @@ def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE):
         continues = not later and any(
             r.get('_v3_page_continues') and r['id'] == group['lines'][-1]['conversation_id'] for r in members
         )
-        age = now - group['end']
+        # Under custom timing, lock age counts from the later of the last speech and when it landed:
+        # an offline batch whose speech is already old must not lock the moment it arrives, or each
+        # later batch appends a fresh card behind it.
+        rids = group_rids(group)
+        landed = [
+            r['v3_speech_landed_at']
+            for r in members
+            if r['id'] in rids and isinstance(r.get('v3_speech_landed_at'), datetime)
+        ]
+        group['settle_from'] = max([group['end'], *landed]) if settle_on_landing else group['end']
+        age = now - group['settle_from']
         group['locked'] = (age >= lock_delay and not continues) or group['manual_end']
         group['finished'] = later or group['locked']
         group['outline_ready'] = group['finished'] or (age >= silence_gap and not continues)
@@ -232,6 +267,16 @@ def reuse_preview(group, preview):
     return entries or fallback(group)
 
 
+def _with_gap_marks(lines, rendered):
+    out, previous_end = [], None
+    for line, text in zip(lines, rendered):
+        if previous_end is not None and line['start'] - previous_end >= GAP_MARK:
+            out.append(f"---- {round((line['start'] - previous_end).total_seconds() / 60)} min without speech ----")
+        out.append(text)
+        previous_end = line['end'] if previous_end is None else max(previous_end, line['end'])
+    return out
+
+
 def messages(group, tz, *, cohesion=False, silence_gap=SILENCE):
     lines = group['lines']
     if cohesion:
@@ -243,12 +288,14 @@ def messages(group, tz, *, cohesion=False, silence_gap=SILENCE):
     else:
         labels = [line['speaker'] for line in lines]
         correction = ''
-    text = '\n'.join(
+    rendered = [
         f"[L{i} {line['start'].astimezone(tz):%H:%M}] {label}: {line['text']}"
         for i, (line, label) in enumerate(zip(lines, labels), 1)
-    )
+    ]
+    text = '\n'.join(_with_gap_marks(lines, rendered) if sitdown(silence_gap) else rendered)
     silence = 'Five minutes' if silence_gap == SILENCE else f'{int(silence_gap.total_seconds())} seconds'
-    prompt = SYSTEM_PROMPT.replace('{silence_boundary}', silence)
+    template = SYSTEM_PROMPT.replace(HARD_BOUNDARY_RULE, SITDOWN_RULE) if sitdown(silence_gap) else SYSTEM_PROMPT
+    prompt = template.replace('{silence_boundary}', silence)
     return [
         ('system', prompt + correction),
         (

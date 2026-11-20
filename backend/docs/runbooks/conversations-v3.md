@@ -139,6 +139,39 @@ while later speech still belongs to the same outline stretch. Later speech
 gets its own continuation. Reconciliation can merge settled cards when the
 outline and the loaded source claims cover the complete merge.
 
+A silence gap above 300 seconds also switches on sit-down cutting:
+- The outline sees pauses of 2 minutes or more as `---- N min without speech ----`
+  marker lines. A sit-down rule replaces the hard-boundary sentence.
+- Neighbouring `conversation` entries of one stretch join into one card, with
+  topics as sections. They stay apart when both name people and share none.
+  Dictation under the Home word minimum between two of them joins as a section.
+  Media, background, longer dictation and manual-end stretches keep their own
+  cards.
+- Each card meets the Home word minimum on its own words, not the stretch's.
+
+Setting the gap back to 300 seconds turns sit-down cutting off for later passes.
+
+At any timing, a stretch over two hours is cut at the last line that starts
+within two hours of its start, then again from there. The cut ignores the
+outline and does not move as live speech arrives, so a locked part never
+strands lines between an old and a new cut. One ownership rule
+(`planner.Ownership`) serves both the cap and the projection: a row that
+published the exact segment from that recording owns it (open rows included);
+only when no row does, containment in a row's window and audio claim decides,
+locked rows first, so a revised turn stays with its row. When a locked row owns
+the first line of a part, the part ends at the first line it does not own, so
+rows cut by earlier code or an earlier pass keep their cut (even when a turn
+straddles it or a held turn is revised) and the cap counts from there. A locked
+row that owns none of the stretch's lines never cuts it.
+
+Under custom timing (either setting differs from 300), the lock delay counts
+from the later of the stretch's last speech and when that speech landed
+(`v3_speech_landed_at`, written in the same transaction as the speech by the
+live transcript write and sync assignment, and only when the speech changed). A
+batch of old speech from
+offline sync then waits the lock delay after landing instead of locking on
+arrival. Default timing still counts from the last speech.
+
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product
 conversations. Legacy recording-wide naming keeps its existing behavior.

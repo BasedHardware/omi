@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from utils.sync import processing_hold, bridge_pending
 from config.recorded_time import late_audio_intake_enabled
+from config.conversations_v3 import SPEECH_LANDED_FIELD
 from config.episodes import episodes_enabled, episode_compose_transcript_ready_enabled
 from models.conversation_continuity import DEFAULT_GAP_SECONDS
 import time
@@ -379,6 +380,9 @@ def assign_in_transaction(
         result, survivors = replace_record(current, incoming, record_span, obligations=obligations)
         if result.get('transcript_segments') != current.get('transcript_segments'):
             rearm_on_revision_change(current, result)
+            if current.get('recording'):
+                # v3: the landing time commits with the appended speech.
+                result[SPEECH_LANDED_FIELD] = datetime.now(timezone.utc)
         invalidate(result)
         encoded = encode(result)
         estimated = _stored_document_bytes(collection.document(target_id), encoded, target, invalidate)
@@ -1077,6 +1081,9 @@ def assign_in_transaction(
                 # Exact assignment retries preserve the original marker.
                 result['episode_transcript_updated_at'] = datetime.now(timezone.utc)
             rearm_on_revision_change(current or {}, result)
+            if result.get('recording'):
+                # v3: the landing time commits with the speech it describes.
+                result[SPEECH_LANDED_FIELD] = datetime.now(timezone.utc)
         payload = encode(result)
         payload.pop('photos', None)
         if current is not None:
