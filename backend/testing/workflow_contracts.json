@@ -710,6 +710,7 @@
         "backend/scripts/sync_ledger_fence_cutover.py",
         "backend/scripts/verify_backend_release_vector.py",
         "backend/scripts/verify_projection_pump_shape.py",
+        "backend/scripts/verify_projection_pump_inverse.py",
         "backend/scripts/verify_sync_ledger_fence_transition.py",
         "backend/scripts/verify-llm-gateway-serving.py",
         "backend/scripts/probe-llm-gateway-from-cloud-run.sh",
