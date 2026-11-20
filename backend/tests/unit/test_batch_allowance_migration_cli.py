@@ -154,15 +154,36 @@ def test_error_report_treats_an_expired_transaction_as_contention():
     assert cli.error_report(error)['retryable'] is True
 
 
-def test_error_report_ignores_a_suppressed_context():
-    try:
+def test_error_report_ignores_implicit_context():
+    for suppress in (True, False):
         try:
-            raise cli.api_exceptions.Aborted('incidental')
-        except cli.api_exceptions.Aborted:
-            raise ValueError('real stop') from None
-    except ValueError as error:
-        report = cli.error_report(error)
-    assert report == {'errors': 1, 'error_type': 'builtins.ValueError', 'retryable': False}
+            try:
+                raise cli.api_exceptions.Aborted('incidental')
+            except cli.api_exceptions.Aborted:
+                if suppress:
+                    raise ValueError('real stop') from None
+                raise ValueError('real stop')
+        except ValueError as error:
+            report = cli.error_report(error)
+        assert report == {'errors': 1, 'error_type': 'builtins.ValueError', 'retryable': False}
+
+
+def test_error_report_reads_the_sdk_retry_error_cause_attribute():
+    error = cli.api_exceptions.RetryError('Timeout of 60.0s exceeded', cli.api_exceptions.Aborted('jobs/secret-doc-id'))
+    assert error.__cause__ is None
+    report = cli.error_report(error)
+    assert report == {
+        'errors': 1,
+        'error_type': 'google.api_core.exceptions.RetryError',
+        'retryable': True,
+        'cause_types': ['google.api_core.exceptions.Aborted'],
+    }
+    assert 'secret' not in json.dumps(report)
+
+
+def test_error_report_keeps_a_fatal_retry_error_cause_fatal():
+    error = cli.api_exceptions.RetryError('exhausted', cli.api_exceptions.PermissionDenied('denied'))
+    assert cli.error_report(error)['retryable'] is False
 
 
 def test_error_report_is_not_retryable_when_any_sibling_failure_is_not():

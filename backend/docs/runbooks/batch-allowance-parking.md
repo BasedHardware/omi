@@ -124,7 +124,7 @@ document reads are not row attempts and are outside this rate. Never multiply
 the limit by running another driver. Stop on any unexpected error; in-flight
 transactions drain, no new rows start, and the failed page is not checkpointed.
 The stop line is `{"errors": N, "error_type": ..., "retryable": ...}`, plus
-`cause_types` for the explicit cause chain and `sibling_types` when other
+`cause_types` for the explicit cause chain (`__cause__`, and `RetryError.cause`) and `sibling_types` when other
 concurrent owner groups also failed on that page. It names only exception
 classes, never a message, which can name documents. `retryable: true` means
 every failure on the page, through its whole cause chain, is a transient

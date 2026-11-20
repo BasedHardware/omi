@@ -42,7 +42,12 @@ def _chain(error: BaseException) -> list[BaseException]:
     while current is not None and id(current) not in seen:
         links.append(current)
         seen.add(id(current))
-        current = current.__cause__ or (None if current.__suppress_context__ else current.__context__)
+        # Explicit causes only. google.api_core.RetryError keeps its last error on
+        # ``.cause`` rather than ``__cause__``; implicit context is incidental.
+        cause = current.__cause__
+        if cause is None and isinstance(current, api_exceptions.RetryError):
+            cause = current.cause
+        current = cause
     return links
 
 
