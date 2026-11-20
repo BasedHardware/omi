@@ -6,6 +6,8 @@ would-have-fired notifications, goals, daily summary, chat index), caches every
 stage's output, and lets people and agents browse the result next to what
 production produced that day. Engine code lives here. **Data and verdicts never do.**
 
+Agents: read [AGENTS.md](AGENTS.md) before running a replay or judging a change with one.
+
 ## Privacy (hard rules)
 
 The run store, corpus days, audio, snapshots, LLM call logs and verdicts hold
@@ -35,6 +37,7 @@ synthetic uid `local-dev-user`.
 | `timeline/`, `cassette/`, `lanes/` | Day timeline and lanes; STT cassettes (vendor prerecorded and Parakeet batch adapters); record/batch and sync replay; `lanes/plugin.py`. |
 | `inspector/` | Stdlib server and static UI; `sample_run.py` (synthetic Lumen Bay day). |
 | `v3/` | Conversations v3 replay: `feed.py` (recordings, arrival instants), `tasks.py` (loopback Cloud Tasks), `driver.py` (event loop), `product.py` + `run.py` + `entry.py` (real v3 code), `export.py` (contract rows, pairing by recording), `corpus.py` (add-day ingest), `select.py` (pipeline choice), `fake.py`, `smoke.py`, `prod_export.py` (read-only v3 exporter). |
+| `ideal/` | Ideal days: `packet.py` (numbered lines), `schema.py` (validator), `score.py` (structure scoring), `runs.py` (score table and per-card diff across runs, no text), drafting passes. |
 | `sample.py` | Minimal synthetic run, used only when the inspector plugin is absent. |
 
 ## Store

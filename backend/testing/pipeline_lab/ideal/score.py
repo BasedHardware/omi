@@ -83,7 +83,9 @@ def conversations_partition(
         target = str(line.get('dup_of') or line['line'])
         by_text[_norm(line['text'])].append((datetime.fromisoformat(line['at']), target))
     part = Partition()
-    for conv in conversations:
+    # A line two conversations both hold goes to the earlier-starting one (then lower id), never to
+    # whichever file a directory listing returned first.
+    for conv in sorted(conversations, key=lambda c: (str(c.get('started_at') or ''), str(c.get('id')))):
         cid = str(conv.get('id'))
         origin = parse_time(conv.get('started_at'))
         part.home[cid] = on_home(conv)

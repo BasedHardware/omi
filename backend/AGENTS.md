@@ -254,6 +254,8 @@ Before a PR, exercise the endpoint:
 3. **Hit the changed endpoints** with curl and read the server logs — verify the behavior changed as intended, not just that the route returns 200.
 4. **Record the commands and output** in the PR description (root `AGENTS.md` → Definition of Done).
 
+To judge a pipeline change (conversation cuts, Home, notes, memories) on a real recorded day, use the pipeline lab; read [`testing/pipeline_lab/AGENTS.md`](testing/pipeline_lab/AGENTS.md) first.
+
 ## Formatting
 
 ```bash

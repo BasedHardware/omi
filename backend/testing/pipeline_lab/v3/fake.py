@@ -158,6 +158,7 @@ def replay_v3_fake(
     sweeps: bool = True,
     partial_step: timedelta | None = None,
     partial_lag: timedelta = DEFAULT_LAG,
+    max_events: int = 20000,
 ) -> dict[str, Any]:
     plan = plan_arrivals(
         recordings, lag=arrival_lag, mode=arrival_mode, partial_step=partial_step, partial_lag=partial_lag
@@ -168,7 +169,13 @@ def replay_v3_fake(
     ops = FakeV3Ops(tasks=tasks, clock=clock, proxy_url=proxy_url)
     end = max([a.instant for a in plan.arrivals] + [first])
     driver = V3Driver(
-        uid=FAKE_UID, ops=ops, tasks=tasks, clock=clock, horizon=default_horizon(plan.arrivals, end, tail), sweeps=False
+        uid=FAKE_UID,
+        ops=ops,
+        tasks=tasks,
+        clock=clock,
+        horizon=default_horizon(plan.arrivals, end, tail),
+        sweeps=False,
+        max_events=max_events,
     )
     report = asyncio.run(driver.run(plan.arrivals))
     rows = list(ops.conversations.values())

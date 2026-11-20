@@ -1,5 +1,6 @@
 """Pipeline-lab ideals: packet lines, the ideal validator and structure scoring (synthetic data only)."""
 
+import json
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -335,3 +336,51 @@ def test_refine_absorbs_background_inside_a_conversation_and_merges_by_threshold
     out = build({'cards': cards}, refined, merge=0.5)
     assert [(c['id'], c['home']) for c in out['cards']] == [('c1', True), ('c4', False), ('c5', True)]
     assert out['cards'][0]['lines'] == [f'{ids[0]}-{ids[3]}']
+
+
+def test_run_diff_reports_boundaries_and_home_flips_without_text(tmp_path, capsys):
+    from testing.pipeline_lab.ideal import runs
+
+    def conv(cid, start_min, end_min, words, visible):
+        return {
+            'id': cid,
+            'started_at': (T0 + timedelta(minutes=start_min)).isoformat(),
+            'finished_at': (T0 + timedelta(minutes=end_min)).isoformat(),
+            'transcript_segments': [seg('secret ' * words, 0, 1)],
+            'v3': {'visible': visible, **({} if visible else {'home_hidden_reason': 'below_word_minimum'})},
+        }
+
+    for run_id, rows in {
+        'run-a': [conv('a1', 0, 10, 5, True), conv('a2', 10, 20, 3, True)],
+        'run-b': [conv('b1', 0, 10, 5, False), conv('b2', 10, 30, 4, True)],
+    }.items():
+        folder = tmp_path / 'runs' / run_id / 'conversations'
+        folder.mkdir(parents=True)
+        for row in rows:
+            (folder / f"{row['id']}.json").write_text(json.dumps(row), encoding='utf-8')
+
+    d = runs.card_diff(
+        [runs.card(c) for c in runs.load_run(tmp_path, 'run-a')],
+        [runs.card(c) for c in runs.load_run(tmp_path, 'run-b')],
+    )
+    assert d['identical'] == 1 and len(d['only_a']) == 1 and len(d['only_b']) == 1
+    assert [(x[3], y[3], y[4]) for x, y in d['home_flips']] == [(True, False, 'below_word_minimum')]
+
+    assert runs.main(['--root', str(tmp_path), 'diff', 'a=run-a', 'b=run-b']) == 0
+    out = capsys.readouterr().out
+    assert 'identical boundaries 1' in out and 'Home flips on identical cards 1' in out
+    assert '09:10:00-09:20:00   10m      3w HOME' in out
+    assert 'secret' not in out
+
+
+def test_a_shared_line_goes_to_the_earlier_conversation_whatever_the_input_order(day):
+    lines, _ = day
+    first = {'id': 'z-early', 'started_at': T0.isoformat(), 'transcript_segments': [seg('yes the tomato ones', 4, 6)]}
+    late = {
+        'id': 'a-late',
+        'started_at': (T0 + timedelta(seconds=4)).isoformat(),
+        'transcript_segments': [seg('yes the tomato ones', 0, 2)],
+    }
+    owners = [conversations_partition(order, lines).card_of for order in ([first, late], [late, first])]
+    assert owners[0] == owners[1]
+    assert set(owners[0].values()) == {'z-early'}
