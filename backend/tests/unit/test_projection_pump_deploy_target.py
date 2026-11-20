@@ -12,6 +12,7 @@ import os
 import re
 import runpy
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -338,16 +339,20 @@ def test_pump_composite_never_builds_pushes_or_grants_an_invoker():
     assert names.index('runtime-env') < names.index('deploy-backend-projection-pump')
 
 
-def test_pump_composite_refuses_latest_revision_traffic_before_any_mutation():
+def test_pump_composite_orders_the_live_checks_before_mutation_and_snapshot():
     steps = PUMP_ACTION['runs']['steps']
     ids = [s.get('id') for s in steps]
-    detect = steps[ids.index('pump-service')]
-    assert '.latestRevision == true' in detect['run']
-    assert 'requested traffic differs from serving traffic' in detect['run']
-    assert '.spec.traffic | $routed' in detect['run'] and '.status.traffic | $routed' in detect['run']
-    assert 'exit 1' in detect['run'].split('following=', 1)[1]
-    assert 'update-traffic backend-projection-pump' in detect['run']
+    names = [s['name'] for s in steps]
     assert ids.index('pump-service') < ids.index('deploy-backend-projection-pump')
+    assert ids.index('pump-service') < names.index('Probe LLM gateway from the Cloud Run VPC before promotion')
+    assert names.index('Verify a newly created projection pump base before pinning') + 1 == names.index(
+        'Pin a newly created projection pump service to its base revision'
+    )
+    assert names.index('Verify the pinned first projection pump base') + 1 == names.index(
+        'Attach revision-aware Managed Prometheus to the projection pump candidate'
+    )
+    assert ids.index('pump-traffic-snapshot') < ids.index('shift-projection-pump-traffic')
+    assert 'verify_projection_pump_inverse.py' in steps[ids.index('pump-traffic-snapshot')]['run']
 
 
 def test_pump_composite_deploys_and_verifies_the_resolved_digest_not_the_tag():
@@ -382,6 +387,7 @@ def _live(**changes):
                 },
                 'spec': {
                     'timeoutSeconds': 3600,
+                    'containerConcurrency': 80,
                     'containers': [
                         {
                             'name': PROJECTION_PUMP,
@@ -420,6 +426,144 @@ def _evaluate(service, iam=PRIVATE, env=MANIFEST_ENV):
 def test_shape_readback_accepts_the_intended_service():
     assert _evaluate(_live()) == []
     assert _evaluate(_live(), iam={}) == []
+
+
+INVERSE_REVISION = f'{PROJECTION_PUMP}-aaaaaaa-17-1-base'
+INVERSE_IMAGE = 'gcr.io/based-hardware/backend@sha256:' + 'b' * 64
+INVERSE_RECEIPT = f'01a1f818-f3a6-7183-bd19-9bd0f7e7bb75 {INVERSE_REVISION} {"a" * 40} {INVERSE_IMAGE}'
+
+
+@pytest.fixture
+def inverse_readback():
+    service = _live()
+    revision = copy.deepcopy(service['spec']['template'])
+    revision['metadata'].update(name=INVERSE_REVISION, labels={'serving.knative.dev/service': PROJECTION_PUMP})
+    revision['status'] = {'conditions': [{'type': 'Ready', 'status': 'True'}], 'imageDigest': INVERSE_IMAGE}
+    app = revision['spec']['containers'][0]
+    app['image'] = INVERSE_IMAGE
+    app['env'].append({'name': 'OMI_BACKEND_RELEASE_SHA', 'value': 'a' * 40})
+    revision['spec']['containers'].pop()  # The first deploy stopped before adding the sidecar.
+    route = {'traffic': [{'revisionName': INVERSE_REVISION, 'percent': 100}]}
+    service['spec'].update(copy.deepcopy(route))
+    service['status'] = copy.deepcopy(route)
+    # Cloud Run may have a newer no-traffic template. Use the receiving Revision.
+    return service, revision, copy.deepcopy(PRIVATE)
+
+
+def _run_inverse_step(tmp_path, step, documents, receipt=INVERSE_RECEIPT):
+    service, revision, iam = documents
+    fixtures = {
+        'services list': [service],
+        f'services describe {PROJECTION_PUMP}': service,
+        f'revisions describe {INVERSE_REVISION}': revision,
+        f'services get-iam-policy {PROJECTION_PUMP}': iam,
+    }
+    (tmp_path / 'fixtures.json').write_text(json.dumps(fixtures))
+    gcloud = tmp_path / 'gcloud'
+    gcloud.write_text(
+        f'#!{sys.executable}\n'
+        'import json, sys\n'
+        'from pathlib import Path\n'
+        'assert sys.argv[1] == "run"\n'
+        'key = " ".join(arg for arg in sys.argv[2:] if not arg.startswith("--"))\n'
+        'path = Path(__file__).with_name("fixtures.json")\n'
+        'print(json.dumps(json.loads(path.read_text())[key]))\n'
+    )
+    gcloud.chmod(0o755)
+    script = step['run'].replace('${{ inputs.project_id }}', 'based-hardware')
+    script = script.replace('${{ inputs.region }}', 'us-central1')
+    script = script.replace('${{ inputs.admitted_sha }}', 'a' * 40)
+    script = script.replace('${{ steps.image-tag.outputs.revision_suffix }}', 'aaaaaaa-17-1')
+    script = script.replace('${{ steps.published-image.outputs.ref }}', INVERSE_IMAGE)
+    script = re.sub(r'\$\{\{ [^}]+ }}', 'unused-first-create-input', script)
+    env = dict(
+        os.environ,
+        PATH=f'{tmp_path}{os.pathsep}{Path(sys.executable).parent}{os.pathsep}{os.environ["PATH"]}',
+        RELEASE_DISPOSITION=receipt,
+        GITHUB_OUTPUT=str(tmp_path / 'steps.out'),
+        DEPLOY_CONTROL_SCRIPTS=str(BACKEND / 'scripts'),
+        PUMP_EXISTS='true',
+    )
+    return subprocess.run(['bash', '-c', script], cwd=tmp_path, env=env, text=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.parametrize(
+    'break_readback',
+    [
+        lambda s, r, i: r['status']['conditions'][0].update(status='False'),
+        lambda s, r, i: r['spec']['containers'][0]['env'][-1].update(value='c' * 40),
+        lambda s, r, i: r['spec']['containers'][0].update(image=INVERSE_IMAGE[:-1] + 'c'),
+        lambda s, r, i: r['status'].update(imageDigest='sha256:' + 'c' * 64),
+        lambda s, r, i: r['spec']['containers'][0]['env'][0].update(value='true'),
+        lambda s, r, i: r['spec']['containers'][0]['env'][1].update(value='true'),
+        lambda s, r, i: r['spec']['containers'][0]['env'][3].update(value='all'),
+        lambda s, r, i: r['spec'].update(containerConcurrency=81),
+        lambda s, r, i: s['metadata']['annotations'].update({'run.googleapis.com/ingress': 'all'}),
+        lambda s, r, i: s['metadata']['annotations'].update({'run.googleapis.com/invoker-iam-disabled': 'true'}),
+        lambda s, r, i: i['bindings'].append({'role': 'roles/run.invoker', 'members': ['allUsers']}),
+        lambda s, r, i: s['status']['traffic'][0].update(latestRevision=True),
+        lambda s, r, i: s['spec']['traffic'][0].update(revisionName=PROJECTION_PUMP + '-elsewhere'),
+    ],
+)
+def test_pinned_but_unverified_base_blocks_retry_and_inverse(tmp_path, inverse_readback, break_readback):
+    break_readback(*inverse_readback)
+    for name in (
+        'Verify existing projection pump before any mutation',
+        'Reverify the projection pump inverse and capture its traffic snapshot',
+    ):
+        result = _run_inverse_step(tmp_path, _step_named(name), inverse_readback)
+        assert result.returncode != 0, result.stdout
+    assert not (tmp_path / 'steps.out').exists()
+    assert not (tmp_path / 'artifacts/projection-pump-pre-promotion-traffic-snapshot.json').exists()
+
+
+def test_pinned_base_requires_release_disposition_and_live_proof(tmp_path, inverse_readback):
+    step = _step_named('Verify existing projection pump before any mutation')
+    result = _run_inverse_step(tmp_path, step, inverse_readback, receipt='')
+    assert result.returncode != 0 and 'recorded Release disposition' in result.stderr
+    assert not (tmp_path / 'steps.out').exists()
+
+    result = _run_inverse_step(tmp_path, step, inverse_readback)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / 'steps.out').read_text() == 'exists=true\n'
+    assert INVERSE_IMAGE in result.stdout
+
+    snapshot_step = _step_named('Reverify the projection pump inverse and capture its traffic snapshot')
+    result = _run_inverse_step(tmp_path, snapshot_step, inverse_readback)
+    assert result.returncode == 0, result.stderr
+    snapshot = json.loads((tmp_path / 'artifacts/projection-pump-pre-promotion-traffic-snapshot.json').read_text())
+    assert snapshot['services'][PROJECTION_PUMP]['spec']['traffic'] == [
+        {'revisionName': INVERSE_REVISION, 'percent': 100}
+    ]
+
+
+def test_latest_is_allowed_only_for_the_new_base_before_its_first_pin(tmp_path, inverse_readback):
+    service, _, _ = inverse_readback
+    service['spec']['traffic'] = [{'percent': 100, 'latestRevision': True}]
+    service['status']['traffic'][0]['latestRevision'] = True
+    service['status'].update(latestReadyRevisionName=INVERSE_REVISION, latestCreatedRevisionName=INVERSE_REVISION)
+
+    existing = _step_named('Verify existing projection pump before any mutation')
+    assert _run_inverse_step(tmp_path, existing, inverse_readback).returncode != 0
+    before_pin = _step_named('Verify a newly created projection pump base before pinning')
+    result = _run_inverse_step(tmp_path, before_pin, inverse_readback, receipt='')
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize('workflow_sha', ['a' * 40, 'b' * 40])
+def test_control_boundary_requires_the_reviewed_dispatch_sha(workflow_sha):
+    script = _step_named('Validate projection pump deploy boundary')['run']
+    for name, value in {
+        'environment': 'prod',
+        'runtime_env': 'prod',
+        'project_id': 'based-hardware',
+        'region': 'us-central1',
+        'admitted_sha': 'c' * 40,
+    }.items():
+        script = script.replace('${{ inputs.' + name + ' }}', value)
+    env = dict(os.environ, GITHUB_SHA=workflow_sha, WORKFLOW_CONTROL_SHA=workflow_sha, REVIEWED_CONTROL_SHA='a' * 40)
+    result = subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True, timeout=10)
+    assert (result.returncode == 0) == (workflow_sha == env['REVIEWED_CONTROL_SHA']), result.stderr
 
 
 def _set_template_annotation(key, value):

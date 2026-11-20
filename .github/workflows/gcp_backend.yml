@@ -73,6 +73,14 @@ on:
         description: 'mode=deploy only: service=<role image>@sha256 pairs from a build-only run of this release_sha (blank = every service keeps its current image)'
         required: false
         default: ''
+      pump_control_sha:
+        description: 'Projection pump only. Full reviewed SHA of the workflow and deploy controls on main.'
+        required: false
+        default: ''
+      pump_release_disposition:
+        description: 'Existing projection pump only. Release comment UUID, serving revision, source SHA, digest-pinned image (space-separated).'
+        required: false
+        default: ''
       # Break-glass: the eligibility proof requires a *successful* Release
       # Eligibility push-run on this exact SHA. A flaky or red check therefore
       # poisons that SHA permanently -- rerunning does not retroactively make
@@ -931,11 +939,15 @@ jobs:
     steps:
       - name: Checkout workflow dispatch surface for composite action
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
 
       - name: Deploy backend projection pump
         uses: ./.github/actions/deploy-projection-pump
         with:
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          reviewed_control_sha: ${{ inputs.pump_control_sha }}
+          release_disposition: ${{ inputs.pump_release_disposition }}
           environment: ${{ github.event.inputs.environment }}
           runtime_env: ${{ vars.ENV }}
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
