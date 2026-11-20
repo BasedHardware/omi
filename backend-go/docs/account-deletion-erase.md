@@ -14,7 +14,9 @@ receivers continue to fence late writes after a queue database session disappear
 
 1. Ship with `GO_QUEUE_ERASE_REQUIRED=false` (the default in every environment). Existing
    deletion paths still run without contacting Go. Configure the private HTTPS listener
-   and give it the authoritative marker project and normal queue access. Omit
+   and give it normal queue access. Set `ERASE_FIRESTORE_PROJECT` and
+   `ERASE_FIRESTORE_DATABASE` to the authoritative project and database resolved by the
+   Python deletion executor. Use `(default)` explicitly for the default database. Omit
    `ERASE_PORT` when the listener is disabled. An explicitly empty port is invalid.
 2. Lane B owns the queue migration and the separately applied recovery access migration.
    David must approve the new recovery role before any access change. After approval,
@@ -46,7 +48,9 @@ the trailing seven days, excluding the 15-minute grace for measurement. Empty co
 publish a null ratio. Pending and failed generations count as misses once mature.
 
 Page the deletion owner for positive `overdue_pending`, `met < eligible`, a missing
-scheduled readback, or `go_queue_erase_page` on a rejected attempt. For a rejection,
+scheduled readback, or `go_queue_erase_page` on a rejected attempt. The page contains
+the reason. Use the restricted deletion failure logs and authoritative marker to locate
+the affected generation. For a rejection,
 correct the listener TLS or workload identity, database permissions, or marker authority
 reported by the failing component, then replay the same current generation through the
 deletion reconciler. A rejection on a retry cannot settle the outcome of an earlier

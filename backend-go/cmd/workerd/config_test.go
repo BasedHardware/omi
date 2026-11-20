@@ -114,3 +114,36 @@ func TestConfigAllowsTLSDisabledOnlyForLoopback(t *testing.T) {
 		})
 	}
 }
+
+func TestEraseConfigPinsTheAuthoritativeFirestorePlane(t *testing.T) {
+	t.Parallel()
+	env := fixtureEnv()
+	env["ERASE_PORT"] = "9443"
+	env["ERASE_AUDIENCE"] = "synthetic-worker"
+	env["ERASE_CALLER_SUBJECT"] = "123456"
+	env["ERASE_TLS_CERT"] = "/dev/null"
+	env["ERASE_TLS_KEY"] = "/dev/null"
+	env["ERASE_FIRESTORE_PROJECT"] = "demo-marker-data"
+	for _, db := range []string{"staging", "(default)"} {
+		env["ERASE_FIRESTORE_DATABASE"] = db
+		cfg, err := readConfig(envLookup(env), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.erase.markerProject == cfg.firestoreProject ||
+			cfg.erase.markerProject != "demo-marker-data" || cfg.erase.markerDatabase != db {
+			t.Fatal("erase listener did not pin the authoritative marker database")
+		}
+	}
+	for _, db := range []string{"", "databases/staging"} {
+		env["ERASE_FIRESTORE_DATABASE"] = db
+		if _, err := readConfig(envLookup(env), false); err == nil {
+			t.Fatal("erase listener started without a valid explicit marker database")
+		}
+	}
+	env["ERASE_FIRESTORE_DATABASE"] = "staging"
+	delete(env, "ERASE_FIRESTORE_PROJECT")
+	if _, err := readConfig(envLookup(env), false); err == nil {
+		t.Fatal("erase listener started without a valid explicit marker project")
+	}
+}

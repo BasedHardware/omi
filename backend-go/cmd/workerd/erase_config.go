@@ -7,14 +7,19 @@ import (
 )
 
 type eraseConfig struct {
-	port     int
-	audience string
-	subject  string
-	cert     string
-	key      string
+	port           int
+	audience       string
+	subject        string
+	cert           string
+	key            string
+	markerProject  string
+	markerDatabase string
 }
 
-var serviceSubject = regexp.MustCompile(`^[0-9]{1,32}$`)
+var (
+	serviceSubject   = regexp.MustCompile(`^[0-9]{1,32}$`)
+	markerDatabaseID = regexp.MustCompile(`^(\(default\)|[a-z][a-z0-9-]{2,61}[a-z0-9])$`)
+)
 
 func (c *config) readEraseConfig(lookup lookupEnv) error {
 	rawPort, enabled := lookup("ERASE_PORT")
@@ -32,6 +37,14 @@ func (c *config) readEraseConfig(lookup lookupEnv) error {
 	if audience == "" || !serviceSubject.MatchString(subject) || cert == "" || key == "" {
 		return errors.New("queue erase listener requires audience, workload subject and TLS files")
 	}
-	c.erase = eraseConfig{port: port, audience: audience, subject: subject, cert: cert, key: key}
+	project, _ := lookup("ERASE_FIRESTORE_PROJECT")
+	database, _ := lookup("ERASE_FIRESTORE_DATABASE")
+	if !projectID.MatchString(project) || !markerDatabaseID.MatchString(database) {
+		return errors.New("queue erase listener requires ERASE_FIRESTORE_PROJECT and ERASE_FIRESTORE_DATABASE")
+	}
+	c.erase = eraseConfig{
+		port: port, audience: audience, subject: subject, cert: cert, key: key,
+		markerProject: project, markerDatabase: database,
+	}
 	return nil
 }

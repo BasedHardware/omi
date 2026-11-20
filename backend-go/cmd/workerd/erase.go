@@ -183,7 +183,9 @@ func openEraseServer(ctx context.Context, cfg config, store *queue.Store, logger
 	if err != nil {
 		return nil, nil, errors.New("could not initialize workload identity validation")
 	}
-	markers, err := docstore.Open(ctx, docstore.Config{Project: cfg.firestoreProject})
+	markers, err := docstore.Open(ctx, docstore.Config{
+		Project: cfg.erase.markerProject, Database: cfg.erase.markerDatabase,
+	})
 	if err != nil {
 		return nil, nil, errors.New("could not open deletion marker reader")
 	}
