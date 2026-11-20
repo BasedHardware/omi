@@ -20,6 +20,7 @@ from database import conversations_v3_leases as leases
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.conversations import ACTION_ITEMS_EDIT_REVISION
+from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.recurring_voice_privacy import filter_processing_write
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
@@ -421,7 +422,8 @@ def undo_group_fits(entries):
     sources.update(rid for e in entries for rid in e.get('sources') or [])
     size = sum(stored_bytes(e.get('raw') or {}) + stored_bytes(e.get('claims') or []) for e in entries)
     size += len(sources) * SOURCE_CLAIMS_BYTES
-    return len(entries) + len(sources) < store.BATCH_MAX_WRITES and size <= UNDO_GROUP_BYTES
+    writes = len(entries) + len(sources) + sum(bool(entry.get('created')) for entry in entries)
+    return writes < store.BATCH_MAX_WRITES and size <= UNDO_GROUP_BYTES
 
 
 def drop_unwritten_priors(uid, run_id, entries, *, firestore_client=None):
@@ -566,6 +568,9 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
             if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
                 raise Conflict('lease_lost')
         restored = 0
+        for cid in created:
+            # Commit the fence before erasure, including resumed undos for an already-hidden row.
+            tx.set(removal_ref(user, cid), {'removed_by_undo': True})
         for entry in entries:
             if entry['id'] not in ours:
                 continue

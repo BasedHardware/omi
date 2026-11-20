@@ -41,6 +41,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database.action_items_cache import bump_action_items_list_version
+from database.conversations_v3_undo_removals import removal_ref
 from database.action_item_codec import (
     prepare_action_item_for_read,
     prepare_action_item_for_write as _prepare_action_item_for_write,
@@ -71,19 +72,19 @@ TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
 _ACTION_ITEM_SCAN_PAGE_SIZE = 500
 
 
-def _validate_create_conversations(
+def _check_undo_removals(
     user_ref: firestore.DocumentReference, items: Iterable[Dict[str, Any]], transaction: firestore.Transaction
 ) -> None:
     """Fence the task association with removal of its conversation in another transaction."""
     checked: set[str] = set()
     for item in items:
         cid = item.get('conversation_id')
-        if cid is None:
+        if not isinstance(cid, str) or cid in checked:
             continue
-        if not isinstance(cid, str) or not cid.strip() or '/' in cid:
-            raise TaskSourceValidationError('Task source conversation is unavailable.')
-        if cid in checked:
+        checked.add(cid)
+        if not removal_ref(user_ref, cid).get(transaction=transaction).exists:
             continue
+        # A later derive can legitimately reuse a deterministic card ID.
         snapshot = (
             user_ref.collection('conversations')
             .document(cid)
@@ -92,7 +93,6 @@ def _validate_create_conversations(
         row = snapshot.to_dict() or {}
         if not snapshot.exists or row.get('deleted') or row.get('recording'):
             raise TaskSourceValidationError('Task source conversation is unavailable.')
-        checked.add(cid)
 
 
 def validate_task_relationship_in_transaction(
@@ -275,7 +275,7 @@ def create_action_item(
     *,
     document_id: Optional[str] = None,
     reuse_finished: bool = True,
-    validate_conversation: bool = False,
+    check_undo_removals: bool = False,
 ) -> str:
     """
     Create a new action item for a user.
@@ -308,7 +308,7 @@ def create_action_item(
         idempotency_key,
         document_id=document_id,
         reuse_finished=reuse_finished,
-        validate_conversation=validate_conversation,
+        check_undo_removals=check_undo_removals,
     )
 
 
@@ -318,7 +318,7 @@ def create_action_items_batch(
     action_items_data: List[Dict[str, Any]],
     *,
     document_ids: Optional[List[Optional[str]]] = None,
-    validate_conversation: bool = False,
+    check_undo_removals: bool = False,
 ) -> List[str]:
     """
     Create multiple action items in a batch operation.
@@ -332,7 +332,7 @@ def create_action_items_batch(
         List of created action item IDs
     """
     return FirestoreActionItems(uid, firestore_client=db).create_documents(
-        action_items_data, document_ids=document_ids, validate_conversation=validate_conversation
+        action_items_data, document_ids=document_ids, check_undo_removals=check_undo_removals
     )
 
 
@@ -1403,7 +1403,7 @@ class FirestoreActionItems:
         *,
         document_id: Optional[str] = None,
         reuse_finished: bool = True,
-        validate_conversation: bool = False,
+        check_undo_removals: bool = False,
     ) -> str:
         uid = self.space_id
         '\n        Create a new action item for a user.\n\n        Args:\n            uid: User ID\n            action_item_data: Action item data including description, dates, etc.\n            idempotency_key: Optional opaque key. When supplied, the function looks\n                for an existing action_item with the same key (any state) and returns\n                its id without creating a new document. This makes the call safe to\n                retry on flaky networks or duplicate event delivery — the previous\n                behaviour silently allocated a fresh Firestore id on every call,\n                producing user-visible duplicates. The key is stored on the\n                document so future calls can find it. Pass a per-attempt client\n                key (for example an ``Idempotency-Key`` header), not a hash of\n                the description: task titles are not unique.\n            document_id: Optional caller-reserved Firestore document id. Reusing\n                the id returns the existing document without rewriting it, making\n                a crash-retried create deterministic.\n            reuse_finished: False skips completed, cancelled and superseded matches. Pass it when\n                the key is derived from the task text: later tasks with the same title share that\n                key, so a finished match is an earlier task, not a retry.\n\n        Returns:\n            The ID of the created (or pre-existing, when idempotency_key matches)\n            action item.\n        '
@@ -1463,8 +1463,8 @@ class FirestoreActionItems:
                     firestore_client=self.client,
                     account_generation=account_generation,
                 )
-            if validate_conversation:
-                _validate_create_conversations(user_ref, (action_item_data,), write_transaction)
+            if check_undo_removals:
+                _check_undo_removals(user_ref, (action_item_data,), write_transaction)
             payload = dict(action_item_data)
             payload['account_generation'] = account_generation
             self._transaction_write(write_transaction, 'set', doc_ref, payload)
@@ -1482,7 +1482,7 @@ class FirestoreActionItems:
         action_items_data: List[Dict[str, Any]],
         *,
         document_ids: Optional[List[Optional[str]]] = None,
-        validate_conversation: bool = False,
+        check_undo_removals: bool = False,
     ) -> List[str]:
         uid = self.space_id
         '\n        Create multiple action items in a batch operation.\n\n        Args:\n            uid: User ID\n            action_items_data: List of action item data dictionaries\n            document_ids: Optional per-item ids; a None entry gets a fresh Firestore id\n\n        Returns:\n            List of created action item IDs\n        '
@@ -1532,8 +1532,8 @@ class FirestoreActionItems:
                         firestore_client=self.client,
                         account_generation=account_generation,
                     )
-            if validate_conversation:
-                _validate_create_conversations(user_ref, prepared_items, write_transaction)
+            if check_undo_removals:
+                _check_undo_removals(user_ref, prepared_items, write_transaction)
             for doc_ref, item in zip(document_refs, prepared_items):
                 self._transaction_write(
                     write_transaction, 'set', doc_ref, {**item, 'account_generation': account_generation}

@@ -702,9 +702,11 @@ async def test_undo_retry_preserves_an_already_hidden_card_with_a_task(
 @pytest.mark.asyncio
 @pytest.mark.parametrize('batch', [False, True], ids=['single', 'batch'])
 @pytest.mark.parametrize('erase', [False, True], ids=['hidden', 'erased'])
+@pytest.mark.parametrize('source_links', ['true', 'false'], ids=['validation-on', 'validation-off'])
 async def test_task_create_validated_before_undo_cannot_commit_after_removal(
-    undo_task_card, strict, ledger, monkeypatch, batch, erase
+    undo_task_card, strict, ledger, monkeypatch, batch, erase, source_links
 ):
+    monkeypatch.setenv(task_source_validation.SOURCE_LINKS_ENABLED_ENV, source_links)
     cid, before = undo_task_card
     # A task attached to a row that undo restores is outside its removal set.
     assert task_service.create_action_item(UID, {'description': 'Unrelated task', 'conversation_id': 'c0'})
@@ -738,6 +740,41 @@ async def test_task_create_validated_before_undo_cannot_commit_after_removal(
     assert [
         task['conversation_id'] for doc, task in strict.rows.items() if doc[:3] == ('users', UID, 'action_items')
     ] == ['c0']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('batch', [False, True], ids=['single', 'batch'])
+async def test_task_source_switch_off_preserves_missing_source_fallback(undo_task_card, strict, monkeypatch, batch):
+    monkeypatch.setenv(task_source_validation.SOURCE_LINKS_ENABLED_ENV, 'false')
+    missing = 'ordinary-missing-conversation'
+    payload = {'description': 'Legacy link', 'conversation_id': missing}
+    reads = []
+    get = StrictFirestoreDocument.get
+
+    def record_get(self, *args, **kwargs):
+        if self.path[2:3] in {('conversations',), ('conversations_v3_undo_removals',)}:
+            reads.append(self.path)
+        return get(self, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', record_get)
+    if batch:
+        ids = task_service.create_action_items_batch(UID, [payload, payload, {'description': 'Standalone'}])
+        assert len(ids) == 3
+    else:
+        ids = [task_service.create_action_item(UID, payload)]
+    for task_id in ids[:2]:
+        assert strict.rows[('users', UID, 'action_items', task_id)]['conversation_id'] == missing
+    assert len(reads) == 1 and reads[0][2] == 'conversations_v3_undo_removals'
+
+
+@pytest.mark.asyncio
+async def test_task_can_link_a_card_recreated_at_an_undo_removed_id(undo_task_card, strict, owner):
+    cid, _ = undo_task_card
+    assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
+    assert (await rederive())[0] == 'committed'
+    assert cid in conversations(strict)
+    task_id = task_service.create_action_item(UID, {'description': 'New link', 'conversation_id': cid})
+    assert strict.rows[('users', UID, 'action_items', task_id)]['conversation_id'] == cid
 
 
 @pytest.mark.asyncio

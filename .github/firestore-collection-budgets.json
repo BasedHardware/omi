@@ -91,6 +91,16 @@
       "reviewed": "2026-11-20"
     },
     {
+      "collection": "conversations_v3_undo_removals",
+      "owner": "lane/conversations-v3",
+      "unit": "distinct conversation ID in a shared linked-task create transaction attempt",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 50000,
+      "basis": "planning-bound",
+      "source": "backend/database/action_items.py: one owner-scoped point read per distinct linked conversation ID per attempt, including retries, even when no repairs ran. Planning scenario: 50,000 such ID-attempts/day. A marker hit may add one point read in conversations. Source-less creates do not read markers.",
+      "reviewed": "2026-11-20"
+    },
+    {
       "collection": "conversations_v3_backfill_starts",
       "owner": "lane/conversations-v3",
       "unit": "conversations-v3 sweep tick",
