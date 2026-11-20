@@ -2,12 +2,10 @@ package docstore
 
 import (
 	"crypto/sha256"
-	"errors"
 
 	"strings"
 	"time"
 
-	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -60,16 +58,7 @@ func (t *Tx) GetVersion(ref Ref, dst any) (time.Time, error) {
 
 // HasChildren reads at most one child from the named collection in this transaction.
 func (t *Tx) HasChildren(parent Ref, collection string) (bool, error) {
-	if collection == "" || strings.Contains(collection, "/") || collection == "." || collection == ".." {
-		return false, ErrPath
-	}
-	iter := t.tx.Documents(t.store.client.Doc(parent.path).Collection(collection).Limit(1))
-	defer iter.Stop()
-	_, err := iter.Next()
-	if errors.Is(err, iterator.Done) {
-		return false, nil
-	}
-	return err == nil, err
+	return t.HasChildMatching(parent, collection)
 }
 
 // Delete removes a document as part of the current fenced transaction.
