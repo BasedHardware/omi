@@ -927,6 +927,8 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if app_id and historical_tier.is_historical(conversation):
+        raise HTTPException(status_code=400, detail='Historical conversations can only be reprocessed with Omi notes')
     if transcribing_hold.retry_pending(conversation):
         pending = transcribing_hold.retry_wire(conversation)
         if pending is None:
@@ -940,6 +942,7 @@ def reprocess_conversation(
         return pending
     from database import processing_attention as attention_db
 
+    explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
     historical_slots = historical_projection.admit_reprocess(uid, conversation_id, conversation)
     input_generation = attention_db.generation(conversation)
     was_discarded = bool(conversation.get('discarded'))
@@ -949,8 +952,6 @@ def reprocess_conversation(
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
-
-    explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
 
     # Reprocess is a new user intent once the prior writer finishes. Share the
     # active writer across app selections to avoid racing summary writes.

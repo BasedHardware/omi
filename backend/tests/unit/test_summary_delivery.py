@@ -651,6 +651,30 @@ def test_real_notes_retire_the_minimums_title_marker_so_the_row_is_not_held_as_s
     assert again['structured']['title_provenance'] is DELETE_FIELD
 
 
+@pytest.mark.parametrize('overview', ['', 'We chose what to plant.'])
+def test_historical_title_marker_is_retired_only_when_notes_land(overview):
+    existing = {
+        'processing_tier': 'historical',
+        'structured': {'title': 'Garden planning', 'title_provenance': 'historical_minimum'},
+    }
+    write = {
+        'status': 'completed',
+        'processing_tier': 'historical',
+        'terminal_no_derived_effects': True,
+        'structured': {'title': 'Planning the garden', 'overview': overview},
+    }
+    delivery.prepare(write, 'u', now=200)
+    delivery.merge_result(existing, write, 'u', now=300)
+    stored = _stored_after_merge(existing, write)
+
+    if overview:
+        assert 'title_provenance' not in stored['structured']
+    else:
+        assert stored['structured']['title_provenance'] == 'historical_minimum'
+    assert stored.get('summary_completed_at') == (300 if overview else None)
+    assert stored.get('summary_due_at') is None
+
+
 def test_minimum_empty_and_new_rows_keep_their_title_marker_untouched(enabled):
     existing = debt()
     # Another stand-in states its own marker; an empty model result is not notes.
