@@ -3,7 +3,7 @@ package docstore_test
 import (
 	"context"
 	"errors"
-	"maps"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -231,10 +231,23 @@ func TestReadDeletionMarker(t *testing.T) {
 	t.Parallel()
 	b := open(t)
 	ctx := t.Context()
-	want := map[string]any{"wipe_status": "retrying", "wipe_job_id": "generation-2", "go_queue_erase_armed": true}
+	want := map[string]any{
+		"uid":                      "wiping",
+		"wipe_status":              "retrying",
+		"wipe_job_id":              "generation-2",
+		"wipe_due_at":              time.Date(2026, 11, 20, 4, 0, 0, 123000000, time.UTC),
+		"wipe_claimed_at":          time.Date(2026, 11, 20, 4, 1, 0, 456000000, time.UTC),
+		"grace_actions_complete":   true,
+		"wipe_requested_erase_now": false,
+		"late_agent_vm_cleanup": map[string]any{
+			"vmName":             "worker-7",
+			"zone":               "us-central1-a",
+			"expectedInstanceId": "1234567890",
+		},
+	}
 	b.Mark(t, "wiping", want)
 	got, err := b.Store.ReadDeletionMarker(ctx, "wiping")
-	if err != nil || !maps.Equal(got, want) {
+	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("read existing marker: got %v, err %v", got, err)
 	}
 	b.Mark(t, "empty", map[string]any{})
