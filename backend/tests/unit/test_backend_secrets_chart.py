@@ -143,6 +143,12 @@ def test_listen_private_env_is_a_dedicated_prod_only_secret(stage, tmp_path):
         assert private == []
         return
     (doc,) = private
+    # The targeted migration apply must leave the resource adoptable by Helm.
+    assert doc['metadata']['labels']['app.kubernetes.io/managed-by'] == 'Helm'
+    assert doc['metadata']['annotations'] == {
+        'meta.helm.sh/release-name': 'prod-omi-backend-secrets',
+        'meta.helm.sh/release-namespace': 'prod-omi-backend',
+    }
     spec = doc['spec']
     # One Secret Manager JSON document -> its own Kubernetes Secret, never the
     # shared backend secret that other workloads load whole through envFrom.

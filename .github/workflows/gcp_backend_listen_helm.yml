@@ -444,7 +444,7 @@ jobs:
       # One-time move of the retired privateEnv overlay (LISTEN_PRIVATE_VALUES_YAML)
       # into Secret Manager (backend/docs/runbooks/listen-private-env.md). Rolls
       # nothing: writes one LISTEN_PRIVATE_ENV version from inside this protected
-      # job, applies the backend-secrets chart (the listen ExternalSecret),
+      # job, applies the listen ExternalSecret from the backend-secrets chart,
       # force-syncs it and reports per key only same/changed. No agent or log sees
       # a value. Delete this mode once the secret is retired.
       - name: Install private-env parser before secret injection
@@ -476,7 +476,15 @@ jobs:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
           REGION: ${{ env.REGION }}
-        run: backend/scripts/deploy-backend-secrets.sh
+        run: |
+          set -euo pipefail
+          chart=backend/charts/backend-secrets
+          namespace="${ENVIRONMENT}-omi-backend"
+          helm template "${ENVIRONMENT}-omi-backend-secrets" "$chart" --namespace "$namespace" \
+            -f "$chart/${ENVIRONMENT}_omi_backend_secrets_values.yaml" \
+            --set-string "gke.projectID=${GCP_PROJECT_ID},gke.clusterLocation=${REGION},gke.clusterName=${GKE_CLUSTER}" \
+            --set-string "gsa.name=${ENVIRONMENT}-omi-backend-eso-gsa@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --show-only templates/listen-private-env.yaml | kubectl -n "$namespace" apply -f -
 
       - name: Force-sync and verify private listen env against live (no roll)
         if: ${{ inputs.mode == 'private-env-migrate' }}

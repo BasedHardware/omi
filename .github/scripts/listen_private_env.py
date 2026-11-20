@@ -11,8 +11,8 @@ a hash, or a subprocess's output):
 
   migrate  one-time, inside the protected prod job that holds the retired GitHub
            secret LISTEN_PRIVATE_VALUES_YAML: check its key set against the
-           chart, then write the declared private keys as one new Secret
-           Manager version. Folded public keys must already equal the chart.
+           chart and require byte equality with serving literals, then write
+           the declared private keys as one new Secret Manager version.
   sync     force-sync the listen-private ExternalSecret and wait until it is Ready.
   guard    before the listen Helm upgrade: every declared key must be present
            and non-empty in the Kubernetes Secret, and where live still carries
@@ -78,24 +78,38 @@ def run(argv: list[str], *, timeout: int = 60) -> bytes:
     return result.stdout
 
 
-def kube_json(namespace: str, kind: str, name: str) -> dict:
-    return json.loads(run(['kubectl', '-n', namespace, 'get', kind, name, '-o', 'json']) or b'{}')
-
-
-def secret_data(namespace: str, name: str) -> dict[str, str]:
-    doc = kube_json(namespace, 'secret', name)
-    return {k: base64.b64decode(v).decode('utf-8') for k, v in (doc.get('data') or {}).items()}
+def kube_json(namespace: str, kind: str, name: str, *options: str) -> dict:
+    return json.loads(run(['kubectl', '-n', namespace, 'get', kind, name, '-o', 'json', *options]) or b'{}')
 
 
 def stamp(text: str) -> datetime:
     return datetime.fromisoformat(text.replace('Z', '+00:00'))
 
 
-def secret_written_at(namespace: str, name: str) -> datetime:
-    # Last time any writer (ESO or a hand edit) changed the Secret, from apiserver managedFields.
-    meta = kube_json(namespace, 'secret', name).get('metadata') or {}
-    times = [f.get('time') for f in meta.get('managedFields') or []] + [meta.get('creationTimestamp')]
-    return max(stamp(t) for t in times if t)
+def secret_written_at(secret: dict, keys: set[str]) -> datetime:
+    # Require timestamped field ownership for the referenced data. Creation time
+    # and metadata-only writes cannot prove that the data predates the pods.
+    refusal = 'private listen Secret has no reliable data update timestamp'
+    covered = set()
+    times = []
+    for field in (secret.get('metadata') or {}).get('managedFields') or []:
+        data_fields = (field.get('fieldsV1') or {}).get('f:data')
+        if field.get('subresource') or field.get('fieldsType') != 'FieldsV1' or data_fields is None:
+            continue
+        owned = {key for key in keys if not data_fields or f'f:{key}' in data_fields}
+        if not owned:
+            continue
+        try:
+            written_at = stamp(field['time'])
+        except (KeyError, AttributeError, ValueError):
+            raise Refused(refusal) from None
+        if written_at.utcoffset() is None:
+            raise Refused(refusal)
+        times.append(written_at)
+        covered.update(owned)
+    if not times or covered != keys:
+        raise Refused(refusal)
+    return max(times)
 
 
 def oldest_serving_pod(namespace: str, deployment: str) -> datetime | None:
@@ -117,11 +131,6 @@ def container_env(pod_spec: dict, container: str) -> dict[str, dict]:
     raise Refused('listen container not found in the live pod template')
 
 
-def live_env(namespace: str, deployment: str, container: str) -> dict[str, dict]:
-    doc = kube_json(namespace, 'deployment', deployment)
-    return container_env(doc['spec']['template']['spec'], container)
-
-
 def serving_envs(namespace: str, deployment: str, container: str) -> list[dict[str, dict]]:
     """The Deployment template plus every ReplicaSet that still has pods.
 
@@ -131,13 +140,14 @@ def serving_envs(namespace: str, deployment: str, container: str) -> list[dict[s
     doc = kube_json(namespace, 'deployment', deployment)
     envs = [container_env(doc['spec']['template']['spec'], container)]
     labels = (doc['spec'].get('selector') or {}).get('matchLabels') or {}
-    if labels:
-        selector = ','.join(f'{k}={v}' for k, v in sorted(labels.items()))
-        sets = json.loads(run(['kubectl', '-n', namespace, 'get', 'replicaset', '-l', selector, '-o', 'json']) or b'{}')
-        for rs in sets.get('items') or []:
-            owners = {o.get('name') for o in rs['metadata'].get('ownerReferences') or []}
-            if deployment in owners and (rs.get('status') or {}).get('replicas', 0) > 0:
-                envs.append(container_env(rs['spec']['template']['spec'], container))
+    if not labels:
+        raise Refused('listen deployment has no selector')
+    selector = ','.join(f'{k}={v}' for k, v in sorted(labels.items()))
+    sets = json.loads(run(['kubectl', '-n', namespace, 'get', 'replicaset', '-l', selector, '-o', 'json']))
+    for rs in sets['items']:
+        owners = {o.get('name') for o in rs['metadata'].get('ownerReferences') or []}
+        if deployment in owners and (rs.get('status') or {}).get('replicas', 0) > 0:
+            envs.append(container_env(rs['spec']['template']['spec'], container))
     return envs
 
 
@@ -192,7 +202,7 @@ def cmd_migrate(a) -> int:
     if not raw.strip():
         raise Refused('LISTEN_PRIVATE_VALUES_YAML is empty; nothing to migrate')
     values = load_values(a.values_file)
-    secret_name, keys = declared(values)
+    _, keys = declared(values)
     if not keys:
         raise Refused('the chart declares no privateSecretEnv keys')
     public = public_literals(values)
@@ -210,10 +220,23 @@ def cmd_migrate(a) -> int:
                 rows.append((name, 'public-same' if same(private[name], public[name]) else 'public-changed'))
             else:
                 rows.append((name, 'undeclared'))
-        rows += [(k, 'missing-from-source') for k in keys if k not in private]
+        rows += [(k, 'missing-from-source') for k in keys if not private.get(k)]
         report(rows)
         if any(effect != 'public-same' for _, effect in rows):
             raise Refused('the GitHub secret does not match the chart declaration; nothing written')
+        serving = serving_envs(a.namespace, a.deployment, a.container)
+        rows = []
+        for key in keys:
+            entries = [env.get(key) for env in serving]
+            if any(entry is None or 'valueFrom' in entry for entry in entries):
+                rows.append((key, 'source-no-serving-literal'))
+            elif any(not same(entry.get('value', ''), private[key]) for entry in entries):
+                rows.append((key, 'source-changed'))
+            else:
+                rows.append((key, 'source-same'))
+        report(rows)
+        if any(effect != 'source-same' for _, effect in rows):
+            raise Refused('cannot prove the source matches every serving literal; nothing written')
         document = Path(tmp) / 'document.json'
         fd = os.open(document, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, 'w') as handle:
@@ -225,9 +248,6 @@ def cmd_migrate(a) -> int:
     if not out.strip():
         raise Refused('gcloud returned no version name')
     print('LISTEN_PRIVATE_ENV new Secret Manager version added')
-    # The same comparison the deploy guard makes, against the source document itself.
-    live = live_env(a.namespace, a.deployment, a.container)
-    report([(k, 'source-' + e) for k, e in compare_live(keys, secret_name, {k: private[k] for k in keys}, live)])
     return 0
 
 
@@ -251,7 +271,8 @@ def cmd_guard(a) -> int:
         print('LISTEN_PRIVATE_ENV no privateSecretEnv keys declared; guard not applicable')
         return 0
     wait_ready(a.namespace, a.external_secret, a.timeout)
-    secret = secret_data(a.namespace, secret_name)
+    document = kube_json(a.namespace, 'secret', secret_name, '--show-managed-fields=true')
+    secret = {k: base64.b64decode(v).decode('utf-8') for k, v in (document.get('data') or {}).items()}
     effects: dict[str, set[str]] = {k: set() for k in keys}
     serving = serving_envs(a.namespace, a.deployment, a.container)
     for env in serving:
@@ -260,10 +281,11 @@ def cmd_guard(a) -> int:
     # After cutover, pods read the Secret only when they start. A Secret written after the oldest
     # serving pod started holds a value no pod serves yet, and a roll would apply it unannounced:
     # apply value changes with the runbook's rollout restart, never with a deploy.
-    referenced = [k for k in keys if any(k in env and 'valueFrom' in env[k] for env in serving)]
+    referenced = {k for k in keys if any(k in env and 'valueFrom' in env[k] for env in serving)}
     if referenced:
+        written_at = secret_written_at(document, referenced)
         oldest = oldest_serving_pod(a.namespace, a.deployment)
-        if oldest is not None and secret_written_at(a.namespace, secret_name) > oldest:
+        if oldest is not None and written_at >= oldest:
             for k in referenced:
                 effects[k] = {'pending-restart'}
     # One line per name; any serving template that differs makes the name differ.

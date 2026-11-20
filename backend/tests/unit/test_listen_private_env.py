@@ -35,6 +35,8 @@ class Cluster:
         self.replicasets: list[tuple[int, dict]] = [(35, live)]
         self.secret_written = "2026-11-18T00:00:00Z"
         self.pod_starts = ["2026-11-18T01:00:00Z", "2026-11-18T02:00:00Z"]
+        self.include_data_fields = True
+        self.allow_replicaset_read = True
 
     def __call__(self, argv, *, timeout=60):
         self.calls.append(list(argv))
@@ -58,6 +60,8 @@ class Cluster:
                 }
             ).encode()
         if kind == "replicaset":
+            if not self.allow_replicaset_read:
+                raise HELPER.Refused("kubectl get failed (exit 1)")
             assert argv[argv.index("-l") + 1] == "app=listen"
             items = []
             for replicas, live in self.replicasets:
@@ -77,12 +81,26 @@ class Cluster:
         if kind == "secret":
             if self.secret is None:
                 raise HELPER.Refused("kubectl get failed (exit 1)")
+            metadata = {"name": SECRET_NAME, "creationTimestamp": "2026-11-17T00:00:00Z"}
+            if "--show-managed-fields=true" in argv:
+                fields = {"f:type": {}}
+                if self.include_data_fields:
+                    fields["f:data"] = {".": {}, **{f"f:{key}": {} for key in self.secret}}
+                metadata["managedFields"] = [
+                    {
+                        "manager": "external-secrets",
+                        "operation": "Update",
+                        "apiVersion": "v1",
+                        "time": self.secret_written,
+                        "fieldsType": "FieldsV1",
+                        "fieldsV1": fields,
+                    }
+                ]
             return json.dumps(
                 {
-                    "metadata": {
-                        "creationTimestamp": "2026-11-17T00:00:00Z",
-                        "managedFields": [{"manager": "external-secrets", "time": self.secret_written}],
-                    },
+                    "apiVersion": "v1",
+                    "kind": "Secret",
+                    "metadata": metadata,
                     "data": {k: base64.b64encode(v.encode()).decode() for k, v in self.secret.items()},
                 }
             ).encode()
@@ -188,6 +206,14 @@ def test_guard_after_cutover_refuses_a_secret_change_no_pod_serves_yet(cluster, 
     assert guard(capsys)[0] == 0
 
 
+def test_guard_after_cutover_refuses_metadata_only_update_evidence(cluster, capsys):
+    live = {key: ref(key) for key in full_secret()}
+    fake = cluster(live=live, secret=full_secret())
+    fake.include_data_fields = False
+    rc, _, err = guard(capsys)
+    assert rc == 2 and "no reliable data update timestamp" in err
+
+
 def test_guard_refuses_an_unsynced_external_secret(cluster, capsys):
     cluster(live=literal_live(), secret=None, ready=False)
     rc, _, err = guard(capsys, timeout="0")
@@ -254,6 +280,7 @@ def test_migrate_writes_only_the_declared_private_names(cluster, capsys, monkeyp
     [
         (full_overlay(STT_CAP_DISPATCH_LANES="live,sync"), "key=STT_CAP_DISPATCH_LANES effect=public-changed"),
         (full_overlay(EDGE_SHADOW_TOKEN="x" * 30), "key=EDGE_SHADOW_TOKEN effect=undeclared"),
+        (full_overlay(STT_CAP_DISPATCH_COHORT=""), "key=STT_CAP_DISPATCH_COHORT effect=missing-from-source"),
         (
             private_yaml(STT_CAP_DISPATCH_COHORT=COHORT),
             "key=MEDIA_NOISE_MODE_SERVE_UID_SHA256S effect=missing-from-source",
@@ -266,6 +293,35 @@ def test_migrate_refuses_a_mismatched_source_and_writes_nothing(cluster, capsys,
     assert rc == 2
     assert effect in out
     assert "nothing written" in err
+    assert fake.written is None
+
+
+@pytest.mark.parametrize("live_template", ["deployment", "replicaset"])
+def test_migrate_refuses_a_serving_literal_mismatch_before_writing(cluster, capsys, monkeypatch, live_template):
+    fake = cluster(live=literal_live(), secret=None)
+    mismatched = dict(literal_live(), STT_CAP_DISPATCH_COHORT={"value": COHORT + "x"})
+    if live_template == "deployment":
+        fake.live = mismatched
+    else:
+        fake.replicasets.append((3, mismatched))
+    rc, out, err = migrate(capsys, monkeypatch, full_overlay())
+    assert rc == 2 and "nothing written" in err
+    assert "key=STT_CAP_DISPATCH_COHORT effect=source-changed" in out
+    assert fake.written is None
+
+
+def test_migrate_refuses_when_serving_state_cannot_be_read(cluster, capsys, monkeypatch):
+    fake = cluster(live=literal_live(), secret=None)
+    fake.allow_replicaset_read = False
+    assert migrate(capsys, monkeypatch, full_overlay())[0] == 2
+    assert fake.written is None
+
+
+def test_migrate_refuses_when_serving_values_are_already_references(cluster, capsys, monkeypatch):
+    fake = cluster(live={key: ref(key) for key in full_secret()}, secret=full_secret())
+    rc, out, err = migrate(capsys, monkeypatch, full_overlay())
+    assert rc == 2 and "nothing written" in err
+    assert "key=STT_CAP_DISPATCH_COHORT effect=source-no-serving-literal" in out
     assert fake.written is None
 
 

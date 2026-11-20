@@ -613,6 +613,9 @@ def test_migrate_mode_installs_before_the_secret_and_never_rolls():
     }
     for step in migrate_steps:
         assert "helm -n" not in (step.get("run") or "") and "rollout" not in (step.get("run") or ""), step["name"]
+    apply = _step("Apply the listen private-env ExternalSecret (no roll)")["run"]
+    assert '--show-only templates/listen-private-env.yaml | kubectl -n "$namespace" apply -f -' in apply
+    assert "deploy-backend-secrets.sh" not in apply
     for name in ("Verify rollout", "Show Helm release history"):
         assert "inputs.mode != 'private-env-migrate'" in _step(name)["if"], name
 

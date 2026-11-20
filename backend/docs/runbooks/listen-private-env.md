@@ -73,13 +73,15 @@ the document.
 The protected workflow mode `private-env-migrate` of
 `.github/workflows/gcp_backend_listen_helm.yml` (prod only; rolls nothing):
 
-1. reads the retired GitHub secret inside the protected job, checks that every
-   private name is declared, that each folded public name equals the chart value,
-   and writes the declared names as one `LISTEN_PRIVATE_ENV` version through the
-   deployer's Workload Identity (`roles/secretmanager.secretVersionAdder` on that
-   one secret);
-2. applies the backend-secrets chart (creates the ExternalSecret), force-syncs it;
-3. runs the deploy guard against the live deployment: every name must report
+1. reads the retired GitHub secret inside the protected job and requires every
+   declared private value to be non-empty and byte-identical to its literal in
+   the Deployment and every serving ReplicaSet. It also checks folded public
+   values against the chart, then writes one `LISTEN_PRIVATE_ENV` version through
+   the deployer's Workload Identity (`roles/secretmanager.secretVersionAdder`
+   on that one secret);
+2. renders and applies only the listen-private ExternalSecret from the
+   backend-secrets chart, then force-syncs it;
+3. runs the deploy guard against the serving templates. Every private name must report
    `effect=same`.
 
 The first listen roll after that renders `secretKeyRef`s; its guard proves the

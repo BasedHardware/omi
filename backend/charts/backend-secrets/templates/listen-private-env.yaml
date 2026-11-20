@@ -17,6 +17,12 @@ apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
   name: {{ required "listenPrivateEnv.name is required" .name }}
+  # The no-roll migration applies this template before the Helm release includes it.
+  labels:
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+  annotations:
+    meta.helm.sh/release-name: {{ $.Release.Name | quote }}
+    meta.helm.sh/release-namespace: {{ $.Release.Namespace | quote }}
 spec:
   refreshInterval: {{ .refreshInterval | default "0s" | quote }}
   secretStoreRef:
