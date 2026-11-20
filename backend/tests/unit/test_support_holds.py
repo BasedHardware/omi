@@ -41,17 +41,20 @@ class _Reference:
 
 
 class _Collection:
-    def __init__(self, client, path, limit=None, after=None):
+    def __init__(self, client, path, limit=None, after=None, descending=False):
         self.client, self.path, self._limit, self._after = client, path, limit, after
+        self._descending = descending
 
     def document(self, document_id):
         return _Reference(self.client, f"{self.path}/{document_id}")
 
     def limit(self, count):
-        return _Collection(self.client, self.path, count, self._after)
+        return _Collection(self.client, self.path, count, self._after, self._descending)
 
-    def order_by(self, field):
+    def order_by(self, field, direction="ASCENDING"):
         assert field == "__name__"  # rows are already in document-id order
+        if direction == "DESCENDING":
+            return _Collection(self.client, self.path, self._limit, self._after, descending=True)
         return self
 
     def start_after(self, snapshot):
@@ -64,6 +67,8 @@ class _Collection:
             for path, payload in sorted(self.client.docs.items())
             if path.startswith(f"{self.path}/") and path.count("/") == depth
         ]
+        if self._descending:
+            rows.reverse()
         if self._after is not None:
             rows = [row for row in rows if row.id > self._after]
         return iter(rows[: self._limit] if self._limit is not None else rows)
@@ -214,6 +219,15 @@ def test_release_pages_past_the_first_page_and_warns_when_the_scan_is_capped(cli
     status, _ = _run(holds.status, _ctx())
     assert status["held_deferred_deletes"]["capped"] is True
     assert status["held_deferred_deletes"]["count"] == 0
+
+
+def test_status_shows_the_newest_events_in_time_order(client):
+    for index in range(holds._EVENTS_SHOWN + 5):
+        client.docs[f"legal_holds/{UID}/events/2026-11-{index:04d}"] = {"action": "place"}
+    status, _ = _run(holds.status, _ctx())
+    ids = [row["id"] for row in status["events"]]
+    assert len(ids) == holds._EVENTS_SHOWN and ids == sorted(ids)
+    assert ids[-1] == f"2026-11-{holds._EVENTS_SHOWN + 4:04d}" and ids[0] == "2026-11-0005"
 
 
 def test_list_flags_overdue_reviews_and_holds_missing_audit(client):

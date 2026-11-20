@@ -244,6 +244,16 @@ def test_manifest_matches_every_file_and_audio_is_decrypted(seams):
     assert "Not included:" in readme
 
 
+def test_signing_failure_uploads_nothing(seams, monkeypatch):
+    def refuse(self, **kwargs):
+        raise RuntimeError("signBlob denied")
+
+    monkeypatch.setattr(FakeBlob, "generate_signed_url", refuse)
+    with pytest.raises(RuntimeError):
+        dsar_export.export(_args(), _ctx(apply=True), ActionRecord(action_id="a6"))
+    assert not [blob for blob in seams.created if blob.uploads]
+
+
 def test_conversation_wav_recordings_are_exported(seams):
     seams.objects[f"{UID}/conv1.wav"] = b"RIFF-wav"
     dsar_export.export(_args(), _ctx(apply=True), ActionRecord(action_id="a5"))

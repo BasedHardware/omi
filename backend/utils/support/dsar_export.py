@@ -507,17 +507,18 @@ def export(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) -
         assert client is not None  # resolved above whenever ctx.apply
         blob = client.bucket(EXPORT_BUCKET).blob(object_name)
         blob.metadata = {"sha256": zip_sha, "approval": approval}
+        # Sign before upload (a V4 URL does not need the object to exist): a
+        # signing failure then leaves no export behind without a link.
+        expires_at = _now() + timedelta(days=url_days)
+        signed_url = blob.generate_signed_url(
+            version="v4",
+            expiration=timedelta(days=url_days),
+            method="GET",
+            **_signing_kwargs(_credentials()),
+        )
         blob.upload_from_filename(zip_path, content_type="application/zip", if_generation_match=0)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
-
-    expires_at = _now() + timedelta(days=url_days)
-    signed_url = blob.generate_signed_url(
-        version="v4",
-        expiration=timedelta(days=url_days),
-        method="GET",
-        **_signing_kwargs(_credentials()),
-    )
     record.after_digest = zip_sha
     record.summary = {
         "approval": approval,

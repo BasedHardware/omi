@@ -159,7 +159,7 @@ _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
     'database.legal_holds.list_legal_holds': 'adb83d85cbbabaa98a4d435147d92e2139b4e483c19a9c09e695c5f7fa4c517b',
-    'utils.support.holds._events': 'd51288dc0b57da25ec5d9b4c5ebb74b47957c5221cc3fc96f190e92039ae3626',
+    'utils.support.holds._events': '94365aaff7a6a2a9d7620bb2b14c8c5a0919c05064a3fb1dc9ca2944d56f68eb',
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3.commit_projection': 'ef2e983f527e4c07c35d5756b816405140fb88196bc819bc9f7a20012411c40e',
@@ -4430,8 +4430,8 @@ for _key, _reason in (
     ),
     (
         'utils.support.holds._events',
-        'Support operator CLI `hold status` only: bounded limit() read of one account\'s '
-        'legal_holds/{uid}/events subcollection by document id; sorted in Python.',
+        'Support operator CLI `hold status` only: newest events of one account\'s legal_holds/{uid}/events '
+        'subcollection, built-in __name__ order descending with a limit; re-sorted in Python.',
     ),
     (
         'utils.support.holds._held_deferred_deletes',
