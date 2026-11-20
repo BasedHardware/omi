@@ -218,10 +218,12 @@ def _erase_at_postgres(uid: str, expires: datetime) -> bool:
 
     try:
         params = conninfo_to_dict(dsn)
-        host = params.get('host', '')
-        if not host or ',' in host or '/' in host:
+        host, hostaddr = params.get('host'), params.get('hostaddr')
+        if not isinstance(host, str) or not host or ',' in host or '/' in host:
             raise ValueError('missing verification host')
-        ip_address(params.get('hostaddr', ''))
+        if not isinstance(hostaddr, str):
+            raise ValueError('missing numeric address')
+        ip_address(hostaddr)
     except (ProgrammingError, ValueError):
         raise EraseRejected('Go queue erase recovery requires a TLS host and numeric hostaddr') from None
     asyncio.run(_recover_erase(dsn, schema, uid, expires))
