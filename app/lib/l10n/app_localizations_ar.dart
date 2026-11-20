@@ -9020,7 +9020,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'تم رفع هذا التسجيل لكن Omi لا يزال ينشئ المحادثة. إذا حذفته الآن وفشلت المعالجة، فلن يمكن استرداده. هل تريد الحذف على أي حال؟';
+      'تم رفع هذا التسجيل بالفعل ويعالجه Omi الآن. الحذف هنا يزيل النسخة الموجودة على الهاتف. إذا فشلت المعالجة، فلن يتمكن Omi من إعادة المحاولة من هذا الهاتف.';
 
   @override
   String get syncCardAllBackedUp => 'تمت مزامنة كل التسجيلات';
@@ -14408,14 +14408,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'مؤخرًا';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'انقطع الاتصال لمدة $duration';
-  }
-
-  @override
   String get deviceControls => 'عناصر التحكم';
 
   @override
@@ -15347,6 +15339,11 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'لم يتم تثبيت التحديث. لا تزال قلادتك تعمل على البرنامج الثابت الحالي ($version). يرجى التواصل مع الدعم بدلاً من إعادة محاولة التحديث.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15388,7 +15385,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15481,4 +15478,157 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'العودة إلى الرئيسية';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'الملخص عند انتهاء هذه المحادثة';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'عمليات الرفع بانتظار الخادم';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'الصوت الخاص بك آمن على جهازك أو هاتفك';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'الملخص حتى $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'النص المكتوب الأخير';
+
+  @override
+  String get finishAlreadySaved => 'تم الحفظ مسبقًا. إنها في الرئيسية.';
+
+  @override
+  String get finishAudioNotReceived => 'ما زال الصوت في طريقه.';
+
+  @override
+  String get finishFailedOffline => 'لم تكتمل العملية. صوتك في أمان.';
+
+  @override
+  String get finishFailed => 'لم تكتمل العملية. صوتك في أمان.';
+
+  @override
+  String get micBlockedCannotRecord => 'اسمح باستخدام الميكروفون للتسجيل.';
+
+  @override
+  String get couldNotStartRecording => 'تعذّر بدء التسجيل.';
+
+  @override
+  String get restorePurchasesFailed => 'تعذّر التحقق من خطتك.';
+
+  @override
+  String get firmwareCheckFailed => 'تعذّر التحقق من التحديثات.';
+
+  @override
+  String get conversationStillPublic => 'ما زالت مشتركة عبر الرابط.';
+
+  @override
+  String get goalSaveFailed => 'تعذّر حفظ هدفك.';
+
+  @override
+  String get goalDeleteFailed => 'تعذّر الحذف. تمت استعادة الهدف.';
+
+  @override
+  String get goalsLoadFailed => 'تعذّر تحميل أهدافك.';
+
+  @override
+  String get missingTargetEndedRecording => 'انتهى هذا التسجيل.';
+
+  @override
+  String get missingTargetMemory => 'هذه الذكرى لم تعد موجودة.';
+
+  @override
+  String get missingTargetTask => 'هذه المهمة لم تعد موجودة.';
+
+  @override
+  String get missingTargetConversation => 'تعذّر فتح هذه المحادثة.';
+
+  @override
+  String get couldNotRefreshConversations => 'تعذّر التحديث.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'قم بتوصيل جهاز Omi للمزامنة.';
+
+  @override
+  String get useDifferentAccountMessage => 'سيتم تسجيل خروجك، وستتم إعادة ضبط إعدادات Omi على هذا الهاتف.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'لم يُعثر على النظارات. هل هي قيد التشغيل؟';
+
+  @override
+  String get couldNotMoveTask => 'تعذّر نقل المهمة.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تم الحذف. تم الإبقاء على $count من المهام المقفلة.',
+      one: 'تم الحذف. تم الإبقاء على مهمة واحدة مقفلة.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'تعذّر حفظ هذا التغيير.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'تعذّر تحميل إعداداتك.';
+
+  @override
+  String get waitForOmiToFinish => 'انتظر حتى ينتهي Omi.';
+
+  @override
+  String get voiceNoteTooShort => 'قصير جدًا. اضغط مطولًا للتسجيل.';
+
+  @override
+  String get submitAppMissingFields => 'أضف اسمًا ووصفًا وصورة وفئة وقدرة لتتمكن من الإرسال.';
+
+  @override
+  String get appSetupNotFinished => 'لم يكتمل الإعداد بعد.';
+
+  @override
+  String get finishNothingKeptTitle => 'لا شيء للاحتفاظ به';
+
+  @override
+  String get submitAppFinishDetails => 'أكمل تفاصيل القدرة والتسعير أعلاه لتتمكن من الإرسال.';
+
+  @override
+  String get finishNothingNew => 'لا جديد بعد.';
+
+  @override
+  String get takingLongerThanUsual => 'يستغرق وقتًا أطول من المعتاد. سيكون في الرئيسية قريبًا.';
+
+  @override
+  String get couldNotCheckOnIt => 'تعذّر التحقق منه. حاول مرة أخرى.';
+
+  @override
+  String get upgradeToOpenThisOne => 'قم بالترقية لفتح هذه المحادثة.';
+
+  @override
+  String get missingTargetConversationGone => 'تم حذف هذه المحادثة.';
+
+  @override
+  String get cantConnectRightNow => 'لا يمكن الاتصال الآن.';
+
+  @override
+  String get loadOlderFailed => 'تعذّر تحميل العناصر الأقدم. انقر لإعادة المحاولة.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'جارٍ الاستماع · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'انتظر حتى ينتهي قبل تغييره.';
+
+  @override
+  String get finishedSummaryReady => 'الملخص جاهز';
+
+  @override
+  String get writingSummaryStatus => 'جارٍ كتابة الملخص…';
+
+  @override
+  String get stillWorkingOnIt => 'ما زلنا نعمل عليه.';
 }

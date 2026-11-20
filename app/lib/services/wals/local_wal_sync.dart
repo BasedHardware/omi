@@ -2289,7 +2289,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       // this pass. Once nothing else is pending it rejoins the candidates, so
       // a capped recording finishes in the same drain instead of stranding its
       // tail until a later pass — a custom-STT user confirms one sync, and a
-      // recording near the 30-day backfill deadline must not wait for a second
+      // recording near the server's backfill deadline must not wait for a second
       // confirmation the deadline may not survive (#14688).
       final waiting = turnPending.where((wal) => !deferredGroups.contains(groupKeys[wal])).toList();
       final candidates = waiting.isNotEmpty ? waiting : turnPending;

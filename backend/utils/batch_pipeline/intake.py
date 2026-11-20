@@ -1,5 +1,6 @@
 """Flagged sync admission. Failures never fall through to the legacy dispatcher."""
 
+import asyncio
 from dataclasses import replace
 from functools import partial
 import hashlib
@@ -29,8 +30,11 @@ from config.batch_pipeline_vendor_overflow import (
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_coverage_wait import decode_failure_memo_enabled
 from config.batch_pipeline_providers import provider_config
+from config.firestore_read_levers import lever_enabled
 from config.prerecorded_language import language_guard_enabled, language_class
+from config.stt_cap_dispatch import offline_enforcement_enabled
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
+from database import batch_pipeline_allowance_hold as allowance_hold
 from database import record_wal_handoff as wal_receipts
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -54,6 +58,7 @@ from utils.sync.receipt_clock import (
     FutureCaptureRetry,
 )
 from utils.batch_pipeline.repair_lineage import language_proof, lineage_record
+from utils.batch_pipeline.packing_counterfactual import IntakePacking
 from utils.capture.batch_coverage import covered_response
 from utils.sync.source_reuse_decode import decode_for_intake
 from config.refactor_modes import serving_for
@@ -71,6 +76,7 @@ from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
 from utils.metrics import OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL, OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL
 from utils.observability.fallback import record_fallback
+from utils.observability.stt_cap_dispatch import BATCH_ADMISSION_STAGE_SECONDS
 from utils.sync.admission_responses import sync_content_in_progress_response
 from utils.sync.stage import current_stage
 from utils.sync.capture import chunk_identity
@@ -89,6 +95,7 @@ HELD_REASON_CODE = 'batch_unit_held'
 
 
 SAMPLE_SCAN_SECONDS = 600  # a sampled upload is held and classified whole up to this much audio; larger stays legacy
+INTAKE_PROBE_SECONDS = 1.0
 
 
 def _speech_windows(wav: bytes) -> list[bytes] | None:
@@ -490,6 +497,50 @@ def _decode_failure_key(uid: str, content_id: str, paths: list[str]) -> str | No
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
+async def _probe_upload_allowance(
+    store, uid, policy, lane, items, source_aliases
+) -> allowance_hold.IntakeRefusal | None:
+    """Recognize the funded gate's monthly refusal using a verified usage total."""
+    if not (
+        policy.stt_route == 'parakeet'
+        and policy.provider_reason != 'byok'
+        and lane in {'fresh', 'backfill'}
+        and any(item.requires_compute_admission and item.segment_id not in source_aliases for item in items)
+        and offline_enforcement_enabled('batch')
+        and lever_enabled('usage_month_total', uid)
+    ):
+        return None
+
+    deadline = time.monotonic() + INTAKE_PROBE_SECONDS
+
+    def probe():
+        if time.monotonic() >= deadline or not allowance_hold.intake_enabled():
+            return None
+        from utils import funded_processing
+        from utils.stt_cap_dispatch import funded_allowance
+
+        if time.monotonic() >= deadline or not funded_processing.consent_allows(uid):
+            return None
+        key = owner_key(uid)
+        fence = store.run(lambda tx: allowance_hold.release_fence(tx.get(allowance_hold.OWNERS, key)))
+        if fence is None or time.monotonic() >= deadline:
+            return None
+        observed_at = time.time()
+        # The GPU gate uses the same monthly allowance for both lanes. Sync
+        # upload enforces the independent Unlimited V2 backfill day cap.
+        allowance = funded_allowance(uid, lane='batch', ready_usage_only=True)
+        if time.monotonic() < deadline and not allowance.managed and allowance.reason == 'plan_allowance_exhausted':
+            return allowance_hold.IntakeRefusal(observed_at, fence)
+        return None
+
+    try:
+        with BATCH_ADMISSION_STAGE_SECONDS.labels(stage='intake_funding').time():
+            return await asyncio.wait_for(run_blocking(db_executor, probe), timeout=INTAKE_PROBE_SECONDS)
+    except Exception as error:
+        logger.warning('event=batch_allowance_intake outcome=unevaluated exception_type=%s', type(error).__name__)
+        return None
+
+
 async def accept_upload(
     *,
     uid: str,
@@ -832,6 +883,21 @@ async def accept_upload(
         )
         phase = 'artifact_setup'
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
+        upload_arguments = {
+            'uid': uid,
+            'job_id': job_id,
+            'content_id': content_id,
+            'paths': paths,
+            'lane': lane,
+            'recording_age_seconds': recording_age_seconds,
+            'source': source,
+            'should_lock': should_lock,
+            'conversation_id': conversation_id,
+            'client_device_id': client_device_id,
+            'client_platform': client_platform,
+            'byok_enabled': byok_enabled,
+            'intake_context': intake_context,
+        }
         held_response = await _coalescing_try_offer(
             store,
             artifacts,
@@ -854,21 +920,7 @@ async def accept_upload(
                 language,
                 input_language,
             ),
-            {
-                'uid': uid,
-                'job_id': job_id,
-                'content_id': content_id,
-                'paths': paths,
-                'lane': lane,
-                'recording_age_seconds': recording_age_seconds,
-                'source': source,
-                'should_lock': should_lock,
-                'conversation_id': conversation_id,
-                'client_device_id': client_device_id,
-                'client_platform': client_platform,
-                'byok_enabled': byok_enabled,
-                'intake_context': intake_context,
-            },
+            upload_arguments,
             evidence,
         )
         if held_response is not None:
@@ -951,6 +1003,7 @@ async def accept_upload(
             queue, decisions = sample
         # A missing-input repair replays these exact decisions; it never probes again.
         repair_languages: dict[str, dict] = {}
+        packing = IntakePacking(upload_arguments, canonical_decode=decode is None)
         phase = 'decode'
         while unit := (
             queue.pop(0) if queue else None if sampled else await run_blocking(sync_executor, _next_unit, iterator)
@@ -983,6 +1036,7 @@ async def accept_upload(
                     staged, proposal = alias
                     items.append(staged)
                     source_aliases[item.segment_id] = proposal
+                    packing.note_alias(item.segment_id)
                     continue
             if len(items) in decisions:
                 # This unit was classified above under fresh authority (silent units on their own audio).
@@ -1005,6 +1059,7 @@ async def accept_upload(
                 probe_guard.raise_if_denied()
             proof = _frozen_language_proof(input_language, language_decision)
             repair_languages[item.segment_id] = proof
+            packing.note(item.segment_id, unit, proof)
             phase = 'freeze_audio'
             frozen = await run_blocking(
                 sync_executor,
@@ -1052,13 +1107,26 @@ async def accept_upload(
         wakes: dict[str, str] = {}
         phase = 'admit'
         outbox = await run_blocking(db_executor, outbox_for, OutboxKind.PROVIDER_STT) if provider else None
+        intake_refusal = await _probe_upload_allowance(store, uid, policy, lane, items, source_aliases)
+        accepted_at = time.time()
+        packing_observations = packing.observations(
+            subscription=user.get('subscription'),
+            protection=context,
+            policy=policy,
+            priority=seed.priority,
+            release=release,
+            now=accepted_at,
+            excluded=(provider, sampled, record_origin, repair_job_id, _coalescing_group, adopt, usage_period),
+            input_language=input_language,
+            language=language,
+        )
         outcome = await run_blocking(
             db_executor,
             admit,
             store,
             items,
             binding,
-            time.time(),
+            accepted_at,
             namespace=store.namespace,
             policy=policy,
             require_artifacts=True,
@@ -1084,6 +1152,8 @@ async def accept_upload(
             adopt=adopt,
             coalescing_group=_coalescing_group,
             source_aliases=source_aliases,
+            packing_observations=packing_observations,
+            intake_refusal=intake_refusal,
         )
         phase = 'wake'
         for row_id, wake_token in wakes.items():

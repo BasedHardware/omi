@@ -290,6 +290,9 @@ class VoiceRecorderProvider extends ChangeNotifier {
       if (pcmLength < minAudioBytes) {
         Logger.debug('Audio too short ($pcmLength bytes), closing without error');
         close();
+        // The note vanishes, so say why (H5).
+        final l10n = globalNavigatorKey.currentContext?.l10n;
+        if (l10n != null) AppSnackbar.showSnackbar(l10n.voiceNoteTooShort);
         return;
       }
 

@@ -65,6 +65,7 @@ def main_endpoint():
 @pytest.mark.parametrize('mixed', [False, True])
 def test_early_upload_job_and_context_documents_equal_main(client, monkeypatch, tmp_path, future_enabled, mixed):
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', str(future_enabled).lower())
+    monkeypatch.setenv('BATCH_PIPELINE_PACKING_SAMPLE_RATE', '0.001')
     monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'false')
     monkeypatch.setattr(router.time, 'time', lambda: NOW)
@@ -174,9 +175,19 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
     ]:
         actual = (ROOT / path).read_text()
         if path.endswith('/capture_decode.py'):
-            actual = actual.replace(
-                'validated_frame_count = _frame_count\n', ''
-            )  # New export only, no changed early code.
+            # Exclude only the export and source-frame telemetry. Every byte
+            # involved in the actual early-clock decode and placement stays pinned.
+            diagnostic = (
+                'validated_frame_count = _frame_count\n',
+                '            if received_at is None:\n'
+                '                unit = replace(unit, source_frames=len(pcm) // 2 - padding_frames)\n',
+                '        padding_frames = 0\n',
+                '                padding_frames = 0\n',
+                '                    padding_frames = 0\n',
+                '                padding_frames += gap\n',
+            )
+            for fragment in sorted(diagnostic, key=len, reverse=True):
+                actual = actual.replace(fragment, '')
         baseline = main_source(path)
         if path.endswith(('/pipeline.py', '/wal_audio_coverage.py')):
             # Only the staging seam gains an opt-in provenance probe. Compare

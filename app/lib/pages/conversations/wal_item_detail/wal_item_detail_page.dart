@@ -12,6 +12,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/widgets/waveform_section.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
 
 class WalItemDetailPage extends StatefulWidget {
   final Wal wal;
@@ -571,11 +572,12 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   void _showDeleteDialog(BuildContext context) async {
-    final uploading = widget.wal.syncDisplayState == WalSyncDisplayState.uploaded;
+    final copy =
+        walDeleteConfirmation(context.l10n, [widget.wal], notUploadedMessage: context.l10n.deleteRecordingConfirmation);
     final confirmed = await showOmiConfirm(
       context,
-      title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
-      message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.deleteRecordingConfirmation,
+      title: copy.title,
+      message: copy.message,
       confirmLabel: context.l10n.delete,
       destructive: true,
     );

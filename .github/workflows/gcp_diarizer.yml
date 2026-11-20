@@ -54,6 +54,11 @@ on:
         required: false
         default: false
         type: boolean
+      worker_dry_run:
+        description: 'Preserve-live only, under the shared lock; never writes, builds or pushes. Without a rollback receipt: forward admission plus a no-op prior-image admission (inverse not verified). With worker_rollback_receipt: server dry-run of the real inverse CAS'
+        required: false
+        default: false
+        type: boolean
 
 # Serialize Helm writers per GPU service and environment.
 # B5 (named by David, 2026-10-19 fourth round #9): every prod deploy writer shares the
@@ -92,6 +97,7 @@ jobs:
           SOURCE_REF: ${{ inputs.branch }}
           CANDIDATE_DIGEST: ${{ inputs.image_digest }}
           BREAK_GLASS_LOCK: ${{ inputs.break_glass_lock }}
+          DRY_RUN: ${{ inputs.worker_dry_run }}
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
@@ -105,6 +111,16 @@ jobs:
           elif [[ -n "$LIVE_BASELINE" ]]; then
             echo "worker_live_baseline requires preserve_live_worker" >&2
             exit 1
+          fi
+          if [[ "$DRY_RUN" == true ]]; then
+            # A dry-run holds the shared prod-train lock and promotes an existing digest (no build or
+            # push). With a rollback receipt it rehearses the real inverse; the rollback checks below apply.
+            [[ "${{ inputs.environment }}" == prod && "$SERVICE" == batch-pipeline-worker && "$PRESERVE_LIVE" == true \
+               && -n "$LIVE_BASELINE" && "$BREAK_GLASS_LOCK" != true \
+               && "$CANDIDATE_DIGEST" =~ ^sha256:[abcdef0-9]{64}$ ]] || {
+              echo "worker_dry_run requires prod preserve-live batch-pipeline-worker, the shared lock and an explicit digest" >&2
+              exit 1
+            }
           fi
           if [[ -n "$ROLLBACK_RECEIPT" ]]; then
             [[ "$PRESERVE_LIVE" == true && "$BREAK_GLASS_LOCK" != true && "$SOURCE_REF" =~ ^[abcdef0-9]{40}$ && "$CANDIDATE_DIGEST" =~ ^sha256:[abcdef0-9]{64}$ ]] || {
@@ -264,7 +280,7 @@ jobs:
 
       - name: Build and Push Docker image
         id: build
-        if: github.event.inputs.image_digest == ''
+        if: github.event.inputs.image_digest == '' && inputs.worker_dry_run != true
         env:
           IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
           DOCKERFILE: ${{ steps.target.outputs.dockerfile }}
@@ -290,6 +306,8 @@ jobs:
       - name: Verify promoted worker digest
         id: promote
         if: github.event.inputs.image_digest != ''
+        # Reachable in worker_dry_run mode, which holds prod-train: bound the registry read.
+        timeout-minutes: 5
         env:
           IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
           IMAGE_DIGEST: ${{ github.event.inputs.image_digest }}
@@ -319,7 +337,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Deploy Diarizer to GKE cluster using Helm
-        if: inputs.preserve_live_worker != true
+        if: inputs.preserve_live_worker != true && inputs.worker_dry_run != true
         env:
           DEPLOY_NAMESPACE: ${{ vars.ENV }}-omi-backend
           TARGET_CHART: ${{ steps.target.outputs.chart }}
@@ -346,8 +364,38 @@ jobs:
 
       # Uses workflow-owned controls even when the runtime source predates this mode.
       # Default success() is intentional: never write after a failed source/index/image gate.
+      - name: Dry-run worker image preserving live runtime
+        if: inputs.preserve_live_worker == true && inputs.worker_dry_run == true
+        env:
+          LIVE_BASELINE: ${{ inputs.worker_live_baseline }}
+          ROLLBACK_RECEIPT: ${{ inputs.worker_rollback_receipt }}
+          IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
+          IMAGE_DIGEST: ${{ steps.promote.outputs.image_digest }}
+          # The helper refuses every API call other than a read or a server dry-run patch while set.
+          WORKER_IMAGE_ONLY_DRY_RUN: "1"
+        run: |
+          set -euo pipefail
+          umask 077
+          echo "$LIVE_BASELINE" > "$RUNNER_TEMP/worker-live-baseline.json"
+          rollback_args=()
+          if [[ -n "$ROLLBACK_RECEIPT" ]]; then
+            echo "$ROLLBACK_RECEIPT" > "$RUNNER_TEMP/worker-rollback-receipt.json"
+            rollback_args=(--rollback-receipt "$RUNNER_TEMP/worker-rollback-receipt.json")
+          fi
+          python3 .github/worker-workflow/.github/scripts/worker_image_only.py dry-run \
+            --baseline "$RUNNER_TEMP/worker-live-baseline.json" \
+            --image "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}" \
+            "${rollback_args[@]}" \
+            --receipt "$RUNNER_TEMP/worker-dry-run-receipt.json" | tee "$RUNNER_TEMP/worker-dry-run.json"
+          {
+            echo '### Worker preserve-live dry-run receipt (no write)'
+            echo '```json'
+            cat "$RUNNER_TEMP/worker-dry-run.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Deploy worker image preserving live runtime
-        if: inputs.preserve_live_worker == true
+        if: inputs.preserve_live_worker == true && inputs.worker_dry_run != true
         env:
           LIVE_BASELINE: ${{ inputs.worker_live_baseline }}
           ROLLBACK_RECEIPT: ${{ inputs.worker_rollback_receipt }}
@@ -380,6 +428,7 @@ jobs:
       # 1500 s drain, so its wait covers drain plus GPU startup. A lost runner (run
       # 39456573983, 2026-10-20) still ends with no conclusion: re-run the job.
       - name: Verify rollout
+        if: inputs.worker_dry_run != true
         timeout-minutes: 45
         env:
           DEPLOY_NAMESPACE: ${{ vars.ENV }}-omi-backend
@@ -442,7 +491,7 @@ jobs:
           timeout 120 python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE"
 
       - name: Verify preserved worker runtime and sibling bindings
-        if: inputs.preserve_live_worker == true
+        if: inputs.preserve_live_worker == true && inputs.worker_dry_run != true
         run: |
           python3 .github/worker-workflow/.github/scripts/worker_image_only.py verify \
             --receipt "$RUNNER_TEMP/worker-image-receipt.json"
@@ -453,7 +502,7 @@ jobs:
         with:
           deployment_tag: ${{ steps.vars.outputs.short_sha || 'unadmitted' }}
           environment: ${{ github.event.inputs.environment }}
-          release_version: ${{ github.event.inputs.release_version }}
+          release_version: ${{ inputs.worker_dry_run == true && 'DRY-RUN (no write)' || github.event.inputs.release_version }}
           status: ${{ job.status }}
           service: ${{ env.SERVICE }}
 
@@ -463,7 +512,7 @@ jobs:
         with:
           deployment_tag: ${{ steps.vars.outputs.short_sha || 'unadmitted' }}
           environment: ${{ github.event.inputs.environment }}
-          release_version: ${{ github.event.inputs.release_version }}
+          release_version: ${{ inputs.worker_dry_run == true && 'DRY-RUN (no write)' || github.event.inputs.release_version }}
           status: ${{ job.status }}
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}

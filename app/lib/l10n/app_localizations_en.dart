@@ -9079,7 +9079,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can\'t be recovered. Delete anyway?';
+      'This recording is already uploaded and Omi is processing it. Deleting it here removes the phone\'s copy. If processing fails, Omi can\'t retry from this phone.';
 
   @override
   String get syncCardAllBackedUp => 'All recordings synced';
@@ -14475,14 +14475,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Recently';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Disconnected for $duration';
-  }
-
-  @override
   String get deviceControls => 'Controls';
 
   @override
@@ -15419,6 +15411,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'The update didn\'t install. Your pendant still works on its current firmware ($version). Please contact support rather than retrying the update.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15460,7 +15457,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15553,4 +15550,157 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Back to Home';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Summary when this conversation ends';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads waiting on the server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Your audio is safe on your device or phone';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Summary through $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Recent transcript';
+
+  @override
+  String get finishAlreadySaved => 'Already saved. It\'s on Home.';
+
+  @override
+  String get finishAudioNotReceived => 'Audio\'s still on its way.';
+
+  @override
+  String get finishFailedOffline => 'Didn\'t go through. Your audio is safe.';
+
+  @override
+  String get finishFailed => 'Didn\'t go through. Your audio is safe.';
+
+  @override
+  String get micBlockedCannotRecord => 'Allow the microphone to record.';
+
+  @override
+  String get couldNotStartRecording => 'Couldn\'t start recording.';
+
+  @override
+  String get restorePurchasesFailed => 'Couldn\'t check your plan.';
+
+  @override
+  String get firmwareCheckFailed => 'Couldn\'t check for updates.';
+
+  @override
+  String get conversationStillPublic => 'It\'s still shared by link.';
+
+  @override
+  String get goalSaveFailed => 'Couldn\'t save your goal.';
+
+  @override
+  String get goalDeleteFailed => 'Couldn\'t delete. Goal restored.';
+
+  @override
+  String get goalsLoadFailed => 'Couldn\'t load your goals.';
+
+  @override
+  String get missingTargetEndedRecording => 'That recording has ended.';
+
+  @override
+  String get missingTargetMemory => 'That memory is gone.';
+
+  @override
+  String get missingTargetTask => 'That task is gone.';
+
+  @override
+  String get missingTargetConversation => 'Couldn\'t open this conversation.';
+
+  @override
+  String get couldNotRefreshConversations => 'Couldn\'t refresh.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Connect your Omi to sync.';
+
+  @override
+  String get useDifferentAccountMessage => 'You\'ll be signed out, and this phone\'s Omi settings will be reset.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Glasses not found. Are they on?';
+
+  @override
+  String get couldNotMoveTask => 'Couldn\'t move the task.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Deleted. $count locked tasks were kept.',
+      one: 'Deleted. 1 locked task was kept.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Couldn\'t save that change.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Couldn\'t load your settings.';
+
+  @override
+  String get waitForOmiToFinish => 'Wait for Omi to finish.';
+
+  @override
+  String get voiceNoteTooShort => 'Too short. Hold to record.';
+
+  @override
+  String get submitAppMissingFields => 'Add a name, description, image, category and capability to submit.';
+
+  @override
+  String get appSetupNotFinished => 'Setup isn\'t finished yet.';
+
+  @override
+  String get finishNothingKeptTitle => 'Nothing to Keep';
+
+  @override
+  String get submitAppFinishDetails => 'Finish the capability and pricing details above to submit.';
+
+  @override
+  String get finishNothingNew => 'Nothing new yet.';
+
+  @override
+  String get takingLongerThanUsual => 'Taking longer than usual. We\'ll have it on Home.';
+
+  @override
+  String get couldNotCheckOnIt => 'Couldn\'t check on it. Try again.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Upgrade to open this one.';
+
+  @override
+  String get missingTargetConversationGone => 'That conversation was deleted.';
+
+  @override
+  String get cantConnectRightNow => 'Can\'t connect right now.';
+
+  @override
+  String get loadOlderFailed => 'Couldn\'t load older ones. Tap to retry.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Listening · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Wait until it ends to change it.';
+
+  @override
+  String get finishedSummaryReady => 'Summary ready';
+
+  @override
+  String get writingSummaryStatus => 'Writing summary…';
+
+  @override
+  String get stillWorkingOnIt => 'Still working on it.';
 }

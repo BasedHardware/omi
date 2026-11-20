@@ -42,6 +42,11 @@ REASONS = frozenset(
 )
 CHECKS = Counter('privacy_checks_total', 'Privacy check decisions', ['family', 'mode', 'reason', 'plan_group'])
 CALLS = Counter('privacy_check_calls_total', 'Privacy check calls including invalid inputs', ['family', 'mode'])
+ACCOUNT_AUTHORITY_WRITES = Counter(
+    'omi_batch_pipeline_account_privacy_writes_total',
+    'Committed account authority writes observed by the Firestore interceptor',
+    ['writer_class', 'field_group', 'certified'],
+)
 READS = Counter(
     'privacy_check_reads_total', 'Privacy document reads issued', ['family', 'mode', 'result', 'plan_group']
 )

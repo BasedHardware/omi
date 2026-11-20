@@ -6,16 +6,14 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
-import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_tabs.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/episode_content.dart';
-import 'package:omi/pages/episodes/finished_capture_page.dart';
+import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/pages/episodes/previous_episode_link.dart';
 import 'package:omi/pages/episodes/live_transcript_view.dart';
@@ -34,20 +32,6 @@ import 'package:omi/widgets/capture_sources.dart';
 /// the user lands there with no flash of the previous page.
 void switchHomeToConversationsTab(BuildContext context) {
   context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
-}
-
-/// The page Finish opens for the conversation Process Now returned, or null to go back to Home. A v3
-/// answer is the recording document, which no page shows: wait on the processing page for the
-/// conversation made from it.
-/// Process Now answered with the recording itself still in progress: the server found nothing to
-/// process in it (no transcript and no stored audio), so no conversation will come from it.
-bool processRefusedNothing(ServerConversation? conversation) =>
-    conversation != null && conversation.v3?.recording == true && conversation.status == ConversationStatus.in_progress;
-
-Widget? finishedCapturePageFor(ServerConversation? conversation) {
-  if (conversation == null || conversation.discarded) return null;
-  if (conversation.v3?.recording == true) return FinishedCapturePage(recordingId: conversation.id);
-  return ConversationDetailPage(conversation: conversation);
 }
 
 enum LiveEpisodeTab { summary, transcript }
@@ -80,6 +64,11 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   EpisodeProvider? _episodes;
   bool _mutePending = false;
   bool _finishing = false;
+
+  /// The transcript on screen at the last Finish, kept until the server answers (and after a
+  /// failure, with [_retryPending] so the next Finish sends it again).
+  HeldCapture? _held;
+  bool _retryPending = false;
   Timer? _tick;
 
   @override
@@ -129,88 +118,41 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
 
   /// Finish (and Wrap Up Now): the one stop. No confirmation: it is explicit. It processes the
   /// conversation (a phone recording stops first) and opens it: its page when the server already
-  /// made it, otherwise a processing page that turns into it. A fresh live episode starts counting
-  /// from now. It never pauses the pendant: with nothing new since the last boundary there is
-  /// nothing to process, and the clock still restarts. Lines from the on-device preview count as
-  /// something to process: a batch pendant's live page shows only those.
+  /// made it, otherwise a processing page that turns into it ([finishLiveCapture],
+  /// [presentFinishOutcome]). Until the server answers, and after a failure, the transcript the
+  /// reader saw stays on screen; a failure keeps them here with Try Again, which sends it again.
   Future<void> _stopConversation(CaptureProvider provider) async {
     // One Finish at a time: a second tap while the first is processing would pop Home before the
     // conversation's page opens.
-    if (_finishing) return;
-    setState(() => _finishing = true);
+    if (_finishing || !mounted) return;
+    final now = holdCapture(provider);
+    final before = _held;
+    setState(() {
+      _finishing = true;
+      _held = before == null
+          ? now
+          : now == null
+              ? before
+              : (segments: [...before.segments, ...now.segments], photos: [...before.photos, ...now.photos]);
+    });
+    var stays = false;
     try {
-      await _finishOnce(provider);
+      final outcome = await finishLiveCapture(provider, episodes: _episodes, retry: _retryPending);
+      if (!mounted) return;
+      stays = presentFinishOutcome(
+        context,
+        outcome,
+        entry: FinishEntry.livePage,
+        onRetry: () => _stopConversation(provider),
+      );
+      _retryPending = stays;
     } finally {
-      if (mounted) setState(() => _finishing = false);
-    }
-  }
-
-  Future<void> _finishOnce(CaptureProvider provider) async {
-    final preview = provider.livePreview;
-    final closed = provider.lastServerClose;
-    final recentClose =
-        closed != null && DateTime.now().difference(closed.at) < const Duration(minutes: 5) ? closed : null;
-    final finished = provider.lastClientFinish;
-    final closeIsLatest = recentClose != null && (finished == null || recentClose.at.isAfter(finished.at));
-    // Words the preview heard before the last close or Finish were already processed (the preview
-    // keeps its lines across both). A new preview session starts its count again.
-    final baseline = closeIsLatest
-        ? (words: recentClose.previewWords, session: recentClose.previewSession)
-        : finished == null
-            ? null
-            : (words: finished.previewWords, session: finished.previewSession);
-    final heardSinceClose = preview != null &&
-        (baseline == null || baseline.session != preview.sessionGeneration
-            ? preview.lines.isNotEmpty
-            : preview.totalWordsSeen > baseline.words);
-    final hadContent = provider.segments.isNotEmpty || provider.photos.isNotEmpty || heardSinceClose;
-    Widget? opens;
-    var nothing = false;
-    if (hadContent) {
-      final previousFinish = provider.lastClientFinish;
-      provider.noteClientFinish();
-      // Ending the capture fires the shared finalize hook, which closes the episode.
-      final result = await _finish(provider);
-      // No answer (offline, a server error): nothing was processed, so a retry must still send it.
-      if (result == null) provider.lastClientFinish = previousFinish;
-      if (!mounted) return;
-      switchHomeToConversationsTab(context);
-      nothing = processRefusedNothing(result?.conversation);
-      opens = nothing ? null : finishedCapturePageFor(result?.conversation);
-    } else {
-      final source = provider.liveCaptureSource;
-      if (source == null || source == ConversationSource.phone.name) {
-        await provider.stopStreamRecording();
+      if (mounted) {
+        setState(() {
+          _finishing = false;
+          if (!stays) _held = null;
+        });
       }
-      final episodes = _episodes;
-      if (episodes != null && episodes.enabled) episodes.onLiveFinalized();
-      if (!mounted) return;
-      if (closeIsLatest) {
-        // The server closed it on its own just before the tap: open that one.
-        switchHomeToConversationsTab(context);
-        opens = FinishedCapturePage(recordingId: recentClose.id);
-      } else {
-        nothing = true;
-      }
-    }
-    if (nothing) OmiFeedback.info(context, context.l10n.finishNothingToProcess);
-    // A swipe back during the finish has already popped this route; it only stays mounted while it
-    // animates out, and a pop then would take Home with it and leave the navigator empty.
-    final route = ModalRoute.of(context);
-    if (route == null || !route.isCurrent) return;
-    if (opens != null) {
-      unawaited(Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => opens!)));
-    } else {
-      Navigator.of(context).pop();
-    }
-  }
-
-  /// The Process Now answer, or null when this finish made no request (a phone batch recording).
-  Future<CreateConversationResponse?> _finish(CaptureProvider provider) async {
-    try {
-      return await provider.finishCaptureWithResult();
-    } on StateError {
-      return null;
     }
   }
 
@@ -250,36 +192,43 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
           final source => CaptureSources.label(context, source),
         },
       ),
-      body: LiveTranscriptView(topConversationId: widget.topConversationId, rejectSpeaker: widget.rejectSpeaker),
+      body: LiveTranscriptView(
+        topConversationId: widget.topConversationId,
+        rejectSpeaker: widget.rejectSpeaker,
+        held: _held,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       // Pause/Resume (a pause glyph: mics belong to Ask Omi) and Finish, the one stop.
-      floatingActionButton:
-          (provider.liveCaptureSource != null || provider.segments.isNotEmpty || provider.photos.isNotEmpty)
-              ? Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (EpisodePresentation.canPause(provider)) ...[
-                      OmiIconButton.filled(
-                        key: const Key('capture_pause_button'),
-                        icon: Icon(effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26),
-                        label: effectivelyMuted ? context.l10n.resume : context.l10n.pause,
-                        diameter: 52,
-                        fillColor: OmiColors.surface3,
-                        onPressed: _mutePending || provider.isCallActive ? null : () => _toggleMute(provider),
-                      ),
-                      const SizedBox(width: OmiSpacing.sm),
-                    ],
-                    OmiButton(
-                      key: const Key('process_now_button'),
-                      label: context.l10n.finish,
-                      leading: const Icon(Icons.check_rounded),
-                      isLoading: _finishing,
-                      onPressed: () => _stopConversation(provider),
-                    ),
-                  ],
-                )
-              : null,
+      floatingActionButton: (provider.liveCaptureSource != null ||
+              provider.segments.isNotEmpty ||
+              provider.photos.isNotEmpty ||
+              _finishing ||
+              _held != null)
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (EpisodePresentation.canPause(provider)) ...[
+                  OmiIconButton.filled(
+                    key: const Key('capture_pause_button'),
+                    icon: Icon(effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26),
+                    label: effectivelyMuted ? context.l10n.resume : context.l10n.pause,
+                    diameter: 52,
+                    fillColor: OmiColors.surface3,
+                    onPressed: _mutePending || provider.isCallActive ? null : () => _toggleMute(provider),
+                  ),
+                  const SizedBox(width: OmiSpacing.sm),
+                ],
+                OmiButton(
+                  key: const Key('process_now_button'),
+                  label: context.l10n.finish,
+                  leading: const Icon(Icons.check_rounded),
+                  isLoading: _finishing,
+                  onPressed: () => _stopConversation(provider),
+                ),
+              ],
+            )
+          : null,
     );
   }
 
@@ -361,13 +310,14 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                   episode: episode ?? _emptyEpisode(now),
                   onDismissItem: (item) => _dismiss(context, episodes, item),
                   jumpToLatestBottom: 120,
+                  held: _held,
                 ),
               ],
             ),
           ),
         ],
       ),
-      bottomNavigationBar: hasCapture
+      bottomNavigationBar: hasCapture || _finishing || _held != null
           ? _wrapUpBar(context, episodes, paused: context.select<CaptureProvider, bool>((c) => c.isPaused))
           : null,
     );

@@ -9159,7 +9159,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Diese Aufnahme wurde hochgeladen, aber Omi erstellt die Konversation noch. Wenn du sie jetzt löschst und die Verarbeitung fehlschlägt, kann sie nicht wiederhergestellt werden. Trotzdem löschen?';
+      'Diese Aufnahme ist bereits hochgeladen und wird von Omi verarbeitet. Löschen entfernt hier die Kopie auf dem Telefon. Wenn die Verarbeitung fehlschlägt, kann Omi es von diesem Telefon aus nicht erneut versuchen.';
 
   @override
   String get syncCardAllBackedUp => 'Alle Aufnahmen synchronisiert';
@@ -14601,14 +14601,6 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Kürzlich';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration getrennt';
-  }
-
-  @override
   String get deviceControls => 'Steuerung';
 
   @override
@@ -15549,6 +15541,11 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Das Update wurde nicht installiert. Dein Anhänger funktioniert weiter mit der aktuellen Firmware ($version). Bitte wende dich an den Support, statt das Update erneut zu versuchen.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15591,7 +15588,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15684,4 +15681,158 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'Zur Startseite';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Zusammenfassung, wenn dieses Gespräch endet';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads, die auf dem Server warten';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ihr Audio ist auf Ihrem Gerät oder Telefon sicher';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Zusammenfassung bis $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Neuestes Transkript';
+
+  @override
+  String get finishAlreadySaved => 'Bereits gespeichert. Du findest sie unter Start.';
+
+  @override
+  String get finishAudioNotReceived => 'Das Audio ist noch unterwegs.';
+
+  @override
+  String get finishFailedOffline => 'Das hat nicht geklappt. Dein Audio ist sicher.';
+
+  @override
+  String get finishFailed => 'Das hat nicht geklappt. Dein Audio ist sicher.';
+
+  @override
+  String get micBlockedCannotRecord => 'Erlaube den Mikrofonzugriff für Aufnahmen.';
+
+  @override
+  String get couldNotStartRecording => 'Die Aufnahme konnte nicht gestartet werden.';
+
+  @override
+  String get restorePurchasesFailed => 'Dein Plan konnte nicht überprüft werden.';
+
+  @override
+  String get firmwareCheckFailed => 'Updates konnten nicht überprüft werden.';
+
+  @override
+  String get conversationStillPublic => 'Sie ist noch per Link geteilt.';
+
+  @override
+  String get goalSaveFailed => 'Dein Ziel konnte nicht gespeichert werden.';
+
+  @override
+  String get goalDeleteFailed => 'Löschen fehlgeschlagen. Dein Ziel wurde wiederhergestellt.';
+
+  @override
+  String get goalsLoadFailed => 'Deine Ziele konnten nicht geladen werden.';
+
+  @override
+  String get missingTargetEndedRecording => 'Diese Aufnahme ist beendet.';
+
+  @override
+  String get missingTargetMemory => 'Diese Erinnerung ist weg.';
+
+  @override
+  String get missingTargetTask => 'Diese Aufgabe ist weg.';
+
+  @override
+  String get missingTargetConversation => 'Diese Unterhaltung konnte nicht geöffnet werden.';
+
+  @override
+  String get couldNotRefreshConversations => 'Konnte nicht aktualisiert werden.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Verbinde dein Omi, um zu synchronisieren.';
+
+  @override
+  String get useDifferentAccountMessage =>
+      'Du wirst abgemeldet, und die Omi-Einstellungen auf diesem Telefon werden zurückgesetzt.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Brille nicht gefunden. Ist sie eingeschaltet?';
+
+  @override
+  String get couldNotMoveTask => 'Die Aufgabe konnte nicht verschoben werden.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Gelöscht. $count gesperrte Aufgaben wurden beibehalten.',
+      one: 'Gelöscht. 1 gesperrte Aufgabe wurde beibehalten.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Die Änderung konnte nicht gespeichert werden.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Deine Einstellungen konnten nicht geladen werden.';
+
+  @override
+  String get waitForOmiToFinish => 'Warte, bis Omi fertig ist.';
+
+  @override
+  String get voiceNoteTooShort => 'Zu kurz. Zum Aufnehmen gedrückt halten.';
+
+  @override
+  String get submitAppMissingFields => 'Füge Name, Beschreibung, Bild, Kategorie und Fähigkeit hinzu, um einzureichen.';
+
+  @override
+  String get appSetupNotFinished => 'Die Einrichtung ist noch nicht abgeschlossen.';
+
+  @override
+  String get finishNothingKeptTitle => 'Nichts zu behalten';
+
+  @override
+  String get submitAppFinishDetails => 'Vervollständige oben die Angaben zur Fähigkeit und zum Preis, um einzureichen.';
+
+  @override
+  String get finishNothingNew => 'Noch nichts Neues.';
+
+  @override
+  String get takingLongerThanUsual => 'Dauert länger als üblich. Du findest sie gleich unter Start.';
+
+  @override
+  String get couldNotCheckOnIt => 'Konnte nicht nachsehen. Versuch es erneut.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Führe ein Upgrade durch, um diese zu öffnen.';
+
+  @override
+  String get missingTargetConversationGone => 'Diese Unterhaltung wurde gelöscht.';
+
+  @override
+  String get cantConnectRightNow => 'Gerade keine Verbindung möglich.';
+
+  @override
+  String get loadOlderFailed => 'Ältere Einträge konnten nicht geladen werden. Zum Wiederholen tippen.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Hört zu · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Warte bis zum Ende, um sie zu ändern.';
+
+  @override
+  String get finishedSummaryReady => 'Zusammenfassung bereit';
+
+  @override
+  String get writingSummaryStatus => 'Zusammenfassung wird erstellt…';
+
+  @override
+  String get stillWorkingOnIt => 'Wir arbeiten noch daran.';
 }

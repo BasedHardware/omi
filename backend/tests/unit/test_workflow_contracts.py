@@ -191,6 +191,24 @@ def test_workflow_contract_directory_glob_selects_nested_chart_test(selector_and
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
+@pytest.mark.parametrize(
+    'source',
+    [
+        'backend/charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml',
+        'backend/charts/batch-pipeline-worker/values.yaml',
+    ],
+)
+def test_batch_worker_chart_edits_select_the_hpa_replay_pins(selector_and_all_tests, source):
+    # A floor or target edit in the worker chart must run the replay tests that pin the live
+    # bounds and the queueing witness (#25842 changed the floor without running them).
+    selector, all_tests = selector_and_all_tests
+    selected, reason = selector.tests_for_changed_paths([source], all_tests)
+    assert 'tests/unit/test_batch_pipeline_hpa_capacity_replay.py' in selected
+    assert 'tests/unit/test_batch_pipeline_hpa_retune_replay.py' in selected
+    assert 'tests/unit/test_batch_pipeline_hpa_max_replay.py' in selected
+    assert reason == 'selected backend unit tests from changed paths and workflow contracts'
+
+
 def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector_and_all_tests):
     """Docs/AGENTS skip selection; metrics is not a FULL_RUN_GLOBS hit."""
     selector, all_tests = selector_and_all_tests
@@ -1672,7 +1690,7 @@ def test_firestore_gate_policy_rejects_orphaned_readiness_dependency():
 _LANE_SOURCE_BINDINGS = {
     'gcp_backend.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'gcp_diarizer.yml': '${{ steps.vars.outputs.source_sha }}',
-    'gcp_backend_auto_dev.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
+    'gcp_backend_auto_dev.yml': '${{ needs.admit_source.outputs.admitted_sha }}',
     'desktop_backend_prod.yml': '${{ steps.admitted-source.outputs.source_sha }}',
     'desktop_backend_auto_dev.yml': '${{ steps.candidate-identity.outputs.source_sha }}',
     'gcp_llm_gateway.yml': '${{ env.CHECKED_OUT_SHA }}',
@@ -1729,14 +1747,22 @@ def test_firestore_gate_lane_source_and_target_bindings():
     auto_dev = (workflows / 'gcp_backend_auto_dev.yml').read_text(encoding='utf-8')
     assert "verify_credential_project: 'true'" in auto_dev
 
-    scope_match = re.search(r"grep -Eq '([^']+)' <<<\"\$changed_files\"", auto_dev)
-    assert scope_match, 'auto-dev scope grep must keep its changed-files contract'
-    pattern = scope_match.group(1)
+    scope_patterns = re.findall(r"grep -Eq '([^']+)' <<<\"\$changed_files\"", auto_dev)
+    assert len(scope_patterns) >= 2, 'auto-dev must independently scope workerd publication and backend deployment'
+    workerd_pattern = next(
+        (pattern for pattern in scope_patterns if re.search(pattern, 'backend-go/cmd/workerd/main.go')),
+        None,
+    )
+    assert workerd_pattern, 'auto-dev scope must select backend-go source for workerd publication'
     for gate_path in (
         '.github/actions/firestore-readiness/action.yml',
         '.github/actions/deploy-backend-stack/action.yml',
     ):
-        assert re.search(pattern, gate_path), f'auto deploy scope regex must match {gate_path}'
+        backend_pattern = next((pattern for pattern in scope_patterns if re.search(pattern, gate_path)), None)
+        assert backend_pattern, f'auto backend deploy scope regex must match {gate_path}'
+        assert not re.search(
+            workerd_pattern, gate_path
+        ), f'workerd-only scope must not match backend deployment input {gate_path}'
 
 
 def test_listen_gate_is_the_conditional_source_sha_gate():
@@ -1968,7 +1994,7 @@ def test_no_customer_data_gate_for_central_or_qa():
             workflow, name=workflow_name, local_actions=local_actions, dockerfiles=dockerfiles
         )
         assert violations == [], violations
-        assert 'project_id: based-hardware' not in workflow, workflow_name
+        assert not re.search(r"(?m)^\s*project_id:\s*['\"]?based-hardware['\"]?\s*$", workflow), workflow_name
 
 
 def test_firestore_gate_contract_selects_the_coverage_guard(selector_and_all_tests):
