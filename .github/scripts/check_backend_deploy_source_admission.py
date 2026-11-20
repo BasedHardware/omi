@@ -50,7 +50,7 @@ MANUAL_TRAFFIC_REPAIR_CONDITION = "\n".join(
     )
 )
 MANUAL_DEPLOY_JOB_NEEDS = "needs: [validate-production-boundary, firestore_readiness, record_break_glass]"
-MANUAL_DEPLOY_JOB_CONDITION = "\n".join(
+_MANUAL_ADMITTED_JOB_CONDITION = "\n".join(
     (
         "always() &&",
         "github.ref == 'refs/heads/main' &&",
@@ -60,7 +60,19 @@ MANUAL_DEPLOY_JOB_CONDITION = "\n".join(
         "(needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
     )
 )
-MANUAL_BUILD_ONLY_JOB_CONDITION = MANUAL_DEPLOY_JOB_CONDITION.replace(
+# SCA-3120: the stack deploy job never runs for the explicit projection pump selection;
+# deploy-projection-pump owns that singleton under the same admission jobs.
+MANUAL_DEPLOY_JOB_CONDITION = _MANUAL_ADMITTED_JOB_CONDITION.replace(
+    "github.event.inputs.mode == 'deploy' &&",
+    "github.event.inputs.mode == 'deploy' &&\ngithub.event.inputs.cloud_run_service != 'backend-projection-pump' &&",
+)
+MANUAL_PROJECTION_PUMP_JOB_CONDITION = _MANUAL_ADMITTED_JOB_CONDITION.replace(
+    "github.event.inputs.mode == 'deploy' &&",
+    "github.event.inputs.mode == 'deploy' &&\n"
+    "github.event.inputs.environment == 'prod' &&\n"
+    "github.event.inputs.cloud_run_service == 'backend-projection-pump' &&",
+)
+MANUAL_BUILD_ONLY_JOB_CONDITION = _MANUAL_ADMITTED_JOB_CONDITION.replace(
     "github.event.inputs.mode == 'deploy' &&", "github.event.inputs.mode == 'build-only' &&"
 ).replace("always() &&", "always() && !cancelled() &&", 1)
 MANUAL_BUILD_ONLY_HEAD_CHECK = '"$head_sha" != "$ADMITTED_SHA"'
@@ -728,14 +740,35 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
         )
         if folded_job_condition(deploy_job) != MANUAL_DEPLOY_JOB_CONDITION:
             errors.append("manual deployment must gate break-glass deploys on a successful audit record")
+        # Scoped to the deploy job: the projection pump job carries the same line (SCA-3120).
         require_fragment(
             errors,
-            contract,
+            deploy_job,
             f"admitted_sha: {MANUAL_ADMITTED_SHA}",
             "manual deployment must pass the admitted SHA to the deploy composite action",
         )
         if contract.count('--commit-sha "${{ inputs.admitted_sha }}"') != 3:
             errors.append("manual deployment must bind every release vector to the admitted SHA")
+    pump_job = mapping_block(text, "deploy-projection-pump", 2)
+    if pump_job is None:
+        errors.append("manual backend deploy is missing its projection pump deployment job")
+    else:
+        require_fragment(
+            errors,
+            pump_job,
+            MANUAL_DEPLOY_JOB_NEEDS,
+            "projection pump deployment must depend on production-boundary validation, source admission, and break-glass audit",
+        )
+        if folded_job_condition(pump_job) != MANUAL_PROJECTION_PUMP_JOB_CONDITION:
+            errors.append(
+                "projection pump deployment must run only for an admitted prod backend-projection-pump selection"
+            )
+        require_fragment(
+            errors,
+            pump_job,
+            f"admitted_sha: {MANUAL_ADMITTED_SHA}",
+            "projection pump deployment must pass the admitted SHA to its composite action",
+        )
     errors.extend(validate_manual_build_only_job(text))
     return errors
 

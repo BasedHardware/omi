@@ -4,8 +4,10 @@ Use the canonical `Deploy Diarizer to GKE` workflow's opt-in
 `preserve_live_worker=true` mode when a release admits an image move while
 requiring the live runtime configuration to remain intact. The default remains
 the existing Helm deployment. This mode targets only
-`prod-omi-backend/prod-omi-batch-pipeline-worker`, container `worker`, strategy
-`Recreate`. It never renders chart values, touches Helm Secrets, modifies
+`prod-omi-backend/prod-omi-batch-pipeline-worker`, container `worker`, with a
+strategy that never surges a GPU: `Recreate`, or `RollingUpdate` with an
+explicit `maxSurge: 0` (the chart's strategy since SCA-3274; any other strategy
+refuses). It never renders chart values, touches Helm Secrets, modifies
 repair policy, or rolls sibling consumers.
 
 This mode does not grant release or activation authority. Keep the existing
@@ -44,6 +46,12 @@ A config change (other than the tolerated autoscaling and CronJob history below)
 refresh and re-admit it instead of retrying blindly. The namespace inventory is
 not a claim about consumers in other namespaces or systems: reconcile those in
 the existing shared-artifact release gate before dispatch.
+
+The baseline hashes the whole Deployment spec except replicas, so any live spec
+change, including the SCA-3274 strategy patch (Recreate -> RollingUpdate with
+`maxSurge: 0`), invalidates a baseline captured before it. Re-run `inventory`
+after such a patch and before the next preserve-live dispatch; an old baseline
+refuses with target drift.
 
 For a qualified, already-built worker digest, Release dispatches once:
 

@@ -216,6 +216,12 @@ below may be used only after that separate decision approves its values.
    `allowlist_only`, list size 1, rate 60, reach 0. Do not manually reset tokens
    or create an open v1 gate. A previously spent hour waits until the next hour.
 
+   **Approved activation (2026-11-18).** The release owner approved a four-owner
+   `allowlist_only` cohort at 60/hour (BasedHardware/omi#25688). For that
+   activation the expected list size is **4**, not 1, and step 5 applies to each
+   of the four owners separately; the hourly budget is shared across them. Any
+   other cohort or rate remains a separate approval.
+
 5. **Verify delivery, not just grants.** Take the aggregate readbacks below
    before and after. Verify the one owner's `result_ready` count falls and its
    projection completion count rises using count-only queries, without printing
