@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Callable
 import errno
 import http.client
+from ipaddress import ip_address
 import json
 import socket
 import ssl
@@ -77,6 +78,8 @@ class _EraseHTTPResponse(http.client.HTTPResponse):
             # The stdlib uses a sentinel until it parses the final status line.
             if self.status in range(100, 1000) and self.status not in _RETRYABLE_WORKER_HTTP_STATUSES | {200}:
                 raise EraseRejected('Go queue erase request rejected') from None
+            if self.status in _RETRYABLE_WORKER_HTTP_STATUSES | {200}:
+                raise EraseUnavailable('Go queue erase response headers were interrupted') from None
             raise
 
 
@@ -210,6 +213,17 @@ def _erase_at_postgres(uid: str, expires: datetime) -> bool:
     schema = os.getenv('GO_QUEUE_ERASE_RECOVERY_SCHEMA', '')
     if not schema:
         raise EraseRejected('Go queue erase recovery schema missing')
+    from psycopg import ProgrammingError
+    from psycopg.conninfo import conninfo_to_dict
+
+    try:
+        params = conninfo_to_dict(dsn)
+        host = params.get('host', '')
+        if not host or ',' in host or '/' in host:
+            raise ValueError('missing verification host')
+        ip_address(params.get('hostaddr', ''))
+    except (ProgrammingError, ValueError):
+        raise EraseRejected('Go queue erase recovery requires a TLS host and numeric hostaddr') from None
     asyncio.run(_recover_erase(dsn, schema, uid, expires))
     return True
 

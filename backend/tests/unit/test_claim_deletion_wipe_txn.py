@@ -945,3 +945,37 @@ def test_legacy_mark_running_uses_the_original_authority_merge():
     assert set(merge.call_args.args[2]) == {'wipe_status', 'wipe_running_at'}
     assert merge.call_args.args[2]['wipe_status'] == 'running'
     client.transaction.assert_not_called()
+
+
+@pytest.mark.parametrize(('age', 'expected'), [(5, 'claimed'), (3, 'running')])
+def test_protected_task_reclaims_only_after_four_minutes(age, expected):
+    txn = _make_txn()
+    snapshot = _make_snapshot(
+        {
+            'uid': 'uid1',
+            'wipe_status': 'running',
+            'wipe_job_id': 'job',
+            'wipe_running_at': datetime.now(timezone.utc) - timedelta(minutes=age),
+            'go_queue_erase_armed_at': datetime.now(timezone.utc) - timedelta(minutes=age),
+        }
+    )
+    ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    raw_fn = users_db._claim_deletion_wipe_task_txn.to_wrap
+    assert (
+        raw_fn(txn, ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER, operation_id='redelivery', expected_job_id='job')
+        == expected
+    )
+    assert bool(txn._sets or txn._updates) == (expected == 'claimed')
+
+
+def test_unprotected_wipe_heartbeat_refuses_armed_generation_without_writing():
+    txn = _make_txn()
+    snapshot = _make_snapshot(
+        {
+            'wipe_status': 'running',
+            'go_queue_erase_armed_at': datetime.now(timezone.utc),
+        }
+    )
+    ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    assert users_db._heartbeat_user_deletion_wipe_txn.to_wrap(txn, ref) is False
+    assert not (txn._sets or txn._updates)

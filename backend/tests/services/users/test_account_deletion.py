@@ -2746,3 +2746,21 @@ def test_billing_failure_does_not_arm_the_go_queue_barrier(monkeypatch):
     assert account_deletion.background_wipe_user_data('uid1', erase_claim=('opaque-job-id', 'current-token')) is False
     require.assert_not_called()
     account_deletion.users_db.mark_user_deletion_billing_failed.assert_called_once()
+
+
+def test_delayed_inline_wipe_stops_when_existing_heartbeat_finds_an_armed_marker(monkeypatch):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'false')
+    monkeypatch.setattr(account_deletion, 'is_account_deletion_dispatch_enabled', lambda: False)
+    monkeypatch.setattr(account_deletion, 'assert_inline_account_deletion_permitted', lambda: None)
+    tasks = []
+    monkeypatch.setattr(account_deletion, 'submit_with_context', lambda _executor, fn, uid: tasks.append((fn, uid)))
+    account_deletion.enqueue_deletion_wipe('uid1', 'job')
+    monkeypatch.setattr(account_deletion.users_db, 'heartbeat_user_deletion_wipe', lambda _uid: False)
+
+    fn, uid = tasks.pop()
+    assert fn(uid) is False
+    account_deletion.auth.delete_account.assert_not_called()
+    account_deletion.users_db.delete_user_data.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
+    account_deletion.finish_destructive_operation.assert_not_called()

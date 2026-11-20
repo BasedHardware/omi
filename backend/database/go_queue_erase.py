@@ -61,6 +61,24 @@ def mark_wipe_running(transaction, ref, job_id: str, claim: str, operation_id: s
     return armed
 
 
+def _generation_due(marker: dict[str, Any]) -> object:
+    due = marker.get('wipe_due_at')
+    restored = marker.get('wipe_restored_at')
+    intent = marker.get('wipe_intent_at')
+    grace_completed = marker.get('grace_actions_completed_at')
+    if (
+        isinstance(restored, datetime)
+        and isinstance(intent, datetime)
+        and restored < intent
+        and (grace_completed is None or (isinstance(grace_completed, datetime) and grace_completed <= restored))
+    ):
+        # An immediate request after restore inherits the cancelled grace fields.
+        armed = marker.get(ARMED_AT)
+        if armed is None:
+            return None
+    return due
+
+
 @transactional
 def _record(
     transaction, client, ref, uid: str, job_id: str, claim: str, step: Step, path: str | None, expires: datetime | None
@@ -70,7 +88,7 @@ def _record(
     )
     snapshot = ref.get(transaction=transaction)
     marker = snapshot.to_dict() or {}
-    due = marker.get('wipe_due_at')
+    due = _generation_due(marker)
     if (
         marker.get('wipe_job_id') != job_id
         or marker.get('wipe_status') != 'running'

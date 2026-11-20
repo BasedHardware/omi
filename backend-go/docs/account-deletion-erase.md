@@ -19,11 +19,16 @@ receivers continue to fence late writes after a queue database session disappear
    `ERASE_FIRESTORE_DATABASE` to the authoritative project and database resolved by the
    Python deletion executor. Use `(default)` explicitly for the default database. Omit
    `ERASE_PORT` when the listener is disabled. An explicitly empty port is invalid.
+   By design, an invalid TLS configuration or a failure to bind the enabled erase
+   listener shuts down the entire workerd process. The deployment cannot serve with
+   a broken erase listener.
 2. Lane B owns the queue migration and the separately applied recovery access migration.
    David must approve the new recovery role before any access change. After approval,
    provision the environment-specific login or IAM binding for the EXECUTE-only role,
    supply `GO_QUEUE_ERASE_RECOVERY_DATABASE_URL` via an approved secret binding and set
-   `GO_QUEUE_ERASE_RECOVERY_SCHEMA` to the schema used by workerd. An absent recovery URL
+   `GO_QUEUE_ERASE_RECOVERY_SCHEMA` to the schema used by workerd. Set a single TLS
+   verification hostname (`host`) and its numeric `hostaddr` in the DSN so recovery
+   can honor its deadline without DNS. An absent recovery URL
    disables recovery. Both Lane B dependencies must reach main before merging this
    barrier. Verify both paths target the same queue using a synthetic tenant.
 3. Wire aggregate readback and paging in the environment as described below. Exercise both

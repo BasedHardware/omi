@@ -432,9 +432,11 @@ def mark_user_deletion_wipe_running(uid: str, job_id: str | None = None, claim: 
 
 
 @transactional
-def _heartbeat_user_deletion_wipe_txn(transaction, doc_ref, protected: bool = False) -> None:
+def _heartbeat_user_deletion_wipe_txn(transaction, doc_ref, protected: bool = False) -> bool | None:
     snapshot = doc_ref.get(transaction=transaction)
     data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+    if not protected and data.get(ARMED_AT) is not None:
+        return False
     if data.get('wipe_status') == 'running':
         now = datetime.now(timezone.utc)
         fields = {'wipe_running_at': now}
@@ -442,13 +444,14 @@ def _heartbeat_user_deletion_wipe_txn(transaction, doc_ref, protected: bool = Fa
         if protected and previous and data.get(PROTECTED_ATTEMPT) == previous:
             fields[PROTECTED_ATTEMPT] = now
         transaction.update(doc_ref, fields)
+    return None
 
 
 @cache_writer('deletion_marker_cache')
-def heartbeat_user_deletion_wipe(uid: str, protected: bool = False) -> None:
+def heartbeat_user_deletion_wipe(uid: str, protected: bool = False) -> bool | None:
     """Refresh a live wipe without resurrecting a failed/completed marker."""
     client = account_deletion_firestore_client()
-    _heartbeat_user_deletion_wipe_txn(
+    return _heartbeat_user_deletion_wipe_txn(
         client.transaction(), account_deletion_document(uid, firestore_client=client), protected
     )
 

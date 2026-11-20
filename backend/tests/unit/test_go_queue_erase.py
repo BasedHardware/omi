@@ -278,3 +278,53 @@ async def test_recovery_does_not_extend_grant_when_clock_sampling_is_interrupted
         with pytest.raises(erase.EraseUnavailable, match='grant expired'):
             await erase._recover_erase('test-only', 'queue', 'tenant', wall_clock + timedelta(seconds=10))
     connect.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ('armed', 'receipt_recorded', 'default_minutes', 'expected_minutes'),
+    [(False, False, 45, 45), (True, False, 45, 4), (True, True, 45, 45), (True, False, 2, 2)],
+)
+def test_running_stale_window(armed, receipt_recorded, default_minutes, expected_minutes):
+    now = datetime.now(timezone.utc)
+    marker = {receipts.ARMED_AT: now if armed else None, receipts.RECEIPT_AT: now if receipt_recorded else None}
+    assert receipts.running_stale_window(marker, timedelta(minutes=default_minutes)) == timedelta(
+        minutes=expected_minutes
+    )
+
+
+def test_unreadable_success_headers_allow_recovery(monkeypatch):
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv('GO_QUEUE_ERASE_URL', 'https://worker.example/internal/v1/tenant-erase')
+    monkeypatch.setenv('GO_QUEUE_ERASE_AUDIENCE', 'worker')
+    monkeypatch.setattr(erase, '_oidc_token', lambda _: 'token')
+    monkeypatch.setattr(erase.socket, 'create_connection', MagicMock())
+    tls = MagicMock()
+    monkeypatch.setattr(erase.ssl, 'create_default_context', lambda: tls)
+    wire = tls.wrap_socket.return_value.makefile.return_value
+    wire.readline.side_effect = [b'HTTP/1.1 200 OK\r\n', erase.http.client.LineTooLong('header')]
+    expires = datetime.now(timezone.utc) + timedelta(seconds=20)
+    monkeypatch.setattr(receipts, 'record', MagicMock(return_value={receipts.CLAIM_EXPIRES_AT: expires}))
+    recover = MagicMock(return_value=True)
+    monkeypatch.setattr(erase, '_erase_at_postgres', recover)
+
+    erase.require_committed_erase('tenant', 'job', 'token', lambda: expires, lambda _: None)
+
+    recover.assert_called_once_with('tenant', expires)
+
+
+def test_recovery_refuses_unresolved_dns_before_starting_event_loop(monkeypatch):
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv('GO_QUEUE_ERASE_RECOVERY_DATABASE_URL', 'host=slow.invalid dbname=queue')
+    monkeypatch.setenv('GO_QUEUE_ERASE_RECOVERY_SCHEMA', 'queue')
+    resolver = MagicMock(side_effect=AssertionError('DNS may outlive the recovery grant'))
+    start_loop = MagicMock()
+    monkeypatch.setattr(erase.socket, 'getaddrinfo', resolver)
+    monkeypatch.setattr(erase.asyncio, 'run', start_loop)
+
+    with pytest.raises(erase.EraseRejected, match='numeric hostaddr'):
+        erase._erase_at_postgres('tenant', datetime.now(timezone.utc) + timedelta(seconds=1))
+
+    resolver.assert_not_called()
+    start_loop.assert_not_called()

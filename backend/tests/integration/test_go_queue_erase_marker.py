@@ -86,3 +86,37 @@ def test_enabled_billing_retry_preserves_known_wipe_order():
         assert ref.get().to_dict()[receipts.ORDER_UNKNOWN] is True
     finally:
         db.close()
+
+
+def test_restored_grace_deadline_does_not_delay_a_replacement_immediate_wipe(monkeypatch):
+    host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
+    if urlsplit(f'//{host}').hostname not in {'localhost', '127.0.0.1', '::1'}:
+        pytest.fail('requires loopback Firestore emulator')
+    uid = uuid4().hex
+    db = firestore.Client(project=f'demo-erase-{uid[:10]}', credentials=AnonymousCredentials())
+    monkeypatch.setattr(receipts, 'account_deletion_firestore_client', lambda: db)
+    ref = db.collection('account_deletions').document(uid)
+    try:
+        now = datetime.now(timezone.utc)
+        ref.set(
+            {
+                'wipe_job_id': 'old-grace',
+                'wipe_status': 'cancelled',
+                'wipe_due_at': now + timedelta(days=1),
+                'wipe_restored_at': now - timedelta(minutes=1),
+                'grace_actions_completed_at': now - timedelta(minutes=2),
+            }
+        )
+        users_db._mark_user_deletion_wipe_intent_txn(db.transaction(), ref, 'immediate')
+        ref.update({'wipe_status': 'retrying'})
+        receipts.mark_wipe_running(db.transaction(), ref, 'immediate', 'claim', 'attempt')
+        acquire_destructive_operation(
+            uid, kind='account_deletion', token=f'account-deletion:{uid}', firestore_client=db
+        )
+        expires = datetime.now(timezone.utc) + receipts.ERASE_GRANT_DURATION
+        receipts.record(uid, 'immediate', 'claim', 'arm', expires=expires)
+        marker = ref.get().to_dict()
+        assert marker['wipe_due_at'] == marker[receipts.ARMED_AT]
+        assert marker['wipe_due_at'] < now + timedelta(minutes=1)
+    finally:
+        db.close()

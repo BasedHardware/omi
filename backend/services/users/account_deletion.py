@@ -390,6 +390,10 @@ async def run_deletion_wipe_with_lease(
     return await asyncio.shield(worker)
 
 
+class _ProtectedWipeRequired(RuntimeError):
+    """An unprotected executor encountered an armed deletion."""
+
+
 def background_wipe_user_data(
     uid: str,
     retry_count: int = 0,
@@ -411,7 +415,8 @@ def background_wipe_user_data(
     def heartbeat() -> None:
         if lease_lost is not None and lease_lost.is_set():
             raise RuntimeError('account deletion run-lock lost')
-        users_db.heartbeat_user_deletion_wipe(uid, *marker_args)
+        if users_db.heartbeat_user_deletion_wipe(uid, *marker_args) is False:
+            raise _ProtectedWipeRequired
 
     try:
         # Acquire the same transaction gate used by the server-owned legal-hold
@@ -531,6 +536,9 @@ def background_wipe_user_data(
         heartbeat()
         destroy_owner_lake_keys(uid)
         logger.info('delete_account background wipe complete')
+    except _ProtectedWipeRequired:
+        logger.warning('account deletion deferred because its Go queue erase is armed')
+        return False
     except Exception as e:
         if erase_claim is not None:
             try:
