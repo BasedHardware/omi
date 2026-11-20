@@ -879,3 +879,39 @@ def test_legacy_generated_live_sections_are_read_redacted_with_owner_overview_pr
         assert ('sections' in row['structured']) is proven_final
         assert row['transcript_segments'] == catchup['transcript_segments']
     assert catchup['structured'] == legacy
+
+
+@pytest.mark.asyncio
+async def test_explicit_summary_open_locks_configured_preview_with_live_recap_present(monkeypatch):
+    row = {
+        'id': 'c',
+        'v3_derived': True,
+        'v3_unlocked': True,
+        'status': 'in_progress',
+        'started_at': AT,
+        'finished_at': AT + timedelta(seconds=1),
+    }
+    reconciles = []
+    prepared = []
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    async def reconcile(uid, *, on_open, conversation_id):
+        reconciles.append((on_open, conversation_id))
+        row.update(status='processing', v3_unlocked=False)
+
+    async def prepare(uid, current):
+        prepared.append(current.copy())
+
+    monkeypatch.setenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', 'uid:synthetic')
+    monkeypatch.setattr(routes, 'run_blocking', blocking)
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: row)
+    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
+    monkeypatch.setattr(service, 'reconcile', reconcile)
+    monkeypatch.setattr(summary, 'prepare', prepare)
+
+    response = await routes.conversation_summary_stream('c', 'synthetic')
+    assert response.media_type == 'text/event-stream'
+    assert reconciles == [(True, 'c')]
+    assert prepared[0]['status'] == 'processing' and not prepared[0]['v3_unlocked']

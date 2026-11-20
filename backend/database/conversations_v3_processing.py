@@ -166,25 +166,37 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
         if current.get('title_locked'):
             patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
             patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
-        settled = current.get('v3_derived') and current.get('status') != 'in_progress'
+        # The scoped reconcile may time out while its outline is still running.
+        # A successful scoped reconcile can also have locked the card before notes are written.
+        # Finish either explicit Open path here while retaining any other owed processing.
+        was_unlocked = current.get('v3_unlocked')
+        open_lock = (
+            {
+                'status': 'completed',
+                'v3_unlocked': False,
+                'v3_open_locked': True,
+                'v3_process_pending': bool(was_unlocked or current.get('v3_process_pending')),
+            }
+            if current.get('v3_derived')
+            and (was_unlocked or (current.get('v3_open_locked') and current.get('status') == 'processing'))
+            else {}
+        )
+        settled = current.get('v3_derived') and (bool(open_lock) or current.get('status') != 'in_progress')
         # On-open notes are a notes write too: a row whose background notes failed and the user then
         # opened owes the same single created delivery once it is visible and completed.
         armed = bool(
             settled
             and policy.created_eligible(
-                {**current, 'v3_notes_written': True, 'v3_process_failed': False, 'tile_state': 'done'}
+                {**current, **open_lock, 'v3_notes_written': True, 'v3_process_failed': False, 'tile_state': 'done'}
             )
         )
         tx.update(
             ref,
             {
                 **patch,
+                **open_lock,
                 'summary_covers_through': covers,
-                **(
-                    {'tile_state': 'done', 'v3_process_failed': False, 'summary_retryable': False}
-                    if current.get('v3_derived') and current.get('status') != 'in_progress'
-                    else {}
-                ),
+                **({'tile_state': 'done', 'v3_process_failed': False, 'summary_retryable': False} if settled else {}),
                 **(
                     {'title_locked': True}
                     if current.get('v3_derived') and not current.get('home_hidden') and patch['structured'].get('title')
