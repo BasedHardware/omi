@@ -314,6 +314,8 @@ async def run_step(uid, run_id, index, phase):
     if not 0 <= index < len(partitions):
         return {'outcome': 'unknown_partition'}
     part = partitions[index]
+    # The copies this partition recorded (its ledger, or this step's report once it derives).
+    prior_ids = part.get('prior_ids')
     gen = int(run.get('resumes') or 0)
     active = {'planned', 'running'}
     sha = os.getenv('OMI_BACKEND_RELEASE_SHA', '')
@@ -360,7 +362,8 @@ async def run_step(uid, run_id, index, phase):
             partition=(index, {'status': 'notes', **report}),
             expect=active,
         )
-        part = {**part, 'status': 'notes', 'prior_ids': report.get('prior_ids')}
+        part = {**part, 'status': 'notes'}
+        prior_ids = report.get('prior_ids')
     if part.get('status') == 'committed' and run.get('status') in active:
         # Redelivery after the commit: the successor's dispatch may have failed. Its name is fixed, so
         # dispatching again is a no-op when it already went out.
@@ -398,7 +401,7 @@ async def run_step(uid, run_id, index, phase):
     if run.get('mode') == LIVE_MODE:
         # The partition's notes are settled: anything that changes these rows from here on is not the
         # run's, and undo refuses to overwrite it.
-        await run_blocking(db_executor, rederive_store.record_baselines, uid, run_id, part.get('prior_ids'))
+        await run_blocking(db_executor, rederive_store.record_baselines, uid, run_id, prior_ids)
     if await run_blocking(
         db_executor,
         runs.update_run,
