@@ -140,6 +140,7 @@ def place(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) ->
     legal_holds.place_legal_hold(
         args.uid, issuer=HOLD_ISSUER, active=True, firestore_client=client, now=now, audit=_audit(ctx, review_by)
     )
+    record.summary["hold_written"] = True
     after = _state(client, args.uid)
     record.after_digest = digest(after["hold"])
     _assert_fence(args.uid, client, expect_active=True)
@@ -160,6 +161,7 @@ def release(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) 
     legal_holds.place_legal_hold(
         args.uid, issuer=HOLD_ISSUER, active=False, firestore_client=client, now=_now(), audit=_audit(ctx, None)
     )
+    record.summary["hold_written"] = True
     after = _state(client, args.uid)
     record.after_digest = digest(after["hold"])
     _assert_fence(args.uid, client, expect_active=False)

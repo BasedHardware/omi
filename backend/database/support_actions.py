@@ -124,7 +124,15 @@ def record_action(
         yield record
     except BaseException as exc:
         document.set(
-            {"outcome": "failed", "error_type": type(exc).__name__, "finished_at": now()},
+            {
+                "outcome": "failed",
+                "error_type": type(exc).__name__,
+                # What the handler recorded before failing (for example a write that
+                # committed before a later verification step failed).
+                "summary": _content_free_summary(record.summary),
+                "before_digest": record.before_digest,
+                "finished_at": now(),
+            },
             merge=True,
         )
         raise

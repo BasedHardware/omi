@@ -295,6 +295,18 @@ def test_apply_is_accepted_after_the_subcommand_as_the_runbook_documents():
     assert ops.build_parser().parse_args(ops._hoist_apply(plain)).apply is False
 
 
+def test_a_failed_fence_check_still_audits_the_committed_hold_write(client, monkeypatch):
+    def fence_fails(*args, **kwargs):
+        raise holds.HoldCommandError("fence not verified")
+
+    monkeypatch.setattr(holds, "_assert_fence", fence_fails)
+    with pytest.raises(holds.HoldCommandError):
+        _run(holds.place, _ctx(apply=True), review_by=None)
+    (audit,) = _actions(client).values()
+    assert audit["outcome"] == "failed" and audit["summary"]["hold_written"] is True
+    assert client.docs[f"legal_holds/{UID}"]["active"] is True
+
+
 def test_released_hold_is_never_review_overdue(client):
     client.docs["legal_holds/r"] = {
         "schema_version": "legal_hold.v1",
