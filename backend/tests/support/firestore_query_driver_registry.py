@@ -158,6 +158,10 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.legal_holds.list_legal_holds': 'adb83d85cbbabaa98a4d435147d92e2139b4e483c19a9c09e695c5f7fa4c517b',
+    'utils.support.holds._events': 'd51288dc0b57da25ec5d9b4c5ebb74b47957c5221cc3fc96f190e92039ae3626',
+    'utils.support.holds._held_deferred_deletes': '673a814d881f7f087636651e54c7f324caac6c2f4b69b512267ec471a6a618dc',
+    'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3.commit_projection': 'ef2e983f527e4c07c35d5756b816405140fb88196bc819bc9f7a20012411c40e',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
@@ -4412,6 +4416,32 @@ for _key, _reason in (
         'discovery or a limited PG key page, then exact-key primary get_all rereads. No additional Firestore '
         'query shape; row/read/statement/deadline budgets and commit-only cursor checked by '
         'tests/unit/test_jobstore_reconcile.py.',
+    ),
+):
+    _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))
+
+
+# Support operator CLI (scripts/support/ops.py): audited, ticket-scoped operator reads, never serving.
+for _key, _reason in (
+    (
+        'database.legal_holds.list_legal_holds',
+        'Support operator CLI `hold list` only: bounded limit() scan of the small legal_holds collection by '
+        'document id (no filter, no order); active/review state filtered in Python.',
+    ),
+    (
+        'utils.support.holds._events',
+        'Support operator CLI `hold status` only: bounded limit() read of one account\'s '
+        'legal_holds/{uid}/events subcollection by document id; sorted in Python.',
+    ),
+    (
+        'utils.support.holds._held_deferred_deletes',
+        'Support operator CLI `hold status/release` only: bounded limit() read of one account\'s '
+        'deleted_conversations tombstones by document id; held_deferred filtered in Python.',
+    ),
+    (
+        'utils.support.retention._select_conversations',
+        'Support operator CLI `retention check` only: one account\'s conversations, created_at range with '
+        'order on the same field and an explicit cap (single-field index, no composite).',
     ),
 ):
     _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))
