@@ -15364,138 +15364,138 @@ class AppLocalizationsKo extends AppLocalizations {
   String get conversationRecentTranscript => '최근 녹취록';
 
   @override
-  String get finishAlreadySaved => 'Already saved. It\'s on Home.';
+  String get finishAlreadySaved => '이미 저장되었습니다. 홈에 있습니다.';
 
   @override
-  String get finishAudioNotReceived => 'Audio\'s still on its way.';
+  String get finishAudioNotReceived => '오디오가 아직 전송 중입니다.';
 
   @override
-  String get finishFailedOffline => 'Didn\'t go through. Your audio is safe.';
+  String get finishFailedOffline => '처리되지 않았습니다. 오디오는 안전합니다.';
 
   @override
-  String get finishFailed => 'Didn\'t go through. Your audio is safe.';
+  String get finishFailed => '처리되지 않았습니다. 오디오는 안전합니다.';
 
   @override
-  String get micBlockedCannotRecord => 'Allow the microphone to record.';
+  String get micBlockedCannotRecord => '녹음하려면 마이크 권한을 허용하세요.';
 
   @override
-  String get couldNotStartRecording => 'Couldn\'t start recording.';
+  String get couldNotStartRecording => '녹음을 시작하지 못했습니다.';
 
   @override
-  String get restorePurchasesFailed => 'Couldn\'t check your plan.';
+  String get restorePurchasesFailed => '플랜을 확인하지 못했습니다.';
 
   @override
-  String get firmwareCheckFailed => 'Couldn\'t check for updates.';
+  String get firmwareCheckFailed => '업데이트를 확인할 수 없습니다.';
 
   @override
-  String get conversationStillPublic => 'It\'s still shared by link.';
+  String get conversationStillPublic => '아직 링크로 공유되어 있습니다.';
 
   @override
-  String get goalSaveFailed => 'Couldn\'t save your goal.';
+  String get goalSaveFailed => '목표를 저장하지 못했습니다.';
 
   @override
-  String get goalDeleteFailed => 'Couldn\'t delete. Goal restored.';
+  String get goalDeleteFailed => '삭제하지 못했습니다. 목표가 복원되었습니다.';
 
   @override
-  String get goalsLoadFailed => 'Couldn\'t load your goals.';
+  String get goalsLoadFailed => '목표를 불러오지 못했습니다.';
 
   @override
-  String get missingTargetEndedRecording => 'That recording has ended.';
+  String get missingTargetEndedRecording => '해당 녹음은 이미 종료되었습니다.';
 
   @override
-  String get missingTargetMemory => 'That memory is gone.';
+  String get missingTargetMemory => '해당 기억은 더 이상 없습니다.';
 
   @override
-  String get missingTargetTask => 'That task is gone.';
+  String get missingTargetTask => '해당 작업은 더 이상 없습니다.';
 
   @override
-  String get missingTargetConversation => 'Couldn\'t open this conversation.';
+  String get missingTargetConversation => '이 대화를 열 수 없습니다.';
 
   @override
-  String get couldNotRefreshConversations => 'Couldn\'t refresh.';
+  String get couldNotRefreshConversations => '새로고침하지 못했습니다.';
 
   @override
-  String get connectDeviceForOfflineSync => 'Connect your Omi to sync.';
+  String get connectDeviceForOfflineSync => '동기화하려면 Omi를 연결하세요.';
 
   @override
-  String get useDifferentAccountMessage => 'You\'ll be signed out, and this phone\'s Omi settings will be reset.';
+  String get useDifferentAccountMessage => '로그아웃되며 이 휴대전화의 Omi 설정이 초기화됩니다.';
 
   @override
-  String get rayBanMetaNotFoundAfterSetup => 'Glasses not found. Are they on?';
+  String get rayBanMetaNotFoundAfterSetup => '안경을 찾을 수 없습니다. 전원이 켜져 있나요?';
 
   @override
-  String get couldNotMoveTask => 'Couldn\'t move the task.';
+  String get couldNotMoveTask => '작업을 이동하지 못했습니다.';
 
   @override
   String lockedTasksKept(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Deleted. $count locked tasks were kept.',
-      one: 'Deleted. 1 locked task was kept.',
+      other: '삭제되었습니다. 잠긴 작업 $count개가 유지되었습니다.',
+      one: '삭제되었습니다. 잠긴 작업 1개가 유지되었습니다.',
     );
     return '$_temp0';
   }
 
   @override
-  String get settingNotSaved => 'Couldn\'t save that change.';
+  String get settingNotSaved => '변경 사항을 저장하지 못했습니다.';
 
   @override
-  String get couldNotLoadNotificationSettings => 'Couldn\'t load your settings.';
+  String get couldNotLoadNotificationSettings => '설정을 불러오지 못했습니다.';
 
   @override
-  String get waitForOmiToFinish => 'Wait for Omi to finish.';
+  String get waitForOmiToFinish => 'Omi의 응답이 끝날 때까지 기다려 주세요.';
 
   @override
-  String get voiceNoteTooShort => 'Too short. Hold to record.';
+  String get voiceNoteTooShort => '너무 짧습니다. 길게 눌러 녹음하세요.';
 
   @override
-  String get submitAppMissingFields => 'Add a name, description, image, category and capability to submit.';
+  String get submitAppMissingFields => '제출하려면 이름, 설명, 이미지, 카테고리, 기능을 추가하세요.';
 
   @override
-  String get appSetupNotFinished => 'Setup isn\'t finished yet.';
+  String get appSetupNotFinished => '설정이 아직 완료되지 않았습니다.';
 
   @override
-  String get finishNothingKeptTitle => 'Nothing to Keep';
+  String get finishNothingKeptTitle => '유지할 항목 없음';
 
   @override
-  String get submitAppFinishDetails => 'Finish the capability and pricing details above to submit.';
+  String get submitAppFinishDetails => '제출하려면 위의 기능 및 가격 세부정보를 완성하세요.';
 
   @override
-  String get finishNothingNew => 'Nothing new yet.';
+  String get finishNothingNew => '아직 새로운 내용이 없습니다.';
 
   @override
-  String get takingLongerThanUsual => 'Taking longer than usual. We\'ll have it on Home.';
+  String get takingLongerThanUsual => '평소보다 오래 걸리고 있습니다. 홈에 추가될 예정입니다.';
 
   @override
-  String get couldNotCheckOnIt => 'Couldn\'t check on it. Try again.';
+  String get couldNotCheckOnIt => '확인하지 못했습니다. 다시 시도하세요.';
 
   @override
-  String get upgradeToOpenThisOne => 'Upgrade to open this one.';
+  String get upgradeToOpenThisOne => '열려면 업그레이드가 필요합니다.';
 
   @override
-  String get missingTargetConversationGone => 'That conversation was deleted.';
+  String get missingTargetConversationGone => '해당 대화는 삭제되었습니다.';
 
   @override
-  String get cantConnectRightNow => 'Can\'t connect right now.';
+  String get cantConnectRightNow => '지금은 연결할 수 없습니다.';
 
   @override
-  String get loadOlderFailed => 'Couldn\'t load older ones. Tap to retry.';
+  String get loadOlderFailed => '이전 항목을 불러오지 못했습니다. 탭하여 다시 시도하세요.';
 
   @override
   String listeningWithDuration(String duration) {
-    return 'Listening · $duration';
+    return '듣는 중 · $duration';
   }
 
   @override
-  String get conversationLiveNoEdits => 'Wait until it ends to change it.';
+  String get conversationLiveNoEdits => '변경하려면 종료될 때까지 기다려 주세요.';
 
   @override
-  String get finishedSummaryReady => 'Summary ready';
+  String get finishedSummaryReady => '요약이 준비되었습니다';
 
   @override
-  String get writingSummaryStatus => 'Writing summary…';
+  String get writingSummaryStatus => '요약 작성 중…';
 
   @override
-  String get stillWorkingOnIt => 'Still working on it.';
+  String get stillWorkingOnIt => '아직 처리 중입니다.';
 }

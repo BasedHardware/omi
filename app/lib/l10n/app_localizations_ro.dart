@@ -15650,138 +15650,139 @@ class AppLocalizationsRo extends AppLocalizations {
   String get conversationRecentTranscript => 'Transcriere recentă';
 
   @override
-  String get finishAlreadySaved => 'Already saved. It\'s on Home.';
+  String get finishAlreadySaved => 'Salvată deja. Este în secțiunea Acasă.';
 
   @override
-  String get finishAudioNotReceived => 'Audio\'s still on its way.';
+  String get finishAudioNotReceived => 'Fișierul audio este încă pe drum.';
 
   @override
-  String get finishFailedOffline => 'Didn\'t go through. Your audio is safe.';
+  String get finishFailedOffline => 'Nu a funcționat. Fișierul tău audio este în siguranță.';
 
   @override
-  String get finishFailed => 'Didn\'t go through. Your audio is safe.';
+  String get finishFailed => 'Nu a funcționat. Fișierul tău audio este în siguranță.';
 
   @override
-  String get micBlockedCannotRecord => 'Allow the microphone to record.';
+  String get micBlockedCannotRecord => 'Permite accesul la microfon pentru a înregistra.';
 
   @override
-  String get couldNotStartRecording => 'Couldn\'t start recording.';
+  String get couldNotStartRecording => 'Nu s-a putut porni înregistrarea.';
 
   @override
-  String get restorePurchasesFailed => 'Couldn\'t check your plan.';
+  String get restorePurchasesFailed => 'Nu am putut verifica planul tău.';
 
   @override
-  String get firmwareCheckFailed => 'Couldn\'t check for updates.';
+  String get firmwareCheckFailed => 'Nu s-a putut verifica dacă există actualizări.';
 
   @override
-  String get conversationStillPublic => 'It\'s still shared by link.';
+  String get conversationStillPublic => 'Este încă partajată prin link.';
 
   @override
-  String get goalSaveFailed => 'Couldn\'t save your goal.';
+  String get goalSaveFailed => 'Nu s-a putut salva obiectivul tău.';
 
   @override
-  String get goalDeleteFailed => 'Couldn\'t delete. Goal restored.';
+  String get goalDeleteFailed => 'Nu s-a putut șterge. Obiectivul a fost restaurat.';
 
   @override
-  String get goalsLoadFailed => 'Couldn\'t load your goals.';
+  String get goalsLoadFailed => 'Nu s-au putut încărca obiectivele tale.';
 
   @override
-  String get missingTargetEndedRecording => 'That recording has ended.';
+  String get missingTargetEndedRecording => 'Înregistrarea aceasta s-a încheiat.';
 
   @override
-  String get missingTargetMemory => 'That memory is gone.';
+  String get missingTargetMemory => 'Această amintire nu mai există.';
 
   @override
-  String get missingTargetTask => 'That task is gone.';
+  String get missingTargetTask => 'Această sarcină nu mai există.';
 
   @override
-  String get missingTargetConversation => 'Couldn\'t open this conversation.';
+  String get missingTargetConversation => 'Nu s-a putut deschide această conversație.';
 
   @override
-  String get couldNotRefreshConversations => 'Couldn\'t refresh.';
+  String get couldNotRefreshConversations => 'Nu s-a putut actualiza.';
 
   @override
-  String get connectDeviceForOfflineSync => 'Connect your Omi to sync.';
+  String get connectDeviceForOfflineSync => 'Conectează-ți Omi pentru a sincroniza.';
 
   @override
-  String get useDifferentAccountMessage => 'You\'ll be signed out, and this phone\'s Omi settings will be reset.';
+  String get useDifferentAccountMessage =>
+      'Sesiunea va fi închisă, iar setările Omi de pe acest telefon vor fi resetate.';
 
   @override
-  String get rayBanMetaNotFoundAfterSetup => 'Glasses not found. Are they on?';
+  String get rayBanMetaNotFoundAfterSetup => 'Nu s-au găsit ochelarii. Sunt porniți?';
 
   @override
-  String get couldNotMoveTask => 'Couldn\'t move the task.';
+  String get couldNotMoveTask => 'Nu s-a putut muta sarcina.';
 
   @override
   String lockedTasksKept(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Deleted. $count locked tasks were kept.',
-      one: 'Deleted. 1 locked task was kept.',
+      other: 'Șters. Sarcinile blocate ($count) au fost păstrate.',
+      one: 'Șters. 1 sarcină blocată a fost păstrată.',
     );
     return '$_temp0';
   }
 
   @override
-  String get settingNotSaved => 'Couldn\'t save that change.';
+  String get settingNotSaved => 'Nu s-a putut salva această modificare.';
 
   @override
-  String get couldNotLoadNotificationSettings => 'Couldn\'t load your settings.';
+  String get couldNotLoadNotificationSettings => 'Nu s-au putut încărca setările tale.';
 
   @override
-  String get waitForOmiToFinish => 'Wait for Omi to finish.';
+  String get waitForOmiToFinish => 'Așteaptă ca Omi să termine.';
 
   @override
-  String get voiceNoteTooShort => 'Too short. Hold to record.';
+  String get voiceNoteTooShort => 'Prea scurt. Ține apăsat pentru a înregistra.';
 
   @override
-  String get submitAppMissingFields => 'Add a name, description, image, category and capability to submit.';
+  String get submitAppMissingFields => 'Adaugă nume, descriere, imagine, categorie și capacitate pentru a trimite.';
 
   @override
-  String get appSetupNotFinished => 'Setup isn\'t finished yet.';
+  String get appSetupNotFinished => 'Configurarea nu este încă finalizată.';
 
   @override
-  String get finishNothingKeptTitle => 'Nothing to Keep';
+  String get finishNothingKeptTitle => 'Nimic de păstrat';
 
   @override
-  String get submitAppFinishDetails => 'Finish the capability and pricing details above to submit.';
+  String get submitAppFinishDetails => 'Completează detaliile de capacitate și preț de mai sus pentru a trimite.';
 
   @override
-  String get finishNothingNew => 'Nothing new yet.';
+  String get finishNothingNew => 'Nimic nou deocamdată.';
 
   @override
-  String get takingLongerThanUsual => 'Taking longer than usual. We\'ll have it on Home.';
+  String get takingLongerThanUsual => 'Durează mai mult decât de obicei. Va apărea în secțiunea Acasă.';
 
   @override
-  String get couldNotCheckOnIt => 'Couldn\'t check on it. Try again.';
+  String get couldNotCheckOnIt => 'Nu am putut verifica. Încearcă din nou.';
 
   @override
-  String get upgradeToOpenThisOne => 'Upgrade to open this one.';
+  String get upgradeToOpenThisOne => 'Fă upgrade pentru a o deschide.';
 
   @override
-  String get missingTargetConversationGone => 'That conversation was deleted.';
+  String get missingTargetConversationGone => 'Această conversație a fost ștearsă.';
 
   @override
-  String get cantConnectRightNow => 'Can\'t connect right now.';
+  String get cantConnectRightNow => 'Nu se poate conecta momentan.';
 
   @override
-  String get loadOlderFailed => 'Couldn\'t load older ones. Tap to retry.';
+  String get loadOlderFailed => 'Nu s-au putut încărca cele mai vechi. Atinge pentru a reîncerca.';
 
   @override
   String listeningWithDuration(String duration) {
-    return 'Listening · $duration';
+    return 'Ascultare · $duration';
   }
 
   @override
-  String get conversationLiveNoEdits => 'Wait until it ends to change it.';
+  String get conversationLiveNoEdits => 'Așteaptă să se încheie pentru a o modifica.';
 
   @override
-  String get finishedSummaryReady => 'Summary ready';
+  String get finishedSummaryReady => 'Rezumat gata';
 
   @override
-  String get writingSummaryStatus => 'Writing summary…';
+  String get writingSummaryStatus => 'Se scrie rezumatul…';
 
   @override
-  String get stillWorkingOnIt => 'Still working on it.';
+  String get stillWorkingOnIt => 'Încă lucrăm la asta.';
 }

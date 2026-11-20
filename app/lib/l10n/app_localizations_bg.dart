@@ -15636,138 +15636,139 @@ class AppLocalizationsBg extends AppLocalizations {
   String get conversationRecentTranscript => 'Скорошен транскрипт';
 
   @override
-  String get finishAlreadySaved => 'Already saved. It\'s on Home.';
+  String get finishAlreadySaved => 'Вече е запазено. Намира се в „Начало“.';
 
   @override
-  String get finishAudioNotReceived => 'Audio\'s still on its way.';
+  String get finishAudioNotReceived => 'Аудиото още е по пътя.';
 
   @override
-  String get finishFailedOffline => 'Didn\'t go through. Your audio is safe.';
+  String get finishFailedOffline => 'Не успя. Аудиото ви е в безопасност.';
 
   @override
-  String get finishFailed => 'Didn\'t go through. Your audio is safe.';
+  String get finishFailed => 'Не успя. Аудиото ви е в безопасност.';
 
   @override
-  String get micBlockedCannotRecord => 'Allow the microphone to record.';
+  String get micBlockedCannotRecord => 'Разрешете микрофона за запис.';
 
   @override
-  String get couldNotStartRecording => 'Couldn\'t start recording.';
+  String get couldNotStartRecording => 'Записът не можа да бъде стартиран.';
 
   @override
-  String get restorePurchasesFailed => 'Couldn\'t check your plan.';
+  String get restorePurchasesFailed => 'Планът ви не можа да бъде проверен.';
 
   @override
-  String get firmwareCheckFailed => 'Couldn\'t check for updates.';
+  String get firmwareCheckFailed => 'Проверката за актуализации не успя.';
 
   @override
-  String get conversationStillPublic => 'It\'s still shared by link.';
+  String get conversationStillPublic => 'Все още е споделено чрез връзка.';
 
   @override
-  String get goalSaveFailed => 'Couldn\'t save your goal.';
+  String get goalSaveFailed => 'Целта ви не можа да бъде запазена.';
 
   @override
-  String get goalDeleteFailed => 'Couldn\'t delete. Goal restored.';
+  String get goalDeleteFailed => 'Изтриването не успя. Целта е възстановена.';
 
   @override
-  String get goalsLoadFailed => 'Couldn\'t load your goals.';
+  String get goalsLoadFailed => 'Целите ви не можаха да бъдат заредени.';
 
   @override
-  String get missingTargetEndedRecording => 'That recording has ended.';
+  String get missingTargetEndedRecording => 'Този запис е приключил.';
 
   @override
-  String get missingTargetMemory => 'That memory is gone.';
+  String get missingTargetMemory => 'Този спомен е изчезнал.';
 
   @override
-  String get missingTargetTask => 'That task is gone.';
+  String get missingTargetTask => 'Тази задача е изчезнала.';
 
   @override
-  String get missingTargetConversation => 'Couldn\'t open this conversation.';
+  String get missingTargetConversation => 'Този разговор не можа да бъде отворен.';
 
   @override
-  String get couldNotRefreshConversations => 'Couldn\'t refresh.';
+  String get couldNotRefreshConversations => 'Обновяването не успя.';
 
   @override
-  String get connectDeviceForOfflineSync => 'Connect your Omi to sync.';
+  String get connectDeviceForOfflineSync => 'Свържете вашия Omi, за да синхронизирате.';
 
   @override
-  String get useDifferentAccountMessage => 'You\'ll be signed out, and this phone\'s Omi settings will be reset.';
+  String get useDifferentAccountMessage =>
+      'Ще излезете от акаунта си, а настройките на Omi на този телефон ще бъдат нулирани.';
 
   @override
-  String get rayBanMetaNotFoundAfterSetup => 'Glasses not found. Are they on?';
+  String get rayBanMetaNotFoundAfterSetup => 'Очилата не са открити. Включени ли са?';
 
   @override
-  String get couldNotMoveTask => 'Couldn\'t move the task.';
+  String get couldNotMoveTask => 'Задачата не можа да бъде преместена.';
 
   @override
   String lockedTasksKept(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Deleted. $count locked tasks were kept.',
-      one: 'Deleted. 1 locked task was kept.',
+      other: 'Изтрито. Запазени са $count заключени задачи.',
+      one: 'Изтрито. Запазена е 1 заключена задача.',
     );
     return '$_temp0';
   }
 
   @override
-  String get settingNotSaved => 'Couldn\'t save that change.';
+  String get settingNotSaved => 'Промяната не можа да бъде запазена.';
 
   @override
-  String get couldNotLoadNotificationSettings => 'Couldn\'t load your settings.';
+  String get couldNotLoadNotificationSettings => 'Настройките ви не можаха да бъдат заредени.';
 
   @override
-  String get waitForOmiToFinish => 'Wait for Omi to finish.';
+  String get waitForOmiToFinish => 'Изчакайте Omi да приключи.';
 
   @override
-  String get voiceNoteTooShort => 'Too short. Hold to record.';
+  String get voiceNoteTooShort => 'Твърде кратко. Задръжте за запис.';
 
   @override
-  String get submitAppMissingFields => 'Add a name, description, image, category and capability to submit.';
+  String get submitAppMissingFields => 'За да изпратите, добавете име, описание, изображение, категория и възможност.';
 
   @override
-  String get appSetupNotFinished => 'Setup isn\'t finished yet.';
+  String get appSetupNotFinished => 'Настройката още не е завършена.';
 
   @override
-  String get finishNothingKeptTitle => 'Nothing to Keep';
+  String get finishNothingKeptTitle => 'Няма какво да се запази';
 
   @override
-  String get submitAppFinishDetails => 'Finish the capability and pricing details above to submit.';
+  String get submitAppFinishDetails => 'За да изпратите, попълнете отгоре данните за възможността и цените.';
 
   @override
-  String get finishNothingNew => 'Nothing new yet.';
+  String get finishNothingNew => 'Все още няма нищо ново.';
 
   @override
-  String get takingLongerThanUsual => 'Taking longer than usual. We\'ll have it on Home.';
+  String get takingLongerThanUsual => 'Отнема повече време от обичайното. Скоро ще е в „Начало“.';
 
   @override
-  String get couldNotCheckOnIt => 'Couldn\'t check on it. Try again.';
+  String get couldNotCheckOnIt => 'Не можа да се провери. Опитайте отново.';
 
   @override
-  String get upgradeToOpenThisOne => 'Upgrade to open this one.';
+  String get upgradeToOpenThisOne => 'Надградете, за да отворите този разговор.';
 
   @override
-  String get missingTargetConversationGone => 'That conversation was deleted.';
+  String get missingTargetConversationGone => 'Този разговор беше изтрит.';
 
   @override
-  String get cantConnectRightNow => 'Can\'t connect right now.';
+  String get cantConnectRightNow => 'Не може да се свърже в момента.';
 
   @override
-  String get loadOlderFailed => 'Couldn\'t load older ones. Tap to retry.';
+  String get loadOlderFailed => 'По-старите не можаха да бъдат заредени. Докоснете, за да опитате отново.';
 
   @override
   String listeningWithDuration(String duration) {
-    return 'Listening · $duration';
+    return 'Слушаме · $duration';
   }
 
   @override
-  String get conversationLiveNoEdits => 'Wait until it ends to change it.';
+  String get conversationLiveNoEdits => 'Изчакайте да приключи, за да го промените.';
 
   @override
-  String get finishedSummaryReady => 'Summary ready';
+  String get finishedSummaryReady => 'Обобщението е готово';
 
   @override
-  String get writingSummaryStatus => 'Writing summary…';
+  String get writingSummaryStatus => 'Пише се обобщение…';
 
   @override
-  String get stillWorkingOnIt => 'Still working on it.';
+  String get stillWorkingOnIt => 'Все още работим по него.';
 }

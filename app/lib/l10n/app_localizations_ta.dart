@@ -15690,138 +15690,139 @@ class AppLocalizationsTa extends AppLocalizations {
   String get conversationRecentTranscript => 'சமீபத்திய உரையாடல் உரை';
 
   @override
-  String get finishAlreadySaved => 'Already saved. It\'s on Home.';
+  String get finishAlreadySaved => 'ஏற்கனவே சேமிக்கப்பட்டது. முகப்பில் உள்ளது.';
 
   @override
-  String get finishAudioNotReceived => 'Audio\'s still on its way.';
+  String get finishAudioNotReceived => 'ஆடியோ இன்னும் வந்துகொண்டிருக்கிறது.';
 
   @override
-  String get finishFailedOffline => 'Didn\'t go through. Your audio is safe.';
+  String get finishFailedOffline => 'செயல்படவில்லை. உங்கள் ஆடியோ பாதுகாப்பாக உள்ளது.';
 
   @override
-  String get finishFailed => 'Didn\'t go through. Your audio is safe.';
+  String get finishFailed => 'செயல்படவில்லை. உங்கள் ஆடியோ பாதுகாப்பாக உள்ளது.';
 
   @override
-  String get micBlockedCannotRecord => 'Allow the microphone to record.';
+  String get micBlockedCannotRecord => 'பதிவு செய்ய ஒலிவாங்கியை அனுமதிக்கவும்.';
 
   @override
-  String get couldNotStartRecording => 'Couldn\'t start recording.';
+  String get couldNotStartRecording => 'பதிவைத் தொடங்க முடியவில்லை.';
 
   @override
-  String get restorePurchasesFailed => 'Couldn\'t check your plan.';
+  String get restorePurchasesFailed => 'உங்கள் திட்டத்தைச் சரிபார்க்க முடியவில்லை.';
 
   @override
-  String get firmwareCheckFailed => 'Couldn\'t check for updates.';
+  String get firmwareCheckFailed => 'புதுப்பிப்புகளைச் சரிபார்க்க முடியவில்லை.';
 
   @override
-  String get conversationStillPublic => 'It\'s still shared by link.';
+  String get conversationStillPublic => 'இது இன்னும் இணைப்பு வழியாகப் பங்கிடப்பட்டுள்ளது.';
 
   @override
-  String get goalSaveFailed => 'Couldn\'t save your goal.';
+  String get goalSaveFailed => 'உங்கள் இலக்கைச் சேமிக்க முடியவில்லை.';
 
   @override
-  String get goalDeleteFailed => 'Couldn\'t delete. Goal restored.';
+  String get goalDeleteFailed => 'நீக்க முடியவில்லை. இலக்கு மீட்டமைக்கப்பட்டது.';
 
   @override
-  String get goalsLoadFailed => 'Couldn\'t load your goals.';
+  String get goalsLoadFailed => 'உங்கள் இலக்குகளை ஏற்ற முடியவில்லை.';
 
   @override
-  String get missingTargetEndedRecording => 'That recording has ended.';
+  String get missingTargetEndedRecording => 'அந்தப் பதிவு முடிந்துவிட்டது.';
 
   @override
-  String get missingTargetMemory => 'That memory is gone.';
+  String get missingTargetMemory => 'அந்த நினைவு இனி இல்லை.';
 
   @override
-  String get missingTargetTask => 'That task is gone.';
+  String get missingTargetTask => 'அந்தப் பணி இனி இல்லை.';
 
   @override
-  String get missingTargetConversation => 'Couldn\'t open this conversation.';
+  String get missingTargetConversation => 'இந்த உரையாடலைத் திறக்க முடியவில்லை.';
 
   @override
-  String get couldNotRefreshConversations => 'Couldn\'t refresh.';
+  String get couldNotRefreshConversations => 'புதுப்பிக்க முடியவில்லை.';
 
   @override
-  String get connectDeviceForOfflineSync => 'Connect your Omi to sync.';
+  String get connectDeviceForOfflineSync => 'ஒத்திசைக்க உங்கள் Omi சாதனத்தை இணைக்கவும்.';
 
   @override
-  String get useDifferentAccountMessage => 'You\'ll be signed out, and this phone\'s Omi settings will be reset.';
+  String get useDifferentAccountMessage =>
+      'நீங்கள் வெளியேற்றப்படுவீர்கள், மேலும் இந்தத் தொலைபேசியின் Omi அமைப்புகள் மீட்டமைக்கப்படும்.';
 
   @override
-  String get rayBanMetaNotFoundAfterSetup => 'Glasses not found. Are they on?';
+  String get rayBanMetaNotFoundAfterSetup => 'கண்ணாடிகள் கிடைக்கவில்லை. அவை இயக்கப்பட்டுள்ளதா?';
 
   @override
-  String get couldNotMoveTask => 'Couldn\'t move the task.';
+  String get couldNotMoveTask => 'பணியை நகர்த்த முடியவில்லை.';
 
   @override
   String lockedTasksKept(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Deleted. $count locked tasks were kept.',
-      one: 'Deleted. 1 locked task was kept.',
+      other: 'நீக்கப்பட்டது. பூட்டப்பட்ட பணிகள் வைக்கப்பட்டுள்ளன: $count.',
+      one: 'நீக்கப்பட்டது. 1 பூட்டப்பட்ட பணி வைக்கப்பட்டுள்ளது.',
     );
     return '$_temp0';
   }
 
   @override
-  String get settingNotSaved => 'Couldn\'t save that change.';
+  String get settingNotSaved => 'அந்த மாற்றத்தைச் சேமிக்க முடியவில்லை.';
 
   @override
-  String get couldNotLoadNotificationSettings => 'Couldn\'t load your settings.';
+  String get couldNotLoadNotificationSettings => 'உங்கள் அமைப்புகளை ஏற்ற முடியவில்லை.';
 
   @override
-  String get waitForOmiToFinish => 'Wait for Omi to finish.';
+  String get waitForOmiToFinish => 'Omi முடிக்கும் வரை காத்திருக்கவும்.';
 
   @override
-  String get voiceNoteTooShort => 'Too short. Hold to record.';
+  String get voiceNoteTooShort => 'மிகச் சிறியது. பதிவு செய்ய அழுத்திப் பிடிக்கவும்.';
 
   @override
-  String get submitAppMissingFields => 'Add a name, description, image, category and capability to submit.';
+  String get submitAppMissingFields => 'சமர்ப்பிக்க பெயர், விளக்கம், படம், வகை மற்றும் திறனைச் சேர்க்கவும்.';
 
   @override
-  String get appSetupNotFinished => 'Setup isn\'t finished yet.';
+  String get appSetupNotFinished => 'அமைவு இன்னும் முடிக்கப்படவில்லை.';
 
   @override
-  String get finishNothingKeptTitle => 'Nothing to Keep';
+  String get finishNothingKeptTitle => 'வைத்திருக்க எதுவுமில்லை';
 
   @override
-  String get submitAppFinishDetails => 'Finish the capability and pricing details above to submit.';
+  String get submitAppFinishDetails => 'சமர்ப்பிக்க மேலே உள்ள திறன் மற்றும் விலை விவரங்களை முடிக்கவும்.';
 
   @override
-  String get finishNothingNew => 'Nothing new yet.';
+  String get finishNothingNew => 'இன்னும் புதியது எதுவுமில்லை.';
 
   @override
-  String get takingLongerThanUsual => 'Taking longer than usual. We\'ll have it on Home.';
+  String get takingLongerThanUsual => 'வழக்கத்தைவிட அதிக நேரம் எடுக்கிறது. முகப்பில் தோன்றும்.';
 
   @override
-  String get couldNotCheckOnIt => 'Couldn\'t check on it. Try again.';
+  String get couldNotCheckOnIt => 'சரிபார்க்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
 
   @override
-  String get upgradeToOpenThisOne => 'Upgrade to open this one.';
+  String get upgradeToOpenThisOne => 'இதைத் திறக்க உங்கள் திட்டத்தை மேம்படுத்தவும்.';
 
   @override
-  String get missingTargetConversationGone => 'That conversation was deleted.';
+  String get missingTargetConversationGone => 'அந்த உரையாடல் நீக்கப்பட்டது.';
 
   @override
-  String get cantConnectRightNow => 'Can\'t connect right now.';
+  String get cantConnectRightNow => 'இப்போது இணைக்க முடியவில்லை.';
 
   @override
-  String get loadOlderFailed => 'Couldn\'t load older ones. Tap to retry.';
+  String get loadOlderFailed => 'பழையவற்றை ஏற்ற முடியவில்லை. மீண்டும் முயற்சிக்கத் தட்டவும்.';
 
   @override
   String listeningWithDuration(String duration) {
-    return 'Listening · $duration';
+    return 'கேட்கிறது · $duration';
   }
 
   @override
-  String get conversationLiveNoEdits => 'Wait until it ends to change it.';
+  String get conversationLiveNoEdits => 'மாற்றுவதற்கு அது முடியும் வரை காத்திருக்கவும்.';
 
   @override
-  String get finishedSummaryReady => 'Summary ready';
+  String get finishedSummaryReady => 'சுருக்கம் தயார்';
 
   @override
-  String get writingSummaryStatus => 'Writing summary…';
+  String get writingSummaryStatus => 'சுருக்கம் எழுதப்படுகிறது…';
 
   @override
-  String get stillWorkingOnIt => 'Still working on it.';
+  String get stillWorkingOnIt => 'இன்னும் அதில் வேலை செய்யப்படுகிறது.';
 }

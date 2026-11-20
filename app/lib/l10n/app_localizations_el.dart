@@ -15687,138 +15687,139 @@ class AppLocalizationsEl extends AppLocalizations {
   String get conversationRecentTranscript => 'Πρόσφατη απομαγνητοφώνηση';
 
   @override
-  String get finishAlreadySaved => 'Already saved. It\'s on Home.';
+  String get finishAlreadySaved => 'Έχει ήδη αποθηκευτεί. Είναι στην Αρχική.';
 
   @override
-  String get finishAudioNotReceived => 'Audio\'s still on its way.';
+  String get finishAudioNotReceived => 'Ο ήχος είναι ακόμα στον δρόμο.';
 
   @override
-  String get finishFailedOffline => 'Didn\'t go through. Your audio is safe.';
+  String get finishFailedOffline => 'Δεν ολοκληρώθηκε. Ο ήχος σας είναι ασφαλής.';
 
   @override
-  String get finishFailed => 'Didn\'t go through. Your audio is safe.';
+  String get finishFailed => 'Δεν ολοκληρώθηκε. Ο ήχος σας είναι ασφαλής.';
 
   @override
-  String get micBlockedCannotRecord => 'Allow the microphone to record.';
+  String get micBlockedCannotRecord => 'Επιτρέψτε το μικρόφωνο για εγγραφή.';
 
   @override
-  String get couldNotStartRecording => 'Couldn\'t start recording.';
+  String get couldNotStartRecording => 'Δεν ήταν δυνατή η έναρξη της εγγραφής.';
 
   @override
-  String get restorePurchasesFailed => 'Couldn\'t check your plan.';
+  String get restorePurchasesFailed => 'Δεν ήταν δυνατός ο έλεγχος του πλάνου σας.';
 
   @override
-  String get firmwareCheckFailed => 'Couldn\'t check for updates.';
+  String get firmwareCheckFailed => 'Δεν ήταν δυνατός ο έλεγχος για ενημερώσεις.';
 
   @override
-  String get conversationStillPublic => 'It\'s still shared by link.';
+  String get conversationStillPublic => 'Εξακολουθεί να κοινοποιείται μέσω συνδέσμου.';
 
   @override
-  String get goalSaveFailed => 'Couldn\'t save your goal.';
+  String get goalSaveFailed => 'Δεν ήταν δυνατή η αποθήκευση του στόχου σας.';
 
   @override
-  String get goalDeleteFailed => 'Couldn\'t delete. Goal restored.';
+  String get goalDeleteFailed => 'Δεν ήταν δυνατή η διαγραφή. Ο στόχος επαναφέρθηκε.';
 
   @override
-  String get goalsLoadFailed => 'Couldn\'t load your goals.';
+  String get goalsLoadFailed => 'Δεν ήταν δυνατή η φόρτωση των στόχων σας.';
 
   @override
-  String get missingTargetEndedRecording => 'That recording has ended.';
+  String get missingTargetEndedRecording => 'Αυτή η εγγραφή έχει τελειώσει.';
 
   @override
-  String get missingTargetMemory => 'That memory is gone.';
+  String get missingTargetMemory => 'Αυτή η ανάμνηση δεν υπάρχει πια.';
 
   @override
-  String get missingTargetTask => 'That task is gone.';
+  String get missingTargetTask => 'Αυτή η εργασία δεν υπάρχει πια.';
 
   @override
-  String get missingTargetConversation => 'Couldn\'t open this conversation.';
+  String get missingTargetConversation => 'Δεν ήταν δυνατό το άνοιγμα αυτής της συνομιλίας.';
 
   @override
-  String get couldNotRefreshConversations => 'Couldn\'t refresh.';
+  String get couldNotRefreshConversations => 'Δεν ήταν δυνατή η ανανέωση.';
 
   @override
-  String get connectDeviceForOfflineSync => 'Connect your Omi to sync.';
+  String get connectDeviceForOfflineSync => 'Συνδέστε το Omi σας για συγχρονισμό.';
 
   @override
-  String get useDifferentAccountMessage => 'You\'ll be signed out, and this phone\'s Omi settings will be reset.';
+  String get useDifferentAccountMessage =>
+      'Θα αποσυνδεθείτε και οι ρυθμίσεις του Omi σε αυτό το τηλέφωνο θα επαναφερθούν.';
 
   @override
-  String get rayBanMetaNotFoundAfterSetup => 'Glasses not found. Are they on?';
+  String get rayBanMetaNotFoundAfterSetup => 'Τα γυαλιά δεν βρέθηκαν. Είναι ενεργοποιημένα;';
 
   @override
-  String get couldNotMoveTask => 'Couldn\'t move the task.';
+  String get couldNotMoveTask => 'Δεν ήταν δυνατή η μετακίνηση της εργασίας.';
 
   @override
   String lockedTasksKept(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Deleted. $count locked tasks were kept.',
-      one: 'Deleted. 1 locked task was kept.',
+      other: 'Διαγράφηκαν. Διατηρήθηκαν $count κλειδωμένες εργασίες.',
+      one: 'Διαγράφηκαν. Διατηρήθηκε 1 κλειδωμένη εργασία.',
     );
     return '$_temp0';
   }
 
   @override
-  String get settingNotSaved => 'Couldn\'t save that change.';
+  String get settingNotSaved => 'Δεν ήταν δυνατή η αποθήκευση της αλλαγής.';
 
   @override
-  String get couldNotLoadNotificationSettings => 'Couldn\'t load your settings.';
+  String get couldNotLoadNotificationSettings => 'Δεν ήταν δυνατή η φόρτωση των ρυθμίσεών σας.';
 
   @override
-  String get waitForOmiToFinish => 'Wait for Omi to finish.';
+  String get waitForOmiToFinish => 'Περιμένετε να τελειώσει το Omi.';
 
   @override
-  String get voiceNoteTooShort => 'Too short. Hold to record.';
+  String get voiceNoteTooShort => 'Πολύ σύντομο. Κρατήστε πατημένο για εγγραφή.';
 
   @override
-  String get submitAppMissingFields => 'Add a name, description, image, category and capability to submit.';
+  String get submitAppMissingFields => 'Προσθέστε όνομα, περιγραφή, εικόνα, κατηγορία και δυνατότητα για την υποβολή.';
 
   @override
-  String get appSetupNotFinished => 'Setup isn\'t finished yet.';
+  String get appSetupNotFinished => 'Η ρύθμιση δεν έχει ολοκληρωθεί ακόμη.';
 
   @override
-  String get finishNothingKeptTitle => 'Nothing to Keep';
+  String get finishNothingKeptTitle => 'Τίποτα προς διατήρηση';
 
   @override
-  String get submitAppFinishDetails => 'Finish the capability and pricing details above to submit.';
+  String get submitAppFinishDetails => 'Συμπληρώστε παραπάνω τα στοιχεία δυνατότητας και τιμολόγησης για την υποβολή.';
 
   @override
-  String get finishNothingNew => 'Nothing new yet.';
+  String get finishNothingNew => 'Δεν υπάρχει κάτι νέο ακόμη.';
 
   @override
-  String get takingLongerThanUsual => 'Taking longer than usual. We\'ll have it on Home.';
+  String get takingLongerThanUsual => 'Αργεί περισσότερο από το συνηθισμένο. Θα το έχουμε στην Αρχική.';
 
   @override
-  String get couldNotCheckOnIt => 'Couldn\'t check on it. Try again.';
+  String get couldNotCheckOnIt => 'Δεν ήταν δυνατός ο έλεγχος. Δοκιμάστε ξανά.';
 
   @override
-  String get upgradeToOpenThisOne => 'Upgrade to open this one.';
+  String get upgradeToOpenThisOne => 'Αναβαθμίστε για να το ανοίξετε.';
 
   @override
-  String get missingTargetConversationGone => 'That conversation was deleted.';
+  String get missingTargetConversationGone => 'Αυτή η συνομιλία διαγράφηκε.';
 
   @override
-  String get cantConnectRightNow => 'Can\'t connect right now.';
+  String get cantConnectRightNow => 'Δεν είναι δυνατή η σύνδεση αυτή τη στιγμή.';
 
   @override
-  String get loadOlderFailed => 'Couldn\'t load older ones. Tap to retry.';
+  String get loadOlderFailed => 'Δεν φορτώθηκαν τα παλαιότερα. Πατήστε για επανάληψη.';
 
   @override
   String listeningWithDuration(String duration) {
-    return 'Listening · $duration';
+    return 'Ακούει · $duration';
   }
 
   @override
-  String get conversationLiveNoEdits => 'Wait until it ends to change it.';
+  String get conversationLiveNoEdits => 'Περιμένετε να τελειώσει για να την αλλάξετε.';
 
   @override
-  String get finishedSummaryReady => 'Summary ready';
+  String get finishedSummaryReady => 'Η σύνοψη είναι έτοιμη';
 
   @override
-  String get writingSummaryStatus => 'Writing summary…';
+  String get writingSummaryStatus => 'Γράφεται η σύνοψη…';
 
   @override
-  String get stillWorkingOnIt => 'Still working on it.';
+  String get stillWorkingOnIt => 'Εξακολουθούμε να δουλεύουμε πάνω σε αυτό.';
 }
