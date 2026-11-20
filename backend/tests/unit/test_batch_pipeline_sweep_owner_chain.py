@@ -10,11 +10,16 @@ the owner-drain kill-switch path (``BATCH_PIPELINE_OWNER_DRAIN_ENABLED=false``);
 import asyncio
 import itertools
 import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
 from contextlib import contextmanager
 from unittest.mock import Mock
 
 import pytest
 
+from omi_logging import JsonFormatter
 from database.batch_pipeline_store import (
     PROJECTION_DISCOVERY_STATES,
     projection_page,
@@ -527,6 +532,59 @@ def test_blocked_summary_reconciles_both_pages_and_uses_only_the_committed_resul
         ['privacy_unknown', 'unknown', 1],
         ['source_deletion_tombstone_required', b, 1],
     ]
+
+
+@pytest.mark.skipif(shutil.which('jq') is None, reason='Release readback requires jq')
+def test_release_command_reconciles_actual_sweep_logs(monkeypatch, tmp_path, caplog):
+    switches(monkeypatch, chain_on=False, pending_on=True)
+    revision = 'backend-integration-test'
+    formatter = JsonFormatter('backend-integration', 'test', None)
+    entries = []
+    for contention in (False, True):
+        log = ResultLog(async_projection=False)
+        log.policy['projection_contention'] = contention
+        for segment in ('first', 'second'):
+            log.commit('owner', segment, segment, [segment])
+        projector = projector_for(log)
+        monkeypatch.setattr(projector, '_project_read', Mock(side_effect=projection.ProjectionPredecessorPending()))
+        caplog.clear()
+        with caplog.at_level('INFO', logger=projection.logger.name):
+            assert projector.sweep()['blocked'] == 2
+        (record,) = (r for r in caplog.records if 'blocked_groups=' in r.getMessage())
+        entries.append(
+            {'jsonPayload': json.loads(formatter.format(record))}
+            if contention
+            else {'textPayload': record.getMessage()}
+        )
+
+    # Substitute only the Cloud Logging read. The production script, shell
+    # pipeline and jq program run unmodified against the emitted log records.
+    gcloud = tmp_path / 'gcloud'
+    gcloud.write_text('#!/bin/sh\ncat\n')
+    gcloud.chmod(0o755)
+    command = Path(__file__).resolve().parents[2] / 'scripts' / 'projection_sweep_blocked_counts.sh'
+
+    def readback():
+        return subprocess.run(
+            [str(command), 'synthetic-project', revision],
+            input=json.dumps(entries),
+            text=True,
+            capture_output=True,
+            env={**os.environ, 'PATH': f"{tmp_path}:{os.environ['PATH']}"},
+        )
+
+    valid = readback()
+    assert valid.returncode == 0, valid.stderr
+    assert json.loads(valid.stdout) == {
+        'revision': revision,
+        'summaries': 2,
+        'blocked': 4,
+        'groups': [{'reason': 'predecessor_pending', 'worker_image_digest': 'unknown', 'blocked': 4}],
+    }
+    entries[0]['textPayload'] = entries[0]['textPayload'].replace('blocked=2 ', 'blocked=3 ')
+    mismatch = readback()
+    assert mismatch.returncode != 0
+    assert 'blocked groups differ from sweep total' in mismatch.stderr
 
 
 def test_single_segment_contents_hand_off_the_page_row_too():

@@ -11,9 +11,10 @@ gcloud logging read "$filter" --project="$project" --freshness=30m --format=json
   jq -e --arg revision "$revision" '
     if length == 0 then error("no sweep summaries in the window") else . end
     | map((.jsonPayload.message // .textPayload)
-        | (capture(" blocked=(?<blocked>[0-9]+) error=[0-9]+ blocked_groups=(?<groups>\\[.*\\])$") // error("summary lacks attribution"))
+        | (capture(" blocked=(?<blocked>[0-9]+) error=[0-9]+ blocked_groups=(?<groups>.+)$") // error("summary lacks attribution"))
         | (.groups | fromjson) as $groups
-        | if (([$groups[][2]] | add) // 0) == (.blocked | tonumber) then $groups
+        | if ($groups | type) != "array" then error("blocked groups must be an array")
+          elif (([$groups[][2]] | add) // 0) == (.blocked | tonumber) then $groups
           else error("blocked groups differ from sweep total") end)
     | {revision: $revision, summaries: length,
        blocked: ([.[][][2]] | add // 0),
