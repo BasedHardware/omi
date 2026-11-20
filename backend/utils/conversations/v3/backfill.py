@@ -14,16 +14,16 @@ import hashlib
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from config.conversations_v3 import stretch_cohesion_enabled
+from config.conversations_v3 import HISTORICAL_SITDOWN_TIMING, stretch_cohesion_enabled
 from database import conversations as conversations_db
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
 from database import conversations_v3_rederive as rederive_store
 from utils.cloud_tasks import enqueue_named_task
-from utils.conversations.v3 import outline, planner, policy, service, visibility
+from utils.conversations.v3 import Conflict, outline, planner, policy, service, visibility
 from utils.conversations.v3.triggers import task_base
 from utils.executors import db_executor, run_blocking
 
@@ -63,23 +63,33 @@ def _utc(value):
     return outline.utc(value)
 
 
-def plan_partitions(meta, since, until, *, max_rows=PARTITION_ROWS):
+def plan_partitions(meta, since, until, *, max_rows=PARTITION_ROWS, historical_sitdown=False):
     """Cut [since, until) into partitions of at most max_rows documents, at recorded silence.
 
     A cut is placed at the last gap of at least five minutes (outline.SILENCE, the live hard window
     boundary), so no live stretch spans two partitions. Only a gap-free run longer than max_rows is
     cut at its largest gap; that partition is marked forced_cut and the run reports the count.
+    Historical sit-down plans require a 900-second boundary and refuse forced cuts.
     """
+    gap_seconds = HISTORICAL_SITDOWN_TIMING[0] if historical_sitdown else outline.SILENCE.total_seconds()
     rows = sorted((r for r in meta if r.get('started_at')), key=lambda r: _utc(r['started_at']))
+    if (
+        historical_sitdown
+        and len(rows) > max_rows
+        and any(not r.get('finished_at') or _utc(r['finished_at']) < _utc(r['started_at']) for r in rows)
+    ):
+        raise Conflict('rederive_live_boundary')
     partitions, current, gaps = [], [], []
     end = None
     for row in rows:
         start = _utc(row['started_at'])
         gap = (start - end).total_seconds() if end is not None else float('inf')
         if len(current) >= max_rows:
-            silent = [i for i in range(1, len(current)) if gaps[i] >= outline.SILENCE.total_seconds()]
-            forced = not silent and gap < outline.SILENCE.total_seconds()
-            if gap >= outline.SILENCE.total_seconds():
+            silent = [i for i in range(1, len(current)) if gaps[i] >= gap_seconds]
+            forced = not silent and gap < gap_seconds
+            if forced and historical_sitdown:
+                raise Conflict('rederive_live_boundary')
+            if gap >= gap_seconds:
                 cut = len(current)
             elif silent:
                 cut = silent[-1]
@@ -205,7 +215,19 @@ def new_run_id(now=None):
 
 
 def create_run(
-    uid, *, since, until, mode, operator, code_sha, partitions, estimate, counts, run_id=None, firestore_client=None
+    uid,
+    *,
+    since,
+    until,
+    mode,
+    operator,
+    code_sha,
+    partitions,
+    estimate,
+    counts,
+    historical_sitdown=False,
+    run_id=None,
+    firestore_client=None,
 ):
     """Write the planned run and its start marker; the sweep starts it when the switch is on."""
     run_id = run_id or new_run_id()
@@ -220,6 +242,10 @@ def create_run(
         'counts': counts,
         'forced_cuts': sum(1 for p in partitions if p.get('forced_cut')),
     }
+    if historical_sitdown:
+        if mode != LIVE_MODE or record['forced_cuts']:
+            raise Conflict('rederive_live_timing')
+        record['historical_timing'] = list(HISTORICAL_SITDOWN_TIMING)
     if not runs.create_run(uid, run_id, record, firestore_client=firestore_client):
         raise ValueError('backfill_run_exists')
     runs.mark_start(uid, run_id, firestore_client=firestore_client)
@@ -320,6 +346,7 @@ async def run_step(uid, run_id, index, phase):
     active = {'planned', 'running'}
     sha = os.getenv('OMI_BACKEND_RELEASE_SHA', '')
     if phase == 'derive' and part.get('status') in {'pending', 'deriving'}:
+        historical_timing = run.get('historical_timing')
         if not await run_blocking(
             db_executor,
             runs.update_run,
@@ -339,6 +366,8 @@ async def run_step(uid, run_id, index, phase):
             run_id=run_id,
             rederive=run.get('mode') == 'rederive',
             live=run.get('mode') == LIVE_MODE,
+            historical_timing=historical_timing,
+            internal_end=index + 1 < len(partitions),
             report=report,
         )
         if outcome == 'busy':
@@ -555,7 +584,7 @@ def classify_live_window(meta):
     return counts
 
 
-def estimate_live_partition(uid, partition, run_id, *, now=None):
+def estimate_live_partition(uid, partition, run_id, *, now=None, historical_sitdown=False, internal_end=False):
     """Read-only preview of one live re-derive partition. Writes nothing and calls no model.
 
     Before counts are exact. After counts come from the real planner with one window per stretch
@@ -570,12 +599,31 @@ def estimate_live_partition(uid, partition, run_id, *, now=None):
         uid, since=partition['since'], until=partition['until'], run_id=run_id
     )
     eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
-    groups = outline.stretches(eligible, now)
+    if historical_sitdown:
+        groups = service.historical_stretches(
+            eligible, now, since=partition['since'], until=partition['until'], internal_end=internal_end
+        )
+    else:
+        groups = outline.stretches(eligible, now)
     protected = {cid for cid, row in existing.items() if row.get('_v3_protected')}
     outlines = [outline.fallback(group) for group in groups]
-    windows = planner.preserve_finished_windows(
-        planner.windows(groups, outlines, cohesion=stretch_cohesion_enabled()), existing, recordings
-    )
+    if historical_sitdown:
+        ownership = planner.Ownership(existing, recordings)
+        planned = planner.windows(
+            groups,
+            outlines,
+            cohesion=True,
+            silence_gap=timedelta(seconds=HISTORICAL_SITDOWN_TIMING[0]),
+            defer_topic_lock=True,
+            ownership=ownership,
+        )
+        windows = planner.preserve_finished_windows(
+            planned, existing, recordings, protect_provisional=True, ownership=ownership
+        )
+    else:
+        windows = planner.preserve_finished_windows(
+            planner.windows(groups, outlines, cohesion=stretch_cohesion_enabled()), existing, recordings
+        )
     # Retained windows belong to protected rows, which the run never writes.
     fresh = [w for w in windows if w.get('existing_id') not in protected]
     est = {

@@ -25,7 +25,13 @@ from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud.firestore_v1 import FieldFilter
 
-from config.conversations_v3 import DEFAULT_BOUNDARY_SECONDS, boundary_seconds, stretch_cohesion_enabled
+from config.conversations_v3 import (
+    DEFAULT_BOUNDARY_SECONDS,
+    HISTORICAL_SITDOWN_TIMING,
+    SPEECH_LANDED_FIELD,
+    boundary_seconds,
+    stretch_cohesion_enabled,
+)
 from utils.conversations.v3.triggers import enqueue, changed
 from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
@@ -75,6 +81,8 @@ BLOCKED = frozenset(
         'rederive_live_outline_failed',
         'rederive_live_coverage',
         'rederive_live_range_overflow',
+        'rederive_live_timing',
+        'rederive_live_landing_unknown',
     }
 )
 
@@ -180,6 +188,25 @@ def _backfill_runs(window, recordings):
     return found
 
 
+def historical_stretches(eligible, now, *, since, until, internal_end=False):
+    """Build settled stretches and verify the partition edge using actual speech bounds."""
+    silence_gap, lock_delay = (timedelta(seconds=value) for value in HISTORICAL_SITDOWN_TIMING)
+    for row in eligible:
+        if any(str(segment.get('text') or '').strip() for segment in row.get('transcript_segments') or ()):
+            landed = row.get(SPEECH_LANDED_FIELD)
+            if not isinstance(landed, datetime) or landed.utcoffset() is None:
+                raise Conflict('rederive_live_landing_unknown')
+    groups = outline.stretches(eligible, now, silence_gap=silence_gap, lock_delay=lock_delay, settle_on_landing=True)
+    # Metadata finished_at can lag a late transcript. Reserve a full silence gap on the left
+    # of an internal seam and verify the right side starts at or after it.
+    latest = until - silence_gap if internal_end else until
+    if any(group['lines'][0]['start'] < since or group['end'] > latest for group in groups):
+        raise Conflict('rederive_live_boundary')
+    if any(not group['locked'] for group in groups):
+        raise Conflict('rederive_live_open')
+    return groups
+
+
 async def reconcile(
     uid,
     *,
@@ -191,6 +218,8 @@ async def reconcile(
     run_id=None,
     rederive=False,
     live=False,
+    historical_timing=None,
+    internal_end=False,
     report=None,
     _pass=0,
 ):
@@ -200,7 +229,8 @@ async def reconcile(
     inputs (legacy donors instead of v3_pending recordings), in stamping rows ``backfilled`` and in
     queueing notes on its own marker, drained by the backfill task instead of the live queue.
     ``live`` (with ``derive``) replans the owner's finished live windows from their sealed sources:
-    see rederive_store.load_live_rederive and _live_outcome.
+    see rederive_store.load_live_rederive and _live_outcome. An explicit historical timing
+    receipt opts that repair into the serving sit-down profile.
     """
     report = {} if report is None else report
     key = store.BACKFILL_LEASE if derive else 'builder'
@@ -221,6 +251,17 @@ async def reconcile(
         metrics.RECONCILES.labels('busy').inc()
         return 'busy'
     try:
+        cohesion = stretch_cohesion_enabled()
+        silence_seconds, lock_seconds = boundary_seconds(cohesion=cohesion and not derive)
+        if historical_timing is not None:
+            if (
+                not (derive and live)
+                or not isinstance(historical_timing, (tuple, list))
+                or tuple(historical_timing) != HISTORICAL_SITDOWN_TIMING
+                or boundary_seconds(cohesion=cohesion) != HISTORICAL_SITDOWN_TIMING
+            ):
+                raise Conflict('rederive_live_timing')
+            silence_seconds, lock_seconds = HISTORICAL_SITDOWN_TIMING
         if derive and live:
             recordings, existing, cached, skipped = await run_blocking(
                 db_executor, rederive_store.load_live_rederive, uid, since=since, until=until, run_id=run_id
@@ -245,13 +286,14 @@ async def reconcile(
             )
         now = datetime.now(timezone.utc)
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
-        cohesion = stretch_cohesion_enabled()
-        silence_seconds, lock_seconds = boundary_seconds(cohesion=cohesion and not derive)
         custom_timing = (silence_seconds, lock_seconds) != (DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS)
         silence_gap, lock_delay = timedelta(seconds=silence_seconds), timedelta(seconds=lock_seconds)
-        groups = outline.stretches(
-            eligible, now, silence_gap=silence_gap, lock_delay=lock_delay, settle_on_landing=custom_timing
-        )
+        if historical_timing is not None:
+            groups = historical_stretches(eligible, now, since=since, until=until, internal_end=internal_end)
+        else:
+            groups = outline.stretches(
+                eligible, now, silence_gap=silence_gap, lock_delay=lock_delay, settle_on_landing=custom_timing
+            )
         if live and not all(group['finished'] for group in groups):
             # Speech within five minutes of now is still the live builder's; refuse before any paid call.
             raise Conflict('rederive_live_open')

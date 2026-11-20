@@ -386,6 +386,14 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     and retire fewer rows than `rows_retired_est`. Spend: one outline per stretch plus notes per
     window after. The run's ledger records the exact `windows_after`, `visible_after`,
     `rows_rebuilt`, `rows_created`, `rows_unchanged`, `rows_retired` and `outline_calls`.
+  - Use `--historical-sitdown` for the 900-second gap and 3,600-second landing lock. It takes
+    one owner and explicit bounds, with the end at least an hour old. Partitioning refuses forced
+    cuts, and the estimate and worker verify seams using decoded speech. Missing landing timestamps
+    and unsettled stretches block the partition. The estimate still uses placeholder outlines.
+    Before scheduling an approved repair, verify that every backfill task worker serves this
+    code with cohesion enabled and both exact timing settings. The run records the timing pair
+    and each derive attempt checks it against the worker configuration. Pause dispatch before
+    routing an unfinished timed run to an older worker.
   - Blocked: `rederive_live_open` (speech within five minutes of now), `rederive_live_boundary` (a
     rebuilt window would cross `since` or `until`), `rederive_live_outline_failed` (the outline fell
     back; never committed as failed tiles), `rederive_live_coverage` (a row's speech would be lost),
