@@ -12,22 +12,18 @@ The load-bearing facts this guards:
   that rule. Without ``--allow-rule-removal`` this validator refuses any desired
   file that drops a rule present in the live describe. Rollback is narrower:
   ``--allow-rule-removal-of <apply document>`` permits dropping only rules that
-  the apply variant declared (the Coldline rule); any other live rule still
+  the apply variant declared; any other live rule still
   blocks. ``--allow-rule-removal`` remains as an explicit operator override.
 * No ``Delete`` action may ever reach ``chunks/``. An unscoped Delete rule counts
-  as reaching it. The single exception is ``NONCURRENT_DELETE_RULE``: a Delete
-  scoped to noncurrent ``chunks/**.opus.enc`` generations with
-  ``numNewerVersions: 1``, which deletes only strictly-superseded generations and
-  always keeps the newest generation of every object name (David, 10-23: delete
-  noncurrent ``.opus.enc`` only after the regen check; see the storage-ops
-  README for why this shape satisfies it).
+  as reaching it. Raw-audio noncurrent deletion is pending explicit clearance
+  in ``retention_contract.json`` and is forbidden, including ``.opus.enc``.
 * At most one ``SetStorageClass`` rule is permitted, targeting COLDLINE from
   STANDARD/MULTI_REGIONAL and prefix-scoped to exactly ``chunks/``. David
   dropped the prod-stock ARCHIVE transition on 11-02 because of its one-time
   operation cost. The new-empty-bucket forward policy is a separate contract.
-* All other noncurrent-version rules (``isLive: false`` and friends) are
-  forbidden: a bucket-wide noncurrent rule would move ``playback/`` noncurrent
-  versions to Coldline, which the 30-day Delete rule then early-deletes.
+* The only permitted noncurrent-version rule is ``NONCURRENT_DELETE_RULE``:
+  Delete after seven noncurrent days, scoped to ``playback/`` and ``merged/``
+  (David, 2026-11-05 17:01/17:03Z). All wider or different shapes are forbidden.
 """
 
 from __future__ import annotations
@@ -44,22 +40,25 @@ ALLOWED_SOURCE_CLASSES = {"STANDARD", "MULTI_REGIONAL"}
 NONCURRENT_CONDITION_KEYS = ("daysSinceNoncurrentTime", "noncurrentTimeBefore", "numNewerVersions")
 
 PROD_BUCKET = "omi-private-cloud-sync"
-LEGACY_DELETE_RULES: tuple[dict[str, Any], ...] = (
-    {"action": {"type": "Delete"}, "condition": {"age": 3, "matchesPrefix": ["merged/"]}},
+PROD_BASELINE_RULES: tuple[dict[str, Any], ...] = (
     {"action": {"type": "Delete"}, "condition": {"age": 30, "matchesPrefix": ["playback/"]}},
+    {
+        "action": {"type": "SetStorageClass", "storageClass": "COLDLINE"},
+        "condition": {
+            "age": 30,
+            "matchesPrefix": [CHUNKS_PREFIX],
+            "matchesStorageClass": ["STANDARD", "MULTI_REGIONAL"],
+            "matchesSuffix": [".batch.enc", ".batch.bin"],
+        },
+    },
 )
-# The one permitted noncurrent rule: deletes superseded .opus.enc chunk
-# generations only. numNewerVersions: 1 keeps the newest generation of every
-# object name (a live object's current generation has zero newer versions, and
-# so does the newest generation of a fully-deleted conversation), so nothing
-# that exists today is erased; only strictly-older duplicates are removed.
+# David approved derived-cache cleanup only; raw chunks remain protected.
 NONCURRENT_DELETE_RULE: dict[str, Any] = {
     "action": {"type": "Delete"},
     "condition": {
         "isLive": False,
-        "numNewerVersions": 1,
-        "matchesPrefix": [CHUNKS_PREFIX],
-        "matchesSuffix": [".opus.enc"],
+        "daysSinceNoncurrentTime": 7,
+        "matchesPrefix": ["playback/", "merged/"],
     },
 }
 
@@ -114,8 +113,8 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
             condition.get("isLive") is False or any(key in condition for key in NONCURRENT_CONDITION_KEYS)
         ) and not _is_scoped_noncurrent_delete(rule):
             errors.append(
-                f"desired rule {index} targets noncurrent versions; noncurrent-version rules are forbidden "
-                "(they would Coldline playback/ noncurrent versions that the 30-day Delete rule early-deletes)"
+                f"desired rule {index} targets noncurrent versions; only the approved seven-day "
+                "playback/ and merged/ noncurrent Delete rule is permitted"
             )
         prefixes = condition.get("matchesPrefix")
         if prefixes is not None and (
@@ -131,7 +130,7 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
                 errors.append(
                     f"desired rule {index} is an unscoped Delete; a Delete rule must never be able to match {CHUNKS_PREFIX!r}"
                 )
-            elif not _is_scoped_noncurrent_delete(rule):
+            else:
                 for prefix in prefixes:
                     if _prefix_touches_chunks(prefix):
                         errors.append(
@@ -170,9 +169,11 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
             f"desired document declares {noncurrent_delete_rules} scoped noncurrent Delete rules; at most one is expected"
         )
     if bucket == PROD_BUCKET:
-        for legacy in LEGACY_DELETE_RULES:
+        for legacy in PROD_BASELINE_RULES:
             if legacy not in lifecycle["rule"]:
-                errors.append(f"desired document is missing the legacy prod rule {json.dumps(legacy, sort_keys=True)}")
+                errors.append(
+                    f"desired document is missing the pre-change live prod rule {json.dumps(legacy, sort_keys=True)}"
+                )
     return errors
 
 

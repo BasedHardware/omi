@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from scripts.validate_storage_lifecycle import (
-    LEGACY_DELETE_RULES,
+    PROD_BASELINE_RULES,
     NONCURRENT_DELETE_RULE,
     validate_against_live,
     validate_desired_document,
@@ -29,12 +29,10 @@ def test_checked_in_documents_pass_the_source_contract():
         assert validate_desired_document(_load(name)) == [], name
 
 
-def test_no_delete_rule_can_reach_chunks_except_the_scoped_noncurrent_rule():
+def test_no_delete_rule_can_reach_chunks():
     for name in APPLY_FILES + ROLLBACK_FILES:
         for rule in _rules(_load(name)):
             if rule["action"]["type"] != "Delete":
-                continue
-            if rule == NONCURRENT_DELETE_RULE:
                 continue
             prefixes = rule["condition"].get("matchesPrefix")
             assert prefixes, f"{name}: unscoped Delete rule"
@@ -94,43 +92,63 @@ def test_archive_rule_is_rejected_in_every_private_cloud_variant(name):
     assert any("must set storageClass COLDLINE" in e and "ARCHIVE" in e for e in errors), errors
 
 
-def test_prod_re_declares_the_two_legacy_delete_rules_verbatim():
+def test_prod_and_rollback_preserve_the_pre_change_live_rules():
     for name in ("prod.json", "prod.rollback.json"):
-        rules = _rules(_load(name))
-        assert {"action": {"type": "Delete"}, "condition": {"age": 3, "matchesPrefix": ["merged/"]}} in rules, name
-        assert {"action": {"type": "Delete"}, "condition": {"age": 30, "matchesPrefix": ["playback/"]}} in rules, name
-        for legacy in LEGACY_DELETE_RULES:
-            assert legacy in rules, name
+        for baseline in PROD_BASELINE_RULES:
+            assert baseline in _rules(_load(name)), name
+    assert _rules(_load("prod.rollback.json")) == list(PROD_BASELINE_RULES)
 
 
-def test_prod_noncurrent_delete_rule_is_pinned():
-    rules = _rules(_load("prod.json"))
-    assert NONCURRENT_DELETE_RULE in rules, "prod must declare the scoped noncurrent .opus.enc delete rule"
-    assert rules.count(NONCURRENT_DELETE_RULE) == 1
-    condition = NONCURRENT_DELETE_RULE["condition"]
-    assert condition["isLive"] is False
-    assert condition["numNewerVersions"] == 1, (
-        "numNewerVersions > 1 or 0 changes which generations survive; 1 keeps exactly the newest "
-        "generation of every object name (David 10-23 regen-check ruling)"
-    )
-    assert condition["matchesPrefix"] == ["chunks/"]
-    assert condition["matchesSuffix"] == [".opus.enc"], "wider suffixes would delete noncurrent PCM batch generations"
+def test_prod_declares_exactly_the_approved_four_rules():
+    assert _rules(_load("prod.json")) == list(PROD_BASELINE_RULES) + [
+        {"action": {"type": "Delete"}, "condition": {"age": 3, "matchesPrefix": ["merged/"]}},
+        {
+            "action": {"type": "Delete"},
+            "condition": {
+                "isLive": False,
+                "daysSinceNoncurrentTime": 7,
+                "matchesPrefix": ["playback/", "merged/"],
+            },
+        },
+    ]
 
 
 def test_rollback_files_only_drop_rules_the_apply_variant_added():
     for apply_name, rollback_name in zip(APPLY_FILES, ROLLBACK_FILES):
         apply_rules = _rules(_load(apply_name))
         rollback_rules = _rules(_load(rollback_name))
-        assert all(rule["action"]["type"] == "Delete" for rule in rollback_rules)
         assert all(rule in apply_rules for rule in rollback_rules)
         dropped = [rule for rule in apply_rules if rule not in rollback_rules]
-        expected = ["Delete", "SetStorageClass"] if apply_name == "prod.json" else ["SetStorageClass"]
-        assert (
-            sorted(rule["action"]["type"] for rule in dropped) == expected
-        ), f"{apply_name}: rollback must drop exactly the rules the apply variant added beyond legacy"
+        expected = ["Delete", "Delete"] if apply_name == "prod.json" else ["SetStorageClass"]
+        assert sorted(rule["action"]["type"] for rule in dropped) == expected
         if apply_name == "prod.json":
             assert NONCURRENT_DELETE_RULE in dropped
+        live = {
+            "name": _load(apply_name)["bucket"],
+            "versioning": {"enabled": True},
+            "lifecycle": {"rule": apply_rules},
+        }
+        assert validate_against_live(_load(rollback_name), live, allow_rule_removal_of=apply_rules) == []
         assert _load(apply_name)["bucket"] == _load(rollback_name)["bucket"]
+
+
+@pytest.mark.parametrize("name", APPLY_FILES + ROLLBACK_FILES)
+def test_unapproved_raw_audio_noncurrent_delete_is_rejected(name):
+    document = _load(name)
+    document["lifecycle"]["rule"].append(
+        {
+            "action": {"type": "Delete"},
+            "condition": {
+                "isLive": False,
+                "numNewerVersions": 1,
+                "matchesPrefix": ["chunks/"],
+                "matchesSuffix": [".opus.enc"],
+            },
+        }
+    )
+    errors = validate_desired_document(document)
+    assert any("can match 'chunks/'" in error for error in errors)
+    assert any("only the approved" in error for error in errors)
 
 
 def test_bucket_wide_set_storage_class_rule_is_rejected():
@@ -202,17 +220,20 @@ def test_scoped_noncurrent_delete_rule_passes_and_near_misses_are_rejected():
         ]
         return validate_desired_document(document)
 
-    # A wider suffix would delete noncurrent PCM batch generations.
-    wider = json.loads(json.dumps(NONCURRENT_DELETE_RULE))
-    wider["condition"]["matchesSuffix"] = [".opus.enc", ".batch.enc"]
-    assert any("noncurrent" in error or "can match 'chunks/'" in error for error in errors_with(wider))
+    # An unscoped or wider prefix could delete protected raw audio.
+    for prefixes in (None, [], [""], ["playback/", "merged/", "chunks/"]):
+        wider = json.loads(json.dumps(NONCURRENT_DELETE_RULE))
+        if prefixes is None:
+            del wider["condition"]["matchesPrefix"]
+        else:
+            wider["condition"]["matchesPrefix"] = prefixes
+        assert errors_with(wider)
 
-    # numNewerVersions != 1 changes which generations survive.
-    looser = json.loads(json.dumps(NONCURRENT_DELETE_RULE))
-    del looser["condition"]["numNewerVersions"]
-    assert any("noncurrent" in error for error in errors_with(looser))
+    for key, value in (("daysSinceNoncurrentTime", 6), ("isLive", True), ("numNewerVersions", 1)):
+        altered = json.loads(json.dumps(NONCURRENT_DELETE_RULE))
+        altered["condition"][key] = value
+        assert any("noncurrent" in error for error in errors_with(altered))
 
-    # Dropping isLive widens the rule beyond the reviewed shape.
     no_is_live = json.loads(json.dumps(NONCURRENT_DELETE_RULE))
     del no_is_live["condition"]["isLive"]
     assert any("noncurrent" in error for error in errors_with(no_is_live))
