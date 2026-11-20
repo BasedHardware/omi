@@ -37,17 +37,25 @@ def _type_name(error: BaseException) -> str:
     return f'{kind.__module__}.{kind.__qualname__}'
 
 
+def _causes(error: BaseException) -> list[BaseException]:
+    # Explicit causes only; implicit context is incidental. google.api_core.RetryError
+    # can carry its last error on ``.cause`` as well as, or instead of, ``__cause__``.
+    found = [error.__cause__]
+    if isinstance(error, api_exceptions.RetryError):
+        found.append(error.cause)
+    return [cause for cause in found if isinstance(cause, BaseException)]
+
+
 def _chain(error: BaseException) -> list[BaseException]:
-    links, seen, current = [], set(), error
-    while current is not None and id(current) not in seen:
+    """Every explicit cause reachable from ``error``, depth-first, each once."""
+    links, seen, stack = [], set(), [error]
+    while stack:
+        current = stack.pop()
+        if id(current) in seen:
+            continue
         links.append(current)
         seen.add(id(current))
-        # Explicit causes only. google.api_core.RetryError keeps its last error on
-        # ``.cause`` rather than ``__cause__``; implicit context is incidental.
-        cause = current.__cause__
-        if cause is None and isinstance(current, api_exceptions.RetryError):
-            cause = current.cause
-        current = cause if isinstance(cause, BaseException) else None
+        stack.extend(reversed(_causes(current)))
     return links
 
 

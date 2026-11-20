@@ -214,6 +214,35 @@ def test_a_fatal_status_raised_from_a_transient_cause_stays_fatal(chain):
     assert 'secret' not in json.dumps(report)
 
 
+@pytest.mark.parametrize(
+    'explicit,sdk',
+    [
+        (cli.api_exceptions.Aborted('a'), cli.api_exceptions.PermissionDenied('jobs/secret-doc-id')),
+        (cli.api_exceptions.PermissionDenied('jobs/secret-doc-id'), cli.api_exceptions.Aborted('a')),
+    ],
+)
+def test_a_retry_error_walks_both_its_explicit_and_sdk_causes(explicit, sdk):
+    try:
+        raise cli.api_exceptions.RetryError('exhausted', sdk) from explicit
+    except cli.api_exceptions.RetryError as error:
+        report = cli.error_report(error)
+    assert report['retryable'] is False
+    assert set(report['cause_types']) == {
+        'google.api_core.exceptions.Aborted',
+        'google.api_core.exceptions.PermissionDenied',
+    }
+    assert 'secret' not in json.dumps(report)
+
+
+def test_a_retry_error_with_both_causes_transient_stays_retryable():
+    try:
+        raise cli.api_exceptions.RetryError('exhausted', cli.api_exceptions.DeadlineExceeded('d')) from (
+            cli.api_exceptions.Aborted('a')
+        )
+    except cli.api_exceptions.RetryError as error:
+        assert cli.error_report(error)['retryable'] is True
+
+
 def test_a_non_exception_retry_error_cause_still_yields_a_stop_line():
     error = cli.api_exceptions.RetryError('exhausted', None)
     error._cause = 'not an exception'
