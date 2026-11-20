@@ -183,3 +183,19 @@ The fake Kubernetes API exercises real JSON Patch preconditions, preservation,
 consumer refusal and exact reverse-image behavior. Workflow tests exercise input
 scope validation and assert success-only ordering/control bindings. They do not
 simulate GitHub environment approvals, external holds or paid runtime behavior.
+
+## Producer digest on completed GPU results
+
+After loading models, each GPU worker process reads its own Pod once using the
+existing namespaced Pods list permission. The field selector uses the Pod name
+from its mounted, Pod-bound service account token. The response must match the
+token's namespace, name and UID. The running `worker` container must confirm the
+Pod's digest pin through its image ID, or through its exact running image name
+when the runtime supplies a bare config ID.
+
+Successful speech and silence completions carry that digest in
+`result.worker_image_digest`. During an image-only roll, draining and
+replacement Pods retain their own identities. The same applies on the inverse.
+An unavailable proof, including a denied Pod read, leaves the field absent for
+that process. Existing results retain their original shape. The integration
+sweep reports absent provenance as `unknown`.

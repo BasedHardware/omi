@@ -126,7 +126,11 @@ def load_worker(artifacts):
         raise RuntimeError('batch worker requires exactly one visible dedicated CUDA GPU')
     if not torch.cuda.is_bf16_supported():
         raise RuntimeError('batch worker requires BF16 ASR support')
-    return load_local_worker(artifacts, device='cuda:0', dtype='bfloat16', model_batch_size=model_batch_size)
+    from diarizer.worker_image import running_worker_digest
+
+    worker = load_local_worker(artifacts, device='cuda:0', dtype='bfloat16', model_batch_size=model_batch_size)
+    worker.worker_image_digest = running_worker_digest()
+    return worker
 
 
 def synchronize_gpu():
