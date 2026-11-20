@@ -14,7 +14,8 @@ from google.api_core import exceptions as api_exceptions
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from database.batch_pipeline_allowance_migration import RowRateLimiter, apply_page, counts
+from database.batch_pipeline_allowance_migration import MigrationOwnerChanged, RowRateLimiter, apply_page, counts
+from database.firestore_transaction_retry import FirestoreContentionExhausted, is_transaction_contention
 from database.batch_pipeline_store import FirestoreStore
 from utils.executors import shutdown_executors
 
@@ -26,6 +27,8 @@ RETRYABLE = (
     api_exceptions.InternalServerError,
     api_exceptions.ResourceExhausted,
     api_exceptions.ServiceUnavailable,
+    FirestoreContentionExhausted,
+    MigrationOwnerChanged,
 )
 
 
@@ -34,13 +37,36 @@ def _type_name(error: BaseException) -> str:
     return f'{kind.__module__}.{kind.__qualname__}'
 
 
+def _chain(error: BaseException) -> list[BaseException]:
+    links, seen, current = [], set(), error
+    while current is not None and id(current) not in seen:
+        links.append(current)
+        seen.add(id(current))
+        current = current.__cause__ or (None if current.__suppress_context__ else current.__context__)
+    return links
+
+
+def _retryable(error: BaseException) -> bool:
+    return any(isinstance(link, RETRYABLE) or is_transaction_contention(link) for link in _chain(error))
+
+
 def error_report(error: BaseException) -> dict:
-    """Classify a stop without printing its message, which can name documents."""
-    cause = error.__cause__ or error.__context__
-    report = {'errors': 1, 'error_type': _type_name(error), 'retryable': isinstance(error, RETRYABLE)}
-    if cause is not None:
-        report['cause_type'] = _type_name(cause)
-        report['retryable'] = report['retryable'] or isinstance(cause, RETRYABLE)
+    """Classify a stop without printing any message, which can name documents.
+
+    Retryable only when the stop and every concurrent owner group's failure are
+    transient or a safe page replay.
+    """
+    siblings = tuple(getattr(error, 'migration_sibling_errors', ()))
+    links = _chain(error)
+    report = {
+        'errors': 1 + len(siblings),
+        'error_type': _type_name(error),
+        'retryable': all(_retryable(failure) for failure in (error, *siblings)),
+    }
+    if len(links) > 1:
+        report['cause_types'] = [_type_name(link) for link in links[1:]]
+    if siblings:
+        report['sibling_types'] = sorted({_type_name(failure) for failure in siblings})
     return report
 
 
@@ -86,9 +112,14 @@ def main():
             shutdown_executors()
 
 
-if __name__ == '__main__':
+def run() -> int:
     try:
         main()
     except Exception as error:
-        print(json.dumps(error_report(error)))
-        sys.exit(1)
+        print(json.dumps(error_report(error)), flush=True)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(run())

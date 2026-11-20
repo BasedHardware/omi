@@ -95,6 +95,19 @@ def test_default_apply_is_sequential_and_unlimited(harness, monkeypatch):
     assert apply.call_args.kwargs['rate_limiter'].rate is None
 
 
+def _raise_chain(*errors):
+    """Raise errors[0] from errors[1] from ... and return the outermost."""
+    cause = None
+    for error in reversed(errors):
+        try:
+            if cause is None:
+                raise error
+            raise error from cause
+        except BaseException as raised:
+            cause = raised
+    return cause
+
+
 @pytest.mark.parametrize(
     'error,error_type,retryable',
     [
@@ -105,6 +118,13 @@ def test_default_apply_is_sequential_and_unlimited(harness, monkeypatch):
         ),
         (cli.api_exceptions.Aborted('owner contention'), 'google.api_core.exceptions.Aborted', True),
         (cli.api_exceptions.ServiceUnavailable('unavailable'), 'google.api_core.exceptions.ServiceUnavailable', True),
+        (cli.api_exceptions.InternalServerError('internal'), 'google.api_core.exceptions.InternalServerError', True),
+        (cli.api_exceptions.ResourceExhausted('quota'), 'google.api_core.exceptions.ResourceExhausted', True),
+        (
+            cli.MigrationOwnerChanged('migration owner changed; retry the page'),
+            'database.batch_pipeline_allowance_migration.MigrationOwnerChanged',
+            True,
+        ),
         (cli.api_exceptions.PermissionDenied('denied'), 'google.api_core.exceptions.PermissionDenied', False),
         (ValueError('owner mismatch users/secret-uid'), 'builtins.ValueError', False),
     ],
@@ -115,17 +135,67 @@ def test_error_report_names_the_class_and_never_the_message(error, error_type, r
     assert 'secret' not in json.dumps(report)
 
 
-def test_error_report_classifies_a_wrapped_transient_cause():
+def test_error_report_walks_the_whole_cause_chain():
+    from google.api_core.exceptions import RetryError
+
+    error = _raise_chain(
+        cli.FirestoreContentionExhausted('contention on jobs/secret-doc-id'),
+        RetryError('retries exhausted', None),
+        cli.api_exceptions.Aborted('jobs/secret-doc-id'),
+    )
+    report = cli.error_report(error)
+    assert report['retryable'] is True
+    assert report['cause_types'] == ['google.api_core.exceptions.RetryError', 'google.api_core.exceptions.Aborted']
+    assert 'secret' not in json.dumps(report)
+
+
+def test_error_report_treats_an_expired_transaction_as_contention():
+    error = _raise_chain(RuntimeError('page failed'), cli.api_exceptions.InvalidArgument('Transaction has expired'))
+    assert cli.error_report(error)['retryable'] is True
+
+
+def test_error_report_ignores_a_suppressed_context():
     try:
         try:
-            raise cli.api_exceptions.DeadlineExceeded('jobs/secret-doc-id')
-        except cli.api_exceptions.DeadlineExceeded as inner:
-            raise RuntimeError('page failed') from inner
-    except RuntimeError as outer:
-        report = cli.error_report(outer)
-    assert report == {
+            raise cli.api_exceptions.Aborted('incidental')
+        except cli.api_exceptions.Aborted:
+            raise ValueError('real stop') from None
+    except ValueError as error:
+        report = cli.error_report(error)
+    assert report == {'errors': 1, 'error_type': 'builtins.ValueError', 'retryable': False}
+
+
+def test_error_report_is_not_retryable_when_any_sibling_failure_is_not():
+    error = cli.api_exceptions.Aborted('first')
+    error.migration_sibling_errors = (cli.api_exceptions.DeadlineExceeded('x'), ValueError('users/secret-uid'))
+    report = cli.error_report(error)
+    assert report['errors'] == 3
+    assert report['retryable'] is False
+    assert report['sibling_types'] == ['builtins.ValueError', 'google.api_core.exceptions.DeadlineExceeded']
+    assert 'secret' not in json.dumps(report)
+
+
+def test_error_report_is_retryable_when_every_sibling_failure_is():
+    error = cli.api_exceptions.Aborted('first')
+    error.migration_sibling_errors = (cli.MigrationOwnerChanged('retry the page'),)
+    assert cli.error_report(error)['retryable'] is True
+
+
+def test_run_prints_only_the_classified_stop_line_and_exits_1(monkeypatch, capsys):
+    def fail():
+        raise cli.api_exceptions.DeadlineExceeded('jobs/secret-doc-id')
+
+    monkeypatch.setattr(cli, 'main', fail)
+    assert cli.run() == 1
+    out = capsys.readouterr()
+    assert json.loads(out.out) == {
         'errors': 1,
-        'error_type': 'builtins.RuntimeError',
+        'error_type': 'google.api_core.exceptions.DeadlineExceeded',
         'retryable': True,
-        'cause_type': 'google.api_core.exceptions.DeadlineExceeded',
     }
+    assert 'secret' not in out.out + out.err
+
+
+def test_run_returns_0_on_success(monkeypatch):
+    monkeypatch.setattr(cli, 'main', lambda: None)
+    assert cli.run() == 0
