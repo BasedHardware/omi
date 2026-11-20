@@ -13,6 +13,7 @@ import json
 from datetime import datetime, timezone
 
 from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_document
@@ -205,12 +206,18 @@ def _live_run_ids(uid, *, firestore_client=None):
     found, cursor = [], None
     while True:
         query = (
-            client.collection('users').document(uid).collection(COLLECTION).order_by('__name__').limit(PRIORS_READ_PAGE)
+            client.collection('users')
+            .document(uid)
+            .collection(COLLECTION)
+            .where(filter=FieldFilter('mode', '==', LIVE_MODE))
+            .order_by('__name__')
+            .select(())
+            .limit(PRIORS_READ_PAGE)
         )
         if cursor is not None:
             query = query.start_after(cursor)
         page = list(query.stream())
-        found.extend(doc.id for doc in page if (doc.to_dict() or {}).get('mode') == LIVE_MODE)
+        found.extend(doc.id for doc in page)
         if len(page) < PRIORS_READ_PAGE:
             return found
         cursor = page[-1]

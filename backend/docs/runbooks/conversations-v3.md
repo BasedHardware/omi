@@ -448,8 +448,18 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     and after a finished undo; never written for a conversation already deleted or once account
     deletion began). Conversation deletion checks for priors by the requested ID and known bridge
     IDs, including when the worker stopped before stamping a row. Re-protection empties old-level
-    priors for the survivor and its recorded bridges. Both use an owner-scoped run scan and point
-    reads for the affected IDs. Emptied priors become `purged` stubs and undo refuses those runs.
+    priors for the same scope, including unstamped rows and same-target retries. Emptied priors
+    become `purged` stubs and undo refuses those runs.
+  - App deletion and re-protection page only the owner's live re-derive runs, 200 IDs at a time.
+    For `L` matching runs and `D` distinct conversation and bridge IDs, the lookup costs at most
+    `L + 1` billed ledger reads and `L × D` prior point reads per attempt before transaction retries.
+    Owners with no matching runs use one minimum query read and zero prior reads. The November 12
+    phone cascade observation of about 1,400 deletes per day is a volume reference. The collection
+    budgets allow 6,000 additional ledger reads and 12,000 prior reads per day, based on 2,000
+    combined deletion and re-protection attempts at averages of three and six reads respectively.
+    These are planning assumptions. Revisit the estimate with actual per-owner run history,
+    duplicate attempts and migration batch sizes if observed traffic exceeds that scenario.
+    [Firestore query billing](https://firebase.google.com/docs/firestore/pricing#minimum-charge-for-queries)
     A failed commit drops the copies of rows it did not write (a resume records them again).
     Each partition reads only its own copies, by id; `resume` and `undo` check every copy of the run
     once. A run whose undo refuses for good keeps its copies until the owner deletes the touched

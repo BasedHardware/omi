@@ -646,21 +646,23 @@ async def test_a_deleted_or_reprotected_conversation_keeps_no_undo_copy(
     assert conversations(strict) == after
 
 
-def test_a_protection_change_empties_undo_copies_of_rederived_rows_after_migrating(strict, monkeypatch):
-    conversations_db = backfill.conversations_db
-    strict.rows[path('c0')] = {'id': 'c0', 'v3_rederive_live_run': RUN, 'data_protection_level': 'standard'}
-    strict.rows[path('c1')] = {'id': 'c1', 'data_protection_level': 'standard'}
-    strict.rows[path('c2')] = {'id': 'c2', 'v3_rederive_live_run': RUN, 'data_protection_level': 'enhanced'}
-
-    def get_all(refs, field_paths=None):
-        return [SimpleNamespace(exists=True, id=ref.id, reference=ref) for ref in refs]
-
-    monkeypatch.setattr(strict, 'get_all', get_all, raising=False)
+@pytest.fixture
+def migration_client(strict, monkeypatch):
+    monkeypatch.setattr(
+        strict, 'get_all', lambda refs, **kw: [SimpleNamespace(exists=True, id=r.id, reference=r) for r in refs]
+    )
     monkeypatch.setattr(strict, 'batch', MagicMock, raising=False)
     monkeypatch.setattr(
         StrictFirestoreCollection, 'select', lambda *args: SimpleNamespace(stream=lambda: []), raising=False
     )
-    monkeypatch.setattr(conversations_db, 'db', strict)
+    monkeypatch.setattr(backfill.conversations_db, 'db', strict)
+
+
+def test_a_protection_change_checks_priors_after_migrating(strict, monkeypatch, migration_client):
+    conversations_db = backfill.conversations_db
+    strict.rows[path('c0')] = {'id': 'c0', 'v3_rederive_live_run': RUN, 'data_protection_level': 'standard'}
+    strict.rows[path('c1')] = {'id': 'c1', 'data_protection_level': 'standard'}
+    strict.rows[path('c2')] = {'id': 'c2', 'v3_rederive_live_run': RUN, 'data_protection_level': 'enhanced'}
     calls = []
 
     def purge(uid, ids, reason, **kwargs):
@@ -668,12 +670,11 @@ def test_a_protection_change_empties_undo_copies_of_rederived_rows_after_migrati
 
     monkeypatch.setattr(runs, 'purge_conversation_priors', purge)
     conversations_db.migrate_conversations_level_batch(UID, ['c0', 'c1', 'c2'], 'enhanced')
-    # After re-protecting: every re-derived row it reached (copies at the new level are kept).
-    assert calls == [(UID, ['c0', 'c2'], 'protection', 'enhanced')]
+    assert calls == [(UID, ['c0', 'c1', 'c2'], 'protection', 'enhanced')]
 
 
 @pytest.mark.parametrize('batch', [False, True], ids=['single', 'batch'])
-def test_protection_migration_purges_retired_donor_priors(strict, monkeypatch, batch):
+def test_protection_migration_purges_retired_donor_priors(strict, monkeypatch, migration_client, batch):
     conversations_db = backfill.conversations_db
     strict.rows[path('survivor')] = {
         'v3_rederive_live_run': RUN,
@@ -691,14 +692,6 @@ def test_protection_migration_purges_retired_donor_priors(strict, monkeypatch, b
     )
     strict.rows[path('donor')].update(deleted=True, sync_merged_into='survivor', v3_rederive_live_run=RUN)
     monkeypatch.setattr(runs, '_live_run_ids', lambda uid, **kw: [RUN])
-    monkeypatch.setattr(conversations_db, 'db', strict)
-    monkeypatch.setattr(
-        strict, 'get_all', lambda refs, **kw: [SimpleNamespace(exists=True, id=r.id, reference=r) for r in refs]
-    )
-    monkeypatch.setattr(strict, 'batch', MagicMock, raising=False)
-    monkeypatch.setattr(
-        StrictFirestoreCollection, 'select', lambda *args: SimpleNamespace(stream=lambda: []), raising=False
-    )
 
     ids = ['survivor', 'donor'] if batch else ['survivor']
     conversations_db.migrate_conversations_level_batch(UID, ids, 'enhanced')
@@ -819,10 +812,10 @@ async def test_a_failed_commit_keeps_no_copy_of_a_row_it_did_not_write(owner, st
     assert not priors(strict)
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize('missing_metadata', [False, True], ids=['normal', 'retry'])
-async def test_app_delete_purges_a_stopped_attempt_prior(owner, strict, ledger, monkeypatch, missing_metadata):
+@pytest.fixture
+async def stopped_attempt(owner, strict, monkeypatch):
     sources, rows = lunch(count=3)
+    rows[1]['data_protection_level'] = 'standard'
     owner(*sources, *rows)
 
     class WorkerStopped(BaseException):
@@ -836,12 +829,18 @@ async def test_app_delete_purges_a_stopped_attempt_prior(owner, strict, ledger, 
     with pytest.raises(WorkerStopped):
         await rederive()
     assert not strict.rows[path('c1')].get('v3_rederive_live_run')
+    monkeypatch.setattr(runs, '_live_run_ids', lambda uid, **kw: [RUN])
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('missing_metadata', [False, True], ids=['normal', 'retry'])
+async def test_app_delete_purges_a_stopped_attempt_prior(
+    stopped_attempt, strict, ledger, monkeypatch, missing_metadata
+):
     # The app records this tombstone before entering its frame/lake and conversation deletion service.
     strict.rows[('users', UID, 'deleted_conversations', 'c1')] = {'conversation_id': 'c1'}
     if missing_metadata:
         strict.rows.pop(path('c1'))
-    monkeypatch.setattr(runs, '_live_run_ids', lambda uid, **kw: [RUN])
     monkeypatch.setattr(
         conversation_frame_evidence.conversations_db,
         'get_conversation_raw_snapshot',
@@ -864,6 +863,31 @@ async def test_app_delete_purges_a_stopped_attempt_prior(owner, strict, ledger, 
     assert path('c1') not in strict.rows
     conversation_frame_evidence.delete_conversation_and_frame_evidence(UID, 'c1')
     assert {prior['id']: prior for prior in priors(strict)} == by_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('ids', [['c1'], ['c1', 'c2']], ids=['single', 'batch'])
+@pytest.mark.parametrize('retry', [False, True], ids=['normal', 'same-target-retry'])
+async def test_protection_migration_purges_stopped_attempt_priors(
+    stopped_attempt, migration_client, strict, monkeypatch, ids, retry
+):
+    assert next(prior for prior in priors(strict) if prior['id'] == 'c1')['raw']['data_protection_level'] == 'standard'
+    migrate = backfill.conversations_db.migrate_conversations_level_batch
+    if retry:
+        with monkeypatch.context() as patch:
+            patch.setattr(runs, 'purge_conversation_priors', MagicMock(side_effect=RuntimeError('purge unavailable')))
+            with pytest.raises(RuntimeError, match='purge unavailable'):
+                migrate(UID, ids, 'enhanced')
+        assert strict.rows[path('c1')]['data_protection_level'] == 'enhanced'
+        assert 'raw' in next(prior for prior in priors(strict) if prior['id'] == 'c1')
+
+    migrate(UID, ids, 'enhanced')
+    by_id = {prior['id']: prior for prior in priors(strict)}
+    for cid in ids:
+        assert strict.rows[path(cid)]['data_protection_level'] == 'enhanced'
+        assert not strict.rows[path(cid)].get('v3_rederive_live_run')
+        assert by_id[cid]['purged'] == 'protection' and 'raw' not in by_id[cid]
+    assert 'raw' in by_id['c0']
 
 
 @pytest.mark.asyncio

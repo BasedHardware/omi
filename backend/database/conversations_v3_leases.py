@@ -72,7 +72,7 @@ def renew(uid, key, token, *, firestore_client=None):
 
 
 @contextmanager
-def keepalive(uid, key, token, *, firestore_client=None, max_seconds=900):
+def keepalive(uid, key, token, *, firestore_client=None, max_seconds: int | None = 900):
     """Own and join the heartbeat of a synchronous writer."""
     stop = threading.Event()
     deadline = monotonic() + max_seconds if max_seconds is not None else None
