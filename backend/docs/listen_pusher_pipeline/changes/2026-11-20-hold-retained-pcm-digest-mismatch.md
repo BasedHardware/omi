@@ -19,6 +19,12 @@ automatic redrive skip this refusal. Reviewed operator redrive remains available
 under the existing eligibility and custody checks. The fallback counter measures
 committed transitions; the batch quality gate reads durable held state.
 
+Recovery now uses admission decoder semantics for gapped, unframed raw-live WAL,
+including the custody manifest's frame table. Until this parity fix, operator
+redrive could not recover that cohort because it repeated the same digest refusal.
+An unchanged pinned pack now recovers while the generation and SHA-256 fences
+remain in force; a repeated mismatch is still durably held.
+
 On by default. Set `BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED=false` to restore the
 legacy single-read, retryable error for new mismatches. Rollback does not clear
 existing holds, change retention, or rewrite manifests.

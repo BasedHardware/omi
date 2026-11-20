@@ -331,6 +331,7 @@ class ArtifactStore:
                     conversation_id,
                     allowed,
                     self.key_for_owner(item.owner_id),
+                    source_metadata=True,
                     read_budget=read_budget,
                 )
 

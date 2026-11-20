@@ -58,6 +58,7 @@ def retained_source(setup, downloads):
     storage = Mock()
     blob = storage.bucket.return_value.blob.return_value
     blob.size = len(SOURCE)
+    blob.metadata = {}
     blob.download_as_bytes.side_effect = list(downloads)
     source = ArtifactStore(
         storage,
