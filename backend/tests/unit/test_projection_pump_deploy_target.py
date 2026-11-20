@@ -14,6 +14,7 @@ import runpy
 import subprocess
 import sys
 from pathlib import Path
+from urllib.error import HTTPError
 
 import pytest
 import yaml
@@ -25,6 +26,13 @@ from scripts.cloud_run_scope import PROJECTION_PUMP, SELECTABLE, SERVICES, selec
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / 'backend'
+# Match direct execution of the workflow script without changing pytest's search path.
+sys.path.insert(0, str(BACKEND / 'scripts'))
+try:
+    import recover_projection_pump_cap as recovery
+finally:
+    sys.path.pop(0)
+
 WORKFLOW = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
 PUMP_ACTION = yaml.safe_load((ROOT / '.github/actions/deploy-projection-pump/action.yml').read_text())
 STACK_ACTION_TEXT = (ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text()
@@ -696,16 +704,7 @@ def test_deploy_pin_and_sidecar_steps_name_the_same_base_revision():
 
 
 # SCA-3318 recovery uses the interrupted base, with one service-cap mismatch.
-@pytest.fixture
-def recovery_module(monkeypatch):
-    monkeypatch.syspath_prepend(str(BACKEND / 'scripts'))
-    import recover_projection_pump_cap
-
-    return recover_projection_pump_cap
-
-
-def _recovery_fixture(inverse_readback, recovery):
-
+def _recovery_fixture(inverse_readback):
     service, revision, policy = inverse_readback
     before = {
         'name': recovery.RESOURCE,
@@ -779,11 +778,11 @@ def _recovery_fixture(inverse_readback, recovery):
         def complete(self, _operation, _cap, *, submitted):
             pass
 
-    return recovery, FakeRun()
+    return FakeRun()
 
 
-def test_cap_recovery_writes_once_and_validates_the_post_write_inverse(inverse_readback, recovery_module):
-    recovery, api = _recovery_fixture(inverse_readback, recovery_module)
+def test_cap_recovery_writes_once_and_validates_the_post_write_inverse(inverse_readback):
+    api = _recovery_fixture(inverse_readback)
     recovery.recover(api, api.read, 'approved-version')
     assert api.cap_requests == [
         ('approved-version', 4, True),
@@ -794,8 +793,8 @@ def test_cap_recovery_writes_once_and_validates_the_post_write_inverse(inverse_r
 
 
 @pytest.mark.parametrize('failure', ['permission', 'etag', 'drift', 'forward', 'inverse', 'shape'])
-def test_cap_recovery_refuses_before_submit(inverse_readback, recovery_module, failure):
-    recovery, api = _recovery_fixture(inverse_readback, recovery_module)
+def test_cap_recovery_refuses_before_submit(inverse_readback, failure):
+    api = _recovery_fixture(inverse_readback)
     etag = 'approved-version'
     if failure == 'permission':
         api.permission_denied = True
@@ -813,8 +812,8 @@ def test_cap_recovery_refuses_before_submit(inverse_readback, recovery_module, f
 
 
 @pytest.mark.parametrize('failure', ['interruption', 'post_write_shape', 'post_write_inverse'])
-def test_cap_recovery_requires_reconciliation_after_any_ambiguous_write(inverse_readback, recovery_module, failure):
-    recovery, api = _recovery_fixture(inverse_readback, recovery_module)
+def test_cap_recovery_requires_reconciliation_after_any_ambiguous_write(inverse_readback, failure):
+    api = _recovery_fixture(inverse_readback)
     api.interrupted = failure == 'interruption'
     api.drift_after_write = failure == 'post_write_shape'
     api.validation_error = 4 if failure == 'post_write_inverse' else None
@@ -825,9 +824,7 @@ def test_cap_recovery_requires_reconciliation_after_any_ambiguous_write(inverse_
     assert [item for item in api.cap_requests if not item[2]] == [('approved-version', 4, False)]
 
 
-def test_cap_recovery_requests_only_the_one_field(monkeypatch, recovery_module):
-    recovery = recovery_module
-
+def test_cap_recovery_requests_only_the_one_field(monkeypatch):
     api = recovery.RunAPI('fixture-token')
     requests = []
     monkeypatch.setattr(api, 'request', lambda *args: requests.append(args))
@@ -850,9 +847,7 @@ def test_cap_recovery_requests_only_the_one_field(monkeypatch, recovery_module):
         {'done': True, 'response': {'name': 'wrong-service'}},
     ],
 )
-def test_cap_recovery_refuses_bad_operation(operation, recovery_module):
-    recovery = recovery_module
-
+def test_cap_recovery_refuses_bad_operation(operation):
     operation.setdefault('name', recovery.OPERATIONS + 'operation')
     api = recovery.RunAPI('fixture-token')
     if not operation.get('done') and operation['name'].startswith(recovery.OPERATIONS):
@@ -861,8 +856,7 @@ def test_cap_recovery_refuses_bad_operation(operation, recovery_module):
         api.complete(operation, 4, submitted=True, sleep=lambda _: None)
 
 
-def test_cap_recovery_checks_server_response_cap(recovery_module):
-    recovery = recovery_module
+def test_cap_recovery_checks_server_response_cap():
     api = recovery.RunAPI('fixture-token')
     response = {
         '@type': 'type.googleapis.com/google.cloud.run.v2.Service',
@@ -875,16 +869,15 @@ def test_cap_recovery_checks_server_response_cap(recovery_module):
         api.complete(operation, 20, submitted=False)
 
 
-def test_cap_validation_accepts_only_completed_typed_empty_response(recovery_module):
-    api = recovery_module.RunAPI('fixture-token')
-    operation = {'done': True, 'response': {'@type': recovery_module.SERVICE_TYPE}}
+def test_cap_validation_accepts_only_completed_typed_empty_response():
+    api = recovery.RunAPI('fixture-token')
+    operation = {'done': True, 'response': {'@type': recovery.SERVICE_TYPE}}
     api.complete(operation, 4, submitted=False)
     with pytest.raises(ValueError):
         api.complete({'done': True}, 4, submitted=False)
 
 
-def test_cap_recovery_polls_numeric_project_operation(recovery_module, monkeypatch):
-    recovery = recovery_module
+def test_cap_recovery_polls_numeric_project_operation(monkeypatch):
     api = recovery.RunAPI('fixture-token')
     name = recovery.OPERATIONS.replace(recovery.PROJECT, recovery.PROJECT_NUMBER) + 'operation'
     resource = recovery.RESOURCE.replace(recovery.PROJECT, recovery.PROJECT_NUMBER)
@@ -901,17 +894,15 @@ def test_cap_recovery_polls_numeric_project_operation(recovery_module, monkeypat
     api.complete({'name': name}, 4, submitted=True, sleep=lambda _: None)
 
 
-def test_cap_recovery_operation_404_is_not_validation_success(recovery_module, monkeypatch, capsys):
-    from urllib.error import HTTPError
-
-    api = recovery_module.RunAPI('fixture-token')
+def test_cap_recovery_operation_404_is_not_validation_success(monkeypatch, capsys):
+    api = recovery.RunAPI('fixture-token')
 
     def missing(*_args, **_kwargs):
         raise HTTPError('private', 404, 'private', None, None)
 
     monkeypatch.setattr(api.opener, 'open', missing)
     with pytest.raises(ValueError):
-        api.complete({'name': recovery_module.OPERATIONS + 'operation'}, 4, submitted=False, sleep=lambda _: None)
+        api.complete({'name': recovery.OPERATIONS + 'operation'}, 4, submitted=False, sleep=lambda _: None)
     assert capsys.readouterr().err == 'PUMP_CAP_API_ERROR stage=operation-read status=404\n'
 
 
