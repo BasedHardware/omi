@@ -601,7 +601,7 @@ async def reconcile(
                 recordings.pop(rid)
         # A re-derive reuses prior ids; a prior copy no rebuilt window claims is retired with the commit.
         remove = [cid for cid in existing if cid not in planned] if derive and rederive else []
-        retire, commit_recordings, commit_existing = {}, recordings, existing
+        retire, commit_recordings, commit_existing, priors = {}, recordings, existing, []
         if live:
             rows, retire, touched, sources, priors, outcome = _live_outcome(
                 rows, existing, recordings, since=since, until=until, run_id=run_id
@@ -609,29 +609,37 @@ async def reconcile(
             report.update(outcome)
             commit_existing = {cid: existing[cid] for cid in touched if cid in existing}
             commit_recordings = {rid: recordings[rid] for rid in sources}
-            # The undo ledger is durable before the commit that changes its rows.
-            await run_blocking(db_executor, backfill_runs.save_priors, uid, run_id, priors)
-        await run_blocking(db_executor, leases.renew, uid, key, token)
-        moved = await run_blocking(
-            db_executor,
-            _commit,
-            uid,
-            token,
-            commit_recordings,
-            commit_existing,
-            rows,
-            cache[-128:],
-            clear_pending=not on_open,
-            remove=remove,
-            retire=retire,
-            key=key,
-        )
+        try:
+            if live:
+                # The undo ledger is durable before the commit that changes its rows.
+                await run_blocking(db_executor, backfill_runs.save_priors, uid, run_id, priors)
+            await run_blocking(db_executor, leases.renew, uid, key, token)
+            moved = await run_blocking(
+                db_executor,
+                _commit,
+                uid,
+                token,
+                commit_recordings,
+                commit_existing,
+                rows,
+                cache[-128:],
+                clear_pending=not on_open,
+                remove=remove,
+                retire=retire,
+                key=key,
+            )
+        except Conflict:
+            if live:
+                # The owner may have deleted or re-protected a row after its copy was recorded.
+                await run_blocking(db_executor, rederive_store.purge_changed_priors, uid, priors)
+            raise
         report.update(
             sources=len(eligible),
             windows=len(rows),
             rows_new=sum(1 for row in rows if row['id'] not in existing),
             rows_removed=len(remove),
-            sources_unclaimed=len(unclaimed),
+            # A live run's loader already counted unclaimed live speech; its legacy meaning is donors.
+            **({} if live else {'sources_unclaimed': len(unclaimed)}),
             notes_queued=sum(1 for row in rows if row.get('v3_backfill_process_pending')),
             home_visible=sum(1 for row in rows if not row.get('home_hidden')),
         )
@@ -837,15 +845,17 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
             continue
         retire[cid] = _retire_patch(survivor, run_id)
     # The survivor lists its bridges (sync_merged_from), as a sync merge does: deleting it purges them.
+    # The list lands in the final batch with the retirements, never before the bridges exist.
     merged_from = {}
     for cid, patch in retire.items():
         donors = merged_from.setdefault(patch['sync_merged_into'], set())
         donors.add(cid)
         donors.update(eligible[cid]['_v3_raw'].get('sync_merged_from') or [])
+    lineage = {}
     for row in planned:
         if row['id'] in merged_from:
             had = (eligible.get(row['id']) or {}).get('_v3_raw', {}).get('sync_merged_from') or []
-            row['sync_merged_from'] = sorted({*had, *merged_from[row['id']]})
+            lineage[row['id']] = {'sync_merged_from': sorted({*had, *merged_from[row['id']]})}
     write = [row for row in planned if row['id'] not in unchanged or row['id'] in merged_from]
     touched = {row['id'] for row in write} | set(retire)
     sources = {rid for row in write for rid in row.get('v3_recording_ids') or []} & recordings.keys()
@@ -867,7 +877,7 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
         if after > stored and after > rederive_store.SOURCE_MAX_BYTES:
             # Growing a source past the document limit fails every retry; block before any write.
             raise Conflict('document_too_large')
-    if len(sources) + len(retire) + 2 > store.BATCH_MAX_WRITES:
+    if len(sources) + len(retire) + len(lineage) + 2 > store.BATCH_MAX_WRITES:
         # The final batch writes every committed source, every retire patch, a row and the lease in one
         # transaction; more than Firestore's write cap would fail on every retry.
         raise Conflict('backfill_partition_budget')
@@ -905,7 +915,7 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
         'priors_recorded': len(priors),
         'segments_checked': len(before_speech),
     }
-    return write, retire, touched, sources, priors, counts
+    return write, {**retire, **lineage}, touched, sources, priors, counts
 
 
 def _commit(

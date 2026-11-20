@@ -338,7 +338,7 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     corrections, speaker assignments, star, folder, photos, kept), locked, shared, private,
     discarded, deleted, backfilled by a legacy run, unreadable or still owed notes. These are offered
     to the planner as published finished rows, so their speech, claims and audio stay theirs. The
-    ledger counts each as `protected_<reason>`, `sources_blocked_<reason>` or `skipped_deleted`,
+    ledger counts each as `protected_<reason>` (deleted rows included: their claims still fence) or `sources_blocked_<reason>`,
     plus `sources_with_deleted_spans` (deleted spans are never replanned) and `sources_unclaimed`
     (sealed live speech no window ever claimed; the run makes new cards of it, so check it first).
   - Adoption: a rebuilt window keeps the id of the earliest row it absorbs. A rebuilt window equal to

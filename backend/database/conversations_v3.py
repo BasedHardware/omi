@@ -702,6 +702,9 @@ def commit_projection(
         for raw, row in zip(batch_rows, batch_prepared):
             if raw.get('deleted'):
                 continue
+            if final and row['id'] in retire:
+                # A live re-derive survivor's bridge list lands with the bridges it names.
+                row = {**row, **retire[row['id']]}
             tx.set(coll.document(row['id']), row)
         for cid, survivor in absorbed.items():
             tx.update(
@@ -720,9 +723,12 @@ def commit_projection(
         if final:
             for cid in remove:
                 tx.delete(coll.document(cid))
+            written = {r['id'] for r in batch_rows}
             for cid, patch in retire.items():
-                tx.update(coll.document(cid), patch)
-        replaced = {r['id'] for r in batch_rows} | set(absorbed) | (set(remove) | set(retire) if final else set())
+                if cid not in written:
+                    tx.update(coll.document(cid), patch)
+        retired = {cid for cid, patch in retire.items() if patch.get('sync_merged_into')}
+        replaced = {r['id'] for r in batch_rows} | set(absorbed) | (set(remove) | retired if final else set())
         for rid, recording in recordings.items():
             if recording.get('deleted') or recording.get('sync_merged_into'):
                 tx.update(coll.document(rid), {'v3_pending': False, 'v3_pending_since': None})

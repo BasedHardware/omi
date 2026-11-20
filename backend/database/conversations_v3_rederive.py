@@ -227,9 +227,7 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
     for cid, snapshot in rows.items():
         raw = raws[cid]
         reason = live_row_protection(raw, since=since, until=until, run_id=run_id)
-        if reason == 'deleted':
-            count('skipped_deleted')
-            continue
+        # A deleted row is offered too: until its claims are released they still fence its speech.
         if reason is None and named_sources(raw) & blocked:
             reason = 'source_blocked'
         if reason is None and not (named_sources(raw) and named_sources(raw) <= recordings.keys()):
@@ -377,14 +375,39 @@ def record_baselines(uid, run_id, *, firestore_client=None):
 
 # Firestore caps a transaction at 500 writes and about 10 MiB; an undo group restores in one.
 UNDO_GROUP_BYTES = 8_000_000
+# A source's rewritten claims list, at most (the commit's own size guard bounds it far lower).
+SOURCE_CLAIMS_BYTES = 64_000
 
 
 def undo_group_fits(entries):
     """One undo group's restore (rows, their sources and the lease read) fits one transaction."""
     sources = {c['recording_id'] for e in entries for c in e.get('claims') or []}
     sources.update(rid for e in entries for rid in e.get('sources') or [])
-    size = sum(stored_bytes(e.get('raw') or {}) for e in entries)
+    size = sum(stored_bytes(e.get('raw') or {}) + stored_bytes(e.get('claims') or []) for e in entries)
+    size += len(sources) * SOURCE_CLAIMS_BYTES
     return len(entries) + len(sources) < store.BATCH_MAX_WRITES and size <= UNDO_GROUP_BYTES
+
+
+def purge_changed_priors(uid, entries, *, firestore_client=None):
+    """After a failed commit: empty the copies of rows the owner deleted or re-protected meanwhile."""
+    client = firestore_client or store.get_firestore_client()
+    coll = store.user_conversations(client, uid)
+    deleted = client.collection('users').document(uid).collection('deleted_conversations')
+    found = {'deleted': [], 'protection': []}
+    for entry in entries:
+        if entry.get('created'):
+            continue
+        if deleted.document(entry['id']).get().exists:
+            found['deleted'].append(entry['id'])
+            continue
+        snapshot = coll.document(entry['id']).get()
+        level = (snapshot.to_dict() or {}).get('data_protection_level', 'standard') if snapshot.exists else None
+        if level is not None and level != (entry.get('raw') or {}).get('data_protection_level', 'standard'):
+            found['protection'].append(entry['id'])
+    for reason, ids in found.items():
+        if ids:
+            runs.purge_conversation_priors(uid, ids, reason, firestore_client=client)
+    return sum(len(ids) for ids in found.values())
 
 
 def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
@@ -458,6 +481,15 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
         }
         if any(owner_changed(current[cid] or {}, by_id[cid]) for cid in ours):
             raise Conflict('owner_edited_rebuilt_row')
+        from database.recurring_voice_privacy import filter_processing_write
+
+        # A recurring voice the owner revoked since the run is never written back.
+        user = client.collection('users').document(uid)
+        restore = {}
+        for entry in entries:
+            if entry['id'] in ours and not entry.get('created'):
+                restore[entry['id']] = dict(entry['raw'])
+                filter_processing_write(tx, user, restore[entry['id']])
         rids = {c['recording_id'] for e in entries if e['id'] in ours for c in e.get('claims') or []}
         rids.update(rid for cid in ours for rid in (current[cid] or {}).get('v3_recording_ids') or [])
         rids.update(rid for e in entries if e['id'] in ours for rid in e.get('sources') or [])
@@ -480,7 +512,7 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
                 )
                 created.append(entry['id'])
             else:
-                tx.set(coll.document(entry['id']), entry['raw'])
+                tx.set(coll.document(entry['id']), restore[entry['id']])
                 restored += 1
         repaired = 0
         for rid, snapshot in sources.items():

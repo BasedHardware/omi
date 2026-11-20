@@ -694,6 +694,65 @@ def test_the_dry_run_reports_live_speech_no_window_claimed(owner, strict):
     assert est['sources_unclaimed'] == 1
 
 
+@pytest.mark.asyncio
+async def test_a_deleted_row_whose_claims_are_not_yet_released_still_fences_its_speech(owner, strict):
+    sources, rows = lunch(count=3)
+    gone_source = source('rd', AT + timedelta(minutes=40), words=400)
+    gone = fragment('cd', gone_source, deleted=True, discarded=True)
+    owner(*sources, *rows, gone_source, gone)
+    outcome, report = await rederive()
+    assert outcome == 'committed' and report['protected_deleted'] == 1
+    after = conversations(strict)
+    # No new card is made from the deleted conversation's speech, and it is left as it was.
+    assert not any('rd' in (row.get('v3_recording_ids') or []) for cid, row in after.items() if cid != 'cd')
+    assert after['cd'] == {**gone, 'id': 'cd'} or after['cd'] == gone
+
+
+@pytest.mark.asyncio
+async def test_the_run_ledger_counts_live_speech_no_window_claimed(owner, strict):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows, source('r9', AT + timedelta(minutes=30), words=400))
+    outcome, report = await rederive()
+    assert outcome == 'committed' and report['sources_unclaimed'] == 1
+
+
+@pytest.mark.asyncio
+async def test_a_failed_commit_empties_copies_of_rows_the_owner_changed_meanwhile(owner, strict, monkeypatch):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    monkeypatch.setattr(runs, '_live_run_ids', lambda uid, **kw: [RUN])
+
+    def commit(*args, **kwargs):
+        # The owner deletes one row and re-protects another between the copies and the commit.
+        strict.rows[('users', UID, 'deleted_conversations', 'c1')] = {'conversation_id': 'c1'}
+        strict.rows[path('c2')]['data_protection_level'] = 'enhanced'
+        raise store.Conflict('source_changed')
+
+    monkeypatch.setattr(service, '_commit', commit)
+    # A changed row is a retry, not a block; the copies of what changed are emptied either way.
+    with pytest.raises(store.Conflict, match='source_changed'):
+        await rederive()
+    by_id = {e['id']: e for e in priors(strict)}
+    assert by_id['c1'].get('purged') == 'deleted' and by_id['c2'].get('purged') == 'protection'
+    assert 'raw' in by_id['c0'] and 'raw' not in by_id['c1'] and 'raw' not in by_id['c2']
+
+
+@pytest.mark.asyncio
+async def test_undo_reapplies_the_recurring_voice_fence_to_restored_rows(owner, strict, ledger, monkeypatch):
+    import database.recurring_voice_privacy as voice_privacy
+
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    await rederive()
+
+    def scrub(tx, user, data):
+        data['voice_fence_applied'] = True
+
+    monkeypatch.setattr(voice_privacy, 'filter_processing_write', scrub)
+    assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
+    assert all(conversations(strict)[cid].get('voice_fence_applied') for cid in ('c0', 'c1', 'c2'))
+
+
 def test_priors_are_never_written_once_the_owner_account_deletion_began(strict, monkeypatch):
     from database.account_deletion_marker import account_deletion_document
 
@@ -836,8 +895,10 @@ async def test_a_commit_that_fails_midway_resumes_and_undoes_exactly(owner, stri
     assert outcome == 'blocked' and report['blocked_reason'] == 'document_too_large'
     partial = conversations(strict)
     assert partial != before and partial['c0']['v3_rederive_live_run'] == RUN
-    # Retirement happens only in the final batch, which failed: the absorbed rows are untouched so far.
+    # Retirement happens only in the final batch, which failed: the absorbed rows are untouched so far,
+    # and the survivor does not list them yet, so deleting it now cannot take live rows with it.
     assert all(partial[f'c{i}'] == before[f'c{i}'] for i in range(1, 6))
+    assert 'sync_merged_from' not in partial['c0']
     # Undo from the partial state is exact.
     assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
     assert conversations(strict) == before
