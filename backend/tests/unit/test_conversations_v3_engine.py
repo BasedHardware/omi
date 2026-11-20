@@ -117,7 +117,8 @@ def test_a_locked_row_that_holds_none_of_the_stretch_never_cuts_it(cohesion):
     row = recording(segments=[{'text': str(i), 'start': i * 60, 'end': i * 60 + 10} for i in range(180)])
     groups = outline.stretches([row], NOW + timedelta(hours=4))
     unrelated = _locked([{'id': 'elsewhere', 'text': 'other', 'start': 0, 'end': 5}], 20)
-    windows = planner.windows(groups, [[entry()]], cohesion=cohesion, locked=[unrelated])
+    ownership = planner.Ownership({'locked': unrelated}, {'r': {'claims': []}})
+    windows = planner.windows(groups, [[entry()]], cohesion=cohesion, ownership=ownership)
     assert [w['lines'][0]['start'] for w in windows] == [NOW, NOW + timedelta(minutes=120)]
 
 
@@ -126,10 +127,36 @@ def test_a_locked_row_holding_the_stretch_start_keeps_its_cut(cohesion):
     segments = [{'text': str(i), 'start': i * 60, 'end': i * 60 + 10} for i in range(180)]
     groups = outline.stretches([recording(segments=segments)], NOW + timedelta(hours=4))
     prefix = _locked(deepcopy(segments[:21]), 20)
-    windows = planner.windows(groups, [[entry()]], cohesion=cohesion, locked=[prefix])
+    ownership = planner.Ownership({'locked': prefix}, {'r': {'claims': []}})
+    windows = planner.windows(groups, [[entry()]], cohesion=cohesion, ownership=ownership)
     # Its cut stays; the cap then counts from it (159 minutes remain, cut again at 141).
     assert [w['lines'][0]['start'] for w in windows] == [NOW, NOW + timedelta(minutes=21), NOW + timedelta(minutes=141)]
     assert windows[0]['finished']
+
+
+def test_an_exact_hold_on_a_later_locked_row_beats_an_earlier_row_claim():
+    # Two locked rows: the earlier one's window and audio claim cover the turn, the later one published
+    # it exactly. Exact holds decide first, for the cap and the projection alike (#25829 review).
+    segments = [{'id': 'x', 'text': 'held turn', 'start': 300, 'end': 330}]
+    groups = outline.stretches([recording(segments=segments)], NOW + timedelta(hours=4))
+    (line,) = groups[0]['lines']
+    wide = {**_locked([], 10), 'id': 'wide', 'v3_recording_ids': ['r']}
+    exact = {
+        'id': 'exact',
+        'status': 'completed',
+        'v3_recording_ids': ['r'],
+        'started_at': NOW + timedelta(seconds=300),
+        'finished_at': NOW + timedelta(seconds=330),
+        'transcript_segments': [{'id': 'x', 'text': 'held turn', 'start': 0.0, 'end': 30.0}],
+    }
+    existing = {'wide': wide, 'exact': exact}
+    recordings = {'r': {'claims': [{'conversation_id': 'wide', 'start': NOW, 'end': NOW + timedelta(minutes=10)}]}}
+    assert planner.Ownership(existing, recordings).owner_of(line)['id'] == 'exact'
+    kept = planner.preserve_finished_windows(planner.windows(groups, [[entry()]]), existing, recordings)
+    assert [w.get('existing_id') for w in kept] == ['exact']
+    # The exact match needs the line's own recording.
+    other = {**exact, 'v3_recording_ids': ['elsewhere']}
+    assert planner.Ownership({'wide': wide, 'exact': other}, recordings).owner_of(line)['id'] == 'wide'
 
 
 @pytest.mark.parametrize('gap', [5, 15.056, 20])

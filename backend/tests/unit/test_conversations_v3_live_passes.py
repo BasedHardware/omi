@@ -555,3 +555,59 @@ async def test_a_revised_held_turn_does_not_move_a_committed_cut(strict, monkeyp
         assert {owners[f's{i}-rev'][0] for i in indices} == set(before)
         spans = claim_spans(strict)
         assert all(left[1] <= right[0] for left, right in zip(spans, spans[1:])), spans
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('gap, lock', [(300, 300), (900, 900)])
+async def test_an_open_tail_turn_inside_the_prefix_claim_stays_in_the_open_tail(strict, monkeypatch, gap, lock):
+    # main cut [0, 119) min | [118.5, 119) + [118.7, 121) + more. The short turn is published in the open
+    # tail, while its audio lies wholly inside the locked prefix's claim. The cap and the projection
+    # use one owner rule (exact hold first, any row), so the cap does not finish that turn with the
+    # prefix and leave a finished fragment beside the open tail (#25829 review).
+    from utils.conversations.v3 import planner
+
+    timing(monkeypatch, gap, lock)
+    minute = 60.0
+
+    def turns(extra):
+        return [
+            {'id': 'a', 'text': 'word ' * 400, 'start': 0.0, 'end': 119 * minute, 'is_user': True},
+            {'id': 't', 'text': 'word ' * 5, 'start': 118.5 * minute, 'end': 119 * minute, 'is_user': True},
+            {'id': 'b', 'text': 'word ' * 40, 'start': 118.7 * minute, 'end': 121 * minute, 'is_user': True},
+            *(
+                {
+                    'id': f'd{i}',
+                    'text': 'word ' * 12,
+                    'start': (121 + i) * minute,
+                    'end': (121.9 + i) * minute,
+                    'is_user': True,
+                }
+                for i in range(extra)
+            ),
+        ]
+
+    segments = turns(2)
+    end = T0 + timedelta(seconds=segments[-1]['end'])
+    put_recording(strict, segments, status='in_progress', landed=end + timedelta(seconds=30))
+    with monkeypatch.context() as old:
+        old.setattr(planner, '_capped', main_capped)
+        assert await reconcile_at(strict, monkeypatch, end + timedelta(seconds=30)) == 'committed'
+    rows = derived(strict)
+    before = boundaries_and_claims(strict, rows)
+    tail = next(r for r in rows if planner_open(r))
+    assert len(rows) == 2 and ownership(rows)['t'] == [tail['id']]
+    prefix_claims = next(iter(before.values()))[2]
+    assert any(a <= T0 + timedelta(minutes=118.5) and T0 + timedelta(minutes=119) <= b for a, b in prefix_claims)
+    for extra in (4, 8):
+        more = turns(extra)
+        later = T0 + timedelta(seconds=more[-1]['end'])
+        put_recording(strict, more, status='in_progress', landed=later + timedelta(seconds=30))
+        assert await reconcile_at(strict, monkeypatch, later + timedelta(seconds=30)) == 'committed'
+        rows = derived(strict)
+        assert boundaries_and_claims(strict, rows) == before
+        assert len(rows) == 2 and rows[1]['id'] == tail['id'] and planner_open(rows[1]), [
+            (r['started_at'], r['finished_at'], planner_open(r)) for r in rows
+        ]
+        owners = ownership(rows)
+        assert all(len(ids) == 1 for ids in owners.values()), owners
+        assert owners['t'] == [tail['id']]

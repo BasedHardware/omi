@@ -154,14 +154,15 @@ Setting the gap back to 300 seconds turns sit-down cutting off for later passes.
 At any timing, a stretch over two hours is cut at the last line that starts
 within two hours of its start, then again from there. The cut ignores the
 outline and does not move as live speech arrives, so a locked part never
-strands lines between an old and a new cut. When a locked row holds the first
-line of a part (the exact segment, or a line wholly inside its audio claim, so a
-revised turn still counts), the part ends at the first line that row does not
-own, so rows cut by earlier code or an earlier pass keep their cut (even when a
-turn straddles it or a held turn is revised) and the cap counts from there. A locked row that holds none of
-the stretch's lines never cuts it. A segment a row already holds stays
-with that row on later passes, even when overlapping turns put it inside a
-neighbour's window and audio claim.
+strands lines between an old and a new cut. One ownership rule
+(`planner.Ownership`) serves both the cap and the projection: a row that
+published the exact segment from that recording owns it (open rows included);
+only when no row does, containment in a row's window and audio claim decides,
+locked rows first, so a revised turn stays with its row. When a locked row owns
+the first line of a part, the part ends at the first line it does not own, so
+rows cut by earlier code or an earlier pass keep their cut (even when a turn
+straddles it or a held turn is revised) and the cap counts from there. A locked
+row that owns none of the stretch's lines never cuts it.
 
 Under custom timing (either setting differs from 300), the lock delay counts
 from the later of the stretch's last speech and when that speech landed

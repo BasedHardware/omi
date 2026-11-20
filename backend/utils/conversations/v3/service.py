@@ -365,9 +365,6 @@ async def reconcile(
             and not eligible_ids.intersection(row.get('v3_recording_ids') or ())
         }
 
-        # Locked rows: the two-hour cap keeps their cuts through the lines they hold.
-        locked_rows = [row for row in existing.values() if not planner.is_unlocked(row) and not row.get('deleted')]
-
         async def plan():
             proposed = planner.windows(
                 groups,
@@ -375,8 +372,8 @@ async def reconcile(
                 cohesion=cohesion,
                 silence_gap=silence_gap,
                 defer_topic_lock=custom_timing,
-                locked=locked_rows,
-                claims=recordings,
+                # The cap and preserve_finished_windows share one ownership rule.
+                ownership=planner.Ownership(existing, recordings),
             )
             merge = refinement.candidate(proposed, existing, recordings) if refine_locked else None
             if merge and await run_blocking(db_executor, store.merge_donors_have_tasks, uid, merge[1]['_v3_absorbed']):

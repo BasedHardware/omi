@@ -27,11 +27,7 @@ def late_rewrite(*, previous_words, new_words, ended_at, now, rewrites):
     )
 
 
-def _held_by_none(line):
-    return None
-
-
-def _capped(lines, sections=(), held=None):
+def _capped(lines, sections=(), ownership=None):
     """Cut a stretch over two hours after the longest prefix that ends within two hours of its start; repeat.
 
     Every part but the last locks. A cut that moved with later speech (the old middle cut) or with the
@@ -39,21 +35,19 @@ def _capped(lines, sections=(), held=None):
     stranded the lines between cuts as one-line cards. Line starts are append-only for live speech, so
     this cut stays put. ``sections`` is accepted for callers and ignored on purpose.
 
-    ``held(line)`` names the locked row that owns a line, if any: it holds the exact segment, or the
-    line lies wholly inside the row's audio claim (a revised turn gets a new id but keeps its audio).
-    A part whose first line a locked row owns keeps that row's cut: it ends at the first line the row
-    does not own, so rows locked by earlier code (main cut at the middle) or an earlier pass keep their
-    cut when a turn straddles it or a held turn is revised, and the cap counts from there. Only
-    ownership of this stretch's own lines counts; a locked row that owns none of them never cuts it.
+    ``ownership`` (an ``Ownership``) decides who owns each line, the same way
+    ``preserve_finished_windows`` does. A part whose first line a locked row owns keeps that row's
+    cut: it ends at the first line another row (open or locked) or no row owns, so rows locked by
+    earlier code (main cut at the middle) or an earlier pass keep their cut when a turn straddles it
+    or a held turn is revised, and the cap counts from there. A locked row that owns none of the
+    stretch's lines never cuts it.
     """
-    holder = held or _held_by_none
     parts, offset = [], 0
     while max(line['end'] for line in lines[offset:]) - lines[offset]['start'] > CAP:
-        owner = holder(lines[offset])
-        if owner is not None:
-            cut = next((i for i in range(offset + 1, len(lines)) if holder(lines[i]) != owner), None)
-            if cut is None:
-                break  # the locked row holds the rest
+        cut = ownership.locked_run_end(lines, offset) if ownership is not None else None
+        if cut is not None:
+            if cut == len(lines):
+                break  # the locked row owns the rest
             parts.append(lines[offset:cut])
             offset = cut
             continue
@@ -174,7 +168,7 @@ def _join_sitdown(lines: list, entries: list[dict[str, Any]]) -> list[dict[str, 
 
 
 def _cohesive_groups(
-    groups, outlines, sitdown=False, held=None
+    groups, outlines, sitdown=False, ownership=None
 ) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
     for group, entries in zip(groups, outlines):
         if not entries:
@@ -187,7 +181,7 @@ def _cohesive_groups(
             for section in entry.get('sections') or []
             if isinstance(section.get('first_line'), int)
         )
-        parts = _capped(group['lines'], cut_points, held)
+        parts = _capped(group['lines'], cut_points, ownership)
         start = 1
         for index, part in enumerate(parts):
             end = start + len(part)
@@ -222,15 +216,11 @@ def _cohesive_groups(
             start = end
 
 
-def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topic_lock=False, locked=(), claims=None):
-    """``locked``: locked derived rows, whose cuts the two-hour cap reuses for lines they own (``_capped``).
-
-    ``claims``: the source recordings (their ``claims`` show which row owns which audio).
-    """
+def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topic_lock=False, ownership=None):
+    """``ownership``: an ``Ownership`` over the loaded rows; the two-hour cap reuses locked rows' cuts."""
     result = []
     sitdown = is_sitdown(silence_gap)
-    held = _holder(locked, claims)
-    pairs = _cohesive_groups(groups, outlines, sitdown, held) if cohesion else zip(groups, outlines)
+    pairs = _cohesive_groups(groups, outlines, sitdown, ownership) if cohesion else zip(groups, outlines)
     for group, entries in pairs:
         first_result = len(result)
         if len(entries) > 1 and (group.get('manual_end') or group.get('after_manual_end')):
@@ -242,7 +232,7 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
             sections = [
                 s['first_line'] - 1 - begin for s in entry.get('sections', []) if isinstance(s.get('first_line'), int)
             ]
-            capped = _capped(lines, sections, held)
+            capped = _capped(lines, sections, ownership)
             for part_index, part in enumerate(capped):
                 candidate = {
                     **entry,
@@ -580,37 +570,64 @@ def _holds_line(row, line, keys=None):
     return (segment_id, start, end, text) in (keys if keys is not None else _segment_keys(row))
 
 
-def _holder(rows, recordings=None):
-    """line -> id of the locked row that owns it, computed only when the cap asks.
+class Ownership:
+    """Who owns each planned line: one rule for the two-hour cap and ``preserve_finished_windows``.
 
-    A row owns a line it holds exactly (id and timing) or one lying wholly inside its audio claim on
-    that recording, so revising a held turn (new id, same audio) does not hand the line away.
+    1. Exact hold first, across every loaded row (locked, then open): the row published this segment
+       (id and timing, or text without an id) from the line's own recording.
+    2. Only when no row holds it exactly: containment on the line's own recording, locked rows first
+       (``_contains_line``: inside the row's window and its audio claim, or its window alone when the
+       recording keeps no claims). A revised turn (new id, same audio) stays with its row.
     """
-    rows = [r for r in rows if r.get('started_at') and r.get('finished_at')]
-    if not rows:
-        return None
-    keys, seen = {r['id']: _segment_keys(r) for r in rows}, {}
-    spans: dict[str, dict[str, list]] = {}
-    ids = {r['id'] for r in rows}
-    for rid, recording in (recordings or {}).items():
-        for claim in recording.get('claims') or ():
-            if claim.get('conversation_id') in ids:
-                spans.setdefault(claim['conversation_id'], {}).setdefault(rid, []).append(
-                    (claim['start'], claim['end'])
-                )
 
-    def owns(row, line):
-        if _holds_line(row, line, keys[row['id']]):
-            return True
-        claimed = spans.get(row['id'], {}).get(line['conversation_id'], ())
-        return any(a <= line['start'] and line['end'] <= b for a, b in claimed)
+    def __init__(self, existing, recordings=None):
+        rows = [
+            row
+            for row in (existing or {}).values()
+            if not row.get('deleted')
+            and row.get('started_at')
+            and row.get('finished_at')
+            and not (row.get('v3_refined') and row.get('v3_claims_transferred_to'))
+        ]
+        self.rows = [r for r in rows if not is_unlocked(r)] + [r for r in rows if is_unlocked(r)]
+        self.locked_ids = {r['id'] for r in self.rows if not is_unlocked(r)}
+        self._keys = {r['id']: _segment_keys(r) for r in self.rows}
+        self._claims: dict[str, Any] = {}
+        for rid, recording in (recordings or {}).items():
+            if recording.get('claims') is None:
+                continue
+            by_row = self._claims.setdefault(rid, {})
+            for claim in recording['claims']:
+                by_row.setdefault(claim['conversation_id'], []).append((claim['start'], claim['end']))
+        self._seen: dict[int, tuple[Any, Any]] = {}
 
-    def held(line):
-        if id(line) not in seen:
-            seen[id(line)] = next((r['id'] for r in rows if owns(r, line)), None)
-        return seen[id(line)]
+    def owner_of(self, line):
+        cached = self._seen.get(id(line))
+        if cached is None or cached[0] is not line:
+            cached = self._seen[id(line)] = (line, self._owner(line))
+        return cached[1]
 
-    return held
+    def _owner(self, line):
+        rid = line['conversation_id']
+        for row in self.rows:
+            sources = row.get('v3_recording_ids')
+            if (not sources or rid in sources) and _holds_line(row, line, self._keys[row['id']]):
+                return row
+        claims = self._claims.get(rid)
+        return next(
+            (r for r in self.rows if _contains_line(r, line, None if claims is None else claims.get(r['id'], ()))),
+            None,
+        )
+
+    def locked_run_end(self, lines, offset):
+        """The index after the run of lines one locked row owns from ``offset``; None when it is unowned."""
+        owner = self.owner_of(lines[offset])
+        if owner is None or owner['id'] not in self.locked_ids:
+            return None
+        for i in range(offset + 1, len(lines)):
+            if self.owner_of(lines[i]) is not owner:
+                return i
+        return len(lines)
 
 
 def _contains_line(row, line, spans):
@@ -650,16 +667,13 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
         finished.extend(row for row in open_rows if row['id'] in provisional)
     protected = {r['id'] for r in finished}
     published_ids = set()
-    claims_by_recording = {}
     published = {}
     for rid, recording in (recordings or {}).items():
         if recording.get('claims') is None:
             continue
-        indexed = claims_by_recording.setdefault(rid, {})
         for claim in recording['claims']:
             if claim['conversation_id'] in protected:
                 span = (claim['start'], claim['end'])
-                indexed.setdefault(claim['conversation_id'], []).append(span)
                 published.setdefault(rid, {}).setdefault('claims', []).append(span)
                 published_ids.add(claim['conversation_id'])
     for row in finished:
@@ -667,16 +681,7 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
             published_ids.add(row['id'])
             files = published.setdefault(p['recording_id'], {}).setdefault('files', {})
             files.setdefault(p['audio_file_id'], []).append((p['start'], p['end']))
-    holders = finished + [
-        row
-        for row in existing.values()
-        if row['id'] not in protected
-        and is_unlocked(row)
-        and not row.get('deleted')
-        and row.get('started_at')
-        and row.get('finished_at')
-    ]
-    holder_keys = {row['id']: _segment_keys(row) for row in holders}
+    ownership = Ownership(existing, recordings)
     retained, fresh = {}, []
     published_partitions = set()
     fresh_metadata = {'_published': published, '_published_ids': published_ids}
@@ -684,22 +689,11 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
         gaps, pieces = [], []
         partition = window.get('_stretch_partition')
         for line in window['lines']:
-            claims = claims_by_recording.get(line['conversation_id'])
-            # One owner per segment across passes: a row that already published this exact segment
-            # keeps it. Overlapping turns at a cut can sit inside a neighbour's window and claim (the
-            # neighbour's claim is clipped, not the turn), so containment alone would move them.
-            holder = next((r for r in holders if _holds_line(r, line, holder_keys[r['id']])), None)
-            if holder is not None:
-                owner = holder if holder['id'] in protected else None
-            else:
-                owner = next(
-                    (
-                        r
-                        for r in finished
-                        if _contains_line(r, line, None if claims is None else claims.get(r['id'], ()))
-                    ),
-                    None,
-                )
+            # The same owner the two-hour cap saw (Ownership). Only a protected owner retains the
+            # line; one an open row owns stays in the planned window that row continues.
+            owner = ownership.owner_of(line)
+            if owner is not None and owner['id'] not in protected:
+                owner = None
             if partition is not None and partition not in published_partitions:
                 spans = published.get(line['conversation_id'], {}).get('claims', ())
                 if owner or any(a < line['end'] and line['start'] < b for a, b in spans):
