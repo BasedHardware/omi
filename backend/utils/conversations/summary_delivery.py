@@ -443,10 +443,19 @@ def retires_title_marker(existing: Row, write: Row) -> bool:
     )
 
 
+def _retire_title_marker(existing: Row, write: Row) -> None:
+    if retires_title_marker(existing, write):
+        # Sync tests load this module with google.cloud stubbed.
+        from google.cloud.firestore import DELETE_FIELD
+
+        write['structured']['title_provenance'] = DELETE_FIELD
+
+
 def _merge_historical(existing: Row, write: Row, current: float) -> None:
     """A historical row owes no automatic summary; its open-time summary is a delivered one."""
     write['summary_due_at'] = None
     if write.get('summary_output_present'):
+        _retire_title_marker(existing, write)
         write['summary_completed_at'] = existing.get('summary_completed_at') or current
         write['summary_title_provenance'] = 'generated'
         write['summary_blocked_reason'] = None
@@ -500,11 +509,7 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         write['summary_first_pending_at'] = accepted
     rich = bool(write.get('summary_output_present'))
     discarded = bool(write.get('discarded'))
-    if retires_title_marker(existing, write):
-        # Imported here like effective_user_title below: sync tests load this module with google.cloud stubbed.
-        from google.cloud.firestore import DELETE_FIELD
-
-        write['structured']['title_provenance'] = DELETE_FIELD
+    _retire_title_marker(existing, write)
     # The fence guards an open first-summary obligation only. Rows outside the
     # server-minimum protocol, already-enriched rows, and rows whose empty
     # budget is exhausted have no caller that catches this exception — the

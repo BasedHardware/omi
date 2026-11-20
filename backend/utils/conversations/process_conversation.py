@@ -3110,14 +3110,6 @@ def process_conversation(
         if derived_effects_disposition_observer is not None:
             derived_effects_disposition_observer(DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
         if historical_tier:
-            if explicit_app is not None:
-                # An explicitly chosen template is the summary the owner asked for.
-                trigger_conversation_apps(
-                    uid, conversation, True, app_id, explicit_app, app_usage_attribution, language_code, people
-                )
-                conversations_db.update_conversation(
-                    uid, conversation.id, {'apps_results': [r.dict() for r in conversation.apps_results]}
-                )
             complete_explicit(uid, conversation, trigger)
         return conversation
 
