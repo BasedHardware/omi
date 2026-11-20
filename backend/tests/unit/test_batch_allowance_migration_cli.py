@@ -136,11 +136,9 @@ def test_error_report_names_the_class_and_never_the_message(error, error_type, r
 
 
 def test_error_report_walks_the_whole_cause_chain():
-    from google.api_core.exceptions import RetryError
-
     error = _raise_chain(
         cli.FirestoreContentionExhausted('contention on jobs/secret-doc-id'),
-        RetryError('retries exhausted', None),
+        cli.api_exceptions.RetryError('retries exhausted', None),
         cli.api_exceptions.Aborted('jobs/secret-doc-id'),
     )
     report = cli.error_report(error)
@@ -198,6 +196,33 @@ def test_a_fatal_rpc_status_anywhere_in_the_chain_vetoes_retry(chain):
     report = cli.error_report(_raise_chain(*chain))
     assert report['retryable'] is False
     assert 'secret' not in json.dumps(report)
+
+
+@pytest.mark.parametrize(
+    'chain',
+    [
+        (cli.api_exceptions.PermissionDenied('denied'), cli.api_exceptions.Aborted('a')),
+        (
+            cli.api_exceptions.NotFound('jobs/secret-doc-id'),
+            cli.api_exceptions.InvalidArgument('Transaction has expired'),
+        ),
+    ],
+)
+def test_a_fatal_status_raised_from_a_transient_cause_stays_fatal(chain):
+    report = cli.error_report(_raise_chain(*chain))
+    assert report['retryable'] is False
+    assert 'secret' not in json.dumps(report)
+
+
+def test_a_non_exception_retry_error_cause_still_yields_a_stop_line():
+    error = cli.api_exceptions.RetryError('exhausted', None)
+    error._cause = 'not an exception'
+    error.__cause__ = None
+    assert cli.error_report(error) == {
+        'errors': 1,
+        'error_type': 'google.api_core.exceptions.RetryError',
+        'retryable': False,
+    }
 
 
 def test_error_report_is_not_retryable_when_any_sibling_failure_is_not():

@@ -15,7 +15,7 @@ from google.api_core import exceptions as api_exceptions
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from database.batch_pipeline_allowance_migration import MigrationOwnerChanged, RowRateLimiter, apply_page, counts
-from database.firestore_transaction_retry import FirestoreContentionExhausted, is_transaction_contention
+from database.firestore_transaction_retry import FirestoreContentionExhausted, is_expired_transaction
 from database.batch_pipeline_store import FirestoreStore
 from utils.executors import shutdown_executors
 
@@ -47,12 +47,13 @@ def _chain(error: BaseException) -> list[BaseException]:
         cause = current.__cause__
         if cause is None and isinstance(current, api_exceptions.RetryError):
             cause = current.cause
-        current = cause
+        current = cause if isinstance(cause, BaseException) else None
     return links
 
 
 def _qualifies(link: BaseException) -> bool:
-    return isinstance(link, RETRYABLE) or is_transaction_contention(link)
+    # Judge each link by its own class only; _chain already exposes every cause.
+    return isinstance(link, RETRYABLE) or is_expired_transaction(link)
 
 
 def _retryable(error: BaseException) -> bool:
