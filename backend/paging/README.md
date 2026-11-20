@@ -72,8 +72,10 @@ exactly as listed. The Scheduler service agent uses its Google-managed
 operator principals authenticate to different application paths and audiences.
 The public HTTPS ingress needs explicit approval because Grafana uses HMAC.
 Bearer verification guards the scheduler and acknowledgement paths. Each worker
-uses a bounded certificate transport and caches parsed Google certificates for
-their HTTP freshness lifetime, capped at one hour. No history API is exposed.
+caches Google certificates for their HTTP freshness lifetime, capped at one hour.
+A cache miss uses a subprocess that is killed and reaped if it overruns the
+two-second retrieval budget, including time spent waiting for a concurrent
+refresh. No history API is exposed.
 
 1. Qualify the exact head and image with the emulator evidence. Deploy fenced
    and keep Scheduler paused through access checks. Verify unsigned publisher

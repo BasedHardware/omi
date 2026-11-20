@@ -1,8 +1,9 @@
 """Verify Google ID tokens with a bounded, per-worker signing certificate cache."""
 
-from concurrent.futures import ThreadPoolExecutor
 import json
 import re
+import subprocess
+import sys
 from threading import Lock
 from time import monotonic
 from types import SimpleNamespace
@@ -15,16 +16,38 @@ import httpx
 _CERT_URL = 'https://www.googleapis.com/oauth2/v1/certs'
 _CERT_TIMEOUT = 2.0
 _MAX_CERT_BYTES = 64 * 1024
+_CERT_COMMAND = (sys.executable, __file__)
 _JWT = re.compile(r'[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+')
 
 
+def fetch_certificates(client, timeout):
+    with client.stream('GET', _CERT_URL, timeout=timeout, follow_redirects=False) as response:
+        response.raise_for_status()
+        body = bytearray()
+        for chunk in response.iter_bytes():
+            if len(body) + len(chunk) > _MAX_CERT_BYTES:
+                raise auth_errors.TransportError('pager signing certificate response exceeded size budget')
+            body.extend(chunk)
+        return {
+            'body': body.decode('utf-8'),
+            'cache_control': response.headers.get('cache-control', ''),
+            'age': response.headers.get('age', '0'),
+        }
+
+
+def fetch_in_process(timeout):
+    # A timed-out process is killed and reaped, even if DNS is still blocked.
+    response = subprocess.run(
+        _CERT_COMMAND, stdin=subprocess.DEVNULL, env={}, capture_output=True, check=True, timeout=timeout
+    )
+    return json.loads(response.stdout)
+
+
 class OIDCVerifier:
-    def __init__(self, client_factory=None, *, clock=monotonic):
-        self.client_factory = client_factory if client_factory is not None else lambda: httpx.Client(trust_env=False)
+    def __init__(self, fetch=fetch_in_process, *, clock=monotonic):
+        self.fetch = fetch
         self.clock = clock
         self.lock = Lock()
-        self.worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pager-oidc")
-        self.refresh = None
         self.certs = None
         self.expires_at = 0
 
@@ -47,25 +70,6 @@ class OIDCVerifier:
             return False
         return verified.get('email') == principal and verified.get('email_verified') is True
 
-    def fetch(self, deadline):
-        started_at = self.clock()
-        remaining = deadline - monotonic()
-        if remaining <= 0:
-            raise TimeoutError()
-        with self.client_factory() as client:
-            with client.stream('GET', _CERT_URL, timeout=remaining, follow_redirects=False) as response:
-                response.raise_for_status()
-                body = bytearray()
-                for chunk in response.iter_bytes():
-                    if monotonic() >= deadline:
-                        raise TimeoutError()
-                    if len(body) + len(chunk) > _MAX_CERT_BYTES:
-                        raise auth_errors.TransportError('pager signing certificate response exceeded size budget')
-                    body.extend(chunk)
-                if monotonic() >= deadline:
-                    raise TimeoutError()
-                return bytes(body), response.headers, started_at
-
     def certificates(self, url, method):
         deadline = monotonic() + _CERT_TIMEOUT
         if (url, method) != (_CERT_URL, 'GET') or not self.lock.acquire(timeout=_CERT_TIMEOUT):
@@ -74,15 +78,12 @@ class OIDCVerifier:
             if self.certs is not None and self.clock() < self.expires_at:
                 return self.certs
             self.certs = None
-            # Keep the slot occupied if the caller times out during a blocking
-            # resolver call. Later requests can wait on it but cannot queue more.
-            if self.refresh is None:
-                self.refresh = self.worker.submit(self.fetch, deadline)
-            try:
-                body, headers, started_at = self.refresh.result(timeout=max(0, deadline - monotonic()))
-            finally:
-                if self.refresh.done():
-                    self.refresh = None
+            started_at = self.clock()
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise TimeoutError()
+            response = self.fetch(remaining)
+            body = response['body'].encode('utf-8')
             certs = json.loads(body)
             if not isinstance(certs, dict) or not certs:
                 raise ValueError('empty signing certificate map')
@@ -91,16 +92,21 @@ class OIDCVerifier:
                     raise ValueError('invalid signing certificate')
                 x509.load_pem_x509_certificate(cert.encode())
 
-            control = headers.get('cache-control', '').lower()
+            control = response['cache_control'].lower()
             max_age = re.search(r'(?:^|,)\s*max-age=(\d{1,10})\s*(?:,|$)', control)
-            age = headers.get('age', '0')
+            age = response['age']
             cacheable = not {'no-cache', 'no-store'}.intersection(part.strip() for part in control.split(','))
             result = SimpleNamespace(status=200, data=body)
             if cacheable and max_age and re.fullmatch(r'\d{1,10}', age):
                 self.expires_at = started_at + min(3600, int(max_age[1]) - int(age))
                 self.certs = result
             return result
-        except (ValueError, RecursionError, TimeoutError, httpx.HTTPError) as error:
+        except (ValueError, RecursionError, OSError, subprocess.SubprocessError, httpx.HTTPError) as error:
             raise auth_errors.TransportError('pager signing certificates unavailable') from error
         finally:
             self.lock.release()
+
+
+if __name__ == '__main__':
+    with httpx.Client(trust_env=False) as client:
+        sys.stdout.write(json.dumps(fetch_certificates(client, _CERT_TIMEOUT)))

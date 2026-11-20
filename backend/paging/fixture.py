@@ -7,7 +7,10 @@ from datetime import datetime, timedelta, timezone
 import hmac
 import json
 import os
-from threading import Event
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import time
 import unittest
 from unittest.mock import Mock, patch
@@ -26,7 +29,7 @@ import httpx
 from .app import OPERATOR_SA, SCHEDULER_SA, create_app
 from .bark import BARK_ENDPOINT, Bark
 from . import oidc
-from .oidc import OIDCVerifier
+from .oidc import OIDCVerifier, fetch_certificates
 from .publisher import REDIS
 from .store import ATTEMPT_LEASE, RETRY_DELAY, Store
 
@@ -79,9 +82,9 @@ class PagerVerificationFixture(unittest.TestCase):
         def authorize(value):
             return verifier('Bearer ' + value, AUDIENCE + DRAIN, SCHEDULER_SA)
 
-        verifier = OIDCVerifier(
-            lambda: httpx.Client(transport=httpx.MockTransport(fetch)), clock=lambda: monotonic_time
-        )
+        client = httpx.Client(transport=httpx.MockTransport(fetch))
+        self.addCleanup(client.close)
+        verifier = OIDCVerifier(lambda timeout: fetch_certificates(client, timeout), clock=lambda: monotonic_time)
         self.assertFalse(authorize('invalid.token.signature'))
         self.assertFalse(authorize(token(exp='malformed')))
         nested = urlsafe_b64encode(b'[' * 1100 + b'0' + b']' * 1100).rstrip(b'=').decode()
@@ -116,60 +119,39 @@ class PagerVerificationFixture(unittest.TestCase):
             attempts.append(request)
             return httpx.Response(200, headers={'Cache-Control': 'max-age=3600'}, json={'kid': 'malformed'})
 
-        verifier = OIDCVerifier(lambda: httpx.Client(transport=httpx.MockTransport(fetch)))
-        self.addCleanup(verifier.worker.shutdown)
-        for _ in range(2):
-            with self.assertRaises(TransportError):
-                verifier.certificates('https://www.googleapis.com/oauth2/v1/certs', 'GET')
+        with httpx.Client(transport=httpx.MockTransport(fetch)) as client:
+            verifier = OIDCVerifier(lambda timeout: fetch_certificates(client, timeout))
+            for _ in range(2):
+                with self.assertRaises(TransportError):
+                    verifier.certificates('https://www.googleapis.com/oauth2/v1/certs', 'GET')
         self.assertEqual(len(attempts), 2)
 
-    def test_certificate_deadline_bounds_wait_and_retains_the_refresh_slot(self):
-        started = Event()
-        unstall = Event()
-        calls = []
+    def test_stalled_certificate_process_is_reaped_before_next_lookup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / 'first'
+            script = (
+                "import json, pathlib, sys, time\n"
+                "marker = pathlib.Path(sys.argv[1])\n"
+                "if not marker.exists():\n"
+                "    marker.write_text('one pending lookup')\n"
+                "    time.sleep(3)\n"
+                "else:\n"
+                "    print(json.dumps({'body': '{}', 'cache_control': '', 'age': '0'}))\n"
+            )
+            command = (sys.executable, '-c', script, str(marker))
+            with patch.object(oidc, '_CERT_COMMAND', command):
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    oidc.fetch_in_process(0.25)
+                self.assertTrue(marker.exists())
+                self.assertEqual(oidc.fetch_in_process(1)['body'], '{}')
 
-        def fetch(request):
-            calls.append(request)
-            started.set()
-            unstall.wait(timeout=2)
-            return httpx.Response(200, json={})
-
-        verifier = OIDCVerifier(lambda: httpx.Client(transport=httpx.MockTransport(fetch)))
-        self.addCleanup(verifier.worker.shutdown)
-        self.addCleanup(unstall.set)
-        with patch.object(oidc, '_CERT_TIMEOUT', 0.15):
-            for _ in range(3):
-                with self.assertRaises(TransportError) as error:
-                    verifier.certificates('https://www.googleapis.com/oauth2/v1/certs', 'GET')
-                self.assertIsInstance(error.exception.__cause__, TimeoutError)
-                self.assertTrue(started.is_set())
-                self.assertFalse(verifier.refresh.done())
-                self.assertIsNone(verifier.certs)
-        self.assertEqual(len(calls), 1)
-
-    def test_certificate_deadline_covers_response_headers_and_body(self):
-        stages = []
-
-        class SlowBody(httpx.SyncByteStream):
-            def __iter__(self):
-                stages.append('body_started')
-                time.sleep(0.2)
-                stages.append('body_complete')
-                yield b'{}'
-
-        def fetch(_):
-            time.sleep(0.15)
-            stages.append('headers')
-            return httpx.Response(200, stream=SlowBody())
-
-        verifier = OIDCVerifier(lambda: httpx.Client(transport=httpx.MockTransport(fetch)))
-        self.addCleanup(verifier.worker.shutdown)
-        with patch.object(oidc, '_CERT_TIMEOUT', 0.3):
-            with self.assertRaises(TransportError) as error:
-                verifier.certificates('https://www.googleapis.com/oauth2/v1/certs', 'GET')
-        self.assertIsInstance(error.exception.__cause__, TimeoutError)
-        self.assertEqual(stages, ['headers', 'body_started'])
+    def test_certificate_request_maps_total_process_timeout_to_transport_error(self):
+        verifier = OIDCVerifier(Mock(side_effect=subprocess.TimeoutExpired(('fixture',), 2)))
+        with self.assertRaises(TransportError) as error:
+            verifier.certificates('https://www.googleapis.com/oauth2/v1/certs', 'GET')
+        self.assertIsInstance(error.exception.__cause__, subprocess.TimeoutExpired)
         self.assertIsNone(verifier.certs)
+        self.assertFalse(verifier.lock.locked())
 
     def test_pinned_sdk_commit_exhaustion_returns_retryable_503(self):
         sdk_transaction = Mock(_read_only=False, _max_attempts=2, _id=b'fixture')
