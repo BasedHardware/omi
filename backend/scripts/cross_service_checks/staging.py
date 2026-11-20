@@ -149,7 +149,11 @@ def staging_diff(root: Path) -> list[tuple[str, str, str]]:
     prod = composer.compose_environment('prod', base_path=base, runtime_env_dir=runtime_env_dir)
 
     problems: list[tuple[str, str, str]] = []
-    prod_services = prod.get('cloud_run', {}).get('services', {})
+    # Prod-only services the composer drops from staging on purpose (SCA-3120 projection pump).
+    excluded = set(getattr(composer, 'STAGING_EXCLUDED_SERVICES', ()))
+    prod_services = {
+        name: cfg for name, cfg in prod.get('cloud_run', {}).get('services', {}).items() if name not in excluded
+    }
     staging_services = staging.get('cloud_run', {}).get('services', {})
     for service in sorted(set(prod_services) ^ set(staging_services)):
         problems.append((service, 'service', 'present in only one of prod/staging'))

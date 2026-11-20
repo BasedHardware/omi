@@ -506,6 +506,7 @@ def test_recovery_minimum_structure_raises_before_persist_or_fanout(capsys, monk
                 patch.object(pc, 'is_release_probe_uid', MagicMock(return_value=False)),
                 patch.object(pc, 'should_skip_omi_paid_postprocessing', MagicMock(return_value=False)),
                 patch.object(pc, '_enrich_meeting_context', MagicMock()),
+                patch.object(pc, 'resolve_speakers_for_processing', return_value=False),
                 patch.object(pc, '_get_structured', MagicMock(return_value=(Structured(), False))),
                 patch.object(pc, '_get_conversation_obj', MagicMock(return_value=conversation)),
                 patch.object(pc, '_attach_client_projection', MagicMock()),

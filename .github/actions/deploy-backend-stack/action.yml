@@ -404,6 +404,13 @@ runs:
       run: |
         set -euo pipefail
         umask 077
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
+        python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
+          --revision "$ROLLBACK_REVISION" --project "${{ inputs.project_id }}" --region "${{ inputs.region }}"
         extension_args=()
         if [[ "${{ inputs.integration_only }}" == true ]]; then extension_args=(--integration-only); fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" prepare \
@@ -543,6 +550,7 @@ runs:
     - name: Preflight Cloud Run deploy
       shell: bash
       run: |
+        set -euo pipefail
         PREFLIGHT_ARGS=(
           ${{ inputs.cloud_run_service != 'all' && format('--service {0}', inputs.cloud_run_service) || '' }} \
           --env ${{ inputs.runtime_env }}
@@ -557,6 +565,14 @@ runs:
                "${{ inputs.environment }}" == "prod" ||
                "${{ inputs.environment }}" == "development") ]]; then
           PREFLIGHT_ARGS+=(--repair-traffic)
+          if [[ "${{ inputs.deploy_profile }}" == manual ]]; then
+            history_args=()
+            if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+              history_args=(--unshallow)
+            fi
+            git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
+            PREFLIGHT_ARGS+=(--release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py")
+          fi
         fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" "${PREFLIGHT_ARGS[@]}"
 
@@ -1024,6 +1040,7 @@ runs:
         CLOUD_RUN_SERVICE: ${{ inputs.service }}-sync
         CLOUD_RUN_PROJECT: ${{ inputs.project_id }}
         CLOUD_RUN_REGION: ${{ inputs.region }}
+        DEFAULT_MAX_SCALE: '50'
       run: |
         set -euo pipefail
         # Service-level caps are the live ops control; older services may only have a revision cap.
@@ -1032,17 +1049,17 @@ runs:
           --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
           --filter="metadata.name=$CLOUD_RUN_SERVICE" \
           --format='json(metadata.name,metadata.annotations,spec.template.metadata.annotations)' \
-          | jq -er --arg service "$CLOUD_RUN_SERVICE" '
+          | jq -er --arg service "$CLOUD_RUN_SERVICE" --arg default "$DEFAULT_MAX_SCALE" '
             [.[] | select(.metadata.name == $service)]
             | if length > 1 then error("Duplicate Cloud Run service") else
                 (.[0].metadata.annotations["run.googleapis.com/maxScale"]
                  // .[0].spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"]
-                 // "50") end
+                 // $default) end
             | if type == "string" and test("^[1-9][0-9]*$") then .
               else error("Invalid Cloud Run maxScale") end
             # Bound digits before shell arithmetic; oversized annotations use the fresh-service default.
-            | if length > 3 then "50"
-              elif tonumber > 500 then "50" else . end')"
+            | if length > 3 then $default
+              elif tonumber > 500 then $default else . end')"
         echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
 
     - name: Deploy ${{ inputs.service }}-sync to Cloud Run
@@ -1201,6 +1218,57 @@ runs:
           --max-attempts=5 \
           --min-backoff=5s --max-backoff=300s
 
+    - name: Resolve live integration maxScale
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-integration') && (inputs.integration_only != 'true' && (inputs.integration_canary != 'true')) }}
+      id: live-integration-max-scale
+      shell: bash
+      env:
+        CLOUD_RUN_SERVICE: ${{ inputs.service }}-integration
+        CLOUD_RUN_PROJECT: ${{ inputs.project_id }}
+        CLOUD_RUN_REGION: ${{ inputs.region }}
+        DEFAULT_MAX_SCALE: ${{ inputs.runtime_env == 'prod' && '35' || '50' }}
+      run: |
+        set -euo pipefail
+        # Integration carries its cap on the serving revision (no service cap), so a capacity revision's
+        # cap survives the next train instead of being reset to the former 35 literal (2026-11-20).
+        # The cap is the minimum of the service cap (when set) and the cap of every revision
+        # receiving traffic (the headroom gate's min-of-caps rule), never the latest template (it can
+        # be a no-traffic candidate). Unlike the gate, which refuses these cases, an uncapped
+        # receiving revision contributes the default (35 in prod), and with no service cap and no
+        # receiving revision (including a fresh service) the cap is the default. A cap over 500 also
+        # falls back to the default; that bound is the resolver's own, not the gate's. Each cap is
+        # validated whole before any arithmetic. Any lookup failure stops the deploy.
+        LISTING="$(gcloud run services list \
+          --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
+          --filter="metadata.name=$CLOUD_RUN_SERVICE" \
+          --format='json(metadata.name,metadata.annotations,status.traffic)')"
+        PLAN="$(jq -ec --arg service "$CLOUD_RUN_SERVICE" '
+          [.[] | select(.metadata.name == $service)]
+          | if length > 1 then error("Duplicate Cloud Run service")
+            elif length == 0 then {service: null, revisions: []}
+            else {service: .[0].metadata.annotations["run.googleapis.com/maxScale"],
+                  revisions: [.[0].status.traffic[]? | select((.percent // 0) > 0) | .revisionName]} end
+          | if any(.revisions[]; (type == "string" and test("\\A[a-z][a-z0-9-]{0,62}\\z")) | not)
+              then error("Invalid serving revision") else . end' <<< "$LISTING")"
+        CAPS="$(jq -c '[.service | select(. != null)]' <<< "$PLAN")"
+        REVISIONS="$(jq -r '.revisions[]' <<< "$PLAN")"
+        while IFS= read -r REVISION; do
+          [[ -n "$REVISION" ]] || continue
+          ANNOTATIONS="$(gcloud run revisions describe "$REVISION" \
+            --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
+            --format='json(metadata.annotations)')"
+          CAPS="$(jq -ec --argjson revision "$ANNOTATIONS" --arg default "$DEFAULT_MAX_SCALE" \
+            '. + [$revision.metadata.annotations["autoscaling.knative.dev/maxScale"] // $default]' <<< "$CAPS")"
+        done <<< "$REVISIONS"
+        MAX_SCALE="$(jq -er --arg default "$DEFAULT_MAX_SCALE" '
+          if length == 0 then [$default] else . end
+          | if all(.[]; type == "string" and test("\\A[1-9][0-9]*\\z")) then .
+            else error("Invalid Cloud Run maxScale") end
+          # Bound digits before shell arithmetic; oversized caps use the fresh-service default.
+          | map(if length > 3 then $default elif tonumber > 500 then $default else . end)
+          | min_by(tonumber)' <<< "$CAPS")"
+        echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
+
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run
       if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-integration') && (inputs.integration_only != 'true' && (inputs.integration_canary != 'true')) }}
       id: deploy-backend-integration
@@ -1222,7 +1290,7 @@ runs:
           --memory=${{ inputs.runtime_env == 'prod' && '4Gi' || '2Gi' }}
           --concurrency=${{ inputs.runtime_env == 'prod' && '80' || '40' }}
           --min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}
-          --max-instances=${{ inputs.runtime_env == 'prod' && '35' || '50' }}
+          --max-instances=${{ steps.live-integration-max-scale.outputs.max_scale }}
           --no-cpu-throttling
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
@@ -1728,8 +1796,15 @@ runs:
         ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev' && (failure() || cancelled()) && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure')) }}
       shell: bash
       run: |
+        set -euo pipefail
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
           --snapshot artifacts/dev-backend-cloud-run-pre-promotion-traffic-snapshot.json \
+          --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
           --evidence-path artifacts/dev-backend-cloud-run-traffic-restore.json
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
@@ -1745,8 +1820,14 @@ runs:
             --state "$RUNNER_TEMP/integration-canary-private.json" || rollback_rc=$?
           canary_args=(--exclude-service backend-integration)
         fi
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
           --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
+          --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
           "${canary_args[@]}" \
           --evidence-path artifacts/backend-cloud-run-traffic-restore.json || rollback_rc=$?
         exit "$rollback_rc"

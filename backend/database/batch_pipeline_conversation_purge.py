@@ -67,6 +67,10 @@ class PurgeIntentMissing(RuntimeError):
     """Deletion intent vanished before traversal; no destructive work is authorized."""
 
 
+class ArtifactUploadPending(Exception):
+    """The current page still owns an upload erasure receipt."""
+
+
 class PurgeCheckpointed(Exception):
     """The run budget ran out at a checkpoint; the next run resumes from it."""
 
@@ -258,9 +262,12 @@ def purge_conversations(
         def erase(item: Any, authority: Any) -> None:
             snapshot, data = item
             if table == 'artifacts':
-                _erase_artifact(
+                pending = _erase_artifact(
                     uid, namespace, snapshot, data, remote_delete(authority), fence=authority.fence, client=client
                 )
+                if pending:
+                    # Replay this page after the upload deadline, before unlinking segments.
+                    raise ArtifactUploadPending()
                 return
             if table == 'coalesce_groups':
                 from database.batch_pipeline_coalescing import purge_group
@@ -367,8 +374,8 @@ def purge_conversations(
                     matches = []
                     for snapshot in rows:
                         data = snapshot.to_dict() or {}
-                        if data.get('owner_key') == key:
-                            continue  # Already handled in ``dependents``, including pending writes.
+                        if data.get('owner_key') == key and not data.get('erasure_requested'):
+                            continue  # Already handled in ``dependents``.
                         if belongs(data) or data.get('segment_id') in segments:
                             matches.append((snapshot, data))
                     erased += _in_units(progress, matches, erase_dependent(namespace, 'artifacts'), clock, settle)

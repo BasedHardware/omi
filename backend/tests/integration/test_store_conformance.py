@@ -20,8 +20,10 @@ import pytest
 
 from config.batch_pipeline import scheduler_control_key
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database import batch_pipeline_projection_outbox as projection_outbox
 from testing.store_fixtures import store_backend  # noqa: F401  (the parametrized fixture)
-from utils.batch_pipeline.contracts import Priority, WorkItem
+from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
+from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import Scheduler, owner_key as scheduler_owner_key
 
 pytestmark = pytest.mark.integration
@@ -551,6 +553,46 @@ def _projection_rows(h):
             ('results', sid, {'segment_id': sid, 'projection_state': state, 'committed_at': float(10 - i // 2)})
         )
     return rows
+
+
+def test_projection_outbox_merge_and_token_conformance(h, monkeypatch):
+    from utils.batch_pipeline import scheduler as scheduler_module
+
+    # This test advances a synthetic domain clock. Host load must not expire the scheduler's setup claim.
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: 100.0)
+    queue = Scheduler(h.store)
+    merge = OrderedMerge(h.store, head_wait_seconds=0, catch_up_depth=0)
+    uid = h.uid('o')
+
+    def commit(segment, now):
+        assert queue.enqueue(WorkItem(segment, uid, now, 'gs://synthetic/input', 30, Priority.FRESH), now)
+        (lease,) = queue.pull(now + 1)
+        assert queue.complete(WorkResult(segment, 'gs://synthetic/result'), lease.token, now + 2)
+        return merge.commit_next(uid, now + 3)
+
+    outbox = projection_outbox
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'false')
+    assert outbox.KIND_FIELD not in commit('old', 10)
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'true')
+    entry = commit('new', 20)
+    assert entry[outbox.DUE_FIELD] == 23 and merge.commit_next(uid, 24) is None
+    assert h.store.projection_outbox_page(22, 10) == []
+    (due,) = h.store.projection_outbox_page(23, 10)
+    key = outbox.Obligation('new', 2)
+    assert due == outbox.DueObligation(key, 23)
+    assert h.store.projection_page_with_outbox() == (['old', 'new'], None, {'new'})
+    assert outbox.claim(h.store, outbox.Obligation('new', 1), lambda: 23) is None
+    token = outbox.claim(h.store, key, lambda: 23)
+    assert token and outbox.claim(h.store, key, lambda: 23) is None
+    assert h.store.projection_outbox_page(23, 10) == []
+    assert outbox.settle(h.store, key, token, lambda: 24, 'incomplete') == 'incomplete'
+    assert h.store.projection_outbox_page(83, 10) == []
+    assert h.store.projection_outbox_page(84, 10) == [outbox.DueObligation(key, 84)]
+    second = outbox.claim(h.store, key, lambda: 84)
+    assert second and second != token
+    assert outbox.settle(h.store, key, token, lambda: 85, 'retry') is None
+    snapshot = h.store.run(lambda tx: tx.get('results', 'new'))
+    assert snapshot['projection_state'] == 'pending' and snapshot[outbox.TOKEN_FIELD] == second
 
 
 def test_projection_page_is_a_stable_keyset_scan(h):

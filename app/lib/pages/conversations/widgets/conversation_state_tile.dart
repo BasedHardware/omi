@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import 'package:provider/provider.dart';
 
@@ -12,7 +13,10 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// today's breathing dot while it is going, a spinner while its transcript arrives, a pen while its
 /// summary is written, and the subject's emoji when done. Otherwise (and for every conversation without
 /// v3 fields, or after a rollback leaves them on old documents) it shows the emoji, as before.
-class ConversationStateTile extends StatelessWidget {
+///
+/// The tile changes in place: live → transcribing → writing → done cross-fade at
+/// `OmiMotion.standard`, never a pop, and a screen reader hears when the summary is ready.
+class ConversationStateTile extends StatefulWidget {
   const ConversationStateTile({super.key, required this.conversation});
 
   final ServerConversation conversation;
@@ -20,10 +24,29 @@ class ConversationStateTile extends StatelessWidget {
   static const double extent = 36;
 
   @override
+  State<ConversationStateTile> createState() => _ConversationStateTileState();
+}
+
+class _ConversationStateTileState extends State<ConversationStateTile> {
+  ConversationTileState? _shown;
+
+  @override
   Widget build(BuildContext context) {
+    final conversation = widget.conversation;
     final l10n = context.l10n;
     final v3On = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false);
     final state = v3On ? conversation.v3?.tileState : null;
+    final previous = _shown;
+    _shown = state;
+    if (state == ConversationTileState.done &&
+        (previous == ConversationTileState.transcribing || previous == ConversationTileState.writing)) {
+      final view = View.of(context);
+      final direction = Directionality.of(context);
+      final message = l10n.finishedSummaryReady;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        SemanticsService.sendAnnouncement(view, message, direction);
+      });
+    }
     final (Widget child, String? label) = switch (state) {
       ConversationTileState.live => (const OmiBreathingDot(key: Key('conversation_tile_live')), l10n.live),
       ConversationTileState.transcribing => (
@@ -49,11 +72,15 @@ class ConversationStateTile extends StatelessWidget {
         ),
     };
     final tile = Container(
-      width: extent,
-      height: extent,
+      width: ConversationStateTile.extent,
+      height: ConversationStateTile.extent,
       decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
       alignment: Alignment.center,
-      child: child,
+      child: OmiCrossFade(
+        alignment: Alignment.center,
+        // Done and no-state both show the emoji: one key, so the emoji never cross-fades with itself.
+        child: KeyedSubtree(key: ValueKey('tile_${label == null ? 'emoji' : state!.name}'), child: child),
+      ),
     );
     return label == null ? tile : Semantics(label: label, child: tile);
   }

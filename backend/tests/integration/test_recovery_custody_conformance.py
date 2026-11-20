@@ -134,7 +134,7 @@ def test_pl049_positive_speech_empty_recovery_keeps_custody_and_spends_once(h, m
     assert job(h)['recovery'] == intent
     assert provider.call_count == artifacts.fetch_audio.call_count == 1
     artifacts.persist_recovery_result.assert_not_called()
-    assert artifacts.method_calls == [call.fetch_audio(ANY)]
+    assert artifacts.method_calls == [call.fetch_audio(ANY, confirm_retained_digest=True)]
     # Positive speech earns at most one independent second chance; an uncertain call keeps custody held and
     # is never repeated by later sweeps.
     assert second.call_count == 1

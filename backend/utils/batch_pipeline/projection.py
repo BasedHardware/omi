@@ -36,6 +36,7 @@ from database import batch_pipeline_projection_release as projection_release
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
+from utils.batch_pipeline.projection_delivery import assert_delivery_claim
 from database.batch_pipeline_projection_protocol import PROJECTION_HEAD_BLOCK_TYPE as PROJECTION_HEAD_BLOCK_TYPE
 from database.batch_pipeline_projection_protocol import PROJECTION_HEAD_BLOCKED_SINCE
 from database.batch_pipeline_projection_protocol import normalized_binding
@@ -44,6 +45,7 @@ from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTI
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 from utils.batch_pipeline.projection_finish_backoff import FinishBackoff
 from utils.batch_pipeline.projection_disposition import persist_disposition, mirror_assignment
+from utils.batch_pipeline.projection_prefetch import NativeAudioPending
 from utils.batch_pipeline.projection_privacy import PRIVACY_HELD, settle_refusals
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from utils.batch_pipeline.projection_index import ProjectionIndex
@@ -69,6 +71,7 @@ from utils.stt.transcript_admission import filter_admission
 from utils.episodes import transcript_receipts
 
 if TYPE_CHECKING:
+    from asyncio import Semaphore
     from utils.batch_pipeline.projection_prefetch import Prefetched
 
 logger = logging.getLogger(__name__)
@@ -265,6 +268,8 @@ def projection_phase(phase: str, policy: ProjectionPolicy | None = None) -> Iter
     logger.info('event=batch_projection_phase phase=%s outcome=started', phase)
     try:
         yield
+    except NativeAudioPending:
+        raise
     except Exception as error:
         logger.info(
             'event=batch_projection_phase phase=%s outcome=error elapsed_ms=%d exception_type=%s%s%s block_reason=%s',
@@ -447,12 +452,18 @@ class Projector:
         # behind work already queued, never ahead of it, so discovery's cursor
         # position cannot strand them and other owners are not starved.
         self.chain_followups: list[str] = []
-        self.discovery = ProjectionDiscovery(store)
+        self.outbox_coverage: Callable[[], bool] | None = None
+        self.outbox_followup_slots: Semaphore | None = None
+        self.discovery = ProjectionDiscovery(store, outbox_coverage=self.has_outbox_coverage)
         self.finish_backoff = FinishBackoff(self)
         # Pending-page mode: assignment never spends page slots on rows it can
         # only replay, and persisted/ready rows advance on their own cursor.
-        self.assignment_discovery = ProjectionDiscovery(store, states=PROJECTION_ASSIGNMENT_STATES, recent=True)
-        self.finish_discovery = ProjectionDiscovery(store, states=PROJECTION_FINISH_STATES)
+        self.assignment_discovery = ProjectionDiscovery(
+            store, states=PROJECTION_ASSIGNMENT_STATES, recent=True, outbox_coverage=self.has_outbox_coverage
+        )
+        self.finish_discovery = ProjectionDiscovery(
+            store, states=PROJECTION_FINISH_STATES, outbox_coverage=self.has_outbox_coverage
+        )
         # Search/people-stats work walks owe, converged off the ordered chain.
         self.index = ProjectionIndex()
         # Owners a sweep or wake wants drained; ``draining`` is live in this process.
@@ -465,11 +476,16 @@ class Projector:
         self.handoff = threading.Lock()
         # Resume point of the held-partial scan; a short page wraps it.
         self.held_after: str | None = None
+        self._held_cursor_baseline: dict | None = None
+        self._held_sweep_lock = threading.Lock()
         # Upload dedupe of the held-partial pass in flight; spans budget stops
         # and wraps only when the scan's cursor does.
         self.held_pass_seen: set[tuple[str, str]] = set()
         # Resume point of the held-release scan; a short page wraps it.
         self.release_after: str | None = None
+
+    def has_outbox_coverage(self) -> bool:
+        return self.outbox_coverage is not None and self.outbox_coverage()
 
     def request_drain(self, owner_id: str, *, reason: str = 'unknown') -> None:
         with self.handoff:
@@ -541,18 +557,47 @@ class Projector:
                 raise ProjectionBlocked('projection assignment claim busy')
             return self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
 
-    async def start_followups(self, priority=(), *, discover=True):
+    async def start_followups(self, priority=(), *, discover=True, include_walk=False):
         # Imported lazily: the synchronous worker seam remains lightweight.
         from utils.batch_pipeline.projection_followup import ProjectionFollowups
 
         if self.followups is None:
             self.followups = ProjectionFollowups(self)
         with self.handoff:
-            tail, self.chain_followups = (self.chain_followups, []) if discover else ((), self.chain_followups)
+            tail, self.chain_followups = (
+                (self.chain_followups, []) if discover or include_walk else ((), self.chain_followups)
+            )
+        if not discover and include_walk:
+            priority, tail = (*priority, *tail), ()
         await self.followups.schedule(priority, tail=tail, discover=discover)
 
     def project(self, segment_id: str) -> dict | None:
         return self._project_read(segment_id, *self.store.read(segment_id))
+
+    def apply_outbox_snapshot(self, segment_id, job, entry, binding) -> str:
+        """Apply a delivery through the ordinary policy and receipt fences."""
+        policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
+        try:
+            if not policy.async_projection:
+                self._project_read(segment_id, job, entry, binding)
+                return 'incomplete'
+            if entry['projection_state'] == 'pending':
+                if self._persist_read(segment_id, job, entry, binding) is PRIVACY_HELD:
+                    return 'blocked'
+        except ProjectionPredecessorPending:
+            if sweep_owner_chain_enabled() and projection_predecessor_replay_enabled():
+                if owner_drain_enabled():
+                    self.request_drain(binding.owner_id, reason='predecessor_replay')
+                else:
+                    try:
+                        self.owe_followups(self.project_owner(binding.owner_id))
+                    except Exception as error:
+                        logger.error(
+                            'event=batch_projection action=outbox_chain outcome=error exception_type=%s',
+                            error_type(error),
+                        )
+            raise
+        return 'followup'
 
     @settle_refusals()
     def _project_read(self, segment_id, job, entry, binding, *, hint=None, claimed=False):
@@ -760,6 +805,9 @@ class Projector:
             return None
         if not accounting.get('source_deleted'):
             with projection_phase('usage', policy):
+                # Accounting may have waited on reads after this worker lost
+                # its claim. Recheck before dispatching the idempotent Redis step.
+                assert_delivery_claim(segment_id, lambda: self.store.ref('results', segment_id).get().to_dict() or {})
                 record_speech(binding, accounting, self.clock())
         with projection_phase('completion', policy):
             result = self.store.complete(segment_id, binding, self.clock(), accounting, policy=policy)
@@ -809,24 +857,38 @@ class Projector:
     def sweep_held(
         self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None
     ) -> dict[str, int]:
-        """Resume the fleet's pass durably: instances restart far more often than a pass wraps.
+        """Resume from the shared checkpoint, with local progress during read or write failures."""
+        with self._held_sweep_lock:
+            durable = projection_release.load_held_partial_cursor(self.store)
+            if durable is not None and durable != self._held_cursor_baseline:
+                # A first successful read of a missing document confirms the
+                # local scan started at the beginning. Keep any unsaved work.
+                if self._held_cursor_baseline is not None or durable:
+                    self.held_after = projection_release.cursor_after_id(durable)
+                    self.held_pass_seen.clear()
+                self._held_cursor_baseline = durable
+            counts = self._sweep_held_pages(limit, deadline=deadline, max_pages=max_pages)
+            counts['reads'] += 1  # The initial checkpoint lookup.
 
-        A fresh pass drops this process's upload dedupe, which another instance's wrap made stale."""
-        event = 'batch_held_partial'
-        key = projection_release.HELD_PARTIAL_CURSOR_KEY
-        durable = projection_release.load_release_cursor(self.store, key=key, event=event)['after_id']
-        # After a failed save the in-memory cursor is the newer one; keep it.
-        unsaved = getattr(self, 'held_cursor_unsaved', False)
-        start = self.held_after = self.held_after if unsaved else durable
-        if start is None:
-            self.held_pass_seen = set()
-        counts = self._sweep_held_pages(limit, deadline=deadline, max_pages=max_pages)
-        if self.held_after != start or unsaved:
-            saved = projection_release.save_release_cursor(
-                self.store, self.held_after, self.clock(), key=key, event=event
-            )
-            self.held_cursor_unsaved = not saved
-        return counts
+            def record_cursor_read():
+                counts['reads'] += 1
+
+            confirmed = durable is not None
+            # A nonempty pass can scan from None back to None. Publish that
+            # wrap too, so a concurrent advance can fence out its completion.
+            wrapped_with_work = not counts['more'] and counts['units'] > 0
+            if durable is not None and (
+                self.held_after != projection_release.cursor_after_id(durable) or wrapped_with_work
+            ):
+                committed = projection_release.advance_held_partial_cursor(
+                    self.store, durable, self.held_after, self.clock(), record_read=record_cursor_read
+                )
+                confirmed = committed is not None
+                if committed is not None:
+                    self._held_cursor_baseline = committed
+            if not counts['more'] and not confirmed:
+                counts['wrap_unconfirmed'] = 1
+            return counts
 
     def _sweep_held_pages(
         self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None
@@ -1037,7 +1099,11 @@ class Projector:
                 with projection_phase('manifest', policy):
                     prefetched = hint.prefetched if hint is not None else None
                     if prefetched is not None and prefetched.manifest is not None:
+                        prefetched.settle_audio('consumed')
                         manifest = prefetched.manifest
+                    elif prefetched is not None and prefetched.native_audio is not None:
+                        assert hint is not None
+                        manifest = prefetched.native_audio.context(self.fetch_audio, item, hint.deadline)
                     else:
                         manifest = read_context(self.fetch_audio(item))
             require_repair_manifest(item, binding, manifest, self.require_lineage_fence)
@@ -1141,6 +1207,10 @@ class Projector:
                     if not incoming['transcript_segments']:
                         receipt = session.persist_empty()
                     else:
+                        from utils.conversations.v3 import triggers as v3_triggers
+
+                        # Same v3 admission as sync intake, or admitted owners get legacy duplicates.
+                        v3_triggers.mark_new(binding.owner_id, incoming)
                         try:
                             assigned = (self.assign_conversation or conversations_db.assign_sync_conversation)(
                                 binding.owner_id,
@@ -1157,6 +1227,7 @@ class Projector:
                             )
                         finally:
                             self._mirror_assignment(session)
+                        v3_triggers.committed_sync_assignment(binding.owner_id, assigned[0])
                         transcript_receipts.enqueue(binding.owner_id, assigned[0], firestore_client=self.store.client)
                         incoming.pop('_sync_lineage_eligible', None)
                         record_projection(
@@ -1544,9 +1615,8 @@ class Projector:
                 # The predecessor check walks erased receipts; so does discovery.
                 previous = segment_id
                 continue
-            job = entry = binding = None
+            job = entry = binding = prefetched = None
             try:
-                prefetched = None
                 if prefetch is not None:
                     prefetched = drain_diagnostics.observe(
                         'prefetch_wait', prefetch.take, segment_id, timeout=deadline - time.monotonic()
@@ -1579,6 +1649,16 @@ class Projector:
                     )
                 else:
                     self._project_read(segment_id, job, entry, binding, hint=hint, claimed=drain)
+            except NativeAudioPending:
+                if (
+                    prefetch is not None
+                    and isinstance(prefetched, Prefetched)
+                    and prefetch.defer(segment_id, prefetched)
+                ):
+                    prefetched = None  # The turn still owns the pending candidate.
+                more = True
+                stop = 'prefetch_wait'
+                break
             except StepDeadline:
                 more = True  # a partial multipart; the next step resumes it
                 stop = 'step_deadline'
@@ -1609,6 +1689,9 @@ class Projector:
                 previous = segment_id
                 advanced.append(segment_id)
                 continue
+            finally:
+                if isinstance(prefetched, Prefetched):
+                    prefetched.abandon_audio()
             try:
                 watermark = self.store.projection_watermark(key)
             except Exception as error:

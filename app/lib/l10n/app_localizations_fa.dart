@@ -1124,6 +1124,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'نام با موفقیت به‌روزرسانی شد!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'تقویم‌های انتخاب‌شده خوانده می‌شوند. رویدادهای جدید از $calendar استفاده می‌کنند.';
+  }
+
+  @override
   String get calendarSettings => 'تنظیمات تقویم';
 
   @override
@@ -9077,7 +9082,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'این ضبط بارگذاری شده اما Omi هنوز در حال ساخت مکالمه است. اگر اکنون آن را حذف کنید و پردازش ناموفق شود، قابل بازیابی نخواهد بود. به‌هرحال حذف شود؟';
+      'این ضبط قبلاً آپلود شده و Omi در حال پردازش آن است. حذف در اینجا نسخهٔ روی گوشی را پاک می‌کند. اگر پردازش ناموفق باشد، Omi نمی‌تواند از این گوشی دوباره تلاش کند.';
 
   @override
   String get syncCardAllBackedUp => 'همهٔ ضبط‌ها همگام شدند';
@@ -14480,14 +14485,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'اخیراً';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'قطع اتصال به مدت $duration';
-  }
-
-  @override
   String get deviceControls => 'کنترل‌ها';
 
   @override
@@ -15423,6 +15420,11 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'به‌روزرسانی نصب نشد. آویز شما همچنان با میان‌افزار فعلی ($version) کار می‌کند. لطفاً به‌جای تلاش دوباره برای به‌روزرسانی، با پشتیبانی تماس بگیرید.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15464,7 +15466,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15548,4 +15550,166 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'کار گزارش‌شده توسط سرور';
+
+  @override
+  String get finishNothingToProcess => 'هنوز چیزی برای پردازش نیست.';
+
+  @override
+  String get finishStillProcessing => 'هنوز در حال پردازش است. در صفحه اصلی نمایش داده می‌شود.';
+
+  @override
+  String get finishBackToHome => 'بازگشت به صفحه اصلی';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'خلاصه پس از پایان این گفتگو';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'بارگذاری‌های در انتظار در سرور';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'صدای شما روی دستگاه یا گوشی شما در امان است';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'خلاصه تا $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'رونویسی اخیر';
+
+  @override
+  String get finishAlreadySaved => 'قبلاً ذخیره شد. در «خانه» است.';
+
+  @override
+  String get finishAudioNotReceived => 'صدا هنوز در راه است.';
+
+  @override
+  String get finishFailedOffline => 'انجام نشد. صدای شما در امان است.';
+
+  @override
+  String get finishFailed => 'انجام نشد. صدای شما در امان است.';
+
+  @override
+  String get micBlockedCannotRecord => 'برای ضبط، به میکروفون اجازه دهید.';
+
+  @override
+  String get couldNotStartRecording => 'ضبط شروع نشد.';
+
+  @override
+  String get restorePurchasesFailed => 'بررسی برنامهٔ شما ممکن نشد.';
+
+  @override
+  String get firmwareCheckFailed => 'بررسی به‌روزرسانی‌ها ممکن نشد.';
+
+  @override
+  String get conversationStillPublic => 'هنوز با پیوند به اشتراک گذاشته شده است.';
+
+  @override
+  String get goalSaveFailed => 'ذخیرهٔ هدف شما ممکن نشد.';
+
+  @override
+  String get goalDeleteFailed => 'حذف ممکن نشد. هدف بازیابی شد.';
+
+  @override
+  String get goalsLoadFailed => 'بارگذاری اهداف شما ممکن نشد.';
+
+  @override
+  String get missingTargetEndedRecording => 'آن ضبط به پایان رسیده است.';
+
+  @override
+  String get missingTargetMemory => 'این خاطره دیگر وجود ندارد.';
+
+  @override
+  String get missingTargetTask => 'آن وظیفه دیگر موجود نیست.';
+
+  @override
+  String get missingTargetConversation => 'باز کردن این گفتگو ممکن نشد.';
+
+  @override
+  String get couldNotRefreshConversations => 'نوسازی ممکن نشد.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'برای همگام‌سازی، اومی خود را وصل کنید.';
+
+  @override
+  String get useDifferentAccountMessage => 'از حساب خود خارج می‌شوید و تنظیمات اومی این گوشی بازنشانی می‌شود.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'عینک پیدا نشد. آیا روشن است؟';
+
+  @override
+  String get couldNotMoveTask => 'جابه‌جایی وظیفه ممکن نشد.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'حذف شد. $count وظیفهٔ قفل‌شده نگه داشته شد.',
+      one: 'حذف شد. ۱ وظیفهٔ قفل‌شده نگه داشته شد.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'ذخیرهٔ این تغییر ممکن نشد.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'بارگذاری تنظیمات شما ممکن نشد.';
+
+  @override
+  String get waitForOmiToFinish => 'صبر کنید اومی کارش را تمام کند.';
+
+  @override
+  String get voiceNoteTooShort => 'خیلی کوتاه است. برای ضبط نگه دارید.';
+
+  @override
+  String get submitAppMissingFields => 'برای ارسال، نام، توضیحات، تصویر، دسته و قابلیت را اضافه کنید.';
+
+  @override
+  String get appSetupNotFinished => 'راه‌اندازی هنوز کامل نشده است.';
+
+  @override
+  String get finishNothingKeptTitle => 'چیزی برای نگه‌داشتن نیست';
+
+  @override
+  String get submitAppFinishDetails => 'برای ارسال، جزئیات قابلیت و قیمت‌گذاری بالا را تکمیل کنید.';
+
+  @override
+  String get finishNothingNew => 'هنوز چیز جدیدی نیست.';
+
+  @override
+  String get takingLongerThanUsual => 'بیشتر از حالت عادی طول می‌کشد. در «خانه» در دسترس خواهد بود.';
+
+  @override
+  String get couldNotCheckOnIt => 'بررسی آن ممکن نشد. دوباره تلاش کنید.';
+
+  @override
+  String get upgradeToOpenThisOne => 'برای باز کردنش، برنامه را ارتقا دهید.';
+
+  @override
+  String get missingTargetConversationGone => 'آن گفتگو حذف شده است.';
+
+  @override
+  String get cantConnectRightNow => 'در حال حاضر امکان اتصال نیست.';
+
+  @override
+  String get loadOlderFailed => 'بارگذاری موارد قدیمی‌تر ممکن نشد. برای تلاش دوباره ضربه بزنید.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'در حال گوش دادن · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'برای تغییر، صبر کنید تا تمام شود.';
+
+  @override
+  String get finishedSummaryReady => 'خلاصه آماده است';
+
+  @override
+  String get writingSummaryStatus => 'در حال نوشتن خلاصه…';
+
+  @override
+  String get stillWorkingOnIt => 'هنوز روی آن کار می‌کنیم.';
 }

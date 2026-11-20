@@ -191,6 +191,24 @@ def test_workflow_contract_directory_glob_selects_nested_chart_test(selector_and
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
+@pytest.mark.parametrize(
+    'source',
+    [
+        'backend/charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml',
+        'backend/charts/batch-pipeline-worker/values.yaml',
+    ],
+)
+def test_batch_worker_chart_edits_select_the_hpa_replay_pins(selector_and_all_tests, source):
+    # A floor or target edit in the worker chart must run the replay tests that pin the live
+    # bounds and the queueing witness (#25842 changed the floor without running them).
+    selector, all_tests = selector_and_all_tests
+    selected, reason = selector.tests_for_changed_paths([source], all_tests)
+    assert 'tests/unit/test_batch_pipeline_hpa_capacity_replay.py' in selected
+    assert 'tests/unit/test_batch_pipeline_hpa_retune_replay.py' in selected
+    assert 'tests/unit/test_batch_pipeline_hpa_max_replay.py' in selected
+    assert reason == 'selected backend unit tests from changed paths and workflow contracts'
+
+
 def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector_and_all_tests):
     """Docs/AGENTS skip selection; metrics is not a FULL_RUN_GLOBS hit."""
     selector, all_tests = selector_and_all_tests
@@ -363,6 +381,104 @@ def test_every_external_workflow_contract_source_triggers_backend_unit_workflow(
     }
 
     assert missing == set()
+
+
+def test_registered_deployment_workflows_have_exact_discovered_tests(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+    registry = json.loads(selector.RUNTIME_IMAGES_PATH.read_text(encoding='utf-8'))
+    contracts = selector.load_workflow_contracts()
+
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == []
+
+
+@pytest.mark.parametrize('registration', ['image', 'service'])
+@pytest.mark.parametrize('sources', [[], ['.github/workflows/**'], ['.github/workflows/new_*.yml']])
+def test_new_deployment_workflow_requires_exact_mapping(selector_and_all_tests, registration, sources):
+    selector, all_tests = selector_and_all_tests
+    path = '.github/workflows/new_deploy.yml'
+    registry = {'images': [], 'services': {}}
+    if registration == 'image':
+        registry['images'].append({'deployment_workflows': [path]})
+    else:
+        registry['services']['new-service'] = {'current_deploy': [path, 'backend/deploy/new-service.yaml']}
+    contracts = [{'sources': sources, 'tests': ['tests/unit/test_workflow_contracts.py']}]
+
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == [
+        f'{path}: registered deployment workflow has no exact-path workflow contract'
+    ]
+
+
+@pytest.mark.parametrize(
+    'targets', [[], ['tests/unit/test_nonexistent_deploy.py'], ['tests/integration/test_deploy.py']]
+)
+def test_deployment_workflow_exact_mapping_requires_discovered_target(selector_and_all_tests, targets):
+    selector, all_tests = selector_and_all_tests
+    path = '.github/workflows/gcp_diarizer.yml'
+    registry = {'images': [{'deployment_workflows': [path]}], 'services': {}}
+    contracts = [
+        {'sources': [path], 'tests': targets},
+        # A broad contract selecting a real test cannot repair an empty exact entry.
+        {'sources': ['.github/workflows/**'], 'tests': ['tests/unit/test_workflow_contracts.py']},
+    ]
+
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == [
+        f'{path}: exact-path workflow contracts select no existing discovered backend tests'
+    ]
+    contracts[0]['tests'] = ['tests/unit/test_workflow_contracts.py']
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == []
+
+
+@pytest.mark.parametrize('registration', ['image', 'service'])
+def test_renamed_deployment_workflow_rejects_stale_registry_and_catalog(
+    selector_and_all_tests, monkeypatch, tmp_path, registration
+):
+    selector, all_tests = selector_and_all_tests
+    monkeypatch.setattr(selector, 'REPO_DIR', tmp_path)
+    path = '.github/workflows/deploy.yml'
+    workflow = tmp_path / path
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text('jobs: {}\n', encoding='utf-8')
+    registry = {'images': [], 'services': {}}
+    if registration == 'image':
+        registry['images'].append({'deployment_workflows': [path]})
+    else:
+        registry['services']['service'] = {'current_deploy': [path]}
+    contracts = [{'sources': [path], 'tests': ['tests/unit/test_workflow_contracts.py']}]
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == []
+
+    workflow.rename(workflow.with_name('renamed_deploy.yml'))
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == [
+        f'{path}: registered deployment workflow does not exist; update registry and exact mapping'
+    ]
+
+
+@pytest.mark.parametrize('mode', ['--all', '--changed-files', '--from-test-list', '--check-deployment-contracts'])
+def test_selector_cli_fails_before_emitting_tests_for_unmapped_deployment(
+    selector_and_all_tests, monkeypatch, tmp_path, capsys, mode
+):
+    selector, _ = selector_and_all_tests
+    registry = json.loads(selector.RUNTIME_IMAGES_PATH.read_text(encoding='utf-8'))
+    registry['images'].append({'deployment_workflows': ['.github/workflows/new_deploy.yml']})
+    registry_path = tmp_path / 'runtime_images.json'
+    registry_path.write_text(json.dumps(registry), encoding='utf-8')
+    monkeypatch.setattr(selector, 'RUNTIME_IMAGES_PATH', registry_path)
+    argv = ['select_backend_unit_tests.py', mode]
+    if mode in ('--changed-files', '--from-test-list'):
+        inputs = tmp_path / 'inputs.txt'
+        inputs.write_text('backend/runtime_images.json\n', encoding='utf-8')
+        argv.append(str(inputs))
+    monkeypatch.setattr(sys, 'argv', argv)
+
+    with pytest.raises(SystemExit, match='new_deploy.yml: registered deployment workflow has no exact-path'):
+        selector.main()
+    assert capsys.readouterr().out == ''
+
+
+def test_deployment_inventory_and_selector_changes_select_coverage_guard(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+    for path in ('backend/runtime_images.json', 'backend/scripts/select_backend_unit_tests.py'):
+        selected, _ = selector.tests_for_changed_paths([path], all_tests)
+        assert 'tests/unit/test_workflow_contracts.py' in selected
 
 
 def test_backend_unit_ci_runner_stays_in_ci_while_pre_push_keeps_its_budget():
@@ -1574,7 +1690,7 @@ def test_firestore_gate_policy_rejects_orphaned_readiness_dependency():
 _LANE_SOURCE_BINDINGS = {
     'gcp_backend.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'gcp_diarizer.yml': '${{ steps.vars.outputs.source_sha }}',
-    'gcp_backend_auto_dev.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
+    'gcp_backend_auto_dev.yml': '${{ needs.admit_source.outputs.admitted_sha }}',
     'desktop_backend_prod.yml': '${{ steps.admitted-source.outputs.source_sha }}',
     'desktop_backend_auto_dev.yml': '${{ steps.candidate-identity.outputs.source_sha }}',
     'gcp_llm_gateway.yml': '${{ env.CHECKED_OUT_SHA }}',
@@ -1631,14 +1747,22 @@ def test_firestore_gate_lane_source_and_target_bindings():
     auto_dev = (workflows / 'gcp_backend_auto_dev.yml').read_text(encoding='utf-8')
     assert "verify_credential_project: 'true'" in auto_dev
 
-    scope_match = re.search(r"grep -Eq '([^']+)' <<<\"\$changed_files\"", auto_dev)
-    assert scope_match, 'auto-dev scope grep must keep its changed-files contract'
-    pattern = scope_match.group(1)
+    scope_patterns = re.findall(r"grep -Eq '([^']+)' <<<\"\$changed_files\"", auto_dev)
+    assert len(scope_patterns) >= 2, 'auto-dev must independently scope workerd publication and backend deployment'
+    workerd_pattern = next(
+        (pattern for pattern in scope_patterns if re.search(pattern, 'backend-go/cmd/workerd/main.go')),
+        None,
+    )
+    assert workerd_pattern, 'auto-dev scope must select backend-go source for workerd publication'
     for gate_path in (
         '.github/actions/firestore-readiness/action.yml',
         '.github/actions/deploy-backend-stack/action.yml',
     ):
-        assert re.search(pattern, gate_path), f'auto deploy scope regex must match {gate_path}'
+        backend_pattern = next((pattern for pattern in scope_patterns if re.search(pattern, gate_path)), None)
+        assert backend_pattern, f'auto backend deploy scope regex must match {gate_path}'
+        assert not re.search(
+            workerd_pattern, gate_path
+        ), f'workerd-only scope must not match backend deployment input {gate_path}'
 
 
 def test_listen_gate_is_the_conditional_source_sha_gate():
@@ -1870,7 +1994,7 @@ def test_no_customer_data_gate_for_central_or_qa():
             workflow, name=workflow_name, local_actions=local_actions, dockerfiles=dockerfiles
         )
         assert violations == [], violations
-        assert 'project_id: based-hardware' not in workflow, workflow_name
+        assert not re.search(r"(?m)^\s*project_id:\s*['\"]?based-hardware['\"]?\s*$", workflow), workflow_name
 
 
 def test_firestore_gate_contract_selects_the_coverage_guard(selector_and_all_tests):

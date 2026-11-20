@@ -2,7 +2,7 @@
 
 Narrower than the typed refusal it replaces: only a kept, decoded, non-empty plain
 conversation whose stored structure is replaceable. Every other case keeps the
-refusal, so rich or titled stored content is never overwritten.
+refusal, preserving the stored content and owner edits.
 """
 
 from __future__ import annotations
@@ -12,8 +12,9 @@ import logging
 import sys
 from typing import Any, Optional
 
+from config.historical_tier import STAND_IN_TITLE_PROVENANCES
 import database.notifications as notification_db
-from models.conversation import Conversation
+from models.conversation import Conversation, CreateConversation
 from models.structured import Structured
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.conversations.processing_trigger import ProcessingTrigger, is_recovery_trigger
@@ -28,6 +29,19 @@ from utils.llm.notes_short_clip import has_explicit_reminder
 from utils.release_probe import is_release_probe_uid
 
 logger = logging.getLogger(__name__)
+
+
+def recovery_minimum_would_drop_metadata(conversation: Conversation | CreateConversation) -> bool:
+    """Protect owner edits, the Home preview, and non-default structured metadata."""
+    if getattr(conversation, 'user_title', None) or getattr(conversation, 'user_corrections', None):
+        return True
+    stored = getattr(conversation, 'structured', None)
+    if stored is None:
+        return False
+    return bool(
+        (stored.gist or '').strip()
+        or stored.model_dump(exclude={'title', 'title_provenance', 'overview', 'gist'}, exclude_defaults=True)
+    )
 
 
 def _eligible(
@@ -68,8 +82,10 @@ def _eligible(
         return False
     stored = conversation.structured
     stored_title = (getattr(stored, 'title', '') or '').strip()
-    return not structured_is_rich(stored) and (
-        not stored_title or getattr(stored, 'title_provenance', None) == 'server_minimum'
+    return (
+        (not stored_title or getattr(stored, 'title_provenance', None) in STAND_IN_TITLE_PROVENANCES)
+        and not structured_is_rich(stored)
+        and not recovery_minimum_would_drop_metadata(conversation)
     )
 
 

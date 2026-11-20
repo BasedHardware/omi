@@ -400,4 +400,5 @@ def test_full_deploy_preserves_restored_integration_cadence(composer, environmen
     assert 'backend-integration' in config['cloud_run']['services']
     for service, spec in config['cloud_run']['services'].items():
         actual = {key: entry['value'] for key, entry in spec['env'].items() if key in expected}
-        assert actual == (expected if service == 'backend-integration' else {}), service
+        # SCA-3120: the prod-only projection pump derives from integration; serving is off there.
+        assert actual == (expected if service in ('backend-integration', 'backend-projection-pump') else {}), service

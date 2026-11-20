@@ -6402,6 +6402,67 @@
         "title": "CalendarOnboardingStatusResponse",
         "type": "object"
       },
+      "CalendarSelection": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "calendars": {
+            "items": {
+              "$ref": "#/components/schemas/ReadableCalendar"
+            },
+            "title": "Calendars",
+            "type": "array"
+          },
+          "selected_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Selected Ids",
+            "type": "array"
+          },
+          "write_calendar_id": {
+            "default": "primary",
+            "title": "Write Calendar Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "calendars",
+          "selected_ids"
+        ],
+        "title": "CalendarSelection",
+        "type": "object"
+      },
+      "CalendarSelectionUpdate": {
+        "properties": {
+          "account_id": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Account Id",
+            "type": "string"
+          },
+          "selected_ids": {
+            "items": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 25,
+            "minItems": 1,
+            "title": "Selected Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "account_id",
+          "selected_ids"
+        ],
+        "title": "CalendarSelectionUpdate",
+        "type": "object"
+      },
       "CampaignAttributionResponse": {
         "properties": {
           "campaign_id": {
@@ -9899,6 +9960,16 @@
             ],
             "title": "Language"
           },
+          "live_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveSummaryPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "manual_end": {
             "anyOf": [
               {
@@ -10017,6 +10088,18 @@
                 "type": "null"
               }
             ]
+          },
+          "processing_tier": {
+            "anyOf": [
+              {
+                "const": "historical",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Tier"
           },
           "record_audio_partial": {
             "anyOf": [
@@ -10153,6 +10236,17 @@
               }
             ],
             "title": "Summary Covers Through"
+          },
+          "summary_on_open": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary On Open"
           },
           "summary_retryable": {
             "anyOf": [
@@ -11451,6 +11545,16 @@
             ],
             "title": "Language"
           },
+          "live_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveSummaryPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "manual_end": {
             "anyOf": [
               {
@@ -11577,6 +11681,18 @@
                 "type": "null"
               }
             ]
+          },
+          "processing_tier": {
+            "anyOf": [
+              {
+                "const": "historical",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Tier"
           },
           "record_audio_partial": {
             "anyOf": [
@@ -11713,6 +11829,17 @@
               }
             ],
             "title": "Summary Covers Through"
+          },
+          "summary_on_open": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary On Open"
           },
           "summary_retryable": {
             "anyOf": [
@@ -21188,6 +21315,18 @@
             "description": "Whether the integration is connected",
             "title": "Connected",
             "type": "boolean"
+          },
+          "read_selection_configured": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Google Calendar has an explicit saved read scope, even if its grant is disconnected",
+            "title": "Read Selection Configured"
           }
         },
         "required": [
@@ -21742,6 +21881,24 @@
           "status"
         ],
         "title": "LiveConversation",
+        "type": "object"
+      },
+      "LiveSummaryPreview": {
+        "properties": {
+          "structured": {
+            "$ref": "#/components/schemas/Structured"
+          },
+          "summary_covers_through": {
+            "format": "date-time",
+            "title": "Summary Covers Through",
+            "type": "string"
+          }
+        },
+        "required": [
+          "structured",
+          "summary_covers_through"
+        ],
+        "title": "LiveSummaryPreview",
         "type": "object"
       },
       "LlmTotalCostResponse": {
@@ -28656,6 +28813,34 @@
           "legacy_reads_authoritative"
         ],
         "title": "ReadRolloutCapabilities",
+        "type": "object"
+      },
+      "ReadableCalendar": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "primary": {
+            "title": "Primary",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "primary",
+          "available"
+        ],
+        "title": "ReadableCalendar",
         "type": "object"
       },
       "RebuildResponse": {
@@ -48936,6 +49121,168 @@
         ]
       }
     },
+    "/v1/calendar/google/calendars": {
+      "get": {
+        "operationId": "list_readable_google_calendars_v1_calendar_google_calendars_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarSelection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "List Readable Google Calendars",
+        "tags": [
+          "google_calendar"
+        ]
+      },
+      "put": {
+        "operationId": "save_google_calendar_selection_v1_calendar_google_calendars_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarSelectionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarSelection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Save Google Calendar Selection",
+        "tags": [
+          "google_calendar"
+        ]
+      }
+    },
     "/v1/calendar/google/events": {
       "get": {
         "description": "List Google Calendar events within a time range.\n\nUsed by the event picker UI when manually linking a conversation to a calendar event.",
@@ -51260,6 +51607,24 @@
               ],
               "description": "Filter by starred status",
               "title": "Starred"
+            }
+          },
+          {
+            "description": "Opaque page cursor from a previous response's X-Omi-Next-Cursor header; when accepted it replaces offset. An unknown or stale cursor falls back to offset.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque page cursor from a previous response's X-Omi-Next-Cursor header; when accepted it replaces offset. An unknown or stale cursor falls back to offset.",
+              "title": "Cursor"
             }
           },
           {
@@ -56427,6 +56792,182 @@
           }
         ],
         "summary": "Patch Conversation Summary",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/summary/live-catchup/stream": {
+      "get": {
+        "operationId": "conversation_live_catchup_stream_v1_conversations__conversation_id__summary_live_catchup_stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Conversation Live Catchup Stream",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/summary/open": {
+      "post": {
+        "description": "Generate the one summary of a historical conversation (`summary_on_open: true`) when its owner opens it. Summary only: no memories, tasks, apps or notifications. `X-Omi-Summary-Outcome` is `existing` (no model call) or `generated`. Typed refusals: 404, 409 (`conversation_locked`, `conversation_discarded`, `not_historical`, `byok_keys_required`, `conversation_processing_in_progress`), 402, 429 with Retry-After, 502 `summary_unavailable`, 503 `historical_summary_disabled` or retryable `historical_summary_retry`.",
+        "operationId": "open_historical_summary_v1_conversations__conversation_id__summary_open_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Open Historical Summary",
         "tags": [
           "conversations"
         ]
