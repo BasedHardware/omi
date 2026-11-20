@@ -96,9 +96,10 @@ LIVE_ONE_SIDED_ALLOWLIST: dict[str, str] = {
 # warm; a replay window warms it with --warm. Min and max never exceed prod's. cpu, memory and
 # concurrency are equal, so per-instance behaviour matches.
 EQUAL_SCALE_FIELDS = ('cpu', 'memory', 'concurrency')
-# Listen env whose prod values come from the LISTEN_PRIVATE_VALUES_YAML secret (#22763 privateEnv),
-# so source states presence only.
-LISTEN_PRIVATE_ENV = ('STT_CAP_DISPATCH_ENFORCEMENT', 'STT_CAP_DISPATCH_COHORT', 'STT_CAP_DISPATCH_LANES')
+# Listen env whose prod values the deploy replaces out of band (presence-only in source). Empty since
+# the retired privateEnv overlay (LISTEN_PRIVATE_VALUES_YAML, #22763) became privateSecretEnv: private
+# names are secretKeyRefs the chart declares, so source states the reference exactly.
+LISTEN_PRIVATE_ENV: tuple[str, ...] = ()
 # Ramp position: staging sits on prod's set, or ahead of it on the full-ramp set it proves (plan §1).
 STAGING_AHEAD_SET = '100_percent'
 
@@ -446,6 +447,13 @@ def listen_values(path: Path) -> tuple[dict[str, dict[str, str]], dict[str, Any]
             env.update(redact_env([entry]))
     for name in [*(doc.get('privateEnv') or {}), *LISTEN_PRIVATE_ENV]:
         env[str(name)] = {'from': 'private-values'}
+    secret_env = doc.get('privateSecretEnv') or {}
+    for name in secret_env.get('keys') or []:
+        env.update(
+            redact_env(
+                [{'name': name, 'valueFrom': {'secretKeyRef': {'name': secret_env.get('secretName'), 'key': name}}}]
+            )
+        )
     autoscaling = doc.get('autoscaling') or {}
     limits = (doc.get('resources') or {}).get('limits') or {}
     scale = {

@@ -52,7 +52,22 @@ overlay:
         # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
         UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
         UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
-        # Mirrors the listen chart (2026-11-18 fold of live values; media noise is also carried by the privateEnv overlay).
+        # Mirrors the listen chart (2026-11-18 fold of live values).
+        # Private: names only; values are the Secret Manager document LISTEN_PRIVATE_ENV
+        # synced by the backend-secrets chart (listen chart privateSecretEnv). Enforcement
+        # stays private by ruling (lead2 4e5e71/45689e, b2cf73); the cohort and digests are uid-bearing.
+        STT_CAP_DISPATCH_ENFORCEMENT:
+          secret:
+            name: prod-omi-backend-listen-private-env
+            key: STT_CAP_DISPATCH_ENFORCEMENT
+        STT_CAP_DISPATCH_COHORT:
+          secret:
+            name: prod-omi-backend-listen-private-env
+            key: STT_CAP_DISPATCH_COHORT
+        MEDIA_NOISE_MODE_SERVE_UID_SHA256S:
+          secret:
+            name: prod-omi-backend-listen-private-env
+            key: MEDIA_NOISE_MODE_SERVE_UID_SHA256S
         MEDIA_NOISE_MODE: {value: shadow, category: rollout}
         MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
         NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}

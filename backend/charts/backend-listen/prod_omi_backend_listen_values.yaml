@@ -94,11 +94,21 @@ envFrom:
   - configMapRef:
       name: prod-omi-backend-config
 
-# NAME: "string" env values the prod listen workflow renders from the
-# protected-environment secret LISTEN_PRIVATE_VALUES_YAML, in the same Helm
-# rollout. Never commit values here. A key replaces the env entry of the same
-# name below (e.g. the STT_CAP_DISPATCH_* defaults).
-privateEnv: {}
+# Private env (uid-bearing cohorts): NAMES only here, values never. The values
+# are one JSON document in Secret Manager (LISTEN_PRIVATE_ENV), synced by the
+# backend-secrets chart's listen-private ExternalSecret into secretName and
+# rendered as one secretKeyRef per name, so the deploy render and the drift gate
+# see references, not values. A declared name replaces the env entry of the same
+# name below. Changing a value is its own audited operation (new Secret Manager
+# version, force-sync, rollout restart): backend/docs/runbooks/listen-private-env.md.
+# The old privateEnv overlay (LISTEN_PRIVATE_VALUES_YAML) is retired: the chart
+# refuses a non-empty privateEnv while this is set.
+privateSecretEnv:
+  secretName: prod-omi-backend-listen-private-env
+  keys:
+    - STT_CAP_DISPATCH_ENFORCEMENT
+    - STT_CAP_DISPATCH_COHORT
+    - MEDIA_NOISE_MODE_SERVE_UID_SHA256S
 
 env:
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED
@@ -191,14 +201,13 @@ env:
   # Production retirement; false restores the old routes only after GPUs are ready.
   - name: STT_GPU_FLEET_OFF
     value: "true"
-  - name: STT_CAP_DISPATCH_ENFORCEMENT
-    value: "false"
-  - name: STT_CAP_DISPATCH_COHORT
-    value: ""
+  # STT_CAP_DISPATCH_ENFORCEMENT and STT_CAP_DISPATCH_COHORT are private (privateSecretEnv above;
+  # enforcement by ruling, lead2 4e5e71/45689e, b2cf73): no public literal, so none can be mistaken
+  # for the live value.
   - name: STT_CAP_DISPATCH_LANES
     value: "live"
-  # Media/noise classifier: live shadow/0 via the privateEnv overlay (folded 2026-11-18, unchanged). The
-  # digest serve list is private and stays in LISTEN_PRIVATE_VALUES_YAML.
+  # Media/noise classifier: live shadow/0 (folded 2026-11-18, unchanged). The digest serve list is
+  # private: see privateSecretEnv above.
   - name: MEDIA_NOISE_MODE
     value: "shadow"
   - name: MEDIA_NOISE_MODE_SERVE_PERCENT
@@ -862,8 +871,8 @@ env:
   - name: EDGE_SHADOW_URL
     value: "ws://prod-omi-listen-edge.prod-omi-backend.svc.cluster.local:8080/v1/shadow"
   # EDGE_SHADOW_TOKEN (sent as x-edge-shadow-token; must match listen-edge's)
-  # is a secret: never committed here, set only through privateEnv
-  # (LISTEN_PRIVATE_VALUES_YAML), which adds the entry at rollout. Unset,
+  # is a secret: never committed here. To set it, add it to the Secret Manager
+  # document LISTEN_PRIVATE_ENV and to privateSecretEnv.keys above. Unset,
   # listen sends no token.
   - name: EDGE_SHADOW_PERCENT
     value: "0"
