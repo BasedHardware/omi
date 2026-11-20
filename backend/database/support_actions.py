@@ -38,6 +38,9 @@ class ActionContext:
     reason: str
     agent: str
     apply: bool = False
+    # The cloud identity the command actually ran under (from ADC), recorded next
+    # to the self-declared ``agent`` so the trail does not rest on CLI text alone.
+    principal: str | None = None
 
     def __post_init__(self) -> None:
         for name in ("ticket", "actor", "reason", "agent"):
@@ -104,6 +107,7 @@ def record_action(
         "ticket": ctx.ticket,
         "actor": ctx.actor,
         "agent": ctx.agent,
+        "principal": ctx.principal,
         "reason": ctx.reason,
         "command": command,
         "apply": ctx.apply,

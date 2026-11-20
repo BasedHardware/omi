@@ -233,13 +233,14 @@ def test_account_summary_returns_allowlisted_fields_only(client):
     assert record.summary == {"exists": True, "legal_hold_active": False}
 
 
-def test_operator_cli_wires_every_group_and_audits_the_run(client, capsys):
+def test_operator_cli_wires_every_group_and_audits_the_run(client, capsys, monkeypatch):
     parser = ops.build_parser()
     groups = {action.dest: action for action in parser._actions}["group"].choices
     assert set(groups) == {"hold", "retention", "dsar", "account"}
     with pytest.raises(SystemExit):
         parser.parse_args(["hold", "list"])  # --ticket/--actor/--reason are required
 
+    monkeypatch.setattr(ops, "_adc_principal", lambda: "support-operator@example.iam.gserviceaccount.com")
     code = ops.main(
         ["--ticket", "ic-1", "--actor", "aryan", "--reason", "triage", "--agent", "vm", "hold", "status", UID]
     )
@@ -248,3 +249,4 @@ def test_operator_cli_wires_every_group_and_audits_the_run(client, capsys):
     assert '"action_id"' in capsys.readouterr().out
     (audit,) = _actions(client).values()
     assert audit["command"] == "hold status" and audit["status"] == "succeeded"
+    assert audit["principal"] == "support-operator@example.iam.gserviceaccount.com"

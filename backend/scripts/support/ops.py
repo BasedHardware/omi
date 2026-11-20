@@ -35,6 +35,8 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
+import google.auth
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
@@ -43,6 +45,19 @@ from utils.support import account, dsar_export, holds, retention  # noqa: E402
 
 Handler = Callable[[argparse.Namespace, support_actions.ActionContext, support_actions.ActionRecord], dict[str, Any]]
 MODULES = (holds, retention, dsar_export, account)
+
+
+def _adc_principal() -> str | None:
+    """The service-account email (or ``user``) behind the operator's ADC, without a network call."""
+
+    try:
+        credentials, _project = google.auth.default()
+    except Exception as exc:  # noqa: BLE001 - recorded, never fatal
+        return f"unresolved:{type(exc).__name__}"
+    email = getattr(credentials, "service_account_email", None) or getattr(credentials, "signer_email", None)
+    if isinstance(email, str) and email and email != "default":
+        return email
+    return type(credentials).__name__
 
 
 def _default_agent() -> str:
@@ -75,6 +90,7 @@ def main(argv: list[str] | None = None, *, firestore_client: Any | None = None) 
         reason=args.reason,
         agent=args.agent or _default_agent(),
         apply=args.apply,
+        principal=_adc_principal(),
     )
     command_args = _command_args(args)
     command = f"{args.group} {getattr(args, 'action', '')}".strip()
