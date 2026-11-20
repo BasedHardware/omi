@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"google.golang.org/api/idtoken"
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
@@ -88,5 +90,12 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 	}
 	registry.MustRegister(newStrandedCollector(workers))
 
-	return serve(ctx, cfg, store, workers, registry, func(ctx context.Context) { maintenance.run(ctx, logger) })
+	var intake http.Handler
+	if cfg.episodeIntakeAudience != "" {
+		intake = episodeIntakeEndpoint{
+			audience: cfg.episodeIntakeAudience, caller: cfg.episodeIntakeCaller,
+			validate: idtoken.Validate, attach: maintenance.family.RepairEpisodeIntake,
+		}
+	}
+	return serve(ctx, cfg, store, workers, registry, func(ctx context.Context) { maintenance.run(ctx, logger) }, intake)
 }

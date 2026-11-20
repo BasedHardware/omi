@@ -29,7 +29,7 @@ func TestServeReturnsCleanlyAfterContextCancellation(t *testing.T) {
 		close(stopped)
 	}
 	go func() {
-		done <- serve(ctx, cfg, h.Store, workers, prometheus.NewRegistry(), maintenance)
+		done <- serve(ctx, cfg, h.Store, workers, prometheus.NewRegistry(), maintenance, nil)
 	}()
 
 	waitForHealth(t, cfg.healthPort)
@@ -75,7 +75,7 @@ func TestServeReturnsListenerFailure(t *testing.T) {
 	port := address.Port
 	cfg := serveTestConfig(t)
 	cfg.healthPort = port
-	err = serve(t.Context(), cfg, h.Store, workers, prometheus.NewRegistry(), nil)
+	err = serve(t.Context(), cfg, h.Store, workers, prometheus.NewRegistry(), nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "health listener failed") {
 		t.Fatalf("serve error = %v, want health listener failure", err)
 	}

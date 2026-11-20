@@ -883,6 +883,10 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
+  "backend/utils/episodes/intake_worker.py:collection": {
+    "policy": "storage",
+    "reason": "Owner-scoped sync revision receipt for authenticated workerd membership repair. Reads storage version metadata only."
+  },
   "backend/utils/episodes/live.py:get_conversation_raw_snapshot": {
     "policy": "both",
     "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."

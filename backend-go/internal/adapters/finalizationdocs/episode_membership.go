@@ -84,19 +84,16 @@ func (m episodeMember) bind(tx *docstore.Tx, episode string, now time.Time) erro
 }
 
 // AttachEpisodeIntake joins a persisted sync clip to an eligible covering
-// episode. The caller supplies current client eligibility and the intake write
-// receipt. Sync intake never creates an occasion or moves an existing owner.
-func (s Store) AttachEpisodeIntake(ctx context.Context, a queue.Admitting, ref finalization.Ref, written time.Time, clientEligible bool) (string, error) {
-	if !clientEligible {
-		return "", nil
-	}
+// episode. The caller has checked client eligibility and supplies the intake
+// write receipt. Sync intake never creates an occasion or moves an existing owner.
+func (s Store) AttachEpisodeIntake(ctx context.Context, a queue.Admitting, ref finalization.Ref, written time.Time, existingOnly bool) (string, error) {
 	if written.IsZero() {
 		return "", finalization.ErrInvalid
 	}
 	now := s.Clock.Now().UTC()
 	var id string
 	err := s.Docs.Fenced(ctx, a, ref.Owner, func(tx *docstore.Tx) error {
-		attached, attachErr := attachEpisodeIntake(tx, ref, written, now)
+		attached, attachErr := attachEpisodeIntake(tx, ref, written, now, existingOnly)
 		id = attached
 		return attachErr
 	})
@@ -106,7 +103,7 @@ func (s Store) AttachEpisodeIntake(ctx context.Context, a queue.Admitting, ref f
 	return id, nil
 }
 
-func attachEpisodeIntake(tx *docstore.Tx, ref finalization.Ref, written, now time.Time) (string, error) {
+func attachEpisodeIntake(tx *docstore.Tx, ref finalization.Ref, written, now time.Time, existingOnly bool) (string, error) {
 	member, err := readEpisodeMember(tx, ref)
 	if err != nil {
 		return "", err
@@ -116,6 +113,9 @@ func attachEpisodeIntake(tx *docstore.Tx, ref finalization.Ref, written, now tim
 	}
 	if owned := episodeOwner(member); owned != "" {
 		return repairIntakeMembership(tx, ref, member, owned, written, now)
+	}
+	if existingOnly {
+		return "", nil
 	}
 	if !member.written.Equal(written) {
 		return "", finalization.ErrStale

@@ -50,14 +50,18 @@ func newServer(port int, handler http.Handler) *http.Server {
 }
 
 // serve owns the workers and their store after startup.
-func serve(ctx context.Context, cfg config, store *queue.Store, workers *queue.Workers, registry *prometheus.Registry, maintenance func(context.Context)) error {
+func serve(ctx context.Context, cfg config, store *queue.Store, workers *queue.Workers, registry *prometheus.Registry, maintenance func(context.Context), intake http.Handler) error {
 	lifetime, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var maintenanceGroup sync.WaitGroup
 	if maintenance != nil {
 		maintenanceGroup.Go(func() { maintenance(lifetime) })
 	}
-	health := newServer(cfg.healthPort, healthHandler(lifetime.Done(), store.Ready))
+	mux := healthHandler(lifetime.Done(), store.Ready)
+	if intake != nil {
+		mux.Handle("POST "+episodeIntakePath, intake)
+	}
+	health := newServer(cfg.healthPort, mux)
 	metrics := newServer(cfg.metricsPort, metricsHandler(registry))
 	ended := make(chan error, 2)
 	go listen(health, "health", ended)

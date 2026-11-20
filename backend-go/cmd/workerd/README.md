@@ -24,6 +24,7 @@ Lane B needs to provide a bounded drain and fenced handback API before enabling 
 | `FIRESTORE_PROJECT` | required | Google Cloud project ID |
 | `ENCRYPTION_SECRET` | required | At least 32 bytes, per `crypt.Check` |
 | `WORKER_QUIET_RECOVERY_ENABLED` | false | Drive due quiet wakes once the archive and ordinary serving handler are configured |
+| `WORKER_EPISODE_INTAKE_AUDIENCE`, `WORKER_EPISODE_INTAKE_CALLER` | unset | Enable the internal intake repair route for the configured Google workload identity |
 | `WORKER_SUMMARY_REPAIR_ENABLED` | false | Run the due-summary scan in workerd |
 | `ENRICHMENT_MAX_AGE_HOURS` | 72 | Nonnegative hours, with zero disabling age-based scan phases |
 | `BUCKET_PRIVATE_CLOUD_SYNC` | unset | Private recording bucket for the read-only archive client |
@@ -57,3 +58,7 @@ the worker Deployment.
 | Queue and PostgreSQL failures use closed log fields without remote error text | `TestReportQueueErrorUsesClosedClassification` |
 | Queue observer metrics constrain all labels to declared values and `unknown` | `TestQueueObserverUsesOnlyDeclaredLabels` |
 | The metrics listener counts real Postgres jobs that lack a local handler | `TestMetricsScrapeCountsJobsWithNoHandler` |
+
+For the serving sync producer, set `SYNC_EPISODE_INTAKE_ORIGIN` to the private HTTPS
+workerd origin and `WORKER_EPISODE_INTAKE_AUDIENCE` to the same audience used by
+workerd. The Python episode hook selects the owner and completes its recovery notes first.

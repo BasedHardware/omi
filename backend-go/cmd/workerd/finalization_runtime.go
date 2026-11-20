@@ -53,7 +53,7 @@ type finalizationRuntime struct {
 }
 
 func openFinalizationRuntime(ctx, startup context.Context, cfg config, q *queue.Store) (finalizationRuntime, error) {
-	if !cfg.quietRecovery && !cfg.summaryRepair && cfg.privateArchive == "" && cfg.retractionOrigin == "" && cfg.objectBucket == "" {
+	if !cfg.quietRecovery && !cfg.summaryRepair && cfg.privateArchive == "" && cfg.retractionOrigin == "" && cfg.objectBucket == "" && cfg.episodeIntakeAudience == "" {
 		return finalizationRuntime{}, nil
 	}
 	docs, err := docstore.Open(startup, docstore.Config{Project: cfg.firestoreProject})

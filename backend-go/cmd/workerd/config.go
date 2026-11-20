@@ -20,20 +20,21 @@ import (
 const gateAbandoned queue.Cause = "gate_abandoned"
 
 type config struct {
-	policy                               queue.Config
-	databaseURL                          string
-	firestoreProject                     string
-	encryptionSecret                     string
-	healthPort                           int
-	metricsPort                          int
-	stopTimeout                          time.Duration
-	quietRecovery                        bool
-	summaryRepair                        bool
-	notesDedupe                          bool
-	summaryMaxAge                        time.Duration
-	privateArchive, derivedArchive       string
-	objectBucket, objectKMSKey           string
-	retractionOrigin, retractionAudience string
+	policy                                     queue.Config
+	databaseURL                                string
+	firestoreProject                           string
+	encryptionSecret                           string
+	healthPort                                 int
+	metricsPort                                int
+	stopTimeout                                time.Duration
+	quietRecovery                              bool
+	summaryRepair                              bool
+	notesDedupe                                bool
+	summaryMaxAge                              time.Duration
+	privateArchive, derivedArchive             string
+	objectBucket, objectKMSKey                 string
+	retractionOrigin, retractionAudience       string
+	episodeIntakeAudience, episodeIntakeCaller string
 }
 
 type lookupEnv func(string) (string, bool)
@@ -75,6 +76,12 @@ func (c *config) readWorkerConfig(lookup lookupEnv) error {
 	}
 	if err := c.readSummaryRepair(lookup); err != nil {
 		return err
+	}
+	c.episodeIntakeAudience, _ = lookup("WORKER_EPISODE_INTAKE_AUDIENCE")
+	c.episodeIntakeCaller, _ = lookup("WORKER_EPISODE_INTAKE_CALLER")
+	if (c.episodeIntakeAudience == "") != (c.episodeIntakeCaller == "") ||
+		(c.episodeIntakeCaller != "" && !strings.HasSuffix(c.episodeIntakeCaller, ".iam.gserviceaccount.com")) {
+		return errors.New("episode intake requires an OIDC audience and service account email")
 	}
 	return c.readFinalizationAdapters(lookup)
 }
