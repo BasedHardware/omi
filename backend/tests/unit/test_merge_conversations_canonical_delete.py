@@ -328,10 +328,10 @@ def test_deleting_a_live_rederived_conversation_purges_its_undo_copies_first():
     assert calls[0] == ('u', ['survivor', 'bridge']) and calls[1] == 'bridge'
 
 
-def test_deleting_a_conversation_no_rederive_touched_reads_no_run_ledger():
+def test_deleting_a_conversation_without_a_rederive_stamp_still_checks_for_priors():
     merge_mod = sys.modules['utils.conversations.merge_conversations']
     with patch.object(merge_mod.conversations_db, 'get_conversation', return_value={}), patch.object(
         merge_mod, 'record_survivor_deleted'
     ), patch.object(merge_mod, '_purge_rederive_priors') as purge:
         merge_mod.delete_conversation_with_sync_sources('u', 'plain')
-    purge.assert_not_called()
+    purge.assert_called_once_with('u', ['plain'])
