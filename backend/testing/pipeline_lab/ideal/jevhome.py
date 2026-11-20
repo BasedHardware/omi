@@ -28,6 +28,7 @@ from typing import Any, Mapping, Sequence
 import urllib.request
 
 from testing.pipeline_lab.ideal.schema import card_lines, load_lines
+from utils.speakers.display import SpeakerLabeler
 
 LANE = 'omi:auto:jev-decisions'
 EXPECTED_MODEL = 'typesafe/jev-1.13'
@@ -56,15 +57,20 @@ JUDGED_KINDS = ('conversation', 'voice_work')
 
 
 def transcript(lines: Sequence[Mapping[str, Any]]) -> str:
-    """The shipped rendering: ``User:`` for the wearer, ``Speaker N:`` for the rest, joined runs."""
+    """The shipped rendering: ``User:`` for the wearer, the display authority's ``Speaker A/B/...`` for
+    unnamed voices in first-appearance order, a person's name as is; joined runs."""
+    labeler = SpeakerLabeler()
     out: list[str] = []
     for line in lines:
         label = line['speaker']
         if label == 'ME':
             who = 'User'
+        elif label == 'S?':
+            who = 'Unknown'
+        elif re.match(r'^S\d+$', label):
+            who = labeler.label(label)
         else:
-            match = re.match(r'^S(\d+)$', label)
-            who = f'Speaker {match.group(1)}' if match else ('Speaker' if label == 'S?' else label)
+            who = label
         if out and out[-1].startswith(who + ':'):
             out[-1] += ' ' + line['text']
         else:

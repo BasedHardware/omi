@@ -714,7 +714,7 @@ def _llm_calls(run_seed: str, conversations: list[dict], changed_ids: set[str]) 
         ids = []
         for n, (stage, feature, model) in enumerate(stages):
             cid = f'call-{_hex(run_seed + conv["id"] + stage, 12)}'
-            transcript = '\n'.join(f"{s.get('speaker_name') or s['speaker']}: {s['text']}" for s in conv['segments'])
+            transcript = '\n'.join(f"{s.get('speaker_name') or 'Unknown'}: {s['text']}" for s in conv['segments'])
             if stage == 'notes':
                 output = json.dumps(
                     {

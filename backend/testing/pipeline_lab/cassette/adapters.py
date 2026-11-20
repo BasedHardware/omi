@@ -227,9 +227,18 @@ class ParakeetBatchAdapter:
             detected = detected or language
             index = int(start // self.window_seconds)
             for word in words_from_prerecorded(raw):
-                speaker = f'w{index}:{word.speaker}' if word.speaker is not None else None
+                speaker = _window_speaker_id(index, word.speaker) if word.speaker is not None else None
                 words.append(Word(word.start + start, word.end + start, word.text, speaker))
         return STTResponse(words, detected, self.provider, self.model)
+
+
+def _window_speaker_id(window: int, speaker: object) -> str:
+    """Opaque diarization id, unique across windows (each window's labels restart at 0).
+
+    A cassette wire value like the vendor's own label: the product resolves display names from it,
+    and it is never shown as text.
+    """
+    return ':'.join(('w' + str(window), str(speaker)))
 
 
 def make_adapter(name: str, *, provider: str | None = None, model: str | None = None, **options) -> STTAdapter:

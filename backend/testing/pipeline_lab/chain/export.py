@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
 
-from testing.pipeline_lab.contracts import memory_key, task_key
+from testing.pipeline_lab.contracts import memory_key, task_key, wire_speaker_label
 from testing.pipeline_lab.stack.io import iso, parse_time, plain
 
 
@@ -46,7 +46,7 @@ def segments(row: Mapping[str, Any], people: Mapping[str, str] | None = None, ow
             continue
         is_user = bool(segment.get('is_user'))
         speaker = segment.get('speaker') or (
-            f'SPEAKER_{segment.get("speaker_id"):02d}' if isinstance(segment.get('speaker_id'), int) else None
+            wire_speaker_label(segment['speaker_id']) if isinstance(segment.get('speaker_id'), int) else None
         )
         name = owner_name if is_user else people.get(str(segment.get('person_id') or ''), None)
         out.append(

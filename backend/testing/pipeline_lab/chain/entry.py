@@ -31,6 +31,8 @@ import traceback
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
+from testing.pipeline_lab.contracts import wire_speaker_label
+
 OVERLAY_ENV = 'OMI_PIPELINE_LAB_OVERLAY_JSON'
 EMBEDDER_ENV = 'OMI_PIPELINE_LAB_EMBEDDER'
 PROXY_ENV = 'OMI_PIPELINE_LAB_LLM_PROXY_URL'
@@ -47,7 +49,7 @@ def product_segments(segments: Sequence[Mapping[str, Any]]) -> list[dict[str, An
             {
                 'id': f'lab-seg-{index}',
                 'text': segment.get('text') or '',
-                'speaker': f'SPEAKER_{speaker_id:02d}',
+                'speaker': wire_speaker_label(speaker_id),
                 'speaker_id': speaker_id,
                 'is_user': bool(segment.get('is_user')),
                 'person_id': None,

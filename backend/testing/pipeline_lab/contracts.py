@@ -46,6 +46,12 @@ class Stage(str, Enum):
 STAGES: tuple[str, ...] = tuple(stage.value for stage in Stage)
 
 
+def wire_speaker_label(voice: int) -> str:
+    """The stored segment ``speaker`` value for diarized voice ``voice`` (``SPEAKER_00``): an id on the
+    wire, never display text. Display names come from ``utils.speakers.display``."""
+    return 'SPEAKER_' + format(voice, '02d')
+
+
 def stage_index(stage: str) -> int:
     try:
         return STAGES.index(stage)
