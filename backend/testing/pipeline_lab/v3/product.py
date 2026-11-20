@@ -277,14 +277,15 @@ def install_emulator_size_errors(stack: ExitStack) -> None:
 TRACE_ENV = 'OMI_PIPELINE_LAB_V3_TRACE'
 
 
-def install_planner_trace(stack: ExitStack) -> None:
+def install_planner_trace(stack: ExitStack, target: str | None = None) -> None:
     """Diagnostics (``OMI_PIPELINE_LAB_V3_TRACE=<file>``): per builder pass, what ``store.load`` returned and
     what ``preserve_finished_windows`` planned. Times, ids, statuses and counts only; never text."""
     import json
     import os
     from unittest.mock import patch
 
-    target = os.environ.get(TRACE_ENV)
+    # Read before lab_environment clears os.environ (the caller passes it).
+    target = target or os.environ.get(TRACE_ENV)
     if not target:
         return
     from database import conversations_v3 as store

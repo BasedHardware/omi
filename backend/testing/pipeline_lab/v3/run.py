@@ -18,6 +18,7 @@ Outputs in the run directory: ``conversations/<v3 id>.json`` (contract rows with
 from __future__ import annotations
 
 from contextlib import ExitStack
+import os
 import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -44,6 +45,7 @@ from testing.pipeline_lab.v3.product import (
     install_attribution,
     install_emulator_size_errors,
     install_planner_trace,
+    TRACE_ENV,
     read_v3_rows,
 )
 from testing.pipeline_lab.v3.tasks import LoopbackTasks
@@ -204,6 +206,7 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
         timings[name] = round(now - mark[0], 3)
         mark[0] = now
 
+    trace_target = os.environ.get(TRACE_ENV)
     with lab_environment(
         config, lab_overlay(spec.overlay), run_dir=run_dir, preimport=PRODUCT_MODULES + V3_MODULES
     ) as env, ExitStack() as stack:
@@ -220,7 +223,7 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
         result['tasks_bound'] = tasks.install(stack)
         install_attribution(stack)
         install_emulator_size_errors(stack)
-        install_planner_trace(stack)
+        install_planner_trace(stack, trace_target)
         stack.enter_context(installed_clock(clock))
         if any(d.get('name') == 'typesense_unavailable' for d in env.decisions.rows):
             result['warnings'].append('typesense not listening: conversation index writes off for this run')
