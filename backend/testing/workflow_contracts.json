@@ -1072,7 +1072,8 @@
       "tests": [
         "tests/unit/test_cross_service_deploy_contract.py",
         "tests/unit/test_batch_pipeline_hpa_capacity_replay.py",
-        "tests/unit/test_batch_pipeline_hpa_retune_replay.py"
+        "tests/unit/test_batch_pipeline_hpa_retune_replay.py",
+        "tests/unit/test_batch_pipeline_hpa_max_replay.py"
       ],
       "checks": [],
       "invariants": [

@@ -202,9 +202,11 @@ def test_batch_worker_chart_edits_select_the_hpa_replay_pins(selector_and_all_te
     # A floor or target edit in the worker chart must run the replay tests that pin the live
     # bounds and the queueing witness (#25842 changed the floor without running them).
     selector, all_tests = selector_and_all_tests
-    selected, _reason = selector.tests_for_changed_paths([source], all_tests)
+    selected, reason = selector.tests_for_changed_paths([source], all_tests)
     assert 'tests/unit/test_batch_pipeline_hpa_capacity_replay.py' in selected
     assert 'tests/unit/test_batch_pipeline_hpa_retune_replay.py' in selected
+    assert 'tests/unit/test_batch_pipeline_hpa_max_replay.py' in selected
+    assert reason == 'selected backend unit tests from changed paths and workflow contracts'
 
 
 def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector_and_all_tests):
