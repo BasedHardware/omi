@@ -90,3 +90,25 @@ unchanged. After release, Support separately checks the affected app version,
 notification permission/Focus settings and a timestamped failed push/task for
 the reported beta OS. No customer account diagnosis or delivery guarantee can
 be inferred from the local test.
+
+## Registration diagnostics (#25870)
+
+The existing registrar writes `push_registration` records through the opt-in
+`DebugLogManager` developer export. Closed stage/result vocabularies identify
+missing APNs/FCM, timezone or persistence exceptions/deadlines, rejected local
+ordering writes, HTTP acceptance/status, and exhausted retry budgets. Cached
+receipts do not emit another success record. No token, UID, timezone value,
+request/response body or SDK exception text is included. These records are local;
+they do not enable logging or introduce a new remote telemetry stream.
+
+A diagnostic write/observer failure cannot change registration, retries or auth
+ownership. Cancellation of an old owner does not emit a new SDK failure. The
+retry schedule, accepted-receipt cache and server contract remain unchanged.
+Diagnostics locate failures; their release is not proof of restored push delivery.
+
+Verification for this addition:
+- [x] Registrar success/failure/retry/deadline/cancellation regressions.
+- [x] Default reporter -> real temporary log file -> developer export, including
+      credential/error-text exclusion and existing logging opt-out/write failures.
+- [ ] Component suite and repository preflight for the final diff.
+- [ ] Release followed by account registration and background delivery evidence.

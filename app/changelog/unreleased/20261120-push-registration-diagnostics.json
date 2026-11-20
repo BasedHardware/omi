@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Opt-in local push-registration diagnostics only; no push delivery, permission, retry or remote telemetry behavior change."
+}
