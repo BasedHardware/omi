@@ -5,7 +5,7 @@
   },
   "backend/database/action_items.py:collection": {
     "policy": "conversations",
-    "reason": "After a repair retirement or undo removal marker hit, the task transaction checks only deletion and recording fields to allow an active product card with the same ID."
+    "reason": "After a V3 refinement, repair retirement or undo marker hit, the task transaction checks only deletion and recording fields to allow an active product card with the same ID."
   },
   "backend/database/batch_pipeline_privacy.py:collection": {
     "policy": "both",
