@@ -97,13 +97,20 @@ def _fold_short_topics(lines: list, entries: list[dict[str, Any]]) -> list[dict[
     return result
 
 
+def _different_people(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    """Both entries name people and share none: a change of company ends a sit-down."""
+    names = lambda entry: {str(p).strip().lower() for p in entry.get('people') or () if str(p).strip()}
+    first, second = names(left), names(right)
+    return bool(first and second and not first & second)
+
+
 def _join_sitdown(lines: list, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """One sit-down is one conversation: neighbouring conversation entries of a stretch join.
 
     Under a long silence gap a stretch already ends where the sit-down does, so talk inside it with the
-    same kind is one card; topics become sections. Short dictation between two conversation entries
-    (under the Home word minimum) joins as a section too; media, background and longer dictation stay
-    their own cards.
+    same kind is one card; topics become sections. Entries that both name people and share none stay
+    apart. Short dictation between two conversation entries (under the Home word minimum) joins as a
+    section too; media, background and longer dictation stay their own cards.
     """
     starts = [entry['first_line'] - 1 for entry in entries]
     counts = {start + 1: word_count(lines[start:end]) for start, end in zip(starts, starts[1:] + [len(lines)])}
@@ -116,7 +123,7 @@ def _join_sitdown(lines: list, entries: list[dict[str, Any]]) -> list[dict[str, 
             and entries[index - 1]['kind'] == 'conversation'
             and entries[index + 1]['kind'] == 'conversation'
         )
-        if joinable and runs and runs[-1][-1].get('_sitdown_joinable'):
+        if joinable and runs and runs[-1][-1].get('_sitdown_joinable') and not _different_people(runs[-1][-1], entry):
             runs[-1].append({**entry, '_sitdown_joinable': True})
         else:
             runs.append([{**entry, '_sitdown_joinable': joinable}])

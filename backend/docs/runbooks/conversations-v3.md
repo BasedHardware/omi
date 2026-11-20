@@ -139,6 +139,18 @@ while later speech still belongs to the same outline stretch. Later speech
 gets its own continuation. Reconciliation can merge settled cards when the
 outline and the loaded source claims cover the complete merge.
 
+A silence gap above 300 seconds also switches on sit-down cutting:
+- The outline sees pauses of 2 minutes or more as `---- N min without speech ----`
+  marker lines. A sit-down rule replaces the hard-boundary sentence.
+- Neighbouring `conversation` entries of one stretch join into one card, with
+  topics as sections. They stay apart when both name people and share none.
+  Dictation under the Home word minimum between two of them joins as a section.
+  Media, background, longer dictation and manual-end stretches keep their own
+  cards.
+- Each card meets the Home word minimum on its own words, not the stretch's.
+
+Setting the gap back to 300 seconds turns sit-down cutting off for later passes.
+
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product
 conversations. Legacy recording-wide naming keeps its existing behavior.

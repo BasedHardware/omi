@@ -17,8 +17,8 @@ def recording(segments, rid='r', **fields):
     return {'id': rid, 'started_at': AT, 'transcript_segments': segments, **fields}
 
 
-def entry(number, kind='conversation'):
-    return {'first_line': number, 'title': f'Topic {number}', 'line': '', 'kind': kind, 'people': []}
+def entry(number, kind='conversation', people=()):
+    return {'first_line': number, 'title': f'Topic {number}', 'line': '', 'kind': kind, 'people': list(people)}
 
 
 def test_only_a_gap_over_five_minutes_cuts_at_sitdowns():
@@ -86,15 +86,44 @@ def test_a_joined_sitdown_card_meets_the_home_minimum_on_its_own_words():
     assert {w['_stretch_words'] for w in stretch_level} == {470}
 
 
-def test_joining_never_holds_an_earlier_stretch_open():
-    # Two sit-downs 20 minutes apart; the second is still going. Only the last window may be open (#25800).
+def test_joining_never_holds_more_than_one_window_open():
+    # A sit-down still going was published as two preview rows (two topics) on earlier passes. Joining
+    # now plans one window over both, so preservation keeps each preview's custody until lock; only the
+    # last window may stay open (#25800).
     first = recording([segment(0, 400), segment(60, 400)], rid='a')
     second = recording([segment(30 * 60, 400), segment(31 * 60, 400)], rid='b')
     now = AT + timedelta(minutes=33)
     groups = outline.stretches([first, second], now, silence_gap=GAP, lock_delay=timedelta(seconds=3600))
-    assert [g['finished'] for g in groups] == [True, False]
     entries = [[entry(1), entry(2)], [entry(1), entry(2)]]
     planned = planner.windows(groups, entries, cohesion=True, silence_gap=GAP, defer_topic_lock=True)
     assert len(planned) == 2  # each sit-down joined into one card
-    windows = planner.preserve_finished_windows(planned, {}, {'a': first, 'b': second}, protect_provisional=True)
-    assert [w['finished'] for w in windows] == [True, False]
+
+    def preview(cid, offset):
+        start = AT + timedelta(seconds=offset)
+        second.setdefault('claims', []).append(
+            {'conversation_id': cid, 'start': start, 'end': start + timedelta(seconds=1)}
+        )
+        return {
+            'id': cid,
+            'v3_derived': True,
+            'status': 'in_progress',
+            'v3_unlocked': True,
+            'started_at': start,
+            'finished_at': start + timedelta(seconds=1),
+            'v3_recording_ids': ['b'],
+        }
+
+    published = {'p1': preview('p1', 30 * 60), 'p2': preview('p2', 31 * 60)}
+    windows = planner.preserve_finished_windows(planned, published, {'a': first, 'b': second}, protect_provisional=True)
+    assert sum(not w['finished'] for w in windows) == 1
+    assert not windows[-1]['finished']
+
+
+def test_entries_naming_different_people_stay_apart():
+    raw = recording([segment(i * 2, 400) for i in range(3)])
+    groups = outline.stretches([raw], AT + timedelta(hours=1), silence_gap=GAP, lock_delay=GAP)
+    entries = [[entry(1, people=['Ana']), entry(2, people=['Ana', 'Ben']), entry(3, people=['Chris'])]]
+    joined = planner.windows(groups, entries, cohesion=True, silence_gap=GAP)
+    assert [len(w['lines']) for w in joined] == [2, 1]  # Ana's talk joins; Chris arriving alone does not
+    unnamed = [[entry(1, people=['Ana']), entry(2), entry(3, people=['Chris'])]]
+    assert len(planner.windows(groups, unnamed, cohesion=True, silence_gap=GAP)) == 1  # no names: no evidence
