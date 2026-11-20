@@ -145,12 +145,7 @@ func (s Store) wakeQuiet(tx *docstore.Tx, check finalization.QuietCheck, now tim
 		return wake, archiveProof{}, retireQuiet(tx, rows.jobPath, job, now, "")
 	case rules.QuietRepair:
 		session := field[string](field[map[string]any](row, "external_data"), "recording_session_id")
-		if s.Archive != nil && emptyBatch(row) && !proof.checked {
-			return wake, archiveProof{session: session, written: rows.written, expiry: lease}, nil
-		}
-		var cleanupErr error
-		wake.Action, cleanupErr = removeQuietEmpty(tx, rows, check.Ref, session, now, lease, proof)
-		return wake, archiveProof{}, cleanupErr
+		return s.resolveQuietEmpty(tx, rows, check, wake, session, now, lease, proof)
 	case rules.QuietStale:
 		return wake, archiveProof{}, nil
 	case rules.QuietWait, rules.QuietReady:

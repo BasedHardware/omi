@@ -40,7 +40,7 @@ func repairSummary(tx *docstore.Tx, ref finalization.Ref, now time.Time, maxAge 
 	if err != nil || !found || due.IsZero() || due.After(now) || !rules.CanRepairSummary(summaryDebt(row)) {
 		return rules.SummarySkip, err
 	}
-	user, allowed, err := summaryAuthority(tx, ref, row)
+	user, allowed, err := privateCloudAuthority(tx, ref, row)
 	if err != nil || !allowed {
 		return rules.SummarySkip, err
 	}
@@ -53,7 +53,7 @@ func repairSummary(tx *docstore.Tx, ref finalization.Ref, now time.Time, maxAge 
 	return scheduleSummary(tx, ref, row, now, due, maxAge)
 }
 
-func summaryAuthority(tx *docstore.Tx, ref finalization.Ref, row document) (document, bool, error) {
+func privateCloudAuthority(tx *docstore.Tx, ref finalization.Ref, row document) (document, bool, error) {
 	userPath, err := docstore.Doc("users", ref.Owner)
 	if err != nil {
 		return nil, false, err

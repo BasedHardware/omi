@@ -45,6 +45,25 @@ type archiveProof struct {
 	checked, empty  bool
 }
 
+func (s Store) resolveQuietEmpty(tx *docstore.Tx, rows quietRows, check finalization.QuietCheck, wake finalization.QuietWake, session string, now, lease time.Time, proof archiveProof) (finalization.QuietWake, archiveProof, error) {
+	if s.Archive != nil && emptyBatch(rows.row) && session != "" {
+		_, allowed, err := privateCloudAuthority(tx, check.Ref, rows.row)
+		allowed = allowed && field[string](rows.row, "sync_merged_into") == ""
+		if err != nil {
+			return wake, archiveProof{}, err
+		}
+		if allowed && !proof.checked {
+			return wake, archiveProof{session: session, written: rows.written, expiry: lease}, nil
+		}
+		if !allowed {
+			proof.empty = false
+		}
+	}
+	action, err := removeQuietEmpty(tx, rows, check.Ref, session, now, lease, proof)
+	wake.Action = action
+	return wake, archiveProof{}, err
+}
+
 func removeQuietEmpty(tx *docstore.Tx, rows quietRows, ref finalization.Ref, session string, now, lease time.Time, proof archiveProof) (rules.QuietAction, error) {
 	if !proof.checked || !proof.empty || !emptyBatch(rows.row) || session != proof.session || !rows.written.Equal(proof.written) || !lease.Equal(proof.expiry) {
 		return rules.QuietRepair, retireQuiet(tx, rows.jobPath, rows.job, now, "record_orphan_repair")

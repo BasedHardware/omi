@@ -36,6 +36,8 @@ func TestF19EmptyCleanupRequiresClosedStorageProof(t *testing.T) {
 			row := read(t, bench, conversationPath)
 			delete(row, "transcript_segments")
 			row["record_lane_owner"], row["server_batch_audio_closed"], row["server_batch_audio_received"] = "batch_live_v1", true, false
+			row["private_cloud_sync_enabled"] = true
+			put(t, bench, "users/"+ref.Owner, document{"private_cloud_sync_enabled": true})
 			put(t, bench, conversationPath, row)
 			a := queue.AdmittingForTest(t, ref.Owner)
 			check, err := store.ArmQuiet(t.Context(), a, ref, 1, false)
