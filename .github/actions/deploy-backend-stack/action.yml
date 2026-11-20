@@ -1263,7 +1263,8 @@ runs:
                 --format='json(metadata.annotations)' \
                 | jq -er '.metadata.annotations["autoscaling.knative.dev/maxScale"] // "default"
                   | if type == "string" then . else error("Invalid Cloud Run maxScale") end')"
-              [[ "$CAP" == default ]] || CAPS+=("$CAP")
+              # An uncapped receiving revision counts as the default, so it still bounds the minimum.
+              if [[ "$CAP" == default ]]; then CAPS+=("$DEFAULT_MAX_SCALE"); else CAPS+=("$CAP"); fi
             done ;;
           *) echo 'Unexpected cap source' >&2; exit 1 ;;
         esac

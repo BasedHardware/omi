@@ -282,3 +282,15 @@ def test_integration_invalid_serving_revision_stops_deploy(tmp_path, action, nam
     assert result.returncode != 0
     assert output == ''
     assert 'revisions describe' not in (tmp_path / 'calls').read_text()
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+@pytest.mark.parametrize('branch,expected', [('prod', '35'), ('dev', '45')])
+def test_integration_uncapped_receiving_revision_counts_as_default(tmp_path, action, branch, expected):
+    # lead2 FIX-FIRST 2026-11-20: 50/50 uncapped + cap45 must give min(default, 45), not 45.
+    traffic = [{'revisionName': 'uncapped', 'percent': 50}, {'revisionName': 'cap45', 'percent': 50}]
+    result, output = resolve(
+        tmp_path, action, traffic=traffic, revisions={'uncapped': None, 'cap45': '45'}, branch=branch
+    )
+    assert result.returncode == 0, result.stderr
+    assert output.splitlines()[0] == f'max_scale={expected}'
