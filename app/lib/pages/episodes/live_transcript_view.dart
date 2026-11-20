@@ -39,6 +39,7 @@ import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/speaker_label.dart';
 import 'package:omi/widgets/speaker_label_badge.dart';
 import 'package:omi/widgets/transcript.dart';
+import 'package:omi/pages/episodes/finish_capture.dart';
 
 /// The live transcript: the capture's recovery and upload banners, then every line as it arrives,
 /// photos in the timeline, speaker naming and Omi's speaker suggestions.
@@ -54,6 +55,7 @@ class LiveTranscriptView extends StatefulWidget {
     this.episode,
     this.onDismissItem,
     this.jumpToLatestBottom = 84,
+    this.held,
   });
 
   final String? topConversationId;
@@ -63,6 +65,10 @@ class LiveTranscriptView extends StatefulWidget {
 
   /// Distance of the jump-to-latest button from the bottom safe area.
   final double jumpToLatestBottom;
+
+  /// What the page showed when Finish was tapped. Process Now moves the capture's lines aside before
+  /// it answers; until it has (and after a failure) the reader keeps seeing these, read-only.
+  final HeldCapture? held;
 
   @override
   State<LiveTranscriptView> createState() => _LiveTranscriptViewState();
@@ -137,45 +143,57 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
               child: _showsLivePreview(provider)
                   ? _previewBody(provider, transcriptSessionId, transcriptScrollState,
                       widget.topConversationId ?? provider.topConversationId)
-                  : provider.segments.isEmpty && provider.photos.isEmpty
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 50, OmiSpacing.xxl, 0),
-                            child: Text(
-                              textAlign: TextAlign.center,
-                              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                              _liveCaptureEmptyStateText(
-                                provider,
-                                connectivity: connectivity,
-                                usage: usage,
-                                photoChannelActive: photoChannelActive,
-                                transcriptionInterrupted: transcriptionInterrupted,
-                              ),
-                            ),
-                          ),
+                  : provider.segments.isEmpty && provider.photos.isEmpty && widget.held != null
+                      ? getTranscriptWidget(
+                          false,
+                          widget.held!.segments,
+                          widget.held!.photos,
+                          deviceProvider.connectedDevice,
+                          bottomMargin: 0,
+                          transcriptKey: const ValueKey('live-transcript-held'),
+                          followLatest: true,
+                          jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + widget.jumpToLatestBottom,
+                          contentVersion: identityHashCode(widget.held!.segments),
                         )
-                      : provider.photos.isNotEmpty || decorated
-                          ? _buildChronologicalTimeline(
-                              provider,
-                              transcriptSessionId,
-                              transcriptScrollState,
-                              widget.topConversationId ?? provider.topConversationId,
+                      : provider.segments.isEmpty && provider.photos.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 50, OmiSpacing.xxl, 0),
+                                child: Text(
+                                  textAlign: TextAlign.center,
+                                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                                  _liveCaptureEmptyStateText(
+                                    provider,
+                                    connectivity: connectivity,
+                                    usage: usage,
+                                    photoChannelActive: photoChannelActive,
+                                    transcriptionInterrupted: transcriptionInterrupted,
+                                  ),
+                                ),
+                              ),
                             )
-                          : getTranscriptWidget(
-                              false,
-                              List<TranscriptSegment>.of(provider.segments),
-                              provider.photos,
-                              deviceProvider.connectedDevice,
-                              bottomMargin: 0,
-                              taggingSegmentIds: provider.taggingSegmentIds,
-                              transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
-                              followLatest: true,
-                              scrollState: transcriptScrollState,
-                              jumpToLatestButtonBottom:
-                                  MediaQuery.paddingOf(context).bottom + widget.jumpToLatestBottom,
-                              contentVersion: provider.segmentsPhotosVersion,
-                              editSegment: (segmentId, speakerId) => _nameSpeaker(segmentId, speakerId, provider),
-                            ),
+                          : provider.photos.isNotEmpty || decorated
+                              ? _buildChronologicalTimeline(
+                                  provider,
+                                  transcriptSessionId,
+                                  transcriptScrollState,
+                                  widget.topConversationId ?? provider.topConversationId,
+                                )
+                              : getTranscriptWidget(
+                                  false,
+                                  List<TranscriptSegment>.of(provider.segments),
+                                  provider.photos,
+                                  deviceProvider.connectedDevice,
+                                  bottomMargin: 0,
+                                  taggingSegmentIds: provider.taggingSegmentIds,
+                                  transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
+                                  followLatest: true,
+                                  scrollState: transcriptScrollState,
+                                  jumpToLatestButtonBottom:
+                                      MediaQuery.paddingOf(context).bottom + widget.jumpToLatestBottom,
+                                  contentVersion: provider.segmentsPhotosVersion,
+                                  editSegment: (segmentId, speakerId) => _nameSpeaker(segmentId, speakerId, provider),
+                                ),
             ),
             if (behind != null && decorated) behind,
           ],

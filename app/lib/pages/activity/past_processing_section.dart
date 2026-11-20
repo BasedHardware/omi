@@ -2,6 +2,7 @@ import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -76,10 +77,11 @@ List<ServerConversation> failedActivityConversations({
   required Iterable<ServerConversation> conversations,
   List<Episode> episodes = const [],
   Set<String> attentionIds = const {},
+  bool v3Only = false,
 }) {
   final byId = <String, ServerConversation>{
     for (final item in pending)
-      if (item.kind == 'conversation' && item.homeStep == 'failed' && item.startedAt != null)
+      if (!v3Only && item.kind == 'conversation' && item.homeStep == 'failed' && item.startedAt != null)
         for (final id in item.conversationIds)
           id: ServerConversation(
               id: id,
@@ -92,7 +94,12 @@ List<ServerConversation> failedActivityConversations({
     for (final c in conversations) c.id: c,
   };
   return byId.values
-      .where((c) => !attentionIds.contains(c.id) && !c.deleted && !c.discarded && isFailedHomeConversation(c))
+      .where((c) =>
+          !attentionIds.contains(c.id) &&
+          !c.deleted &&
+          !c.discarded &&
+          isFailedConversation(c) &&
+          (!v3Only || c.v3?.tileState == ConversationTileState.failed))
       .toList()
     ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
 }

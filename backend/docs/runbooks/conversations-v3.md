@@ -280,6 +280,44 @@ optional-predicate composite indexes. Rare filtered layer counts select at most
 transcript decoding. The generated manifest has 304 composite indexes.
 The daily gauge refuses a truncated scan rather than publishing a partial count.
 
+## Sync redirect custody repair
+
+Sync redirects transfer transcript-only claims and card source links in the same transaction
+as the donor redirect. When playback backing, deletion spans, competing claims, or missing
+speech evidence prevent a transfer, sync keeps the original source. The transfer checks every
+line in the proposed claim against the published card and preserves the card's existing fields.
+
+For an already-published chain, use the explicit custody repair in coordination with the live
+re-derive owner. Keep overlapping repairs on the same owner paused during qualification.
+Run the preview with the read-only operator profile and keep the resulting card IDs, claim
+ranges and receipt in the approved QA channel.
+
+```bash
+PYTHONPATH=backend backend/.venv/bin/python -m scripts.conversations_v3_sync_custody preview \
+  --uid "$QA_UID" --donor "$DONOR_ID"
+```
+
+A `ready` preview lists the original and proposed claims and card links. A `skipped` preview
+reports the first reason the chain needs review. For example, playback references need proof
+of equivalent backing, and competing claims need evidence beyond overlapping clocks.
+The operation moves custody for supported cards. Existing Home visibility, titles, transcripts,
+notes, and audio references are preserved.
+
+After separate approval, use `apply --uid "$QA_UID" --donor "$DONOR_ID" --receipt "$RECEIPT"`
+with the same module and scope. The receipt binds the exact project, owner, redirect path, edits,
+and Firestore revisions. Apply updates all affected documents and creates the rollback journal in
+one transaction. Repeating apply with the same receipt reports the recorded outcome.
+Use `rollback` with the same arguments to restore the prior fields. Rollback refuses when a source
+or card has advanced, acquired a tombstone, or changed lineage. Re-preview and escalate those cases.
+Successful rollback consumes that receipt.
+
+Each attempt reads at most nine source documents, 64 claimant cards, their tombstone documents,
+the account deletion marker and the journal. At most 74 documents are written, including the
+journal, and the journal is capped at 128 KiB. Preview uses a read-only transaction. Restrict
+post-release readback to the approved internal TestFlight scope and record the exact TestFlight
+build and serving revisions. Verify that fresh sync redirects retain custody, Home shows one
+card for the same claimed speech, and separate speech remains present.
+
 ## Backfill and repair (per owner)
 
 `CONVERSATIONS_V3_BACKFILL=off` by default. While it is off, nothing below runs. The switch is

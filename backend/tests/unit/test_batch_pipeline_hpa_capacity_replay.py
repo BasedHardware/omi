@@ -22,10 +22,11 @@ def test_historical_volume_capacity_retains_the_retune_witness():
 
 def test_current_volume_capacity_stays_cool_and_at_the_audited_floor():
     result = FRONTIER.stats(FRONTIER.series, FRONTIER.cfg)
-    assert FRONTIER.cfg['min_replicas'] == 4
+    # The worker rollout safety change (#25842) raised the live floor to six.
+    assert FRONTIER.cfg['min_replicas'] == 6
     assert FRONTIER.cfg['max_replicas'] == 16
-    assert result['mean'] == pytest.approx(4.34, abs=0.01)
-    assert result['max'] == 5
+    assert result['mean'] == 6
+    assert result['max'] == 6
     assert result['hot'] == 0
     assert result['floor']
 

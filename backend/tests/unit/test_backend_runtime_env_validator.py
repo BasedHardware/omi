@@ -508,8 +508,8 @@ GOOGLE_OAUTH_SECRETS = '''\
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
         {"name": "GOOGLE_MAPS_API_KEY", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_MAPS_API_KEY", "key": "latest"}}},'''
 
-# POSTHOG_EVENTS_API_KEY is only declared for backend-integration in
-# deploy/runtime_env; deployed-state fixtures must scope it the same way.
+# POSTHOG_EVENTS_API_KEY is declared only for backend-integration and backend-projection-pump
+# in deploy/runtime_env; deployed-state fixtures must scope it the same way.
 INTEGRATION_EVENTS_SECRET = (
     '        {"name": "POSTHOG_EVENTS_API_KEY", "valueFrom": {"secretKeyRef": '
     '{"name": "POSTHOG_EVENTS_API_KEY", "key": "latest"}}}'
@@ -1737,8 +1737,12 @@ def test_soniox_live_retirement_bindings_keep_recovery_gate_integration_only():
         holders = {name for name, service in services.items() if 'SONIOX_API_KEY' in service.get('secrets', {})}
         # Lead 2026-11-02 17:42Z: reuse the existing key and runtime identity for
         # live GPU retirement; the independent recovery gate remains integration-only.
+        # SCA-3120: the prod projection pump derives from integration and runs the same
+        # main.py startup, whose streaming STT validation requires the key.
         assert holders == (
-            {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'} if stage == 'prod' else set()
+            {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration', 'backend-projection-pump'}
+            if stage == 'prod'
+            else set()
         )
         assert services['backend-integration']['env']['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'][
             'value'
@@ -3743,7 +3747,10 @@ def test_guarded_long_recovery_stays_disabled_and_hours_are_inert():
     for stage in ('dev', 'prod'):
         services = manifest['environments'][stage]['cloud_run']['services']
         cap = 'BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS'
-        assert {name for name, service in services.items() if cap in service.get('env', {})} == {'backend-integration'}
+        # SCA-3120: the prod projection pump derives integration's env (serving is off there).
+        assert {name for name, service in services.items() if cap in service.get('env', {})} == (
+            {'backend-integration', 'backend-projection-pump'} if stage == 'prod' else {'backend-integration'}
+        )
         assert services['backend-integration']['env'][cap] == {
             'value': '0',
             'category': 'ops_kill',
@@ -4070,7 +4077,11 @@ def test_allowance_intake_parking_is_bound_only_to_upload_roles(environment, mon
         service: [entry['value'] for entry in target['env'] if entry['name'] == 'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED']
         for service, target in state['services'].items()
     }
-    assert rendered == {service: [value] for service, value in ALLOWANCE_INTAKE_PARK_BY_SERVICE.items()}
+    expected = dict(ALLOWANCE_INTAKE_PARK_BY_SERVICE)
+    if environment == 'prod':
+        # SCA-3120: the projection pump derives integration's env; it takes no uploads (internal ingress).
+        expected['backend-projection-pump'] = ALLOWANCE_INTAKE_PARK_BY_SERVICE['backend-integration']
+    assert rendered == {service: [value] for service, value in expected.items()}
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
@@ -4084,7 +4095,8 @@ def test_post_seal_controls_are_rendered_on_every_cpu_reader(environment):
         'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     ]
     hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
-    assert len(hosts) == 5
+    # SCA-3120: prod adds the derived projection pump as a sixth reader.
+    assert len(hosts) == (6 if environment == 'prod' else 5)
     for host in hosts:
         for key in flags:
             value = 'false' if key in {'RECORD_FRESH_MERGE_ENABLED', 'RECORD_NOTES_EAGER_ENABLED'} else 'true'
@@ -4200,7 +4212,8 @@ def test_future_capture_admissions_default_off_until_reader_rollout(environment)
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
     expected = {'value': 'false', 'category': 'rollout'}
     hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
-    assert len(hosts) == 5
+    # SCA-3120: prod adds the derived projection pump as a sixth reader.
+    assert len(hosts) == (6 if environment == 'prod' else 5)
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
     for host in hosts:
         assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == expected
