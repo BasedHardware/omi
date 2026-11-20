@@ -7,9 +7,12 @@ gate would silently never open; pin the prod values through the real parser inst
 import os
 from pathlib import Path
 
+import pytest
 import yaml
 
 from config.batch_pipeline_backlog_release import PREFIX, WriterConfig
+from config.process_role import ProcessRoleConfigError, startup_process_role
+from scripts.cloud_run_scope import PROJECTION_PUMP
 
 ROOT = Path(__file__).resolve().parents[3]
 LEGACY = 'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED'
@@ -72,10 +75,19 @@ def test_no_other_prod_host_or_chart_sets_backlog_authority_keys():
     found = set()
     _walk_env_keys({k: v for k, v in prod.items() if k != 'cloud_run'}, found)
     _walk_env_keys(prod['cloud_run'].get('jobs', {}), found)
-    for name, service in prod['cloud_run']['services'].items():
-        if service is not integration:
+    services = prod['cloud_run']['services']
+    for name, service in services.items():
+        if service is not integration and name != PROJECTION_PUMP:
             _walk_env_keys(service, found)
     assert not found, sorted(found)
+    # The projection pump derives backend-integration's env verbatim, so it carries these keys,
+    # but it can never run the writer: the heartbeat runs only in the serving loop, and the
+    # pump process role refuses BATCH_PIPELINE_SERVING_ENABLED=true at startup.
+    pump = services[PROJECTION_PUMP]['env']
+    assert _value(pump['OMI_PROCESS_ROLE']) == 'projection_pump'
+    assert _value(pump['BATCH_PIPELINE_SERVING_ENABLED']) == 'false'
+    with pytest.raises(ProcessRoleConfigError):
+        startup_process_role({'OMI_PROCESS_ROLE': 'projection_pump', 'BATCH_PIPELINE_SERVING_ENABLED': 'true'})
     for chart in (ROOT / 'backend/charts').glob('*/prod_*_values.yaml'):
         chart_keys = set()
         _walk_env_keys(yaml.load(chart.read_text(), Loader=yaml.CSafeLoader), chart_keys)
