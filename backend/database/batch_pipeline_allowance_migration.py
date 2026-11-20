@@ -17,7 +17,7 @@ KEY = 'allowance_parking_v1'
 
 
 class MigrationOwnerChanged(RuntimeError):
-    """A row's owner moved after discovery. Nothing was parked; replaying the page is safe."""
+    """A row's owner moved after discovery. Nothing is parked for that row; replaying the page is safe."""
 
 
 class _Stopped(Exception):

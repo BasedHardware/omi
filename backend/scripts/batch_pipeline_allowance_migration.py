@@ -51,8 +51,17 @@ def _chain(error: BaseException) -> list[BaseException]:
     return links
 
 
+def _qualifies(link: BaseException) -> bool:
+    return isinstance(link, RETRYABLE) or is_transaction_contention(link)
+
+
 def _retryable(error: BaseException) -> bool:
-    return any(isinstance(link, RETRYABLE) or is_transaction_contention(link) for link in _chain(error))
+    # Retry only when some link is a safe replay and no link is a fatal RPC
+    # status (for example DeadlineExceeded caused by PermissionDenied). Generic
+    # wrappers such as RuntimeError or RetryError neither qualify nor veto.
+    links = _chain(error)
+    fatal = any(isinstance(link, api_exceptions.GoogleAPICallError) and not _qualifies(link) for link in links)
+    return not fatal and any(_qualifies(link) for link in links)
 
 
 def error_report(error: BaseException) -> dict:

@@ -131,7 +131,7 @@ every failure on the page, through its whole cause chain, is a transient
 Firestore/RPC class (Aborted, DeadlineExceeded, InternalServerError,
 ResourceExhausted, ServiceUnavailable, an expired transaction), exhausted
 transaction contention, or `MigrationOwnerChanged` (a discovery hint went stale
-before anything was parked). Because the failed page is replayed idempotently,
+before that row was parked), and no link in any chain is a fatal RPC status such as PermissionDenied or NotFound. Because the failed page is replayed idempotently,
 the release owner may relaunch such a stop from the retained checkpoint under
 the standing recovery disposition on SCA-2198. Any other stop stays stopped for
 the tool owner.

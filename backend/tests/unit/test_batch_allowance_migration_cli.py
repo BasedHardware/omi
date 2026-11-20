@@ -186,6 +186,20 @@ def test_error_report_keeps_a_fatal_retry_error_cause_fatal():
     assert cli.error_report(error)['retryable'] is False
 
 
+@pytest.mark.parametrize(
+    'chain',
+    [
+        (cli.api_exceptions.DeadlineExceeded('outer'), cli.api_exceptions.PermissionDenied('denied')),
+        (cli.FirestoreContentionExhausted('outer'), cli.api_exceptions.NotFound('jobs/secret-doc-id')),
+        (RuntimeError('page'), cli.api_exceptions.Aborted('a'), cli.api_exceptions.FailedPrecondition('index')),
+    ],
+)
+def test_a_fatal_rpc_status_anywhere_in_the_chain_vetoes_retry(chain):
+    report = cli.error_report(_raise_chain(*chain))
+    assert report['retryable'] is False
+    assert 'secret' not in json.dumps(report)
+
+
 def test_error_report_is_not_retryable_when_any_sibling_failure_is_not():
     error = cli.api_exceptions.Aborted('first')
     error.migration_sibling_errors = (cli.api_exceptions.DeadlineExceeded('x'), ValueError('users/secret-uid'))
