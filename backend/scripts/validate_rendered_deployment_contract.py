@@ -224,11 +224,12 @@ def validate_rendered_deployment(
             continue
         ref = _mapping(_mapping(entry.get("valueFrom")).get("secretKeyRef"))
         if ref:
-            if not ref.get("name") or not ref.get("key"):
+            ref_name, ref_key = ref.get("name"), ref.get("key")
+            if not isinstance(ref_name, str) or not ref_name or not isinstance(ref_key, str) or not ref_key:
                 errors.append(f"{prefix}: secretKeyRef needs a non-empty name and key")
-            elif ref.get("name") not in allowed_secrets:
+            elif ref_name not in allowed_secrets:
                 errors.append(f"{prefix}: secretKeyRef must target the shared backend secret")
-            elif ref.get("name") == expected_secret:
+            elif ref_name == expected_secret:
                 has_shared_secret_ref = True
     if contract.required_secret_name and not has_shared_secret_ref:
         errors.append(f"{prefix}: missing required shared backend secretKeyRef")

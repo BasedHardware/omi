@@ -62,9 +62,8 @@ def untagged_chart_results(contracts: SimpleNamespace) -> list[tuple[str, str, A
     return results
 
 
-def _deployment(contracts: SimpleNamespace, *, image: str | None = None) -> dict:
+def _deployment(contracts: SimpleNamespace, *, image: str | None = None, environment: str = "dev") -> dict:
     contract = contracts.CONTRACTS[0]
-    environment = "dev"
     return {
         "apiVersion": "apps/v1",
         "kind": "Deployment",
@@ -82,13 +81,16 @@ def _deployment(contracts: SimpleNamespace, *, image: str | None = None) -> dict
                             "readinessProbe": {"httpGet": {"path": "/ready"}},
                             "startupProbe": {"httpGet": {"path": "/health"}},
                             "env": [
-                                {"name": "OMI_ENV_STAGE", "value": "dev"},
-                                {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware-dev"},
+                                {"name": "OMI_ENV_STAGE", "value": environment},
+                                {
+                                    "name": "GOOGLE_CLOUD_PROJECT",
+                                    "value": contracts.ENVIRONMENTS[environment]["project"],
+                                },
                                 {
                                     "name": "OPENAI_API_KEY",
                                     "valueFrom": {
                                         "secretKeyRef": {
-                                            "name": "dev-omi-backend-secrets",
+                                            "name": f"{environment}-omi-backend-secrets",
                                             "key": "OPENAI_API_KEY",
                                         }
                                     },
@@ -234,15 +236,27 @@ def test_listen_private_env_secret_is_allowed_in_prod_only(contracts: SimpleName
     # Diagnostics stay value-free (see test_failure_diagnostics_omit_rendered_values).
     assert any("secretKeyRef must target the shared backend secret" in failure for failure in failures)
     assert all("prod-omi-backend-listen-private-env" not in failure for failure in failures)
-    prod = deepcopy(deployment)
-    for entry in prod["spec"]["template"]["spec"]["containers"][0]["env"]:
-        ref = (entry.get("valueFrom") or {}).get("secretKeyRef") or {}
-        if ref.get("name") == "dev-omi-backend-secrets":
-            ref["name"] = "prod-omi-backend-secrets"
-    prod_failures = contracts.validate_rendered_deployment(listen, "prod", [prod])
-    assert not any("secretKeyRef must target" in failure for failure in prod_failures)
+    prod = _deployment(contracts, environment="prod")
+    prod_env = prod["spec"]["template"]["spec"]["containers"][0]["env"]
+    prod_env.append(deepcopy(deployment["spec"]["template"]["spec"]["containers"][0]["env"][-1]))
+    assert contracts.validate_rendered_deployment(listen, "prod", [prod]) == []
+    # The prod-only private secret does not satisfy the shared-secret requirement on its own.
+    prod_env[:] = [entry for entry in prod_env if entry["name"] != "OPENAI_API_KEY"]
+    assert contracts.validate_rendered_deployment(listen, "prod", [prod]) == [
+        "prod/backend-listen: missing required shared backend secretKeyRef"
+    ]
     assert ("prod", "prod-omi-backend-listen-private-env") in listen.extra_secret
     assert all(not c.extra_secret for c in contracts.CONTRACTS if c.service != "backend-listen")
+
+
+@pytest.mark.parametrize("field", ["name", "key"])
+@pytest.mark.parametrize("malformed", [["synthetic-list-secret"], {"synthetic": "mapping-secret"}, 7])
+def test_malformed_secret_ref_types_fail_closed_without_values(contracts: SimpleNamespace, field, malformed):
+    deployment = _deployment(contracts)
+    deployment["spec"]["template"]["spec"]["containers"][0]["env"][2]["valueFrom"]["secretKeyRef"][field] = malformed
+    failures = contracts.validate_rendered_deployment(contracts.CONTRACTS[0], "dev", [deployment])
+    assert "dev/backend-listen: secretKeyRef needs a non-empty name and key" in failures
+    assert all("synthetic" not in failure for failure in failures)
 
 
 def test_render_command_uses_the_deploy_immutable_tag_override(monkeypatch, contracts: SimpleNamespace):
