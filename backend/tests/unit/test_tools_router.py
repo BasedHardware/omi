@@ -102,6 +102,9 @@ _SYS_MODULE_NAMES = [
     "database.vector_db",
     "database.action_items",
     "database.notifications",
+    "database.ports",
+    "database.ports.action_items",
+    "database.ports.base",
     "utils",
     "utils.notifications",
     "utils.conversations",
@@ -122,6 +125,8 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval.tool_services.memories",
     "utils.retrieval.tool_services.action_items",
     "utils.retrieval.tool_result_boundaries",
+    "utils.task_intelligence",
+    "utils.task_intelligence.task_source_validation",
     "utils.other",
     "utils.other.endpoints",
     "utils.memory",
@@ -165,6 +170,8 @@ sys.modules["database.auth"].get_user_name = MagicMock(return_value="Test User")
 
 # Stub database packages
 _stub_package("database")
+# Let the real task source validator import the storage-neutral exception.
+_stub_package("database.ports").__path__ = [str(BACKEND_DIR / "database" / "ports")]
 sys.modules["database._client"].db = MagicMock()
 
 # Stub database.conversations
@@ -468,6 +475,8 @@ memories_svc = _load_module_from_file(
 )
 # The real product by-id guard: it only wraps the stubbed database reader.
 _load_module_from_file("utils.conversations.layer", BACKEND_DIR / "utils" / "conversations" / "layer.py")
+# Bind the real validator to this fixture's conversation reader even during bulk collection.
+sys.modules.pop("utils.task_intelligence.task_source_validation", None)
 action_items_svc = _load_module_from_file(
     "utils.retrieval.tool_services.action_items",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "action_items.py",
