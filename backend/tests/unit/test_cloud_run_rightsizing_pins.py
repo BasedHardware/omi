@@ -20,6 +20,14 @@ from scripts.ops import drift_check as dc
 
 RIGHTSIZED_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 REPO_ROOT = Path(__file__).resolve().parents[3]
+# Named literally so an ops-file edit selects this test through the data-path import graph
+# (dc.source_model reads them by computed path, which the selector cannot see).
+OPS_FILES = ('backend/deploy/ops/prod.yaml', 'backend/deploy/ops/staging.yaml')
+
+
+def test_source_model_reads_the_named_ops_files():
+    for ops_file in OPS_FILES:
+        assert (REPO_ROOT / ops_file).is_file(), ops_file
 
 
 def test_workflow_backend_sync_memory_fallback_is_the_costcut_value():

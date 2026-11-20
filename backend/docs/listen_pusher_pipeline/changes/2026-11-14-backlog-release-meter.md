@@ -222,6 +222,10 @@ below may be used only after that separate decision approves its values.
    of the four owners separately; the hourly budget is shared across them. Any
    other cohort or rate remains a separate approval.
 
+   **Widened (2026-11-20).** David approved three more support owners held on the
+   same provider backlog, at the same shared 60/hour budget (the rate is one
+   gate-wide token budget, not per owner). The expected list size is now **7**.
+
 5. **Verify delivery, not just grants.** Take the aggregate readbacks below
    before and after. Verify the one owner's `result_ready` count falls and its
    projection completion count rises using count-only queries, without printing

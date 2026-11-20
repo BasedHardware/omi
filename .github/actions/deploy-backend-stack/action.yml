@@ -1231,11 +1231,13 @@ runs:
         set -euo pipefail
         # Integration carries its cap on the serving revision (no service cap), so a capacity revision's
         # cap survives the next train instead of being reset to the former 35 literal (2026-11-20).
-        # Like the headroom gate, the cap is the minimum of the service cap (when set) and the cap of
-        # every revision receiving traffic, never the latest template (it can be a no-traffic
-        # candidate). An uncapped receiving revision, or a fresh service, contributes the default
-        # (35 in prod). Each cap is validated whole before any arithmetic; bounds are the 500 ceiling
-        # here and the headroom gate. Any lookup failure stops the deploy.
+        # The cap is the minimum of the service cap (when set) and the cap of every revision
+        # receiving traffic (the headroom gate's min-of-caps rule), never the latest template (it can
+        # be a no-traffic candidate). Unlike the gate, which refuses these cases, an uncapped
+        # receiving revision contributes the default (35 in prod), and with no service cap and no
+        # receiving revision (including a fresh service) the cap is the default. A cap over 500 also
+        # falls back to the default; that bound is the resolver's own, not the gate's. Each cap is
+        # validated whole before any arithmetic. Any lookup failure stops the deploy.
         LISTING="$(gcloud run services list \
           --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
           --filter="metadata.name=$CLOUD_RUN_SERVICE" \
