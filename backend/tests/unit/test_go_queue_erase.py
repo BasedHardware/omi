@@ -106,6 +106,9 @@ def test_worker_transport_distinguishes_tcp_availability_from_tls_trust(monkeypa
     with pytest.raises(expected):
         erase._erase_at_worker('tenant', 'job', 'claim')
 
+    if during_tls:
+        assert context.minimum_version is erase.ssl.TLSVersion.TLSv1_2
+
 
 def test_tls_context_setup_timeout_cannot_authorize_recovery(monkeypatch):
     from unittest.mock import MagicMock

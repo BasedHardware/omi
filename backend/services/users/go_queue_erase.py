@@ -97,6 +97,7 @@ def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
     with raw:
         try:
             tls = ssl.create_default_context()
+            tls.minimum_version = ssl.TLSVersion.TLSv1_2
         except OSError:
             raise EraseRejected('Go queue erase TLS context setup failed') from None
         try:
