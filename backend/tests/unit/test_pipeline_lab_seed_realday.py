@@ -195,7 +195,7 @@ def test_peer_probe_sees_a_closed_typesense_port():
         server.listen(1)
         port = server.getsockname()[1]
         assert peer_listening(('127.0.0.1', port)) is True
-    assert peer_listening(('127.0.0.1', port), timeout=0.2) is False
+    assert peer_listening(('127.0.0.1', port), timeout=0.5) is False  # a closed port refuses at once
 
 
 def test_discard_stage_reports_entry_warnings_and_timings(tmp_path):

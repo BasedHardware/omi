@@ -119,8 +119,8 @@ def lab(tmp_path):
     return store
 
 
-def _proxy(lab, upstream, *, mode='record', budget=1.0, run_id='run-1'):
-    ledger = SpendLedger(lab.ledger_path('run-1'), budget_usd=budget)
+def _proxy(lab, upstream, *, mode='record', cap_usd=1.0, run_id='run-1'):
+    ledger = SpendLedger(lab.ledger_path('run-1'), budget_usd=cap_usd)
     return LlmProxy(ProxyConfig(upstream=upstream.url, mode=mode, run_id=run_id), store=lab, ledger=ledger)
 
 
@@ -232,7 +232,7 @@ def test_replay_mode_miss_is_non_retryable(lab, upstream):
 
 
 def test_spend_cap_refuses_before_sending(lab, upstream):
-    with _proxy(lab, upstream, budget=0.001) as proxy:  # below one reservation
+    with _proxy(lab, upstream, cap_usd=0.001) as proxy:  # below one reservation
         status, headers, body = _post(proxy.url + '/v1/chat/completions', CHAT)
         assert proxy.cap_reached
     assert status == 402 and headers['x-should-retry'] == 'false'
@@ -244,7 +244,7 @@ def test_spend_cap_refuses_before_sending(lab, upstream):
 def test_cache_hits_still_served_after_the_cap(lab, upstream):
     with _proxy(lab, upstream) as proxy:
         _post(proxy.url + '/v1/chat/completions', CHAT)
-    with _proxy(lab, upstream, budget=0.0) as proxy:
+    with _proxy(lab, upstream, cap_usd=0.0) as proxy:
         status, _, _ = _post(proxy.url + '/v1/chat/completions', CHAT)
     assert status == 200 and len(upstream.requests) == 1
 
