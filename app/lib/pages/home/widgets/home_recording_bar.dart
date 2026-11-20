@@ -5,7 +5,10 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
+import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/services/capture/finish_outcome.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -93,18 +96,18 @@ class _HomeRecordingBarState extends State<HomeRecordingBar> {
     }
   }
 
+  /// Wrap Up is Finish from Home: the same path and the same outcome (ux-contract §17.7). The bar
+  /// leaves the tree once the recording stops, so the outcome is shown from Home's context.
   Future<void> _wrapUp(CaptureProvider capture) async {
     if (_busy) return;
     setState(() => _busy = true);
     OmiHaptics.medium();
-    try {
-      await capture.finishCapture();
-      PlatformManager.instance.analytics.phoneMicRecordingStopped();
-    } catch (_) {
-      if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    final home = Navigator.of(context).context;
+    final outcome = await finishLiveCapture(capture, episodes: context.read<EpisodeProvider?>());
+    if (outcome is! FinishFailed) PlatformManager.instance.analytics.phoneMicRecordingStopped();
+    if (mounted) setState(() => _busy = false);
+    if (!home.mounted) return;
+    presentFinishOutcome(home, outcome, entry: FinishEntry.home, onRetry: () => retryFinishFromHome(home, capture));
   }
 
   void _open(CaptureProvider capture) {

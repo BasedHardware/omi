@@ -1,0 +1,8 @@
+**
+!go.mod
+!go.sum
+!cmd/
+!cmd/workerd/
+!cmd/workerd/*.go
+!internal/
+!internal/**

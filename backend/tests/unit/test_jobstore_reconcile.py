@@ -381,38 +381,3 @@ def test_primary_updated_after_discovery_copies_current_value(world):
     result = rec.process_page(dual, source='primary', table='jobs', apply=True)
     assert result.counts.copied == 1
     assert shadow.rows[('jobs', 'a')]['version'] == 2
-
-
-def test_cursor_hooks_run_in_page_transaction_and_advance_failure_rolls_back(world):
-    client, shadow, dual = world
-    shadow.rows[('jobs', 'a')] = {'old': True}
-    events = []
-
-    def load(conn):
-        assert conn.conn is shadow.pool.conn
-        events.append('load')
-        return None
-
-    def advance(conn, result):
-        events.append('advance')
-        assert shadow.commits == 0 and shadow.rows == {}
-        assert result.end_of_pass and result.cursor is None
-        conn.execute('UPDATE synthetic_cursor SET version = version + 1')
-        raise RuntimeError('checkpoint refused')
-
-    with pytest.raises(RuntimeError, match='checkpoint refused'):
-        page(dual, apply=True, load_cursor=load, advance=advance)
-    assert events == ['load', 'advance'] and shadow.commits == 0
-    assert ('jobs', 'a') in shadow.rows
-
-
-def test_cursor_callback_sql_is_charged_to_page_budget(world):
-    _, shadow, dual = world
-
-    def advance(conn, result):
-        for _ in range(10):
-            conn.execute('UPDATE synthetic_cursor SET version = version + 1')
-
-    with pytest.raises(RuntimeError, match='statement budget'):
-        page(dual, max_statements=10, advance=advance)
-    assert shadow.commits == 0

@@ -24,7 +24,9 @@ Uri latestFirmwareVersionUri({
   });
 }
 
-Future<Map> getLatestFirmwareVersion({
+/// The newest firmware for this device, or null when the request failed (offline, a server error):
+/// a failed check is never "up to date" (ux-contract §17.2).
+Future<Map?> getLatestFirmwareVersion({
   required String deviceModelNumber,
   required String firmwareRevision,
   required String hardwareRevision,
@@ -45,13 +47,14 @@ Future<Map> getLatestFirmwareVersion({
   );
 
   if (res == null || res.statusCode != 200) {
-    return {};
+    return null;
   }
 
   return wire.GeneratedFirmwareVersionResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>).toJson();
 }
 
-Future<Map> getStableFirmwareVersion({required String deviceModelNumber}) async {
+/// The stable firmware for this model, or null when the request failed.
+Future<Map?> getStableFirmwareVersion({required String deviceModelNumber}) async {
   var res = await makeApiCall(
     url: "${Env.apiBaseUrl}v2/firmware/stable?device_model=$deviceModelNumber",
     headers: {},
@@ -60,7 +63,7 @@ Future<Map> getStableFirmwareVersion({required String deviceModelNumber}) async 
   );
 
   if (res == null || res.statusCode != 200) {
-    return {};
+    return null;
   }
 
   return wire.GeneratedFirmwareVersionResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>).toJson();

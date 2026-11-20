@@ -30,39 +30,38 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   String updateMessage = '';
   bool isLoading = false;
 
-  /// Whether the lookup positively confirmed the device needs nothing (latest, or already on stable).
-  /// A failed or inconclusive lookup leaves this false so the page never reports it as success.
-  bool isConfirmedCurrent = false;
+  /// The firmware check got no answer.
+  bool checkFailed = false;
 
-  /// Whether the device's own firmware revision is empty or unparsable, so the inconclusive check is a
-  /// device-side failure rather than a lookup/connectivity one.
-  bool isCurrentVersionUnknown = false;
+  /// The check confirmed the device needs nothing (latest, or already on stable). Any other answer without
+  /// an offer shows [updateMessage] instead of "up to date".
+  bool isConfirmedCurrent = false;
 
   // Store reference to provider for safe disposal
   DeviceProvider? _deviceProvider;
 
-  @override
-  void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      Provider.of<DeviceProvider>(context, listen: false).setOnFirmwareUpdatePage(true);
-      await _checkForUpdate();
-    });
-    super.initState();
+  /// Asks the server which firmware is current. A check that got no answer shows an error state
+  /// with Try Again, never "Your device is up to date" (ux-contract §17.2).
+  /// A lookup that throws (a malformed answer) is a failed check, never an endless spinner (D1).
+  Future<bool> _answered(Future<bool> Function() lookup) async {
+    try {
+      return await lookup();
+    } catch (_) {
+      return false;
+    }
   }
 
-  /// Looks up the latest (or, for rollback, stable) firmware and records whether the device needs it.
-  /// Also backs the retry action shown when a lookup could not confirm the result.
-  Future<void> _checkForUpdate() async {
+  Future<void> _check() async {
     final device = widget.device!;
-    if (!mounted) return;
     setState(() {
       isLoading = true;
+      checkFailed = false;
       isConfirmedCurrent = false;
-      isCurrentVersionUnknown = false;
     });
 
     if (widget.isRollback) {
-      await getStableVersion(deviceModelNumber: device.modelNumber);
+      final answered = await _answered(() => getStableVersion(deviceModelNumber: device.modelNumber));
+      if (!answered) return _failCheck();
       final stableVersion = latestFirmwareDetails['version']?.toString();
       final alreadyStable =
           isKnownFirmwareVersion(device.firmwareRevision) && device.firmwareRevision.trim() == stableVersion?.trim();
@@ -79,24 +78,47 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         });
       }
     } else {
-      await getLatestVersion(
-        deviceModelNumber: device.modelNumber,
-        firmwareRevision: device.firmwareRevision,
-        hardwareRevision: device.hardwareRevision,
-        manufacturerName: device.manufacturerName,
-        serialNumber: device.serialNumber,
-      );
-      var result = await checkFirmwareUpdate(currentFirmware: widget.device!.firmwareRevision);
+      final answered = await _answered(() => getLatestVersion(
+            deviceModelNumber: device.modelNumber,
+            firmwareRevision: device.firmwareRevision,
+            hardwareRevision: device.hardwareRevision,
+            manufacturerName: device.manufacturerName,
+            serialNumber: device.serialNumber,
+          ));
+      if (!answered) return _failCheck();
+      final result = await checkFirmwareUpdate(currentFirmware: widget.device!.firmwareRevision);
+      // An answer with no usable release (empty, draft, unparsable) is as inconclusive as no answer.
+      if (result.status == FirmwareUpdateCheck.releaseUnavailable) return _failCheck();
       if (mounted) {
         setState(() {
           shouldUpdate = result.status == FirmwareUpdateCheck.updateAvailable;
           isConfirmedCurrent = result.status == FirmwareUpdateCheck.upToDate;
-          isCurrentVersionUnknown = result.status == FirmwareUpdateCheck.currentVersionUnknown;
-          updateMessage = isCurrentVersionUnknown ? context.l10n.unableToDetermineFirmwareVersion : result.message;
+          // An unreadable device revision gets no Try Again: a re-check would reuse the same revision.
+          updateMessage = result.status == FirmwareUpdateCheck.currentVersionUnknown
+              ? context.l10n.unableToDetermineFirmwareVersion
+              : context.l10n.firmwareUpdateCheckUnavailable;
           isLoading = false;
         });
       }
     }
+  }
+
+  void _failCheck() {
+    if (!mounted) return;
+    setState(() {
+      shouldUpdate = false;
+      checkFailed = true;
+      isLoading = false;
+    });
+  }
+
+  @override
+  void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      Provider.of<DeviceProvider>(context, listen: false).setOnFirmwareUpdatePage(true);
+      await _check();
+    });
+    super.initState();
   }
 
   @override
@@ -270,7 +292,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       FirmwareUpdateFailure.download => context.l10n.firmwareDownloadFailedMessage,
       FirmwareUpdateFailure.install => context.l10n.firmwareUpdateFailedMessage,
       FirmwareUpdateFailure.notInstalled =>
-        context.l10n.firmwareUpdateNotInstalledMessage(observedFirmwareVersion ?? ''),
+        firmwareNotInstalledMessage(context.l10n, widget.device, observedFirmwareVersion ?? ''),
       FirmwareUpdateFailure.noReconnect => context.l10n.firmwareUpdateUnconfirmedMessage,
     };
     return Column(
@@ -402,7 +424,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Up to date status (only when the lookup confirmed it), otherwise say the check was inconclusive
+        // Up to date status (only when the check confirmed it)
         if (!shouldUpdate && isConfirmedCurrent) ...[
           Padding(
             padding: const EdgeInsets.only(left: OmiSpacing.xxs, bottom: OmiSpacing.sm),
@@ -427,14 +449,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Flexible(
-                  child: Text(
-                    widget.isRollback
-                        ? context.l10n.noStableFirmwareFound
-                        : isCurrentVersionUnknown
-                            ? context.l10n.unableToDetermineFirmwareVersion
-                            : context.l10n.firmwareUpdateCheckUnavailable,
-                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                  ),
+                  child: Text(updateMessage, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                 ),
                 const SizedBox(width: OmiSpacing.xs),
                 FaIcon(FontAwesomeIcons.circleExclamation, color: OmiColors.warning, size: 14),
@@ -521,20 +536,6 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           ),
         ],
 
-        // Retry when the lookup could not confirm the result (the inconclusive row promises "try again").
-        // Not offered for an unknown device revision: re-running the server lookup reuses the same
-        // unreadable revision, so it could only reproduce the same message.
-        if (!shouldUpdate && !isConfirmedCurrent && !isCurrentVersionUnknown) ...[
-          const SizedBox(height: OmiSpacing.sm),
-          OmiButton(
-            key: const Key('firmware_update_check_retry'),
-            label: context.l10n.tryAgain,
-            leading: const FaIcon(FontAwesomeIcons.arrowRotateRight),
-            expand: true,
-            onPressed: isLoading ? null : _checkForUpdate,
-          ),
-        ],
-
         // Help link
         if (!shouldUpdate) ...[
           const SizedBox(height: OmiSpacing.sm),
@@ -586,13 +587,19 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.md),
             child: isLoading
                 ? _buildLoadingSection()
-                : busy
-                    ? _buildProgressSection()
-                    : isInstalled
-                        ? _buildSuccessSection()
-                        : failure != null
-                            ? _buildFailedSection(failure)
-                            : _buildUpdateSection(),
+                : checkFailed
+                    ? OmiErrorState(
+                        key: const Key('firmware_check_failed'),
+                        message: context.l10n.firmwareCheckFailed,
+                        onRetry: _check,
+                      )
+                    : busy
+                        ? _buildProgressSection()
+                        : isInstalled
+                            ? _buildSuccessSection()
+                            : failure != null
+                                ? _buildFailedSection(failure)
+                                : _buildUpdateSection(),
           ),
         ),
       ),

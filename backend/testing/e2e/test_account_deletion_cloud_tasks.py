@@ -19,6 +19,34 @@ _INVOKER_SERVICE_ACCOUNT = "account-deletion-worker@example.invalid"
 _LOCAL_TASK_TOKEN = "local-account-deletion-cloud-task"
 
 
+@pytest.mark.parametrize(
+    'method,path,body',
+    [
+        ('POST', '/v1/users/private-cloud-sync?value=true', None),
+        ('PATCH', '/v1/users/voice-profile-settings', {'save_other_voice_profiles': False}),
+        ('POST', '/v1/users/migration/requests', {'target_level': 'enhanced'}),
+    ],
+)
+def test_erased_account_privacy_mutations_return_gone(
+    client, fake_firestore, monkeypatch, account_deletion_identity, method, path, body
+):
+    from database.batch_pipeline_privacy import privacy_owner_key
+
+    uid, headers = account_deletion_identity
+    monkeypatch.setenv('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'true')
+    user = fake_firestore.collection('users').document(uid)
+    user.delete()
+    owner = fake_firestore.collection('batch_pipeline_privacy').document(privacy_owner_key(uid))
+    owner.set({'generation': 1, 'blocked': True})
+    try:
+        response = client.request(method, path, headers=headers, json=body)
+        assert response.status_code == 410
+        assert response.json() == {'detail': 'Account has been erased.'}
+        assert not user.get().exists
+    finally:
+        owner.delete()
+
+
 class _CapturedCloudTasksClient:
     """Strict local substitute for the Cloud Tasks client used by this workflow."""
 

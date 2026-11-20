@@ -71,6 +71,92 @@ def step_case(name, elevated, expected):
     }
 
 
+def recording_case(name, *, hours=50, reads=50_000, breakouts=False, reset=False):
+    ratio = "omi_batch_firestore_reads_per_completed_audio_hour"
+    status = "omi_batch_firestore_cost_status"
+    scope = 'project_id="based-hardware"'
+    rows = []
+    expected = []
+    if hours is not None:
+        # Two distinct original series exercise aggregation after increase().
+        for outcome in ("speech", "confirmed_silence"):
+            rows.append(
+                counter(f'omi_batch_pipeline_completed_audio_seconds_total{{{scope},outcome="{outcome}"}}', hours * 30)
+            )
+    if reads is not None:
+        rows.append(
+            counter(
+                f'omi_firestore_billed_reads_by_caller_total{{{scope},caller="database.batch_pipeline_store:get"}}',
+                reads,
+            )
+        )
+    if hours is not None and hours >= 50 and reads is not None:
+        groups = {"batch": reads, "total": reads}
+        if breakouts:
+            for group, caller, rate in (
+                ("lifecycle", "database.lifecycle_metrics_queries:nojob", 1000),
+                ("erasure", "database.batch_pipeline_purge:purge_batch_owner", 500),
+                ("packing_probe", "database.batch_pipeline_store:packing_candidates", 120),
+            ):
+                rows.append(counter(f'omi_firestore_billed_reads_by_caller_total{{{scope},caller="{caller}"}}', rate))
+                groups[group] = rate
+                if group != "packing_probe":
+                    groups["total"] += rate
+            rows.append(
+                counter(
+                    f'omi_firestore_billed_reads_by_origin_total{{{scope},origin="job:batch_packing_counterfactual"}}',
+                    120,
+                )
+            )
+        expected = [
+            {"labels": f'{ratio}{{caller_group="{group}"}}', "value": rate * 60 / hours}
+            for group, rate in groups.items()
+        ]
+    conditions = []
+    if hours is not None and hours < 50:
+        conditions.append("denominator_low")
+    if hours is None or reads is None:
+        conditions.append("telemetry_missing")
+    if reset:
+        # Restart inside the settled window with one minute already accumulated
+        # on the new process. Increase must be computed on each raw counter.
+        for row in rows:
+            increment = row["values"].removeprefix("0+").removesuffix("x300")
+            row["values"] = f"0+{increment}x149 {increment}+{increment}x150"
+    return {
+        "name": name,
+        "interval": "1m",
+        "input_series": rows,
+        "promql_expr_test": [
+            {"expr": ratio, "eval_time": "190m", "exp_samples": expected},
+            {
+                "expr": status,
+                "eval_time": "190m",
+                "exp_samples": [
+                    {"labels": f'{status}{{condition="{condition}"}}', "value": 1} for condition in conditions
+                ],
+            },
+        ],
+    }
+
+
+def coverage_case(name, second_query, expected):
+    coverage = "omi_firestore_attributed_read_coverage_ratio_1h"
+    native = 'firestore_googleapis_com:document_read_count{project_id="based-hardware",'
+    return {
+        "name": name,
+        "interval": "1m",
+        "input_series": [
+            counter('omi_firestore_billed_reads_total{project_id="based-hardware"}', 300),
+            {"series": native + 'type="LOOKUP"}', "values": "100x60"},
+            {"series": native + 'type="NOT_FOUND"}', "values": "0x60"},
+            {"series": native + 'type="QUERY",database_id="primary"}', "values": "100x60"},
+            {"series": native + 'type="QUERY",database_id="secondary"}', "values": second_query},
+        ],
+        "promql_expr_test": [{"expr": coverage, "eval_time": "65m", "exp_samples": expected}],
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--promtool", required=True, type=Path)
@@ -86,6 +172,19 @@ def main():
         batch_case("exact read boundary", 10000000, 0, set()),
         step_case("diurnal same hour stays quiet", False, False),
         step_case("full hour step sustained", True, True),
+        recording_case("recorded ratio and disjoint groups", breakouts=True),
+        recording_case("raw counter resets preserve the recorded ratio", reset=True),
+        recording_case("recorded ratio retains an observed true zero", reads=0),
+        recording_case("low completion volume suppresses ratio", hours=49),
+        recording_case("observed zero completion volume is low", hours=0),
+        recording_case("missing completions suppress ratio", hours=None),
+        recording_case("missing reads suppress ratio", reads=None),
+        coverage_case(
+            "native coverage accepts a second series with 58 samples",
+            "100x56 _ _ _ 100",
+            [{"labels": "omi_firestore_attributed_read_coverage_ratio_1h", "value": 1}],
+        ),
+        coverage_case("native coverage rejects a second series with 57 samples", "100x55 _ _ _ _ 100", []),
     ]
     median = rules[-1]["data"][1]["model"]["expr"]
     hourly = rules[-1]["data"][0]["model"]["expr"]
@@ -155,6 +254,7 @@ def main():
                 "promql_expr_test": [{"expr": median, "eval_time": "7d16h30m", "exp_samples": []}],
             }
         )
+    recording = yaml.safe_load((MONITORING / "batch-cost/recording-rules.yaml").read_text())["spec"]["groups"]
     with tempfile.TemporaryDirectory(prefix="firestore-cost-promql-") as directory:
         root = Path(directory)
         (root / "rules.yml").write_text(
@@ -169,6 +269,7 @@ def main():
                             ],
                         }
                     ]
+                    + recording
                 }
             )
         )

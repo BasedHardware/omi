@@ -196,7 +196,7 @@ maintenance (`utils/batch_pipeline/serving.py:start_serving_from_env.run`).
 | `batch:ready` | `J:Scheduler.enqueue_in_transaction`, `J:Scheduler.requeue_quarantined_in_transaction` | `J:Scheduler._pull_shard.commit` | none | T | T | No held-specific switch | Existing queue/ownership fences |
 | `batch:leased` | `J:Scheduler._pull_shard.commit` | `J:Scheduler.complete`, `J:Scheduler.recover` | `lease_until` | T | T | No held-specific switch | Token-fenced lease expiry |
 | `batch:retry` | `utils/batch_pipeline/scheduler.py:_defer`, `J:Scheduler.defer` | `J:Scheduler.recover`, then `J:Scheduler._pull_shard.commit` | `available_at` retry schedule; no total dwell deadline | T | T | No held-specific switch | Retain attempts and custody |
-| `batch:allowance_held` | `database/batch_pipeline_allowance_hold.py:park` via scheduler/migration | `utils/batch_pipeline/allowance_hold.py:AllowanceHolds.tick`, then normal admission | none; no expiry of held recording or obligation | `omi_batch_allowance_held_units` | Separate policy stock, never a late-work alarm | `BATCH_ALLOWANCE_PARK_ENABLED` | Off returns retained rows to legacy retry gradually; keep a new controller until drained. Effective plan/grant or usage-period changes trigger owner release. |
+| `batch:allowance_held` | `database/batch_pipeline_allowance_hold.py:park` via sync intake, scheduler or migration | `utils/batch_pipeline/allowance_hold.py:AllowanceHolds.tick`, then normal admission | none; no expiry of held recording or obligation | `omi_batch_allowance_held_units` | Separate policy stock, never a late-work alarm | `BATCH_ALLOWANCE_PARK_ENABLED`, with `BATCH_ALLOWANCE_INTAKE_PARK_ENABLED` controlling new intake holds | Intake off keeps worker parking and release active. Parking off returns retained rows to legacy retry gradually. Keep a parking-aware controller until drained. Effective plan/grant or usage-period changes trigger owner release. |
 | `batch:result_ready` | `J:Scheduler.complete`, `R:RecoveryStore.settle`, `V:ProviderSttStore.settle` | `M:OrderedMerge.commit_next` | none | T | T | No held-specific switch | Retain result, ordered merge |
 | `batch:vendor_held` | `V:ProviderSttStore.hold` | `V:ProviderSttStore.redrive` via `V:ProviderSttStage._held` | `vendor_hold.redrive_at` retry schedule | T; `omi_batch_pipeline_vendor_held_oldest_age_seconds` | T | `BATCH_VENDOR_HELD_REDRIVE_ENABLED` | False parks holds; rollback past vendor failover requires route-table removal and drain (see provider module); never put provider work on GPU ring |
 | `batch:quarantined` | `Q:quarantine_job`; provider `V:ProviderSttStore.settle`, `V:ProviderSttStore.terminal` | `R:RecoveryStore.prepare/start/settle`; dormant GPU expiry `R:expire_held_in_transaction` via `H:HeldDeadLetter.tick` | `held_deadline_at` for enabled GPU path; provider entry paths remain unstamped | T | T | `BATCH_HELD_DEAD_LETTER_ENABLED` | False stops new stamps/automatic GPU maintenance; manual requeue survives |
@@ -222,6 +222,26 @@ job; that does not turn it into a worker quarantine.
 | `batch_projection:quarantine_held` | `S:ProjectionSession.persist/write_receipt` | `U:ProjectionReleaseStore.release`; nightly `H:ProjectionHeldDeadLetter.tick` | `held_deadline_at` for assignment holds only | `omi_batch_held_oldest_age_seconds`; expired subset `omi_batch_held_expired_units` | `omi-pipeline-held-row-age` (page); expired volume (agent) | `BATCH_HELD_DEAD_LETTER_ENABLED`; release expansion separately `BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED`; ghost hint repair `BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED` (default OFF) | Physical state retained; capped attempt reset preserves pre-4b release eligibility. Committed assignment gate failures also stamp/expire under the same window and privacy/operator guards. |
 | `batch_projection:completed` | `P:ProjectionStore.acknowledge.commit` | Terminal | none | none | none | No held-specific switch | Keep receipts; no automatic reopening |
 | `batch_projection:erased` | `database/batch_pipeline_purge.py:_write_erased_result` | Terminal privacy disposition | none | none | none | No held switch bypasses privacy | This is explicit privacy deletion, never dead-lettering |
+
+#### Projection delivery scheduling
+
+The normal merge and source-alias fallback stamp an obligation on the committed
+result in the same transaction. The immutable result key and owner log sequence
+identify it. A due clock, claim token and disposition schedule the next attempt
+through the existing assignment and finish transactions. Their receipts still
+own ordering, privacy, multipart completion and paid-once accounting.
+
+Only one elected scanner per namespace discovers missed wakes by kind, due time
+and document ID. Post-commit hints from serving processes bypass election.
+A fresh successful scan and an obligation on the same result are both required
+before a compatibility page skips an attempt. Unstamped rows and released rows
+whose older writer left no active obligation remain eligible.
+
+Held work retains its receipts and returns to due at a fenced release or
+privacy resume. A privacy purge still removes the result or replaces it with
+the existing ordering edge. `BATCH_PROJECTION_OUTBOX=false` restores legacy
+discovery and stops new obligations and claims. See the
+[serving and rollback notes](../../docs/runbooks/batch-projection-outbox.md).
 
 ### Finalization job
 
@@ -726,3 +746,44 @@ metadata attestation. Count overflow, queue expiry and unsettled/metadata deadli
 all keep the producer token fenced. The queue holds no extra drain slot or PCM
 copy. The 256 entries cover eight default 32-drain budgets for scale-down bursts;
 this is a bounded admission choice, not a measured fleet burst guarantee.
+
+## Atomic account authority writes
+
+Account protection, migration, cloud-sync consent, deletion-marker transitions,
+and physical user-root deletion write the account epoch in the same customer-plane
+transaction as the source change. The protection and migration-start writers also
+begin the legacy generation's purge in that transaction. Existing cleanup consumes
+the exact generation and finishes only that purge. Restorable deletion markers
+use the existing access policy. Restore and billing failure preserve independent
+permanent blocks and active purges.
+
+`batch_pipeline_privacy/{owner_key}` retains the legacy generation, sticky block,
+and active purge fields. GPU work, including the `ef42ee8` image, carries this legacy
+generation. The row also publishes `account_epoch`, with a durable head and hashed,
+fixed-size operation receipts in its subcollections. The head and receipts survive
+old root replacement and recursive user erasure. Each mutation allocates its
+operation ID before entering the retryable transaction or derives it from a stable
+job ID. Receipts hold counters and `expires_at` with a 90-day replay window.
+The permanent head and privacy owner row do not expire. See the
+[receipt TTL declaration](../../deploy/batch-pipeline/account-privacy-receipt-retention.json).
+
+The customer-data client behind `db` and the explicit data-plane client target
+the same Firestore project and database on the API and worker deployments that
+mount account settings. The standalone desktop service may use a different
+compute project and does not mount those routers. The account epoch transaction
+can increase contention on the owner row during simultaneous privacy changes.
+
+The Commit observer emits `omi_batch_pipeline_account_privacy_writes_total` with
+`writer_class`, `field_group`, and `certified` labels after successful writes. It
+checks the matching source, owner patch, head and operation receipt in the same
+transaction. It performs zero reads. A classified root upsert can report
+uncertified when the interceptor cannot prove existence from its write precondition.
+The source ratchet lists these legacy metadata constructors and synthetic tools
+individually. Old binaries and clients outside the SDK interceptor provide no
+counter evidence. The live reader and its existing invalidation token remain
+authoritative in mixed or partially covered fleets.
+
+Set `BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED=false` on writer-bearing services to
+restore legacy routing. Use `true` or unset to restore the atomic route. Commit
+observation and the masked legacy generation patch apply in both modes. An off
+interval is a coverage gap for any future account-epoch reader qualification.

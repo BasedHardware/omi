@@ -31,7 +31,6 @@ import '../helpers/sfpro_font_fixtures.dart';
 
 bool _offerZip = false;
 void Function()? _onDownload;
-int _lookupStatus = 200;
 Map<String, dynamic> _lookupBody = const {};
 
 class _EnvFields implements EnvFields {
@@ -106,7 +105,6 @@ void main() {
   setUp(() {
     _offerZip = false;
     _onDownload = null;
-    _lookupStatus = 200;
     _lookupBody = const {};
   });
 
@@ -114,6 +112,8 @@ void main() {
       {bool rollback = false,
       Locale locale = const Locale('en'),
       String firmwareVersion = '2.0.10',
+      String modelNumber = 'Omi CV 1',
+      String deviceName = 'Omi',
       bool expectOffer = true}) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -142,10 +142,10 @@ void main() {
             isRollback: rollback,
             device: BtDevice(
                 id: 'fixture-pendant',
-                name: 'Omi',
+                name: deviceName,
                 type: DeviceType.omi,
                 rssi: -50,
-                modelNumber: 'Omi',
+                modelNumber: modelNumber,
                 firmwareRevision: firmwareVersion),
           ),
         ),
@@ -194,11 +194,47 @@ void main() {
       });
       await tester.pump();
       expect(tester.takeException(), isNull);
-      if (status == 'not-installed') expect(find.text(en.firmwareUpdateNotInstalledMessage('2.0.10')), findsOneWidget);
+      if (status == 'not-installed') {
+        expect(find.text(en.firmwareUpdateNotInstalledCv1Message('2.0.10')), findsOneWidget);
+      }
       if (status == 'no-reconnect') expect(find.text(en.firmwareUpdateUnconfirmedMessage), findsOneWidget);
       if (status == 'verifying') expect(find.text(en.firmwareVerifyingInstallation), findsOneWidget);
       if (status == 'installed') expect(find.text('${en.currentVersion}: 3.0.1'), findsOneWidget);
       await capture(tester, 'ota-$status.png');
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
+  Future<void> showNotInstalled(WidgetTester tester) async {
+    final dynamic state = tester.state(find.byType(FirmwareUpdate));
+    state.setState(() {
+      state.installProgress = 100;
+      state.observedFirmwareVersion = '2.0.10';
+      state.updateFailure = FirmwareUpdateFailure.notInstalled;
+    });
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  }
+
+  testWidgets('CV1 not_installed says the pendant still works and points to support, not a retry', (tester) async {
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80));
+    await showNotInstalled(tester);
+    expect(
+        en.firmwareUpdateNotInstalledCv1Message('2.0.10'),
+        "The update didn't install. Your pendant still works on its current firmware (2.0.10). "
+        'Please contact support rather than retrying the update.');
+    expect(find.text(en.firmwareUpdateNotInstalledCv1Message('2.0.10')), findsOneWidget);
+    expect(find.text(en.firmwareUpdateNotInstalledMessage('2.0.10')), findsNothing);
+    await capture(tester, '003-mobile-ios-firmware-cv1-not-installed.png');
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  for (final (model, name) in [('Omi DevKit 2', 'Omi DevKit 2'), ('Omi Glass', 'Omi Glass'), ('Neo', 'Omi Neo')]) {
+    testWidgets('$model not_installed keeps the try-again copy', (tester) async {
+      await pumpPage(tester, _DeviceProvider(batteryLevel: 80), modelNumber: model, deviceName: name);
+      await showNotInstalled(tester);
+      expect(find.text(en.firmwareUpdateNotInstalledMessage('2.0.10')), findsOneWidget);
+      expect(find.text(en.firmwareUpdateNotInstalledCv1Message('2.0.10')), findsNothing);
       debugDefaultTargetPlatformOverride = null;
     });
   }
@@ -211,56 +247,26 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  // #25375: a lookup that cannot confirm the latest firmware must not render the green
-  // "up to date" status, which reads as a successful check.
-  testWidgets('failed firmware lookup is not reported as up to date', (tester) async {
-    _lookupStatus = 503;
-    await pumpPage(tester, _DeviceProvider(batteryLevel: 80), expectOffer: false);
-    expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
-    expect(find.text(en.firmwareUpdateCheckUnavailable), findsOneWidget);
-    await capture(tester, '001-mobile-ios-firmware-check-unavailable.png');
-    debugDefaultTargetPlatformOverride = null;
-  });
-
-  // The inconclusive row tells the user to try again, so the page must offer a retry that reruns the
-  // lookup instead of forcing them to leave and reopen it once connectivity recovers.
-  testWidgets('retry after a failed firmware lookup reruns the check', (tester) async {
-    _lookupStatus = 503;
-    await pumpPage(tester, _DeviceProvider(batteryLevel: 80), expectOffer: false);
-    expect(find.text(en.firmwareUpdateCheckUnavailable), findsOneWidget);
-    final retry = find.byKey(const Key('firmware_update_check_retry'));
-    expect(retry, findsOneWidget);
-
-    _lookupStatus = 200;
-    await tester.ensureVisible(retry);
-    await tester.tap(retry);
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(find.text(en.firmwareUpdateCheckUnavailable), findsNothing);
-    expect(find.byKey(const Key('firmware_update_start')), findsOneWidget);
-    expect(find.byKey(const Key('firmware_update_check_retry')), findsNothing);
-    debugDefaultTargetPlatformOverride = null;
-  });
-
-  testWidgets('retry after a failed stable lookup during rollback reruns the check', (tester) async {
-    _lookupStatus = 503;
-    await pumpPage(tester, _DeviceProvider(batteryLevel: 80), rollback: true, expectOffer: false);
-    expect(find.text(en.noStableFirmwareFound), findsOneWidget);
-
-    _lookupStatus = 200;
-    final retry = find.byKey(const Key('firmware_update_check_retry'));
-    await tester.ensureVisible(retry);
-    await tester.tap(retry);
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(find.text(en.noStableFirmwareFound), findsNothing);
-    expect(find.byKey(const Key('firmware_update_start')), findsOneWidget);
-    debugDefaultTargetPlatformOverride = null;
-  });
-
+  // #25375: an answered lookup whose release can't be used is as inconclusive as no answer, so it gets
+  // the failed-check state with Try Again (#25757), never the green "up to date" status.
   for (final (name, body) in [
     ('draft release', <String, dynamic>{'draft': true}),
     ('missing minimum version', <String, dynamic>{'min_version': null}),
+    ('unparsable latest version', <String, dynamic>{'version': 'not-a-version'}),
+  ]) {
+    testWidgets('$name shows the failed check, not up to date', (tester) async {
+      _lookupBody = body;
+      await pumpPage(tester, _DeviceProvider(batteryLevel: 80), expectOffer: false);
+      expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
+      expect(find.byKey(const Key('firmware_check_failed')), findsOneWidget);
+      expect(find.text(en.firmwareCheckFailed), findsOneWidget);
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
+  // A usable release that can't be offered (device below its minimum, or a newer app needed) is not
+  // "up to date" either.
+  for (final (name, body) in [
     ('below minimum version', <String, dynamic>{'min_version': '2.5.0'}),
     ('newer app required', <String, dynamic>{'min_app_version': '99.0.0', 'min_app_version_code': '999999'}),
   ]) {
@@ -268,22 +274,23 @@ void main() {
       _lookupBody = body;
       await pumpPage(tester, _DeviceProvider(batteryLevel: 80), expectOffer: false);
       expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
+      expect(find.byKey(const Key('firmware_update_check_not_confirmed')), findsOneWidget);
       expect(find.text(en.firmwareUpdateCheckUnavailable), findsOneWidget);
+      if (name == 'below minimum version') await capture(tester, '001-mobile-ios-firmware-below-minimum.png');
       debugDefaultTargetPlatformOverride = null;
     });
   }
 
   // A non-empty but unparsable revision (e.g. the 'Unknown' sentinel after a failed BLE read) is a
-  // device-side failure, so the page must say the version is unknown, not blame connectivity.
+  // device-side failure, so the page must say the version is unknown, not report it as up to date.
   for (final revision in ['Unknown', 'not-a-version']) {
     testWidgets('unparsable firmware revision "$revision" is reported as unknown version', (tester) async {
       await pumpPage(tester, _DeviceProvider(batteryLevel: 80), firmwareVersion: revision, expectOffer: false);
       expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
-      expect(find.text(en.firmwareUpdateCheckUnavailable), findsNothing);
       expect(find.text(en.unableToDetermineFirmwareVersion), findsOneWidget);
-      // Re-running the server lookup cannot fix a revision that failed to read over BLE, so no
-      // in-place retry is offered for this outcome.
-      expect(find.byKey(const Key('firmware_update_check_retry')), findsNothing);
+      // Re-running the server lookup cannot fix a revision that failed to read over BLE, so the
+      // failed-check state and its Try Again are not shown for this outcome.
+      expect(find.byKey(const Key('firmware_check_failed')), findsNothing);
       debugDefaultTargetPlatformOverride = null;
     });
   }
@@ -291,14 +298,14 @@ void main() {
   testWidgets('firmware at the latest version is still reported as up to date', (tester) async {
     await pumpPage(tester, _DeviceProvider(batteryLevel: 80), firmwareVersion: '3.0.1', expectOffer: false);
     expect(find.text(en.yourDeviceIsUpToDate), findsOneWidget);
-    expect(find.text(en.firmwareUpdateCheckUnavailable), findsNothing);
-    expect(find.byKey(const Key('firmware_update_check_retry')), findsNothing);
+    expect(find.byKey(const Key('firmware_update_check_not_confirmed')), findsNothing);
+    expect(find.byKey(const Key('firmware_check_failed')), findsNothing);
     await capture(tester, '002-mobile-ios-firmware-up-to-date.png');
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('failed stable lookup during rollback is not reported as already stable', (tester) async {
-    _lookupStatus = 503;
+  testWidgets('rollback with no usable stable version is not reported as already stable', (tester) async {
+    _lookupBody = <String, dynamic>{'version': null};
     await pumpPage(tester, _DeviceProvider(batteryLevel: 80), rollback: true, expectOffer: false);
     expect(find.text(en.alreadyOnStableFirmware), findsNothing);
     expect(find.text(en.noStableFirmwareFound), findsOneWidget);
@@ -595,7 +602,6 @@ class _FirmwareRequest implements HttpClientRequest {
       _onDownload?.call();
       return _FirmwareResponse([1, 2, 3]);
     }
-    if (_lookupStatus != 200) return _FirmwareResponse(utf8.encode('{"detail": "unavailable"}'), _lookupStatus);
     return _FirmwareResponse(utf8.encode(jsonEncode({
       'version': '3.0.1',
       'min_version': '2.0.0',
@@ -614,10 +620,10 @@ class _FirmwareRequest implements HttpClientRequest {
 }
 
 class _FirmwareResponse extends Stream<List<int>> implements HttpClientResponse {
-  _FirmwareResponse(this._body, [this.statusCode = 200]);
+  _FirmwareResponse(this._body);
   final List<int> _body;
   @override
-  final int statusCode;
+  int get statusCode => 200;
   @override
   int get contentLength => _body.length;
   @override

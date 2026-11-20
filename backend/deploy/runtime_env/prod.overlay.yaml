@@ -48,14 +48,6 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
-        OMI_DEPLOYMENT: {value: 'prod', category: config}
-        FIRESTORE_DATABASE_ID: {value: '(default)', category: config}
-        JOBSTORE_PG_HOST: {value: '172.25.29.2', category: config}
-        JOBSTORE_PG_DATABASE: {value: 'jobstore_prod', category: config}
-        JOBSTORE_PG_USER: {value: 'backend-listen-runtime@based-hardware.iam', category: config}
-        JOBSTORE_SHADOW_NAMESPACES: {value: 'batch_pipeline_prod', category: config}
-        JOBSTORE_PRODUCTION_MIRROR: {value: 'off', category: config}
-        BATCH_JOBSTORE_MODE: {value: 'firestore', category: config}
         # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
         # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
         UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -623,14 +615,6 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
-          OMI_DEPLOYMENT: {value: 'prod', category: config}
-          FIRESTORE_DATABASE_ID: {value: '(default)', category: config}
-          JOBSTORE_PG_HOST: {value: '172.25.29.2', category: config}
-          JOBSTORE_PG_DATABASE: {value: 'jobstore_prod', category: config}
-          JOBSTORE_PG_USER: {value: 'backend-runtime@based-hardware.iam', category: config}
-          JOBSTORE_SHADOW_NAMESPACES: {value: 'batch_pipeline_prod', category: config}
-          JOBSTORE_PRODUCTION_MIRROR: {value: 'off', category: config}
-          BATCH_JOBSTORE_MODE: {value: 'firestore', category: config}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1030,14 +1014,6 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
-          OMI_DEPLOYMENT: {value: 'prod', category: config}
-          FIRESTORE_DATABASE_ID: {value: '(default)', category: config}
-          JOBSTORE_PG_HOST: {value: '172.25.29.2', category: config}
-          JOBSTORE_PG_DATABASE: {value: 'jobstore_prod', category: config}
-          JOBSTORE_PG_USER: {value: 'backend-runtime@based-hardware.iam', category: config}
-          JOBSTORE_SHADOW_NAMESPACES: {value: 'batch_pipeline_prod', category: config}
-          JOBSTORE_PRODUCTION_MIRROR: {value: 'off', category: config}
-          BATCH_JOBSTORE_MODE: {value: 'firestore', category: config}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1477,14 +1453,6 @@ overlay:
         # (SCA-2283).
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
-          OMI_DEPLOYMENT: {value: 'prod', category: config}
-          FIRESTORE_DATABASE_ID: {value: '(default)', category: config}
-          JOBSTORE_PG_HOST: {value: '172.25.29.2', category: config}
-          JOBSTORE_PG_DATABASE: {value: 'jobstore_prod', category: config}
-          JOBSTORE_PG_USER: {value: 'backend-runtime@based-hardware.iam', category: config}
-          JOBSTORE_SHADOW_NAMESPACES: {value: 'batch_pipeline_prod', category: config}
-          JOBSTORE_PRODUCTION_MIRROR: {value: 'off', category: config}
-          BATCH_JOBSTORE_MODE: {value: 'firestore', category: config}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1870,17 +1838,6 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
-          OMI_DEPLOYMENT: {value: 'prod', category: config}
-          FIRESTORE_DATABASE_ID: {value: '(default)', category: config}
-          JOBSTORE_PG_HOST: {value: '172.25.29.2', category: config}
-          JOBSTORE_PG_DATABASE: {value: 'jobstore_prod', category: config}
-          JOBSTORE_PG_USER: {value: 'backend-runtime@based-hardware.iam', category: config}
-          JOBSTORE_SHADOW_NAMESPACES: {value: 'batch_pipeline_prod', category: config}
-          JOBSTORE_PRODUCTION_MIRROR: {value: 'off', category: config}
-          BATCH_JOBSTORE_MODE: {value: 'firestore', category: config}
-          # Staged roll (lead2 a392ec): no copy retirement until Release reads back 0010. Re-enable by
-          # deleting this line in a separate config step after that readback. Kill switch: 'off'.
-          JOBSTORE_RETIREMENT_ENABLED: {value: 'off', category: ops_kill}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -2187,6 +2144,35 @@ overlay:
             value: 'true'
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+      # SCA-3120: dedicated projection pump, prod only (never dev, auto-dev or staging).
+      # Deployed only by gcp_backend.yml cloud_run_service=backend-projection-pump through
+      # .github/actions/deploy-projection-pump; `all` keeps the four services above.
+      # Starts from backend-integration's composed contract (env, secrets incl. the
+      # SONIOX_API_KEY that main.py's validate_streaming_stt_env requires, identity,
+      # forbidden_env, --timeout) and overrides only the keys below. Ships dark: both
+      # batch loops off. OMI_PROCESS_ROLE=projection_pump keeps main.py startup to the
+      # pump's set (no FSR reconcilers, messaging or cohort pollers); see config/process_role.py.
+      # Ramp and rollback: docs/listen_pusher_pipeline/changes/2026-11-19-projection-pump-deploy-target.md.
+      backend-projection-pump:
+        derive_from: backend-integration
+        env:
+          # Startup isolation, independent of the pump flag: stopping the pump keeps the
+          # reconcilers off. Never unset here while the service runs (unset = full startup).
+          OMI_PROCESS_ROLE:
+            value: projection_pump
+          # Kill switches stay off on first deploy. Enable the pump on this service only,
+          # never on backend-integration (the selector is service-wide). Rollback: 'false'.
+          BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'false', category: rollout}
+          # Bundle (ii) safe start: one page per tick, 2 s post-work sleep, 8 owner drains.
+          BATCH_PIPELINE_PUMP_SWEEP_PAGES: {value: '1', category: rollout}
+          BATCH_PIPELINE_PUMP_TICK_SECONDS: {value: '2', category: rollout}
+          BATCH_PIPELINE_MAX_OWNER_DRAINS: {value: '8', category: rollout}
+          # Bill this service's Firestore reads to itself, not to backend-integration.
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: backend-projection-pump
+          # Independent language recovery stays on the recovery role (backend-integration) only.
+          BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'false', category: ops_kill}
     jobs:
       notifications-job:
         flags:

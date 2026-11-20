@@ -2,7 +2,7 @@
 
 from enum import StrEnum
 
-from prometheus_client import Counter, Gauge
+from prometheus_client import Counter, Gauge, Histogram
 from config.stt_cap_dispatch import execution_admission_configured as enabled
 from config.stt_cap_dispatch import recovery_cohort_state
 import logging
@@ -11,6 +11,12 @@ AUDIO_SECONDS = Counter(
     'omi_stt_cap_provider_audio_seconds',
     'Provider-accepted or cap-suppressed audio; never the legacy monthly usage counter',
     ['path', 'outcome', 'provider', 'allowance'],
+)
+BATCH_ADMISSION_STAGE_SECONDS = Histogram(
+    'omi_batch_compute_admission_stage_seconds',
+    'Admission substage wall time including executor wait; bounded stages, no identifiers',
+    ['stage'],
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 4, 8),
 )
 CONFIG_ERRORS = Counter('omi_stt_cap_launch_config_errors', 'Invalid subscription launch configuration', ['reason'])
 RECONCILIATION = Counter('omi_stt_cap_recovery_reconciliation', 'Held piece reconciliation transitions', ['outcome'])
@@ -51,6 +57,7 @@ class DispatchPath(StrEnum):
     EMPTY_RETRY = 'sync_empty_retry'
     MULTILINGUAL = 'sync_multilingual'
     BATCH_GPU = 'batch_gpu'
+    BATCH_INTAKE = 'batch_intake'
     BATCH_PROVIDER = 'batch_provider'
     SPEECH_REDRIVE = 'batch_speech_redrive'
     QUARANTINE = 'batch_quarantine'

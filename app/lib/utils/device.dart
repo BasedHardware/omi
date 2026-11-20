@@ -6,11 +6,14 @@ import 'package:version/version.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 
-/// Outcome of a firmware lookup, as far as the firmware update page may claim it.
+/// Outcome of a firmware lookup that got an answer, as far as the firmware update page may claim it.
 ///
-/// [currentVersionUnknown] is a device-side failure: the paired device reported no revision or one that
-/// does not parse (e.g. the `Unknown` sentinel after a failed BLE read), so no lookup can be conclusive.
-enum FirmwareUpdateCheck { updateAvailable, upToDate, notConfirmed, currentVersionUnknown }
+/// [releaseUnavailable]: the answer has no usable release (empty, draft, or a version that does not parse),
+/// so it is as inconclusive as no answer. [notConfirmed]: the release is usable but cannot be offered (the
+/// device is below its minimum version, or it needs a newer app). [currentVersionUnknown] is a device-side
+/// failure: the paired device reported no revision or one that does not parse (e.g. the `Unknown` sentinel
+/// after a failed BLE read), so no lookup can be conclusive.
+enum FirmwareUpdateCheck { updateAvailable, upToDate, releaseUnavailable, notConfirmed, currentVersionUnknown }
 
 class DeviceUtils {
   /// Closed, analysis-safe hardware family used by product telemetry.
@@ -64,15 +67,13 @@ class DeviceUtils {
   }
 
   /// Classifies a firmware lookup. Only [FirmwareUpdateCheck.upToDate] means the lookup confirmed the
-  /// device already runs the latest release; every other outcome without an offer is
-  /// [FirmwareUpdateCheck.notConfirmed] (failed or empty lookup, draft or unparsable release metadata,
-  /// a device below the release's minimum version, or a release that needs a newer app), except an empty or
-  /// unparsable device revision, which is [FirmwareUpdateCheck.currentVersionUnknown] whatever the lookup says.
+  /// device already runs the latest release. An empty or unparsable device revision is
+  /// [FirmwareUpdateCheck.currentVersionUnknown] whatever the lookup says.
   static Future<({FirmwareUpdateCheck status, String message, String version})> checkFirmwareUpdate({
     required String currentFirmware,
     required Map latestFirmwareDetails,
   }) async {
-    const notConfirmed = FirmwareUpdateCheck.notConfirmed;
+    const releaseUnavailable = FirmwareUpdateCheck.releaseUnavailable;
     Version? currentVersion = _tryParseVersion(currentFirmware);
     if (currentVersion == null) {
       return (
@@ -82,22 +83,22 @@ class DeviceUtils {
       );
     }
     if (latestFirmwareDetails.isEmpty || latestFirmwareDetails['version'] == null) {
-      return (status: notConfirmed, message: 'Latest Version Not Available', version: '');
+      return (status: releaseUnavailable, message: 'Latest Version Not Available', version: '');
     }
     if (latestFirmwareDetails['draft'] == true) {
-      return (status: notConfirmed, message: 'Latest Version Not Available', version: '');
+      return (status: releaseUnavailable, message: 'Latest Version Not Available', version: '');
     }
 
     String latestVersionStr = latestFirmwareDetails['version'];
     Version? latestVersion = _tryParseVersion(latestVersionStr);
     Version? minVersion = _tryParseVersion(latestFirmwareDetails['min_version']);
     if (latestVersion == null || minVersion == null) {
-      return (status: notConfirmed, message: 'Latest Version Not Available', version: '');
+      return (status: releaseUnavailable, message: 'Latest Version Not Available', version: '');
     }
 
     if (currentVersion < minVersion) {
       return (
-        status: notConfirmed,
+        status: FirmwareUpdateCheck.notConfirmed,
         message: 'Current firmware is below the minimum version required for this update',
         version: latestVersionStr,
       );
@@ -115,7 +116,7 @@ class DeviceUtils {
             appVersion <= minAppVersion &&
             buildNumber < minBuildNumber) {
           return (
-            status: notConfirmed,
+            status: FirmwareUpdateCheck.notConfirmed,
             message:
                 'The latest version of firmware is not compatible with this version of App (${packageInfo.version}+${packageInfo.buildNumber}). Please update the app from ${Platform.isAndroid ? 'Play Store' : 'App Store'}',
             version: latestVersionStr,

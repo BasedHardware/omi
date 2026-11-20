@@ -44,8 +44,11 @@ def main() -> int:
     parser.add_argument('--region', default=DEFAULT_REGION)
     parser.add_argument('--service', action='append', dest='services')
     parser.add_argument('--repair', action='store_true', help='Apply traffic repair to serving revisions.')
+    parser.add_argument('--release-floor-check', help='Validate the exact revision before moving live traffic.')
     parser.add_argument('--state', help='Offline Cloud Run services JSON list/object for tests.')
     args = parser.parse_args()
+    if args.state and args.release_floor_check:
+        parser.error('--release-floor-check requires live revision discovery and cannot be combined with --state')
 
     services = tuple(args.services or DEFAULT_SERVICES)
     if args.state:
@@ -63,6 +66,7 @@ def main() -> int:
             region=args.region,
             services=services,
             repair=args.repair,
+            release_floor_check=args.release_floor_check,
         )
 
     exit_code = 0
@@ -79,6 +83,7 @@ def repair_live(
     region: str,
     services: tuple[str, ...],
     repair: bool,
+    release_floor_check: str | None = None,
 ) -> list[RepairResult]:
     results: list[RepairResult] = []
     for service in services:
@@ -90,7 +95,14 @@ def repair_live(
             continue
         try:
             results.append(
-                _repair_service_doc(service_doc, service=service, project=project, region=region, repair=repair)
+                _repair_service_doc(
+                    service_doc,
+                    service=service,
+                    project=project,
+                    region=region,
+                    repair=repair,
+                    release_floor_check=release_floor_check,
+                )
             )
         except subprocess.CalledProcessError as exc:
             print(f'ERROR [{service}]: traffic repair failed with exit code {exc.returncode}', file=sys.stderr)
@@ -163,6 +175,7 @@ def _repair_service_doc(
     project: str,
     region: str,
     repair: bool,
+    release_floor_check: str | None = None,
 ) -> RepairResult:
     state = analyze_service_traffic(service_doc, service=service)
     if not state.serving_revision:
@@ -199,6 +212,20 @@ def _repair_service_doc(
             spec_revision=state.spec_revision,
         )
 
+    if release_floor_check:
+        subprocess.run(
+            [
+                sys.executable,
+                release_floor_check,
+                '--revision',
+                state.serving_revision,
+                '--project',
+                project,
+                '--region',
+                region,
+            ],
+            check=True,
+        )
     subprocess.run(command.split(), check=True)
     return RepairResult(
         service=service,

@@ -58,9 +58,7 @@ def set_voice_profile_settings(uid: str, updates: Dict[str, bool], *, firestore_
         raise ValueError(f'Unknown voice profile setting(s): {", ".join(sorted(unknown))}')
     if not updates:
         return
-    update_privacy(
-        uid, {key: bool(value) for key, value in updates.items()}, firestore_client=_client(firestore_client)
-    )
+    update_privacy(uid, {key: bool(value) for key, value in updates.items()}, firestore_client=firestore_client)
 
 
 def _state_ref(uid: str, firestore_client: Any = None) -> Any:

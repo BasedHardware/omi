@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
-from config.conversations_v3 import conversations_v3_enabled
+from config.conversations_v3 import SPEECH_LANDED_FIELD, conversations_v3_enabled
 from database import conversations_v3 as store
 from database.helpers import set_data_protection_level
 from utils.cloud_tasks import enqueue_named_task
@@ -61,6 +61,7 @@ def _mark_resolved(uid, row):
             terminal_no_derived_effects=True,
             v3_pending=True,
             v3_pending_since=datetime.now(timezone.utc),
+            **{SPEECH_LANDED_FIELD: datetime.now(timezone.utc)},
             structured={},
         )
 

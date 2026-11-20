@@ -94,6 +94,11 @@ class WorkItem:
     source_alias_of: str | None = None
     source_conversation_ids: tuple[str, ...] = ()
 
+    @classmethod
+    def from_dict(cls, value: dict) -> 'WorkItem':
+        """Read a stored item envelope, ignoring fields a newer writer added (reader-first rollout)."""
+        return cls(**{key: item for key, item in value.items() if key in cls.__dataclass_fields__})
+
     def to_dict(self, *, include_nulls: bool = False):
         """Preserve old envelope nulls on request; trust is absent unless explicitly set."""
         from dataclasses import asdict

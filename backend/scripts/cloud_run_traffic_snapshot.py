@@ -257,6 +257,7 @@ def restore_snapshot(
     remove_tag: str | None = None,
     delete_missing: bool = False,
     exclude_services: Sequence[str] = (),
+    release_floor_check: Path | None = None,
 ) -> dict[str, Any]:
     """Restore and observe every recorded route, retaining bounded evidence."""
     project = cast(str, snapshot['project'])
@@ -300,6 +301,25 @@ def restore_snapshot(
             'targets': [{'revision': revision, 'percent': percent} for revision, percent in targets],
             'command': ' '.join(command),
         }
+        if release_floor_check:
+            try:
+                for revision, _ in targets:
+                    execute(
+                        [
+                            sys.executable,
+                            str(release_floor_check),
+                            '--revision',
+                            revision,
+                            '--project',
+                            project,
+                            '--region',
+                            region,
+                        ]
+                    )
+            except subprocess.CalledProcessError:
+                result.update({'result': 'failed', 'error': f'backend release floor rejected {revision}'})
+                results[service] = result
+                continue
         try:
             execute(command)
         except subprocess.CalledProcessError as exc:
@@ -383,6 +403,7 @@ def main() -> int:
     restore.add_argument('--remove-tag')
     restore.add_argument('--delete-missing', action='store_true')
     restore.add_argument('--exclude-service', action='append', default=[])
+    restore.add_argument('--release-floor-check', type=Path)
     args = parser.parse_args()
     try:
         if args.command == 'capture':
@@ -401,6 +422,7 @@ def main() -> int:
             remove_tag=args.remove_tag,
             delete_missing=args.delete_missing,
             exclude_services=args.exclude_service,
+            release_floor_check=args.release_floor_check,
         )
         _write_json(args.evidence_path, evidence)
         print(json.dumps(evidence, indent=2, sort_keys=True))
