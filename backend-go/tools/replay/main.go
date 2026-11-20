@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,7 +30,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags.Usage = func() { flags.PrintDefaults() }
 	corpus := flags.String("corpus", "", "JSON corpus file")
 	output := flags.String("output", "", "new JSON report file (created with mode 0600)")
-	python := flags.String("python", "../backend/.venv/bin/python", "backend Python interpreter")
+	backend := flags.String("backend", "", "Python backend directory (detected from the working directory or corpus if omitted)")
+	python := flags.String("python", "", "backend Python interpreter (defaults to the backend virtualenv)")
 	jobd := flags.String("jobd", "", "compiled conformance jobd binary")
 	testKey := flags.String("test-key-file", "", "optional private replay key file")
 	includeValues := flags.Bool("include-values", false, "include full observations in the report")
@@ -44,7 +46,15 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	result, err := invoke(ctx, *python, *corpus, *jobd, *testKey, stderr)
+	input, err := prepareReplay(*backend, *corpus, *output, *testKey, *includeValues)
+	if err != nil {
+		return failure(stderr, err)
+	}
+	interpreter := *python
+	if interpreter == "" {
+		interpreter = filepath.Join(input.backend, ".venv", "bin", "python")
+	}
+	result, err := invoke(ctx, interpreter, *jobd, *testKey, input, stderr)
 	if err != nil {
 		return failure(stderr, err)
 	}
@@ -54,7 +64,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			result.Cases[index].Go = nil
 		}
 	}
-	if err := writeReport(*output, result); err != nil {
+	if err := writeReport(input.reportPath, result); err != nil {
 		return failure(stderr, err)
 	}
 	if err := summarize(stdout, result); err != nil {
@@ -80,8 +90,8 @@ func summarize(stdout io.Writer, result report) error {
 	return err
 }
 
-func invoke(ctx context.Context, python, corpus, jobd, testKey string, stderr io.Writer) (report, error) {
-	args := []string{"-B", "-m", "testing.finalization_replay.driver", corpus, jobd, testKey}
+func invoke(ctx context.Context, python, jobd, testKey string, input replayInput, stderr io.Writer) (report, error) {
+	args := []string{"-B", "-m", "testing.finalization_replay.driver", jobd, testKey}
 	cmd := exec.CommandContext(ctx, python, args...)
 	cmd.Env = []string{
 		"PATH=" + os.Getenv("PATH"),
@@ -89,8 +99,9 @@ func invoke(ctx context.Context, python, corpus, jobd, testKey string, stderr io
 		"TIKTOKEN_CACHE_DIR=" + os.Getenv("TIKTOKEN_CACHE_DIR"),
 		"FIRESTORE_EMULATOR_HOST=" + os.Getenv("FIRESTORE_EMULATOR_HOST"),
 		"TEST_DATABASE_URL=" + os.Getenv("TEST_DATABASE_URL"),
-		"PYTHONPATH=" + filepath.Clean("../backend"),
+		"PYTHONPATH=" + input.backend,
 	}
+	cmd.Stdin = bytes.NewReader(input.corpus)
 	cmd.Stderr = stderr
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	cmd.WaitDelay = 20 * time.Second

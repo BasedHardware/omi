@@ -87,23 +87,36 @@ func TestCompareOnlyExcusesVerifiedBindingsAndClocks(t *testing.T) {
 			Started: start, Finished: start.Add(time.Minute),
 			Document: map[string]any{
 				"finalization_job_id": job,
-				"fanout_key":          fanout,
-				"updated_at":          map[string]any{"$timestamp": stamp.Format(time.RFC3339Nano)},
+
+				"updated_at": map[string]any{"$timestamp": stamp.Format(time.RFC3339Nano)},
 			},
 			Webhooks: []any{map[string]any{"app": "fixture", "idempotency_key": fanout}},
 		}
 	}
 	py := build("python", "python-fanout", start.Add(time.Second))
 	goRun := build("go", "go-fanout", start.Add(2*time.Second))
-	for _, diff := range compareObservations(py, goRun) {
+	doc, ok := goRun.Document.(map[string]any)
+	if !ok {
+		t.Fatal("test observation needs a conversation object")
+	}
+	doc["fanout_key"] = "go-fanout"
+	diffs := compareObservations(py, goRun)
+	fanoutCompared := false
+	for _, diff := range diffs {
+		if diff.Path == "/fanout_key" {
+			fanoutCompared = true
+		}
 		if diff.Reason == "" {
 			t.Fatalf("verified binding and timestamp drift: %v", diff)
 		}
 	}
+	if !fanoutCompared {
+		t.Fatal("Python queue and Go conversation fanout IDs were not compared")
+	}
 	goRun = build("go", "go-fanout", start.Add(time.Hour))
 	goRun.Admitted.Job = "wrong"
 	goRun.Admitted.Fanout = "wrong"
-	diffs := compareObservations(py, goRun)
+	diffs = compareObservations(py, goRun)
 	if len(diffs) < 3 {
 		t.Fatalf("invalid evidence produced no drift: %v", diffs)
 	}

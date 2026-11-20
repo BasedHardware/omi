@@ -40,7 +40,7 @@ def provider_server():
                 body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 path = urlsplit(self.path).path
                 result = self.server.dispatch(path, body, self.headers)
-                status = 200
+                status = 503 if path == f"/receive/{self.server.state.case.get('unavailable_app')}" else 200
             except Exception as error:
                 self.server.errors.append(type(error).__name__)
                 result, status = {'error': {'message': 'unknown replay provider request'}}, 400

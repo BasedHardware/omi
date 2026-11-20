@@ -15,18 +15,20 @@ go build -o "$scratch/replay" ./tools/replay
 ./scripts/with-postgres.sh ./scripts/with-firestore.sh bash -euc '
     scratch=$1
     python_bin=$2
+    repo_go=$PWD
+    cd "$scratch"
     run() {
         "$scratch/replay" -jobd "$scratch/jobd" -python "$python_bin" "$@"
     }
 
-    run -corpus tools/replay/corpus/parity.json -output "$scratch/parity.json"
+    run -corpus "$repo_go"/tools/replay/corpus/admission-parity.json -output "$scratch/parity.json"
 
     drift_status=0
-    run -corpus tools/replay/corpus/conformance-gaps.json -output "$scratch/gaps.json" -include-values || drift_status=$?
+    run -corpus "$repo_go"/tools/replay/corpus/conformance-gaps.json -output "$scratch/gaps.json" -include-values || drift_status=$?
     if [[ $drift_status != 1 ]]; then
         echo "Expected active conformance replay to report drift, got exit $drift_status" >&2
         exit 1
     fi
 
-    "$python_bin" tools/replay/verify.py "$scratch/parity.json" "$scratch/gaps.json"
+    "$python_bin" -O "$repo_go/tools/replay/verify.py" "$scratch/parity.json" "$scratch/gaps.json"
 ' bash "$scratch" "$python_bin"

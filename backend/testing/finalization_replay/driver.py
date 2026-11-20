@@ -124,11 +124,11 @@ def _terminate(_signum, _frame):
 def main():
     signal.signal(signal.SIGTERM, _terminate)
     emulator_endpoint()
-    corpus, jobd, key_file = sys.argv[1:]
+    jobd, key_file = sys.argv[1:]
     key = private_text(Path(key_file)).rstrip('\r\n') if key_file else DEFAULT_TEST_KEY
     if len(key.encode()) < 32 or '\x00' in key:
         raise ValueError('replay key must be at least 32 bytes')
-    cases = read_corpus(Path(corpus))
+    cases = read_corpus(sys.stdin.buffer.read(16 * 1024 * 1024 + 1))
     logging.disable(logging.CRITICAL)
     with open(os.devnull, 'w', encoding='utf-8') as sink, redirect_stdout(sink), redirect_stderr(sink):
         result = replay(cases, Path(jobd).resolve(strict=True), os.environ['TEST_DATABASE_URL'], key)

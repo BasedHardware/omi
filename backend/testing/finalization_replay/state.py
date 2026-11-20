@@ -135,8 +135,8 @@ class CaseState:
             'webhooks': sorted(self.webhooks, key=lambda delivery: delivery['app']),
         }
 
-    def vector(self, overview):
-        self.effects['conversation_vector'] = {'overview': overview}
+    def vector(self, conversation_id):
+        self.effects.setdefault('conversation_vector', []).append({'conversation_id': conversation_id})
 
     def memory(self, memory_id, content, protection):
         self.user.collection('replay_memories').document(memory_id).set(

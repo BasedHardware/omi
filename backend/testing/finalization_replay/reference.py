@@ -22,6 +22,7 @@ async def _finalize(state, intent, claim, trigger):
         dispatch_generation=generation,
         lease_epoch=epoch,
         trigger=trigger,
+        final_attempt=state.case.get('final_attempt', False),
     )
     if disposition.value == 'fenced':
         if not lifecycle.complete_fenced_finalization(job_id, generation, epoch):
@@ -29,7 +30,6 @@ async def _finalize(state, intent, claim, trigger):
     elif disposition.value in {'completed', 'discarded'}:
         if not jobs.mark_finalization_completed(job_id, generation, epoch):
             raise RuntimeError('Python completion acknowledgement refused')
-        return 'completed'
     return disposition.value
 
 
@@ -119,6 +119,10 @@ class VectorReceiver:
 
     def upsert(self, *, vectors, namespace, **_kwargs):
         for record in vectors:
-            kind = 'conversation_vector' if record['id'] == f'{self.state.uid}-{self.state.cid}' else 'other_vectors'
+            if record['id'] == f'{self.state.uid}-{self.state.cid}':
+                self.state.vector(self.state.cid)
+                kind = 'python_vector_payload'
+            else:
+                kind = 'other_vectors'
             self.state.effects.setdefault(kind, []).append({'namespace': namespace, 'record': record})
         return {'upserted_count': len(vectors)}, 200, {'x-pinecone-request-lsn': '1'}

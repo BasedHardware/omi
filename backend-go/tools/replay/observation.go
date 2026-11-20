@@ -11,7 +11,8 @@ import (
 func compareObservations(python, goRun *observation) []difference {
 	diffs := []difference{}
 	compareValue(&diffs, "/status", python.Status, goRun.Status)
-	compareValue(&diffs, "/conversation", python.Document, goRun.Document)
+	compareValue(&diffs, "/conversation", python.Document, goConversation(goRun, python))
+	compareFanout(&diffs, python, goRun)
 	compareObject(&diffs, "/derived_documents", python.Derived, goRun.Derived)
 	compareObject(&diffs, "/effects", python.Effects, goRun.Effects)
 	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
@@ -20,7 +21,9 @@ func compareObservations(python, goRun *observation) []difference {
 		diff := &diffs[i]
 		switch diff.Kind {
 		case "different_value":
-			diff.Reason = allowedDifference(diff.Path, python, goRun)
+			if diff.Reason == "" {
+				diff.Reason = allowedDifference(diff.Path, python, goRun)
+			}
 		case "missing_in_go":
 			if unported(diff.Path) {
 				diff.Kind = "unported"
@@ -35,6 +38,43 @@ func compareObservations(python, goRun *observation) []difference {
 		compareValue(&diffs, "/admitted/own_key", python.Admitted.OwnKey, goRun.Admitted.OwnKey)
 	}
 	return diffs
+}
+
+// The Python conversation has no fanout key field. Its queue document owns that
+// binding. Compare Go's stored conversation key to the Python queue key separately.
+func goConversation(goRun, python *observation) any {
+	doc, ok := goRun.Document.(map[string]any)
+	if !ok || python.QueueFanout == "" || documentField(python, "fanout_key") != nil {
+		return goRun.Document
+	}
+	fields := make(map[string]any, len(doc))
+	for name, value := range doc {
+		if name != "fanout_key" {
+			fields[name] = value
+		}
+	}
+	return fields
+}
+
+func compareFanout(diffs *[]difference, python, goRun *observation) {
+	if python.Admitted == nil || goRun.Admitted == nil {
+		return
+	}
+	path := "/fanout_key"
+	actual, ok := documentField(goRun, "fanout_key").(string)
+	if !ok || actual == "" {
+		addDifference(diffs, path, "missing_in_go")
+		return
+	}
+	if python.QueueFanout == "" || python.QueueFanout != python.Admitted.Fanout ||
+		actual != goRun.Admitted.Fanout || actual != goRun.QueueFanout {
+		addDifference(diffs, path, "invalid_binding")
+	} else if python.QueueFanout != actual {
+		*diffs = append(*diffs, difference{
+			Path: path, Kind: "different_value",
+			Reason: "Python job and Go conversation fanout keys independently match their admitted bindings",
+		})
+	}
 }
 
 func countProviderCalls(calls []string) map[string]any {
@@ -101,12 +141,6 @@ func allowedDifference(path string, python, goRun *observation) string {
 		if timestampInWindow(python) && timestampInWindow(goRun) {
 			return "both writes occurred within their observed replay windows"
 		}
-	case "/conversation/fanout_key":
-		if python.Admitted != nil && goRun.Admitted != nil && python.Admitted.Fanout != "" && goRun.Admitted.Fanout != "" &&
-			documentField(python, "fanout_key") == python.Admitted.Fanout &&
-			documentField(goRun, "fanout_key") == goRun.Admitted.Fanout {
-			return "both stored fanout identifiers bind to their own admitted job"
-		}
 	case "/conversation/finalization_job_id":
 		if python.Admitted != nil && goRun.Admitted != nil && python.Admitted.Job != "" && goRun.Admitted.Job != "" &&
 			documentField(python, "finalization_job_id") == python.Admitted.Job &&
@@ -151,7 +185,7 @@ func webhookMatches(path string, run *observation) bool {
 }
 
 func unported(path string) bool {
-	if path == "/conversation/apps_results" || path == "/conversation/folder_id" || path == "/webhooks/developer-created" || path == "/effects/other_vectors" {
+	if path == "/conversation/apps_results" || path == "/conversation/folder_id" || path == "/webhooks/developer-created" || path == "/effects/other_vectors" || path == "/effects/python_vector_payload" {
 		return true
 	}
 	for _, collection := range []string{"folders", "memory_items", "memory_evidence", "memory_commits", "memory_operations",

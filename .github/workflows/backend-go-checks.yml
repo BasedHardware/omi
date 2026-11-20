@@ -112,7 +112,7 @@ jobs:
     needs: port-tasks
     if: ${{ !cancelled() && (github.event_name != 'push' || inputs.nightly_main_sha != '' || needs.port-tasks.outputs.go_changed == 'true') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: backend-go

@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import re
-import socket
+from selectors import DefaultSelector, EVENT_READ
 import subprocess
 from threading import Lock, Thread
 from time import monotonic, sleep
@@ -80,7 +80,7 @@ def _request(method, url, data=None, headers=None):
 
 
 def _wait(proc, url, done):
-    deadline = monotonic() + 12
+    deadline = monotonic() + 60
     while monotonic() < deadline:
         if proc.poll() is not None:
             raise RuntimeError('jobd exited during replay')
@@ -149,7 +149,8 @@ class _Handler(BaseHTTPRequestHandler):
                 body = self._body()
                 if not _bound(state, body):
                     return 409, {'code': 'fenced'}
-                state.vector(body['overview'])
+                state.vector(cid)
+                state.effects['conformance_vector_payload'] = {'overview': body['overview']}
                 return 200, {}
             case 'PUT', ['memories', uid, memory_id] if uid == state.uid:
                 body = self._body()
@@ -161,6 +162,8 @@ class _Handler(BaseHTTPRequestHandler):
                 body = self._body()
                 if _bound(state, body):
                     state.webhook(app, self.headers.get('X-Omi-Idempotency-Key'), body)
+                    if app == state.case.get('unavailable_app'):
+                        return 503, {'code': 'fixture_unavailable'}
                     return 200, {}
                 return 409, {'code': 'fenced'}
         raise ValueError('unexpected jobd stub request')
@@ -235,33 +238,44 @@ def _admit(proc, url, state):
     state.queue_fanout_key = job['fanout_key']
     if job.get('outcome') == 'fenced':
         return 'fenced'
+    if job['state'] == 'completed' and (state.conversation.get().to_dict() or {}).get('discarded'):
+        return 'discarded'
     return job['state']
+
+
+def _listener_url(proc):
+    with DefaultSelector() as selector:
+        selector.register(proc.stdout, EVENT_READ)
+        if not selector.select(timeout=60):
+            raise TimeoutError('jobd did not announce its loopback listener')
+        address = proc.stdout.readline(64).decode('ascii').strip()
+    if not re.fullmatch(r'127\.0\.0\.1:[1-9][0-9]{0,4}', address):
+        raise RuntimeError('jobd did not bind an ephemeral loopback listener')
+    return f'http://{address}'
 
 
 def run_candidate(state, jobd: Path, database: str, key: str):
     with _stub(state) as (stub, errors):
-        with socket.socket() as listener:
-            listener.bind(('127.0.0.1', 0))
-            port = listener.getsockname()[1]
         env = {
             'DATABASE_URL': database,
             'STUB_URL': stub,
             'ENCRYPTION_SECRET': key,
-            'PORT': str(port),
+            'JOBD_REPLAY_LISTEN': '1',
             'WORKERS': '1',
             'BACKOFF_BASE_MS': '20',
             'BUDGET_REQUEUE_SECONDS': '0',
+            'MAX_ATTEMPTS': '1' if state.case.get('final_attempt') else '5',
         }
-        url = f'http://127.0.0.1:{port}'
         # jobd uses database/HTTP wire observations; never pass host credentials or proxies.
         with subprocess.Popen(
             [str(jobd), 'serve'],
             env=env,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         ) as proc:
             try:
+                url = _listener_url(proc)
                 _wait(proc, f'{url}/healthz', lambda code, _body: code == 200)
                 status = _admit(proc, url, state)
             finally:

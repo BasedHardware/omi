@@ -106,6 +106,22 @@
           }
         ]
       }
+    },
+    {
+      "name": "last-attempt-webhook",
+      "final_attempt": true,
+      "apps": [
+        "unavailable-fixture"
+      ],
+      "unavailable_app": "unavailable-fixture",
+      "recording": {
+        "duration_s": 61,
+        "segments": [
+          {
+            "text": "This synthetic recording tests the last delivery attempt. We reviewed both agendas, finished the worksheet, and agreed to post the test report once everyone has confirmed the final schedule."
+          }
+        ]
+      }
     }
   ]
 }

@@ -13,10 +13,12 @@ worker's webhook, vector and memory operations.
 
 The runner compares disposition, every stored conversation field, changed derived
 documents, vendor effects, provider call counts by lane, and webhook deliveries by destination and delivery order.
+Comparison covers persistent and outbound effects. Redis cache and suppression keys are outside this replay contract.
 Both observations must supply JSON objects for derived documents and vendor effects. Empty objects are valid.
 Object comparison distinguishes missing fields from nulls. The report uses JSON Pointer
 paths and gives a reason for each allowed difference. Generated job and fanout IDs
-must agree with the corresponding side's admission and stored binding. Changed write
+must agree with the corresponding side's admission and stored binding. The
+fanout comparison pairs the Python queue document with the Go conversation. Changed write
 timestamps must land inside the corresponding side's execution window. Python-only
 effects such as canonical memory documents, app results, folders, tasks, goals, and
 the developer-created webhook appear as `unported` when missing in Go. They still
@@ -53,12 +55,14 @@ go build -o "$work/replay" ./tools/replay
 The tool prints one summary line and exits **0** for parity, **1** for unexplained
 differences, and **2** for a setup, execution, or report error. It creates a new
 mode-0600 JSON file and refuses to overwrite a report. By default it reports paths,
-refusals and counts. Use `-include-values` to include the original observations when
-working with synthetic data. Keep private corpora and reports outside the repository.
-Paths can include fixture document IDs even when values are omitted.
+refusals and counts. The CLI rejects report locations inside Git worktrees.
+`-include-values` is available only for the reviewed synthetic fixtures pinned by digest.
+The CLI rejects changed or unreviewed in-repo corpora. Paths can include fixture document
+IDs even when values are omitted. Pass `-backend /absolute/path/to/omi/backend` when running
+from outside the checkout with an external corpus.
 
-Use an isolated developer or CI machine for this command. The conformance binary
-binds an ephemeral port on all interfaces and is intended only for local test use.
+The replay launches the conformance binary on an OS-assigned loopback port and reads
+the bound address from the process, avoiding a separate port probe.
 The replay driver validates both database endpoints as loopback and clears inherited
 credentials, vendor endpoints and proxy settings before launching either path. It
 cleans up both emulator projects and drops its disposable Postgres database.
@@ -93,10 +97,15 @@ fixture live-session key). Use `responses` to supply recorded, synthetic gateway
 bodies keyed by model lane (for example `conv-structure` or `memory-l1`). The conformance
 adapter projects title and overview from notes and text from memory candidates. The report
 can show response paths and effects that only Python currently supports.
-Add consented captures as private corpus files with stored transcript fields already
-re-encrypted under a replay-only key. Pass the owned mode-0600 key file as
-`-test-key-file`. Both workers use that key. The oracle does not fetch recordings or
-read production keys.
+Both vector receivers record the common ordered conversation-write identities. They also
+retain their different transport payloads separately as drift.
+Set `final_attempt` and name an `unavailable_app` from `apps` to exercise the
+terminal delivery path with a synthetic HTTP 503.
+Review new in-repo fixtures as synthetic, including decoded encrypted fixture contents,
+before updating their SHA-256 pins in `paths.go`. Keep consented recordings, re-encrypted
+under a replay-only key, in scratch storage outside Git. Pass an owned mode-0600 key file
+outside Git as `-test-key-file` for that mode. Private runs require reports without values.
+The oracle does not fetch recordings or read production keys.
 
 ## Checks and current coverage
 
@@ -106,10 +115,13 @@ read production keys.
 | Object, array, scalar and null mismatches produce a report | `TestCompareDifferencesWithIncompatibleJSONShapes` |
 | Job IDs and fanout keys must match admission, and generated timestamps must be inside the replay window | `TestCompareOnlyExcusesVerifiedBindingsAndClocks` |
 | Missing evidence or driver errors cannot yield a pass | `TestCompareRejectsInvalidEvidence`, `TestCompareCountsExecutionErrors` |
-| Ten completed, failed, discarded and missing-row admissions across both paths produce zero unexplained differences | `test.sh` with `corpus/parity.json` |
+| Ten completed, failed, discarded and missing-row admissions across both paths produce zero unexplained differences | `test.sh` with `corpus/admission-parity.json` |
 | Active workers persist notes, reach the memory and vector sinks, deliver webhooks and resume a seeded own-key job. Python also runs its canonical memory, app, task, folder, goal and developer-webhook code. Compressed and enhanced transcripts complete, and empty input exposes disposition drift | `test.sh` with `corpus/conformance-gaps.json` |
 
-The active corpus is a detection test for the interim conformance port. It intentionally
-exits 1. Current differences include Go's conformance payload, Python-only Home and
-episode projection fields, and empty-input disposition. Updating the candidate to lane
-6 requires swapping the conformance launcher and wire shim for the real worker.
+The zero-drift corpus is an admission-refusal gate. The active-finalizer corpus
+intentionally exits 1 against the interim Go port. Its regression gate pins the exact
+multiset of unexplained paths and difference kinds per case in `expected-drift.json`,
+canonicalizing only documented clock bucket and generated document IDs. To inspect a
+change, generate a fresh reviewed synthetic report outside Git and use
+`python3 tools/replay/verify.py --print-drift-signatures REPORT` after reviewing its
+unexplained paths. Active finalization parity must be measured with the lane 6 worker.

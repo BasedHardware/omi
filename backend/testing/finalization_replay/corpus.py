@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 from datetime import datetime, timedelta, timezone
 import json
-from pathlib import Path
 import re
 
 DEFAULT_TEST_KEY = 'replay-harness-synthetic-encryption-key-0000'
@@ -60,6 +59,8 @@ def _validate_case(case, seen):
         'repeat',
         'own_key',
         'responses',
+        'final_attempt',
+        'unavailable_app',
     }
     if not isinstance(case, dict) or set(case) - fields:
         raise ValueError('unknown replay case fields')
@@ -88,7 +89,9 @@ def _validate_case(case, seen):
         raise ValueError('invalid synthetic app identifier')
     if len(set(case.get('apps', []))) != len(case.get('apps', [])):
         raise ValueError('duplicate synthetic app identifier')
-    if any(type(case.get(field, False)) is not bool for field in ('repeat', 'own_key')):
+    if 'unavailable_app' in case and case['unavailable_app'] not in case.get('apps', []):
+        raise ValueError('unavailable_app must name a seeded app')
+    if any(type(case.get(field, False)) is not bool for field in ('repeat', 'own_key', 'final_attempt')):
         raise ValueError('expected a boolean')
     if 'notes' in case and (
         not isinstance(case['notes'], dict)
@@ -112,10 +115,10 @@ def _validate_case(case, seen):
         raise ValueError('invalid synthetic recording duration')
 
 
-def read_corpus(path: Path) -> list[dict]:
-    if path.stat().st_size > 16 * 1024 * 1024:
+def read_corpus(payload: bytes) -> list[dict]:
+    if len(payload) > 16 * 1024 * 1024:
         raise ValueError('replay corpus exceeds 16 MiB')
-    corpus = json.loads(path.read_text(encoding='utf-8'))
+    corpus = json.loads(payload.decode('utf-8'))
     if not isinstance(corpus, dict) or set(corpus) != {'version', 'cases'} or type(corpus['version']) is not int:
         raise ValueError('expected a versioned corpus')
     if corpus['version'] != 1 or not isinstance(corpus['cases'], list) or not corpus['cases']:
