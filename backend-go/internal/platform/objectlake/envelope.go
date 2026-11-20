@@ -91,7 +91,7 @@ func publicSegments(plain []byte) ([]json.RawMessage, error) {
 		if text := fields["text"]; len(text) == 0 || text[0] != '"' {
 			return nil, ErrCorrupt
 		}
-		for _, name := range []string{"recurring_voice_id", "speaker_grouping_internal", "provider_speaker", "speaker_grouping_shadow", "speaker_grouping_shadow_expires_at"} {
+		for _, name := range []string{"recurring_voice_id", "speaker_grouping_internal", "provider_speaker", "speaker_grouping_shadow", "speaker_grouping_shadow_expires_at", "voice_candidates"} {
 			delete(fields, name)
 		}
 		segment, err := json.Marshal(fields)

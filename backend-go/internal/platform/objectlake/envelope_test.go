@@ -61,6 +61,16 @@ func TestPythonEnvelopes(t *testing.T) {
 	}
 }
 
+func TestPublicSegmentsStripIdentitySuggestions(t *testing.T) {
+	got, err := publicSegments([]byte(`[{"text":"one","voice_candidates":[{"person_id":"person-1"}]}]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || string(got[0]) != `{"text":"one"}` {
+		t.Fatalf("identity suggestions escaped finalization filtering: %s", got)
+	}
+}
+
 func TestRejectDamagedEnvelope(t *testing.T) {
 	for _, change := range []func(*objectRef, []byte){
 		func(_ *objectRef, b []byte) { b[0]++ }, func(_ *objectRef, b []byte) { b[4]++ },
