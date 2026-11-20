@@ -630,8 +630,8 @@ async def reconcile(
             )
         except Conflict:
             if live:
-                # The owner may have deleted or re-protected a row after its copy was recorded.
-                await run_blocking(db_executor, rederive_store.purge_changed_priors, uid, priors)
+                # Copies of rows this attempt did not write go; a resume records them again.
+                await run_blocking(db_executor, rederive_store.drop_unwritten_priors, uid, run_id, priors)
             raise
         report.update(
             sources=len(eligible),

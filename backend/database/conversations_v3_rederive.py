@@ -74,6 +74,9 @@ def live_row_protection(raw, *, since, until, run_id=None):
         return 'shared'
     if any(raw.get(field) for field in OWNER_EDIT_FIELDS) or summary_edited(raw):
         return 'edited'
+    if raw.get('apps_results'):
+        # App results can be edited by the owner with no marker, and a replan never regenerates them.
+        return 'app_results'
     if raw.get('discarded'):
         return 'discarded'
     # A row this run already wrote (an interrupted multi-batch commit, then resume) owes its notes on
@@ -403,26 +406,22 @@ def undo_group_fits(entries):
     return len(entries) + len(sources) < store.BATCH_MAX_WRITES and size <= UNDO_GROUP_BYTES
 
 
-def purge_changed_priors(uid, entries, *, firestore_client=None):
-    """After a failed commit: empty the copies of rows the owner deleted or re-protected meanwhile."""
+def drop_unwritten_priors(uid, run_id, entries, *, firestore_client=None):
+    """After a failed commit, keep copies only of rows the run wrote (stamped); drop the rest.
+
+    So every undo copy belongs to a row its run stamped, and the deletion and protection paths,
+    which act on stamped rows, always reach it. A resume records the dropped rows again.
+    """
     client = firestore_client or store.get_firestore_client()
     coll = store.user_conversations(client, uid)
-    deleted = client.collection('users').document(uid).collection('deleted_conversations')
-    found = {'deleted': [], 'protection': []}
+    unwritten = []
     for entry in entries:
-        if entry.get('created'):
-            continue
-        if deleted.document(entry['id']).get().exists:
-            found['deleted'].append(entry['id'])
-            continue
         snapshot = coll.document(entry['id']).get()
-        level = (snapshot.to_dict() or {}).get('data_protection_level', 'standard') if snapshot.exists else None
-        if level is not None and level != (entry.get('raw') or {}).get('data_protection_level', 'standard'):
-            found['protection'].append(entry['id'])
-    for reason, ids in found.items():
-        if ids:
-            runs.purge_conversation_priors(uid, ids, reason, firestore_client=client)
-    return sum(len(ids) for ids in found.values())
+        if not snapshot.exists or (snapshot.to_dict() or {}).get('v3_rederive_live_run') != run_id:
+            unwritten.append(entry['id'])
+    if unwritten:
+        runs.drop_priors(uid, run_id, unwritten, firestore_client=client)
+    return len(unwritten)
 
 
 def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):

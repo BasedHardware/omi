@@ -636,39 +636,32 @@ async def test_a_deleted_or_reprotected_conversation_keeps_no_undo_copy(
     assert conversations(strict) == after
 
 
-def test_a_protection_change_empties_undo_copies_of_stamped_rows_before_migrating(monkeypatch):
+def test_a_protection_change_empties_undo_copies_of_rederived_rows_after_migrating(strict, monkeypatch):
+    from unittest.mock import MagicMock
+
+    conversations_db = backfill.conversations_db
+    strict.rows[path('c0')] = {'id': 'c0', 'v3_rederive_live_run': RUN, 'data_protection_level': 'standard'}
+    strict.rows[path('c1')] = {'id': 'c1', 'data_protection_level': 'standard'}
+    strict.rows[path('c2')] = {'id': 'c2', 'v3_rederive_live_run': RUN, 'data_protection_level': 'enhanced'}
+
+    def get_all(refs, field_paths=None):
+        return [SimpleNamespace(exists=True, id=ref.id, reference=ref) for ref in refs]
+
+    monkeypatch.setattr(strict, 'get_all', get_all, raising=False)
+    monkeypatch.setattr(strict, 'batch', MagicMock, raising=False)
+    monkeypatch.setattr(
+        StrictFirestoreCollection, 'select', lambda *args: SimpleNamespace(stream=lambda: []), raising=False
+    )
+    monkeypatch.setattr(conversations_db, 'db', strict)
     calls = []
 
     def purge(uid, ids, reason, **kwargs):
-        calls.append((uid, ids, reason))
-        raise RuntimeError('stop before migrating')
+        calls.append((uid, ids, reason, strict.rows[path(ids[0])]['data_protection_level']))
 
-    stamped = StrictFirestoreSnapshot({'v3_rederive_live_run': RUN})
-    stamped.id = 'c0'
-    plain = StrictFirestoreSnapshot({'data_protection_level': 'standard'})
-    plain.id = 'c1'
-    # Stamped rows the migration skips keep their copies: already at the level, deleted, or shared.
-    skipped = []
-    for cid, extra in (
-        ('c2', {'data_protection_level': 'enhanced'}),
-        ('c3', {'deleted': True}),
-        ('c4', {'visibility': 'shared'}),
-    ):
-        snap = StrictFirestoreSnapshot({'v3_rederive_live_run': RUN, **extra})
-        snap.id = cid
-        skipped.append(snap)
-    client = SimpleNamespace(
-        collection=lambda *a: SimpleNamespace(
-            document=lambda *a: SimpleNamespace(collection=lambda *a: SimpleNamespace(document=lambda cid: cid))
-        ),
-        get_all=lambda refs, field_paths=None: [stamped, plain, *skipped],
-        batch=lambda: None,
-    )
-    monkeypatch.setattr(backfill.conversations_db, 'db', client)
     monkeypatch.setattr(runs, 'purge_conversation_priors', purge)
-    with pytest.raises(RuntimeError, match='stop before migrating'):
-        backfill.conversations_db.migrate_conversations_level_batch(UID, ['c0', 'c1', 'c2', 'c3', 'c4'], 'enhanced')
-    assert calls == [(UID, ['c0'], 'protection')]
+    conversations_db.migrate_conversations_level_batch(UID, ['c0', 'c1', 'c2'], 'enhanced')
+    # Only the re-derived row this migration re-protected, and only after it was re-protected.
+    assert calls == [(UID, ['c0'], 'protection', 'enhanced')]
 
 
 @pytest.mark.asyncio
@@ -733,10 +726,9 @@ async def test_the_run_ledger_counts_live_speech_no_window_claimed(owner, strict
 
 
 @pytest.mark.asyncio
-async def test_a_failed_commit_empties_copies_of_rows_the_owner_changed_meanwhile(owner, strict, monkeypatch):
+async def test_a_failed_commit_keeps_no_copy_of_a_row_it_did_not_write(owner, strict, monkeypatch):
     sources, rows = lunch(count=3)
     owner(*sources, *rows)
-    monkeypatch.setattr(runs, '_live_run_ids', lambda uid, **kw: [RUN])
 
     def commit(*args, **kwargs):
         # The owner deletes one row and re-protects another between the copies and the commit.
@@ -745,12 +737,38 @@ async def test_a_failed_commit_empties_copies_of_rows_the_owner_changed_meanwhil
         raise store.Conflict('source_changed')
 
     monkeypatch.setattr(service, '_commit', commit)
-    # A changed row is a retry, not a block; the copies of what changed are emptied either way.
+    # A changed row is a retry, not a block; every copy the failed attempt recorded goes with it.
     with pytest.raises(store.Conflict, match='source_changed'):
         await rederive()
-    by_id = {e['id']: e for e in priors(strict)}
-    assert by_id['c1'].get('purged') == 'deleted' and by_id['c2'].get('purged') == 'protection'
-    assert 'raw' in by_id['c0'] and 'raw' not in by_id['c1'] and 'raw' not in by_id['c2']
+    assert not priors(strict)
+
+
+@pytest.mark.asyncio
+async def test_a_row_the_owner_deletes_before_its_retirement_fails_the_commit(owner, strict, monkeypatch):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    record = runs.save_priors
+
+    def save_then_delete(uid, run_id, entries, **kwargs):
+        record(uid, run_id, entries, **kwargs)
+        # The delete route records its tombstone first; c1 is about to be retired into c0.
+        strict.rows[('users', UID, 'deleted_conversations', 'c1')] = {'conversation_id': 'c1'}
+
+    monkeypatch.setattr(runs, 'save_priors', save_then_delete)
+    outcome, report = await rederive()
+    assert outcome == 'blocked' and report['blocked_reason'] == 'target_deleted'
+    assert conversations(strict) == before and not priors(strict)
+
+
+@pytest.mark.asyncio
+async def test_a_card_with_app_results_is_left_alone(owner, strict):
+    sources, rows = lunch(count=3)
+    rows[2]['apps_results'] = [{'app_id': 'app', 'content': 'Result'}]
+    owner(*sources, *rows)
+    outcome, report = await rederive()
+    assert outcome == 'committed' and report['protected_app_results'] == 1
+    assert conversations(strict)['c2'] == rows[2]
 
 
 @pytest.mark.asyncio
@@ -987,6 +1005,8 @@ async def test_a_commit_that_fails_midway_resumes_and_undoes_exactly(owner, stri
     # and the survivor does not list them yet, so deleting it now cannot take live rows with it.
     assert all(partial[f'c{i}'] == before[f'c{i}'] for i in range(1, 6))
     assert 'sync_merged_from' not in partial['c0']
+    # Copies are kept only for rows the failed attempt wrote; a resume records the rest again.
+    assert priors(strict) and all(partial[e['id']]['v3_rederive_live_run'] == RUN for e in priors(strict))
     # Undo from the partial state is exact.
     assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
     assert conversations(strict) == before

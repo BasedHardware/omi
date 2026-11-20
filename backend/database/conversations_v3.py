@@ -675,7 +675,7 @@ def commit_projection(
         absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
         if absorbed and merge_donors_have_tasks(uid, absorbed, firestore_client=client, transaction=tx):
             raise Conflict('source_changed')
-        for cid in [*(row['id'] for row in batch_rows), *absorbed]:
+        for cid in [*(row['id'] for row in batch_rows), *absorbed, *(retire if final else ())]:
             tombstone = (
                 client.collection('users')
                 .document(uid)

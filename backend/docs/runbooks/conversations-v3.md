@@ -366,6 +366,9 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     and after a finished undo; never written for a conversation already deleted or once account
     deletion began). When the owner deletes a stamped conversation or changes its protection level,
     its priors in every live run are emptied to a `purged` stub, and that run's undo then refuses.
+    A failed commit drops the copies of rows it did not write (a resume records them again).
+    A capture longer than one partition crosses both partitions' edges: the dry-run reports it as
+    `windows_crossing_edge`; widen `since`/`until` around it or leave it.
     Restores are exact apart from the commit hook's `home_source_version` and
     `home_content_invalidated` stamps.
     `undo --run` takes both builder leases, waits for in-flight notes, then restores each group of

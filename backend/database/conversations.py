@@ -3028,29 +3028,12 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             'transcript_segments_compressed',
             'manual_speaker_assignments',
             'manual_speaker_assignments_compressed',
-            'v3_rederive_live_run',
-            'deleted',
-            'visibility',
         ],
     )
-    doc_snapshots = list(doc_snapshots)
-    # Only rows this migration re-protects (the transaction below skips the rest).
-    stamped = [
-        s.id
-        for s in doc_snapshots
-        if s.exists
-        and (data := s.to_dict() or {}).get('v3_rederive_live_run')
-        and not data.get('deleted')
-        and data.get('visibility') not in ('public', 'shared')
-        and data.get('data_protection_level', 'standard') != target_level
-    ]
-    if stamped:
-        # A live re-derive's undo copies of these rows were stored at the old level; none survive.
-        from database import conversations_v3_backfill_runs
 
-        conversations_v3_backfill_runs.purge_conversation_priors(uid, stamped, 'protection', firestore_client=db)
-
-    late_stamped = set()
+    # Rows a live re-derive stamped when this migration re-protected them (every undo copy of a row
+    # belongs to a run that stamped it); their copies are at the old level and are emptied after.
+    rederived = set()
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
             logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
@@ -3063,8 +3046,8 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                 return False
             if current.get('data_protection_level', 'standard') == target_level:
                 return False
-            if current.get('v3_rederive_live_run') and doc_snapshot.id not in stamped:
-                late_stamped.add(doc_snapshot.id)
+            if current.get('v3_rederive_live_run'):
+                rederived.add(doc_snapshot.id)
             payload = {'data_protection_level': target_level}
             had_match_scores = match_scores.FIELD in current
             if 'transcript_segments' in current and not isinstance(current['transcript_segments'], dict):
@@ -3107,8 +3090,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
         if not run_preloaded_transactional(db, _migrate):
             continue
-        if late_stamped and doc_snapshot.id in late_stamped:
-            # Stamped by a live re-derive after the snapshot above: its copy is at the old level too.
+        if rederived and doc_snapshot.id in rederived:
             from database import conversations_v3_backfill_runs
 
             conversations_v3_backfill_runs.purge_conversation_priors(
