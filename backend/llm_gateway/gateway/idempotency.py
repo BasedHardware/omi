@@ -156,7 +156,11 @@ async def complete(
                 settlement = gateway_settlement_executor.submit(copy_context().run, store.finish, saved)
             except RuntimeError as exc:
                 raise IdempotencyError(503, 'idempotency_store_unavailable') from exc
-            await _storage(asyncio.wrap_future(settlement))
+            settlement.add_done_callback(lambda _: _settlement_slots.release())
+            settled = asyncio.wrap_future(settlement)
+            # If the HTTP waiter leaves, still observe errors on the asyncio wrapper.
+            settled.add_done_callback(lambda done: None if done.cancelled() else done.exception())
+            await _storage(asyncio.shield(settled))
             if saved is None:
                 OUTCOMES.labels('post', 'indeterminate').inc()
             else:
@@ -167,8 +171,6 @@ async def complete(
         finally:
             if settlement is None:
                 _settlement_slots.release()
-            else:
-                settlement.add_done_callback(lambda _: _settlement_slots.release())
     except IdempotencyError as exc:
         return _error(exc, 'post')
 

@@ -659,9 +659,10 @@ and the customer project intentionally differ. This pin applies only to
 keyed storage. The claim and lookup executor admits eight running and eight
 queued transactions per replica. A keyed POST must reserve one of eight separate
 settlement slots before reading the body or creating a claim. Claim and lookup
-contention cannot take those slots. Cancellation releases an unused slot or,
-when settlement has started, releases it once the worker exits. Unkeyed work
-and accounting use their existing pool.'"
+contention cannot take those slots. A canceled HTTP request releases an unused
+slot. Once settlement has been submitted, the worker keeps the slot and can
+commit the result even if the HTTP request is canceled before the worker starts.
+Unkeyed work and accounting use their existing pool.'"
 
 The Helm values accept a gateway-only Kubernetes secret named
 `<stage>-omi-llm-gateway-idempotency-keys` in the gateway namespace. Its optional entries use the same names as the gateway environment settings

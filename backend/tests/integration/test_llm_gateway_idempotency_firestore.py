@@ -416,3 +416,63 @@ def test_schema_property_order_conflicts_but_envelope_order_replays(db, headers,
         )
         assert client.post(POST, json=changed_nested, headers=headers).json()['error']['code'] == 'idempotency_conflict'
     assert len(provider.calls) == 1
+
+
+def test_canceled_post_keeps_queued_settlement_and_recovers_paid_result(db, headers, monkeypatch):
+    import asyncio
+    from concurrent.futures import Future
+    from threading import BoundedSemaphore
+
+    from httpx import ASGITransport, AsyncClient
+
+    provider = FakeChatCompletionProvider()
+    use_providers(monkeypatch, provider)
+    permits = BoundedSemaphore(1)
+    monkeypatch.setattr(idempotency, '_settlement_slots', permits)
+
+    async def exercise():
+        submitted = asyncio.Event()
+        pending = Future()
+        queued_work = None
+
+        def hold_before_start(fn, *args):
+            nonlocal queued_work
+            assert queued_work is None
+            queued_work = (fn, args)
+            submitted.set()
+            return pending
+
+        def run_worker():
+            assert queued_work is not None
+            assert pending.set_running_or_notify_cancel(), 'HTTP cancellation discarded the queued settlement'
+            fn, args = queued_work
+            pending.set_result(fn(*args))
+
+        monkeypatch.setattr(idempotency.gateway_settlement_executor, 'submit', hold_before_start)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url='http://testserver') as client:
+            post = asyncio.create_task(client.post(POST, json=BODY, headers=headers))
+            try:
+                await asyncio.wait_for(submitted.wait(), timeout=10)
+                assert not pending.running()
+                assert len(provider.calls) == 1
+            finally:
+                post.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await post
+            await asyncio.sleep(0)
+            assert not pending.cancelled()
+            assert not permits.acquire(blocking=False)
+            await asyncio.wait_for(asyncio.to_thread(run_worker), timeout=10)
+            assert permits.acquire(blocking=False), 'settlement did not return its permit'
+            permits.release()
+
+            recovered = await client.get(lookup(headers), headers=headers)
+            assert recovered.status_code == 200
+            assert recovered.headers['X-Omi-Idempotency-Key'] == headers['Idempotency-Key']
+            assert recovered.json()['choices'][0]['message']['content']
+            replay = await client.post(POST, json=BODY, headers=headers)
+            assert replay.status_code == 200
+            assert replay.content == recovered.content
+            assert len(provider.calls) == 1
+
+    asyncio.run(exercise())
