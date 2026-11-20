@@ -76,7 +76,11 @@ def sitdown(silence_gap):
 DUPLICATE_OVERLAP_SLACK = timedelta(seconds=2)
 
 
-def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE):
+def group_rids(group):
+    return {line['conversation_id'] for line in group['lines']}
+
+
+def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_on_landing=False):
     lines = []
     seen = []
     for row in sorted(
@@ -163,7 +167,17 @@ def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE):
         continues = not later and any(
             r.get('_v3_page_continues') and r['id'] == group['lines'][-1]['conversation_id'] for r in members
         )
-        age = now - group['end']
+        # Under custom timing, lock age counts from the later of the last speech and when it landed:
+        # an offline batch whose speech is already old must not lock the moment it arrives, or each
+        # later batch appends a fresh card behind it.
+        rids = group_rids(group)
+        landed = [
+            r['v3_speech_landed_at']
+            for r in members
+            if r['id'] in rids and isinstance(r.get('v3_speech_landed_at'), datetime)
+        ]
+        group['settle_from'] = max([group['end'], *landed]) if settle_on_landing else group['end']
+        age = now - group['settle_from']
         group['locked'] = (age >= lock_delay and not continues) or group['manual_end']
         group['finished'] = later or group['locked']
         group['outline_ready'] = group['finished'] or (age >= silence_gap and not continues)

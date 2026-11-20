@@ -89,12 +89,13 @@ def test_outline_contract_and_title_cap():
         outline.parse(json.dumps({'conversations': [entry(first=True)]}), group)
 
 
-def test_two_hour_cap_at_nearest_middle_section():
+def test_two_hour_cap_cuts_after_two_hours_whatever_the_outline_sections():
+    # Live speech and outline revisions must not move a cut that locks the prefix (#25829 review).
     row = recording(segments=[{'text': str(i), 'start': i * 60, 'end': i * 60 + 10} for i in range(180)])
     groups = outline.stretches([row], NOW + timedelta(hours=4))
     windows = planner.windows(groups, [[entry(sections=[{'first_line': 91, 'title': 'Next subject'}])]])
     assert len(windows) == 2
-    assert windows[1]['lines'][0]['start'] == NOW + timedelta(minutes=90)
+    assert windows[1]['lines'][0]['start'] == NOW + timedelta(minutes=120)
     assert all(max(line['end'] for line in w['lines']) - w['lines'][0]['start'] <= timedelta(hours=2) for w in windows)
 
 

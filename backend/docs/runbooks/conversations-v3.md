@@ -148,10 +148,19 @@ A silence gap above 300 seconds also switches on sit-down cutting:
   Media, background, longer dictation and manual-end stretches keep their own
   cards.
 - Each card meets the Home word minimum on its own words, not the stretch's.
-- A stretch over two hours is cut at the last boundary within two hours of its
-  start, not at its middle, so live speech never moves a locked part's edge.
 
 Setting the gap back to 300 seconds turns sit-down cutting off for later passes.
+
+At any timing, a stretch over two hours is cut at the last line that starts
+within two hours of its start, then again from there. The cut ignores the
+outline and does not move as live speech arrives, so a locked part never
+strands lines between an old and a new cut.
+
+Under custom timing (either setting differs from 300), the lock delay counts
+from the later of the stretch's last speech and when that speech landed
+(`v3_speech_landed_at`, stamped by `mark_pending`). A batch of old speech from
+offline sync then waits the lock delay after landing instead of locking on
+arrival. Default timing still counts from the last speech.
 
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product

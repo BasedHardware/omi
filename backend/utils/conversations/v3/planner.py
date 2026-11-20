@@ -27,36 +27,26 @@ def late_rewrite(*, previous_words, new_words, ended_at, now, rewrites):
     )
 
 
-def _capped(lines, sections, *, anchored=False):
-    end = max(line['end'] for line in lines)
-    if end - lines[0]['start'] <= CAP:
-        return [lines]
-    if anchored:
-        return _capped_from_start(lines, sections)
-    middle = lines[0]['start'] + (end - lines[0]['start']) / 2
-    candidates = [i for i in sections if 0 < i < len(lines)] or list(range(1, len(lines)))
-    if not candidates:
-        raise ValueError('single_transcript_segment_exceeds_two_hours')
-    cut = min(candidates, key=lambda i: abs((lines[i]['start'] - middle).total_seconds()))
-    return _capped(lines[:cut], []) + _capped(lines[cut:], [])
+def _capped(lines, sections=()):
+    """Cut a stretch over two hours after the longest prefix that ends within two hours of its start; repeat.
 
-
-def _capped_from_start(lines, sections):
-    """Cut an over-long stretch at the last boundary within two hours of its start, then repeat.
-
-    A middle cut moves every time live speech extends the stretch. Every part but the last locks, so
-    each pass froze a different prefix and the lines between the old and new cut became one-line
-    cards. Anchored at the start, later speech never moves an earlier cut.
+    Every part but the last locks. A cut that moved with later speech (the old middle cut) or with the
+    outline (a topic boundary the first paid outline adds) froze a different prefix on each pass and
+    stranded the lines between cuts as one-line cards. Line starts are append-only for live speech, so
+    this cut stays put. ``sections`` is accepted for callers and ignored on purpose.
     """
     parts, offset = [], 0
-    pending = sorted(i for i in set(sections) if 0 < i < len(lines))
     while max(line['end'] for line in lines[offset:]) - lines[offset]['start'] > CAP:
+        # The longest prefix whose latest end (overlapping turns included) stays within the cap.
         limit = lines[offset]['start'] + CAP
-        inside = [i for i in pending if offset < i and lines[i]['start'] <= limit]
-        inside = inside or [i for i in range(offset + 1, len(lines)) if lines[i]['start'] <= limit]
-        if not inside:
+        cut, latest = None, lines[offset]['end']
+        for i in range(offset + 1, len(lines)):
+            if latest > limit:
+                break
+            cut = i
+            latest = max(latest, lines[i]['end'])
+        if cut is None:
             raise ValueError('single_transcript_segment_exceeds_two_hours')
-        cut = inside[-1]
         parts.append(lines[offset:cut])
         offset = cut
     parts.append(lines[offset:])
@@ -175,7 +165,7 @@ def _cohesive_groups(groups, outlines, sitdown=False) -> Iterator[tuple[dict[str
             for section in entry.get('sections') or []
             if isinstance(section.get('first_line'), int)
         )
-        parts = _capped(group['lines'], cut_points, anchored=sitdown)
+        parts = _capped(group['lines'], cut_points)
         start = 1
         for index, part in enumerate(parts):
             end = start + len(part)
@@ -225,7 +215,7 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
             sections = [
                 s['first_line'] - 1 - begin for s in entry.get('sections', []) if isinstance(s.get('first_line'), int)
             ]
-            capped = _capped(lines, sections, anchored=sitdown)
+            capped = _capped(lines, sections)
             for part_index, part in enumerate(capped):
                 candidate = {
                     **entry,
@@ -242,7 +232,7 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                 }
                 if defer_topic_lock and not group.get('locked', group['finished']) and part_index == len(capped) - 1:
                     candidate['_defer_lock'] = True
-                    candidate['_lock_end'] = group['end']
+                    candidate['_lock_end'] = group.get('settle_from', group['end'])
                 if cohesion:
                     # A sit-down stretch can span two hours of separate cards, so each card meets the Home
                     # word minimum on its own words; a five-minute stretch is judged whole (#25786).

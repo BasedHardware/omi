@@ -129,19 +129,18 @@ def test_entries_naming_different_people_stay_apart():
     assert len(planner.windows(groups, unnamed, cohesion=True, silence_gap=GAP)) == 1  # no names: no evidence
 
 
-def test_long_gap_cap_cuts_stay_put_as_a_live_stretch_grows():
-    # Five hours of talk with no 15-minute silence: one stretch, cut under the two-hour cap. Each pass
-    # sees more speech. Every part but the last locks, so a cut that moves strands lines as fragments.
+def test_cap_cuts_stay_put_as_a_live_stretch_grows():
+    # Five hours of talk with no long silence: one stretch, cut under the two-hour cap. Each pass sees
+    # more speech. Every part but the last locks, so a cut that moves strands lines as fragments. The
+    # cut is stable at the default gap too (#25829 review: the old middle cut moved there as well).
     def cuts(minutes, silence_gap):
         raw = recording([segment(m * 60, 20) for m in range(minutes)])
         groups = outline.stretches([raw], AT + timedelta(minutes=minutes), silence_gap=silence_gap, lock_delay=GAP)
         planned = planner.windows(groups, [[entry(1)]], cohesion=True, silence_gap=silence_gap)
         return [w['lines'][0]['start'] for w in planned[1:]]
 
-    passes = [cuts(minutes, GAP) for minutes in range(150, 300, 7)]
-    for earlier, later in zip(passes, passes[1:]):
-        assert later[: len(earlier)] == earlier
-    assert all(len(p) >= 1 for p in passes)
-    # The default five-minute gap keeps its middle cut (unchanged behaviour), which moves as speech grows.
-    middle = [cuts(minutes, outline.SILENCE) for minutes in (150, 200)]
-    assert middle[0] != middle[1][: len(middle[0])]
+    for silence_gap in (outline.SILENCE, GAP):
+        passes = [cuts(minutes, silence_gap) for minutes in range(150, 300, 7)]
+        for earlier, later in zip(passes, passes[1:]):
+            assert later[: len(earlier)] == earlier
+        assert all(passes)

@@ -230,7 +230,9 @@ async def reconcile(
         silence_seconds, lock_seconds = boundary_seconds(cohesion=cohesion and not derive)
         custom_timing = (silence_seconds, lock_seconds) != (DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS)
         silence_gap, lock_delay = timedelta(seconds=silence_seconds), timedelta(seconds=lock_seconds)
-        groups = outline.stretches(eligible, now, silence_gap=silence_gap, lock_delay=lock_delay)
+        groups = outline.stretches(
+            eligible, now, silence_gap=silence_gap, lock_delay=lock_delay, settle_on_landing=custom_timing
+        )
         if on_open and conversation_id:
             target = existing.get(conversation_id)
             if target is None:
@@ -609,7 +611,8 @@ async def reconcile(
                 # A different minute than the currently executing task avoids
                 # Cloud Tasks' completed-name dedupe swallowing the continuation.
                 delay = lock_delay if group['outline_ready'] else min(silence_gap, lock_delay)
-                await run_blocking(db_executor, enqueue, uid, at=max(group['end'] + delay, now + timedelta(minutes=1)))
+                settle_from = group.get('settle_from', group['end'])
+                await run_blocking(db_executor, enqueue, uid, at=max(settle_from + delay, now + timedelta(minutes=1)))
         for row in rows:
             prior = existing.get(row['id']) or {}
             if (
