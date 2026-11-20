@@ -123,6 +123,8 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
             CALLS=str(log),
             DEPLOY_CONTROL_SCRIPTS='/controls',
             SELECTED_CLOUD_RUN_SERVICES=' '.join(selected(service)),
+            CLOUD_RUN_SERVICE=service,
+            ROLLBACK_REVISION=f'{service}-old',
             GMP_CANDIDATE_TAG='',
             RUNNER_TEMP=str(tmp_path),
         ),
@@ -144,6 +146,12 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
         ):
             seen.add(match[1])
     assert seen == expected, (calls, expected)
+    if name == 'Capture Cloud Run pre-promotion traffic snapshot':
+        assert len(calls) == 1
+        if service == 'all':
+            assert '--expected-serving-revision' not in calls[0]
+        else:
+            assert f'--expected-serving-revision {service}-old' in calls[0]
     if name == 'Shift Cloud Run traffic to validated revisions':
         assert len(calls) == len(expected)
         assert all('--to-revisions=' + s + '-new=100' in c for s, c in zip(selected(service), calls))
@@ -276,6 +284,7 @@ def test_selected_workflow_refuses_lock_or_source_bypass_before_side_effects(tmp
         SERVICE_IMAGES='',
         REQUESTED_BY='fixture',
         RELEASE_SHA='a' * 40,
+        SELECTED_ROLLBACK_REVISION='backend-sync-old',
         SKIP_ELIGIBILITY='false',
         BREAK_GLASS_LOCK='false',
         GITHUB_OUTPUT=str(output),
@@ -284,6 +293,45 @@ def test_selected_workflow_refuses_lock_or_source_bypass_before_side_effects(tmp
     result = subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True, timeout=10)
     assert result.returncode != 0
     assert not output.exists()
+
+
+@pytest.mark.parametrize('inverse', ['', 'backend-old', 'backend-sync-old'])
+def test_selected_workflow_binds_admitted_inverse(tmp_path, inverse):
+    workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
+    jobs = workflow['jobs']
+    script = jobs['validate-production-boundary']['steps'][0]['run']
+    script = script.replace("${{ github.event.inputs.deploy_gateway }}", 'false')
+    output = tmp_path / 'outputs'
+    result = subprocess.run(
+        ['bash', '-c', script],
+        env=dict(
+            os.environ,
+            DEPLOY_ENVIRONMENT='prod',
+            DEPLOY_TARGETS='cloud-run-only',
+            WORKFLOW_MODE='deploy',
+            CLOUD_RUN_SERVICE='backend-sync',
+            SERVICE_IMAGES='',
+            REQUESTED_BY='selection:fixture',
+            RELEASE_SHA='a' * 40,
+            SKIP_ELIGIBILITY='false',
+            BREAK_GLASS_LOCK='false',
+            SELECTED_ROLLBACK_REVISION=inverse,
+            GITHUB_OUTPUT=str(output),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert (result.returncode == 0) == (inverse == 'backend-sync-old'), result.stderr
+    if result.returncode == 0:
+        assert 'rollback_revision=backend-sync-old' in output.read_text().splitlines()
+        assert 'inputs.selected_rollback_revision' in workflow['run-name']
+        assert (
+            'needs.validate-production-boundary.outputs.rollback_revision'
+            in jobs['deploy']['steps'][1]['with']['rollback_revision']
+        )
+    else:
+        assert not output.exists()
 
 
 @pytest.mark.parametrize('routing_enabled', [True, False])

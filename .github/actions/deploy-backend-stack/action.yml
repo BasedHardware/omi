@@ -5,7 +5,7 @@ description: >-
 
 inputs:
   rollback_revision:
-    description: 'Exact retained integration predecessor; explicit integration-only binding must match the serving 200/10 revision'
+    description: 'Exact admitted predecessor for a named deploy or integration canary'
     required: false
     default: 'backend-integration-provfix-off1114'
   post_wrap_guard:
@@ -564,7 +564,11 @@ runs:
               ("${{ inputs.deploy_profile }}" == "auto-dev" ||
                "${{ inputs.environment }}" == "prod" ||
                "${{ inputs.environment }}" == "development") ]]; then
-          PREFLIGHT_ARGS+=(--repair-traffic)
+          # Named deploys must refuse drift against their admitted inverse.
+          # Do not rewrite requested traffic before that comparison.
+          if [[ "${{ inputs.cloud_run_service }}" == all ]]; then
+            PREFLIGHT_ARGS+=(--repair-traffic)
+          fi
           if [[ "${{ inputs.deploy_profile }}" == manual ]]; then
             history_args=()
             if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
@@ -1659,12 +1663,19 @@ runs:
         ${{ inputs.integration_only != 'true' && (success()) }}
       id: cloud-run-traffic-snapshot
       shell: bash
+      env:
+        CLOUD_RUN_SERVICE: ${{ inputs.cloud_run_service }}
+        ROLLBACK_REVISION: ${{ inputs.rollback_revision }}
       run: |
+        set -euo pipefail
         scope_args=()
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then scope_args+=(--service backend); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then scope_args+=(--service backend-sync); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then scope_args+=(--service backend-sync-backfill); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then scope_args+=(--service backend-integration); fi
+        if [[ "${{ inputs.deploy_profile }}" == manual && "$CLOUD_RUN_SERVICE" != all ]]; then
+          scope_args+=(--expected-serving-revision "$ROLLBACK_REVISION")
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" capture \
           "${scope_args[@]}" \
           --project "${{ inputs.project_id }}" \
