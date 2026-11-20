@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import InvalidArgument
 
+from database import conversations as conversations_db
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
@@ -199,6 +200,16 @@ def lunch(count=6, words=10, gap=0):
     return sources, rows
 
 
+@pytest.fixture
+def edit_embedded_items(strict, monkeypatch):
+    @store.firestore.transactional
+    def write(tx, uid, cid, patch):
+        tx.update(store.user_conversations(strict, uid).document(cid), patch)
+
+    monkeypatch.setattr(conversations_db, 'update_conversation', lambda *args: write(strict.transaction(), *args))
+    return conversations_db.update_conversation_action_items
+
+
 def claims_by_row(rows):
     found = {}
     for cid, row in rows.items():
@@ -241,6 +252,25 @@ async def test_fragmented_lunch_folds_into_one_card_that_keeps_the_earliest_id(o
     assert len(pieces) == len(set(pieces)) == 6
     assert report['rows_eligible'] == 6 and report['windows_after'] == 1 and report['rows_retired'] == 5
     assert report['visible_before'] == 6 and report['visible_after'] == 1 and report['outline_calls'] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('marked_deletion', [False, True], ids=['legacy-completed-item', 'marked-empty-list'])
+async def test_rederive_preserves_cards_with_embedded_owner_items(owner, strict, edit_embedded_items, marked_deletion):
+    sources, rows = lunch(count=3)
+    rows[0]['structured']['action_items'] = [{'description': 'Owner revision', 'completed': True}]
+    owner(*sources, *rows)
+    if marked_deletion:
+        edit_embedded_items(UID, 'c0', [])
+    before = conversations(strict)
+
+    _, report = await rederive()
+
+    after = conversations(strict)
+    assert after['c0'] == before['c0']
+    assert after['r0']['claims'] == before['r0']['claims']
+    reason = 'protected_edited' if marked_deletion else 'protected_action_items'
+    assert report[reason] == 1
 
 
 @pytest.mark.asyncio
@@ -494,6 +524,33 @@ async def test_undo_refuses_after_the_owner_edited_a_rebuilt_or_created_row(owne
         assert conversations(strict) == after and not ledger.erased
         for key in edit:
             strict.rows[path(cid)].pop(key)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('settled', [False, True], ids=['pending-baseline', 'recorded-baseline'])
+@pytest.mark.parametrize(
+    'edited_items', [[{'description': 'Owner revision', 'completed': True}], []], ids=['edit', 'delete']
+)
+async def test_embedded_item_changes_block_undo(owner, strict, ledger, edit_embedded_items, settled, edited_items):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    await rederive()
+    strict.rows[path('c0')]['structured']['action_items'] = [{'description': 'Generated', 'completed': False}]
+    if settled:
+        rederive_store.record_baselines(UID, RUN)
+
+    edit_embedded_items(UID, 'c0', edited_items)
+    after = conversations(strict)
+    assert after['c0']['structured']['action_items'] == edited_items
+    assert after['c0'][conversations_db.ACTION_ITEMS_EDIT_REVISION]
+    refused = {'outcome': 'busy', 'reason': 'owner_edited_rebuilt_row'}
+    assert backfill.undo_run(UID, RUN) == refused
+    if not settled:
+        rederive_store.record_baselines(UID, RUN)
+        prior = next(entry for entry in priors(strict) if entry['id'] == 'c0')
+        assert prior['baseline'] == rederive_store.CHANGED_BEFORE_SETTLE
+        assert backfill.undo_run(UID, RUN) == refused
+    assert conversations(strict) == after
 
 
 @pytest.mark.asyncio

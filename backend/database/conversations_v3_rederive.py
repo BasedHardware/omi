@@ -19,6 +19,7 @@ from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from database.conversations import ACTION_ITEMS_EDIT_REVISION
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.recurring_voice_privacy import filter_processing_write
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
@@ -52,6 +53,7 @@ OWNER_EDIT_FIELDS = (
     'has_photos',
     'sync_relevance_user_kept',
     'v3_claims_transferred_to',
+    ACTION_ITEMS_EDIT_REVISION,
 )
 
 
@@ -75,6 +77,10 @@ def live_row_protection(raw, *, since, until, run_id=None):
         return 'shared'
     if any(raw.get(field) for field in OWNER_EDIT_FIELDS) or summary_edited(raw):
         return 'edited'
+    structured = raw.get('structured')
+    if isinstance(structured, dict) and structured.get('action_items'):
+        # Historical items can contain owner edits with no revision marker.
+        return 'action_items'
     if raw.get('apps_results'):
         # App results can be edited by the owner with no marker, and a replan never regenerates them.
         return 'app_results'
@@ -295,7 +301,12 @@ def owner_surface(row):
     """A digest of the owner-changeable surface of a stored row (never content in the ledger)."""
     structured = row.get('structured') if isinstance(row.get('structured'), dict) else {}
     surface = {field: row.get(field) for field in OWNER_SURFACE_FIELDS}
+    # Keep baselines for rows with no embedded item state compatible with existing runs.
+    if not surface[ACTION_ITEMS_EDIT_REVISION]:
+        surface.pop(ACTION_ITEMS_EDIT_REVISION)
     surface['structured'] = {k: structured.get(k) for k in ('title', 'overview')}
+    if structured.get('action_items'):
+        surface['structured']['action_items'] = structured['action_items']
     return hashlib.sha256(json.dumps(surface, sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -306,9 +317,11 @@ def owner_changed(row, entry):
     recorded then (``baseline``). Before that, the fields the run itself never sets are compared with
     the prior document, and a retired row must still be the run's bridge to its survivor.
     """
+    raw = entry.get('raw') or {}
+    if row.get(ACTION_ITEMS_EDIT_REVISION) != raw.get(ACTION_ITEMS_EDIT_REVISION):
+        return True
     if entry.get('baseline'):
         return owner_surface(row) != entry['baseline']
-    raw = entry.get('raw') or {}
     if entry.get('retired_into'):
         return row.get('sync_merged_into') != entry['retired_into'] or not row.get('deleted')
     if row.get('sync_merged_into') or row.get('deleted'):

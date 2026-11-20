@@ -144,6 +144,7 @@ from utils.llm.model_constants import LUNA_MODEL
 logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
+ACTION_ITEMS_EDIT_REVISION = 'user_action_items_revision'
 
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
 # Top-level fields behind the Typesense conversation projection (see
@@ -1720,6 +1721,12 @@ def persist_processing_result_with_lifecycle(
             write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
         _quality_processing_notes(uid, write_data, existing)
+
+        if existing.get('v3_rederive_live_run') and existing.get(ACTION_ITEMS_EDIT_REVISION):
+            # Notes from the repair may settle after an owner edit, including removal of the last item.
+            structured = write_data.get('structured')
+            if isinstance(structured, dict):
+                structured['action_items'] = (existing.get('structured') or {}).get('action_items', [])
 
         _reapply_current_manual_assignments(uid, write_data, existing)
         _stage_notes_identity(transaction, user_ref, write_data, existing)
@@ -3594,7 +3601,11 @@ def update_conversation_events(uid: str, conversation_id: str, events: List[dict
 
 
 def update_conversation_action_items(uid: str, conversation_id: str, action_items: List[dict]):
-    update_conversation(uid, conversation_id, {'structured.action_items': action_items})
+    update_conversation(
+        uid,
+        conversation_id,
+        {'structured.action_items': action_items, ACTION_ITEMS_EDIT_REVISION: uuid.uuid4().hex},
+    )
 
 
 def _page_eligible_action_item_count(conversation: dict, include_completed: bool) -> int:
