@@ -313,7 +313,12 @@ def _cancel_grace_period_paid(stripe_sub: dict) -> bool:
     if not latest:
         return False
     if isinstance(latest, str):
-        latest = stripe.Invoice.retrieve(latest)
+        try:
+            latest = stripe.Invoice.retrieve(latest)
+        except stripe.error.InvalidRequestError as e:
+            if e.code == 'resource_missing':
+                return False
+            raise
     return latest.get('status') == 'paid'
 
 
@@ -1405,6 +1410,52 @@ async def stripe_webhook(
     return result
 
 
+async def _restore_paid_cancel_grace(invoice: dict, subscription_obj: dict) -> None:
+    """Grant the paid-through grace once a canceled subscription's latest invoice is paid late.
+
+    A dunning cancel projects Basic while the renewal invoice is still open; paying
+    that invoice afterwards (hosted invoice link, a settling bank debit) pays the
+    period, so the grace that the cancel withheld applies now. Only the user's
+    stored subscription for this same canceled subscription is changed.
+    """
+    now = int(time.time())
+    invoice_id = invoice.get('id')
+    if (
+        not invoice_id
+        or invoice.get('status', 'paid') != 'paid'
+        or not _cancel_grace_window_open(subscription_obj, now)
+        or _latest_invoice_id(subscription_obj) != invoice_id
+    ):
+        return
+    uid = (subscription_obj.get('metadata') or {}).get('uid')
+    if not uid:
+        return
+    subscription_id = subscription_obj.get('id')
+    if await _deletion_webhook_blocks_entitlement(uid, subscription_id):
+        return
+    current = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+    if current is None or current.stripe_subscription_id != subscription_id or is_paid_plan(current.plan):
+        return
+    restored = _build_subscription_from_stripe_object(
+        subscription_obj, grant_cancel_grace=True, now=now, period_paid=True
+    )
+    if restored is None or not is_paid_plan(restored.plan):
+        return
+    try:
+        await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
+        await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
+        await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
+        await run_blocking(db_executor, users_db.update_user_subscription, uid, restored.model_dump())
+    except FirestoreNotFound:
+        logger.warning(f"Stripe webhook: user {uid} not found in Firestore, skipping late-paid grace restore")
+        return
+    await run_blocking(db_executor, set_credits_invalidation_signal, uid)
+    logger.info(
+        f"Early-cancel paid-through grace for user {uid}: invoice {invoice_id} paid after cancel of sub "
+        f"{subscription_id}; keeping plan until period end."
+    )
+
+
 async def _end_unpaid_cancel_grace(event: dict) -> dict:
     """End a paid-through grace whose period's invoice was voided or marked uncollectible.
 
@@ -1914,7 +1965,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
 
     if event['type'] in ['invoice.paid', 'invoice.payment_succeeded']:
         invoice = event['data']['object']
-        subscription_id = invoice.get('subscription')
+        subscription_id = _invoice_subscription_id(invoice)
         if subscription_id:
             try:
                 subscription = await run_blocking(
@@ -1928,6 +1979,11 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         return {"status": "success", "message": "Account deletion is in progress."}
                     await run_blocking(db_executor, paid_app, app_id, uid, subscription.get('current_period_end'))
                     logger.info(f"Paid app entitlement renewed for user {uid}. App: {app_id}")
+                if not app_id:
+                    try:
+                        await _restore_paid_cancel_grace(invoice, subscription)
+                    except Exception as error:
+                        raise HTTPException(503, f"Late-paid grace restore: {type(error).__name__}") from None
                 if metadata.get(monthly_switch.SUPERSEDED_INVOICE_KEY):  # a failed void of the yearly invoice: retry
                     try:
                         await run_blocking(stripe_executor, monthly_switch.void_superseded, subscription)
