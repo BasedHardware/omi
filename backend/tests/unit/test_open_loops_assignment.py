@@ -199,7 +199,7 @@ def test_protection_migration_round_trips_extractions_atomically(monkeypatch, so
     monkeypatch.setattr(
         store,
         'get_all',
-        lambda *args, **kwargs: [SimpleNamespace(exists=True, reference=ref, to_dict=dict)],
+        lambda *args, **kwargs: [SimpleNamespace(exists=True, id=ref.id, reference=ref, to_dict=dict)],
         raising=False,
     )
     monkeypatch.setattr(store, 'batch', MagicMock, raising=False)
@@ -207,6 +207,7 @@ def test_protection_migration_round_trips_extractions_atomically(monkeypatch, so
         StrictFirestoreCollection, 'select', lambda *args: SimpleNamespace(stream=lambda: []), raising=False
     )
     monkeypatch.setattr(db, 'db', store)
+    monkeypatch.setattr(db.conversations_v3_backfill_runs, '_live_run_ids', lambda *a, **kw: [])
     db.migrate_conversations_level_batch('u', ['existing'], target)
     raw = store.rows[path('existing')]
     assert raw['data_protection_level'] == target

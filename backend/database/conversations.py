@@ -3031,8 +3031,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
         ],
     )
 
-    # Stamped survivors and their recorded bridges may hold undo copies at the old protection level.
-    rederived = set()
+    prior_ids = set()
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
             logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
@@ -3043,10 +3042,9 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             current = doc_snapshot.reference.get(transaction=transaction).to_dict()
             if not current or current.get('deleted') or current.get('visibility') in ('public', 'shared'):
                 return False
-            if current.get('v3_rederive_live_run'):
-                # Recorded on every attempt, so a retry after a failed purge still purges.
-                rederived.add(doc_snapshot.id)
-                rederived.update(current.get('sync_merged_from') or [])
+            # Priors can exist before a repair stamps the row. Collect IDs even on a same-target retry.
+            prior_ids.add(doc_snapshot.id)
+            prior_ids.update(current.get('sync_merged_from') or [])
             if current.get('data_protection_level', 'standard') == target_level:
                 return False
             payload = {'data_protection_level': target_level}
@@ -3121,10 +3119,10 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
     if batch_count > 0:
         batch.commit()
-    if rederived:
+    if prior_ids:
         # After rows and photos: a live re-derive's undo copies stored at another level are emptied.
         conversations_v3_backfill_runs.purge_conversation_priors(
-            uid, sorted(rederived), 'protection', firestore_client=db, keep_level=target_level
+            uid, sorted(prior_ids), 'protection', firestore_client=db, keep_level=target_level
         )
 
 
