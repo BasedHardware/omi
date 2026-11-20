@@ -6,10 +6,12 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_meta.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/share.dart';
+import 'package:omi/pages/conversation_detail/share_flow.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/calendar_event_sheets.dart';
 import 'package:omi/pages/conversation_detail/widgets/capture_recordings.dart';
@@ -17,6 +19,7 @@ import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.d
 import 'package:omi/pages/conversation_detail/widgets/conversation_entity_chips.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
@@ -129,8 +132,24 @@ class ConversationDetailHeader extends StatelessWidget {
   }
 
   /// "Today 12:40 PM · 14m": when it started and how long it ran, the list row's length rule. A
-  /// linked calendar event shows its logo and opens the event.
+  /// linked calendar event shows its logo and opens the event. A v3 conversation still in progress
+  /// shows "● Live · 11m" instead: the speech so far, the same length its Home row shows.
   Widget _whenChip(BuildContext context, ServerConversation conversation) {
+    final live = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false) &&
+        conversation.v3?.tileState == ConversationTileState.live;
+    if (live) {
+      final duration = conversationDurationLabel(conversation, context.l10n);
+      final label = [context.l10n.live, if (duration.isNotEmpty) duration].join(' · ');
+      return Semantics(
+        label: label,
+        excludeSemantics: true,
+        child: ConversationDetailChip(
+          key: const Key('conversation_when_live'),
+          icon: const OmiBreathingDot(),
+          label: label,
+        ),
+      );
+    }
     final dates = OmiDateFormat.of(context);
     final start = conversation.startedAt ?? conversation.createdAt;
     final duration = conversationDurationLabel(conversation, context.l10n);
@@ -338,12 +357,43 @@ abstract final class ConversationVisibilitySheet {
   static void show(BuildContext context, ServerConversation conversation) {
     final provider = context.read<ConversationDetailProvider>();
 
+    Future<void> makePrivate() async {
+      final ok = await setConversationVisibility(conversation.id, visibility: ConversationVisibility.private_.value);
+      if (ok) provider.updateVisibilityLocally(ConversationVisibility.private_);
+      if (!ok && context.mounted) showShareFlowEnd(context, ShareFlowEnd.stillPublic, makePrivate: makePrivate);
+    }
+
     Future<void> choose(BuildContext sheetContext, ConversationVisibility target) async {
       if (conversation.visibility == target) {
         Navigator.pop(sheetContext);
         return;
       }
       final previousVisibility = conversation.visibility;
+      if (target == ConversationVisibility.shared) {
+        // Making it shared is Share: the same consent step, sheet and revert (ux-contract §17.7).
+        Navigator.pop(sheetContext); // omi-ux-allow: pop-before-await -- the next step is the share consent dialog
+        final end = await runConversationShare(
+          wasPrivate: true,
+          confirm: () => showOmiConfirm(
+            context,
+            title: context.l10n.shareConversationQuestion,
+            message: context.l10n.anyoneWithLinkCanView,
+            confirmLabel: context.l10n.share,
+          ),
+          setVisibility: (visibility) => setConversationVisibility(conversation.id, visibility: visibility.value),
+          onVisibility: provider.updateVisibilityLocally,
+          openSheet: () async => (await shareConversationLink(conversation)).status,
+        );
+        if (end == ShareFlowEnd.shared) {
+          PlatformManager.instance.analytics.conversationVisibilityChanged(
+            conversationId: conversation.id,
+            fromVisibility: previousVisibility.value,
+            toVisibility: target.value,
+          );
+        }
+        if (context.mounted) showShareFlowEnd(context, end, makePrivate: makePrivate);
+        return;
+      }
       provider.updateVisibilityLocally(target);
       Navigator.pop(sheetContext);
       final success = await setConversationVisibility(conversation.id, visibility: target.value);
@@ -357,7 +407,6 @@ abstract final class ConversationVisibilitySheet {
         fromVisibility: previousVisibility.value,
         toVisibility: target.value,
       );
-      if (target == ConversationVisibility.shared && context.mounted) shareConversationLink(conversation);
     }
 
     showOmiSheet<void>(

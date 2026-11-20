@@ -189,6 +189,7 @@ SCHEMA_GROUPS = {
             'ConversationSpeakers',
             'AudioTimelineProvenance',
             'Conversation',
+            'LiveSummaryPreview',
             'RecordingPiece',
             'LiveConversation',
             'ConversationsLiveResponse',

@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "workerd.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "workerd.labels" . | nindent 8 }}
+        service_name: workerd
+    spec:
+      serviceAccountName: {{ .Release.Name }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 35
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: workerd
+          image: {{ include "workerd.image" . | quote }}
+          securityContext:
+            {{- include "workerd.securityContext" . | nindent 12 }}
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: dev-omi-workerd-runtime
+                  key: DATABASE_URL
+            - name: ENCRYPTION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: dev-omi-workerd-runtime
+                  key: ENCRYPTION_SECRET
+            - {name: FIRESTORE_PROJECT, value: based-hardware-dev}
+            - {name: WORKERS, value: {{ .Values.workers | quote }}}
+            - {name: SHUTDOWN_SECONDS, value: "25"}
+          ports:
+            - {name: health, containerPort: 8080}
+            - {name: metrics, containerPort: 9090}
+          startupProbe:
+            httpGet: {path: /ready, port: health}
+            periodSeconds: 5
+            failureThreshold: 12
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: {path: /ready, port: health}
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /health, port: health}
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {memory: 256Mi}

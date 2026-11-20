@@ -14,7 +14,8 @@ from contextlib import ExitStack, nullcontext
 
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks, Header
-from typing import Annotated, Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional, cast
+from starlette.datastructures import Headers
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -32,8 +33,9 @@ from database.legal_holds import destructive_operation_gate
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.list_version_check import ListVersionCheck
+from config import historical_tier
 from config.episodes import home_step_projection_enabled, home_transcription_presentation_gate_enabled
-from utils.conversations import home_step, transcribing_hold
+from utils.conversations import historical_projection, home_step, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
     delete_action_item_vector,
@@ -79,7 +81,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.reprocess_contract import DERIVED_EFFECTS_TRANSCRIPT_FIELD, FIRST_PARTY_SUMMARY_SOURCE
 from utils.conversations.analytics import build_conversation_analytics
-from utils.conversations.render import redact_conversations_for_list
+from utils.conversations.render import redact_conversations_for_list, redact_legacy_live_recap_sections
 from utils.conversations.onopen_translation import translate_open_page
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
@@ -164,12 +166,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from config.conversations_v3 import conversations_v3_enabled
+from config.conversations_v3 import conversations_v3_enabled, live_recap_enabled
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
-from utils.conversations.v3 import live as v3_live
+from utils.conversations.v3 import live as v3_live, policy as v3_policy
+from database import conversations_v3_live, conversations_v3_processing
+from utils.conversations import list_page_headers
 
 router = APIRouter()
 
@@ -185,7 +189,8 @@ def get_live_conversation(
     enabled = conversations_v3_enabled(uid)
     if not enabled:
         return {'v3': False, 'conversation': None}
-    row = v3_live.active(conversations_db.get_conversations_without_photos(uid, **v3_live.OPEN_ROWS))
+    now = datetime.now(timezone.utc)
+    row = conversations_v3_live.live_window(uid, now=now, max_idle=v3_live.MAX_IDLE, pick=v3_live.active)
     compact = (
         {
             key: row[key]
@@ -197,6 +202,13 @@ def get_live_conversation(
     )
     if compact is not None:
         compact['finished_at'] = row.get('finished_at')
+        if row.get('is_locked'):
+            compact['is_locked'] = True
+        elif isinstance(row.get('v3_recording_ids'), list):
+            # Identifiers only, from the authenticated owner's existing live-window read.
+            compact['v3_recording_ids'] = [
+                rid for rid in row['v3_recording_ids'][-8:] if isinstance(rid, str) and rid and '/' not in rid
+            ]
     if compact and 'structured' in compact:
         compact['structured'] = {
             key: compact['structured'][key] for key in ('title', 'emoji') if key in compact['structured']
@@ -928,6 +940,7 @@ def reprocess_conversation(
         return pending
     from database import processing_attention as attention_db
 
+    historical_slots = historical_projection.admit_reprocess(uid, conversation_id, conversation)
     input_generation = attention_db.generation(conversation)
     was_discarded = bool(conversation.get('discarded'))
     user_kept = was_discarded or bool(conversation.get('sync_relevance_user_kept'))
@@ -946,8 +959,10 @@ def reprocess_conversation(
             uid, conversation_id, expected_generation=input_generation, restart_succeeded=True
         )
     except attention_db.ClaimRejected as error:
+        historical_projection.release(historical_slots)
         raise HTTPException(status_code=404, detail='Conversation not found') from error
     if not owned or not attention_db.owns_live_claim(uid, operation):
+        historical_projection.release(historical_slots)
         # Echoing the stale row as 200 made clients report "updated" with no new
         # summary; another writer still owns this conversation. Every released
         # client treats a non-200 reprocess answer as failure.
@@ -1044,6 +1059,12 @@ def execute_reprocess(
         processed_conversation.discarded = not restored
         if restored and processed_conversation.sync_relevance == 'review':
             processed_conversation.sync_relevance = 'keep'
+    if historical_tier.is_historical(processed_conversation):
+        from utils.conversations import historical_summary
+
+        # Old builds' "Summarize" CTA lands here: the marker kept the run summary-only.
+        historical_summary.after_summary(uid, processed_conversation)
+        return processed_conversation
 
     return schedule_reprocessed_learning(
         uid,
@@ -1112,6 +1133,13 @@ def get_conversations(
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
+    cursor: Optional[str] = Query(
+        None,
+        description=(
+            "Opaque page cursor from a previous response's X-Omi-Next-Cursor header; when accepted it "
+            "replaces offset. An unknown or stale cursor falls back to offset."
+        ),
+    ),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     if start_date is not None and end_date is not None and aware_datetime(start_date) > aware_datetime(end_date):
@@ -1151,10 +1179,18 @@ def get_conversations(
     # query and the page stream runs under the derived per-RPC timeout, so a
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
     budget = list_read_budget_for_request(request, route='conversations')
+    page: Dict[str, Any] = {}
+    reveal = include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
+    default_home = not (reveal or start_date or end_date)
+    # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
+    # legacy sync piece there would duplicate them.
+    show_held = default_home and not conversations_v3_enabled(uid)
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
         offset,
+        cursor=cursor,
+        cursor_page=page,
         include_discarded=include_discarded,
         statuses=status_filter,
         sources=source_list,
@@ -1167,15 +1203,10 @@ def get_conversations(
         presentation=True,
         include_recordings=status_filter == ['in_progress'],
         capture_only=status_filter == ['in_progress'],
-        hide_home=not (
-            include_discarded
-            or sources
-            or start_date
-            or end_date
-            or folder_id
-            or starred is not None
-            or statuses != 'processing,completed'
-        ),
+        # A date range alone is still Home: the day view is Home's own drill-in,
+        # so it hides what Home hides. Explicit reveal filters still opt out.
+        hide_home=not reveal,
+        show_held=show_held,
     )
 
     conversations = home_membership.project_list(
@@ -1187,8 +1218,15 @@ def get_conversations(
             include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
         ),
     )
+    if response is not None:
+        list_page_headers.apply(response, page)
     _heal_locked_conversations_if_eligible(uid, conversations)
-    conversations = [transcribing_hold.project(home_step.project(row), home_list=True) for row in conversations]
+    conversations = [
+        historical_projection.project(
+            transcribing_hold.project(home_step.project(row, show_held=show_held), home_list=True)
+        )
+        for row in conversations
+    ]
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
@@ -1335,7 +1373,16 @@ def get_conversation_by_id(
             response.headers['X-Translation-Status'] = translation_status
             if next_cursor is not None:
                 response.headers['X-Translation-Cursor'] = next_cursor
-    return transcribing_hold.project(conversation)
+    preview = None
+    if conversation.get('id') == conversation_id and live_recap_enabled(uid):
+        preview = conversations_v3_processing.read_live_summary(uid, conversation)
+    else:
+        redact_legacy_live_recap_sections(conversation)
+    conversation.pop('live_summary', None)
+    conversation.pop(v3_policy.LIVE_SUMMARY_FIELD, None)
+    if preview:
+        conversation['live_summary'] = preview
+    return historical_projection.project(transcribing_hold.project(conversation))
 
 
 @router.patch(
@@ -2858,6 +2905,31 @@ def merge_conversations(
     )
 
 
+@router.post(
+    '/v1/conversations/{conversation_id}/summary/open',
+    response_model=Conversation,
+    tags=['conversations'],
+    description=(
+        "Generate the one summary of a historical conversation (`summary_on_open: true`) when its owner opens it. "
+        "Summary only: no memories, tasks, apps or notifications. `X-Omi-Summary-Outcome` is `existing` (no model "
+        "call) or `generated`. Typed refusals: 404, 409 (`conversation_locked`, `conversation_discarded`, "
+        "`not_historical`, `byok_keys_required`, `conversation_processing_in_progress`), 402, 429 with Retry-After, "
+        "502 `summary_unavailable`, 503 `historical_summary_disabled` or retryable `historical_summary_retry`."
+    ),
+)
+def open_historical_summary(
+    conversation_id: str,
+    response: Response = None,  # type: ignore[assignment]
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    from utils.conversations import historical_summary
+
+    body, outcome = historical_summary.open_summary(uid, conversation_id)
+    if response is not None:
+        response.headers[historical_summary.OUTCOME_HEADER] = outcome
+    return body
+
+
 @router.get(
     '/v1/conversations/{conversation_id}/summary/stream',
     tags=['conversations'],
@@ -2879,9 +2951,15 @@ def merge_conversations(
     },
 )
 async def conversation_summary_stream(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    def reject_live_target(conversation):
+        if v3_policy.live_summary_target(conversation) and not conversation.get('v3_unlocked'):
+            detail = 'use_live_recap_stream' if live_recap_enabled(uid) else 'live_recap_unavailable'
+            raise HTTPException(404, detail)
+
     conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
+    reject_live_target(conversation)
     await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
-    if conversation.get('v3_derived') and conversation.get('status') == 'in_progress':
+    if v3_summary.needs_open_reconcile(conversation):
         from utils.conversations.v3.service import reconcile
 
         try:
@@ -2894,9 +2972,43 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
         except Exception as exc:
             logger.warning('event=v3_on_open_reconcile outcome=stored exception_type=%s', type(exc).__name__)
         conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
+        reject_live_target(conversation)
     token = await v3_summary.prepare(uid, conversation)
     return StreamingResponse(
         v3_summary.stream(uid, conversation, token=token),
+        media_type='text/event-stream',
+        headers={'Cache-Control': 'no-cache'},
+    )
+
+
+@router.get(
+    '/v1/conversations/{conversation_id}/summary/live-catchup/stream',
+    tags=['conversations'],
+    response_class=StreamingResponse,
+    responses={200: {'content': {'text/event-stream': {'schema': {'type': 'string'}}}}},
+)
+async def conversation_live_catchup_stream(
+    conversation_id: str, uid: str = Depends(auth.get_current_user_uid), request: Request = cast(Request, None)
+):
+    from utils.conversations.v3.recap_telemetry import observe
+
+    if not live_recap_enabled(uid):
+        raise HTTPException(404, 'live_recap_unavailable')
+    observation = observe(uid, request.headers if request is not None else Headers())
+    observation.record('request_received')
+    try:
+        row = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
+        if row.get('id') != conversation_id or not v3_policy.live_summary_target(row):
+            raise HTTPException(status_code=404, detail='Live conversation not available')
+        if not live_recap_enabled(uid):
+            raise HTTPException(404, 'live_recap_unavailable')
+        await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
+    except HTTPException:
+        observation.record('admission_refused')
+        raise
+    token = await v3_summary.prepare(uid, row, live=True, observation=observation)
+    return StreamingResponse(
+        v3_summary.stream(uid, row, token=token, live=True, observation=observation),
         media_type='text/event-stream',
         headers={'Cache-Control': 'no-cache'},
     )

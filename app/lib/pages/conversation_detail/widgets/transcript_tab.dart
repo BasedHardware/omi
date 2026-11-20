@@ -43,6 +43,7 @@ class TranscriptWidgets extends StatefulWidget {
   final VoidCallback? onTapWhenSearchEmpty;
   final Function(TranscriptSegment)? onSegmentTap;
   final ConversationPlaybackController? playbackController;
+  final Widget? Function(ServerConversation, Widget?)? livePreviewTail;
 
   const TranscriptWidgets({
     super.key,
@@ -51,6 +52,7 @@ class TranscriptWidgets extends StatefulWidget {
     this.onTapWhenSearchEmpty,
     this.onSegmentTap,
     this.playbackController,
+    this.livePreviewTail,
   });
 
   @override
@@ -427,21 +429,23 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
             final segments = conversation.transcriptSegments;
             final photos = conversation.photos;
 
+            Widget? empty;
             if (segments.isEmpty && photos.isEmpty) {
-              final pending = _pendingTranscriptState(context, provider, conversation);
-              if (pending != null) return pending;
-              return Padding(
-                padding: const EdgeInsets.only(top: OmiSpacing.xxl),
-                child: ExpandableTextWidget(
-                  text: (conversation.externalIntegration?.text ?? '').decodeString,
-                  maxLines: 1000,
-                  linkColor: OmiColors.textSecondary,
-                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.3),
-                  toggleExpand: provider.toggleIsTranscriptExpanded,
-                  isExpanded: provider.isTranscriptExpanded,
-                ),
-              );
+              empty = _pendingTranscriptState(context, provider, conversation) ??
+                  Padding(
+                    padding: const EdgeInsets.only(top: OmiSpacing.xxl),
+                    child: ExpandableTextWidget(
+                      text: (conversation.externalIntegration?.text ?? '').decodeString,
+                      maxLines: 1000,
+                      linkColor: OmiColors.textSecondary,
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.3),
+                      toggleExpand: provider.toggleIsTranscriptExpanded,
+                      isExpanded: provider.isTranscriptExpanded,
+                    ),
+                  );
             }
+            final tail = widget.livePreviewTail?.call(conversation, empty);
+            if (tail == null && empty != null) return empty;
 
             final selection = _selection;
             return Column(
@@ -471,10 +475,10 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 ),
                 Expanded(
                   child: widget.playbackController == null
-                      ? _buildTranscript(null)
+                      ? _buildTranscript(null, tail)
                       : _PlaybackFollowScope(
                           controller: widget.playbackController!,
-                          builder: (context) => _buildTranscript(widget.playbackController),
+                          builder: (context) => _buildTranscript(widget.playbackController, tail),
                         ),
                 ),
               ],
@@ -485,7 +489,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     );
   }
 
-  Widget _buildTranscript(ConversationPlaybackController? controller) {
+  Widget _buildTranscript(ConversationPlaybackController? controller, Widget? tail) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         final conversation = provider.conversation;
@@ -553,6 +557,8 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           startedAt: conversation.startedAt ?? conversation.createdAt,
           leadingItems: [for (final item in leading) item.$2],
           leadingItemIds: [for (final item in leading) item.$1],
+          contentVersion: identityHashCode(segments),
+          trailingItem: tail,
           currentSegmentId: playback?.currentSegmentId,
           highlightedSegment: playback?.highlightedSegment,
           followTargetSegmentId: playback?.followTargetSegmentId,

@@ -1,14 +1,41 @@
-"""Transactional allowance parking shared by scheduling and migration. No IO at import."""
+"""Transactional allowance parking for intake, scheduling and migration. No IO at import."""
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from config.policy.kill_switches import kill_switch
 
 STATE = 'allowance_held'
 OWNERS = 'allowance_holds'
 SWITCH = 'BATCH_ALLOWANCE_PARK_ENABLED'
+EXHAUSTED = 'allowance_exhausted'
 
 
 def enabled() -> bool:
     return kill_switch(SWITCH, log=False)
+
+
+def intake_enabled() -> bool:
+    return enabled() and kill_switch('BATCH_ALLOWANCE_INTAKE_PARK_ENABLED', log=False)
+
+
+def release_fence(owner: dict) -> tuple[str | None, float | None] | None:
+    if owner.get('token') or owner.get('draining'):
+        return None
+    return owner.get('generation'), owner.get('cutoff')
+
+
+@dataclass(frozen=True)
+class IntakeRefusal:
+    observed_at: float
+    owner_fence: tuple[str | None, float | None]
+
+    def current(self, owner: dict, now: float) -> bool:
+        # If a release check crossed the probe, its acknowledged generation
+        # could otherwise hide this hold until the next entitlement change.
+        return release_fence(owner) == self.owner_fence and datetime.fromtimestamp(
+            self.observed_at, timezone.utc
+        ).strftime('%Y-%m') == datetime.fromtimestamp(now, timezone.utc).strftime('%Y-%m')
 
 
 def eligible(job: dict) -> bool:
@@ -16,15 +43,24 @@ def eligible(job: dict) -> bool:
     decision = job.get('compute_decision') or {}
     return (
         decision.get('outcome') == 'held'
-        and decision.get('reason') == 'allowance_exhausted'
+        and decision.get('reason') == EXHAUSTED
         and not job.get('result')
         and (job.get('stt_route') or {}).get('stt_route') != 'provider'
     )
 
 
-def park(tx, job: dict, now: float) -> bool:
-    """Caller has revoked/refunded a lease or CAS-read a detached retry row."""
-    if job.get('state') != 'retry' or not eligible(job) or job.get('token') or job.get('lease_until', 0) > now:
+def park(tx, job: dict, now: float, *, at_intake: bool = False) -> bool:
+    """Accept a detached retry, or an initial row the scheduler has never enqueued."""
+    if job.get('state') != ('ready' if at_intake else 'retry'):
+        return False
+    if at_intake:
+        job = {
+            **job,
+            'next': '',
+            'compute_decision': {'outcome': 'held', 'reason': EXHAUSTED, 'at': now},
+            'last_policy_hold': {'reason': EXHAUSTED, 'at': now},
+        }
+    if not eligible(job) or job.get('token') or job.get('lease_until', 0) > now:
         return False
     key = job['owner_key']
     owner = tx.get(OWNERS, key)

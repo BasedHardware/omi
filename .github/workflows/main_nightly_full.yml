@@ -72,6 +72,12 @@ jobs:
     with:
       nightly_main_sha: ${{ needs.source.outputs.main_sha }}
 
+  backend-go-checks:
+    needs: source
+    uses: ./.github/workflows/backend-go-checks.yml
+    with:
+      nightly_main_sha: ${{ needs.source.outputs.main_sha }}
+
   desktop-backend-contracts:
     needs: source
     uses: ./.github/workflows/desktop-backend-contracts.yml
@@ -199,6 +205,7 @@ jobs:
       - backend-checks
       - backend-edge
       - backend-emulator-proofs
+      - backend-go-checks
       - backend-hermetic-e2e
       - backend-unit-tests
       - desktop-backend-contracts

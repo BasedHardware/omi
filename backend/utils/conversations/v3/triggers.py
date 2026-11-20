@@ -3,10 +3,11 @@
 import hashlib
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
-from config.conversations_v3 import conversations_v3_enabled
+from config.conversations_v3 import SPEECH_LANDED_FIELD, conversations_v3_enabled
 from database import conversations_v3 as store
 from database.helpers import set_data_protection_level
 from utils.cloud_tasks import enqueue_named_task
@@ -27,6 +28,31 @@ def mark_new(uid, row):
         _mark_resolved(uid, row)
 
 
+def committed_sync_assignment(uid, assigned, *, attempts=3):
+    """Wake reconcile for a recording a batch projection created or appended to. Post-commit, never raises.
+
+    The assignment and its receipt are durable, so a failure must not replay the unit. A created
+    recording is already stored v3_pending (``mark_new``) and the sweep finds it. An append owes its
+    reconcile only through ``changed``'s ``mark_pending``, so that write is retried; if every attempt
+    fails the append waits for the owner's next change, and the degraded branch is counted.
+    """
+    if not assigned.get('recording'):
+        return
+    failure = 'none'
+    for attempt in range(attempts):
+        try:
+            changed(uid, assigned['id'])
+            return
+        except Exception as error:
+            failure = type(error).__name__
+            if attempt + 1 < attempts:
+                time.sleep(0.2 * (2**attempt))
+    logger.error('event=batch_projection action=v3_wake outcome=error exception_type=%s', failure)
+    record_fallback(
+        component='other', from_mode='dispatch', to_mode='none', reason='enqueue_failed', outcome='degraded'
+    )
+
+
 @set_data_protection_level(data_arg_name='row')
 def _mark_resolved(uid, row):
     if row.get('data_protection_level') != 'private':
@@ -35,6 +61,7 @@ def _mark_resolved(uid, row):
             terminal_no_derived_effects=True,
             v3_pending=True,
             v3_pending_since=datetime.now(timezone.utc),
+            **{SPEECH_LANDED_FIELD: datetime.now(timezone.utc)},
             structured={},
         )
 

@@ -9085,7 +9085,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Tämä tallenne on ladattu, mutta Omi luo yhä keskustelua. Jos poistat sen nyt ja käsittely epäonnistuu, sitä ei voi palauttaa. Poistetaanko silti?';
+      'Tämä tallenne on jo lähetetty, ja Omi käsittelee sitä. Poistaminen tässä poistaa puhelimen kopion. Jos käsittely epäonnistuu, Omi ei voi yrittää uudelleen tästä puhelimesta.';
 
   @override
   String get syncCardAllBackedUp => 'Kaikki tallenteet synkronoitu';
@@ -14495,14 +14495,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Äskettäin';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Yhteys katkesi $duration ajaksi';
-  }
-
-  @override
   String get deviceControls => 'Säätimet';
 
   @override
@@ -15440,6 +15432,11 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Päivitys ei asentunut. Riipuksesi toimii edelleen nykyisellä laiteohjelmistolla ($version). Ota yhteyttä tukeen sen sijaan, että yrität päivitystä uudelleen.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15481,7 +15478,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15565,4 +15562,167 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Palvelimen ilmoittama työ';
+
+  @override
+  String get finishNothingToProcess => 'Ei vielä mitään käsiteltävää.';
+
+  @override
+  String get finishStillProcessing => 'Käsitellään yhä. Se näkyy kotinäkymässä.';
+
+  @override
+  String get finishBackToHome => 'Takaisin kotiin';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Yhteenveto, kun tämä keskustelu päättyy';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Palvelimelle lähetetyt tiedostot odottavat';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Äänityksesi ovat turvassa laitteella tai puhelimella';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Yhteenveto klo $time asti';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Viimeisin litterointi';
+
+  @override
+  String get finishAlreadySaved => 'Jo tallennettu. Se on etusivulla.';
+
+  @override
+  String get finishAudioNotReceived => 'Ääni on vielä matkalla.';
+
+  @override
+  String get finishFailedOffline => 'Se ei onnistunut. Äänisi on turvassa.';
+
+  @override
+  String get finishFailed => 'Se ei onnistunut. Äänisi on turvassa.';
+
+  @override
+  String get micBlockedCannotRecord => 'Salli mikrofonin käyttö tallentamista varten.';
+
+  @override
+  String get couldNotStartRecording => 'Tallennusta ei voitu aloittaa.';
+
+  @override
+  String get restorePurchasesFailed => 'Tilaustasi ei voitu tarkistaa.';
+
+  @override
+  String get firmwareCheckFailed => 'Päivityksiä ei voitu tarkistaa.';
+
+  @override
+  String get conversationStillPublic => 'Se on edelleen jaettu linkillä.';
+
+  @override
+  String get goalSaveFailed => 'Tavoitettasi ei voitu tallentaa.';
+
+  @override
+  String get goalDeleteFailed => 'Poisto ei onnistunut. Tavoite palautettiin.';
+
+  @override
+  String get goalsLoadFailed => 'Tavoitteitasi ei voitu ladata.';
+
+  @override
+  String get missingTargetEndedRecording => 'Tuo tallenne on päättynyt.';
+
+  @override
+  String get missingTargetMemory => 'Tuo muisto on kadonnut.';
+
+  @override
+  String get missingTargetTask => 'Tuo tehtävä on kadonnut.';
+
+  @override
+  String get missingTargetConversation => 'Tätä keskustelua ei voitu avata.';
+
+  @override
+  String get couldNotRefreshConversations => 'Päivitys ei onnistunut.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Yhdistä Omi synkronointia varten.';
+
+  @override
+  String get useDifferentAccountMessage => 'Sinut kirjataan ulos ja tämän puhelimen Omi-asetukset nollataan.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Laseja ei löytynyt. Ovatko ne päällä?';
+
+  @override
+  String get couldNotMoveTask => 'Tehtävää ei voitu siirtää.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Poistettu. $count lukittua tehtävää säilytettiin.',
+      one: 'Poistettu. 1 lukittu tehtävä säilytettiin.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Muutosta ei voitu tallentaa.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Asetuksiasi ei voitu ladata.';
+
+  @override
+  String get waitForOmiToFinish => 'Odota, että Omi valmistuu.';
+
+  @override
+  String get voiceNoteTooShort => 'Liian lyhyt. Pidä pohjassa tallentaaksesi.';
+
+  @override
+  String get submitAppMissingFields => 'Lisää nimi, kuvaus, kuva, kategoria ja ominaisuus lähettämistä varten.';
+
+  @override
+  String get appSetupNotFinished => 'Määritys ei ole vielä valmis.';
+
+  @override
+  String get finishNothingKeptTitle => 'Ei säilytettävää';
+
+  @override
+  String get submitAppFinishDetails =>
+      'Viimeistele yllä olevat ominaisuuden ja hinnoittelun tiedot lähettämistä varten.';
+
+  @override
+  String get finishNothingNew => 'Ei vielä mitään uutta.';
+
+  @override
+  String get takingLongerThanUsual => 'Kestää tavallista kauemmin. Se saapuu etusivulle.';
+
+  @override
+  String get couldNotCheckOnIt => 'Sen tilaa ei voitu tarkistaa. Yritä uudelleen.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Päivitä tilauksesi avataksesi tämän.';
+
+  @override
+  String get missingTargetConversationGone => 'Tuo keskustelu poistettiin.';
+
+  @override
+  String get cantConnectRightNow => 'Yhdistäminen ei juuri nyt onnistu.';
+
+  @override
+  String get loadOlderFailed => 'Vanhempia ei voitu ladata. Yritä uudelleen napauttamalla.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Kuuntelee · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Odota, että se päättyy, ennen kuin muutat sitä.';
+
+  @override
+  String get finishedSummaryReady => 'Tiivistelmä valmis';
+
+  @override
+  String get writingSummaryStatus => 'Kirjoitetaan tiivistelmää…';
+
+  @override
+  String get stillWorkingOnIt => 'Yhä työn alla.';
 }

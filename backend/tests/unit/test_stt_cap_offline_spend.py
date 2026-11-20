@@ -3,6 +3,8 @@
 from contextlib import nullcontext
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import re
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -90,6 +92,13 @@ def test_kill_switch_restores_legacy_scope_without_allowance_read(monkeypatch, l
     monkeypatch.setattr(dispatch, 'funded_allowance', resolver)
     assert dispatch.sync_allowed('synthetic', lane=lane)
     resolver.assert_not_called()
+
+
+def test_doc_lists_all_dispatch_metric_paths():
+    doc = (Path(__file__).resolve().parents[2] / 'docs/stt-cap-dispatch.md').read_text(encoding='utf-8')
+    inventory = re.search(r'The closed paths\s+are (.*?)\. Outcomes', doc, flags=re.DOTALL)
+    assert inventory is not None
+    assert re.findall(r'`([a-z_0-9]+)`', inventory.group(1)) == [path.value for path in DispatchPath]
 
 
 def test_metrics_reject_unbounded_labels():

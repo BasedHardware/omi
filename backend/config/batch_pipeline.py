@@ -726,6 +726,10 @@ def projection_followup_page_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED')
 
 
+def projection_followup_early_coalesce_enabled() -> bool:
+    return kill_switch('BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED', log=False)
+
+
 def owner_drain_enabled() -> bool:
     """Kill switch: a per-process owner drain replaces the sweep-shared walk budget."""
     from config.policy import kill_switch
@@ -758,6 +762,10 @@ def serving_projection_sweep_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP')
+
+
+def projection_outbox_enabled() -> bool:
+    return kill_switch('BATCH_PROJECTION_OUTBOX', log=False)
 
 
 def _pump_bound(raw: str, default: int, maximum: int, minimum: int = 1) -> int:

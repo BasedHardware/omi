@@ -50,6 +50,7 @@ class ObjectClient:
             def __init__(self):
                 self.generation = generation
                 self.size = None
+                self.metadata = None
 
             def upload_from_file(self, stream, **kw):
                 body = stream.read()

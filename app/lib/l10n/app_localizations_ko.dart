@@ -8956,7 +8956,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      '이 녹음은 업로드되었지만 Omi가 아직 대화를 만들고 있습니다. 지금 삭제하고 처리가 실패하면 복구할 수 없습니다. 그래도 삭제하시겠습니까?';
+      '이 녹음은 이미 업로드되었고 Omi가 처리 중입니다. 여기서 삭제하면 휴대폰에 있는 사본이 삭제됩니다. 처리에 실패하면 Omi가 이 휴대폰에서 다시 시도할 수 없습니다.';
 
   @override
   String get syncCardAllBackedUp => '모든 녹음이 동기화됨';
@@ -14290,14 +14290,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => '최근';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration 동안 연결 끊김';
-  }
-
-  @override
   String get deviceControls => '제어';
 
   @override
@@ -15214,6 +15206,11 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return '업데이트가 설치되지 않았습니다. 펜던트는 현재 펌웨어($version)로 계속 작동합니다. 업데이트를 다시 시도하지 말고 지원팀에 문의해 주세요.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15255,7 +15252,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15339,4 +15336,166 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => '서버에서 보고한 작업';
+
+  @override
+  String get finishNothingToProcess => '아직 처리할 내용이 없어요.';
+
+  @override
+  String get finishStillProcessing => '아직 처리 중이에요. 홈에 표시될 거예요.';
+
+  @override
+  String get finishBackToHome => '홈으로 돌아가기';
+
+  @override
+  String get conversationSummaryWhenItEnds => '이 대화가 끝나면 요약이 표시됩니다';
+
+  @override
+  String get deviceUploadsWaitingOnServer => '서버에서 대기 중인 업로드';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => '오디오는 기기 또는 휴대전화에 안전하게 저장되어 있습니다';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time까지의 요약';
+  }
+
+  @override
+  String get conversationRecentTranscript => '최근 녹취록';
+
+  @override
+  String get finishAlreadySaved => '이미 저장되었습니다. 홈에 있습니다.';
+
+  @override
+  String get finishAudioNotReceived => '오디오가 아직 전송 중입니다.';
+
+  @override
+  String get finishFailedOffline => '처리되지 않았습니다. 오디오는 안전합니다.';
+
+  @override
+  String get finishFailed => '처리되지 않았습니다. 오디오는 안전합니다.';
+
+  @override
+  String get micBlockedCannotRecord => '녹음하려면 마이크 권한을 허용하세요.';
+
+  @override
+  String get couldNotStartRecording => '녹음을 시작하지 못했습니다.';
+
+  @override
+  String get restorePurchasesFailed => '플랜을 확인하지 못했습니다.';
+
+  @override
+  String get firmwareCheckFailed => '업데이트를 확인할 수 없습니다.';
+
+  @override
+  String get conversationStillPublic => '아직 링크로 공유되어 있습니다.';
+
+  @override
+  String get goalSaveFailed => '목표를 저장하지 못했습니다.';
+
+  @override
+  String get goalDeleteFailed => '삭제하지 못했습니다. 목표가 복원되었습니다.';
+
+  @override
+  String get goalsLoadFailed => '목표를 불러오지 못했습니다.';
+
+  @override
+  String get missingTargetEndedRecording => '해당 녹음은 이미 종료되었습니다.';
+
+  @override
+  String get missingTargetMemory => '해당 기억은 더 이상 없습니다.';
+
+  @override
+  String get missingTargetTask => '해당 작업은 더 이상 없습니다.';
+
+  @override
+  String get missingTargetConversation => '이 대화를 열 수 없습니다.';
+
+  @override
+  String get couldNotRefreshConversations => '새로고침하지 못했습니다.';
+
+  @override
+  String get connectDeviceForOfflineSync => '동기화하려면 Omi를 연결하세요.';
+
+  @override
+  String get useDifferentAccountMessage => '로그아웃되며 이 휴대전화의 Omi 설정이 초기화됩니다.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => '안경을 찾을 수 없습니다. 전원이 켜져 있나요?';
+
+  @override
+  String get couldNotMoveTask => '작업을 이동하지 못했습니다.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '삭제되었습니다. 잠긴 작업 $count개가 유지되었습니다.',
+      one: '삭제되었습니다. 잠긴 작업 1개가 유지되었습니다.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => '변경 사항을 저장하지 못했습니다.';
+
+  @override
+  String get couldNotLoadNotificationSettings => '설정을 불러오지 못했습니다.';
+
+  @override
+  String get waitForOmiToFinish => 'Omi의 응답이 끝날 때까지 기다려 주세요.';
+
+  @override
+  String get voiceNoteTooShort => '너무 짧습니다. 길게 눌러 녹음하세요.';
+
+  @override
+  String get submitAppMissingFields => '제출하려면 이름, 설명, 이미지, 카테고리, 기능을 추가하세요.';
+
+  @override
+  String get appSetupNotFinished => '설정이 아직 완료되지 않았습니다.';
+
+  @override
+  String get finishNothingKeptTitle => '유지할 항목 없음';
+
+  @override
+  String get submitAppFinishDetails => '제출하려면 위의 기능 및 가격 세부정보를 완성하세요.';
+
+  @override
+  String get finishNothingNew => '아직 새로운 내용이 없습니다.';
+
+  @override
+  String get takingLongerThanUsual => '평소보다 오래 걸리고 있습니다. 홈에 추가될 예정입니다.';
+
+  @override
+  String get couldNotCheckOnIt => '확인하지 못했습니다. 다시 시도하세요.';
+
+  @override
+  String get upgradeToOpenThisOne => '열려면 업그레이드가 필요합니다.';
+
+  @override
+  String get missingTargetConversationGone => '해당 대화는 삭제되었습니다.';
+
+  @override
+  String get cantConnectRightNow => '지금은 연결할 수 없습니다.';
+
+  @override
+  String get loadOlderFailed => '이전 항목을 불러오지 못했습니다. 탭하여 다시 시도하세요.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return '듣는 중 · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => '변경하려면 종료될 때까지 기다려 주세요.';
+
+  @override
+  String get finishedSummaryReady => '요약이 준비되었습니다';
+
+  @override
+  String get writingSummaryStatus => '요약 작성 중…';
+
+  @override
+  String get stillWorkingOnIt => '아직 처리 중입니다.';
 }

@@ -131,7 +131,23 @@ FIELD_SITES = {
                 'v3_process_fingerprint',
                 'v3_rewrites',
             ),
-        )
+        ),
+        # The claim transfer transaction redirects settled donors and clears legacy notes debt.
+        (
+            'commit_projection.commit',
+            'summary_due_at',
+            'None',
+            (
+                'deleted',
+                'discarded',
+                'home_hidden',
+                'summary_due_at',
+                'sync_content_revision',
+                'sync_merged_into',
+                'v3_claims_transferred_to',
+                'v3_refined',
+            ),
+        ),
     ],
     # Reviewed backfill run ledger: run and partition status, not a conversation lifecycle field.
     'database/conversations_v3_backfill_runs.py': [
@@ -180,6 +196,12 @@ FIELD_SITES = {
                 'v3_process_pending',
             ),
         ),
+        (
+            'store_summary.persist',
+            'status',
+            "'completed'",
+            ('status', 'v3_open_locked', 'v3_process_pending', 'v3_unlocked'),
+        ),
     ],
     'utils/conversations/v3/planner.py': [
         (
@@ -214,7 +236,21 @@ FIELD_SITES = {
                 'v3_derived',
                 'v3_recording_ids',
             ),
-        )
+        ),
+        (
+            'unavailable_preview',
+            'status',
+            "'completed'",
+            (
+                '_v3_claims',
+                'home_hidden',
+                'home_hidden_reason',
+                'status',
+                'tile_state',
+                'v3_process_pending',
+                'v3_unlocked',
+            ),
+        ),
     ],
     'utils/conversations/v3/service.py': [
         ('reconcile.plan', 'status', "prior['status']", ('status',)),
@@ -3309,15 +3345,24 @@ FIELD_SITES = {
         ('_store_deferred_conversation', 'status', 'ConversationStatus.processing', ('status',)),
         ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
         ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
+        ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
         ('process_user_expression_measurement_callback', 'status', 'task_status', ('status',)),
     ],
     'utils/conversations/summary_delivery.py': [
+        (
+            '_merge_historical',
+            'summary_completed_at',
+            "existing.get('summary_completed_at') or current",
+            ('summary_completed_at',),
+        ),
+        ('_merge_historical', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_completed_at', 'current', ('summary_completed_at',)),
         ('merge_result', 'summary_completed_at', "existing['summary_completed_at']", ('summary_completed_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
+        ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),

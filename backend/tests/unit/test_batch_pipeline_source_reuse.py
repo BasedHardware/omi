@@ -755,8 +755,28 @@ async def test_missing_input_repair_preserves_accepted_file_boundaries_after_off
     assert set(protocol.restore_reupload.call_args.args[3]) == set(snapshots)
 
 
-def test_mixed_bundle_admits_only_the_new_tail_as_paid_work(monkeypatch):
+@pytest.fixture
+def allowance_intake_probe(monkeypatch):
+    from utils import stt_cap_dispatch
+    from utils.batch_pipeline.intake import _probe_upload_allowance
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"usage_month_total":100}')
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'true')
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_ALLOWANCE_INTAKE_PARK_ENABLED', 'true')
+    allowance = Mock()
+    monkeypatch.setattr(stt_cap_dispatch, 'funded_allowance', allowance)
+    return _probe_upload_allowance, allowance
+
+
+@pytest.mark.parametrize(
+    'reason,expected', [('plan_within_allowance', 'ready'), ('plan_allowance_exhausted', 'allowance_held')]
+)
+async def test_mixed_bundle_admits_only_the_new_tail_as_paid_work(
+    monkeypatch, allowance_intake_probe, reason, expected
+):
     from database.batch_pipeline_intake import admit
+    from database.batch_pipeline_allowance_hold import OWNERS
     from utils.batch_pipeline.scheduler import Scheduler
     from database import batch_pipeline_store
 
@@ -793,7 +813,13 @@ def test_mixed_bundle_admits_only_the_new_tail_as_paid_work(monkeypatch):
         return answer
 
     paid = Mock(wraps=Scheduler.enqueue_in_transaction)
+    monkeypatch.setattr(Scheduler, 'enqueue_in_transaction', staticmethod(paid))
     adapter = SimpleNamespace(run=run, namespace=NS)
+    policy = replace(BatchUnitPolicy(), batch_enabled=True)
+    aliases = {COPY: {'segment_id': SOURCE, 'result_uri': marker}}
+    probe, allowance = allowance_intake_probe
+    allowance.return_value = SimpleNamespace(managed=expected == 'ready', reason=reason)
+    refusal = await probe(adapter, UID, policy, 'fresh', [copy, tail], aliases)
     assert (
         admit(
             adapter,
@@ -802,15 +828,19 @@ def test_mixed_bundle_admits_only_the_new_tail_as_paid_work(monkeypatch):
             NOW,
             namespace=NS,
             require_artifacts=True,
-            policy=replace(BatchUnitPolicy(), batch_enabled=True),
-            enqueue=paid,
-            source_aliases={COPY: {'segment_id': SOURCE, 'result_uri': marker}},
+            policy=policy,
+            intake={'lane': 'fresh'},
+            source_aliases=aliases,
+            intake_refusal=refusal,
         )['outcome']
         == 'batch'
     )
     assert paid.call_count == 1 and paid.call_args.args[1].segment_id == tail_id
     assert store.ref('jobs', COPY).get().to_dict()['state'] == 'result_ready'
-    assert store.ref('jobs', tail_id).get().to_dict()['state'] == 'ready'
+    assert store.ref('jobs', tail_id).get().to_dict()['state'] == expected
+    allowance.assert_called_once_with(UID, lane='batch', ready_usage_only=True)
+    owner = store.ref(OWNERS, owner_key(UID)).get().to_dict() or {}
+    assert owner.get('held_count', 0) == int(expected == 'allowance_held')
 
 
 def test_projection_refusal_finishes_after_temporary_canonical_artifacts_expire():

@@ -136,6 +136,22 @@
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_SERVING_TICK_SECONDS",
       "why": "Margin-40 PR25539 panel F4 requires integration-only cadence, 2026-11-17: this cadence belongs only to the integration projection sweep/supervisor. The worker entrypoint runs Pump/Scheduler, not Projection.sweep or Serving.supervise; the import-closure inventory over-approximates execution. Retain the excluded worker defaults. The deploy-contract test pins this exact integration/worker distinction; no general reader-split exemption."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_BACKLOG_RELEASE_OWNER_KEYS",
+      "why": "Reviewed 2026-11-18 (backlog-release-meter runbook PR 4): the fenced backlog heartbeat writer runs only in the serving supervisor (main.py start_serving_from_env -> serving._supervise_backlog_heartbeat), enabled on the one designated role backend-integration. The worker entrypoint (diarizer.batch_pipeline_runtime) runs Pump/Scheduler and never constructs HeartbeatAuthority; the import-closure inventory over-approximates execution. The worker must keep the writer disabled default; delete these entries when the gate closes and the keys leave backend-integration."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_BACKLOG_RELEASE_RATE_PER_HOUR",
+      "why": "Reviewed 2026-11-18 (backlog-release-meter runbook PR 4): the fenced backlog heartbeat writer runs only in the serving supervisor (main.py start_serving_from_env -> serving._supervise_backlog_heartbeat), enabled on the one designated role backend-integration. The worker entrypoint (diarizer.batch_pipeline_runtime) runs Pump/Scheduler and never constructs HeartbeatAuthority; the import-closure inventory over-approximates execution. The worker must keep the writer disabled default; delete these entries when the gate closes and the keys leave backend-integration."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_BACKLOG_RELEASE_STATE",
+      "why": "Reviewed 2026-11-18 (backlog-release-meter runbook PR 4): the fenced backlog heartbeat writer runs only in the serving supervisor (main.py start_serving_from_env -> serving._supervise_backlog_heartbeat), enabled on the one designated role backend-integration. The worker entrypoint (diarizer.batch_pipeline_runtime) runs Pump/Scheduler and never constructs HeartbeatAuthority; the import-closure inventory over-approximates execution. The worker must keep the writer disabled default; delete these entries when the gate closes and the keys leave backend-integration."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_BACKLOG_RELEASE_WRITER",
+      "why": "Reviewed 2026-11-18 (backlog-release-meter runbook PR 4): the fenced backlog heartbeat writer runs only in the serving supervisor (main.py start_serving_from_env -> serving._supervise_backlog_heartbeat), enabled on the one designated role backend-integration. The worker entrypoint (diarizer.batch_pipeline_runtime) runs Pump/Scheduler and never constructs HeartbeatAuthority; the import-closure inventory over-approximates execution. The worker must keep the writer disabled default; delete these entries when the gate closes and the keys leave backend-integration."
     }
   ]
 }
