@@ -2697,6 +2697,33 @@ def test_go_queue_erase_gates_data_wipe_after_billing(monkeypatch, workerd_down,
         account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
 
 
+def test_unarmed_flag_off_task_records_lake_failure_for_retry(monkeypatch):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'false')
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock(return_value=False))
+    renew = MagicMock(side_effect=[True, RuntimeError('unexpected extra renewal')])
+    monkeypatch.setattr(account_deletion, 'renew_job_run_lock', renew)
+    require_erase = MagicMock()
+    monkeypatch.setattr(account_deletion, 'require_committed_erase', require_erase)
+    monkeypatch.setattr(
+        account_deletion, 'destroy_owner_lake_keys', MagicMock(side_effect=RuntimeError('final lake purge failed'))
+    )
+    short_lease = account_deletion.Event()
+    short_lease.set()
+
+    assert not account_deletion.background_wipe_user_data(
+        'uid1', erase_claim=('opaque-job-id', 'current-token', short_lease)
+    )
+
+    renew.assert_called_once_with(
+        'account-deletion:uid1', 'current-token', account_deletion.go_erase_db.ERASE_LEASE_SECONDS
+    )
+    require_erase.assert_not_called()
+    account_deletion.destroy_owner_lake_keys.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
+
+
 def test_billing_failure_does_not_arm_the_go_queue_barrier(monkeypatch):
     _stub_wipe_steps_after_billing(monkeypatch)
     monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'true')

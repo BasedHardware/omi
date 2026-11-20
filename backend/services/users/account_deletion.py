@@ -441,10 +441,8 @@ def background_wipe_user_data(
             )
             preserve_erase_gate = armed is True
             if not (preserve_erase_gate or configured):
-                # Keep the claim short until the authoritative marker rules out the barrier.
+                # Resume the normal heartbeat once the marker rules out the barrier.
                 short_lease_event.clear()
-                if not renew_job_run_lock(deletion_gate_token, token):
-                    raise RuntimeError('account deletion wipe claim lost')
         needs_erase = preserve_erase_gate or configured
         # The durable marker and queue claim are the authority for every
         # irreversible step below. In particular, do not cancel billing or
@@ -544,10 +542,9 @@ def background_wipe_user_data(
         destroy_owner_lake_keys(uid)
         logger.info('delete_account background wipe complete')
     except Exception as e:
-        if erase_claim is not None:
+        if erase_claim is not None and erase_claim[2].is_set():
             try:
-                lease_args = (go_erase_db.ERASE_LEASE_SECONDS,) if erase_claim[2].is_set() else ()
-                if not renew_job_run_lock(deletion_gate_token, erase_claim[1], *lease_args):
+                if not renew_job_run_lock(deletion_gate_token, erase_claim[1], go_erase_db.ERASE_LEASE_SECONDS):
                     logger.warning('delete_account failure ignored after losing the run lock')
                     return False
             except Exception:
