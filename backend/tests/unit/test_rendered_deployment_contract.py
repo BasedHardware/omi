@@ -6,6 +6,8 @@ from copy import deepcopy
 from pathlib import Path
 import runpy
 import shutil
+import subprocess
+import sys
 from types import SimpleNamespace
 from typing import Any
 
@@ -186,6 +188,35 @@ def test_helm_output_never_escapes_in_render_error(monkeypatch, contracts, retur
         contracts.render_chart(contracts.CONTRACTS[0], "dev", "helm")
     assert "synthetic-" not in str(exc.value)
     assert exc.value.__suppress_context__ or exc.value.__context__ is None
+
+
+def test_cli_omits_scalar_from_yaml_constructor_error():
+    marker = "synthetic-rendered-scalar-marker"
+    # Run the CLI entry point with a stubbed Helm process and the real YAML loader.
+    bootstrap = """
+import runpy
+import sys
+from subprocess import CompletedProcess
+from unittest.mock import patch
+
+with patch("shutil.which", return_value="helm"), patch(
+    "subprocess.run", return_value=CompletedProcess([], 0, stdout=sys.argv[2], stderr="")
+):
+    runpy.run_path(sys.argv[1], run_name="__main__")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", bootstrap, str(SCRIPT), f"value: !!bool {marker}\n"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode == 1
+    assert marker not in result.stdout
+    assert marker not in result.stderr
+    assert "Traceback" not in result.stderr
+    assert "Helm render failed or returned invalid YAML" in result.stderr
 
 
 def test_render_command_uses_the_deploy_immutable_tag_override(monkeypatch, contracts: SimpleNamespace):

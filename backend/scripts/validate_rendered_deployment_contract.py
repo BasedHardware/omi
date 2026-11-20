@@ -128,7 +128,8 @@ def render_chart(contract: DeploymentContract, environment: str, helm_binary: st
         raise ValueError("Helm template failed")
     try:
         return [document for document in yaml.safe_load_all(result.stdout) if isinstance(document, dict)]
-    except yaml.YAMLError:
+    except Exception:
+        # YAML constructors can raise ordinary exceptions containing rendered scalars.
         raise ValueError("Helm returned invalid YAML") from None
 
 
