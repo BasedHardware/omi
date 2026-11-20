@@ -47,15 +47,25 @@ def events(caplog):
     ]
 
 
+@pytest.fixture
+def summary_open_model(monkeypatch):
+    # Built in setup: the first OpenAI client construction pays one-time lazy imports
+    # (~0.6 s CPU), which the fast-unit duration guard (call phase only) must not
+    # charge to this test's own work.
+    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'https://synthetic.invalid')
+    return get_or_create_omi_gateway_llm(
+        'omi:auto:conversation-v3-summary-open', feature='conversation_v3_summary_open'
+    )
+
+
 @pytest.mark.asyncio
-async def test_recap_provider_receipts_join_across_foreground_intervals(catchup, monkeypatch, caplog):
+async def test_recap_provider_receipts_join_across_foreground_intervals(
+    catchup, monkeypatch, caplog, summary_open_model
+):
     caplog.set_level(logging.INFO, logger=recap_telemetry.logger.name)
     now = [299.0]
     monkeypatch.setattr(recap_telemetry, 'time', SimpleNamespace(time=lambda: now[0]))
-    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'https://synthetic.invalid')
-    model = get_or_create_omi_gateway_llm(
-        'omi:auto:conversation-v3-summary-open', feature='conversation_v3_summary_open'
-    )
+    model = summary_open_model
     receipts = []
     should_fail = [False]
 
