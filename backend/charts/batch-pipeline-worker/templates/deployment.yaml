@@ -35,9 +35,10 @@ metadata:
   {{- end }}
 spec:
   # L4 scale-from-zero, image pull and joint model startup exceeded 600s in dev.
-  # Recreate also waits for old pods to drain (terminationGracePeriodSeconds 1500)
-  # before new ones start, so the deadline covers drain plus startup.
-  progressDeadlineSeconds: 2400
+  # A replaced pod may drain for up to terminationGracePeriodSeconds (1500) before
+  # its successor starts on the freed GPU, and the startupProbe allows 1200 s more,
+  # so the deadline covers a worst-case drain plus startup with margin.
+  progressDeadlineSeconds: 3000
   {{- $replicas := .instance.baselineReplicas | default .Values.replicaCount }}
   {{- if hasKey .instance "fixedReplicas" }}
   {{- $replicas = .instance.fixedReplicas }}
@@ -57,9 +58,24 @@ spec:
   # looking up the live value also prevents later Helm upgrades resetting HPA scale.
   # New installs and offline renders use replicaCount as their baseline.
   replicas: {{ $replicas | int }}
-  # Never allocate surge GPUs or co-locate a second chain on one device.
+  # Never allocate surge GPUs or co-locate a second chain on one device: maxSurge
+  # stays 0 and every pod requests a whole nvidia.com/gpu. Rolling, not Recreate,
+  # so a GPU node is never left empty during a roll: each replacement is created
+  # (Pending) as soon as its predecessor is told to stop and takes the freed GPU
+  # seconds after that pod exits, long before the cluster autoscaler's 10-minute
+  # unneeded-node timer. Under Recreate, one old pod that hung for its full
+  # 1500 s grace kept every replacement from existing while the autoscaler
+  # returned nine idle L4 nodes during a stockout (incident SCA-3274, 2026-11-20).
+  # A hung pod now delays only its own replacement.
+  {{- $maxUnavailable := toString (.Values.rollout | default dict).maxUnavailable }}
+  {{- if not (regexMatch "^([1-9][0-9]?|100)%$" $maxUnavailable) }}
+  {{- fail "rollout.maxUnavailable must be a percentage in [1%, 100%]" }}
+  {{- end }}
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: {{ $maxUnavailable | quote }}
   selector:
     matchLabels:
       app.kubernetes.io/name: batch-pipeline-worker

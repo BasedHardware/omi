@@ -26,6 +26,15 @@ dataPlaneProject: ""
 bucket: ""
 secretName: ""
 replicaCount: 1
+# Worker rolls replace pods in place with maxSurge 0 (no surge GPU). This is the
+# share of replicas that may be draining or starting at once; Kubernetes rounds
+# it down and never below one pod. 50% finishes a roll in two drain-plus-startup
+# waves, which fits the deploy workflow's single-wave rollout wait the way
+# Recreate did, while half the fleet keeps serving (Recreate stopped all of it).
+# Rollback: 100% replaces every pod at once (Recreate's capacity drop, but each
+# replacement still keeps its node).
+rollout:
+  maxUnavailable: 50%
 # Operator-managed L4 (g2-standard-8) pool; never share the live diarizer pool.
 nodeSelector:
   cloud.google.com/gke-nodepool: batch-pipeline-pool
