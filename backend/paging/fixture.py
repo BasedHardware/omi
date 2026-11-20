@@ -1,5 +1,7 @@
 """Exercise the real endpoint and Firestore transactions with an isolated Bark transport."""
 
+import asyncio
+from base64 import urlsafe_b64encode
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -8,7 +10,7 @@ import json
 import os
 import time
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -23,6 +25,7 @@ import httpx
 
 from .app import OPERATOR_SA, SCHEDULER_SA, create_app
 from .bark import BARK_ENDPOINT, Bark
+from . import oidc
 from .oidc import OIDCVerifier
 from .publisher import REDIS
 from .store import ATTEMPT_LEASE, RETRY_DELAY, Store
@@ -76,32 +79,35 @@ class PagerVerificationFixture(unittest.TestCase):
         def authorize(value):
             return verifier('Bearer ' + value, AUDIENCE + DRAIN, SCHEDULER_SA)
 
-        with httpx.Client(transport=httpx.MockTransport(fetch)) as client:
-            verifier = OIDCVerifier(client, clock=lambda: monotonic_time)
-            self.assertFalse(authorize('invalid.token.signature'))
-            self.assertFalse(authorize(token(exp='malformed')))
-            self.assertFalse(outbound)
-            self.assertTrue(authorize(token()))
-            self.assertTrue(authorize(token()))
-            self.assertEqual(len(outbound), 1)
-            self.assertEqual(outbound[0].url, httpx.URL('https://www.googleapis.com/oauth2/v1/certs'))
-            self.assertEqual(set(outbound[0].extensions['timeout'].values()), {2.0})
-            for overrides in (
-                {'aud': AUDIENCE + '/internal/ack'},
-                {'iss': 'https://fixture.invalid'},
-                {'email': OPERATOR_SA},
-                {'email_verified': False},
-                {'exp': int(now.timestamp()) - 1},
-            ):
-                with self.subTest(overrides=overrides):
-                    self.assertFalse(authorize(token(**overrides)))
-            header_payload, signature = token().rsplit('.', 1)
-            corrupt = ('A' if signature[0] != 'A' else 'B') + signature[1:]
-            self.assertFalse(authorize(header_payload + '.' + corrupt))
-            self.assertEqual(len(outbound), 1)
-            monotonic_time += 20
-            self.assertTrue(authorize(token()))
-            self.assertEqual(len(outbound), 2)
+        verifier = OIDCVerifier(
+            lambda: httpx.AsyncClient(transport=httpx.MockTransport(fetch)), clock=lambda: monotonic_time
+        )
+        self.assertFalse(authorize('invalid.token.signature'))
+        self.assertFalse(authorize(token(exp='malformed')))
+        nested = urlsafe_b64encode(b'[' * 1100 + b'0' + b']' * 1100).rstrip(b'=').decode()
+        self.assertFalse(authorize(token().split('.')[0] + '.' + nested + '.AAAA'))
+        self.assertFalse(outbound)
+        self.assertTrue(authorize(token()))
+        self.assertTrue(authorize(token()))
+        self.assertEqual(len(outbound), 1)
+        self.assertEqual(outbound[0].url, httpx.URL('https://www.googleapis.com/oauth2/v1/certs'))
+        self.assertTrue(all(0 < value <= 2 for value in outbound[0].extensions['timeout'].values()))
+        for overrides in (
+            {'aud': AUDIENCE + '/internal/ack'},
+            {'iss': 'https://fixture.invalid'},
+            {'email': OPERATOR_SA},
+            {'email_verified': False},
+            {'exp': int(now.timestamp()) - 1},
+        ):
+            with self.subTest(overrides=overrides):
+                self.assertFalse(authorize(token(**overrides)))
+        header_payload, signature = token().rsplit('.', 1)
+        corrupt = ('A' if signature[0] != 'A' else 'B') + signature[1:]
+        self.assertFalse(authorize(header_payload + '.' + corrupt))
+        self.assertEqual(len(outbound), 1)
+        monotonic_time += 20
+        self.assertTrue(authorize(token()))
+        self.assertEqual(len(outbound), 2)
 
     def test_invalid_certificate_is_never_cached(self):
         attempts = []
@@ -110,12 +116,34 @@ class PagerVerificationFixture(unittest.TestCase):
             attempts.append(request)
             return httpx.Response(200, headers={'Cache-Control': 'max-age=3600'}, json={'kid': 'malformed'})
 
-        with httpx.Client(transport=httpx.MockTransport(fetch)) as client:
-            verifier = OIDCVerifier(client)
-            for _ in range(2):
-                with self.assertRaises(TransportError):
-                    verifier.certificates('https://www.googleapis.com/oauth2/v1/certs', 'GET')
-            self.assertEqual(len(attempts), 2)
+        verifier = OIDCVerifier(lambda: httpx.AsyncClient(transport=httpx.MockTransport(fetch)))
+        for _ in range(2):
+            with self.assertRaises(TransportError):
+                verifier.certificates('https://www.googleapis.com/oauth2/v1/certs', 'GET')
+        self.assertEqual(len(attempts), 2)
+
+    def test_certificate_deadline_covers_response_headers_and_body(self):
+        stages = []
+
+        class SlowBody(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                stages.append('body_started')
+                await asyncio.sleep(0.2)
+                stages.append('body_complete')
+                yield b'{}'
+
+        async def fetch(_):
+            await asyncio.sleep(0.15)
+            stages.append('headers')
+            return httpx.Response(200, stream=SlowBody())
+
+        verifier = OIDCVerifier(lambda: httpx.AsyncClient(transport=httpx.MockTransport(fetch)))
+        with patch.object(oidc, '_CERT_TIMEOUT', 0.3):
+            with self.assertRaises(TransportError) as error:
+                verifier.certificates('https://www.googleapis.com/oauth2/v1/certs', 'GET')
+        self.assertIsInstance(error.exception.__cause__, TimeoutError)
+        self.assertEqual(stages, ['headers', 'body_started'])
+        self.assertIsNone(verifier.certs)
 
     def test_pinned_sdk_commit_exhaustion_returns_retryable_503(self):
         sdk_transaction = Mock(_read_only=False, _max_attempts=2, _id=b'fixture')

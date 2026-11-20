@@ -1,5 +1,6 @@
 """Verify Google ID tokens with a bounded, per-worker signing certificate cache."""
 
+import asyncio
 import json
 import re
 from threading import Lock
@@ -18,8 +19,10 @@ _JWT = re.compile(r'[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+')
 
 
 class OIDCVerifier:
-    def __init__(self, client=None, *, clock=monotonic):
-        self.client = client if client is not None else httpx.Client(trust_env=False)
+    def __init__(self, client_factory=None, *, clock=monotonic):
+        self.client_factory = (
+            client_factory if client_factory is not None else lambda: httpx.AsyncClient(trust_env=False)
+        )
         self.clock = clock
         self.lock = Lock()
         self.certs = None
@@ -40,11 +43,23 @@ class OIDCVerifier:
             ):
                 return False
             verified = id_token.verify_oauth2_token(token, self.certificates, audience=audience)
-        except (ValueError, auth_errors.GoogleAuthError):
+        except (ValueError, RecursionError, auth_errors.GoogleAuthError):
             return False
         return verified.get('email') == principal and verified.get('email_verified') is True
 
+    async def fetch(self, timeout):
+        async with asyncio.timeout(timeout), self.client_factory() as client:
+            async with client.stream('GET', _CERT_URL, timeout=timeout, follow_redirects=False) as response:
+                response.raise_for_status()
+                body = bytearray()
+                async for chunk in response.aiter_bytes():
+                    if len(body) + len(chunk) > _MAX_CERT_BYTES:
+                        raise auth_errors.TransportError('pager signing certificate response exceeded size budget')
+                    body.extend(chunk)
+                return bytes(body), response.headers
+
     def certificates(self, url, method):
+        deadline = monotonic() + _CERT_TIMEOUT
         if (url, method) != (_CERT_URL, 'GET') or not self.lock.acquire(timeout=_CERT_TIMEOUT):
             raise auth_errors.TransportError('pager signing certificates unavailable')
         try:
@@ -52,31 +67,34 @@ class OIDCVerifier:
                 return self.certs
             self.certs = None
             started_at = self.clock()
-            with self.client.stream('GET', url, timeout=_CERT_TIMEOUT, follow_redirects=False) as response:
-                response.raise_for_status()
-                body = bytearray()
-                for chunk in response.iter_bytes():
-                    if self.clock() - started_at >= _CERT_TIMEOUT or len(body) + len(chunk) > _MAX_CERT_BYTES:
-                        raise auth_errors.TransportError('pager signing certificate response exceeded budget')
-                    body.extend(chunk)
-                certs = json.loads(body)
-                if not isinstance(certs, dict) or not certs:
-                    raise ValueError('empty signing certificate map')
-                for cert in certs.values():
-                    if not isinstance(cert, str):
-                        raise ValueError('invalid signing certificate')
-                    x509.load_pem_x509_certificate(cert.encode())
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise auth_errors.TransportError('pager signing certificate deadline elapsed')
+            # The caller is a synchronous Gunicorn thread. Do not wait for a
+            # cancelled DNS executor call during asyncio.run() shutdown.
+            loop = asyncio.new_event_loop()
+            try:
+                body, headers = loop.run_until_complete(self.fetch(remaining))
+            finally:
+                loop.close()
+            certs = json.loads(body)
+            if not isinstance(certs, dict) or not certs:
+                raise ValueError('empty signing certificate map')
+            for cert in certs.values():
+                if not isinstance(cert, str):
+                    raise ValueError('invalid signing certificate')
+                x509.load_pem_x509_certificate(cert.encode())
 
-                control = response.headers.get('cache-control', '').lower()
-                max_age = re.search(r'(?:^|,)\s*max-age=(\d{1,10})\s*(?:,|$)', control)
-                age = response.headers.get('age', '0')
-                cacheable = not {'no-cache', 'no-store'}.intersection(part.strip() for part in control.split(','))
-                result = SimpleNamespace(status=response.status_code, data=bytes(body))
-                if cacheable and max_age and re.fullmatch(r'\d{1,10}', age):
-                    self.expires_at = started_at + min(3600, int(max_age[1]) - int(age))
-                    self.certs = result
-                return result
-        except (ValueError, httpx.HTTPError) as error:
+            control = headers.get('cache-control', '').lower()
+            max_age = re.search(r'(?:^|,)\s*max-age=(\d{1,10})\s*(?:,|$)', control)
+            age = headers.get('age', '0')
+            cacheable = not {'no-cache', 'no-store'}.intersection(part.strip() for part in control.split(','))
+            result = SimpleNamespace(status=200, data=body)
+            if cacheable and max_age and re.fullmatch(r'\d{1,10}', age):
+                self.expires_at = started_at + min(3600, int(max_age[1]) - int(age))
+                self.certs = result
+            return result
+        except (ValueError, RecursionError, TimeoutError, httpx.HTTPError) as error:
             raise auth_errors.TransportError('pager signing certificates unavailable') from error
         finally:
             self.lock.release()
