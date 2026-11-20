@@ -186,10 +186,11 @@ def test_cap_rebases_sections_for_a_topic_spanning_the_boundary(monkeypatch):
         'sections': [{'first_line': i, 'title': f'Section {i}'} for i in (2, 3, 4)],
     }
     left, right = planner.windows(outline.stretches([raw], AT + timedelta(minutes=10)), [[topic]], cohesion=True)
-    assert [line['segment']['id'] for line in left['lines']] == ['0', '4']
-    assert [line['segment']['id'] for line in right['lines']] == ['8', '12']
-    assert [section['first_line'] for section in left['sections']] == [2]
-    assert [section['first_line'] for section in right['sections']] == [1, 2]
+    # The cap cut follows the longest prefix that ends within the cap, not the sections (#25829).
+    assert [line['segment']['id'] for line in left['lines']] == ['0', '4', '8']
+    assert [line['segment']['id'] for line in right['lines']] == ['12']
+    assert [section['first_line'] for section in left['sections']] == [2, 3]
+    assert [section['first_line'] for section in right['sections']] == [1]
 
 
 def test_resume_merges_within_the_cap_partition_and_keeps_sections(monkeypatch):
@@ -197,5 +198,6 @@ def test_resume_merges_within_the_cap_partition_and_keeps_sections(monkeypatch):
     raw = recording([segment(i, 320) for i in (0, 8, 9, 18)])
     topics = [entry(1), entry(2), {**entry(3), 'resumes_previous': True}, {**entry(4), 'resumes_previous': True}]
     windows = planner.windows(outline.stretches([raw], AT + timedelta(minutes=10)), [topics], cohesion=True)
-    assert [[line['segment']['id'] for line in w['lines']] for w in windows] == [['0'], ['8'], ['9', '18']]
-    assert windows[-1]['sections'] == [{'first_line': 2, 'title': 'Topic 4'}]
+    # Topic 3 resumes Topic 2 inside the first cap partition; Topic 4 cannot resume across the cut.
+    assert [[line['segment']['id'] for line in w['lines']] for w in windows] == [['0'], ['8', '9'], ['18']]
+    assert windows[1]['sections'] == [{'first_line': 3, 'title': 'Topic 3'}]

@@ -131,7 +131,23 @@ FIELD_SITES = {
                 'v3_process_fingerprint',
                 'v3_rewrites',
             ),
-        )
+        ),
+        # The claim transfer transaction redirects settled donors and clears legacy notes debt.
+        (
+            'commit_projection.commit',
+            'summary_due_at',
+            'None',
+            (
+                'deleted',
+                'discarded',
+                'home_hidden',
+                'summary_due_at',
+                'sync_content_revision',
+                'sync_merged_into',
+                'v3_claims_transferred_to',
+                'v3_refined',
+            ),
+        ),
     ],
     # Reviewed backfill run ledger: run and partition status, not a conversation lifecycle field.
     'database/conversations_v3_backfill_runs.py': [
@@ -180,6 +196,12 @@ FIELD_SITES = {
                 'v3_process_pending',
             ),
         ),
+        (
+            'store_summary.persist',
+            'status',
+            "'completed'",
+            ('status', 'v3_open_locked', 'v3_process_pending', 'v3_unlocked'),
+        ),
     ],
     'utils/conversations/v3/planner.py': [
         (
@@ -214,7 +236,21 @@ FIELD_SITES = {
                 'v3_derived',
                 'v3_recording_ids',
             ),
-        )
+        ),
+        (
+            'unavailable_preview',
+            'status',
+            "'completed'",
+            (
+                '_v3_claims',
+                'home_hidden',
+                'home_hidden_reason',
+                'status',
+                'tile_state',
+                'v3_process_pending',
+                'v3_unlocked',
+            ),
+        ),
     ],
     'utils/conversations/v3/service.py': [
         ('reconcile.plan', 'status', "prior['status']", ('status',)),
