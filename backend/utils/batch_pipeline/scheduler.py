@@ -35,6 +35,7 @@ from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.packing_counterfactual import job_observation, sampled as packing_sampled
 from utils.batch_pipeline.control import activate, consume_frontier_hint, field, migrate_legacy, read_control
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
+from utils.batch_pipeline.held_terminal import retained_digest_changed_held
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 from config.backlog_state_machine import MAX_HELD_REDRIVES, held_redrive_budget_enabled, held_redrive_counter_enabled
 from database import batch_pipeline_allowance_hold as allowance_hold
@@ -1382,6 +1383,10 @@ class Scheduler:
             if checked is None:
                 return None
             job, _ = checked(tx, job['segment_id'])
+            if not operator and retained_digest_changed_held(job):
+                # A repeatedly disagreeing pinned source can never satisfy its
+                # manifest; automatic intake redrive must not spend a requeue.
+                return None
             return Scheduler.requeue_quarantined_in_transaction(tx, job, now)
         control = read_control(tx, scheduler_control_key(job['owner_key']))
         job.update(

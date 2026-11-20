@@ -47,15 +47,34 @@ def events(caplog):
     ]
 
 
+@pytest.fixture
+def summary_open_model(monkeypatch):
+    # Built in setup: the first OpenAI client construction pays one-time lazy imports
+    # (~0.6 s CPU), which the fast-unit duration guard (call phase only) must not
+    # charge to this test's own work.
+    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'https://synthetic.invalid')
+    return get_or_create_omi_gateway_llm(
+        'omi:auto:conversation-v3-summary-open', feature='conversation_v3_summary_open'
+    )
+
+
+@pytest.fixture
+def default_summary_open_model():
+    # Same setup-phase construction for the default gateway URL (a separate model cache key),
+    # so no test in this file builds a gateway model inside its timed call phase.
+    return get_or_create_omi_gateway_llm(
+        'omi:auto:conversation-v3-summary-open', feature='conversation_v3_summary_open'
+    )
+
+
 @pytest.mark.asyncio
-async def test_recap_provider_receipts_join_across_foreground_intervals(catchup, monkeypatch, caplog):
+async def test_recap_provider_receipts_join_across_foreground_intervals(
+    catchup, monkeypatch, caplog, summary_open_model
+):
     caplog.set_level(logging.INFO, logger=recap_telemetry.logger.name)
     now = [299.0]
     monkeypatch.setattr(recap_telemetry, 'time', SimpleNamespace(time=lambda: now[0]))
-    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'https://synthetic.invalid')
-    model = get_or_create_omi_gateway_llm(
-        'omi:auto:conversation-v3-summary-open', feature='conversation_v3_summary_open'
-    )
+    model = summary_open_model
     receipts = []
     should_fail = [False]
 
@@ -246,14 +265,12 @@ def test_recap_duplicates_and_non_v4_ids_cannot_join(monkeypatch, caplog):
 
 
 @pytest.mark.asyncio
-async def test_recap_cohort_is_rechecked_before_outbound_dispatch(monkeypatch, caplog):
+async def test_recap_cohort_is_rechecked_before_outbound_dispatch(monkeypatch, caplog, default_summary_open_model):
     caplog.set_level(logging.INFO, logger=recap_telemetry.logger.name)
     monkeypatch.setenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', 'uid:synthetic')
     _, ingress = request('first_open', str(uuid4()))
     observation = recap_telemetry.observe('synthetic', ingress.headers)
-    model = get_or_create_omi_gateway_llm(
-        'omi:auto:conversation-v3-summary-open', feature='conversation_v3_summary_open'
-    )
+    model = default_summary_open_model
 
     def no_dispatch(outbound):
         pytest.fail('removed beta tester dispatched provider traffic')

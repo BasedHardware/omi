@@ -151,7 +151,7 @@ def test_unrelated_desktop_change_exits_as_a_green_no_op(git_repo: Path) -> None
 
     outputs, summary = _run_scope(git_repo, desktop_sha, main_sha=_git(git_repo, 'rev-parse', f'{desktop_sha}^'))
 
-    assert outputs == {'applies': 'false'}
+    assert outputs == {'applies': 'false', 'workerd': 'false'}
     assert 'Green no-op' in summary
 
 
@@ -164,7 +164,15 @@ def test_backend_source_or_deploy_input_change_proceeds(git_repo: Path, relative
 
     outputs, _summary = _run_scope(git_repo, relevant_sha)
 
-    assert outputs == {'applies': 'true'}
+    assert outputs == {'applies': 'true', 'workerd': 'false'}
+
+
+def test_workerd_change_selects_the_go_worker(git_repo: Path) -> None:
+    sha = _commit(git_repo, 'backend-go/cmd/workerd/main.go')
+
+    outputs, _summary = _run_scope(git_repo, sha)
+
+    assert outputs == {'applies': 'false', 'workerd': 'true'}
 
 
 def test_relevant_sha_left_behind_by_a_later_merge_still_reaches_admission(git_repo: Path) -> None:
@@ -182,7 +190,7 @@ def test_relevant_sha_left_behind_by_a_later_merge_still_reaches_admission(git_r
 
     outputs, _summary = _run_scope(git_repo, relevant_sha, main_sha=later_main_sha)
 
-    assert outputs == {'applies': 'true'}
+    assert outputs == {'applies': 'true', 'workerd': 'false'}
 
 
 def test_admission_accepts_a_target_newer_than_the_trigger(git_repo: Path) -> None:

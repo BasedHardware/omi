@@ -132,6 +132,40 @@ func Doc(collection, id string, more ...string) (Ref, error) {
 	return Ref{path: strings.Join(segments, "/")}, nil
 }
 
+// ReadDeletionMarker reads account_deletions/{tenant} from this store's database,
+// including while deletion is in progress. An absent document returns a nil map. A missing
+// database or failed read returns an error so callers cannot mistake an unavailable
+// authority for no marker.
+func (s *Store) ReadDeletionMarker(ctx context.Context, tenant string) (map[string]any, error) {
+	ref, err := Doc(MarkerCollection, tenant)
+	if err != nil {
+		return nil, err
+	}
+	// GetAll represents a missing document as a snapshot, keeping absence
+	// distinct from an RPC failure such as a missing database.
+	snapshots, err := s.client.GetAll(ctx, []*firestore.DocumentRef{s.client.Doc(ref.path)})
+	if err != nil {
+		return nil, classifyMarkerRead(err)
+	}
+	if len(snapshots) != 1 {
+		return nil, &CallError{Kind: KindRejected, Code: "UnexpectedSnapshotCount"}
+	}
+	var fields map[string]any
+	if snapshot := snapshots[0]; snapshot.Exists() {
+		if err := snapshot.DataTo(&fields); err != nil {
+			return nil, &CallError{Kind: KindRejected, Code: "Undecodable"}
+		}
+	}
+	return fields, nil
+}
+
+func classifyMarkerRead(err error) error {
+	if status.Code(err) == codes.NotFound {
+		return &CallError{Kind: KindRejected, Code: codes.NotFound.String()}
+	}
+	return classify(err)
+}
+
 // Tx is one fenced transaction. Its methods are valid only inside the callback.
 type Tx struct {
 	store *Store
@@ -218,6 +252,12 @@ func (t *Tx) Update(ref Ref, fields map[string]any) error {
 func classify(err error) error {
 	if err == nil {
 		return nil
+	}
+	if errors.Is(err, context.Canceled) {
+		return &CallError{Kind: KindTransient, Code: codes.Canceled.String()}
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return &CallError{Kind: KindTransient, Code: codes.DeadlineExceeded.String()}
 	}
 	state, ok := status.FromError(err)
 	if !ok {
