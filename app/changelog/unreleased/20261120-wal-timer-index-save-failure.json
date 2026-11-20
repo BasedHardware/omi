@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "A full-disk WAL index save inside the periodic flush/drain timers is now logged and retried instead of escaping as an uncaught async error; recordings were already retained, nothing visible changes."
+}

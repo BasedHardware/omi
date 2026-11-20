@@ -903,7 +903,6 @@ def release_claims(uid, row, *, firestore_client=None):
         return
     client = firestore_client or get_firestore_client()
     coll = user_conversations(client, uid)
-    ids = set(row.get('v3_recording_ids') or []) | {p['recording_id'] for p in row.get('recording_pieces') or []}
 
     @firestore.transactional
     def remove(tx):
@@ -916,6 +915,14 @@ def release_claims(uid, row, *, firestore_client=None):
         )
         if not intent.exists:
             raise Conflict('delete_intent_required')
+        # The delete caller may have read the card before a sync custody move
+        # committed. Once intent exists, no such move may change its links.
+        current = coll.document(row['id']).get(transaction=tx).to_dict() or row
+        if current.get('v3_claims_transferred_to'):
+            return
+        ids = set(current.get('v3_recording_ids') or []) | {
+            p['recording_id'] for p in current.get('recording_pieces') or []
+        }
         snapshots = [(rid, coll.document(rid).get(transaction=tx)) for rid in ids]
         for rid, snapshot in snapshots:
             recording = snapshot.to_dict() or {}

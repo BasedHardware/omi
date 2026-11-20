@@ -115,6 +115,10 @@
     "policy": "both",
     "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."
   },
+  "backend/database/conversations_v3_sync_repair.py:collection": {
+    "policy": "operator",
+    "reason": "Explicit owner-scoped point reads of one sync redirect chain and its claimants, fenced by source/card revisions and tombstones."
+  },
   "backend/database/daily_summaries.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."

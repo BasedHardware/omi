@@ -22,6 +22,16 @@ type episodeIntakeEndpoint struct {
 	attach           func(context.Context, finalization.Ref, time.Time) (string, error)
 }
 
+func (m *finalizationRuntime) episodeIntakeHandler(cfg config) http.Handler {
+	if cfg.episodeIntakeAudience == "" {
+		return nil
+	}
+	return episodeIntakeEndpoint{
+		audience: cfg.episodeIntakeAudience, caller: cfg.episodeIntakeCaller,
+		validate: idtoken.Validate, attach: m.family.RepairEpisodeIntake,
+	}
+}
+
 func (h episodeIntakeEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
 	defer cancel()

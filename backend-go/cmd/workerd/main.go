@@ -5,14 +5,12 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"google.golang.org/api/idtoken"
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
@@ -68,8 +66,8 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 		return errors.New("could not verify PostgreSQL queue schema; check connectivity and migration state")
 	}
 	maintenance, err := openFinalizationRuntime(ctx, startup, cfg, store)
-	endStartup()
 	if err != nil {
+		endStartup()
 		store.Close()
 		return err
 	}
@@ -79,6 +77,14 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 		}
 	}()
 	handlers := workerdHandlers(maintenance.family)
+
+	eraseServer, closeErase, err := openEraseServer(startup, cfg, store, logger)
+	endStartup()
+	if err != nil {
+		store.Close()
+		return err
+	}
+	defer closeErase()
 
 	workers, err := queue.Start(ctx, store, handlers, func(err error) {
 		reportQueueError(logger, "worker", err)
@@ -90,12 +96,7 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 	}
 	registry.MustRegister(newStrandedCollector(workers))
 
-	var intake http.Handler
-	if cfg.episodeIntakeAudience != "" {
-		intake = episodeIntakeEndpoint{
-			audience: cfg.episodeIntakeAudience, caller: cfg.episodeIntakeCaller,
-			validate: idtoken.Validate, attach: maintenance.family.RepairEpisodeIntake,
-		}
-	}
-	return serve(ctx, cfg, store, workers, registry, func(ctx context.Context) { maintenance.run(ctx, logger) }, intake)
+	return serve(ctx, cfg, store, workers, registry, func(ctx context.Context) {
+		maintenance.run(ctx, logger)
+	}, maintenance.episodeIntakeHandler(cfg), eraseServer)
 }
