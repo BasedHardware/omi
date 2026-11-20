@@ -1,7 +1,7 @@
 """Pure boundary and late-speech policy. No switch reads and no IO."""
 
 from utils.conversations.v3 import policy, visibility
-from utils.conversations.v3.outline import SILENCE, playback_origin
+from utils.conversations.v3.outline import SILENCE, playback_origin, sitdown as is_sitdown
 
 from collections.abc import Iterator
 from copy import deepcopy
@@ -27,16 +27,44 @@ def late_rewrite(*, previous_words, new_words, ended_at, now, rewrites):
     )
 
 
-def _capped(lines, sections):
-    end = max(line['end'] for line in lines)
-    if end - lines[0]['start'] <= CAP:
-        return [lines]
-    middle = lines[0]['start'] + (end - lines[0]['start']) / 2
-    candidates = [i for i in sections if 0 < i < len(lines)] or list(range(1, len(lines)))
-    if not candidates:
-        raise ValueError('single_transcript_segment_exceeds_two_hours')
-    cut = min(candidates, key=lambda i: abs((lines[i]['start'] - middle).total_seconds()))
-    return _capped(lines[:cut], []) + _capped(lines[cut:], [])
+def _capped(lines, sections=(), ownership=None):
+    """Cut a stretch over two hours after the longest prefix that ends within two hours of its start; repeat.
+
+    Every part but the last locks. A cut that moved with later speech (the old middle cut) or with the
+    outline (a topic boundary the first paid outline adds) froze a different prefix on each pass and
+    stranded the lines between cuts as one-line cards. Line starts are append-only for live speech, so
+    this cut stays put. ``sections`` is accepted for callers and ignored on purpose.
+
+    ``ownership`` (an ``Ownership``) decides who owns each line, the same way
+    ``preserve_finished_windows`` does. A part whose first line a locked row owns keeps that row's
+    cut: it ends at the first line another row (open or locked) or no row owns, so rows locked by
+    earlier code (main cut at the middle) or an earlier pass keep their cut when a turn straddles it
+    or a held turn is revised, and the cap counts from there. A locked row that owns none of the
+    stretch's lines never cuts it.
+    """
+    parts, offset = [], 0
+    while max(line['end'] for line in lines[offset:]) - lines[offset]['start'] > CAP:
+        cut = ownership.locked_run_end(lines, offset) if ownership is not None else None
+        if cut is not None:
+            if cut == len(lines):
+                break  # the locked row owns the rest
+            parts.append(lines[offset:cut])
+            offset = cut
+            continue
+        # The longest prefix whose latest end (overlapping turns included) stays within the cap.
+        limit = lines[offset]['start'] + CAP
+        cut, latest = None, lines[offset]['end']
+        for i in range(offset + 1, len(lines)):
+            if latest > limit:
+                break
+            cut = i
+            latest = max(latest, lines[i]['end'])
+        if cut is None:
+            raise ValueError('single_transcript_segment_exceeds_two_hours')
+        parts.append(lines[offset:cut])
+        offset = cut
+    parts.append(lines[offset:])
+    return parts
 
 
 def _as_sections(entries: list[dict[str, Any]], *, primary: dict[str, Any] | None = None) -> list[dict[str, Any]]:
@@ -97,7 +125,51 @@ def _fold_short_topics(lines: list, entries: list[dict[str, Any]]) -> list[dict[
     return result
 
 
-def _cohesive_groups(groups, outlines) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
+def _different_people(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    """Both entries name people and share none: a change of company ends a sit-down."""
+    names = lambda entry: {str(p).strip().lower() for p in entry.get('people') or () if str(p).strip()}
+    first, second = names(left), names(right)
+    return bool(first and second and not first & second)
+
+
+def _join_sitdown(lines: list, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One sit-down is one conversation: neighbouring conversation entries of a stretch join.
+
+    Under a long silence gap a stretch already ends where the sit-down does, so talk inside it with the
+    same kind is one card; topics become sections. Entries that both name people and share none stay
+    apart. Short dictation between two conversation entries (under the Home word minimum) joins as a
+    section too; media, background and longer dictation stay their own cards.
+    """
+    starts = [entry['first_line'] - 1 for entry in entries]
+    counts = {start + 1: word_count(lines[start:end]) for start, end in zip(starts, starts[1:] + [len(lines)])}
+    runs: list[list[dict[str, Any]]] = []
+    for index, entry in enumerate(entries):
+        joinable = entry['kind'] == 'conversation' or (
+            entry['kind'] == 'voice_work'
+            and counts[entry['first_line']] < visibility.MIN_HOME_WORDS
+            and 0 < index < len(entries) - 1
+            and entries[index - 1]['kind'] == 'conversation'
+            and entries[index + 1]['kind'] == 'conversation'
+        )
+        if joinable and runs and runs[-1][-1].get('_sitdown_joinable') and not _different_people(runs[-1][-1], entry):
+            runs[-1].append({**entry, '_sitdown_joinable': True})
+        else:
+            runs.append([{**entry, '_sitdown_joinable': joinable}])
+    result = []
+    for run in runs:
+        run = [{k: v for k, v in entry.items() if k != '_sitdown_joinable'} for entry in run]
+        conversations = [entry for entry in run if entry['kind'] == 'conversation']
+        if len(run) == 1 or not conversations:
+            result.extend(run)
+            continue
+        primary = max(conversations, key=lambda entry: counts[entry['first_line']])
+        result.append(_as_sections(run, primary=primary)[0])
+    return result
+
+
+def _cohesive_groups(
+    groups, outlines, sitdown=False, ownership=None
+) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
     for group, entries in zip(groups, outlines):
         if not entries:
             continue
@@ -109,7 +181,7 @@ def _cohesive_groups(groups, outlines) -> Iterator[tuple[dict[str, Any], list[di
             for section in entry.get('sections') or []
             if isinstance(section.get('first_line'), int)
         )
-        parts = _capped(group['lines'], cut_points)
+        parts = _capped(group['lines'], cut_points, ownership)
         start = 1
         for index, part in enumerate(parts):
             end = start + len(part)
@@ -137,13 +209,18 @@ def _cohesive_groups(groups, outlines) -> Iterator[tuple[dict[str, Any], list[di
                 'locked': group.get('locked', group['finished']) or not last,
                 '_stretch_words': word_count(part),
             }
-            yield bounded, _as_sections(topics) if manual else _fold_short_topics(part, topics)
+            if manual:
+                yield bounded, _as_sections(topics)
+            else:
+                yield bounded, _fold_short_topics(part, _join_sitdown(part, topics) if sitdown else topics)
             start = end
 
 
-def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topic_lock=False):
+def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topic_lock=False, ownership=None):
+    """``ownership``: an ``Ownership`` over the loaded rows; the two-hour cap reuses locked rows' cuts."""
     result = []
-    pairs = _cohesive_groups(groups, outlines) if cohesion else zip(groups, outlines)
+    sitdown = is_sitdown(silence_gap)
+    pairs = _cohesive_groups(groups, outlines, sitdown, ownership) if cohesion else zip(groups, outlines)
     for group, entries in pairs:
         first_result = len(result)
         if len(entries) > 1 and (group.get('manual_end') or group.get('after_manual_end')):
@@ -155,7 +232,7 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
             sections = [
                 s['first_line'] - 1 - begin for s in entry.get('sections', []) if isinstance(s.get('first_line'), int)
             ]
-            capped = _capped(lines, sections)
+            capped = _capped(lines, sections, ownership)
             for part_index, part in enumerate(capped):
                 candidate = {
                     **entry,
@@ -172,9 +249,11 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                 }
                 if defer_topic_lock and not group.get('locked', group['finished']) and part_index == len(capped) - 1:
                     candidate['_defer_lock'] = True
-                    candidate['_lock_end'] = group['end']
+                    candidate['_lock_end'] = group.get('settle_from', group['end'])
                 if cohesion:
-                    candidate['_stretch_words'] = group['_stretch_words']
+                    # A sit-down stretch can span two hours of separate cards, so each card meets the Home
+                    # word minimum on its own words; a five-minute stretch is judged whole (#25786).
+                    candidate['_stretch_words'] = word_count(part) if sitdown else group['_stretch_words']
                     candidate['_stretch_partition'] = first_result
                 # A model can undo a topic split, never a recorded silence boundary.
                 prior = result[-1] if result else None
@@ -193,6 +272,8 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                     if cohesion:
                         prior['sections'] = _as_sections([prior, candidate], primary=prior)[0]['sections']
                     prior['lines'].extend(part)
+                    if cohesion and sitdown:
+                        prior['_stretch_words'] = word_count(prior['lines'])
                     prior['finished'] = candidate['finished']
                     prior['manual_end'] = candidate['manual_end']
                     if defer_topic_lock:
@@ -471,6 +552,94 @@ def unavailable_preview(row, recordings):
     }
 
 
+def _segment_keys(row):
+    return {
+        (s.get('id'), s.get('start'), s.get('end'), None if s.get('id') is not None else s.get('text'))
+        for s in row.get('transcript_segments') or []
+    }
+
+
+def _holds_line(row, line, keys=None):
+    """The row published this exact segment (id and timing, or text when it has no id)."""
+    if not (row['started_at'] <= line['start'] and line['end'] <= row['finished_at']):
+        return False
+    segment_id = line['segment'].get('id')
+    start = (line['start'] - row['started_at']).total_seconds()
+    end = (line['end'] - row['started_at']).total_seconds()
+    text = None if segment_id is not None else line['segment'].get('text')
+    return (segment_id, start, end, text) in (keys if keys is not None else _segment_keys(row))
+
+
+class Ownership:
+    """Who owns each planned line: one rule for the two-hour cap and ``preserve_finished_windows``.
+
+    1. Exact hold first, across every loaded row (locked, then open): the row published this segment
+       (id and timing, or text without an id). A row that names the line's recording in
+       ``v3_recording_ids`` wins over a legacy row that names none.
+    2. Only when no row holds it exactly: containment on the line's own recording, locked rows first
+       (``_contains_line``: inside the row's window and its audio claim, or its window alone when the
+       recording keeps no claims). A revised turn (new id, same audio) stays with its row.
+
+    A deleted locked row (a tombstone) still owns its lines, so routing keeps the deleted speech in its
+    own window (the builder skips it) and it never joins the valid speech either side. The cap never
+    reuses a tombstone's cut (``locked_run_end``).
+    """
+
+    def __init__(self, existing, recordings=None):
+        rows = [
+            row
+            for row in (existing or {}).values()
+            if row.get('started_at')
+            and row.get('finished_at')
+            and not (row.get('v3_refined') and row.get('v3_claims_transferred_to'))
+            # Tombstones count only where they are locked, as finished windows always did.
+            and not (row.get('deleted') and is_unlocked(row))
+        ]
+        self.rows = [r for r in rows if not is_unlocked(r)] + [r for r in rows if is_unlocked(r)]
+        self.tombstone_ids = {r['id'] for r in self.rows if r.get('deleted')}
+        self.locked_ids = {r['id'] for r in self.rows if not is_unlocked(r)} - self.tombstone_ids
+        self._keys = {r['id']: _segment_keys(r) for r in self.rows}
+        self._claims: dict[str, Any] = {}
+        for rid, recording in (recordings or {}).items():
+            if recording.get('claims') is None:
+                continue
+            by_row = self._claims.setdefault(rid, {})
+            for claim in recording['claims']:
+                by_row.setdefault(claim['conversation_id'], []).append((claim['start'], claim['end']))
+        self._seen: dict[int, tuple[Any, Any]] = {}
+
+    def owner_of(self, line):
+        cached = self._seen.get(id(line))
+        if cached is None or cached[0] is not line:
+            cached = self._seen[id(line)] = (line, self._owner(line))
+        return cached[1]
+
+    def _owner(self, line):
+        rid = line['conversation_id']
+        exact = [row for row in self.rows if _holds_line(row, line, self._keys[row['id']])]
+        sourced = next((row for row in exact if rid in (row.get('v3_recording_ids') or ())), None)
+        if sourced is not None:
+            return sourced
+        legacy = next((row for row in exact if not row.get('v3_recording_ids')), None)
+        if legacy is not None:
+            return legacy
+        claims = self._claims.get(rid)
+        return next(
+            (r for r in self.rows if _contains_line(r, line, None if claims is None else claims.get(r['id'], ()))),
+            None,
+        )
+
+    def locked_run_end(self, lines, offset):
+        """The index after the run of lines one locked row owns from ``offset``; None when it is unowned."""
+        owner = self.owner_of(lines[offset])
+        if owner is None or owner['id'] not in self.locked_ids:
+            return None
+        for i in range(offset + 1, len(lines)):
+            if self.owner_of(lines[i]) is not owner:
+                return i
+        return len(lines)
+
+
 def _contains_line(row, line, spans):
     inside_window = row['started_at'] <= line['start'] and line['end'] <= row['finished_at']
     if not inside_window:
@@ -479,20 +648,16 @@ def _contains_line(row, line, spans):
         return True
     # A previous pass may have published this segment with a clipped audio claim.
     # Its original timing and id still identify the segment on retry.
-    segment_id = line['segment'].get('id')
     if not any(a < line['end'] and line['start'] < b for a, b in spans):
         return False
-    start = (line['start'] - row['started_at']).total_seconds()
-    end = (line['end'] - row['started_at']).total_seconds()
-    return any(
-        (s.get('id'), s.get('start'), s.get('end')) == (segment_id, start, end)
-        and (segment_id is not None or s.get('text') == line['segment'].get('text'))
-        for s in row.get('transcript_segments') or []
-    )
+    return _holds_line(row, line)
 
 
-def preserve_finished_windows(planned, existing, recordings=None, *, protect_provisional=False):
-    """Late speech cannot move a published finished conversation's boundaries."""
+def preserve_finished_windows(planned, existing, recordings=None, *, protect_provisional=False, ownership=None):
+    """Late speech cannot move a published finished conversation's boundaries.
+
+    ``ownership``: the plan's ``Ownership`` (the one the two-hour cap used); built here when omitted.
+    """
     finished = [
         row
         for row in existing.values()
@@ -515,16 +680,13 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
         finished.extend(row for row in open_rows if row['id'] in provisional)
     protected = {r['id'] for r in finished}
     published_ids = set()
-    claims_by_recording = {}
     published = {}
     for rid, recording in (recordings or {}).items():
         if recording.get('claims') is None:
             continue
-        indexed = claims_by_recording.setdefault(rid, {})
         for claim in recording['claims']:
             if claim['conversation_id'] in protected:
                 span = (claim['start'], claim['end'])
-                indexed.setdefault(claim['conversation_id'], []).append(span)
                 published.setdefault(rid, {}).setdefault('claims', []).append(span)
                 published_ids.add(claim['conversation_id'])
     for row in finished:
@@ -532,6 +694,7 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
             published_ids.add(row['id'])
             files = published.setdefault(p['recording_id'], {}).setdefault('files', {})
             files.setdefault(p['audio_file_id'], []).append((p['start'], p['end']))
+    ownership = ownership if ownership is not None else Ownership(existing, recordings)
     retained, fresh = {}, []
     published_partitions = set()
     fresh_metadata = {'_published': published, '_published_ids': published_ids}
@@ -539,11 +702,11 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
         gaps, pieces = [], []
         partition = window.get('_stretch_partition')
         for line in window['lines']:
-            claims = claims_by_recording.get(line['conversation_id'])
-            owner = next(
-                (r for r in finished if _contains_line(r, line, None if claims is None else claims.get(r['id'], ()))),
-                None,
-            )
+            # The same owner the two-hour cap saw (Ownership). Only a protected owner retains the
+            # line; one an open row owns stays in the planned window that row continues.
+            owner = ownership.owner_of(line)
+            if owner is not None and owner['id'] not in protected:
+                owner = None
             if partition is not None and partition not in published_partitions:
                 spans = published.get(line['conversation_id'], {}).get('claims', ())
                 if owner or any(a < line['end'] and line['start'] < b for a, b in spans):

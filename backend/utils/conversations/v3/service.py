@@ -248,7 +248,9 @@ async def reconcile(
         silence_seconds, lock_seconds = boundary_seconds(cohesion=cohesion and not derive)
         custom_timing = (silence_seconds, lock_seconds) != (DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS)
         silence_gap, lock_delay = timedelta(seconds=silence_seconds), timedelta(seconds=lock_seconds)
-        groups = outline.stretches(eligible, now, silence_gap=silence_gap, lock_delay=lock_delay)
+        groups = outline.stretches(
+            eligible, now, silence_gap=silence_gap, lock_delay=lock_delay, settle_on_landing=custom_timing
+        )
         if live and not all(group['finished'] for group in groups):
             # Speech within five minutes of now is still the live builder's; refuse before any paid call.
             raise Conflict('rederive_live_open')
@@ -385,8 +387,16 @@ async def reconcile(
         }
 
         async def plan():
+            # One ownership index per plan (adoption can add rows before a replan), shared by the
+            # two-hour cap and both projections below.
+            ownership = planner.Ownership(existing, recordings)
             proposed = planner.windows(
-                groups, outlines, cohesion=cohesion, silence_gap=silence_gap, defer_topic_lock=custom_timing
+                groups,
+                outlines,
+                cohesion=cohesion,
+                silence_gap=silence_gap,
+                defer_topic_lock=custom_timing,
+                ownership=ownership,
             )
             merge = refinement.candidate(proposed, existing, recordings) if refine_locked else None
             if merge and await run_blocking(db_executor, store.merge_donors_have_tasks, uid, merge[1]['_v3_absorbed']):
@@ -398,13 +408,13 @@ async def reconcile(
                 reserved = {merged['id'], *merged['_v3_absorbed']}
                 candidates = proposed[:index] + proposed[index + 1 :]
             windows = planner.preserve_finished_windows(
-                candidates, existing, recordings, protect_provisional=custom_timing
+                candidates, existing, recordings, protect_provisional=custom_timing, ownership=ownership
             )
             if reserved.intersection(window.get('existing_id') for window in windows):
                 merge = None
                 reserved.clear()
                 windows = planner.preserve_finished_windows(
-                    proposed, existing, recordings, protect_provisional=custom_timing
+                    proposed, existing, recordings, protect_provisional=custom_timing, ownership=ownership
                 )
             # A retained finished conversation owns its id by claim evidence; a fresh window that sorts
             # before it (late speech overlapping its start) must not time-match the same id. Two planned
@@ -655,7 +665,8 @@ async def reconcile(
                 # A different minute than the currently executing task avoids
                 # Cloud Tasks' completed-name dedupe swallowing the continuation.
                 delay = lock_delay if group['outline_ready'] else min(silence_gap, lock_delay)
-                await run_blocking(db_executor, enqueue, uid, at=max(group['end'] + delay, now + timedelta(minutes=1)))
+                settle_from = group.get('settle_from', group['end'])
+                await run_blocking(db_executor, enqueue, uid, at=max(settle_from + delay, now + timedelta(minutes=1)))
         for row in rows:
             prior = existing.get(row['id']) or {}
             if (
