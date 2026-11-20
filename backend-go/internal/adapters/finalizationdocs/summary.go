@@ -161,7 +161,8 @@ func updateSummary(outbox, row document, ref finalization.Ref, id string, action
 	if version == math.MaxInt64 || generation == math.MaxInt64 || revision < 0 {
 		return finalization.ErrInvalid
 	}
-	if field[string](outbox, "task_token") == "" || field[int64](outbox, "summary_expected_revision") != revision || action == rules.SummaryPark {
+	expected, revisionBound := outbox["summary_expected_revision"].(int64)
+	if field[string](outbox, "task_token") == "" || !revisionBound || expected != revision || action == rules.SummaryPark {
 		token, err := newUUID()
 		if err != nil {
 			return err
