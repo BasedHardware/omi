@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # The changelog approval wait reads the `UI author approval` commit status.
+  # Read-only, and scoped to this workflow's own token rather than widening the
+  # Omi Bot App installation.
+  statuses: read
 
 env:
   # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
@@ -21,7 +25,11 @@ env:
 jobs:
   plan-and-tag:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The changelog approval wait is bounded at 25 minutes (see the wait step).
+    # Worst case is ~5 minutes of planning/checkout plus the wait plus ~5 minutes
+    # of merge/tag/dispatch, so 45 minutes keeps the job above the wait budget
+    # while staying inside the 60-minute Omi Bot App token lifetime.
+    timeout-minutes: 45
     concurrency:
       group: desktop-release-planner-main
       cancel-in-progress: false
@@ -215,7 +223,7 @@ jobs:
             echo "branch=$BRANCH"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create and regular-merge PR to sync changelog back to main
+      - name: Create or reuse the changelog sync PR
         if: steps.plan.outputs.should_release == 'true' && steps.changelog.outputs.changed == 'true'
         id: changelog-pr
         env:
@@ -246,6 +254,7 @@ jobs:
               echo "number=$PR_NUMBER"
               echo "url=$PR_URL"
               echo "merged_main_sha=$MERGED_MAIN_SHA"
+              echo "needs_merge=false"
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -274,37 +283,116 @@ jobs:
             fi
           fi
 
+          PR_URL=$(gh pr view "$PR_NUMBER" --json url --jq '.url')
+
+          # A concurrent merge may have landed this changelog between the
+          # resolver and now. Verify the normal merge commit ancestry instead of
+          # merging again; the tag still binds to the changelog commit, which
+          # must be reachable from main.
           PR_STATE=$(gh pr view "$PR_NUMBER" --json state --jq '.state')
-          if [ "$PR_STATE" != "MERGED" ]; then
-            # main branch policy blocks ordinary merges. Use admin override so
-            # the Omi Bot can sync the changelog without waiting on checks.
-            # Do not fall back to a non-admin merge: a transient --admin failure
-            # (e.g. HTTP 502) would otherwise retry without override and fail
-            # on branch policy (see run 30581710658 / PR #10910).
-            merge_ok=0
-            for attempt in 1 2 3; do
-              if gh pr merge "$PR_NUMBER" --admin --merge; then
-                merge_ok=1
-                break
-              fi
-              if [ "$attempt" -lt 3 ]; then
-                echo "Admin merge attempt ${attempt}/3 failed; retrying in 5s..."
-                sleep 5
-              fi
-            done
-            test "$merge_ok" = "1"
+          if [ "$PR_STATE" = "MERGED" ]; then
+            MERGED_MAIN_SHA=$(gh pr view "$PR_NUMBER" --json mergeCommit --jq '.mergeCommit.oid')
+            test -n "$MERGED_MAIN_SHA"
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            test "$(git rev-parse "${MERGED_MAIN_SHA}^2")" = "$CHANGELOG_COMMIT"
+            test "$(git merge-base --is-ancestor "$CHANGELOG_COMMIT" origin/main && echo ok)" = "ok"
+            {
+              echo "number=$PR_NUMBER"
+              echo "url=$PR_URL"
+              echo "merged_main_sha=$MERGED_MAIN_SHA"
+              echo "needs_merge=false"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          {
+            echo "number=$PR_NUMBER"
+            echo "url=$PR_URL"
+            echo "needs_merge=true"
+          } >> "$GITHUB_OUTPUT"
+
+      # The `UI author approval` ruleset check is posted asynchronously by
+      # ui-author-approval.yml on pull_request_target, so the old 3x5s merge
+      # retry raced it and failed every hourly run after 2026-11-12 (SCA-3426).
+      # #25884 reached success 16m43s after PR creation; the 25-minute cap keeps
+      # headroom above that observed delay and fits the 45-minute job timeout.
+      - name: Wait for UI author approval on the exact changelog head
+        if: steps.plan.outputs.should_release == 'true' && steps.changelog.outputs.changed == 'true' && steps.changelog-pr.outputs.needs_merge == 'true'
+        id: approval
+        timeout-minutes: 30
+        env:
+          # Read-only status access; the merge below still uses the Omi Bot App.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/wait-for-changelog-approval.py \
+            --repository "${{ github.repository }}" \
+            --pr-number "${{ steps.changelog-pr.outputs.number }}" \
+            --expected-head-sha "${{ steps.changelog.outputs.commit }}" \
+            --context "UI author approval" \
+            --timeout-seconds 1500 \
+            --poll-seconds 15 \
+            --evidence "$RUNNER_TEMP/desktop-changelog-approval-wait.json" \
+            --github-output
+
+      - name: Merge the approved changelog PR at the exact head
+        if: steps.plan.outputs.should_release == 'true' && steps.changelog.outputs.changed == 'true' && steps.changelog-pr.outputs.needs_merge == 'true'
+        id: changelog-merge
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          PR_NUMBER="${{ steps.changelog-pr.outputs.number }}"
+          CHANGELOG_COMMIT="${{ steps.changelog.outputs.commit }}"
+
+          # Re-read the head immediately before merging. The wait proved the
+          # status on this SHA, and --match-head-commit makes the merge itself
+          # conditional on the same SHA, so a force-push cannot slip through.
+          test "$(gh pr view "$PR_NUMBER" --json headRefOid --jq '.headRefOid')" = "$CHANGELOG_COMMIT"
+
+          # The approval wait above is the gate. This loop only absorbs
+          # transient merge API errors; every attempt is bound to the same head.
+          # Do not fall back to a non-admin merge: a transient --admin failure
+          # (e.g. HTTP 502) would otherwise retry without override and fail on
+          # branch policy (see run 30581710658 / PR #10910).
+          merge_ok=0
+          for attempt in 1 2 3; do
+            if gh pr merge "$PR_NUMBER" --admin --merge --match-head-commit "$CHANGELOG_COMMIT"; then
+              merge_ok=1
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Admin merge attempt ${attempt}/3 failed; retrying in 5s..."
+              sleep 5
+            fi
+          done
+          test "$merge_ok" = "1"
 
           PR_STATE=$(gh pr view "$PR_NUMBER" --json state --jq '.state')
           test "$PR_STATE" = "MERGED"
           MERGED_MAIN_SHA=$(gh pr view "$PR_NUMBER" --json mergeCommit --jq '.mergeCommit.oid')
           PR_URL=$(gh pr view "$PR_NUMBER" --json url --jq '.url')
           test -n "$MERGED_MAIN_SHA"
+
+          # Normal merge commit ancestry: the merge commit's second parent is
+          # the exact approved head, and that head is reachable from main.
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse "${MERGED_MAIN_SHA}^2")" = "$CHANGELOG_COMMIT"
+          test "$(git merge-base --is-ancestor "$CHANGELOG_COMMIT" origin/main && echo ok)" = "ok"
+
           {
-            echo "number=$PR_NUMBER"
-            echo "url=$PR_URL"
             echo "merged_main_sha=$MERGED_MAIN_SHA"
+            echo "url=$PR_URL"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Retain changelog approval wait evidence
+        if: always() && steps.plan.outputs.should_release == 'true' && steps.changelog.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-changelog-approval-wait-${{ steps.version.outputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/desktop-changelog-approval-wait.json
+          if-no-files-found: ignore
+          overwrite: false
 
       - name: Bind immutable planner evidence to merged release source
         if: steps.plan.outputs.should_release == 'true'
