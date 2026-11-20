@@ -475,12 +475,11 @@ memories_svc = _load_module_from_file(
 )
 # The real product by-id guard: it only wraps the stubbed database reader.
 _load_module_from_file("utils.conversations.layer", BACKEND_DIR / "utils" / "conversations" / "layer.py")
-# Bind the real validator to this fixture's conversation reader even during bulk collection.
-sys.modules.pop("utils.task_intelligence.task_source_validation", None)
 action_items_svc = _load_module_from_file(
     "utils.retrieval.tool_services.action_items",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "action_items.py",
 )
+task_source_validator = sys.modules["utils.task_intelligence.task_source_validation"]
 action_items_svc.conversations_db = conversations_db
 router_mod = _load_module_from_file(
     "routers.tools",
@@ -496,6 +495,12 @@ rate_limit_config_mod = _load_module_from_file(
 restore_sys_modules(_SYS_MODULES_SNAPSHOT)
 importlib.import_module("database").notifications = notifications_db
 del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
+
+
+@pytest.fixture(autouse=True)
+def use_fixture_task_source_reader(monkeypatch):
+    # The service may have imported the validator before our database stubs were installed.
+    monkeypatch.setattr(task_source_validator, "conversations_db", conversations_db)
 
 
 # ===========================================================================
