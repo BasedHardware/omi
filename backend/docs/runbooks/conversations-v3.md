@@ -468,7 +468,10 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     deleted a rebuilt row (`owner_deleted_rebuilt_row`), after the owner edited, shared, locked,
     merged or retitled a row the run wrote, created or retired (`owner_edited_rebuilt_row`; compared
     against the owner-surface digest each settled partition records), or while a newer live run
-    restamped one (`undo_newer_run_first`: undo that one first). An interrupted undo is rerun as is:
+    restamped one (`undo_newer_run_first`: undo that one first). A standalone task linked to a card
+    scheduled for removal also blocks undo (`undo_created_row_has_tasks`). The run checks all such
+    cards before restoring any group and rechecks each group inside its transaction, including
+    cards already hidden by an interrupted undo. An interrupted undo is rerun as is:
     rows it already restored, and created rows it already hid (`v3_rederive_live_undone`), are
     finished rather than refused. It also refuses once account deletion began (`account_deletion`),
     and before restoring anything when a group of rows sharing sources is too large for one

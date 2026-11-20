@@ -468,12 +468,19 @@ def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
     if purged_reason(entries):
         return purged_reason(entries)
     named = set()
+    created = []
     for entry in entries:
         cid = entry['id']
         if deleted.document(cid).get().exists:
             return 'owner_deleted_rebuilt_row'
         snapshot = coll.document(cid).get()
         row = (snapshot.to_dict() or {}) if snapshot.exists else None
+        if (
+            row is not None
+            and entry.get('created')
+            and (row.get('v3_rederive_live_run') == run_id or row.get('v3_rederive_live_undone') == run_id)
+        ):
+            created.append(cid)
         if already_undone(row, entry, run_id):
             continue
         row = row or {}
@@ -485,6 +492,8 @@ def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
         if stamp == run_id:
             named.update(c['recording_id'] for c in entry.get('claims') or [])
             named.update(entry.get('sources') or [])
+    if created and store.merge_donors_have_tasks(uid, created, firestore_client=client):
+        return 'undo_created_row_has_tasks'
     # Every source any group will repair, before the first group restores.
     if any(not coll.document(rid).get().exists for rid in sorted(named)):
         return 'undo_source_missing'
@@ -535,6 +544,9 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
         }
         if any(owner_changed(current[cid] or {}, by_id[cid]) for cid in ours):
             raise Conflict('owner_edited_rebuilt_row')
+        created = [cid for cid in sorted(ours | done) if current[cid] is not None and by_id[cid].get('created')]
+        if created and store.merge_donors_have_tasks(uid, created, firestore_client=client, transaction=tx):
+            raise Conflict('undo_created_row_has_tasks')
         # A recurring voice the owner revoked since the run is never written back.
         user = client.collection('users').document(uid)
         restore = {}
@@ -554,7 +566,6 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
             if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
                 raise Conflict('lease_lost')
         restored = 0
-        created = [cid for cid in sorted(done) if current[cid] is not None and by_id[cid].get('created')]
         for entry in entries:
             if entry['id'] not in ours:
                 continue
@@ -569,7 +580,6 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
                         'v3_rederive_live_undone': run_id,
                     },
                 )
-                created.append(entry['id'])
             else:
                 tx.set(coll.document(entry['id']), restore[entry['id']])
                 restored += 1

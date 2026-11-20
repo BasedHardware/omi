@@ -10,6 +10,7 @@ Parent reference navigation preserves the owning store and performs no IO.
 It also supports the direct-document is_locked projection used at dispatch,
 and equality-only, document-id projections with a positive limit,
 proven by daily_memory_sweep_emulator_test.py for legacy window fence admission.
+Live V3 undo also uses a bounded conversation_id projection of linked tasks.
 Projected client BatchGet of folder membership is covered by
 test_folder_delete_concurrency_emulator.py; all of its reads obey the same
 read-before-write rule. BatchGet does not promise request-order results.
@@ -126,6 +127,7 @@ class StrictFirestoreDocument:
             # semantics as the already supported projection below.
             supported_field_paths = [field for field in field_paths if field != 'recording']
             if supported_field_paths not in (
+                ['deleted'],
                 ["is_locked"],
                 ["folder_id"],
                 ["language"],
@@ -271,29 +273,30 @@ class StrictFirestoreIdQuery:
     def __init__(self, database: StrictFirestore, path: tuple[str, ...]):
         self._database = database
         self._path = path
-        self._filters: tuple[tuple[str, Any], ...] = ()
-        self._ids_only = False
+        self._filters: tuple[tuple[str, str, Any], ...] = ()
+        self._projection: tuple[str, ...] | None = None
         self._limit: int | None = None
 
     def _copy(self) -> StrictFirestoreIdQuery:
         result = StrictFirestoreIdQuery(self._database, self._path)
         result._filters = self._filters
-        result._ids_only = self._ids_only
+        result._projection = self._projection
         result._limit = self._limit
         return result
 
     def where(self, *, filter: Any) -> StrictFirestoreIdQuery:
-        if filter.op_string != '==':
+        task_query = self._path[-1] == 'action_items' and filter.field_path == 'conversation_id'
+        if filter.op_string != '==' and not (task_query and filter.op_string == 'in' and 1 <= len(filter.value) <= 30):
             raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
         result = self._copy()
-        result._filters += ((filter.field_path, filter.value),)
+        result._filters += ((filter.field_path, filter.op_string, filter.value),)
         return result
 
     def select(self, fields: tuple[str, ...]) -> StrictFirestoreIdQuery:
-        if fields:
+        if fields and not (self._path[-1] == 'action_items' and fields == ('conversation_id',)):
             raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
         result = self._copy()
-        result._ids_only = True
+        result._projection = fields
         return result
 
     def limit(self, count: int) -> StrictFirestoreIdQuery:
@@ -303,18 +306,24 @@ class StrictFirestoreIdQuery:
         result._limit = count
         return result
 
-    def stream(self, *, transaction: StrictFirestoreTransaction):
-        if not self._filters or not self._ids_only or self._limit is None:
+    def stream(self, *, transaction: StrictFirestoreTransaction | None = None):
+        if not self._filters or self._projection is None or self._limit is None:
             raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
-        if transaction._database is not self._database:
-            raise ForeignTransactionError('Firestore transaction and query must belong to the same store')
-        transaction._assert_read_allowed()
+        if transaction is not None:
+            if transaction._database is not self._database:
+                raise ForeignTransactionError('Firestore transaction and query must belong to the same store')
+            transaction._assert_read_allowed()
+        elif self._projection != ('conversation_id',):
+            raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
         rows = []
         for path, value in sorted(self._database.rows.items()):
             if path[:-1] == self._path and all(
-                field in value and value[field] == expected for field, expected in self._filters
+                field in value and (value[field] == expected if op == '==' else value[field] in expected)
+                for field, op, expected in self._filters
             ):
-                snapshot = StrictFirestoreSnapshot({})
+                snapshot = StrictFirestoreSnapshot(
+                    {field: value[field] for field in self._projection if field in value}
+                )
                 snapshot.reference = StrictFirestoreDocument(self._database, path)
                 rows.append(snapshot)
         return iter(rows[: self._limit])

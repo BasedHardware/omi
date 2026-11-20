@@ -3,6 +3,10 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/action_items.py:collection": {
+    "policy": "conversations",
+    "reason": "Owner-scoped task commit reads only deletion and recording fields, rejecting missing, deleted, and recording rows before creating the association."
+  },
   "backend/database/batch_pipeline_privacy.py:collection": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."

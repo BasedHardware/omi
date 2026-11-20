@@ -726,6 +726,7 @@ def undo_live_run(uid, run_id, *, firestore_client=None):
             'owner_edited_rebuilt_row',
             'account_deletion',
             'undo_source_missing',
+            'undo_created_row_has_tasks',
             'lease_lost',
         }:
             raise
