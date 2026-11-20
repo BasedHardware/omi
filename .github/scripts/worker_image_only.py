@@ -87,6 +87,17 @@ def identity_spec(obj):
     return spec
 
 
+def no_surge_strategy(strategy):
+    """Recreate, or RollingUpdate with an explicit zero maxSurge: a roll never asks for a GPU beyond
+    the replica count. Kubernetes defaults an omitted maxSurge to 25%, so absence refuses."""
+    if strategy.get("type") == "Recreate":
+        return "rollingUpdate" not in strategy
+    if strategy.get("type") != "RollingUpdate":
+        return False
+    rolling = strategy.get("rollingUpdate") or {}
+    return "maxSurge" in rolling and rolling["maxSurge"] in (0, "0", "0%")
+
+
 def worker_images(spec):
     return {
         (field, c.get("name")): c.get("image", "")
@@ -173,7 +184,7 @@ def target_state(obj):
     meta = obj["metadata"]
     require(meta.get("namespace") == NAMESPACE and meta.get("name") == TARGET, "wrong deployment target")
     require(meta.get("uid") and meta.get("resourceVersion") and not meta.get("deletionTimestamp"), "unstable target")
-    require(obj["spec"].get("strategy", {}).get("type") == "Recreate", "worker must use Recreate")
+    require(no_surge_strategy(obj["spec"].get("strategy", {})), "worker must roll without surge GPUs")
     containers = pod_spec(obj)["containers"]
     matches = [i for i, c in enumerate(containers) if c.get("name") == "worker"]
     require(len(matches) == 1, "ambiguous worker container")

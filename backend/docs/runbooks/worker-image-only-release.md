@@ -4,8 +4,10 @@ Use the canonical `Deploy Diarizer to GKE` workflow's opt-in
 `preserve_live_worker=true` mode when a release admits an image move while
 requiring the live runtime configuration to remain intact. The default remains
 the existing Helm deployment. This mode targets only
-`prod-omi-backend/prod-omi-batch-pipeline-worker`, container `worker`, strategy
-`Recreate`. It never renders chart values, touches Helm Secrets, modifies
+`prod-omi-backend/prod-omi-batch-pipeline-worker`, container `worker`, with a
+strategy that never surges a GPU: `Recreate`, or `RollingUpdate` with an
+explicit `maxSurge: 0` (the chart's strategy since SCA-3274; any other strategy
+refuses). It never renders chart values, touches Helm Secrets, modifies
 repair policy, or rolls sibling consumers.
 
 This mode does not grant release or activation authority. Keep the existing

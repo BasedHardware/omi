@@ -321,11 +321,12 @@ maximum per class across identical worker samplers, then sums the classes.
 Absent/stale/partial data stays unavailable; never replace it with zero or sum
 the same global queue once per replica.
 
-Production values hold a four-worker on-demand GPU floor (vendor routing,
-11-01; was three, lead 114a22/724762) so batch keeps GPUs through vendor
-outages and L4 stockouts; see `docs/runbooks/batch-vendor-routing-capacity.md`.
+Production values hold a six-worker on-demand GPU floor (David, 2026-11-20;
+four from 11-01, three before) so batch keeps GPUs through vendor outages and
+L4 stockouts; the node pool minimum matches it and workers roll in place with
+`maxSurge: 0`. See `docs/runbooks/batch-vendor-routing-capacity.md`.
 The qualified cutover shape (lead f05065, 10-28) is a single OD-pinned HPA,
-now at min4/max16: every replica pins to
+now at min6/max16: every replica pins to
 `batch-pipeline-pool`, so the guaranteed floor and scale-out never depend on
 Spot (persistent L4 Spot stockout; Spot L4 bills above on-demand). The latent
 balanced-pool machinery stays available for non-production explicit-budget

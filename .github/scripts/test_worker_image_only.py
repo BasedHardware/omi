@@ -227,7 +227,12 @@ class PreservationTests(unittest.TestCase):
             lambda o: o["metadata"].update(namespace="dev-omi-backend"),
             lambda o: o["metadata"].update(name="wrong"),
             lambda o: o.update(kind="StatefulSet"),
+            # RollingUpdate without an explicit zero maxSurge (Kubernetes defaults it to 25%).
             lambda o: o["spec"]["strategy"].update(type="RollingUpdate"),
+            lambda o: o["spec"].update(strategy={"type": "RollingUpdate", "rollingUpdate": {"maxUnavailable": "25%"}}),
+            lambda o: o["spec"].update(strategy={"type": "RollingUpdate", "rollingUpdate": {"maxSurge": 1, "maxUnavailable": 0}}),
+            lambda o: o["spec"].update(strategy={"type": "RollingUpdate", "rollingUpdate": {"maxSurge": "25%", "maxUnavailable": "25%"}}),
+            lambda o: o["spec"].update(strategy={}),
             lambda o: o["spec"]["template"]["spec"]["containers"].append(copy.deepcopy(o["spec"]["template"]["spec"]["containers"][0])),
             lambda o: o["spec"]["template"]["spec"]["containers"][0].update(name="not-worker"),
             lambda o: o["spec"]["template"]["spec"]["containers"][0].update(image=worker.REPOSITORY + ":main"),
@@ -238,6 +243,17 @@ class PreservationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.deploy()
                 self.assertEqual(self.cluster.writes, 0)
+
+    def test_no_surge_rolling_update_is_admitted_and_preserved(self):
+        # SCA-3274: the worker rolls in place with maxSurge 0 so no GPU node empties mid-roll.
+        for rolling in ({"maxSurge": 0, "maxUnavailable": "25%"}, {"maxSurge": "0%", "maxUnavailable": 1}):
+            with self.subTest(rolling=rolling):
+                self.cluster = Cluster()
+                self.cluster.target["spec"]["strategy"] = {"type": "RollingUpdate", "rollingUpdate": dict(rolling)}
+                self.baseline = worker.snapshot(self.cluster)[1]
+                self.deploy()
+                self.assertEqual(self.cluster.writes, 1)
+                self.assertEqual(self.cluster.target["spec"]["strategy"]["rollingUpdate"], rolling)
 
     def test_invalid_candidate_and_already_serving_refuse(self):
         for image in (OLD, worker.REPOSITORY + ":latest", "gcr.io/other@sha256:" + "2" * 64):
