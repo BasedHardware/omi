@@ -99,7 +99,8 @@ def accept_deletion(
         row_snapshot = conversation_ref.get(
             field_paths=['external_data', 'created_at', 'deleted', 'sync_merged_from'], transaction=transaction
         )
-        tombstone_exists = tombstone_ref.get(transaction=transaction).exists
+        tombstone = tombstone_ref.get(transaction=transaction)
+        tombstone_exists = tombstone.exists
         owed = obligation_ref.get(transaction=transaction) if arm_erasure else None
         row = (row_snapshot.to_dict() or {}) if row_snapshot.exists else {}
         # Merge donors are read now, while the row exists: their canonical audio is erased with it.
@@ -114,6 +115,13 @@ def accept_deletion(
                 payload['legal_hold_deferred'] = True
                 payload['erasure_armed'] = arm_erasure
             transaction.create(tombstone_ref, payload)
+        elif legal_hold_deferred:
+            # A held retry (or a cascade after a held non-cascade delete) must stay
+            # visible to release follow-up, and armed erasure is never un-armed.
+            existing = tombstone.to_dict() or {}
+            armed = existing.get('erasure_armed') is True or arm_erasure
+            if existing.get('legal_hold_deferred') is not True or existing.get('erasure_armed') is not armed:
+                transaction.update(tombstone_ref, {'legal_hold_deferred': True, 'erasure_armed': armed})
         if row_snapshot.exists and not row.get('deleted'):
             transaction.update(conversation_ref, {'deleted': True})
         if owed is None:

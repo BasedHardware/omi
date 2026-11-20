@@ -22,7 +22,9 @@ HOLD_ISSUER = "admin"
 DEFAULT_REVIEW_DAYS = 180
 MAX_REVIEW_DAYS = 730
 _EVENTS_SHOWN = 20
-_TOMBSTONE_SCAN_LIMIT = 2000
+# Paged by document id; an operator read of one account, at most this many tombstones.
+_TOMBSTONE_SCAN_LIMIT = 50000
+_TOMBSTONE_PAGE = 500
 
 
 class HoldCommandError(RuntimeError):
@@ -70,11 +72,20 @@ def _held_deferred_deletes(client: Any, uid: str) -> dict[str, Any]:
     collection = client.collection(f"users/{uid}/deleted_conversations")
     scanned = 0
     held: list[dict[str, Any]] = []
-    for snapshot in collection.limit(_TOMBSTONE_SCAN_LIMIT).stream():
-        scanned += 1
-        payload = snapshot.to_dict() or {}
-        if payload.get("legal_hold_deferred") is True:
-            held.append({"conversation_id": snapshot.id, "erasure_armed": payload.get("erasure_armed") is True})
+    last = None
+    while scanned < _TOMBSTONE_SCAN_LIMIT:
+        query = collection.order_by("__name__").limit(min(_TOMBSTONE_PAGE, _TOMBSTONE_SCAN_LIMIT - scanned))
+        if last is not None:
+            query = query.start_after(last)
+        page = list(query.stream())
+        for snapshot in page:
+            scanned += 1
+            payload = snapshot.to_dict() or {}
+            if payload.get("legal_hold_deferred") is True:
+                held.append({"conversation_id": snapshot.id, "erasure_armed": payload.get("erasure_armed") is True})
+        if len(page) < _TOMBSTONE_PAGE:
+            break
+        last = page[-1]
     return {
         "count": len(held),
         "without_armed_erasure": sum(1 for row in held if not row["erasure_armed"]),
@@ -152,12 +163,19 @@ def release(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) 
     record.summary["fence_verified"] = True
     deferred = after["held_deferred_deletes"]
     record.summary["held_deferred_without_erasure"] = deferred["without_armed_erasure"]
-    follow_up = None
+    notes = []
     if deferred["without_armed_erasure"]:
-        follow_up = (
+        notes.append(
             f"{deferred['without_armed_erasure']} conversation(s) the user deleted while held have no armed erasure. "
-            "Erase them per backend/docs/runbooks/support-operator-cli.md (hold release follow-up)."
+            "File them on the ticket and SCA-3339 per backend/docs/runbooks/support-operator-cli.md "
+            "(hold release follow-up); do not erase by hand."
         )
+    if deferred["capped"]:
+        notes.append(
+            f"Tombstone scan stopped at {deferred['tombstones_scanned']}; deferred deletes beyond it are not listed. "
+            "Escalate on SCA-3339 before closing the ticket."
+        )
+    follow_up = " ".join(notes) or None
     return {"uid": args.uid, "released": True, "follow_up": follow_up, **after}
 
 

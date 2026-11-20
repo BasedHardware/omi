@@ -47,6 +47,9 @@ DEFAULT_URL_DAYS = 7
 AUDIO_PREFIXES = ("chunks", "playback")
 CHUNK_EXTENSIONS = (".batch.enc", ".batch.bin", ".opus.enc", ".opus", ".enc", ".bin")
 PLAYBACK_EXTENSIONS = (".mp3",)
+# Conversation recordings: {uid}/{conversation_id}.wav in BUCKET_MEMORIES_RECORDINGS.
+DEFAULT_MEMORIES_RECORDINGS_BUCKET = "memories-recordings"
+RECORDING_EXTENSIONS = (".wav",)
 # Encrypted stored extension -> extension of the decrypted bytes (same codec as
 # the unencrypted variant the pipeline writes).
 _DECRYPTED_SUFFIX = {"batch.enc": ".batch.bin", "opus.enc": ".opus", "enc": ".bin"}
@@ -241,11 +244,21 @@ def _audio_blobs(client: Any, uid: str) -> list[Any]:
         for blob in client.list_blobs(bucket, prefix=f"{prefix}/{uid}/"):
             if blob.name.endswith(allowed):
                 selected.append(blob)
+    recordings = client.bucket(_memories_recordings_bucket())
+    for blob in client.list_blobs(recordings, prefix=f"{uid}/"):
+        if blob.name.endswith(RECORDING_EXTENSIONS):
+            selected.append(blob)
     selected.sort(key=lambda blob: blob.name)
     return selected
 
 
+def _memories_recordings_bucket() -> str:
+    return (os.getenv("BUCKET_MEMORIES_RECORDINGS") or "").strip() or DEFAULT_MEMORIES_RECORDINGS_BUCKET
+
+
 def _audio_member_name(blob_name: str, uid: str, decrypted: bool) -> str:
+    if blob_name.startswith(f"{uid}/"):
+        return f"audio/recordings/{blob_name[len(uid) + 1:]}"
     kind, _, rest = blob_name.partition(f"/{uid}/")
     if decrypted:
         ext = get_extension_for_path(blob_name)
@@ -323,6 +336,7 @@ def _readme(
             "  16-bit little-endian mono PCM; *.opus are Opus packets, each prefixed with",
             "  a 4-byte big-endian length (the format Omi stores).",
             "  audio/playback/: MP3 playback files built from those chunks.",
+            "  audio/recordings/: per-conversation WAV recordings.",
             f"  Decrypted objects: {audio_decrypted}; objects stored unencrypted: {audio_raw}.",
         ]
         if audio_undecryptable:

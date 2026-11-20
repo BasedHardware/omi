@@ -392,6 +392,48 @@ def test_held_delete_kill_switch_restores_previous_non_cascade_behavior(plane, c
     assert cascade.erased == ['c1']
 
 
+def test_hold_released_during_a_held_non_cascade_delete_falls_through_to_normal_deletion(plane, cascade, monkeypatch):
+    # The hold is on another Firestore client, so it cannot join the tombstone transaction.
+    # A release (and its follow-up scan) that lands between them must not strand an unarmed tombstone.
+    from database import conversation_tombstones as tombstones
+
+    accept = tombstones.accept_deletion
+
+    def accept_then_release(*args, **kwargs):
+        accept(*args, **kwargs)
+        _hold(plane, active=False)
+
+    monkeypatch.setattr(tombstones, 'accept_deletion', accept_then_release)
+    _hold(plane)
+    with TestClient(cascade.app) as client:
+        response = client.delete('/v1/conversations/c1')
+    assert response.status_code == 204
+    assert response.headers['X-Omi-Delete-Outcome'] == 'tombstoned'
+    assert cascade.erased == ['c1']
+
+
+def test_held_retry_marks_the_existing_tombstone_and_never_unarms_erasure(plane, cascade):
+    _hold(plane)
+    plane.docs[f'users/{UID}/deleted_conversations/c1'] = {'conversation_id': 'c1'}  # earlier partial delete
+    with TestClient(cascade.app) as client:
+        assert client.delete('/v1/conversations/c1').status_code == 204
+        tombstone = _tombstone(plane, 'c1')
+        assert tombstone['legal_hold_deferred'] is True and tombstone['erasure_armed'] is False
+        assert client.delete('/v1/conversations/c1?cascade=true').status_code == 204
+        assert _tombstone(plane, 'c1')['erasure_armed'] is True and _erasure(plane, 'c1')
+        assert client.delete('/v1/conversations/c1').status_code == 204
+    assert _tombstone(plane, 'c1')['erasure_armed'] is True
+
+
+def test_held_cascade_delete_with_kill_switch_off_answers_gate_busy(plane, cascade, monkeypatch):
+    monkeypatch.setenv('LEGAL_HOLD_DEFER_SINGLE_DELETE', 'false')
+    _hold(plane)
+    with TestClient(cascade.app, raise_server_exceptions=False) as client:
+        response = client.delete('/v1/conversations/c1?cascade=true')
+    assert response.status_code == 409
+    assert cascade.erased == []
+
+
 def test_unreadable_hold_authority_answers_gate_busy_and_writes_nothing(plane, cascade):
     plane.docs[HOLD_PATH] = {'schema_version': 'unknown', 'issuer': 'admin', 'active': True}
     with TestClient(cascade.app, raise_server_exceptions=False) as client:

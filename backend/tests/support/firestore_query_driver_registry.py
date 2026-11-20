@@ -160,7 +160,7 @@ _MCP_KEY = 'omi_mcp_' + 'a' * 32
 BODY_DIGEST = {
     'database.legal_holds.list_legal_holds': 'adb83d85cbbabaa98a4d435147d92e2139b4e483c19a9c09e695c5f7fa4c517b',
     'utils.support.holds._events': 'd51288dc0b57da25ec5d9b4c5ebb74b47957c5221cc3fc96f190e92039ae3626',
-    'utils.support.holds._held_deferred_deletes': '673a814d881f7f087636651e54c7f324caac6c2f4b69b512267ec471a6a618dc',
+    'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3.commit_projection': 'ef2e983f527e4c07c35d5756b816405140fb88196bc819bc9f7a20012411c40e',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
@@ -4435,8 +4435,9 @@ for _key, _reason in (
     ),
     (
         'utils.support.holds._held_deferred_deletes',
-        'Support operator CLI `hold status/release` only: bounded limit() read of one account\'s '
-        'deleted_conversations tombstones by document id; held_deferred filtered in Python.',
+        'Support operator CLI `hold status/release` only: one account\'s deleted_conversations tombstones, '
+        'paged by document id (built-in __name__ order, start_after, limit) up to a fixed cap; held_deferred '
+        'filtered in Python.',
     ),
     (
         'utils.support.retention._select_conversations',

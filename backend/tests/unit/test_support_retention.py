@@ -249,8 +249,8 @@ def test_single_conversation_reports_fields_and_compressed_segment_count():
     assert [p['prefix'] for p in conv['storage']] == [
         f'chunks/{UID}/c1/',
         f'raw-live/{UID}/c1/',
-        f'playback/{UID}/c1',
-        f'{UID}/c1',
+        f'playback/{UID}/c1/',
+        f'{UID}/c1.wav',
     ]
 
 
@@ -288,7 +288,7 @@ def test_audio_present_vs_absent_and_object_kinds():
     storage = FakeStorage(
         objects={
             ('omi-private-cloud-sync', f'chunks/{UID}/with/'): [_blob(100, t2), _blob(50, t1, deleted=t3)],
-            ('memories-recordings', f'{UID}/with'): [_blob(10, t3)],
+            ('memories-recordings', f'{UID}/with.wav'): [_blob(10, t3)],
         },
         soft_deleted={('omi-private-cloud-sync', f'chunks/{UID}/with/'): [_blob(7, t1)]},
     )
@@ -306,12 +306,12 @@ def test_audio_present_vs_absent_and_object_kinds():
 def test_bucket_without_soft_delete_is_tolerated():
     fs = FakeFirestore({f'users/{UID}/conversations/c1': _conv(_aug(2))})
     storage = FakeStorage(
-        objects={('memories-recordings', f'{UID}/c1'): [_blob(10, _aug(2))]},
+        objects={('memories-recordings', f'{UID}/c1.wav'): [_blob(10, _aug(2))]},
         no_soft_delete={'memories-recordings'},
     )
     result, _ = _run(fs, storage, conversation='c1')
     storage_by_bucket = {p['bucket'] + ':' + p['prefix']: p for p in result['conversations'][0]['storage']}
-    memories = storage_by_bucket[f'memories-recordings:{UID}/c1']
+    memories = storage_by_bucket[f'memories-recordings:{UID}/c1.wav']
     assert memories['objects'] == 1
     assert memories['soft_delete'].startswith('unavailable')
     assert storage_by_bucket[f'omi-private-cloud-sync:chunks/{UID}/c1/']['soft_delete'] == 'listed'

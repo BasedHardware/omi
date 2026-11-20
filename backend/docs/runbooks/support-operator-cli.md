@@ -37,7 +37,8 @@ conversation deletes (cascade or not), memory deletes, batch purges and
 retention sweeps. It never blocks product access (P7 Decision 4). A held user
 can still delete a conversation in the app: it disappears for them at once
 (hidden + tombstoned, `X-Omi-Delete-Outcome: held_deferred`) and is physically
-kept until the hold is released.
+kept until the hold is released. A hold released while such a delete is in
+flight falls through to the normal delete.
 
 | Command | Effect |
 | --- | --- |
@@ -65,7 +66,8 @@ flags them as `missing_audit`, and `hold place` on them backfills the fields.
   `erasure_armed: false` and prints a `follow_up` line. Their physical erasure
   is still owed after release. Until a `hold erase-deferred` command exists
   (tracked on SCA-3339), file the list on the ticket and the SCA issue. Do not
-  erase by hand.
+  erase by hand. If the tombstone scan reports `capped`, deferred deletes past
+  the cap are not listed; escalate on SCA-3339 before closing the ticket.
 
 ### Kill switch
 

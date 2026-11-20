@@ -244,6 +244,14 @@ def test_manifest_matches_every_file_and_audio_is_decrypted(seams):
     assert "Not included:" in readme
 
 
+def test_conversation_wav_recordings_are_exported(seams):
+    seams.objects[f"{UID}/conv1.wav"] = b"RIFF-wav"
+    dsar_export.export(_args(), _ctx(apply=True), ActionRecord(action_id="a5"))
+    archive = zipfile.ZipFile(io.BytesIO(_uploaded(seams).data))
+    assert archive.read("audio/recordings/conv1.wav") == b"RIFF-wav"
+    assert ("memories-recordings", f"{UID}/") in seams.listed
+
+
 def test_undecryptable_object_is_kept_and_flagged(seams):
     seams.objects[f"chunks/{UID}/conv1/1700000003.000.enc"] = b"garbage"
     result = dsar_export.export(_args(), _ctx(apply=True), ActionRecord(action_id="a4"))

@@ -191,8 +191,8 @@ def _storage_prefixes(uid: str, conversation_id: str) -> list[tuple[str, str]]:
     return [
         (sync, f'chunks/{uid}/{conversation_id}/'),
         (sync, f'raw-live/{uid}/{conversation_id}/'),
-        (sync, f'playback/{uid}/{conversation_id}'),
-        (_memories_recordings_bucket(), f'{uid}/{conversation_id}'),
+        (sync, f'playback/{uid}/{conversation_id}/'),
+        (_memories_recordings_bucket(), f'{uid}/{conversation_id}.wav'),
     ]
 
 

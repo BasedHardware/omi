@@ -1651,7 +1651,9 @@ def delete_conversation(
     ):
         return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'already_deleted'})
     if _legal_hold_defers_delete(uid):
-        return _accept_held_conversation_delete(uid, conversation_id, cascade, http_request)
+        held_response = _accept_held_conversation_delete(uid, conversation_id, cascade, http_request)
+        if held_response is not None:
+            return held_response
     db_client = getattr(db_client_module, 'db', None) if cascade else None
     memory_service = MemoryService(db_client=db_client) if cascade else None
     # Acquire before recording delete intent, so a delete that can neither run nor be
@@ -1692,6 +1694,7 @@ def delete_conversation(
         if type(error).__name__ not in {
             'DestructiveGateTakeover',
             'DestructiveOperationInProgress',
+            'LegalHoldActive',
             'LegalHoldAuthorityUnavailable',
         }:
             raise
@@ -1744,14 +1747,23 @@ def _legal_hold_defers_delete(uid: str) -> bool:
     return False
 
 
-def _accept_held_conversation_delete(uid: str, conversation_id: str, cascade: bool, http_request: Request) -> Response:
+def _accept_held_conversation_delete(
+    uid: str, conversation_id: str, cascade: bool, http_request: Request
+) -> Response | None:
     """Hide and retain a held account's conversation; physical erasure waits for release.
 
     A cascade delete still owes its erasure: the runner finishes it ``held`` and
     re-checks hourly, then erases after release. A non-cascade delete arms no
     erasure (the runner only cascades); the tombstone marks it for release review.
+    The hold lives on another Firestore client, so it cannot join the tombstone
+    transaction: a non-cascade accept re-reads it after commit. A release that
+    landed in between may have scanned before the tombstone existed, so the
+    request returns ``None`` and the caller deletes normally.
     """
     conversation_tombstones.accept_deletion(uid, conversation_id, legal_hold_deferred=True, arm_erasure=cascade)
+    if not cascade and not _legal_hold_defers_delete(uid):
+        logger.info('event=conversation_delete outcome=held_released_during_delete')
+        return None
     logger.info('event=conversation_delete outcome=held_deferred cascade=%s', cascade)
     record_product_event('conversation_deleted', request=http_request)
     # 204, no body: released mobile clients gate delete success on exactly 204.

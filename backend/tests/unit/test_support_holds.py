@@ -41,14 +41,21 @@ class _Reference:
 
 
 class _Collection:
-    def __init__(self, client, path, limit=None):
-        self.client, self.path, self._limit = client, path, limit
+    def __init__(self, client, path, limit=None, after=None):
+        self.client, self.path, self._limit, self._after = client, path, limit, after
 
     def document(self, document_id):
         return _Reference(self.client, f"{self.path}/{document_id}")
 
     def limit(self, count):
-        return _Collection(self.client, self.path, count)
+        return _Collection(self.client, self.path, count, self._after)
+
+    def order_by(self, field):
+        assert field == "__name__"  # rows are already in document-id order
+        return self
+
+    def start_after(self, snapshot):
+        return _Collection(self.client, self.path, self._limit, snapshot.id)
 
     def stream(self):
         depth = self.path.count("/") + 1
@@ -57,6 +64,8 @@ class _Collection:
             for path, payload in sorted(self.client.docs.items())
             if path.startswith(f"{self.path}/") and path.count("/") == depth
         ]
+        if self._after is not None:
+            rows = [row for row in rows if row.id > self._after]
         return iter(rows[: self._limit] if self._limit is not None else rows)
 
 
@@ -186,6 +195,25 @@ def test_release_records_who_and_why_and_flags_held_deletes_without_erasure(clie
     assert result["held_deferred_deletes"]["count"] == 2
     assert record.summary["held_deferred_without_erasure"] == 1
     assert "1 conversation" in result["follow_up"]
+
+
+def test_release_pages_past_the_first_page_and_warns_when_the_scan_is_capped(client, monkeypatch):
+    monkeypatch.setattr(holds, "_TOMBSTONE_PAGE", 2)
+    _run(holds.place, _ctx(apply=True), review_by=None)
+    for index in range(5):
+        client.docs[f"users/{UID}/deleted_conversations/c{index}"] = {"conversation_id": f"c{index}"}
+    client.docs[f"users/{UID}/deleted_conversations/c9"] = {"legal_hold_deferred": True, "erasure_armed": False}
+
+    result, _ = _run(holds.release, _ctx(apply=True, ticket="ic-3"))
+    deferred = result["held_deferred_deletes"]
+    assert deferred["tombstones_scanned"] == 6 and deferred["capped"] is False
+    assert [row["conversation_id"] for row in deferred["conversations"]] == ["c9"]
+    assert "do not erase by hand" in result["follow_up"]
+
+    monkeypatch.setattr(holds, "_TOMBSTONE_SCAN_LIMIT", 4)
+    status, _ = _run(holds.status, _ctx())
+    assert status["held_deferred_deletes"]["capped"] is True
+    assert status["held_deferred_deletes"]["count"] == 0
 
 
 def test_list_flags_overdue_reviews_and_holds_missing_audit(client):
