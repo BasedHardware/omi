@@ -158,8 +158,11 @@ def save_priors(uid, run_id, entries, *, firestore_client=None):
         for entry in batch:
             if user.collection('deleted_conversations').document(entry['id']).get(transaction=tx).exists:
                 raise Conflict('target_deleted')
+        # A resumed attempt keeps the first copy: it holds the row and claim positions from before the run.
+        recorded = {entry['id'] for entry in batch if coll.document(entry['id']).get(transaction=tx).exists}
         for entry in batch:
-            tx.set(coll.document(entry['id']), {**entry, 'recorded_at': datetime.now(timezone.utc)})
+            if entry['id'] not in recorded:
+                tx.set(coll.document(entry['id']), {**entry, 'recorded_at': datetime.now(timezone.utc)})
 
     for batch in [*pages, page] if page else pages:
         write(client.transaction(), batch)

@@ -790,7 +790,7 @@ def _stored_bytes(value):
     return len(json.dumps(value, default=str).encode())
 
 
-def _retire_patch(survivor, run_id):
+def _retire_patch(survivor, run_id, prior):
     """A retired live row becomes a sync bridge to the window that absorbed it.
 
     Deleted and discarded hide it everywhere a merged-away conversation is hidden, reads by id follow
@@ -803,6 +803,10 @@ def _retire_patch(survivor, run_id):
         'sync_merged_into': survivor,
         'v3_derived': False,
         'v3_rederive_live_run': run_id,
+        # As a sync merge's absorbed row: its claims went to the survivor, so deleting the bridge later
+        # releases nothing of the survivor's, and cached copies see the redirect.
+        'v3_claims_transferred_to': survivor,
+        'sync_content_revision': int(prior.get('sync_content_revision') or 0) + 1,
     }
 
 
@@ -843,7 +847,7 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
             # No rebuilt window covers its time: nothing absorbed it, so it stays as it is.
             kept += 1
             continue
-        retire[cid] = _retire_patch(survivor, run_id)
+        retire[cid] = _retire_patch(survivor, run_id, prior['_v3_raw'])
     # The survivor lists its bridges (sync_merged_from), as a sync merge does: deleting it purges them.
     # The list lands in the final batch with the retirements, never before the bridges exist.
     merged_from = {}

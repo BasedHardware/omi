@@ -706,6 +706,7 @@ def undo_live_run(uid, run_id, *, firestore_client=None):
                 'owner_deleted_rebuilt_row',
                 'owner_edited_rebuilt_row',
                 'account_deletion',
+                'undo_source_missing',
             }
             if str(error) not in refusals:
                 raise

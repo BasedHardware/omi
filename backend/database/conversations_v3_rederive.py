@@ -72,7 +72,7 @@ def live_row_protection(raw, *, since, until, run_id=None):
     visibility = raw.get('visibility')
     if visibility not in (None, 'private'):
         return 'shared'
-    if any(raw.get(field) for field in OWNER_EDIT_FIELDS):
+    if any(raw.get(field) for field in OWNER_EDIT_FIELDS) or summary_edited(raw):
         return 'edited'
     if raw.get('discarded'):
         return 'discarded'
@@ -87,6 +87,19 @@ def live_row_protection(raw, *, since, until, run_id=None):
     ):
         return 'notes_pending'
     return None
+
+
+def summary_edited(raw):
+    """The owner rewrote the summary: the summary edit endpoint deletes generated sections.
+
+    Older edits carry no separate marker, so a written card with an overview and no sections is
+    treated as edited (the rule refinement applies to locked cards).
+    """
+    if not raw.get('v3_notes_written'):
+        return False
+    structured = raw.get('structured') if isinstance(raw.get('structured'), dict) else {}
+    sections = structured.get('sections')
+    return bool(structured.get('overview')) and not (isinstance(sections, list) and sections)
 
 
 def live_source_block(raw):
@@ -298,6 +311,8 @@ def owner_changed(row, entry):
         return True
     if any(row.get(field) and row.get(field) != raw.get(field) for field in OWNER_EDIT_FIELDS):
         return True
+    if summary_edited(row):
+        return True
     if row.get('visibility') not in (None, 'private') and row.get('visibility') != raw.get('visibility'):
         return True
     if row.get('data_protection_level', 'standard') != raw.get('data_protection_level', 'standard'):
@@ -494,6 +509,9 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
         rids.update(rid for cid in ours for rid in (current[cid] or {}).get('v3_recording_ids') or [])
         rids.update(rid for e in entries if e['id'] in ours for rid in e.get('sources') or [])
         sources = {rid: coll.document(rid).get(transaction=tx) for rid in sorted(rids)}
+        if any(not snapshot.exists for snapshot in sources.values()):
+            # A source the run's claims name is gone: the rows cannot get their claims back.
+            raise Conflict('undo_source_missing')
         restored = 0
         created = [cid for cid in sorted(done) if current[cid] is not None and by_id[cid].get('created')]
         for entry in entries:
@@ -516,8 +534,6 @@ def undo_live_rederive(uid, token, run_id, entries, *, firestore_client=None):
                 restored += 1
         repaired = 0
         for rid, snapshot in sources.items():
-            if not snapshot.exists:
-                continue
             claims = (snapshot.to_dict() or {}).get('claims') or []
             kept = [c for c in claims if c.get('conversation_id') not in ours]
             back = sorted(

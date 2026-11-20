@@ -73,7 +73,11 @@ def fragment(cid, src, **extra):
         'home_hidden': False,
         'home_hidden_reason': 'manual_end',
         'title_locked': True,
-        'structured': {'title': 'Piece ' + cid, 'overview': 'Old notes'},
+        'structured': {
+            'title': 'Piece ' + cid,
+            'overview': 'Old notes',
+            'sections': [{'heading': 'Piece ' + cid, 'body_markdown': 'Old notes'}],
+        },
         'transcript_segments': [dict(s) for s in src['transcript_segments']],
         'v3_recording_ids': [src['id']],
         'recording_pieces': [
@@ -213,6 +217,8 @@ async def test_fragmented_lunch_folds_into_one_card_that_keeps_the_earliest_id(o
         retired = after[cid]
         assert retired['deleted'] is True and retired['discarded'] is True
         assert retired['sync_merged_into'] == 'c0' and retired['v3_derived'] is False
+        # As a sync merge's absorbed row: claims transferred, and cached copies see a new revision.
+        assert retired['v3_claims_transferred_to'] == 'c0' and retired['sync_content_revision'] == 1
     # The survivor lists its bridges, so deleting it purges them (the sync merge contract).
     assert card['sync_merged_from'] == ['c1', 'c2', 'c3', 'c4', 'c5']
     # Every source names exactly the surviving card; no claim points at a retired row.
@@ -641,17 +647,27 @@ def test_a_protection_change_empties_undo_copies_of_stamped_rows_before_migratin
     stamped.id = 'c0'
     plain = StrictFirestoreSnapshot({'data_protection_level': 'standard'})
     plain.id = 'c1'
+    # Stamped rows the migration skips keep their copies: already at the level, deleted, or shared.
+    skipped = []
+    for cid, extra in (
+        ('c2', {'data_protection_level': 'enhanced'}),
+        ('c3', {'deleted': True}),
+        ('c4', {'visibility': 'shared'}),
+    ):
+        snap = StrictFirestoreSnapshot({'v3_rederive_live_run': RUN, **extra})
+        snap.id = cid
+        skipped.append(snap)
     client = SimpleNamespace(
         collection=lambda *a: SimpleNamespace(
             document=lambda *a: SimpleNamespace(collection=lambda *a: SimpleNamespace(document=lambda cid: cid))
         ),
-        get_all=lambda refs, field_paths=None: [stamped, plain],
+        get_all=lambda refs, field_paths=None: [stamped, plain, *skipped],
         batch=lambda: None,
     )
     monkeypatch.setattr(backfill.conversations_db, 'db', client)
     monkeypatch.setattr(runs, 'purge_conversation_priors', purge)
     with pytest.raises(RuntimeError, match='stop before migrating'):
-        backfill.conversations_db.migrate_conversations_level_batch(UID, ['c0', 'c1'], 'enhanced')
+        backfill.conversations_db.migrate_conversations_level_batch(UID, ['c0', 'c1', 'c2', 'c3', 'c4'], 'enhanced')
     assert calls == [(UID, ['c0'], 'protection')]
 
 
@@ -751,6 +767,58 @@ async def test_undo_reapplies_the_recurring_voice_fence_to_restored_rows(owner, 
     monkeypatch.setattr(voice_privacy, 'filter_processing_write', scrub)
     assert backfill.undo_run(UID, RUN)['outcome'] == 'undone'
     assert all(conversations(strict)[cid].get('voice_fence_applied') for cid in ('c0', 'c1', 'c2'))
+
+
+@pytest.mark.asyncio
+async def test_a_card_whose_summary_the_owner_rewrote_is_left_alone(owner, strict):
+    sources, rows = lunch(count=3)
+    # The summary edit endpoint replaces the overview and deletes the generated sections.
+    rows[1]['structured'] = {'title': 'Piece c1', 'overview': 'My own words'}
+    owner(*sources, *rows)
+    outcome, report = await rederive()
+    assert outcome == 'committed' and report['protected_edited'] == 1
+    assert conversations(strict)['c1'] == rows[1]
+
+
+@pytest.mark.asyncio
+async def test_undo_refuses_after_a_summary_rewrite_before_baselines(owner, strict, ledger):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    await rederive()
+    strict.rows[path('c0')].update(v3_notes_written=True, structured={'title': 'Lunch', 'overview': 'Mine'})
+    assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': 'owner_edited_rebuilt_row'}
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_retired_bridge_releases_none_of_the_survivors_claims(owner, strict):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    await rederive()
+    before = conversations(strict)
+    store.release_claims(UID, before['c1'], firestore_client=strict)
+    after = conversations(strict)
+    assert all(after[s['id']] == before[s['id']] for s in sources)
+    assert not any(after[s['id']].get('v3_audio_purge_pending') for s in sources)
+
+
+@pytest.mark.asyncio
+async def test_undo_refuses_when_a_source_the_run_named_is_gone(owner, strict, ledger):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    await rederive()
+    strict.rows.pop(path('r1'))
+    after = conversations(strict)
+    assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': 'undo_source_missing'}
+    assert conversations(strict) == after
+
+
+def test_a_resumed_attempt_keeps_the_first_copy_of_a_row(strict):
+    first = {'id': 'c0', 'raw': {'id': 'c0', 'title': 'before'}, 'claims': [{'recording_id': 'r0', 'index': 0}]}
+    later = {'id': 'c0', 'raw': {'id': 'c0', 'title': 'later'}, 'claims': [{'recording_id': 'r0', 'index': 3}]}
+    runs.save_priors(UID, RUN, [first], firestore_client=strict)
+    runs.save_priors(UID, RUN, [later], firestore_client=strict)
+    (kept,) = priors(strict)
+    assert kept['raw'] == first['raw'] and kept['claims'] == first['claims']
 
 
 def test_priors_are_never_written_once_the_owner_account_deletion_began(strict, monkeypatch):
