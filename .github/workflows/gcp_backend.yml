@@ -11,6 +11,7 @@
 #                        in the same GitHub Environment as deploy, so the prod
 #                        registry keeps the prod approval and WIF binding.
 #   repair-traffic-only  Restore Cloud Run traffic to the serving revisions.
+#   recover-pump-cap    SCA-3318 one-time service-level cap correction on the dark pump.
 
 name: Deploy Backend to Cloud RUN
 
@@ -49,6 +50,7 @@ on:
           - build-only
           - repair-traffic-only
           - operator-qualify-publish
+          - recover-pump-cap
       deploy_targets:
         description: 'Deploy all backend surfaces or Cloud Run only'
         required: true
@@ -79,6 +81,10 @@ on:
         default: ''
       pump_release_disposition:
         description: 'Existing projection pump only. Release comment UUID, serving revision, source SHA, digest-pinned image (space-separated).'
+        required: false
+        default: ''
+      pump_recovery_etag:
+        description: 'SCA-3318 cap recovery only. Fresh Cloud Run v2 service etag from Release readback.'
         required: false
         default: ''
       # Break-glass: the eligibility proof requires a *successful* Release
@@ -167,10 +173,12 @@ jobs:
       rollback_revision: ${{ steps.boundary.outputs.rollback_revision }}
     if: >-
       github.event.inputs.mode == 'deploy' ||
-      github.event.inputs.mode == 'build-only'
+      github.event.inputs.mode == 'build-only' ||
+      github.event.inputs.mode == 'recover-pump-cap'
     runs-on: ubuntu-latest
     steps:
       - name: Reject unsupported production deployment boundary before side effects
+        if: inputs.mode != 'recover-pump-cap'
         id: boundary
         env:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
@@ -285,6 +293,36 @@ jobs:
             echo "service_images applies only to mode=deploy." >&2
             exit 1
           fi
+
+      - name: Bind SCA-3318 recovery approval inputs
+        if: inputs.mode == 'recover-pump-cap'
+        env:
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+          DEPLOY_TARGETS: ${{ inputs.deploy_targets }}
+          CLOUD_RUN_SERVICE: ${{ inputs.cloud_run_service }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          CONTROL_SHA: ${{ inputs.pump_control_sha }}
+          WORKFLOW_CONTROL_SHA: ${{ github.workflow_sha }}
+          APPROVED_ETAG: ${{ inputs.pump_recovery_etag }}
+        run: |
+          set -euo pipefail
+          jq -e '.inputs |
+            .break_glass_lock == "false" and .skip_eligibility_proof == "false" and
+            .deploy_gateway == "false" and
+            ([.service_images, .pump_release_disposition, .break_glass_confirm,
+              .break_glass_reason, .release_version] | all(. == "" or . == null)) and
+            (.requested_by | test("[^[:space:]]"))' "$GITHUB_EVENT_PATH" >/dev/null
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" == refs/heads/main &&
+             "$GITHUB_REPOSITORY" == BasedHardware/omi && "$GITHUB_RUN_ATTEMPT" == 1 &&
+             "$DEPLOY_ENVIRONMENT" == prod && "$DEPLOY_TARGETS" == cloud-run-only &&
+             "$CLOUD_RUN_SERVICE" == backend-projection-pump &&
+             "$CONTROL_SHA" =~ ^[0-9a-f]{40}$ && "$CONTROL_SHA" == "$WORKFLOW_CONTROL_SHA" &&
+             "$WORKFLOW_CONTROL_SHA" == "$GITHUB_SHA" &&
+             "$RELEASE_SHA" == f7060aa1a0c9e3481790d497140096ae99f9b062 &&
+             "$APPROVED_ETAG" =~ ^[A-Za-z0-9_+/=-]{1,200}$ ]]
+          jq -n --arg control "$CONTROL_SHA" --arg etag "$APPROVED_ETAG" --arg source "$RELEASE_SHA" \
+            '{issue:"SCA-3318", service:"backend-projection-pump", control:$control, etag:$etag,
+              base_source:$source, forward_max:4, inverse_max:20}' >> "$GITHUB_STEP_SUMMARY"
 
   repair-traffic:
     if: >-
@@ -976,6 +1014,45 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           region: ${{ env.REGION }}
           release_version: ${{ github.event.inputs.release_version }}
+
+  recover-projection-pump-cap:
+    needs: validate-production-boundary
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.mode == 'recover-pump-cap' &&
+      inputs.environment == 'prod' &&
+      inputs.cloud_run_service == 'backend-projection-pump' &&
+      !inputs.break_glass_lock &&
+      !inputs.skip_eligibility_proof &&
+      needs.validate-production-boundary.result == 'success'
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact reviewed recovery controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Verify recovery control checkout
+        env:
+          CONTROL_SHA: ${{ inputs.pump_control_sha }}
+        run: test "$(git rev-parse HEAD)" = "$CONTROL_SHA"
+      - name: Authenticate existing production workflow identity
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+      - name: Set up existing gcloud client
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Validate, correct and read back only the pump service cap
+        env:
+          APPROVED_ETAG: ${{ inputs.pump_recovery_etag }}
+        run: python3 backend/scripts/recover_projection_pump_cap.py --etag="$APPROVED_ETAG"
 
   # SOURCE-ONLY PROPOSAL: contract remains closed until approved ingress IDs
   # and existing repository authorization evidence are reviewed and committed.
