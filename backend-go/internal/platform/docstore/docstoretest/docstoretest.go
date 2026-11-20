@@ -39,6 +39,11 @@ type Bench struct {
 // is skipped, or fails when RequiredEnv is 1.
 func Open(tb testing.TB) Bench {
 	tb.Helper()
+	return open(tb)
+}
+
+func open(tb testing.TB) Bench {
+	tb.Helper()
 	host := os.Getenv(HostEnv)
 	if host == "" {
 		if os.Getenv(RequiredEnv) == "1" {
