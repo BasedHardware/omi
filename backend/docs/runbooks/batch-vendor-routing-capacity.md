@@ -43,7 +43,8 @@ floor did not help: it counts pods, and Recreate had deliberately removed them.
   requests a whole `nvidia.com/gpu`). A replacement is created as soon as its
   predecessor is told to stop and takes the freed node seconds after that pod
   exits, so no node is idle long enough for scale-down. `rollout.maxUnavailable`
-  (default 25%) bounds how much capacity drains at once.
+  (default 50%: two drain-plus-startup waves, so a roll fits the deploy
+  workflow's rollout wait) bounds how much capacity drains at once.
 - **Node minimum:** the pool minimum equals the HPA floor, so even a roll or
   manual action that removes every pod cannot return those nodes. With
   `locationPolicy: ANY` the minimum is regional, not per zone.

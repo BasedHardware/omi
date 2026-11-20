@@ -11,7 +11,7 @@ import yaml
 
 CHART = Path(__file__).resolve().parents[2] / 'charts' / 'batch-pipeline-worker'
 # Rolls replace pods in place: no surge GPU, and no GPU node left empty mid-roll (SCA-3274).
-NO_SURGE_ROLL = {'type': 'RollingUpdate', 'rollingUpdate': {'maxSurge': 0, 'maxUnavailable': '25%'}}
+NO_SURGE_ROLL = {'type': 'RollingUpdate', 'rollingUpdate': {'maxSurge': 0, 'maxUnavailable': '50%'}}
 
 
 def render(*arguments, namespace='synthetic'):
@@ -240,7 +240,7 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
 
     deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
     deployment = next(doc for doc in deployments if doc['metadata']['name'] == 'synthetic-worker')
-    assert deployment['spec']['progressDeadlineSeconds'] == 2400
+    assert deployment['spec']['progressDeadlineSeconds'] == 3000
     pod = deployment['spec']['template']['spec']
     if environment == 'prod':
         # Borrowing stays off in prod so Parakeet's freed L4s go back to GCE; the
@@ -1079,3 +1079,8 @@ def test_worker_rolls_never_surge_and_reject_non_percent_unavailability():
         rendered = render_prod('--set-string', 'rollout.maxUnavailable=' + bad)
         assert rendered.returncode != 0, bad
         assert 'rollout.maxUnavailable must be a percentage' in rendered.stderr, bad
+    # A null or missing rollout map reaches the same message, not a nil-pointer render error.
+    for missing in (('--set', 'rollout=null'), ('--set', 'rollout.maxUnavailable=null')):
+        rendered = render_prod(*missing)
+        assert rendered.returncode != 0, missing
+        assert 'rollout.maxUnavailable must be a percentage' in rendered.stderr, missing

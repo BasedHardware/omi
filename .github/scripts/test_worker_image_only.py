@@ -251,9 +251,13 @@ class PreservationTests(unittest.TestCase):
                 self.cluster = Cluster()
                 self.cluster.target["spec"]["strategy"] = {"type": "RollingUpdate", "rollingUpdate": dict(rolling)}
                 self.baseline = worker.snapshot(self.cluster)[1]
-                self.deploy()
+                original = copy.deepcopy(self.cluster.target)
+                receipt = self.deploy()
+                worker.verify(receipt, self.cluster)
                 self.assertEqual(self.cluster.writes, 1)
-                self.assertEqual(self.cluster.target["spec"]["strategy"]["rollingUpdate"], rolling)
+                # Only the worker image moved; the strategy and every other field are as admitted.
+                self.cluster.target["spec"]["template"]["spec"]["containers"][0]["image"] = OLD
+                self.assertEqual(original, self.cluster.target)
 
     def test_invalid_candidate_and_already_serving_refuse(self):
         for image in (OLD, worker.REPOSITORY + ":latest", "gcr.io/other@sha256:" + "2" * 64):

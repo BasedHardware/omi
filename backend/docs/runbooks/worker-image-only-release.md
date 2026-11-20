@@ -47,6 +47,12 @@ refresh and re-admit it instead of retrying blindly. The namespace inventory is
 not a claim about consumers in other namespaces or systems: reconcile those in
 the existing shared-artifact release gate before dispatch.
 
+The baseline hashes the whole Deployment spec except replicas, so any live spec
+change, including the SCA-3274 strategy patch (Recreate -> RollingUpdate with
+`maxSurge: 0`), invalidates a baseline captured before it. Re-run `inventory`
+after such a patch and before the next preserve-live dispatch; an old baseline
+refuses with target drift.
+
 For a qualified, already-built worker digest, Release dispatches once:
 
 ```bash

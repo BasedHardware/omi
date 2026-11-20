@@ -76,6 +76,10 @@ Rollback: restore the prior worker image and guard chart and restore the Grafana
 rule backup through the documented importer. Preserve the approved worker HPA
 min 6 / max 16 and baseline 6 (David, 2026-11-20, superseding D4); see
 `batch-vendor-routing-capacity.md` for the node minimum and roll strategy.
+D4's conditional restore ("baseline/min 6 and max 12 if GPU queue depth or
+ready_units climbs back past 50k") is retired: the current bounds already meet
+or exceed it, so a backlog past 50k is a capacity decision for Release, not an
+automatic bound change.
 Disposition/redrive cannot be undone by
 resetting a paid token; stop further apply, preserve durable receipts, and
 replan after an uncertain result.

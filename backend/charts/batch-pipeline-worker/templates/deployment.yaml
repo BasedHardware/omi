@@ -36,8 +36,9 @@ metadata:
 spec:
   # L4 scale-from-zero, image pull and joint model startup exceeded 600s in dev.
   # A replaced pod may drain for up to terminationGracePeriodSeconds (1500) before
-  # its successor starts on the freed GPU, so the deadline covers drain plus startup.
-  progressDeadlineSeconds: 2400
+  # its successor starts on the freed GPU, and the startupProbe allows 1200 s more,
+  # so the deadline covers a worst-case drain plus startup with margin.
+  progressDeadlineSeconds: 3000
   {{- $replicas := .instance.baselineReplicas | default .Values.replicaCount }}
   {{- if hasKey .instance "fixedReplicas" }}
   {{- $replicas = .instance.fixedReplicas }}
@@ -66,7 +67,7 @@ spec:
   # 1500 s grace kept every replacement from existing while the autoscaler
   # returned nine idle L4 nodes during a stockout (incident SCA-3274, 2026-11-20).
   # A hung pod now delays only its own replacement.
-  {{- $maxUnavailable := toString .Values.rollout.maxUnavailable }}
+  {{- $maxUnavailable := toString (.Values.rollout | default dict).maxUnavailable }}
   {{- if not (regexMatch "^([1-9][0-9]?|100)%$" $maxUnavailable) }}
   {{- fail "rollout.maxUnavailable must be a percentage in [1%, 100%]" }}
   {{- end }}
