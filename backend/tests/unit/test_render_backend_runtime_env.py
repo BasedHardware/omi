@@ -1336,7 +1336,8 @@ def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
         # which runs the finish sweep, and for prod backend-sync, which can reach the same sweep through
         # its reconcile and batch metrics routes (review SCA-2270). It was turned off in production at
         # 19:41Z and stays off by ruling. No other service or environment declares it (SCA-1993).
-        if environment == 'prod' and name in ('backend-integration', 'backend-sync'):
+        # SCA-3120: the prod projection pump derives integration's env, so it carries the same values.
+        if environment == 'prod' and name in ('backend-integration', 'backend-sync', 'backend-projection-pump'):
             assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {'value': 'false', 'category': 'rollout'}
         else:
             assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
@@ -1351,7 +1352,7 @@ def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
             # settled-SKU evidence) were never recorded, so the owner kept the
             # documented default-off rollback. See config/feature-flags.yaml.
             expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'false'
-            if name in ('backend-sync', 'backend-integration'):
+            if name in ('backend-sync', 'backend-integration', 'backend-projection-pump'):
                 expected['BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED'] = 'true'
         switches = {
             key: env[key]
@@ -1368,7 +1369,9 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
     """A base edit must neither enable unqualified readers nor miss CR overrides."""
     config = _MANIFEST['environments'][environment]
     cloud_run = config['cloud_run']['services']
-    assert set(cloud_run) == {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'}
+    assert set(cloud_run) == {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'} | (
+        {'backend-projection-pump'} if environment == 'prod' else set()
+    )
     expected = {
         'action_items_page': 100,
         'action_items_ttl120': 100,
