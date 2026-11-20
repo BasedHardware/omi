@@ -627,7 +627,8 @@ def _declared_off_values(path: Path) -> int:
 
 def test_mode_surfaces_agree_on_off_and_the_three_values():
     assert _declared_off_values(REPO_ROOT / 'backend/deploy/runtime_env/_base.yaml') == 5
-    assert _declared_off_values(REPO_ROOT / 'backend/deploy/runtime_env.yaml') == 10
+    # Per environment: one GKE host and the four Cloud Run services; prod adds the projection pump (SCA-3120).
+    assert _declared_off_values(REPO_ROOT / 'backend/deploy/runtime_env.yaml') == 11
 
     for chart in ('dev', 'prod'):
         text = (REPO_ROOT / f'backend/charts/backend-listen/{chart}_omi_backend_listen_values.yaml').read_text(
