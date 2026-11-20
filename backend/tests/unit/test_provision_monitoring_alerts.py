@@ -423,3 +423,159 @@ def test_regenerate_is_offline_preserves_order_and_rejects_duplicate_sources(pro
     with pytest.raises(ValueError, match='duplicate'):
         provisioner.regenerate_export(path)
     assert path.read_bytes() == first
+
+
+# SCA-2119: a production dispatch may be narrowed to the reviewed census scope.
+# These tests pin selection, write scope, backup scope and the canary gate.
+
+
+def test_census_scope_selects_exactly_the_registry_rendered_rules(provisioner):
+    generator = SimpleNamespace(
+        **runpy.run_path(str(Path(__file__).resolve().parents[2] / 'scripts/generate_batch_census_alerts.py'))
+    )
+    rendered = [item['uid'] for item in generator.rules()]
+    scope = provisioner.monitoring_scope.resolve('census')
+    assert len(rendered) == 29
+    assert [path.name for path in scope.dashboards] == ['batch-stuck-census.json']
+    assert provisioner.monitoring_scope.select_uids(scope) == rendered
+
+
+def test_shipped_scopes_resolve_against_the_repo_trees(provisioner):
+    scopes = provisioner.monitoring_scope.load()
+    assert set(scopes) == {'census'}
+    for scope in scopes.values():
+        assert provisioner.monitoring_scope.select_uids(scope)
+
+
+def test_unknown_scope_and_absent_scope_rules_fail_closed(provisioner):
+    with pytest.raises(ValueError, match='unknown monitoring scope'):
+        provisioner.monitoring_scope.resolve('not-a-scope')
+    scope = provisioner.monitoring_scope.resolve('census')
+    only_one = {'omi-census-snapshot-blind': rule('omi-census-snapshot-blind')}
+    with pytest.raises(ValueError, match='absent from the combined export'):
+        provisioner.scoped_rules(only_one, scope)
+
+
+def test_scoped_drift_does_not_report_out_of_scope_rules(provisioner):
+    api = FakeGrafana({'example': rule(), 'unrelated': rule('unrelated')})
+    assert provisioner.reconcile(api, {'example': rule()}, scope='census') == []
+    assert provisioner.reconcile(api, {'example': {**rule(), 'title': 'drifted'}}, scope='census') == [
+        'example: divergent fields: title'
+    ]
+
+
+def test_scoped_apply_writes_only_scope_rules_and_backs_up_only_them(provisioner, tmp_path):
+    api = FakeGrafana({'example': {**rule(), 'title': 'old'}, 'unrelated': rule('unrelated')})
+    backup = tmp_path / 'backup'
+    assert provisioner.reconcile(api, {'example': rule()}, backup=backup, scope='census') == []
+    assert [write[0] for write in api.writes] == ['PUT']
+    snapshot = json.loads(backup.read_text())
+    assert snapshot['scope'] == 'census'
+    assert [item['uid'] for item in snapshot['rules']] == ['example']
+    assert snapshot['created_uids'] == []
+    assert backup.stat().st_mode & 0o777 == 0o600
+
+
+def test_unscoped_apply_keeps_the_whole_export_backup(provisioner, tmp_path):
+    api = FakeGrafana({'example': {**rule(), 'title': 'old'}, 'unrelated': rule('unrelated')})
+    backup = tmp_path / 'backup'
+    assert provisioner.reconcile(api, {'example': rule()}, backup=backup) == [
+        'unrelated: live but uncommitted (retained)'
+    ]
+    snapshot = json.loads(backup.read_text())
+    assert set(snapshot) == {'rules', 'created_uids'}
+    assert {item['uid'] for item in snapshot['rules']} == {'example', 'unrelated'}
+
+
+def canary(provisioner, uid):
+    return {
+        **rule(uid),
+        'execErrState': 'Alerting',
+        'noDataState': 'Alerting',
+        'data': [
+            {
+                'refId': 'A',
+                'relativeTimeRange': {'from': 900, 'to': 0},
+                'datasourceUid': 'prometheus',
+                'model': {},
+            },
+            {
+                'refId': 'B',
+                'datasourceUid': '__expr__',
+                'model': {'conditions': [{'evaluator': {'type': 'lt', 'params': [0]}}]},
+            },
+        ],
+    }
+
+
+def test_scoped_keep_last_requires_installed_canaries_before_any_write(provisioner, tmp_path):
+    keep_last = {**rule(), 'execErrState': 'KeepLast'}
+    canaries = {uid: canary(provisioner, uid) for uid in provisioner.CANARY_UIDS}
+    api = FakeGrafana({})
+    backup = tmp_path / 'backup'
+    differences = provisioner.reconcile(api, {'example': keep_last}, backup=backup, scope='census', canaries=canaries)
+    assert differences == [
+        f'{uid}: scoped apply needs the committed datasource canary installed unchanged'
+        for uid in sorted(provisioner.CANARY_UIDS)
+    ]
+    assert api.writes == []
+    assert not backup.exists()
+
+
+def test_scoped_keep_last_probe_failure_blocks_writes(provisioner, tmp_path):
+    keep_last = {**rule(), 'execErrState': 'KeepLast'}
+    canaries = {uid: canary(provisioner, uid) for uid in provisioner.CANARY_UIDS}
+
+    class UnhealthyProbe(FakeGrafana):
+        def request(self, path, body=None, method='GET', *, editable=False):
+            if path == '/api/ds/query':
+                return {'results': {}}
+            return super().request(path, body, method, editable=editable)
+
+    api = UnhealthyProbe(dict(canaries))
+    backup = tmp_path / 'backup'
+    differences = provisioner.reconcile(api, {'example': keep_last}, backup=backup, scope='census', canaries=canaries)
+    assert differences and all('query failed' in item for item in differences)
+    assert api.writes == []
+    assert not backup.exists()
+
+
+def mixed_provenance_group(folder='other', rule_group='other-group', prefix='other'):
+    """Two live rules in one group that no single provisioner owns."""
+    return {
+        f'{prefix}-ui': {**rule(f'{prefix}-ui'), 'folderUID': folder, 'ruleGroup': rule_group, 'provenance': ''},
+        f'{prefix}-api': {**rule(f'{prefix}-api'), 'folderUID': folder, 'ruleGroup': rule_group, 'provenance': 'api'},
+    }
+
+
+def test_unscoped_apply_still_rejects_mixed_provenance_in_an_unrelated_live_group(provisioner, tmp_path):
+    """A full run keeps the pre-scope guard: every live group must be single-provenance."""
+    live = {'example': rule(), **mixed_provenance_group()}
+    api = FakeGrafana(live)
+    backup = tmp_path / 'backup'
+    with pytest.raises(ValueError, match='mixed provenance'):
+        provisioner.reconcile(api, {'example': {**rule(), 'title': 'new'}}, backup=backup)
+    assert api.writes == []
+    assert not backup.exists()
+
+
+def test_scoped_apply_ignores_an_unrelated_group_even_with_mixed_provenance(provisioner, tmp_path):
+    """The census scope must not be blocked by provenance drift it cannot touch."""
+    live = {'example': {**rule(), 'title': 'old'}, **mixed_provenance_group()}
+    api = FakeGrafana(live)
+    backup = tmp_path / 'backup'
+    assert provisioner.reconcile(api, {'example': rule()}, backup=backup, scope='census') == []
+    assert [write[0] for write in api.writes] == ['PUT']
+    snapshot = json.loads(backup.read_text())
+    assert [item['uid'] for item in snapshot['rules']] == ['example']
+
+
+def test_scoped_apply_still_rejects_mixed_provenance_in_a_group_it_can_write(provisioner, tmp_path):
+    """Narrowing the scan must not license a partial takeover of the census group."""
+    live = {'example': {**rule(), 'provenance': ''}, 'sibling': {**rule('sibling'), 'provenance': 'api'}}
+    api = FakeGrafana(live)
+    backup = tmp_path / 'backup'
+    with pytest.raises(ValueError, match='mixed provenance'):
+        provisioner.reconcile(api, {'example': {**rule(), 'title': 'new'}}, backup=backup, scope='census')
+    assert api.writes == []
+    assert not backup.exists()

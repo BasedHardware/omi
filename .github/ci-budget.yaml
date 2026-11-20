@@ -1959,7 +1959,7 @@
       "budget_p50_minutes": 6,
       "display_name": "provision",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 1.5,
       "if": "github.ref == 'refs/heads/main'",
       "matrix": {
         "environment": [
@@ -1969,7 +1969,7 @@
       "matrix_size": 1,
       "needs": "validate",
       "owner": "CI maintainers",
-      "rationale": "Funnel trigger row (omi-tv-funnel.json, with the board split in #24942): push to main only when that file changes, so cadence is at most one run per merged funnel change; expected_runs_per_day 1 is a conservative daily ceiling and the runs are not PR runs. Minutes per run: the existing 6-minute p50 budget. Push runs resolve to the dev environment, so the prod-only alert and Business steps cannot run from this trigger (the alert step is also dispatch-gated).",
+      "rationale": "Funnel trigger row (omi-tv-funnel.json, with the board split in #24942): push to main only when that file changes, so cadence is at most one run per merged funnel change; expected_runs_per_day 1 was a conservative daily ceiling and the runs are not PR runs. #SCA-2119 raises it to 1.5 for the optional scoped dispatch: the census release is one guarded prod run at the same 6-minute p50, and a scoped run writes fewer objects than the full path it replaces. Minutes per run: the existing 6-minute p50 budget. Push runs resolve to the dev environment, so the prod-only alert and Business steps cannot run from this trigger (the alert step is also dispatch-gated).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1981,13 +1981,13 @@
       "budget_p50_minutes": 6,
       "display_name": "provision-prod-ops-dashboards",
       "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 3,
+      "expected_runs_per_day": 3.5,
       "if": "github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'BasedHardware/omi'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "validate",
       "owner": "CI maintainers",
-      "rationale": "Prod Ops dashboard apply on every push to main that matches the workflow trigger paths (approved by David 2026-11-09); the same job applies the Business TV boards once BUSINESS_GRAFANA_TOKEN is added to the grafana-dashboards-prod environment and warns and skips until then (David 2026-11-12). The apply is idempotent and has no change-detection skip, so a superseded push run cannot drop a dashboard change. Uses the production MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment, which has no required reviewers (the repo-level token is dev-only). expected_runs_per_day 3 is a conservative daily ceiling for merges plus alert and script pushes. The 6-minute p50 is a reviewed estimate for two Grafana API applies (Ops, then Business); re-measure with --reseed after the first runs. The job runs only in BasedHardware/omi.",
+      "rationale": "Prod Ops dashboard apply on every push to main that matches the workflow trigger paths (approved by David 2026-11-09); the same job applies the Business TV boards once BUSINESS_GRAFANA_TOKEN is added to the grafana-dashboards-prod environment and warns and skips until then (David 2026-11-12). The apply is idempotent and has no change-detection skip, so a superseded push run cannot drop a dashboard change. Uses the production MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment, which has no required reviewers (the repo-level token is dev-only). expected_runs_per_day 3 is a conservative daily ceiling for merges plus alert and script pushes. The 6-minute p50 is a reviewed estimate for two Grafana API applies (Ops, then Business); re-measure with --reseed after the first runs. The job runs only in BasedHardware/omi. #SCA-2119 adds backend/charts/monitoring/provisioning-scopes.json to the trigger paths, so a review of the monitoring scope file also runs this idempotent push apply; expected_runs_per_day rises from 3 to 3.5 for that occasional extra merge.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1999,13 +1999,13 @@
       "budget_p50_minutes": 6,
       "display_name": "validate",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 1.5,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Funnel trigger row (omi-tv-funnel.json, with the board split in #24942): push to main only when that file changes, so cadence is at most one run per merged funnel change; expected_runs_per_day 1 is a conservative daily ceiling and the runs are not PR runs. Minutes per run: the existing 6-minute p50 budget. Push runs resolve to the dev environment, so the prod-only alert and Business steps cannot run from this trigger (the alert step is also dispatch-gated).",
+      "rationale": "Funnel trigger row (omi-tv-funnel.json, with the board split in #24942): push to main only when that file changes, so cadence is at most one run per merged funnel change; expected_runs_per_day 1 is a conservative daily ceiling and the runs are not PR runs. Minutes per run: the existing 6-minute p50 budget. Push runs resolve to the dev environment, so the prod-only alert and Business steps cannot run from this trigger (the alert step is also dispatch-gated). #SCA-2119 adds the optional `scope` dispatch input and the provisioning-scopes.json trigger path; the extra 0.5 run/day covers one scoped census dispatch, whose lint now also resolves every monitoring scope offline.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5876,7 +5876,7 @@
     "grafana_dashboard_provisioning.yml": {
       "name": "Provision Grafana dashboards",
       "owner": "CI maintainers",
-      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch for alerts and the Ops boards; every push to main that matches the trigger paths applies prod Ops dashboards through provision-prod-ops-dashboards (prod MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment with no required reviewers, approved by David 2026-11-09); the Business TV boards apply from the same no-reviewer job once BUSINESS_GRAFANA_TOKEN is added to the grafana-dashboards-prod environment and stay on the gated prod path until then (David 2026-11-12); the prod-only Business API step reuses the existing job, no new workflow or PR matrix. #24942 adds the omi-tv-funnel.json path and allowlist entry; push runs resolve to dev, and the prod alert step is dispatch-gated.",
+      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch for alerts and the Ops boards; every push to main that matches the trigger paths applies prod Ops dashboards through provision-prod-ops-dashboards (prod MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment with no required reviewers, approved by David 2026-11-09); the Business TV boards apply from the same no-reviewer job once BUSINESS_GRAFANA_TOKEN is added to the grafana-dashboards-prod environment and stay on the gated prod path until then (David 2026-11-12); the prod-only Business API step reuses the existing job, no new workflow or PR matrix. #24942 adds the omi-tv-funnel.json path and allowlist entry; push runs resolve to dev, and the prod alert step is dispatch-gated. #SCA-2119 adds the optional `scope` dispatch input and the provisioning-scopes.json push path: scope=full (default) is byte-for-byte the previous behaviour; scope=census applies only the stuck-state census dashboard and the 29 rules its registry renders, skips the Business boards, and records only those definitions in its rollback backup. Scoped dispatches are production-only and still gated by the prod Environment.",
       "triggers": {
         "push": {
           "branches": [
@@ -5886,6 +5886,7 @@
             "backend/charts/monitoring/dashboards/**",
             "backend/charts/monitoring/alerts/**",
             "backend/charts/monitoring/alert-rules.json",
+            "backend/charts/monitoring/provisioning-scopes.json",
             "backend/scripts/provision_monitoring_alerts.py",
             "backend/scripts/provision_grafana_dashboards.py",
             ".github/workflows/grafana_dashboard_provisioning.yml",
@@ -5903,6 +5904,16 @@
               "options": [
                 "prod",
                 "dev"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "scope": {
+              "default": "full",
+              "description": "Reviewed monitoring scope; full applies the whole dashboard allowlist and alert export",
+              "options": [
+                "full",
+                "census"
               ],
               "required": "true",
               "type": "choice"

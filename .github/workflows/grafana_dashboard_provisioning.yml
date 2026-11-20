@@ -6,6 +6,14 @@ name: Provision Grafana dashboards
 # drifted (omi-core-features sat 2 versions behind for 5 weeks). This
 # workflow applies development dashboards on main. Production dashboards and
 # alert rules require explicit environment=prod dispatch and Environment approval.
+#
+# A dispatch also takes an optional reviewed `scope` (backend/charts/monitoring/
+# provisioning-scopes.json). scope=full, the default, behaves exactly as before.
+# scope=census writes only the stuck-state census dashboard and the 29 rules its
+# registry renders, skips the Business boards, and leaves every other dashboard,
+# rule and folder untouched; the scoped backup holds only the definitions that
+# dispatch can change. Scopes are production-only and are validated offline in
+# the `validate` job.
 
 on:
   push:
@@ -14,6 +22,7 @@ on:
       - 'backend/charts/monitoring/dashboards/**'
       - 'backend/charts/monitoring/alerts/**'
       - 'backend/charts/monitoring/alert-rules.json'
+      - 'backend/charts/monitoring/provisioning-scopes.json'
       - 'backend/scripts/provision_monitoring_alerts.py'
       - 'backend/scripts/provision_grafana_dashboards.py'
       - '.github/workflows/grafana_dashboard_provisioning.yml'
@@ -28,6 +37,12 @@ on:
         type: choice
         options: [prod, dev]
         default: prod
+        required: true
+      scope:
+        description: 'Reviewed monitoring scope; full applies the whole dashboard allowlist and alert export'
+        type: choice
+        options: [full, census]
+        default: full
         required: true
 
 permissions:
@@ -82,6 +97,13 @@ jobs:
         environment: ["${{ github.event.inputs.environment || 'dev' }}"]
     steps:
       - uses: actions/checkout@v7
+      - name: Refuse a scoped dispatch outside production
+        # A scope is a reviewed production subset and must never be pointed at
+        # the development instance, where it would prove nothing about prod.
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.scope != 'full' && matrix.environment != 'prod'
+        run: |
+          echo "::error::scope=${{ github.event.inputs.scope }} is a production-only reviewed subset; dispatch with environment=prod"
+          exit 1
       - name: Provision dashboards
         env:
           # Ops Grafana service-account token (same secret family the pusher
@@ -90,6 +112,7 @@ jobs:
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
           GRAFANA_URL: ${{ matrix.environment == 'prod' && 'https://monitor.omi.me' || 'https://monitor.omiapi.com' }}
           GIT_SHORT_SHA: ${{ github.sha }}
+          MONITORING_SCOPE: ${{ github.event.inputs.scope || 'full' }}
           # First land provisions only the custom repo-first boards (string
           # uids). Community/helm-managed boards keep their manual flow.
           DASHBOARD_ALLOWLIST: ${{ matrix.environment == 'prod' && 'omi-core-features.json,omi-translation.json,resilience-fallbacks.json,omi-services-overview.json,fleet-telemetry.json' || 'omi-core-features.json,omi-translation.json,resilience-fallbacks.json,fleet-telemetry.json' }}
@@ -97,15 +120,22 @@ jobs:
           set -euo pipefail
           umask 077
           test -n "$MONITOR_GRAFANA_TOKEN"
+          # A scoped dispatch selects its boards from the reviewed scope file,
+          # not the allowlist, so it can never widen to an unrelated board.
+          selection=(--allowlist "$DASHBOARD_ALLOWLIST")
+          if [ "$MONITORING_SCOPE" != "full" ]; then
+            selection=(--scope "$MONITORING_SCOPE")
+          fi
           python3 backend/scripts/provision_grafana_dashboards.py \
             --dashboards-dir backend/charts/monitoring/dashboards \
             --grafana-url "$GRAFANA_URL" \
             --token-env MONITOR_GRAFANA_TOKEN \
             --source-sha "$GIT_SHORT_SHA" \
             --backup-file "$RUNNER_TEMP/grafana-dashboard-backup.json" \
-            --allowlist "$DASHBOARD_ALLOWLIST"
+            "${selection[@]}"
       - name: Provision private Business board (prod only)
-        if: matrix.environment == 'prod'
+        # A scoped dispatch owns no Business board; skip it entirely.
+        if: matrix.environment == 'prod' && (github.event_name != 'workflow_dispatch' || github.event.inputs.scope == 'full')
         env:
           BUSINESS_GRAFANA_TOKEN: ${{ secrets.BUSINESS_GRAFANA_TOKEN }}
           GRAFANA_URL: ${{ matrix.environment == 'prod' && 'https://monitor.omi.me' || 'https://monitor.omiapi.com' }}
@@ -126,10 +156,16 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod'
         env:
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+          MONITORING_SCOPE: ${{ github.event.inputs.scope || 'full' }}
         run: |
           set -euo pipefail
+          scope_args=()
+          if [ "$MONITORING_SCOPE" != "full" ]; then
+            scope_args=(--scope "$MONITORING_SCOPE")
+          fi
           python3 backend/scripts/provision_monitoring_alerts.py \
-            --apply --backup-file "$RUNNER_TEMP/grafana-alert-backup.json"
+            --apply --backup-file "$RUNNER_TEMP/grafana-alert-backup.json" \
+            "${scope_args[@]}"
       - name: Preserve pre-apply dashboard definitions for reviewed rollback
         if: always()
         uses: actions/upload-artifact@v7
