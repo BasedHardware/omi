@@ -220,6 +220,9 @@ runs:
              "${{ inputs.integration_image }}" =~ ^gcr\.io/based-hardware/(backend|backend-workers)@sha256:[0-9a-f]{64}$ &&
              ("$BOUND_SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }},post_wrap_guard=${{ inputs.post_wrap_guard }}" ||
               ("${{ inputs.post_wrap_guard }}" == internal && "$BOUND_SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }}")) ]] || exit 1
+        elif [[ "$CLOUD_RUN_SERVICE" != all ]]; then
+          [[ "$ROLLBACK_REVISION" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ &&
+             ${#ROLLBACK_REVISION} -le 63 ]] || exit 1
         else
           [[ "$ROLLBACK_REVISION" == backend-integration-provfix-off1114 ]] || exit 1
         fi

@@ -32,6 +32,12 @@ def render(script):
         'inputs.integration_canary': 'false',
         'inputs.deploy_profile': 'manual',
         'inputs.environment': 'prod',
+        'inputs.deploy_targets': 'cloud-run-only',
+        'inputs.deploy_gateway': 'false',
+        'inputs.service': 'backend',
+        'inputs.integration_only': 'false',
+        'inputs.post_wrap_guard': 'internal',
+        'inputs.integration_image': '',
         'steps.capture-backend-revision.outputs.revision': 'backend-new',
         'steps.capture-backend-sync-revision.outputs.revision': 'backend-sync-new',
         'steps.sync-backfill.outputs.revision': 'backend-sync-backfill-new',
@@ -295,8 +301,10 @@ def test_selected_workflow_refuses_lock_or_source_bypass_before_side_effects(tmp
     assert not output.exists()
 
 
-@pytest.mark.parametrize('inverse', ['', 'backend-old', 'backend-sync-old'])
-def test_selected_workflow_binds_admitted_inverse(tmp_path, inverse):
+@pytest.mark.parametrize('service', SERVICES)
+@pytest.mark.parametrize('inverse_kind', ['missing', 'wrong_service', 'admitted'])
+def test_selected_workflow_binds_admitted_inverse(tmp_path, service, inverse_kind):
+    inverse = dict(missing='', wrong_service='other-service-old', admitted=f'{service}-old')[inverse_kind]
     workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
     jobs = workflow['jobs']
     script = jobs['validate-production-boundary']['steps'][0]['run']
@@ -309,7 +317,7 @@ def test_selected_workflow_binds_admitted_inverse(tmp_path, inverse):
             DEPLOY_ENVIRONMENT='prod',
             DEPLOY_TARGETS='cloud-run-only',
             WORKFLOW_MODE='deploy',
-            CLOUD_RUN_SERVICE='backend-sync',
+            CLOUD_RUN_SERVICE=service,
             SERVICE_IMAGES='',
             REQUESTED_BY='selection:fixture',
             RELEASE_SHA='a' * 40,
@@ -322,14 +330,30 @@ def test_selected_workflow_binds_admitted_inverse(tmp_path, inverse):
         text=True,
         timeout=10,
     )
-    assert (result.returncode == 0) == (inverse == 'backend-sync-old'), result.stderr
+    assert (result.returncode == 0) == (inverse_kind == 'admitted'), result.stderr
     if result.returncode == 0:
-        assert 'rollback_revision=backend-sync-old' in output.read_text().splitlines()
+        emitted = dict(line.split('=', 1) for line in output.read_text().splitlines())
+        assert emitted['rollback_revision'] == inverse
         assert 'inputs.selected_rollback_revision' in workflow['run-name']
         assert (
             'needs.validate-production-boundary.outputs.rollback_revision'
             in jobs['deploy']['steps'][1]['with']['rollback_revision']
         )
+        boundary = subprocess.run(
+            ['bash', '-c', render(step('Validate deploy profile boundary')['run'])],
+            env=dict(
+                os.environ,
+                CLOUD_RUN_SERVICE=service,
+                SERVICE_IMAGES='',
+                ROLLBACK_REVISION=emitted['rollback_revision'],
+                GITHUB_WORKSPACE=str(ROOT),
+                GITHUB_ENV=str(tmp_path / 'runner-env'),
+            ),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert boundary.returncode == 0, boundary.stderr
     else:
         assert not output.exists()
 
