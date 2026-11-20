@@ -8,12 +8,22 @@ import json
 import os
 import time
 import unittest
+from unittest.mock import Mock
+
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
+from google.api_core.exceptions import Aborted
+from google.auth import crypt, jwt
+from google.auth.exceptions import TransportError
 
 from google.cloud import firestore
 import httpx
 
 from .app import OPERATOR_SA, SCHEDULER_SA, create_app
 from .bark import BARK_ENDPOINT, Bark
+from .oidc import OIDCVerifier
 from .publisher import REDIS
 from .store import ATTEMPT_LEASE, RETRY_DELAY, Store
 
@@ -23,6 +33,125 @@ PUBLISH = '/v1/publish/grafana-redis'
 DRAIN = '/internal/drain'
 AUTH = {'Authorization': 'fixture-scheduler'}
 PROJECT = 'demo-omi-paging'
+
+
+class PagerVerificationFixture(unittest.TestCase):
+    def test_actual_oidc_verification_with_cached_and_bounded_transport(self):
+        now = datetime.now(timezone.utc)
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        identity = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'pager fixture')])
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(identity)
+            .issuer_name(identity)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - timedelta(minutes=1))
+            .not_valid_after(now + timedelta(hours=1))
+            .sign(key, hashes.SHA256())
+        )
+        signer = crypt.RSASigner(key, 'fixture-key')
+        outbound = []
+        monotonic_time = 100
+
+        def fetch(request):
+            outbound.append(request)
+            return httpx.Response(
+                200,
+                headers={'Cache-Control': 'public, max-age=30', 'Age': '10'},
+                json={'fixture-key': cert.public_bytes(serialization.Encoding.PEM).decode()},
+            )
+
+        def token(**overrides):
+            claims = {
+                'iss': 'https://accounts.google.com',
+                'aud': AUDIENCE + DRAIN,
+                'email': SCHEDULER_SA,
+                'email_verified': True,
+                'iat': int(now.timestamp()) - 1,
+                'exp': int(now.timestamp()) + 60,
+            }
+            return jwt.encode(signer, {**claims, **overrides}).decode()
+
+        def authorize(value):
+            return verifier('Bearer ' + value, AUDIENCE + DRAIN, SCHEDULER_SA)
+
+        with httpx.Client(transport=httpx.MockTransport(fetch)) as client:
+            verifier = OIDCVerifier(client, clock=lambda: monotonic_time)
+            self.assertFalse(authorize('invalid.token.signature'))
+            self.assertFalse(authorize(token(exp='malformed')))
+            self.assertFalse(outbound)
+            self.assertTrue(authorize(token()))
+            self.assertTrue(authorize(token()))
+            self.assertEqual(len(outbound), 1)
+            self.assertEqual(outbound[0].url, httpx.URL('https://www.googleapis.com/oauth2/v1/certs'))
+            self.assertEqual(set(outbound[0].extensions['timeout'].values()), {2.0})
+            for overrides in (
+                {'aud': AUDIENCE + '/internal/ack'},
+                {'iss': 'https://fixture.invalid'},
+                {'email': OPERATOR_SA},
+                {'email_verified': False},
+                {'exp': int(now.timestamp()) - 1},
+            ):
+                with self.subTest(overrides=overrides):
+                    self.assertFalse(authorize(token(**overrides)))
+            header_payload, signature = token().rsplit('.', 1)
+            corrupt = ('A' if signature[0] != 'A' else 'B') + signature[1:]
+            self.assertFalse(authorize(header_payload + '.' + corrupt))
+            self.assertEqual(len(outbound), 1)
+            monotonic_time += 20
+            self.assertTrue(authorize(token()))
+            self.assertEqual(len(outbound), 2)
+
+    def test_invalid_certificate_is_never_cached(self):
+        attempts = []
+
+        def fetch(request):
+            attempts.append(request)
+            return httpx.Response(200, headers={'Cache-Control': 'max-age=3600'}, json={'kid': 'malformed'})
+
+        with httpx.Client(transport=httpx.MockTransport(fetch)) as client:
+            verifier = OIDCVerifier(client)
+            for _ in range(2):
+                with self.assertRaises(TransportError):
+                    verifier.certificates('https://www.googleapis.com/oauth2/v1/certs', 'GET')
+            self.assertEqual(len(attempts), 2)
+
+    def test_pinned_sdk_commit_exhaustion_returns_retryable_503(self):
+        sdk_transaction = Mock(_read_only=False, _max_attempts=2, _id=b'fixture')
+        sdk_transaction._commit.side_effect = Aborted('fixture commit contention')
+        db = Mock()
+        db.transaction.return_value = sdk_transaction
+        store = Store(db)
+        now = datetime.now(timezone.utc)
+        store.read = Mock(
+            return_value={
+                'state': 'retry',
+                'next_at': now,
+                'expires_at': now + timedelta(minutes=1),
+                'resolved_at': None,
+                'attempts': [{'number': 1}],
+                'route': REDIS.route_id,
+                'recipient': REDIS.recipient,
+                'channel': REDIS.channel,
+            }
+        )
+        bark = Mock()
+        app = create_app(store, bark, SECRET, AUDIENCE, True, clock=lambda: now, authorize=lambda *_: True)
+        store.due = lambda _: iter(('a' * 64,))
+        response = app.test_client().post(DRAIN)
+        self.assertEqual((response.status_code, response.json), (503, {'error': 'store_unavailable'}))
+        self.assertEqual(sdk_transaction._commit.call_count, 2)
+        sdk_transaction._rollback.assert_called_once()
+        bark.send.assert_not_called()
+
+        def invalid_state(*_):
+            raise ValueError('invalid delivery state') from Aborted('unrelated cause')
+
+        store.read = invalid_state
+        app.testing = True
+        with self.assertRaisesRegex(ValueError, 'invalid delivery state'):
+            app.test_client().post(DRAIN)
 
 
 class PagerFixture(unittest.TestCase):

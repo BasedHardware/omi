@@ -1,7 +1,9 @@
 """Firestore inbox, recipient outbox and attempt receipts."""
 
 from datetime import timedelta
+import re
 
+from google.api_core.exceptions import Aborted
 from google.cloud import firestore
 
 from .publisher import MAX_EVENT_AGE, digest
@@ -24,10 +26,25 @@ def due_deliveries(db, now):
     )
 
 
+class TransactionRetriesExhausted(RuntimeError):
+    """Firestore abandoned a write transaction after its SDK retry budget."""
+
+
 class Store:
     def __init__(self, db, count_operation=lambda _: None):
         self.db = db
         self.count_operation = count_operation
+
+    def _transaction(self, commit):
+        try:
+            return commit(self.db.transaction())
+        except ValueError as error:
+            # Firestore 2.20.0 wraps exhausted commit aborts in this ValueError.
+            if isinstance(error.__cause__, Aborted) and re.fullmatch(
+                r'Failed to commit transaction in [0-9]+ attempts\.', str(error)
+            ):
+                raise TransactionRetriesExhausted() from error
+            raise
 
     def read(self, ref, transaction):
         self.count_operation('read')
@@ -105,7 +122,7 @@ class Store:
                 self.write(transaction, 'update', delivery_ref, changes)
             return disposition
 
-        return commit(self.db.transaction())
+        return self._transaction(commit)
 
     def delivery_ref(self, delivery_id):
         return self.db.collection('pager_deliveries').document(delivery_id)
@@ -154,7 +171,7 @@ class Store:
             )
             return attempt, delivery['route'], delivery['recipient'], delivery['channel']
 
-        return commit(self.db.transaction())
+        return self._transaction(commit)
 
     def finish(self, delivery_id, number, outcome, reason, now):
         ref = self.delivery_ref(delivery_id)
@@ -178,7 +195,7 @@ class Store:
                 state = outcome
             self.write(transaction, 'update', ref, {'state': state, 'next_at': next_at, 'attempts': attempts})
 
-        commit(self.db.transaction())
+        self._transaction(commit)
 
     def acknowledge(self, delivery_id, now):
         ref = self.delivery_ref(delivery_id)
@@ -197,4 +214,4 @@ class Store:
                 )
             return True
 
-        return commit(self.db.transaction())
+        return self._transaction(commit)

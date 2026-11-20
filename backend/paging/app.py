@@ -8,15 +8,13 @@ import re
 
 from flask import Flask, request
 from google.api_core.exceptions import GoogleAPICallError, RetryError
-from google.auth import exceptions as auth_errors
-from google.auth.transport.requests import Request
 from google.cloud import firestore
-from google.oauth2 import id_token
 import httpx
 
 from .bark import Bark
+from .oidc import OIDCVerifier
 from .publisher import parse_events, verify_signature
-from .store import Store
+from .store import Store, TransactionRetriesExhausted
 
 OPS_PROJECT = 'omi-paging-ops-prod'
 OPS_DB = 'pager'
@@ -29,22 +27,15 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 
-def verify_oidc(token, audience, principal):
-    if not token.startswith('Bearer '):
-        return False
-    try:
-        claims = id_token.verify_oauth2_token(token[7:], Request(), audience=audience)
-    except (ValueError, auth_errors.GoogleAuthError):
-        return False
-    return claims.get('email') == principal and claims.get('email_verified') is True
-
-
-def create_app(store, bark, signing_secret, audience, sender_enabled, *, clock=utcnow, authorize=verify_oidc):
+def create_app(store, bark, signing_secret, audience, sender_enabled, *, clock=utcnow, authorize=None):
+    if authorize is None:
+        authorize = OIDCVerifier()
     app = Flask(__name__)
     app.config['MAX_CONTENT_LENGTH'] = 32 * 1024
 
     @app.errorhandler(GoogleAPICallError)
     @app.errorhandler(RetryError)
+    @app.errorhandler(TransactionRetriesExhausted)
     def store_unavailable(error):
         LOG.warning('pager store unavailable: %s', type(error).__name__)
         return {'error': 'store_unavailable'}, 503

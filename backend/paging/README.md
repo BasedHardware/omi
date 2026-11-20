@@ -71,8 +71,9 @@ exactly as listed. The Scheduler service agent uses its Google-managed
 `roles/cloudscheduler.serviceAgent` grant in this project. The scheduler and
 operator principals authenticate to different application paths and audiences.
 The public HTTPS ingress needs explicit approval because Grafana uses HMAC.
-Bearer verification guards the scheduler and acknowledgement paths. No history
-API is exposed.
+Bearer verification guards the scheduler and acknowledgement paths. Each worker
+uses a bounded certificate transport and caches parsed Google certificates for
+their HTTP freshness lifetime, capped at one hour. No history API is exposed.
 
 1. Qualify the exact head and image with the emulator evidence. Deploy fenced
    and keep Scheduler paused through access checks. Verify unsigned publisher
@@ -87,7 +88,9 @@ API is exposed.
    the serving network. Publish explicit probe failures at zero listen accepts.
    For the production query, use the same five-minute pending window and a
    single output series that fires on the established ratio gate OR a fresh
-   failed probe. Retain last state for missing probe telemetry when the ratio
+   failed probe. Any fresh failed series wins over a fresh healthy peer for the
+   same allowlisted target. An expired failure cannot override fresh healthy
+   evidence. Retain last state for missing probe telemetry when the ratio
    cannot independently establish an outage. Verify the separate telemetry
    health signal and the actual probe cadence. The PromQL fixture checks the
    combined behavior with an illustrative probe selector.
@@ -110,6 +113,25 @@ API is exposed.
    drill and production rule readback are recorded. Disable only the raw Redis
    connection wake after the handset receipt and verify the OOM path with a
    non-ringing fixture.
+
+Release owns the Redis source and live probe preflight as a separate change.
+Update the `omi-redis-cache-conn-page` entry in
+`backend/charts/monitoring/alerts/resilience.json` and regenerate the combined
+`alert-rules.json` export. Set `paging_target=prod-serving-redis` and bind only this
+UID to `Omi - Redis phone wake`. In `provision_monitoring_alerts.py` and
+`verify_pusher_live_alert_route.py`, scope receiver and contact validation to
+that exact UID. Exercise the import plan and drift readback to verify every
+other rule retains its receiver, including `omi-redis-cache-conn-warn`. Prepare
+the webhook settings from `release.yaml` with the credential supplied by
+Release at apply time.
+
+The fixture selector is a proposed schema. Release first records the production
+datasource UID, exact serving target and probe labels, freshness and coverage
+from an authenticated read-only query. Verify successful and failed probes can
+both publish independently of listen traffic. If the series is absent, stale or
+cannot be tied to the serving-network authenticated PING, keep the alert change
+unapplied and record the missing signal or required exporter change. Capture
+counts and timestamps only.
 
 Rollback restores the backed-up Redis rule and route, re-enables the Mac
 connection wake if it was disabled, pauses the Scheduler job, and serves the
