@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	cloud.google.com/go/firestore v1.29.2
+	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/prometheus/client_golang v1.25.0
 	google.golang.org/api v0.304.0
