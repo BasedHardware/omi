@@ -541,6 +541,12 @@ _add(
 )
 
 _add(DriverEntry('database.account_deletion_transitions.read_agent_vm_migration_journals', base={'uid': UID}))
+_add(
+    DriverEntry(
+        'database.go_queue_erase.readback',
+        base={'now': T0, 'collection': ref_collection('account_deletions')},
+    )
+)
 
 _add(
     DriverEntry(

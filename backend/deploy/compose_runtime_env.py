@@ -191,6 +191,7 @@ def _compose_environment(
     env_config = cast(ConfigDict, merged)
     _resolve_derived_services(env_config)
     _apply_conversations_v3_stage(env_config)
+    _apply_go_queue_erase_setting(env_config)
     env_config['compute_project'] = compute_project
     env_config['data_plane_project'] = data_plane_project
     # Legacy aliases consumed by deploy scripts and validators.
@@ -301,6 +302,33 @@ def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
                 service['env']['CONVERSATIONS_V3_FIRST_APP_BUILD'] = deepcopy(build_descriptor)
 
 
+def _apply_go_queue_erase_setting(env_config: ConfigDict) -> None:
+    """Render one environment-wide value for all hosts that can run deletion."""
+    required = env_config.pop('go_queue_erase_required', None)
+    if required is not None and not isinstance(required, bool):
+        raise ValueError('go_queue_erase_required must be a YAML boolean')
+    key = 'GO_QUEUE_ERASE_REQUIRED'
+    descriptor = {'value': 'true' if required else 'false', 'category': 'rollout'}
+    cloud_run = env_config.get('cloud_run', {})
+    for service in cloud_run.get('services', {}).values():
+        env = service.setdefault('env', {})
+        if key in env:
+            raise ValueError('set go_queue_erase_required at environment scope')
+        if required is not None:
+            env[key] = dict(descriptor)
+    gke = env_config.get('gke', {})
+    config_map = gke.get('config_map')
+    if isinstance(config_map, dict):
+        entries = config_map.setdefault('entries', {})
+        if key in entries:
+            raise ValueError('set go_queue_erase_required at environment scope')
+        if required is not None:
+            entries[key] = {'source': 'literal', 'value': descriptor['value']}
+    for name in ('backend-listen', 'pusher'):
+        if name in gke and key in gke[name].get('env', {}):
+            raise ValueError('set go_queue_erase_required at environment scope')
+
+
 def compose_staging(
     *,
     base_path: Path = DEFAULT_BASE,
@@ -338,6 +366,8 @@ def compose_staging(
     if derived:
         raise StagingComposeError(f'staging does not compose derived services: {", ".join(derived)}')
     _apply_conversations_v3_stage(merged)
+    merged['go_queue_erase_required'] = staging_doc.get('overlay', {}).get('go_queue_erase_required')
+    _apply_go_queue_erase_setting(merged)
 
     spec = _as_config_dict(staging_doc.get('cloud_run')) or {}
     run_url_template = str(staging_doc['run_url_template'])

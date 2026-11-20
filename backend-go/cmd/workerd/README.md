@@ -46,3 +46,19 @@ the worker Deployment.
 | Queue and PostgreSQL failures use closed log fields without remote error text | `TestReportQueueErrorUsesClosedClassification` |
 | Queue observer metrics constrain all labels to declared values and `unknown` | `TestQueueObserverUsesOnlyDeclaredLabels` |
 | The metrics listener counts real Postgres jobs that lack a local handler | `TestMetricsScrapeCountsJobsWithNoHandler` |
+
+## Private account erase listener
+
+The erase listener is off by default. Configure `ERASE_PORT` on a distinct private port,
+`ERASE_AUDIENCE`, `ERASE_CALLER_SUBJECT` with the deletion executor's numeric Google service
+account subject, and `ERASE_TLS_CERT` and `ERASE_TLS_KEY` with mounted TLS files. Route it only
+from the authenticated deletion executor. Set `ERASE_FIRESTORE_PROJECT` and
+`ERASE_FIRESTORE_DATABASE` to the deletion executor's authoritative data plane project and
+database. Use `(default)` explicitly for the default database or the configured named ID
+(for example, `staging`).
+It returns an acknowledgement for the matching armed generation and claim only after the
+queue-only erase commits. `TestEraseRequiresAuthenticatedArmedGenerationAndCommit` covers
+the listener's acceptance and acknowledgement conditions.
+
+The endpoint depends on Lane B's queue-only operation and read-only marker reader. See
+[the deletion rollout](../../docs/account-deletion-erase.md) for activation and rollback.

@@ -644,7 +644,13 @@ def _requirement_pin(requirements_text: str, package: str) -> str:
     raise AssertionError(f'{package} pin missing from requirements')
 
 
-def test_pusher_installs_typesense_because_finalization_indexes_conversations():
+@pytest.fixture(scope='module')
+def pusher_lock_packages() -> dict[str, str]:
+    lock = tomllib.loads((BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8'))
+    return {package['name']: package['version'] for package in lock['packages']}
+
+
+def test_pusher_installs_typesense_because_finalization_indexes_conversations(pusher_lock_packages):
     """process_conversation → lifecycle → typesense_index is reachable in the pusher image.
 
     Auto-deploy smoke failed from 2026-09-01 onward with
@@ -654,8 +660,7 @@ def test_pusher_installs_typesense_because_finalization_indexes_conversations():
     pusher = (BACKEND_DIR / 'pusher' / 'requirements.txt').read_text(encoding='utf-8')
     backend = (BACKEND_DIR / 'requirements.txt').read_text(encoding='utf-8')
     assert _requirement_pin(pusher, 'typesense') == _requirement_pin(backend, 'typesense')
-    pylock = (BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8')
-    assert 'name = "typesense"' in pylock
+    assert 'typesense' in pusher_lock_packages
 
 
 def test_pusher_imageio_ffmpeg_exclusion_keeps_its_system_ffmpeg_fallback():
@@ -679,18 +684,16 @@ def test_pusher_imageio_ffmpeg_exclusion_keeps_its_system_ffmpeg_fallback():
     assert 'install --no-install-recommends ffmpeg' in dockerfile
 
 
-def test_pusher_posthog_pin_matches_backend_cohort_flag_client():
+def test_pusher_posthog_pin_matches_backend_cohort_flag_client(pusher_lock_packages):
     """PR #20533 enabled cohort dispatch, but pusher lacked the lazy PostHog SDK."""
     pusher = (BACKEND_DIR / 'pusher' / 'requirements.txt').read_text(encoding='utf-8')
     backend = (BACKEND_DIR / 'requirements.txt').read_text(encoding='utf-8')
     pin = _requirement_pin(backend, 'posthog')
     assert _requirement_pin(pusher, 'posthog') == pin
-    lock = tomllib.loads((BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8'))
-    packages = {package['name']: package['version'] for package in lock['packages']}
-    assert packages['posthog'] == pin.split('==', 1)[1]
+    assert pusher_lock_packages['posthog'] == pin.split('==', 1)[1]
 
 
-def test_pusher_lock_covers_mentor_v2_lazy_imports():
+def test_pusher_lock_covers_mentor_v2_lazy_imports(pusher_lock_packages):
     """Packages audited in the pusher-only venv, including function-local imports.
 
     PR #20533's cohort dispatch exposed a missing lazy PostHog import that the
@@ -735,9 +738,9 @@ def test_pusher_lock_covers_mentor_v2_lazy_imports():
         'typesense': 'typesense',
         'ulid': 'python-ulid',
     }
-    lock = tomllib.loads((BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8'))
-    installed_packages = {package['name'] for package in lock['packages']}
-    missing = {module: package for module, package in module_distributions.items() if package not in installed_packages}
+    missing = {
+        module: package for module, package in module_distributions.items() if package not in pusher_lock_packages
+    }
     assert not missing, f'Mentor v2 modules missing from pusher lock: {missing}'
 
 
