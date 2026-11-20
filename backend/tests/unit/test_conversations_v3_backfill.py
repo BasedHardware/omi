@@ -1206,6 +1206,38 @@ async def test_a_row_rechecks_account_deletion_right_before_its_notes_call(direc
     assert processed == ['a'] and counts['account_deletion'] == 1 and 'summary-b' in released
 
 
+@pytest.mark.asyncio
+async def test_deletion_between_drain_guard_and_model_dispatch(direct, strict, monkeypatch):
+    from utils.conversations import process_conversation as process
+
+    row = legacy('a', AT, 400, created_at=AT, v3_derived=True, backfilled=True)
+    path = ('users', 'u', 'conversations', 'a')
+    strict.rows[path] = {**row, 'v3_backfill_process_pending': True, 'v3_process_pending': True}
+    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid: [row])
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(service.models, 'account_deletion_firestore_client', lambda: strict)
+    monkeypatch.setattr(writers, 'begin_processing', lambda *a: True)
+    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    released = []
+    monkeypatch.setattr(leases, 'release', lambda *a: released.append(a[1]))
+
+    def prepare_notes(*args, **kwargs):
+        # The original drain checks have passed and the leased worker has started.
+        strict.rows[('account_deletions', 'u')] = {'wipe_status': 'pending'}
+        service.models.dispatch_notes_model(lambda: pytest.fail('transcript reached the model'))
+
+    monkeypatch.setattr(process, 'process_conversation', prepare_notes)
+    monkeypatch.setattr(
+        writers, 'settle_backfill_processing', lambda *a, **kw: pytest.fail('spent a notes retry on deletion')
+    )
+
+    counts = await service.drain_backfill('u', deadline=float('inf'))
+    assert counts == {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 1, 'account_deletion': 1}
+    assert released == ['summary-a']
+    assert strict.rows[path]['v3_backfill_process_pending'] is True
+    assert strict.rows[path]['v3_process_pending'] is False
+
+
 def test_an_oversized_undo_group_is_refused_whole(strict):
     # Reads per copy are three (row, tombstone, notes lease): 167 copies plus 2 exceed 500.
     with pytest.raises(store.Conflict, match='undo_group_too_large'):

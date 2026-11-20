@@ -443,6 +443,20 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
     return changed
 
 
+def park_backfill_processing(uid, cid, *, firestore_client=None):
+    """Return a deletion-blocked attempt to the dedicated backfill drain."""
+    client = firestore_client or store.get_firestore_client()
+    ref = store.user_conversations(client, uid).document(cid)
+
+    @firestore.transactional
+    def park(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        if row.get('v3_backfill_process_pending') and row.get('v3_process_pending'):
+            tx.update(ref, {'v3_process_pending': False})
+
+    park(client.transaction())
+
+
 def settle_backfill_processing(uid, cid, *, failed, max_attempts, firestore_client=None):
     """Clear the backfill notes marker once the live processing writer settled the row.
 

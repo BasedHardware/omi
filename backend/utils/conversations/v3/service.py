@@ -730,9 +730,9 @@ async def _process_leased(uid, row, token):
         await asyncio.shield(worker)
     except asyncio.CancelledError:
         await asyncio.shield(worker)
-        await keeper
         raise
-    await keeper
+    finally:
+        await keeper
 
 
 async def drain_processing(uid):
@@ -795,7 +795,7 @@ def _process(uid, row, token):
     else:
         notes = True
         persisted = []
-        with fence.writer(uid, row['id'], token), models.notes_mode(uid):
+        with fence.writer(uid, row['id'], token), models.notes_mode(uid, backfilled=bool(row.get('backfilled'))):
             result = process_conversation(
                 uid,
                 row.get('language') or 'en',
@@ -941,38 +941,38 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
         if token is None:
             counts['busy'] += 1
             return
-        failed = False
         try:
-            # Re-checked per row, right before the model call, not only per chunk.
-            blocked = await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid, fresh=True)
-        except Exception:
-            await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
-            raise
-        if blocked:
-            counts['account_deletion'] = 1
-            await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
-            return
-        try:
-            await _process_leased(uid, row, token)
-        except Exception as error:
-            failed = True
-            logger.warning('event=v3_backfill_notes outcome=error exception_type=%s', type(error).__name__)
-        finally:
+            if await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid, fresh=True):
+                counts['account_deletion'] = 1
+                return
+            failed = False
             try:
-                outcome = await run_blocking(
-                    db_executor,
-                    writers.settle_backfill_processing,
-                    uid,
-                    row['id'],
-                    failed=failed,
-                    max_attempts=BACKFILL_NOTES_ATTEMPTS,
-                )
-            finally:
-                await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
+                await _process_leased(uid, row, token)
+            except models.BackfillNotesDeletionBlocked:
+                counts['account_deletion'] = 1
+                await run_blocking(db_executor, writers.park_backfill_processing, uid, row['id'])
+                return
+            except Exception as error:
+                failed = True
+                logger.warning('event=v3_backfill_notes outcome=error exception_type=%s', type(error).__name__)
+            outcome = await run_blocking(
+                db_executor,
+                writers.settle_backfill_processing,
+                uid,
+                row['id'],
+                failed=failed,
+                max_attempts=BACKFILL_NOTES_ATTEMPTS,
+            )
+        finally:
+            await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
         counts[{'settled': 'processed', 'absent': 'processed', 'failed': 'failed', 'retry': 'retry'}[outcome]] += 1
 
     for start in range(0, len(rows), concurrency):
-        if time.monotonic() >= deadline or (keep_going is not None and not await keep_going()):
+        if (
+            counts['account_deletion']
+            or time.monotonic() >= deadline
+            or (keep_going is not None and not await keep_going())
+        ):
             break
         if await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid, fresh=True):
             counts['account_deletion'] = 1

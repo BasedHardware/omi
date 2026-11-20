@@ -599,7 +599,7 @@ def _get_shaped_conversation_notes(
 
             return await run_loop(mount, evidence, model_turn)
 
-    result = asyncio.run(invoke())
+    result = v3_models.dispatch_notes_model(lambda: asyncio.run(invoke()))
     output_schema = _notes_output_schema(uid)
     validated_output = output_schema.model_validate(result.value)
     capture_into_sink(validated_output, open_loop_out)

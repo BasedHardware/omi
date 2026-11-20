@@ -765,7 +765,12 @@ def _get_structured(
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
-    except (ConversationAbsorbed, SyncConversationPersistenceFenced, member_notes.LiveMemberNotesDeferred):
+    except (
+        ConversationAbsorbed,
+        SyncConversationPersistenceFenced,
+        member_notes.LiveMemberNotesDeferred,
+        v3_service.models.BackfillNotesDeletionBlocked,
+    ):
         raise
     except Exception as e:
         if funded_processing.enabled(uid, 'batch') and _is_funded_budget_denial(e):
