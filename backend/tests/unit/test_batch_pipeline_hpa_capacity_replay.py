@@ -21,11 +21,14 @@ def test_historical_volume_capacity_retains_the_retune_witness():
 
 
 def test_current_volume_capacity_stays_cool_and_at_the_audited_floor():
+    # #25842 (SCA-3274, 2026-11-20) raised the live GPU floor 4 -> 6 so worker rolls keep
+    # L4 nodes; at current volume the fleet now sits on that floor. The 4/16 retune
+    # witness stays pinned separately in HISTORICAL_CFG.
     result = FRONTIER.stats(FRONTIER.series, FRONTIER.cfg)
-    assert FRONTIER.cfg['min_replicas'] == 4
+    assert FRONTIER.cfg['min_replicas'] == 6
     assert FRONTIER.cfg['max_replicas'] == 16
-    assert result['mean'] == pytest.approx(4.34, abs=0.01)
-    assert result['max'] == 5
+    assert result['mean'] == pytest.approx(6.0, abs=0.01)
+    assert result['max'] == 6
     assert result['hot'] == 0
     assert result['floor']
 
