@@ -179,13 +179,15 @@ def renew(job_id: str, epoch: int, *, phase: str | None = None, firestore_client
     return commit(client.transaction())
 
 
-def resolve_go_cleanup_source(job_id: str, generation: int, epoch: int, index: int) -> tuple[str, str] | None:
-    """Resolve an opaque source ordinal only under the current Go cleanup lease."""
+def resolve_go_cleanup_source(
+    job_id: str, generation: int, epoch: int, index: int, *, retracted_source: tuple[str, str, str] | None = None
+) -> tuple[str, str, str, bool] | None:
+    """Resolve or acknowledge a source under the exact sealed Go cleanup lease."""
     client = client_for(None)
     ref = client.collection(COLLECTION).document(job_id)
 
     @firestore.transactional
-    def resolve(transaction: Any) -> tuple[str, str] | None:
+    def resolve(transaction: Any) -> tuple[str, str, str, bool] | None:
         job = ref.get(transaction=transaction).to_dict() or {}
         sources = job.get('conversation_ids')
         if (
@@ -223,7 +225,17 @@ def resolve_go_cleanup_source(job_id: str, generation: int, epoch: int, index: i
             or donor.get('transcript_corrections_moved_to') != target
         ):
             return None
-        return owner, source
+        prior = job.get('go_cleanup_receipts')
+        receipts = dict(prior) if isinstance(prior, dict) else {}
+        receipt_key = f'source_{index}'
+        receipt = {'generation': generation, 'epoch': epoch, 'source': source, 'target': target}
+        already_retracted = receipts.get(receipt_key) == receipt
+        if retracted_source is not None and retracted_source != (owner, source, target):
+            return None
+        if retracted_source is not None and not already_retracted:
+            receipts[receipt_key] = receipt
+            transaction.update(ref, {'go_cleanup_receipts': receipts})
+        return owner, source, target, already_retracted or retracted_source is not None
 
     return resolve(client.transaction())
 

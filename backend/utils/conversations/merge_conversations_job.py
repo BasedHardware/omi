@@ -139,7 +139,13 @@ def retract_go_merge_source(job_id: str, generation: int, epoch: int, index: int
         source = store.resolve_go_cleanup_source(job_id, generation, epoch, index)
         if source is None or should_skip_background_account_mutation(source[0]):
             return False
-        retract_sync_bridge_source(*source)
-        return store.resolve_go_cleanup_source(job_id, generation, epoch, index) == source
+        owner, conversation, target, already_retracted = source
+        if already_retracted:
+            return True
+        retract_sync_bridge_source(owner, conversation)
+        receipt = store.resolve_go_cleanup_source(
+            job_id, generation, epoch, index, retracted_source=(owner, conversation, target)
+        )
+        return receipt == (owner, conversation, target, True)
     finally:
         release_job_run_lock(lock_key, token)

@@ -263,7 +263,17 @@ def test_go_retraction_requires_current_sealed_lease_and_live_target(store, monk
     retract.assert_called_once_with(owner, 'a')
     assert row(store, 'a')['merge_job_id'] == job_id
     assert release.call_count == 4
+    assert jobrow(store, admitted)['go_cleanup_receipts'] == {
+        'source_0': {'generation': 1, 'epoch': 1, 'source': 'a', 'target': target}
+    }
+    assert worker.retract_go_merge_source(job_id, 1, 1, 0)
+    retract.assert_called_once_with(owner, 'a')
+    jobrow(store, admitted).update(lease_epoch=2, go_cleanup_epoch=2)
+    retract.side_effect = lambda *_args: row(store, 'a').pop('transcript_corrections_moved_to')
+    assert not worker.retract_go_merge_source(job_id, 1, 2, 0)
+    assert jobrow(store, admitted)['go_cleanup_receipts']['source_0']['epoch'] == 1
+    retract.reset_mock()
 
     del client.rows[('users', owner, 'conversations', target)]
-    assert not worker.retract_go_merge_source(job_id, 1, 1, 0)
-    retract.assert_called_once()
+    assert not worker.retract_go_merge_source(job_id, 1, 2, 0)
+    retract.assert_not_called()
