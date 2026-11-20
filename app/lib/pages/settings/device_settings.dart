@@ -311,11 +311,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 
   void _openOfflineSync(DeviceProvider provider) {
-    if (!provider.isDeviceStorageSupport) {
-      showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
-      return;
+    switch (offlineSyncEntry(
+        connected: provider.connectedDevice != null, storageSupported: provider.isDeviceStorageSupport)) {
+      case OfflineSyncEntry.connectFirst:
+        // Disconnected is not "unsupported": the app cannot ask the device until it is back (D4).
+        OmiFeedback.info(context, context.l10n.connectDeviceForOfflineSync);
+      case OfflineSyncEntry.unsupported:
+        showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
+      case OfflineSyncEntry.open:
+        routeToPage(context, provider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage());
     }
-    routeToPage(context, provider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage());
   }
 
   Future<void> _openChargingHelp(DeviceProvider provider) async {
@@ -911,4 +916,13 @@ class _PendingSyncChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What tapping Offline Sync does. A disconnected device has not said whether it stores audio, so it
+/// is never reported as unsupported.
+enum OfflineSyncEntry { connectFirst, unsupported, open }
+
+OfflineSyncEntry offlineSyncEntry({required bool connected, required bool storageSupported}) {
+  if (!connected) return OfflineSyncEntry.connectFirst;
+  return storageSupported ? OfflineSyncEntry.open : OfflineSyncEntry.unsupported;
 }
