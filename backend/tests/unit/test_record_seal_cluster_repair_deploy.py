@@ -150,12 +150,18 @@ def test_cpu_admission_switch_is_declared_in_runtime_manifest_and_listen_chart()
             capture_output=True,
             text=True,
         )
-        assert rendered.returncode == 0
-        deployment = next(
-            d for d in yaml.load_all(rendered.stdout, Loader=yaml.CSafeLoader) if d and d['kind'] == 'Deployment'
-        )
-        entries = deployment['spec']['template']['spec']['containers'][0]['env']
-        assert [e['value'] for e in entries if e['name'] == key] == ['false']
+        if yaml.load(values.read_text(), Loader=yaml.CSafeLoader).get('privateSecretEnv'):
+            # Since #25660 a stage with privateSecretEnv refuses any literal privateEnv overlay,
+            # so the switch can only be overridden through the Secret Manager document.
+            assert rendered.returncode != 0
+            assert 'privateEnv is retired once privateSecretEnv is set' in rendered.stderr
+        else:
+            assert rendered.returncode == 0, rendered.stderr
+            deployment = next(
+                d for d in yaml.load_all(rendered.stdout, Loader=yaml.CSafeLoader) if d and d['kind'] == 'Deployment'
+            )
+            entries = deployment['spec']['template']['spec']['containers'][0]['env']
+            assert [e['value'] for e in entries if e['name'] == key] == ['false']
         pusher_values = backend / f'charts/pusher/{stage}_omi_pusher_values.yaml'
         pusher_entries = yaml.load(pusher_values.read_text(), Loader=yaml.CSafeLoader)['env']
         assert next(e for e in pusher_entries if e['name'] == key)['value'] == 'true'
