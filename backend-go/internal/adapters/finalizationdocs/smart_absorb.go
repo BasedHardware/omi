@@ -3,6 +3,7 @@ package finalizationdocs
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"time"
@@ -13,8 +14,8 @@ import (
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
 
-// Absorb commits a standard inline first-pair plan. Other transcript custody,
-// enhanced encryption and pre-existing lineage require their owning adapters.
+// Absorb commits an approved, revision-fenced inline plan and flattens its
+// validated lineage. External transcript objects require their custody writer.
 func (s Store) Absorb(ctx context.Context, g queue.Guarded, claim finalization.Claim, plan finalization.SmartAbsorbPlan) (finalization.SmartAbsorbResult, error) {
 	var result finalization.SmartAbsorbResult
 	if plan.SurvivorID == "" || plan.SurvivorID == claim.Intent.Ref.ID {
@@ -25,7 +26,7 @@ func (s Store) Absorb(ctx context.Context, g queue.Guarded, claim finalization.C
 			return queue.ErrLease
 		}
 		var absorbErr error
-		result, absorbErr = absorb(tx, claim, plan, now)
+		result, absorbErr = s.absorb(tx, claim, plan, now)
 		return absorbErr
 	})
 	if err != nil {
@@ -40,7 +41,7 @@ type absorbRows struct {
 	targetRef             finalization.Ref
 }
 
-func absorb(tx *docstore.Tx, claim finalization.Claim, plan finalization.SmartAbsorbPlan, now time.Time) (finalization.SmartAbsorbResult, error) {
+func (s Store) absorb(tx *docstore.Tx, claim finalization.Claim, plan finalization.SmartAbsorbPlan, now time.Time) (finalization.SmartAbsorbResult, error) {
 	rows := absorbRows{targetRef: finalization.Ref{Owner: claim.Intent.Ref.Owner, ID: plan.SurvivorID}}
 	var err error
 	rows.donorPath, err = conversationRef(claim.Intent.Ref)
@@ -67,63 +68,127 @@ func absorb(tx *docstore.Tx, claim finalization.Claim, plan finalization.SmartAb
 	prior := field[map[string]any](rows.donor, "smart_merge")
 	if field[bool](rows.donor, "deleted") && field[string](prior, "role") == "donor" &&
 		field[string](prior, "survivor_id") == plan.SurvivorID && field[string](rows.donor, "sync_merged_into") == plan.SurvivorID &&
-		field[int64](prior, "survivor_revision") == field[int64](targetMerge, "revision") {
+		replayAbsorb(rows.target, targetMerge, prior, claim.Intent.Ref.ID) {
 		return finalization.SmartAbsorbResult{Survivor: rows.targetRef, Revision: field[int64](targetMerge, "revision"),
 			SyncRevision: field[int64](rows.target, "sync_content_revision"), AlreadyApplied: true}, nil
 	}
 	if donorWritten.IsZero() || targetWritten.IsZero() || !donorWritten.Equal(plan.DonorWritten) ||
-		!targetWritten.Equal(plan.SurvivorWritten) || plan.SurvivorRevision != 0 {
+		!targetWritten.Equal(plan.SurvivorWritten) || plan.SurvivorRevision != field[int64](targetMerge, "revision") {
 		return finalization.SmartAbsorbResult{}, finalization.ErrStale
 	}
-	return appendFirstPair(tx, rows, claim.Intent.Ref, now)
+	return s.appendAbsorb(tx, rows, claim.Intent.Ref, now)
 }
 
 func absorbVisible(row document) bool {
-	return row != nil && !field[bool](row, "deleted") && !field[bool](row, "discarded") && !field[bool](row, "is_locked")
+	return row != nil && !field[bool](row, "is_deleted") && !field[bool](row, "deleted") && !field[bool](row, "discarded") && !field[bool](row, "is_locked")
 }
 
-func inlinePairRow(row document) bool {
-	return absorbVisible(row) && field[string](row, "data_protection_level") == "standard" &&
-		!field[bool](row, "transcript_segments_compressed") && !field[bool](row, "has_transcript_corrections") &&
-		!field[bool](row, "has_photos") && emptyValue(row["photos"]) && emptyValue(row["audio_files"]) &&
-		!field[bool](row, "starred") && !field[bool](row, "folder_user_set") && !field[bool](row, "sync_relevance_user_kept") &&
-		field[string](row, "user_title") == "" && field[string](row, "user_overview") == "" &&
-		field[string](row, "sync_merged_into") == "" && row["smart_merge"] == nil && emptyValue(row["sync_merged_from"]) &&
+func replayAbsorb(target, state, donorState document, donor string) bool {
+	prior := field[int64](donorState, "survivor_revision")
+	rev := field[int64](state, "revision")
+	return prior > 0 && prior <= rev && slices.Contains(field[[]any](target, "sync_merged_from"), any(donor))
+}
+
+func absorbPairRow(row document) bool {
+	return absorbVisible(row) && !absorbProtected(row) &&
+		field[string](row, "sync_merged_into") == "" && field[string](row, "merge_job_id") == "" &&
 		row["speaker_match_scores"] == nil && (row["visibility"] == nil || row["visibility"] == "private")
 }
 
-func appendFirstPair(tx *docstore.Tx, rows absorbRows, donorRef finalization.Ref, now time.Time) (finalization.SmartAbsorbResult, error) {
-	donor, target := rows.donor, rows.target
-	if !inlinePairRow(donor) || !inlinePairRow(target) || field[string](target, "status") != string(rules.Completed) ||
-		field[string](donor, "status") != string(rules.Completed) || field[string](donor, "source") != field[string](target, "source") ||
-		field[string](donor, "client_device_id") == "" || field[string](donor, "client_device_id") != field[string](target, "client_device_id") {
+func absorbProtected(row document) bool {
+	return field[bool](row, "has_transcript_corrections") || field[bool](row, "has_photos") ||
+		!emptyValue(row["photos"]) || !emptyValue(row["audio_files"]) ||
+		field[bool](row, "starred") || field[bool](row, "folder_user_set") || field[bool](row, "sync_relevance_user_kept") ||
+		field[string](row, "user_title") != "" || field[string](row, "user_overview") != ""
+}
+
+func sameAbsorbPartition(target, donor document) bool {
+	device := field[string](donor, "client_device_id")
+	level := field[string](target, "data_protection_level")
+	return (level == "standard" || level == "enhanced") && level == field[string](donor, "data_protection_level") &&
+		field[string](target, "status") == string(rules.Completed) && field[string](donor, "status") == string(rules.Completed) &&
+		field[string](donor, "source") == field[string](target, "source") && device != "" && device == field[string](target, "client_device_id")
+}
+
+func (s Store) appendAbsorb(tx *docstore.Tx, rows absorbRows, donorRef finalization.Ref, now time.Time) (finalization.SmartAbsorbResult, error) {
+	if !absorbPairRow(rows.target) || !absorbPairRow(rows.donor) || !sameAbsorbPartition(rows.target, rows.donor) {
 		return finalization.SmartAbsorbResult{}, finalization.ErrStale
 	}
 	if err := verifyAbsorbSidecars(tx, rows, donorRef); err != nil {
 		return finalization.SmartAbsorbResult{}, err
 	}
-	joined, err := joinInlineSpeech(target, donor, donorRef.ID)
+	lineage, err := loadAbsorbLineage(tx, donorRef, rows)
 	if err != nil {
 		return finalization.SmartAbsorbResult{}, err
 	}
-	rev, donorRev := field[int64](target, "sync_content_revision"), field[int64](donor, "sync_content_revision")
-	if rev == math.MaxInt64 || donorRev == math.MaxInt64 {
-		return finalization.SmartAbsorbResult{}, finalization.ErrInvalid
-	}
-	state := document{"role": "survivor", "revision": int64(1), "refreshed_revision": int64(0), "last_merged_at": now,
-		"fragments": []document{inlineFragment(target, rows.targetRef.ID), inlineFragment(donor, donorRef.ID)}}
-	joinedRow := document{"transcript_segments": joined, "finished_at": field[time.Time](donor, "finished_at"), "has_content": true,
-		"sync_content_revision": rev + 1, "sync_merged_from": []string{donorRef.ID}, "smart_merge": state}
-	stageSummaryRearm(target, joinedRow, now)
-	if storedLowerBound(map[string]any(target))+storedLowerBound(map[string]any(joinedRow)) > 900<<10 {
-		return finalization.SmartAbsorbResult{}, finalization.ErrStale
-	}
-	if err := tx.Update(rows.targetPath, joinedRow); err != nil {
+	patch, result, err := s.absorbTargetPatch(rows, donorRef, lineage.ids, now)
+	if err != nil {
 		return finalization.SmartAbsorbResult{}, err
 	}
-	patch := document{"deleted": true, "discarded": true, "sync_merged_into": rows.targetRef.ID, "sync_content_revision": donorRev + 1,
-		"smart_merge": document{"role": "donor", "survivor_id": rows.targetRef.ID, "survivor_revision": int64(1), "merged_at": now}}
-	return finalization.SmartAbsorbResult{Survivor: rows.targetRef, Revision: 1, SyncRevision: rev + 1}, tx.Update(rows.donorPath, patch)
+	if err := tx.Update(rows.targetPath, patch); err != nil {
+		return finalization.SmartAbsorbResult{}, err
+	}
+	return result, markAbsorbDonors(tx, rows, result, lineage, now)
+}
+
+func (s Store) absorbTargetPatch(rows absorbRows, donorRef finalization.Ref, ids []string, now time.Time) (document, finalization.SmartAbsorbResult, error) {
+	donor, target := rows.donor, rows.target
+	cut, err := mergedTranscript(s.Codec, donorRef, target, donor)
+	if err != nil {
+		return nil, finalization.SmartAbsorbResult{}, err
+	}
+	rev := field[int64](target, "sync_content_revision")
+	state := maps.Clone(field[map[string]any](target, "smart_merge"))
+	current := field[int64](state, "revision")
+	if rev < 0 || rev == math.MaxInt64 || current == math.MaxInt64 {
+		return nil, finalization.SmartAbsorbResult{}, finalization.ErrInvalid
+	}
+	state, err = extendAbsorbFragments(state, rows, donorRef.ID, now)
+	if err != nil {
+		return nil, finalization.SmartAbsorbResult{}, err
+	}
+	patch := document{"transcript_segments": cut.value, "transcript_segments_compressed": cut.compressed,
+		"finished_at": field[time.Time](donor, "finished_at"), "has_content": true,
+		"sync_content_revision": rev + 1, "sync_merged_from": ids, "smart_merge": state}
+	stageSummaryRearm(target, patch, now)
+	projected := maps.Clone(target)
+	maps.Copy(projected, patch)
+	if storedLowerBound(map[string]any(projected)) > 900<<10 {
+		return nil, finalization.SmartAbsorbResult{}, finalization.ErrStale
+	}
+	return patch, finalization.SmartAbsorbResult{Survivor: rows.targetRef, Revision: current + 1, SyncRevision: rev + 1}, nil
+}
+
+func extendAbsorbFragments(state document, rows absorbRows, donor string, now time.Time) (document, error) {
+	prior := field[int64](state, "revision")
+	var fragments []any
+	if state == nil {
+		state = document{"role": "survivor", "refreshed_revision": int64(0)}
+		fragments = []any{inlineFragment(rows.target, rows.targetRef.ID)}
+	} else {
+		fragments = field[[]any](state, "fragments")
+		if field[string](state, "role") != "survivor" || prior <= 0 || len(fragments) < 2 || len(fragments) >= maxAbsorbFragments {
+			return nil, finalization.ErrStale
+		}
+	}
+	state["revision"], state["last_merged_at"], state["fragments"] = prior+1, now, append(fragments, inlineFragment(rows.donor, donor))
+	delete(state, "refresh_lease")
+	return state, nil
+}
+
+func markAbsorbDonors(tx *docstore.Tx, rows absorbRows, result finalization.SmartAbsorbResult, lineage absorbLineage, now time.Time) error {
+	rev := field[int64](rows.donor, "sync_content_revision")
+	if rev < 0 || rev == math.MaxInt64 {
+		return finalization.ErrInvalid
+	}
+	patch := document{"deleted": true, "discarded": true, "sync_merged_into": rows.targetRef.ID, "sync_content_revision": rev + 1,
+		"smart_merge": document{"role": "donor", "survivor_id": rows.targetRef.ID, "survivor_revision": result.Revision, "merged_at": now}}
+	for _, hop := range lineage.repoint {
+		if err := tx.Update(hop.path, document{"sync_merged_into": rows.targetRef.ID, "sync_content_revision": hop.revision + 1}); err != nil {
+			return err
+		}
+	}
+	return tx.Update(rows.donorPath, patch)
 }
 
 func verifyAbsorbSidecars(tx *docstore.Tx, rows absorbRows, donor finalization.Ref) error {
@@ -175,10 +240,9 @@ func verifyAbsorbSidecars(tx *docstore.Tx, rows absorbRows, donor finalization.R
 	return err
 }
 
-func joinInlineSpeech(target, donor document, donorID string) ([]any, error) {
+func joinInlineSpeech(target, donor document, first, second []any, donorID string) ([]any, error) {
 	base, begin, end, finish := field[time.Time](target, "started_at"), field[time.Time](donor, "started_at"),
 		field[time.Time](target, "finished_at"), field[time.Time](donor, "finished_at")
-	first, second := field[[]any](target, "transcript_segments"), field[[]any](donor, "transcript_segments")
 	if base.IsZero() || !end.After(base) || !finish.After(begin) || begin.Before(end) || begin.Sub(end) > 30*time.Minute ||
 		len(first) == 0 || len(second) == 0 {
 		return nil, finalization.ErrStale
@@ -187,21 +251,38 @@ func joinInlineSpeech(target, donor document, donorID string) ([]any, error) {
 	speakers := newDonorSpeakers(first)
 	for _, raw := range second {
 		segment, ok := raw.(map[string]any)
-		if !ok || field[string](segment, "audio_alignment") == "unplaced" {
+		if !ok || !offsetDonorSegment(segment, begin.Sub(base).Seconds()) {
 			return nil, finalization.ErrStale
 		}
-		start, stop := field[float64](segment, "start"), field[float64](segment, "end")
-		if stop <= start || start < 0 || math.IsNaN(start) || math.IsNaN(stop) || math.IsInf(stop, 0) {
-			return nil, finalization.ErrStale
-		}
-		offset := begin.Sub(base).Seconds()
-		segment["start"], segment["end"] = start+offset, stop+offset
 		if err := speakers.assign(segment, donorID); err != nil {
 			return nil, err
 		}
 		segments = append(segments, segment)
 	}
 	return segments, nil
+}
+
+func offsetDonorSegment(segment document, offset float64) bool {
+	start, stop := segmentNumber(segment["start"]), segmentNumber(segment["end"])
+	if field[string](segment, "audio_alignment") == "unplaced" {
+		return start == -1 && stop == -1 && field[string](segment, "id") != ""
+	}
+	if stop <= start || start < 0 || math.IsNaN(start) || math.IsNaN(stop) || math.IsInf(stop, 0) {
+		return false
+	}
+	segment["start"], segment["end"] = start+offset, stop+offset
+	return true
+}
+
+func segmentNumber(value any) float64 {
+	switch n := value.(type) {
+	case int64:
+		return float64(n)
+	case float64:
+		return n
+	default:
+		return math.NaN()
+	}
 }
 
 type donorSpeakers struct {
