@@ -19,17 +19,35 @@ const isUI = path => !GENERATED_API_FILES.has(path) && (/^(app\/lib\/(pages|widg
   || /^desktop\/windows\/src\/renderer\/.*\.(tsx|jsx|css|scss|html|svg|png|jpg|webp)$/.test(path)
   || /\.(figma|sketch)$/.test(path));
 
-function decision(pr, files, commits, comments) {
+const touchesUI = files => files.some(f => f.ui || isUI(f.filename)
+  || (f.previous_filename && isUI(f.previous_filename)));
+const COMMAND = /^\/(approve|reject)-ui ([a-f0-9]{40})\s*$/;
+const approverCommands = comments => comments
+  .filter(c => APPROVER_IDS.has(c.user?.id) && COMMAND.test(c.body.trim()))
+  .sort((a, b) => a.id - b.id);
+
+// R29 (David, 2026-11-20): an approval carries to a later head only when the
+// newest approver command on the PR is an /approve-ui for an earlier head (any
+// later /reject-ui withdraws it) and nothing was said about the current head.
+// The caller must still prove the UI did not change between the two heads.
+function carryCandidate(comments, headSha) {
+  const commands = approverCommands(comments);
+  if (commands.some(c => c.body.trim().match(COMMAND)[2] === headSha)) return null;
+  const [, verb, sha] = commands.at(-1)?.body.trim().match(COMMAND) || [];
+  return verb === 'approve' ? sha : null;
+}
+
+function decision(pr, files, commits, comments, carried = false) {
   const actor = isActor(pr.user) || commits.some(c => isActor(c.author) || isActor(c.committer)
     || (c.authors || []).some(isActor));
-  const ui = files.some(f => f.ui || isUI(f.filename) || (f.previous_filename && isUI(f.previous_filename)));
+  const ui = touchesUI(files);
   // REST caps PR commits at 250 and files at 3000. Never pass incomplete evidence.
   const incomplete = pr.commits >= 250 || pr.changed_files > 3000;
   const required = incomplete || (actor && ui);
   const commands = comments.filter(c => APPROVER_IDS.has(c.user?.id)
     && new RegExp(`^/(approve|reject)-ui ${pr.head.sha}\\s*$`).test(c.body.trim()));
   commands.sort((a, b) => a.id - b.id);
-  const approved = commands.at(-1)?.body.trim().startsWith('/approve-ui ');
+  const approved = commands.length ? commands.at(-1).body.trim().startsWith('/approve-ui ') : carried;
   return {required, allowed: !required || (!incomplete && !!approved), incomplete};
 }
 
@@ -100,7 +118,19 @@ async function evidence(github, repo, pr) {
       }
     }
   }
-  return {files:first.files,commits};
+  return {files:first.files,commits,status:first.status};
+}
+
+// The approved head must be an ancestor of the current head, so the compare is
+// exactly approved..current; a rebase or force-push needs a fresh approval. Any
+// UI file in that range, including Swift UI found by content, refuses the carry.
+async function unchangedUI(github, repo, approvedSha, headSha) {
+  try {
+    const range = await evidence(github, repo, {base:{sha:approvedSha}, head:{sha:headSha}});
+    return ['ahead','identical'].includes(range.status) && !touchesUI(range.files);
+  } catch (error) {
+    return false;
+  }
 }
 
 async function evaluateHead({github, context, headSha}) {
@@ -128,14 +158,20 @@ async function evaluateHead({github, context, headSha}) {
       const comments = await github.paginate(github.rest.issues.listComments, {
         ...repo,issue_number:pr.number,per_page:100,
       });
-      const result = decision(pr,files,commits,comments);
+      let result = decision(pr,files,commits,comments);
+      const candidate = result.allowed || result.incomplete ? null : carryCandidate(comments,sha);
+      if (candidate && await unchangedUI(github,repo,candidate,sha)) {
+        result = decision(pr,files,commits,comments,true);
+      }
       allowed &&= result.allowed;
       const marker = `${MARKER.slice(0,-4)}:${sha} -->`;
-      if (result.required && !comments.some(c => c.user?.type === 'Bot' && c.body.includes(marker))) {
+      if (result.required && !result.allowed
+        && !comments.some(c => c.user?.type === 'Bot' && c.body.includes(marker))) {
         await github.rest.issues.createComment({...repo,issue_number:pr.number,body:
           `${marker}\n@kodjima33 UI changes involving Git-on-my-level require your approval. `
           + `Review the current diff, then comment \`/approve-ui ${sha}\`. `
-          + 'Each new head needs a fresh approval. To withdraw it, comment `/reject-ui <full head SHA>`. '
+          + 'A later head keeps the approval only when it adds commits on top with no UI changes; '
+          + 'a UI change, rebase or force-push needs a fresh one. To withdraw it, comment `/reject-ui <full head SHA>`. '
           + 'Non-UI work and unrelated access are unaffected.'});
       }
     }
@@ -158,3 +194,4 @@ async function run(args) {
 module.exports = run;
 module.exports.decision = decision;
 module.exports.evidence = evidence;
+module.exports.carryCandidate = carryCandidate;
