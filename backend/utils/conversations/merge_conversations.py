@@ -1170,20 +1170,14 @@ def cleanup_failed_merge_target(uid: str, merged_conversation_id: str) -> bool:
 
     try:
         conversations_db.delete_conversation_photos(uid, merged_conversation_id)
-    except Exception as e:
-        logger.error(f"Error deleting merged conversation photos for {merged_conversation_id}: {e}")
-    try:
         delete_conversation_audio_files(uid, merged_conversation_id)
-    except Exception as e:
-        logger.error(f"Error deleting merged conversation audio for {merged_conversation_id}: {e}")
-    try:
         delete_vector(uid, merged_conversation_id)
-    except Exception as e:
-        logger.error(f"Error deleting merged conversation vector for {merged_conversation_id}: {e}")
-    try:
+        # Delete the row last so a failed artifact sweep leaves discoverable
+        # debt for the same reserved target on the next rollback attempt.
         conversations_db.delete_conversation(uid, merged_conversation_id)
-    except Exception as e:
-        logger.error(f"Error deleting merged conversation {merged_conversation_id}: {e}")
+    except Exception as error:
+        logger.warning('event=merge_rollback_cleanup outcome=retry exception_type=%s', type(error).__name__)
+        return False
     return True
 
 
@@ -1216,7 +1210,8 @@ def _handle_merge_failure(
     )
     if merged_conversation_id:
         if failure_phase == MergeFailurePhase.BEFORE_SOURCE_DELETION:
-            cleanup_failed_merge_target(uid, merged_conversation_id)
+            if not cleanup_failed_merge_target(uid, merged_conversation_id):
+                return
         else:
             logger.error(
                 "Preserving merged target after source deletion started",

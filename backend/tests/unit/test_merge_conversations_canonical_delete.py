@@ -278,12 +278,11 @@ def test_merge_failure_aborts_target_cleanup_when_canonical_retraction_fails():
 @pytest.mark.parametrize('merged_into', ['merged', None])
 def test_bridge_ancestor_cleanup_never_implies_canonical_erasure(merged_into):
     merge_mod = sys.modules['utils.conversations.merge_conversations']
-    with patch.object(
-        merge_mod.conversations_db, 'get_conversation', return_value={'sync_merged_from': ['donor']}
-    ), patch.object(merge_mod, '_delete_conversation_and_related_data') as cleanup, patch.object(
-        merge_mod.conversation_tombstones, 'record_deletion'
-    ), patch.object(
-        merge_mod, 'record_survivor_deleted'
+    with (
+        patch.object(merge_mod.conversations_db, 'get_conversation', return_value={'sync_merged_from': ['donor']}),
+        patch.object(merge_mod, '_delete_conversation_and_related_data') as cleanup,
+        patch.object(merge_mod.conversation_tombstones, 'record_deletion'),
+        patch.object(merge_mod, 'record_survivor_deleted'),
     ):
         merge_mod.delete_conversation_with_sync_sources('u', 'source', merged_into=merged_into)
     cleanup.assert_called_once_with('u', 'donor', purge_sync_sources=False, merged_into=merged_into)
@@ -291,9 +290,11 @@ def test_bridge_ancestor_cleanup_never_implies_canonical_erasure(merged_into):
 
 def test_canonical_link_failure_aborts_source_deletion():
     merge_mod = sys.modules['utils.conversations.merge_conversations']
-    with patch.object(merge_mod, 'MemoryService', return_value=MagicMock()), patch.object(
-        merge_mod, 'delete_conversation_audio_files', side_effect=RuntimeError('link unavailable')
-    ), patch.object(merge_mod, 'delete_conversation_with_sync_sources') as delete_parent:
+    with (
+        patch.object(merge_mod, 'MemoryService', return_value=MagicMock()),
+        patch.object(merge_mod, 'delete_conversation_audio_files', side_effect=RuntimeError('link unavailable')),
+        patch.object(merge_mod, 'delete_conversation_with_sync_sources') as delete_parent,
+    ):
         with pytest.raises(RuntimeError, match='link unavailable'):
             merge_mod._delete_conversation_and_related_data('u', 'source', merged_into='merged')
     delete_parent.assert_not_called()
@@ -303,11 +304,30 @@ def test_canonical_link_failure_aborts_source_deletion():
 def test_merge_source_document_delete_failure_propagates_on_current_main(purge_sync_sources):
     """The merged_into path must withhold completion; nonmerge cleanup stays best effort."""
     service = MagicMock()
-    with patch('utils.conversations.merge_conversations.MemoryService', return_value=service), patch(
-        'utils.conversations.merge_conversations.conversations_db.delete_conversation',
-        side_effect=RuntimeError('synthetic document unavailable'),
+    with (
+        patch('utils.conversations.merge_conversations.MemoryService', return_value=service),
+        patch(
+            'utils.conversations.merge_conversations.conversations_db.delete_conversation',
+            side_effect=RuntimeError('synthetic document unavailable'),
+        ),
     ):
         with pytest.raises(RuntimeError, match='synthetic document unavailable'):
             _delete_conversation_and_related_data(
                 'owner', 'source', purge_sync_sources=purge_sync_sources, merged_into='retained-target'
             )
+
+
+def test_rollback_keeps_target_and_sources_when_target_artifacts_need_retry():
+    from utils.conversations import merge_conversations as merge_mod
+
+    delete_conversation = sys.modules["database.conversations"].delete_conversation
+    delete_conversation.reset_mock()
+    with (
+        patch.object(merge_mod, "MemoryService"),
+        patch.object(merge_mod, "delete_conversation_audio_files", side_effect=OSError("storage unavailable")),
+        patch.object(merge_mod.lifecycle_service, "complete") as release,
+    ):
+        assert not merge_mod.cleanup_failed_merge_target("uid-merge", "merged-1")
+        merge_mod._handle_merge_failure("uid-merge", ["src-1"], merged_conversation_id="merged-1")
+    delete_conversation.assert_not_called()
+    release.assert_not_called()

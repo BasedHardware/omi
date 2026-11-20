@@ -317,9 +317,28 @@ def finish_recovery(job_id: str, epoch: int, *, firestore_client: Any = None) ->
     @firestore.transactional
     def commit(transaction: Any) -> bool:
         row = ref.get(transaction=transaction).to_dict() or {}
-        if row.get('kind') != KIND or row.get('phase') != 'recovering' or row.get('lease_epoch') != epoch:
+        now = _now()
+        until = row.get('lease_expires_at')
+        if (
+            row.get('kind') != KIND
+            or row.get('status') != 'leased'
+            or row.get('phase') != 'recovering'
+            or row.get('lease_epoch') != epoch
+            or not isinstance(until, datetime)
+            or until <= now
+        ):
             return False
-        refs = [_source(client, row['uid'], cid) for cid in row['conversation_ids']]
+        owner, target = row['uid'], row['merge_target_id']
+        deleting = client.collection('account_deletions').document(owner).get(transaction=transaction)
+        if account_deletion_marker_blocks_access(
+            marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')
+        ):
+            return False
+        if _source(client, owner, target).get(transaction=transaction).exists:
+            # Canonical cleanup may return after an ambiguous document delete.
+            # Source release requires transactional absence of this exact target.
+            return False
+        refs = [_source(client, owner, cid) for cid in row['conversation_ids']]
         sources = [source.get(transaction=transaction).to_dict() or {} for source in refs]
         for source, data in zip(refs, sources):
             if data.get('status') == 'merging' and data.get('merge_job_id') == job_id:

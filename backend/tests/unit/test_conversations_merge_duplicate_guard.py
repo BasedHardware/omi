@@ -234,3 +234,39 @@ def test_oversized_merge_is_a_request_rejection_not_an_internal_job_error(conv):
         )
     assert error.value.status_code == 400
     assert tasks.tasks == []
+
+
+@pytest.mark.parametrize('published', [True, False])
+def test_merge_dispatches_durable_generation_before_falling_back(conv, monkeypatch, published):
+    from unittest.mock import Mock
+
+    from fastapi import BackgroundTasks
+    from models.conversation import MergeConversationsRequest
+    import utils.conversations.merge_conversations as worker
+    import utils.cloud_tasks as tasks
+
+    monkeypatch.setattr(
+        conv.conversations_db, 'get_conversation', lambda _uid, cid, **_kwargs: {'id': cid, 'status': 'completed'}
+    )
+    monkeypatch.setattr(worker, 'validate_merge_compatibility', lambda _rows: (True, None, None))
+    monkeypatch.setattr(
+        conv.lifecycle_service.merge_jobs,
+        'admit',
+        lambda *_args: {'job_id': 'merge-fixture', 'dispatch_generation': 4, 'merge_target_id': 'durable-target'},
+    )
+    monkeypatch.setattr(tasks, 'listen_finalization_binding', lambda: {'queue': 'configured'})
+    enqueue = Mock(side_effect=None if published else TimeoutError('ambiguous transport'))
+    monkeypatch.setattr(tasks, 'enqueue_listen_finalization_job', enqueue)
+    fallback = BackgroundTasks()
+    result = conv.merge_conversations(
+        request=MergeConversationsRequest(conversation_ids=['c1', 'c2']),
+        background_tasks=fallback,
+        uid='test-account',
+    )
+    assert result.merged_conversation_id == 'durable-target'
+    enqueue.assert_called_once_with('merge-fixture', 4)
+    if published:
+        assert fallback.tasks == []
+    else:
+        assert len(fallback.tasks) == 1
+        assert fallback.tasks[0].args == ('merge-fixture', 4)

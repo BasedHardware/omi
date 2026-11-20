@@ -1,11 +1,14 @@
 """Lifecycle-owned durable merge coordinator; reconciliation survives mode-off."""
 
 import asyncio
-from typing import Any
+import logging
+from typing import Any, Callable
 
 from database import conversation_merge_jobs as store
 from utils.executors import db_executor, lifecycle_executor, run_blocking, start_background_task
 from utils.observability.fallback import record_fallback
+
+logger = logging.getLogger(__name__)
 
 
 class MergeLeaseLost(RuntimeError):
@@ -14,6 +17,22 @@ class MergeLeaseLost(RuntimeError):
 
 def admit(uid: str, conversation_ids: list[str], reprocess: bool, *, firestore_client: Any = None) -> dict | None:
     return store.admit(uid, conversation_ids, reprocess, firestore_client=firestore_client)
+
+
+def schedule(job: dict, add_background_task: Callable[..., Any]) -> None:
+    """Offer the exact admitted generation to the configured transport first."""
+    from utils.cloud_tasks import enqueue_listen_finalization_job, listen_finalization_binding
+
+    job_id, generation = job['job_id'], job['dispatch_generation']
+    if all(listen_finalization_binding().values()):
+        try:
+            enqueue_listen_finalization_job(job_id, generation)
+            return
+        except Exception as error:
+            # An ambiguous enqueue may have delivered the task. Only one of
+            # the two transports can claim this durable generation.
+            logger.warning('event=conversation_merge_dispatch outcome=fallback exception_type=%s', type(error).__name__)
+    add_background_task(run, job_id, generation)
 
 
 def checkpoint(job_id: str, epoch: int, phase: str | None = None) -> None:

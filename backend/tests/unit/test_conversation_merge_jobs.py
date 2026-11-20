@@ -277,3 +277,25 @@ def test_go_retraction_requires_current_sealed_lease_and_live_target(store, monk
     del client.rows[('users', owner, 'conversations', target)]
     assert not worker.retract_go_merge_source(job_id, 1, 2, 0)
     retract.assert_not_called()
+
+
+def test_rollback_retains_all_sources_until_provisional_target_is_absent(store, monkeypatch):
+    client, owner = store
+    job = admit(store)
+    monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
+    recovery = jobs.begin_recovery(job['job_id'], firestore_client=client)
+    path = ('users', owner, 'conversations', job['merge_target_id'])
+    client.rows[path] = {'status': 'processing'}
+
+    assert not jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=client)
+    assert all(row(store, cid)['merge_job_id'] == job['job_id'] for cid in ('a', 'b'))
+    assert jobrow(store, job)['phase'] == 'recovering'
+
+    del client.rows[path]
+    deletion_path = ('account_deletions', owner)
+    client.rows[deletion_path] = {'wipe_status': 'pending'}
+    assert not jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=client)
+    assert all(row(store, cid)['status'] == 'merging' for cid in ('a', 'b'))
+    client.rows[deletion_path]['wipe_status'] = 'cancelled'
+    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=client)
+    assert all(row(store, cid)['status'] == 'completed' for cid in ('a', 'b'))

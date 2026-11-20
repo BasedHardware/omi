@@ -2895,7 +2895,7 @@ def merge_conversations(
     job = lifecycle_service.merge_jobs.admit(uid, request.conversation_ids, request.reprocess)
     if job is None:
         raise HTTPException(status_code=409, detail='Conversation changed during merge admission')
-    background_tasks.add_task(lifecycle_service.merge_jobs.run, job['job_id'], job['dispatch_generation'])
+    lifecycle_service.merge_jobs.schedule(job, background_tasks.add_task)
     return MergeConversationsResponse(
         status='merging',
         message='Merge started',
