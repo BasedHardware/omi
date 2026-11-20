@@ -23,7 +23,6 @@ DEFAULT_REVIEW_DAYS = 180
 MAX_REVIEW_DAYS = 730
 _EVENTS_SHOWN = 20
 _TOMBSTONE_SCAN_LIMIT = 2000
-TOMBSTONES_COLLECTION = "deleted_conversations"
 
 
 class HoldCommandError(RuntimeError):
@@ -59,9 +58,8 @@ def _document_dict(client: Any, path: str) -> dict[str, Any] | None:
 
 
 def _events(client: Any, uid: str) -> list[dict[str, Any]]:
-    collection = client.collection(
-        f"{legal_holds.LEGAL_HOLDS_COLLECTION}/{uid}/{legal_holds.LEGAL_HOLD_EVENTS_SUBCOLLECTION}"
-    )
+    # Literal segments keep the path visible to the Firestore collection-budget scanner.
+    collection = client.collection(f"legal_holds/{uid}/events")
     rows = [{"id": snapshot.id, **(snapshot.to_dict() or {})} for snapshot in collection.limit(_EVENTS_SHOWN).stream()]
     return sorted(rows, key=lambda row: row["id"])
 
@@ -69,7 +67,7 @@ def _events(client: Any, uid: str) -> list[dict[str, Any]]:
 def _held_deferred_deletes(client: Any, uid: str) -> dict[str, Any]:
     """Conversations the user deleted while held: hidden and retained, erasure owed after release."""
 
-    collection = client.collection(f"users/{uid}/{TOMBSTONES_COLLECTION}")
+    collection = client.collection(f"users/{uid}/deleted_conversations")
     scanned = 0
     held: list[dict[str, Any]] = []
     for snapshot in collection.limit(_TOMBSTONE_SCAN_LIMIT).stream():
