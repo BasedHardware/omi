@@ -24,6 +24,8 @@ The load-bearing facts this guards:
 * The only permitted noncurrent-version rule is ``NONCURRENT_DELETE_RULE``:
   Delete after seven noncurrent days, scoped to ``playback/`` and ``merged/``
   (David, 2026-11-05 17:01/17:03Z). All wider or different shapes are forbidden.
+* Prod apply requires exactly the four approved rules. Explicit rollback
+  validation requires exactly the two pre-change live rules.
 """
 
 from __future__ import annotations
@@ -52,6 +54,10 @@ PROD_BASELINE_RULES: tuple[dict[str, Any], ...] = (
         },
     },
 )
+MERGED_DELETE_RULE: dict[str, Any] = {
+    "action": {"type": "Delete"},
+    "condition": {"age": 3, "matchesPrefix": ["merged/"]},
+}
 # David approved derived-cache cleanup only; raw chunks remain protected.
 NONCURRENT_DELETE_RULE: dict[str, Any] = {
     "action": {"type": "Delete"},
@@ -61,6 +67,7 @@ NONCURRENT_DELETE_RULE: dict[str, Any] = {
         "matchesPrefix": ["playback/", "merged/"],
     },
 }
+PROD_APPLY_RULES = PROD_BASELINE_RULES + (MERGED_DELETE_RULE, NONCURRENT_DELETE_RULE)
 
 
 def _is_scoped_noncurrent_delete(rule: Any) -> bool:
@@ -82,7 +89,7 @@ def _prefix_touches_chunks(prefix: str) -> bool:
     return prefix.startswith(CHUNKS_PREFIX) or CHUNKS_PREFIX.startswith(prefix)
 
 
-def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
+def validate_desired_document(document: Mapping[str, Any], *, rollback: bool = False) -> list[str]:
     errors: list[str] = []
     bucket = str(document.get("bucket") or "").strip()
     project = str(document.get("project") or "").strip()
@@ -169,11 +176,16 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
             f"desired document declares {noncurrent_delete_rules} scoped noncurrent Delete rules; at most one is expected"
         )
     if bucket == PROD_BUCKET:
-        for legacy in PROD_BASELINE_RULES:
-            if legacy not in lifecycle["rule"]:
-                errors.append(
-                    f"desired document is missing the pre-change live prod rule {json.dumps(legacy, sort_keys=True)}"
-                )
+        approved_rules = PROD_BASELINE_RULES if rollback else PROD_APPLY_RULES
+        variant = "rollback" if rollback else "apply"
+        missing = [json.dumps(rule, sort_keys=True) for rule in approved_rules]
+        for rule in lifecycle["rule"]:
+            encoded = json.dumps(rule, sort_keys=True)
+            if encoded in missing:
+                missing.remove(encoded)
+            else:
+                errors.append(f"prod {variant} declares an unexpected or duplicate rule {encoded}")
+        errors.extend(f"prod {variant} is missing the required rule {rule}" for rule in missing)
     return errors
 
 
@@ -245,6 +257,7 @@ def main() -> int:
     parser.add_argument("--live", type=Path, default=None, help="gcloud storage buckets describe --format=json")
     parser.add_argument("--notifications", type=Path, default=None)
     parser.add_argument("--expect-applied", action="store_true")
+    parser.add_argument("--rollback", action="store_true", help="Validate the rollback variant of the desired document")
     parser.add_argument("--allow-rule-removal", action="store_true")
     parser.add_argument(
         "--allow-rule-removal-of",
@@ -266,7 +279,7 @@ def main() -> int:
     if not isinstance(desired, Mapping):
         print("ERROR: desired lifecycle document must be a JSON object")
         return 1
-    errors.extend(validate_desired_document(desired))
+    errors.extend(validate_desired_document(desired, rollback=args.rollback))
 
     if args.source_only:
         if (

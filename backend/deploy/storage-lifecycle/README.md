@@ -11,6 +11,9 @@ rule present in the live bucket, lets a `Delete` rule reach `chunks/`, adds a
 `SetStorageClass` rule not scoped to exactly `chunks/`, or adds a
 noncurrent-version (`isLive: false`) rule other than the approved seven-day
 derived-cache Delete below. Raw-audio `chunks/` deletion has no exception.
+Prod apply validation requires exactly the four approved rules below. The
+workflow passes `--rollback` in the rollback lane to require the two pre-change
+live rules instead.
 
 Rollback: dispatch the workflow with `lifecycle_variant=rollback`. Prod restores
 the pre-change live rules: playback Delete age 30 and the batch-scoped Coldline

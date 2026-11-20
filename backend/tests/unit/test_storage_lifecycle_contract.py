@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 from scripts.validate_storage_lifecycle import (
-    PROD_BASELINE_RULES,
     NONCURRENT_DELETE_RULE,
+    PROD_BASELINE_RULES,
     validate_against_live,
     validate_desired_document,
     validate_notifications,
@@ -26,7 +26,7 @@ def _rules(document: dict) -> list:
 
 def test_checked_in_documents_pass_the_source_contract():
     for name in APPLY_FILES + ROLLBACK_FILES:
-        assert validate_desired_document(_load(name)) == [], name
+        assert validate_desired_document(_load(name), rollback=name in ROLLBACK_FILES) == [], name
 
 
 def test_no_delete_rule_can_reach_chunks():
@@ -88,7 +88,7 @@ def test_archive_rule_is_rejected_in_every_private_cloud_variant(name):
             },
         }
     )
-    errors = validate_desired_document(document)
+    errors = validate_desired_document(document, rollback=name in ROLLBACK_FILES)
     assert any("must set storageClass COLDLINE" in e and "ARCHIVE" in e for e in errors), errors
 
 
@@ -111,6 +111,32 @@ def test_prod_declares_exactly_the_approved_four_rules():
             },
         },
     ]
+
+
+@pytest.mark.parametrize("prefixes", [["merged/"], ["playback/", "merged/"]])
+def test_prod_apply_requires_both_cache_cleanup_rules(prefixes):
+    document = _load("prod.json")
+    document["lifecycle"]["rule"] = [
+        rule for rule in _rules(document) if rule["condition"]["matchesPrefix"] != prefixes
+    ]
+
+    errors = validate_desired_document(document)
+    assert any("prod apply is missing the required rule" in error for error in errors), errors
+
+
+@pytest.mark.parametrize("name", ["prod.json", "prod.rollback.json"])
+@pytest.mark.parametrize("age", [1, 30])
+def test_prod_rejects_extra_and_duplicate_delete_rules(name, age):
+    document = _load(name)
+    _rules(document).append({"action": {"type": "Delete"}, "condition": {"age": age, "matchesPrefix": ["playback/"]}})
+
+    errors = validate_desired_document(document, rollback=name in ROLLBACK_FILES)
+    assert any("declares an unexpected or duplicate rule" in error for error in errors), errors
+
+
+def test_prod_rollback_requires_explicit_selection_and_only_accepts_baseline():
+    assert validate_desired_document(_load("prod.rollback.json"))
+    assert validate_desired_document(_load("prod.json"), rollback=True)
 
 
 def test_rollback_files_only_drop_rules_the_apply_variant_added():
@@ -146,7 +172,7 @@ def test_unapproved_raw_audio_noncurrent_delete_is_rejected(name):
             },
         }
     )
-    errors = validate_desired_document(document)
+    errors = validate_desired_document(document, rollback=name in ROLLBACK_FILES)
     assert any("can match 'chunks/'" in error for error in errors)
     assert any("only the approved" in error for error in errors)
 
@@ -221,13 +247,18 @@ def test_scoped_noncurrent_delete_rule_passes_and_near_misses_are_rejected():
         return validate_desired_document(document)
 
     # An unscoped or wider prefix could delete protected raw audio.
-    for prefixes in (None, [], [""], ["playback/", "merged/", "chunks/"]):
+    for prefixes, expected_error in (
+        (None, "unscoped Delete"),
+        ([], "unscoped Delete"),
+        ([""], "can match 'chunks/'"),
+        (["playback/", "merged/", "chunks/"], "can match 'chunks/'"),
+    ):
         wider = json.loads(json.dumps(NONCURRENT_DELETE_RULE))
         if prefixes is None:
             del wider["condition"]["matchesPrefix"]
         else:
             wider["condition"]["matchesPrefix"] = prefixes
-        assert errors_with(wider)
+        assert any(expected_error in error for error in errors_with(wider))
 
     for key, value in (("daysSinceNoncurrentTime", 6), ("isLive", True), ("numNewerVersions", 1)):
         altered = json.loads(json.dumps(NONCURRENT_DELETE_RULE))
