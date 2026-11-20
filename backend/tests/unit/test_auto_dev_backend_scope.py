@@ -167,6 +167,14 @@ def test_backend_source_or_deploy_input_change_proceeds(git_repo: Path, relative
     assert outputs == {'applies': 'true', 'workerd': 'false'}
 
 
+def test_workerd_change_selects_the_go_worker(git_repo: Path) -> None:
+    sha = _commit(git_repo, 'backend-go/cmd/workerd/main.go')
+
+    outputs, _summary = _run_scope(git_repo, sha)
+
+    assert outputs == {'applies': 'false', 'workerd': 'true'}
+
+
 def test_relevant_sha_left_behind_by_a_later_merge_still_reaches_admission(git_repo: Path) -> None:
     """Scope must not strand a backend change that main has moved past.
 

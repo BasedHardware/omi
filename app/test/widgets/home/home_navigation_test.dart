@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/http/api/memories.dart' show GetMemoriesResult;
 import 'package:omi/backend/schema/memory.dart';
@@ -234,7 +235,7 @@ void main() {
     expect(opened, ['task-150']);
   });
 
-  testWidgets('a Live Activity link for a recording that ended shows Home and opens nothing', (tester) async {
+  testWidgets('a Live Activity link for a recording that ended shows Home, says so and opens nothing', (tester) async {
     final capture = CaptureProvider(localSegmentStore: LocalSegmentStore.disabled());
     addTearDown(capture.dispose);
     final home = HomeProvider()..selectedIndex = HomeProvider.tasksTab;
@@ -245,7 +246,11 @@ void main() {
           ChangeNotifierProvider<CaptureProvider>.value(value: capture),
           ChangeNotifierProvider<HomeProvider>.value(value: home),
         ],
-        child: const MaterialApp(home: SizedBox(key: Key('capture-link-home'))),
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: [Locale('en')],
+          home: Scaffold(body: SizedBox(key: Key('capture-link-home'))),
+        ),
       ),
     );
     final context = tester.element(find.byKey(const Key('capture-link-home')));
@@ -261,6 +266,36 @@ void main() {
     expect(opened, isFalse);
     expect(home.selectedIndex, HomeProvider.homeTab);
     expect(find.byType(LiveEpisodePage), findsNothing);
+    // L1 (audit 2026-11-19): it says why nothing opened.
+    expect(find.text('That recording has ended.'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('a link to a memory that no longer exists says so, not "Something went wrong"', (tester) async {
+    final provider = MemoriesProvider();
+    addTearDown(provider.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider<MemoriesProvider>.value(
+        value: provider,
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: [Locale('en')],
+          home: Scaffold(body: SizedBox(key: Key('memory-link-home'))),
+        ),
+      ),
+    );
+    final context = tester.element(find.byKey(const Key('memory-link-home')));
+    final opened = await openHomeDeepLink(
+      context,
+      const HomeDeepLink('memory', id: 'gone'),
+      openSettings: () async {},
+      memoryById: (id) async => null,
+    );
+    await tester.pump();
+    expect(opened, isFalse);
+    expect(find.text('That memory is gone.'), findsOneWidget);
+    expect(find.textContaining('Something went wrong'), findsNothing);
+    await tester.pump(const Duration(seconds: 5));
   });
 
   testWidgets('indexed memory opens by backend id outside the visible filter', (tester) async {
