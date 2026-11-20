@@ -9,6 +9,7 @@ the owner-drain kill-switch path (``BATCH_PIPELINE_OWNER_DRAIN_ENABLED=false``);
 
 import asyncio
 import itertools
+import json
 from contextlib import contextmanager
 from unittest.mock import Mock
 
@@ -465,6 +466,67 @@ def test_finish_page_contention_on_async_receipts_still_logs_the_summary(monkeyp
     with caplog.at_level('INFO', logger=projection.logger.name):
         projector_for(log).sweep()
     assert any('action=sweep outcome=summary' in record.getMessage() for record in caplog.records)
+
+
+@pytest.mark.parametrize('contention', [False, True])
+def test_blocked_summary_reconciles_both_pages_and_uses_only_the_committed_result(monkeypatch, caplog, contention):
+    switches(monkeypatch, chain_on=False, pending_on=True)
+    log = ResultLog(async_projection=False)
+    log.policy['projection_contention'] = contention
+    projector = projector_for(log)
+    a, b = ('sha256:' + digit * 64 for digit in 'ab')
+    private = 'synthetic-private@example.invalid'
+    cases = [
+        ('first', 'pending', a, projection.ProjectionPredecessorPending()),
+        ('second', 'pending', a, projection.ProjectionPredecessorPending()),
+        ('malformed', 'pending', private, projection.ProjectionBlocked(private)),
+        ('held', 'pending', b, ValueError()),
+        (
+            'finish',
+            'persisted',
+            b,
+            projection.ProjectionBlocked('privacy disposition requires a source deletion tombstone'),
+        ),
+        ('legacy', 'persisted', None, projection.BatchPrivacyBlocked('account_deleted')),
+        ('unread', 'persisted', a, projection.BatchPrivacyBlocked(private)),
+    ]
+    failures = {}
+    for sid, state, digest, error in cases:
+        log.commit('owner', sid, sid, [sid], state=state)
+        log.jobs[sid]['worker_image_digest'] = b
+        if digest is not None:
+            log.results[sid]['result']['worker_image_digest'] = digest
+        failures[sid] = error
+
+    real_read = log.read
+
+    def read(sid):
+        if sid == 'unread':
+            raise failures[sid]
+        return real_read(sid)
+
+    def project(sid, *args):
+        raise failures[sid]
+
+    monkeypatch.setattr(log, 'read', read)
+    monkeypatch.setattr(projector, '_project_read', project)
+    monkeypatch.setattr(projector, 'resolve_failing_head', lambda *args: True)
+    with caplog.at_level('INFO', logger=projection.logger.name):
+        counts = projector.sweep()
+    assert counts == {'completed': 0, 'waiting': 0, 'blocked': 7, 'error': 1}
+    action = 'sweep' if contention else 'sweep_blocked'
+    (summary,) = (r.getMessage() for r in caplog.records if 'blocked_groups=' in r.getMessage())
+    assert f'action={action} outcome=summary' in summary
+    assert private not in summary
+    assert 'blocked=7 error=1' in summary
+    assert json.loads(summary.split('blocked_groups=')[1]) == [
+        ['failing_head_held', b, 1],
+        ['other', 'unknown', 1],
+        ['predecessor_pending', a, 2],
+        ['privacy_account_deleted', 'unknown', 1],
+        ['privacy_unknown', 'unknown', 1],
+        ['source_deletion_tombstone_required', b, 1],
+    ]
 
 
 def test_single_segment_contents_hand_off_the_page_row_too():
