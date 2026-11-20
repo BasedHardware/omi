@@ -6,8 +6,7 @@ backend. Its routes map to the same Firebase-auth app-client OpenAPI surface the
 Flutter app uses (`docs/api-reference/app-client-openapi.json`). This test:
 
 - Extracts every backend REST route string hardcoded in the APIClient sources.
-- Excludes out-of-scope protocols (Rust desktop backend `/v2/agent/*`,
-  `/v2/realtime/*`, `/v1/config/api-keys`, integration OAuth `/v1/x/*`, local
+- Excludes out-of-scope protocols (Rust desktop backend `/v2/realtime/*`, `/v1/config/api-keys`, integration OAuth `/v1/x/*`, local
   VM, WebSocket/SSE/binary).
 - Asserts each in-scope route exists in the app-client OpenAPI spec.
 
@@ -38,7 +37,6 @@ CONVERSATIONS_DB = ROOT_DIR / 'backend' / 'database' / 'conversations.py'
 # explicitly out of scope for the Python-backend REST SSoT rollout.
 OUT_OF_SCOPE_PREFIXES = (
     '/v2/realtime',  # Rust desktop backend
-    '/v2/agent',  # Rust desktop backend / agent VM
     '/v1/config/api-keys',  # Rust desktop backend
     '/v1/x/',  # integration OAuth (desktop-mediated)
     '/v1/tts/synthesize',  # Rust desktop backend

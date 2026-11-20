@@ -54,6 +54,7 @@ def main() -> int:
     parser.add_argument('--check-secrets', action='store_true')
     parser.add_argument('--check-traffic', action='store_true')
     parser.add_argument('--repair-traffic', action='store_true')
+    parser.add_argument('--release-floor-check', help='Validate the exact revision before repairing traffic.')
     parser.add_argument('--wait-revision-ready', action='append', metavar='SERVICE=REVISION')
     parser.add_argument('--timeout-seconds', type=int, default=600)
     parser.add_argument('--poll-interval-seconds', type=float, default=5.0)
@@ -121,6 +122,7 @@ def main() -> int:
             region=args.region,
             services=services,
             repair=args.repair_traffic,
+            release_floor_check=args.release_floor_check,
         )
         for result in results:
             print(repair_cloud_run_traffic._format_result(result))

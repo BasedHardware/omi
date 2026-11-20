@@ -65,6 +65,7 @@ def main_endpoint():
 @pytest.mark.parametrize('mixed', [False, True])
 def test_early_upload_job_and_context_documents_equal_main(client, monkeypatch, tmp_path, future_enabled, mixed):
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', str(future_enabled).lower())
+    monkeypatch.setenv('BATCH_PIPELINE_PACKING_SAMPLE_RATE', '0.001')
     monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'false')
     monkeypatch.setattr(router.time, 'time', lambda: NOW)
@@ -174,27 +175,40 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
     ]:
         actual = (ROOT / path).read_text()
         if path.endswith('/capture_decode.py'):
-            actual = actual.replace(
-                'validated_frame_count = _frame_count\n', ''
-            )  # New export only, no changed early code.
+            # Exclude only the export and source-frame telemetry. Every byte
+            # involved in the actual early-clock decode and placement stays pinned.
+            diagnostic = (
+                'validated_frame_count = _frame_count\n',
+                '            if received_at is None:\n'
+                '                unit = replace(unit, source_frames=len(pcm) // 2 - padding_frames)\n',
+                '        padding_frames = 0\n',
+                '                padding_frames = 0\n',
+                '                    padding_frames = 0\n',
+                '                padding_frames += gap\n',
+            )
+            for fragment in sorted(diagnostic, key=len, reverse=True):
+                actual = actual.replace(fragment, '')
         baseline = main_source(path)
         if path.endswith(('/pipeline.py', '/wal_audio_coverage.py')):
             # Only the staging seam gains an opt-in provenance probe. Compare
             # every other byte, then execute the default seam below as well.
             def without_staging(text):
-                node = next(
-                    n
-                    for n in ast.parse(text).body
-                    if isinstance(n, ast.FunctionDef)
-                    and n.name
-                    == (
-                        'apply_wal_audio_coverage'
-                        if path.endswith('/wal_audio_coverage.py')
-                        else '_retrieve_file_paths_v2'
-                    )
+                # pipeline.py also exempts process_segment: the backfill day cap moved
+                # out of it to upload admission (#25677); no early-placement code there.
+                names = (
+                    {'apply_wal_audio_coverage'}
+                    if path.endswith('/wal_audio_coverage.py')
+                    else {'_retrieve_file_paths_v2', 'process_segment'}
                 )
                 lines = text.splitlines(keepends=True)
-                return ''.join(lines[: node.lineno - 1] + lines[node.end_lineno :])
+                for node in sorted(
+                    (n for n in ast.parse(text).body if isinstance(n, ast.FunctionDef) and n.name in names),
+                    key=lambda n: n.lineno,
+                    reverse=True,
+                ):
+                    start = min([node.lineno] + [d.lineno for d in node.decorator_list])
+                    lines = lines[: start - 1] + lines[node.end_lineno :]
+                return ''.join(lines).replace('from utils import backfill_hours_cap\n', '')
 
             if path.endswith('/wal_audio_coverage.py'):
                 actual = actual.replace(

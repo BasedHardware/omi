@@ -23,7 +23,7 @@ class _Listener implements IWalSyncListener {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory dir;
-  const now = 1794873600, old = now - 46 * 86400;
+  const now = 1794873600, old = now - orphanReclaimAgeSeconds - 86400;
   String name(int time, [String marker = 'pendant']) => 'audio_${marker}_opus_fs320_16000_1_fs320_$time.bin';
   Map<String, Object?> row(String file, [String owner = 'owner-b']) => {
         'file_path': file,
@@ -179,6 +179,21 @@ void main() {
       expect(await file.exists(), isTrue);
     });
   }
+  test('reclaim age stays strictly beyond automatic recovery and the server lookback plus margin', () {
+    // Reclaim must never delete audio the phone would still auto-recover or the server would
+    // still admit. retention_contract.json margin_days is 7.
+    expect(orphanReclaimMarginSeconds, greaterThanOrEqualTo(7 * 86400));
+    expect(orphanRecoveryWindowSeconds, lessThan(serverSyncLookbackSeconds));
+    expect(orphanReclaimAgeSeconds, greaterThan(orphanRecoveryWindowSeconds + orphanReclaimMarginSeconds));
+    expect(orphanReclaimAgeSeconds, greaterThanOrEqualTo(serverSyncLookbackSeconds + orphanReclaimMarginSeconds));
+    expect(serverSyncLookbackSeconds, 60 * 86400);
+  });
+  test('an orphan one second past the reclaim age on both clocks is reclaimed', () async {
+    final file = await audio(name(now - orphanReclaimAgeSeconds - 1), modified: now - orphanReclaimAgeSeconds - 1);
+    final sync = await ledger();
+    await sync.reclaimOrphanAudio();
+    expect(await file.exists(), isFalse);
+  });
   for (final kind in [
     'part',
     'torn',
@@ -187,7 +202,9 @@ void main() {
     'unparseable',
     'filename_young',
     'mtime_young',
-    'exact_45'
+    'exact_reclaim_age',
+    'inside_lookback',
+    'inside_lookback_margin'
   ]) {
     test('excludes $kind', () async {
       final filename = switch (kind) {
@@ -197,17 +214,25 @@ void main() {
         'omimobilebatch' => name(old, 'omimobilebatch'),
         'unparseable' => 'audio_unknown.bin',
         'filename_young' => name(now - 86400),
-        'exact_45' => name(now - 45 * 86400),
+        'exact_reclaim_age' => name(now - orphanReclaimAgeSeconds),
+        // Admissible to the 60-day server lookback: the old 45-day reclaim deleted it.
+        'inside_lookback' => name(now - 50 * 86400),
+        'inside_lookback_margin' => name(now - serverSyncLookbackSeconds - 86400),
         _ => name(old),
       };
-      final file = await audio(filename, modified: kind == 'mtime_young' ? now : old);
+      final file = await audio(filename,
+          modified: switch (kind) {
+            'mtime_young' => now,
+            'inside_lookback' => now - 50 * 86400,
+            _ => old,
+          });
       final sync = await ledger();
       await sync.reclaimOrphanAudio();
       expect(await file.exists(), isTrue);
     });
   }
-  test('fractional filename at the 45-day boundary is retained', () async {
-    final file = await audio(name(now - 45 * 86400).replaceFirst('.bin', '.500001.bin'));
+  test('fractional filename at the reclaim-age boundary is retained', () async {
+    final file = await audio(name(now - orphanReclaimAgeSeconds).replaceFirst('.bin', '.500001.bin'));
     final sync = await ledger();
     await sync.reclaimOrphanAudio();
     expect(await file.exists(), isTrue);
@@ -236,8 +261,8 @@ void main() {
       expect(await file.exists(), isTrue);
     });
   }
-  test('mtime exactly 45 days old is retained', () async {
-    final file = await audio(name(old), modified: now - 45 * 86400);
+  test('mtime exactly at the reclaim age is retained', () async {
+    final file = await audio(name(old), modified: now - orphanReclaimAgeSeconds);
     final sync = await ledger();
     await sync.reclaimOrphanAudio();
     expect(await file.exists(), isTrue);

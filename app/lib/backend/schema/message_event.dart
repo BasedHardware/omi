@@ -11,6 +11,20 @@ abstract class MessageEvent {
     switch (json['type']) {
       case 'capture_committed':
         return CaptureCommittedEvent.parse(json);
+      case 'conversation_session':
+        final id = json['conversation_id'];
+        final status = json['status'];
+        final session = json['recording_session_id'];
+        if (id is String &&
+            id.isNotEmpty &&
+            !id.contains('/') &&
+            session is String &&
+            session.isNotEmpty &&
+            status is String) {
+          return ConversationSessionEvent(
+              recordingId: id, clientSessionId: session, inProgress: status == 'in_progress');
+        }
+        return UnknownEvent(eventType: 'conversation_session');
       case 'service_status':
         return MessageServiceStatusEvent.fromJson(json);
       case 'memory_processing_started':
@@ -48,6 +62,16 @@ abstract class MessageEvent {
 
 class UnknownEvent extends MessageEvent {
   UnknownEvent({required super.eventType});
+}
+
+/// The exact server recording bound to the authenticated listen connection.
+class ConversationSessionEvent extends MessageEvent {
+  ConversationSessionEvent({required this.recordingId, required this.clientSessionId, required this.inProgress})
+      : super(eventType: 'conversation_session');
+
+  final String recordingId;
+  final String clientSessionId;
+  final bool inProgress;
 }
 
 class MessageServiceStatusEvent extends MessageEvent {

@@ -119,7 +119,7 @@ def run(store, segment_id, payload):
         if job is None:
             outcome = 'not_eligible'
             return {'status': 'not_eligible'}
-        item = WorkItem(**job['item'])
+        item = WorkItem.from_dict(job['item'])
 
         def read(path, fields, timeout):
             return store.client.document('/'.join(path)).get(field_paths=fields, timeout=timeout, retry=None).to_dict()

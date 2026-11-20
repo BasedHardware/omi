@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from config.policy import BatchUnitPolicy
+from database.batch_pipeline_projection_outbox import arm as arm_projection
 from database.batch_pipeline_staging import artifact_id
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_policy import check_unit_privacy
@@ -173,6 +174,7 @@ def merge_ready(tx, job, now):
         projection_block_type=None,
     )
     entry.pop('source_alias_version', None)
+    entry.update(arm_projection(entry, now))
     job.update(state='committed', merge_pending=False)
     owner['revision'] = owner.get('revision', 0) + 1
     tx.put('results', job['segment_id'], entry)

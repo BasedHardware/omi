@@ -951,8 +951,6 @@ class AppState: ObservableObject {
             finishSession: false
           )
         }
-        // Flush final sync changes before sleep
-        await AgentSyncService.shared.stop()
         self.armDarkWakeCaptureRearm()
       }
     }

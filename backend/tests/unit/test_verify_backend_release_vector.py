@@ -468,7 +468,10 @@ def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> Non
         assert 'service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com' in text
         assert 'workloadIdentityPools/omi-gha-deploy-' in text
         assert 'GCP_FIRESTORE_READONLY_CREDENTIALS' not in text
-        assert 'needs: firestore_readiness' in text
+        assert re.search(
+            r"(?m)^    needs: (?:firestore_readiness|\[[^\]\n]*\bfirestore_readiness\b[^\]\n]*\])$",
+            text,
+        )
 
 
 def test_dev_firestore_readiness_requires_read_only_credentials_for_the_runtime_project() -> None:

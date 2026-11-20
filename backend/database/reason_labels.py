@@ -18,6 +18,7 @@ class ReasonFamily(StrEnum):
     WORKER_VALIDATION = 'worker_validation'
     RECOVERY_FAILURE = 'recovery_failure'
     STALE_RECOVERY = 'stale_recovery'
+    RECORDING_ROTATION = 'recording_rotation'
     WORK_OUTCOME = 'work_outcome'
     QUARANTINE = 'quarantine'
     FALLBACK = 'fallback'
@@ -52,7 +53,9 @@ class ReasonFamily(StrEnum):
     JOURNEY_FAILURE = 'journey_failure'
     LISTEN_NO_AUDIO_CLOSE = 'listen_no_audio_close'
     DUE_MARKER_SWEEP = 'due_marker_sweep'
+    SUMMARY_REPAIR_DISCOVERY = 'summary_repair_discovery'
     RECORD_SEAL_REPAIR = 'record_seal_repair'
+    HISTORICAL_SUMMARY_OPEN = 'historical_summary_open'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
