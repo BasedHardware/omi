@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import hmac
 import json
 import os
+import time
 import unittest
 
 from google.cloud import firestore
@@ -91,8 +92,15 @@ class PagerFixture(unittest.TestCase):
             },
         )
 
-    def admit(self, *alerts):
+    def admit(self, *alerts, retry_unavailable=False):
         response = self.publish(*alerts)
+        if retry_unavailable:
+            for delay in (0.05, 0.1, 0.2):
+                if response.status_code != 503 or response.get_json() != {'error': 'store_unavailable'}:
+                    break
+                # Grafana retries transient Firestore contention with the same event ID.
+                time.sleep(delay)
+                response = self.publish(*alerts)
         self.assertEqual(response.status_code, 202, response.get_json())
         return response.get_json()['receipts'][0]
 
@@ -145,7 +153,7 @@ class PagerFixture(unittest.TestCase):
     def test_concurrent_replay_and_drain_send_once(self):
         alert = self.alert()
         with ThreadPoolExecutor(max_workers=6) as pool:
-            receipts = list(pool.map(lambda _: self.admit(alert), range(6)))
+            receipts = list(pool.map(lambda _: self.admit(alert, retry_unavailable=True), range(6)))
             self.assertEqual(Counter(r['state'] for r in receipts), {'queued': 1, 'duplicate': 5})
             self.assertEqual(len({r['delivery_id'] for r in receipts}), 1)
             counts = list(pool.map(lambda _: self.drain().get_json()['attempted'], range(6)))
