@@ -19,7 +19,7 @@ from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
-from database.conversations import ACTION_ITEMS_EDIT_REVISION
+from database.conversations import ACTION_ITEMS_EDIT_REVISION, EVENTS_EDIT_REVISION, has_created_calendar_events
 from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.recurring_voice_privacy import filter_processing_write
@@ -55,6 +55,7 @@ OWNER_EDIT_FIELDS = (
     'sync_relevance_user_kept',
     'v3_claims_transferred_to',
     ACTION_ITEMS_EDIT_REVISION,
+    EVENTS_EDIT_REVISION,
 )
 
 
@@ -82,6 +83,8 @@ def live_row_protection(raw, *, since, until, run_id=None):
     if isinstance(structured, dict) and structured.get('action_items'):
         # Historical items can contain owner edits with no revision marker.
         return 'action_items'
+    if has_created_calendar_events(structured):
+        return 'calendar_events'
     if raw.get('apps_results'):
         # App results can be edited by the owner with no marker, and a replan never regenerates them.
         return 'app_results'
@@ -302,12 +305,15 @@ def owner_surface(row):
     """A digest of the owner-changeable surface of a stored row (never content in the ledger)."""
     structured = row.get('structured') if isinstance(row.get('structured'), dict) else {}
     surface = {field: row.get(field) for field in OWNER_SURFACE_FIELDS}
-    # Keep baselines for rows with no embedded item state compatible with existing runs.
-    if not surface[ACTION_ITEMS_EDIT_REVISION]:
-        surface.pop(ACTION_ITEMS_EDIT_REVISION)
+    # Keep baselines for rows with no owner-managed embedded state compatible with existing runs.
+    for revision_field in (ACTION_ITEMS_EDIT_REVISION, EVENTS_EDIT_REVISION):
+        if not surface[revision_field]:
+            surface.pop(revision_field)
     surface['structured'] = {k: structured.get(k) for k in ('title', 'overview')}
     if structured.get('action_items'):
         surface['structured']['action_items'] = structured['action_items']
+    if row.get(EVENTS_EDIT_REVISION) or has_created_calendar_events(structured):
+        surface['structured']['events'] = structured.get('events')
     return hashlib.sha256(json.dumps(surface, sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -319,10 +325,12 @@ def owner_changed(row, entry):
     the prior document, and a retired row must still be the run's bridge to its survivor.
     """
     raw = entry.get('raw') or {}
-    if row.get(ACTION_ITEMS_EDIT_REVISION) != raw.get(ACTION_ITEMS_EDIT_REVISION):
+    if any(row.get(field) != raw.get(field) for field in (ACTION_ITEMS_EDIT_REVISION, EVENTS_EDIT_REVISION)):
         return True
     if entry.get('baseline'):
         return owner_surface(row) != entry['baseline']
+    if has_created_calendar_events(row.get('structured')):
+        return True
     if entry.get('retired_into'):
         return row.get('sync_merged_into') != entry['retired_into'] or not row.get('deleted')
     if row.get('sync_merged_into') or row.get('deleted'):
