@@ -373,8 +373,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   DateTime _now() => _nowOverride?.call() ?? DateTime.now();
   bool _isRecordingWaiting(Wal wal) => _uploadGate.isRecordingWaiting(
-        conversationId: wal.conversationId,
-        recordingSessionId: wal.recordingSessionId,
+        recordingGroup: recordingWaitGroupKey(wal),
         filePath: wal.filePath,
       );
 
@@ -2444,6 +2443,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           conversationId: batchWals.first.conversationId,
           captureEvidence: captureEvidenceUploadHeader(batchWals, files),
           recordingSessionId: batchWals.first.recordingSessionId,
+          recordingGroup: recordingWaitGroupKey(batchWals.first),
           audioStartSeconds: audioBounds.start,
           audioEndSeconds: audioBounds.end,
           claimLiveCapture: claimLiveCapture,
@@ -2772,6 +2772,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         conversationId: walToSync.conversationId,
         captureEvidence: captureEvidenceUploadHeader([walToSync], [walFile]),
         recordingSessionId: walToSync.recordingSessionId,
+        recordingGroup: recordingWaitGroupKey(walToSync),
         audioStartSeconds: audioBounds.start,
         audioEndSeconds: audioBounds.end,
         claimLiveCapture: claimLiveCapture,

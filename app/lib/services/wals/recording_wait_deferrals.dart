@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:path/path.dart' as path;
 
@@ -13,7 +14,7 @@ class RecordingWaitDeferrals {
   static const defaultWaitSeconds = 30;
   static const _maxBaseSeconds = 240; // Leave room for jitter even at the cap.
   static const _streakRetention = Duration(minutes: 30);
-  static const _prefKey = 'recordingCustodyWaitsV1';
+  static const _prefKey = 'recordingCustodyWaitsV2';
 
   final DateTime Function() _now;
   final SharedPreferencesUtil? _prefs;
@@ -21,20 +22,23 @@ class RecordingWaitDeferrals {
   final Map<String, ({int deadlineMs, int baseSeconds})> _waits = {};
   String? _owner;
 
-  static String? key({String? conversationId, String? recordingSessionId, String? filePath}) {
-    if (conversationId != null && conversationId.isNotEmpty) return 'conversation:$conversationId';
-    if (recordingSessionId != null && recordingSessionId.isNotEmpty) return 'session:$recordingSessionId';
+  static String? key({String? recordingGroup, String? filePath}) {
+    if (recordingGroup != null) return 'group:$recordingGroup';
     // The server can resolve a recording using its audio interval. Keep that
     // fallback local to the WALs sent in the refusal, without pausing imports.
     if (filePath != null && filePath.isNotEmpty) return 'wal:${path.basename(filePath)}';
     return null;
   }
 
+  // An upload group can include location. Keep raw group identity out of prefs.
+  static String _storageKey(String key) => sha256.convert(utf8.encode(key)).toString();
+
   bool isWaiting(String? key) {
     if (key == null) return false;
     _loadOwner();
+    if (_waits.isEmpty) return false;
     final now = _now().millisecondsSinceEpoch;
-    final deadline = _waits[key]?.deadlineMs ?? 0;
+    final deadline = _waits[_storageKey(key)]?.deadlineMs ?? 0;
     return deadline > now && deadline - now <= maxWaitSeconds * 1000;
   }
 
@@ -44,11 +48,12 @@ class RecordingWaitDeferrals {
     final now = _now().millisecondsSinceEpoch;
     _waits.removeWhere((_, wait) => !_validDeadline(wait.deadlineMs, now));
     final hint = (seconds == null || seconds <= 0) ? defaultWaitSeconds : min(seconds, maxWaitSeconds);
-    final previousBase = keys.fold(0, (base, key) => max(base, _waits[key]?.baseSeconds ?? 0));
+    final storageKeys = keys.map(_storageKey).toList();
+    final previousBase = storageKeys.fold(0, (base, key) => max(base, _waits[key]?.baseSeconds ?? 0));
     final base = max(hint, min(_maxBaseSeconds, previousBase * 2));
     final jitter = min(maxWaitSeconds - base, max(1, base ~/ 4));
     final deadline = now + (base + _random.nextInt(jitter + 1)) * 1000;
-    for (final key in keys) {
+    for (final key in storageKeys) {
       _waits[key] = (deadlineMs: deadline, baseSeconds: base);
     }
     await _save();
@@ -56,9 +61,10 @@ class RecordingWaitDeferrals {
 
   Future<void> clear(Set<String> keys) async {
     _loadOwner();
+    if (_waits.isEmpty) return;
     var changed = false;
     for (final key in keys) {
-      if (_waits.remove(key) != null) changed = true;
+      if (_waits.remove(_storageKey(key)) != null) changed = true;
     }
     if (changed) await _save();
   }

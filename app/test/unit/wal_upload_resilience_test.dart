@@ -52,7 +52,7 @@ class _UploadGateSpy implements SyncUploadGate {
   int calls = 0;
 
   @override
-  bool isRecordingWaiting({String? conversationId, String? recordingSessionId, String? filePath}) => false;
+  bool isRecordingWaiting({String? recordingGroup, String? filePath}) => false;
 
   @override
   dynamic noSuchMethod(Invocation invocation) {
@@ -983,7 +983,7 @@ void main() {
     });
   });
 
-  test('custody wait survives restart and both upload paths resume with the same retained audio', () async {
+  test('after restart a shared conversation uploads one session while the other waits for custody', () async {
     var now = DateTime.utc(2026, 11, 20);
     const owner = 'record-wait-owner';
     await SharedPreferencesUtil().saveString('uid', owner);
@@ -1016,8 +1016,12 @@ void main() {
         );
 
     final start = now.millisecondsSinceEpoch ~/ 1000 - 100;
-    final waiting = _makeWal(timerStart: start, filePath: 'waiting.bin')..recordingSessionId = 'waiting-session';
-    final other = _makeWal(timerStart: start + 1, filePath: 'other.bin')..recordingSessionId = 'other-session';
+    final waiting = _makeWal(timerStart: start, filePath: 'waiting.bin')
+      ..conversationId = 'shared-conversation'
+      ..recordingSessionId = 'waiting-session';
+    final other = _makeWal(timerStart: start + 1, filePath: 'other.bin')
+      ..conversationId = 'shared-conversation'
+      ..recordingSessionId = 'other-session';
     for (final wal in [waiting, other]) {
       await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 0, 0, 0, 42]);
     }
@@ -1035,6 +1039,9 @@ void main() {
       ['other.bin'],
     ]);
     expect(deferred?.localUploadFailures, 0);
+    final accepted = restarted.testWals.singleWhere((wal) => wal.recordingSessionId == 'other-session');
+    expect(accepted.status, WalStatus.uploaded);
+    expect(accepted.jobId, 'accepted-other-session');
     expect(restored.status, WalStatus.miss);
     expect(restored.retryCount, 0);
     expect(restored.jobId, isNull);

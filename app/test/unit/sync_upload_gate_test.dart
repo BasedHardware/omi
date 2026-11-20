@@ -383,11 +383,11 @@ void main() {
     ));
 
     await Future.wait([
-      expectLater(gate.upload([], conversationId: 'waiting'), throwsA(isA<SyncUploadHttpException>())),
-      expectLater(gate.upload([], conversationId: 'waiting'), throwsA(isA<SyncRecordingWaitException>())),
+      expectLater(gate.upload([], recordingGroup: 'waiting'), throwsA(isA<SyncUploadHttpException>())),
+      expectLater(gate.upload([], recordingGroup: 'waiting'), throwsA(isA<SyncRecordingWaitException>())),
     ]);
 
-    expect(gate.isRecordingWaiting(conversationId: 'other'), isFalse);
+    expect(gate.isRecordingWaiting(recordingGroup: 'other'), isFalse);
     expect(limiter.isLimited, isFalse);
   });
 

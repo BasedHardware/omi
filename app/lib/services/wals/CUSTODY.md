@@ -144,8 +144,10 @@ the legacy coverage trim is deleted (plan C, C11).
 
 HTTP 503 `record_capture_pending` asks the app to retain the submitted WALs.
 The upload gate applies the response body's `retry_after_seconds` to that recording,
-with bounded exponential backoff and jitter on repeated refusals. The wait
-survives an app restart for the signed-in account. Automatic and single-file
+using the WAL upload group (conversation, session, batch family, location)
+and bounded backoff with jitter on repeated refusals. WALs without a session
+ID are paced by the submitted file names. The wait survives an app restart for
+the signed-in account. Automatic and single-file
 uploads both respect it. Subsequent sync passes can send the WAL when the
 deadline passes, and acceptance clears the backoff.
 

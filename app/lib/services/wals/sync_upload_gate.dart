@@ -85,12 +85,8 @@ class SyncUploadGate {
   final Mutex _uploadMutex = Mutex();
   Future<bool>? _reconciliation;
 
-  bool isRecordingWaiting({String? conversationId, String? recordingSessionId, String? filePath}) =>
-      _recordingWaits.isWaiting(RecordingWaitDeferrals.key(
-        conversationId: conversationId,
-        recordingSessionId: recordingSessionId,
-        filePath: filePath,
-      ));
+  bool isRecordingWaiting({String? recordingGroup, String? filePath}) =>
+      _recordingWaits.isWaiting(RecordingWaitDeferrals.key(recordingGroup: recordingGroup, filePath: filePath));
 
   static String _defaultAttemptId() => const Uuid().v4();
 
@@ -180,6 +176,7 @@ class SyncUploadGate {
     String? conversationId,
     String? captureEvidence,
     String? recordingSessionId,
+    String? recordingGroup,
     double? audioStartSeconds,
     double? audioEndSeconds,
     bool claimLiveCapture = false,
@@ -211,8 +208,7 @@ class SyncUploadGate {
         );
       }
 
-      final recordingKey =
-          RecordingWaitDeferrals.key(conversationId: conversationId, recordingSessionId: recordingSessionId);
+      final recordingKey = RecordingWaitDeferrals.key(recordingGroup: recordingGroup);
       final waitKeys = {
         if (recordingKey != null)
           recordingKey
