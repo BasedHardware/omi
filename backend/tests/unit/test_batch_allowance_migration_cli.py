@@ -93,3 +93,39 @@ def test_default_apply_is_sequential_and_unlimited(harness, monkeypatch):
     cli.main()
     assert apply.call_args.kwargs['concurrency'] == 1
     assert apply.call_args.kwargs['rate_limiter'].rate is None
+
+
+@pytest.mark.parametrize(
+    'error,error_type,retryable',
+    [
+        (
+            cli.api_exceptions.DeadlineExceeded('jobs/secret-doc-id'),
+            'google.api_core.exceptions.DeadlineExceeded',
+            True,
+        ),
+        (cli.api_exceptions.Aborted('owner contention'), 'google.api_core.exceptions.Aborted', True),
+        (cli.api_exceptions.ServiceUnavailable('unavailable'), 'google.api_core.exceptions.ServiceUnavailable', True),
+        (cli.api_exceptions.PermissionDenied('denied'), 'google.api_core.exceptions.PermissionDenied', False),
+        (ValueError('owner mismatch users/secret-uid'), 'builtins.ValueError', False),
+    ],
+)
+def test_error_report_names_the_class_and_never_the_message(error, error_type, retryable):
+    report = cli.error_report(error)
+    assert report == {'errors': 1, 'error_type': error_type, 'retryable': retryable}
+    assert 'secret' not in json.dumps(report)
+
+
+def test_error_report_classifies_a_wrapped_transient_cause():
+    try:
+        try:
+            raise cli.api_exceptions.DeadlineExceeded('jobs/secret-doc-id')
+        except cli.api_exceptions.DeadlineExceeded as inner:
+            raise RuntimeError('page failed') from inner
+    except RuntimeError as outer:
+        report = cli.error_report(outer)
+    assert report == {
+        'errors': 1,
+        'error_type': 'builtins.RuntimeError',
+        'retryable': True,
+        'cause_type': 'google.api_core.exceptions.DeadlineExceeded',
+    }

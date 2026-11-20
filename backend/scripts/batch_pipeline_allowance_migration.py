@@ -10,11 +10,38 @@ from pathlib import Path
 import sys
 import time
 
+from google.api_core import exceptions as api_exceptions
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from database.batch_pipeline_allowance_migration import RowRateLimiter, apply_page, counts
 from database.batch_pipeline_store import FirestoreStore
 from utils.executors import shutdown_executors
+
+# Transient Firestore/RPC classes. A page that fails with one of these is safe to
+# replay: the failed page is never checkpointed and state-CAS makes re-parking a no-op.
+RETRYABLE = (
+    api_exceptions.Aborted,
+    api_exceptions.DeadlineExceeded,
+    api_exceptions.InternalServerError,
+    api_exceptions.ResourceExhausted,
+    api_exceptions.ServiceUnavailable,
+)
+
+
+def _type_name(error: BaseException) -> str:
+    kind = type(error)
+    return f'{kind.__module__}.{kind.__qualname__}'
+
+
+def error_report(error: BaseException) -> dict:
+    """Classify a stop without printing its message, which can name documents."""
+    cause = error.__cause__ or error.__context__
+    report = {'errors': 1, 'error_type': _type_name(error), 'retryable': isinstance(error, RETRYABLE)}
+    if cause is not None:
+        report['cause_type'] = _type_name(cause)
+        report['retryable'] = report['retryable'] or isinstance(cause, RETRYABLE)
+    return report
 
 
 def main():
@@ -62,6 +89,6 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except Exception:
-        print(json.dumps({'errors': 1}))
+    except Exception as error:
+        print(json.dumps(error_report(error)))
         sys.exit(1)
