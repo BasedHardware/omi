@@ -103,6 +103,15 @@ def test_verify_refuses_moved_head_and_dirty_backend(repo):
         w.ensure_worktree(repo, 'v1')
 
 
+def test_verify_refuses_untracked_source_under_backend(repo):
+    tree = w.ensure_worktree(repo, 'v1')
+    (tree.backend / 'notes.txt').write_text('inert\n')
+    w.verify_worktree(tree.path, w.resolve_ref(repo, 'v1'))
+    (tree.backend / 'shadow.py').write_text('# not in the pin\n')
+    with pytest.raises(w.WorktreeError, match='untracked source'):
+        w.verify_worktree(tree.path, w.resolve_ref(repo, 'v1'))
+
+
 def test_worktrees_never_under_home_workspace(repo, tmp_path, monkeypatch):
     monkeypatch.setenv('HOME', str(tmp_path / 'home'))
     with pytest.raises(w.WorktreeError):

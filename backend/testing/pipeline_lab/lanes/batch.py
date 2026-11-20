@@ -202,18 +202,17 @@ def replay_record_lane(
     payloads: dict[str, dict] = {}
     failures: list[tuple[str, str]] = []
     turns_by_unit: dict[str, list[dict]] = {}
-    unit_len: dict[str, int] = {}
+    current: dict[str, str | None] = {'unit': None}
 
     def persist(item, payload):
         payloads[item.segment_id] = payload
         return f'lab-result://{item.segment_id}'
 
     def diarize(samples):
-        # Called with the full unit (compaction pinned off). Find the unit by length.
-        for segment_id, length in unit_len.items():
-            if len(samples) == length:
-                return {'turns': turns_by_unit[segment_id]}
-        return {'turns': []}
+        # Called with the full unit (compaction pinned off). Units go through the worker one at a
+        # time, so the unit in flight is the one being diarized; equal-length units stay distinct.
+        unit = current['unit']
+        return {'turns': turns_by_unit.get(unit, []) if unit else []}
 
     segments: list[dict] = []
     decoded: dict[str, np.ndarray] = {}
@@ -244,7 +243,6 @@ def replay_record_lane(
                     conversation_id=conversation.conversation_id,
                 )
                 unit_source = _OffsetSource(source, u_start)
-                unit_len[segment_id] = len(pcm) // 2
                 turns_by_unit[segment_id] = speaker_turns(unit_source.words(0.0, seconds(pcm)))
                 # Production decode of the staged WAV, once; the worker slices this
                 # buffer, so its windows are views the words provider can locate.
@@ -252,7 +250,9 @@ def replay_record_lane(
                 words_provider.register(segment_id, decoded[segment_id], unit_source)
                 # The lab has no funded allowance; spend is capped by the cassette
                 # recorder's ledger instead, so dispatch admission always allows.
+                current['unit'] = segment_id
                 outcomes = worker.process_batch([item], authorize_dispatch=_allow_all)
+                current['unit'] = None
                 outcome = outcomes[0] if outcomes else None
                 unit_report = {
                     'segment_id': segment_id,

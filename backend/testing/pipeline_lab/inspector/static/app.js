@@ -211,7 +211,11 @@
 
   function parseRoute() {
     let raw = location.hash.replace(/^#\/?/, '');
-    if (!raw.includes('?')) raw = raw.replace(/%3F/i, '?'); // some launchers percent-encode the fragment's "?"
+    if (!raw.includes('?')) {
+      // Some launchers percent-encode the fragment's "?": the first encoded one separates path from query.
+      const at = raw.search(/%3F/i);
+      if (at >= 0) raw = raw.slice(0, at) + '?' + raw.slice(at + 3);
+    }
     const [path, query] = raw.split('?');
     const params = new URLSearchParams(query || '');
     if (params.get('tab') && TABS.some(([k]) => k === params.get('tab'))) state.tab = params.get('tab');

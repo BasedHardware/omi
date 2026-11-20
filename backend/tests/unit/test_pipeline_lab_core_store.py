@@ -165,6 +165,8 @@ def test_cache_get_put(lab):
     assert lab.cache_get('notes', key) is None
     lab.cache_put('notes', key, {'output': {'n': 1}})
     assert lab.cache_get('notes', key)['output'] == {'n': 1}
+    lab.cache_put('notes', key, {'output': {'n': 2}, 'key': 'other', 'stage': 'other'})
+    assert lab.cache_get('notes', key)['output'] == {'n': 2}  # a value never overrides the entry's identity
     assert lab.cache_path('notes', key).parent.name == 'ab'
     with pytest.raises(s.StoreRefused):
         lab.cache_path('notes', '../../etc')

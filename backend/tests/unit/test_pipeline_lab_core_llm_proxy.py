@@ -403,3 +403,12 @@ def test_foreground_serve_reports_the_bound_url(lab, upstream):
     finally:
         proxy.stop()
         thread.join(10)
+
+
+def test_plain_http_upstream_is_only_allowed_on_loopback():
+    from testing.pipeline_lab.llm_proxy.server import ProxyConfig
+
+    for ok in ('http://127.0.0.1:9', 'http://localhost:9', 'http://[::1]:9', 'https://gateway.example'):
+        ProxyConfig(upstream=ok)
+    with pytest.raises(ValueError):
+        ProxyConfig(upstream='http://gateway.example')

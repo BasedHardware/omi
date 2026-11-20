@@ -384,3 +384,12 @@ def test_a_shared_line_goes_to_the_earlier_conversation_whatever_the_input_order
     owners = [conversations_partition(order, lines).card_of for order in ([first, late], [late, first])]
     assert owners[0] == owners[1]
     assert set(owners[0].values()) == {'z-early'}
+
+
+def test_run_card_for_an_open_conversation_ends_at_its_last_segment():
+    from testing.pipeline_lab.ideal import runs
+
+    start, end, words, home, reason = runs.card(
+        {'started_at': T0.isoformat(), 'finished_at': None, 'transcript_segments': [seg('a b', 0, 4), seg('c', 5, 9)]}
+    )
+    assert (end - start).total_seconds() == 9 and words == 3 and reason.endswith('+open')

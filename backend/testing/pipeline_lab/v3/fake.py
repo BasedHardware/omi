@@ -174,7 +174,7 @@ def replay_v3_fake(
         tasks=tasks,
         clock=clock,
         horizon=default_horizon(plan.arrivals, end, tail),
-        sweeps=False,
+        sweeps=sweeps,
         max_events=max_events,
     )
     report = asyncio.run(driver.run(plan.arrivals))

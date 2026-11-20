@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import base64
 import http.client
+import ipaddress
 import json
 import os
 import secrets
@@ -65,6 +66,15 @@ _HOP = {
 }
 
 
+def _is_loopback(host: str) -> bool:
+    if host == 'localhost':
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 @dataclass
 class ProxyConfig:
     upstream: str
@@ -82,6 +92,9 @@ class ProxyConfig:
         parsed = urllib.parse.urlsplit(self.upstream)
         if parsed.scheme not in ('http', 'https') or not parsed.hostname:
             raise ValueError('upstream must be an http(s) URL')
+        if parsed.scheme == 'http' and not _is_loopback(parsed.hostname):
+            # Prompts are private and the proxy may add a bearer token: plain HTTP only to this host.
+            raise ValueError('a non-loopback upstream must use https')
 
 
 def _error_body(kind: str, code: str, message: str) -> bytes:

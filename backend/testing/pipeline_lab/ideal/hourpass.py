@@ -663,7 +663,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         silence_windows='silence-windows' in switches,
     )
     context = json.loads((packet / 'context.json').read_text(encoding='utf-8'))
-    token = Path(args.token_file).read_text(encoding='utf-8').strip()
+    from testing.pipeline_lab.cli import read_private_value
+
+    token = read_private_value(Path(args.token_file))  # owner-only regular file, never a link
     store = Store(root=ensure_private_dir(Path(args.root)), verdicts_root=Path(os.devnull))
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     run_id = f'{stamp}-hourpass-{context.get("day")}-{args.label}-{secrets.token_hex(3)}'

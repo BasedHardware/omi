@@ -274,18 +274,25 @@ def run_pipeline(
         from testing.pipeline_lab.llm_proxy.server import LlmProxy, ProxyConfig
         from testing.pipeline_lab.llm_proxy.wire import PriceTable
 
-        proxy = LlmProxy(
-            ProxyConfig(
-                upstream=request.llm_upstream or 'http://127.0.0.1:9',
-                mode=request.llm_mode,
-                run_id=run_id,
-                prices=PriceTable.from_json(request.llm_prices or {}),
-                # The real gateway's credential, from the operator's env only (never run.json or disk).
-                upstream_token=os.environ.get(UPSTREAM_TOKEN_ENV) or None,
-            ),
-            store=store,
-            ledger=ledger,
-        ).start()
+        try:
+            proxy = LlmProxy(
+                ProxyConfig(
+                    upstream=request.llm_upstream or 'http://127.0.0.1:9',
+                    mode=request.llm_mode,
+                    run_id=run_id,
+                    prices=PriceTable.from_json(request.llm_prices or {}),
+                    # The real gateway's credential, from the operator's env only (never run.json or disk).
+                    upstream_token=os.environ.get(UPSTREAM_TOKEN_ENV) or None,
+                ),
+                store=store,
+                ledger=ledger,
+            ).start()
+        except BaseException as failure:  # a bad upstream or a failed bind: never leave the run 'running'
+            run.status = RunStatus.FAILED.value
+            run.finished_at = utc_iso()
+            run.warnings.append(f'llm proxy did not start: {type(failure).__name__}')
+            store.write_run(run)
+            raise
         env['OMI_LLM_GATEWAY_URL'] = proxy.url
         env['OMI_PIPELINE_LAB_LLM_PROXY_URL'] = proxy.url  # RULINGS 8: the name the chain's stack reads
 

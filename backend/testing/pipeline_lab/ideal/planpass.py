@@ -163,7 +163,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     ).stdout.strip()
     store.create_run(c.RunRecord(run_id=run_id, day_id=args.day, ref=f'planpass:{sha}'))
     ledger = SpendLedger(store.ledger_path(run_id), budget_usd=args.budget_usd)
-    token = Path(args.token_file).read_text(encoding='utf-8').strip()
+    from testing.pipeline_lab.cli import read_private_value
+
+    token = read_private_value(Path(args.token_file))  # owner-only regular file, never a link
     config = ProxyConfig(upstream=args.upstream, mode=args.mode, run_id=run_id, upstream_token=token)
     end = datetime.fromisoformat(day['window']['end'].replace('Z', '+00:00'))
     env = {k: v for k, v in os.environ.items() if not k.startswith(('GOOGLE_', 'CLOUDSDK_', 'FIRESTORE_'))}

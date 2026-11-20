@@ -349,7 +349,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_id = f'{stamp}-refine-{source.get("day")}-{secrets.token_hex(3)}'
     store.create_run(c.RunRecord(run_id=run_id, day_id=str(source.get('day')), ref=f'refine:{LANE}'))
     ledger = SpendLedger(store.ledger_path(run_id), budget_usd=args.budget_usd)
-    token = Path(args.token_file).read_text(encoding='utf-8').strip()
+    from testing.pipeline_lab.cli import read_private_value
+
+    token = read_private_value(Path(args.token_file))  # owner-only regular file, never a link
     config = ProxyConfig(upstream=args.upstream, mode='record', run_id=run_id, upstream_token=token)
     failures = 0
     with LlmProxy(config, store=store, ledger=ledger) as proxy, ThreadPoolExecutor(args.workers) as pool:

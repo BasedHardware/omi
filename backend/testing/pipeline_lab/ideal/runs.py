@@ -11,7 +11,8 @@ Paths come from the run store (``$OMI_PIPELINE_LAB_ROOT``, or ``--root``):
 - ``diff`` compares every run with the first one: cards whose (start, end) match exactly,
   cards only one side has, and Home flips on matching cards.
 
-Output is times (UTC), minutes, word counts, the Home flag and its reason: never transcript text
+A card still open when the run ended (no ``finished_at``) ends at its last segment and is marked
+``open``. Output is times (UTC), minutes, word counts, the Home flag and its reason: never transcript text
 or titles, so it is safe to paste into a PR or an issue.
 """
 
@@ -19,7 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -27,7 +28,7 @@ from testing.pipeline_lab.ideal.schema import load_lines
 from testing.pipeline_lab.ideal.score import conversations_partition, ideal_partition, score
 from testing.pipeline_lab.store import lab_root
 
-Card = tuple[datetime, datetime, int, bool, str]
+Card = tuple[datetime, datetime, int, bool, str]  # start, end, words, on Home, reason ('+open' if open)
 
 
 def _when(value: str) -> datetime:
@@ -46,13 +47,15 @@ def card(conversation: Mapping[str, Any]) -> Card:
     words = sum(len((s.get('text') or '').split()) for s in segments)
     v3 = conversation.get('v3') or {}
     home = v3.get('visible', not v3.get('home_hidden', False))
-    return (
-        _when(conversation['started_at']),
-        _when(conversation['finished_at']),
-        words,
-        bool(home),
-        str(v3.get('home_hidden_reason') or ''),
-    )
+    start = _when(conversation['started_at'])
+    reason = str(v3.get('home_hidden_reason') or '')
+    if conversation.get('finished_at'):
+        end = _when(conversation['finished_at'])
+    else:
+        last = max((float(s.get('end') or s.get('start') or 0) for s in segments), default=0.0)
+        end = start + timedelta(seconds=last)
+        reason = (reason + ' +open').strip()
+    return (start, end, words, bool(home), reason)
 
 
 def card_diff(a: Iterable[Card], b: Iterable[Card]) -> dict[str, Any]:

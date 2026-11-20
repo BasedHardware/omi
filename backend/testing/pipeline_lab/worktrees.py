@@ -113,13 +113,22 @@ class Worktree:
 
 
 def verify_worktree(path: Path, sha: str) -> Worktree:
-    """HEAD must equal the pinned sha and tracked files under backend/ must be unmodified."""
+    """HEAD must equal the pinned sha, tracked files under backend/ must be unmodified, and no untracked
+    (not ignored) Python source may sit under backend/."""
     head = git(path, 'rev-parse', 'HEAD')
     if head != sha:
         raise WorktreeError(f'worktree HEAD {head[:12]} does not match the pinned {sha[:12]}')
     dirty = git(path, 'status', '--porcelain', '--untracked-files=no', '--', 'backend')
     if dirty:
         raise WorktreeError('pinned worktree has modified tracked files under backend/')
+    # backend/ is on the arm's sys.path, so an untracked module there would run code the pin lacks.
+    stray = [
+        name
+        for name in git(path, 'ls-files', '--others', '--exclude-standard', '--', 'backend').splitlines()
+        if name.endswith(('.py', '.pth', '.so'))
+    ]
+    if stray:
+        raise WorktreeError(f'pinned worktree has {len(stray)} untracked source file(s) under backend/: {stray[0]}')
     return Worktree(path=path, sha=sha, backend_tree=git(path, 'rev-parse', f'{sha}:backend'))
 
 

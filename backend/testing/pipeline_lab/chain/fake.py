@@ -66,7 +66,9 @@ def ask(proxy_url: str, *, stage: str, conversation_id: Optional[str], prompt: s
     request = urllib.request.Request(
         proxy_url.rstrip('/') + '/v1/chat/completions', data=json.dumps(body).encode(), headers=headers, method='POST'
     )
-    with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310 - loopback proxy only
+    # No ambient HTTP proxy: the request carries private transcript text and must reach the loopback lab proxy.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(request, timeout=60) as response:  # noqa: S310 - loopback proxy only
         payload = json.loads(response.read())
     return json.loads(payload['choices'][0]['message']['content'] or '{}')
 

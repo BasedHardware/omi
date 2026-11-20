@@ -29,21 +29,23 @@ def _record(args: argparse.Namespace) -> dict:
     from testing.pipeline_lab.contracts import utc_iso
     from testing.pipeline_lab.lanes.day import record_day_cassettes
     from testing.pipeline_lab.ledger import SpendLedger
-    from testing.pipeline_lab.store import atomic_write_json, lab_root, private_subdir, safe_segment
+    from testing.pipeline_lab.store import atomic_write_json, ensure_private_dir, lab_root, private_subdir, safe_segment
 
-    root = lab_root()
+    root = ensure_private_dir(lab_root())  # refuses a root inside git, a foreign or an open directory
+    safe_segment(args.day, 'day id')
     record_id = safe_segment(args.record_id or f'{args.day}-{args.adapter}', 'record id')
     directory = private_subdir(root / 'stt_records' / record_id)
     options = {'window_seconds': args.window_seconds} if args.adapter == 'parakeet_batch' else {}
     adapter = make_adapter(args.adapter, provider=args.provider, model=args.model, **options)
     ledger = SpendLedger(directory / 'ledger.json', budget_usd=args.budget_usd)
-    recorder = Recorder(adapter, ledger, vendor_log=directory / 'vendor_log.jsonl')
+    recorder = Recorder(adapter, ledger, vendor_log=directory / 'vendor_log.jsonl', root=root)
     summary = record_day_cassettes(
         args.day,
         recorder,
         language=args.language,
         vocabulary=tuple(v for v in args.vocabulary.split(',') if v),
         sync_exact=args.sync_exact,
+        root=root,
     )
     summary.update(
         record_id=record_id,
@@ -96,16 +98,19 @@ def main(argv=None) -> int:
         return 0
 
     from testing.pipeline_lab.lanes.day import STTSelection, replay_day
+    from testing.pipeline_lab.store import ensure_private_dir, lab_root, safe_segment
 
     if not (args.provider and args.model):
         parser.error('--provider and --model name the cassettes to play')
     vocabulary = tuple(v for v in args.vocabulary.split(',') if v)
+    root = ensure_private_dir(lab_root())
     results = replay_day(
-        args.day,
-        args.run,
+        safe_segment(args.day, 'day id'),
+        safe_segment(args.run, 'run id'),
         STTSelection(args.provider, args.model, args.language, vocabulary),
         sync_mode=args.sync_mode,
         streaming_via=None if args.streaming_via == 'none' else args.streaming_via,
+        root=root,
     )
     counts: dict[str, int] = {}
     errors: dict[str, int] = {}

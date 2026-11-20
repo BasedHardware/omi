@@ -176,6 +176,8 @@ def run_overview(reader: Reader, run_id: str) -> dict[str, Any]:
     for group in view['groups']:
         left = [_cell(prod_by_id[i], 'production', verdicts) for i in group['production'] if i in prod_by_id]
         right = [_cell(replay_by_id[i], 'replay', verdicts) for i in group['replay'] if i in replay_by_id]
+        if not left and not right:
+            continue  # a cached comparison group whose rows are gone from both sides
         open_ = {'kind': 'replay', 'id': right[0]['id']} if right else {'kind': 'production', 'id': left[0]['id']}
         groups.append(
             {

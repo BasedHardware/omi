@@ -317,7 +317,7 @@ class Store:
 
     def cache_put(self, stage: str, key: str, value: dict[str, Any]) -> Path:
         path = self.cache_path(stage, key)
-        atomic_write_json(path, {'key': key, 'stage': stage, 'stored_at': utc_iso(), **value})
+        atomic_write_json(path, {**value, 'key': key, 'stage': stage, 'stored_at': utc_iso()})
         return path
 
     # ---- runs ------------------------------------------------------------------

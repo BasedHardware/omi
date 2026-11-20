@@ -31,6 +31,7 @@ import argparse
 import importlib.util
 import json
 import os
+import stat
 import subprocess
 import sys
 from contextlib import ExitStack, contextmanager
@@ -68,11 +69,20 @@ def load_guard(path: str | Path) -> ModuleType:
 
 
 def _inside_git_worktree(path: Path) -> bool:
+    """Fail closed: inside a work tree, or unable to tell, both count as inside."""
     probe = path if path.exists() else path.parent
-    result = subprocess.run(
-        ['git', '-C', str(probe), 'rev-parse', '--is-inside-work-tree'], capture_output=True, text=True
-    )
-    return result.returncode == 0 and result.stdout.strip() == 'true'
+    for candidate in (probe, *probe.parents):
+        if (candidate / '.git').exists():
+            return True
+    try:
+        result = subprocess.run(
+            ['git', '-C', str(probe), 'rev-parse', '--is-inside-work-tree'], capture_output=True, text=True
+        )
+    except OSError:
+        return True
+    if result.returncode == 0:
+        return result.stdout.strip() == 'true'
+    return 'not a git repository' not in (result.stderr or '')
 
 
 def resolve_output(snapshot: str | Path, *, allowed_root: Path = ALLOWED_ROOT) -> Path:
@@ -84,7 +94,15 @@ def resolve_output(snapshot: str | Path, *, allowed_root: Path = ALLOWED_ROOT) -
     if _inside_git_worktree(root):
         raise SystemExit('refusing: the snapshot is inside a Git work tree')
     out = root / 'v3'
+    if out.is_symlink():
+        raise SystemExit('refusing: the snapshot v3 output is a symlink')
     out.mkdir(mode=0o700, exist_ok=True)
+    info = out.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+        raise SystemExit('refusing: the snapshot v3 output is not a directory this user owns')
+    if allowed_root not in out.resolve().parents:
+        raise SystemExit(f'refusing: the snapshot v3 output resolves outside {allowed_root}')
+    os.chmod(out, 0o700)
     return out
 
 
@@ -108,6 +126,7 @@ def read_only_fence() -> Iterator[None]:
     """Refuse every Firestore, Cloud Storage and Redis write in this process."""
     with ExitStack() as stack:
         from google.cloud.firestore_v1 import batch, bulk_writer, collection, document, transaction
+        from google.cloud.firestore_v1 import client as fs_client
 
         for cls, names in (
             (document.DocumentReference, ('set', 'update', 'delete', 'create')),
@@ -115,6 +134,7 @@ def read_only_fence() -> Iterator[None]:
             (batch.WriteBatch, ('commit',)),
             (transaction.Transaction, ('_commit', 'commit')),
             (bulk_writer.BulkWriter, ('create', 'set', 'update', 'delete')),
+            (fs_client.Client, ('recursive_delete', 'bulk_writer')),
         ):
             for name in names:
                 if hasattr(cls, name):
@@ -133,6 +153,11 @@ def read_only_fence() -> Iterator[None]:
             ):
                 if hasattr(storage_blob.Blob, name):
                     stack.enter_context(patch.object(storage_blob.Blob, name, _refuse(f'storage {name}')))
+            from google.cloud.storage import bucket as storage_bucket
+
+            for name in ('delete_blob', 'delete_blobs', 'copy_blob', 'rename_blob', 'delete', 'patch', 'update'):
+                if hasattr(storage_bucket.Bucket, name):
+                    stack.enter_context(patch.object(storage_bucket.Bucket, name, _refuse(f'storage bucket {name}')))
         except ImportError:  # pragma: no cover - storage is a backend dependency
             pass
         try:
@@ -147,6 +172,8 @@ def read_only_fence() -> Iterator[None]:
                 return original(self, *args, **kwargs)
 
             stack.enter_context(patch.object(redis.Redis, 'execute_command', read_only))
+            # A pipeline batches commands past execute_command: refuse it whole.
+            stack.enter_context(patch.object(redis.client.Pipeline, 'execute', _refuse('redis pipeline')))
         except ImportError:  # pragma: no cover
             pass
         yield
@@ -238,9 +265,16 @@ def lease_rows(client: Any, uid: str) -> list[dict[str, Any]]:
     return rows
 
 
+def _open_private(path: Path) -> int:
+    """Owner-only output: never follows a symlink, and an existing file is reset to 0600."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    os.fchmod(fd, 0o600)
+    return fd
+
+
 def _write_jsonl(path: Path, rows: Iterable[Any]) -> int:
     count = 0
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = _open_private(path)
     with os.fdopen(fd, 'w') as fp:
         for row in rows:
             fp.write(json.dumps(plain(row), ensure_ascii=False))
@@ -268,7 +302,7 @@ def export(uid: str, client: Any, snapshot: Path, out: Path, *, margin: timedelt
         'counts': counts,
         'tool': 'testing.pipeline_lab.v3.prod_export',
     }
-    fd = os.open(out / 'manifest.json', os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = _open_private(out / 'manifest.json')
     with os.fdopen(fd, 'w') as fp:
         json.dump(manifest, fp, indent=1)
     return manifest

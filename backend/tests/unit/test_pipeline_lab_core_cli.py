@@ -338,3 +338,11 @@ def test_plugin_loading_skips_absent_lanes_and_surfaces_broken_ones(tmp_path, mo
     assert 'goals' in registry.stages and registry.plugins == ['labplugin_fixture.good']
     with pytest.raises(ModuleNotFoundError):
         load_plugins(Registry(), ['labplugin_fixture.broken'])
+
+
+def test_a_proxy_that_cannot_start_leaves_the_run_failed_not_running(lab):
+    registry, _ = registry_with(CHAIN, [])
+    with pytest.raises(ValueError):
+        orchestrator.run_pipeline(lab, _request(llm_upstream='http://gateway.example'), registry, backend_tree=TREE)
+    (run,) = lab.list_runs('d1')
+    assert run.status == c.RunStatus.FAILED.value and run.finished_at

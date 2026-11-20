@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from testing.pipeline_lab.store import atomic_write_json, lab_root
+from testing.pipeline_lab.store import atomic_write_json, lab_root, safe_segment
 
 SCHEMA = 'pipeline_lab.ingest/v1'
 
@@ -64,13 +64,13 @@ def contract_segment(segment: Any, *, offset: float = 0.0) -> dict:
 
 
 def ingest_dir(run_id: str, root=None) -> Path:
-    return lab_root(root) / 'runs' / run_id / 'ingest'
+    return lab_root(root) / 'runs' / safe_segment(run_id, 'run id') / 'ingest'
 
 
 def write_results(run_id: str, results: list[IngestResult], root=None) -> Path:
     directory = ingest_dir(run_id, root)
     for result in results:
-        atomic_write_json(directory / f'{result.id}.json', result.to_json())
+        atomic_write_json(directory / f"{safe_segment(result.id, 'conversation id')}.json", result.to_json())
     index = [
         {
             'id': r.id,

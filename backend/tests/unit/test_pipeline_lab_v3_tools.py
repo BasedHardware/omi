@@ -191,6 +191,56 @@ def test_read_only_fence_refuses_firestore_and_redis_writes():
     assert document.DocumentReference.set is not None
 
 
+def test_read_only_fence_refuses_deletes_and_pipelines():
+    import redis
+    from google.cloud.firestore_v1 import client as fs_client
+    from google.cloud.storage import bucket as storage_bucket
+
+    with prod_export.read_only_fence():
+        with pytest.raises(prod_export.WriteRefused):
+            fs_client.Client.recursive_delete(object(), object())
+        with pytest.raises(prod_export.WriteRefused):
+            storage_bucket.Bucket.delete_blob(object(), 'x')
+        with pytest.raises(prod_export.WriteRefused):
+            redis.client.Pipeline.execute(object())
+
+
+def test_output_refuses_a_symlinked_v3_and_never_follows_or_keeps_loose_modes(tmp_path):
+    snap = tmp_path / 'snap'
+    snap.mkdir()
+    (snap / 'manifest.json').write_text('{}')
+    elsewhere = tmp_path / 'elsewhere'
+    elsewhere.mkdir()
+    (snap / 'v3').symlink_to(elsewhere)
+    with pytest.raises(SystemExit):
+        prod_export.resolve_output(snap, allowed_root=tmp_path.parent)
+    (snap / 'v3').unlink()
+    out = prod_export.resolve_output(snap, allowed_root=tmp_path.parent)
+    loose = out / 'recordings.jsonl'
+    loose.write_text('old')
+    loose.chmod(0o644)
+    assert prod_export._write_jsonl(loose, [{'a': 1}]) == 1
+    assert oct(loose.stat().st_mode & 0o777) == '0o600'
+    target = tmp_path / 'target.jsonl'
+    target.write_text('keep')
+    (out / 'derived.jsonl').symlink_to(target)
+    with pytest.raises(OSError):
+        prod_export._write_jsonl(out / 'derived.jsonl', [{'a': 1}])
+    assert target.read_text() == 'keep'
+
+
+def test_git_probe_fails_closed(tmp_path, monkeypatch):
+    repo = tmp_path / 'repo'
+    (repo / '.git').mkdir(parents=True)
+    assert prod_export._inside_git_worktree(repo / 'snap')
+
+    def broken(*args, **kwargs):
+        raise OSError('no git')
+
+    monkeypatch.setattr(prod_export.subprocess, 'run', broken)
+    assert prod_export._inside_git_worktree(tmp_path / 'plain')
+
+
 def test_output_and_guard_are_refused_outside_the_rules(tmp_path):
     with pytest.raises(SystemExit):
         prod_export.resolve_output(tmp_path / 'snap')  # not under /Volumes/Ephemeral
