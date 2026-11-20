@@ -108,7 +108,7 @@ func TestF09MergedDocumentAdapterFencesNewerInputAndUpdatesHome(t *testing.T) {
 			return err
 		}},
 	}
-	wireFinalizationDocuments(s, lifecycle)
+	wireFinalizationDocuments(s, lifecycle, nil)
 	intent, err := s.Admit(t.Context(), finalization.AdmissionRequest{
 		Ref: finalization.Ref{Owner: "replay-owner", ID: "replay-conversation"}, Trigger: rules.CaptureEnd,
 	})
@@ -177,7 +177,7 @@ func TestF35ManualRedriveResumesFanoutWithoutAnotherAutomaticGrant(t *testing.T)
 	h := queuetest.Open(t, policy, finalization.Declaration(causes...))
 	effects := syntheticEffects{}
 	s := &finalization.Service{Queue: h.Store, Meeting: effects, Effects: effects, Targets: effects, Gateway: unavailableNotes{}}
-	wireFinalizationDocuments(s, finalizationdocs.Store{Docs: bench.Store, Clock: clock.System{}})
+	wireFinalizationDocuments(s, finalizationdocs.Store{Docs: bench.Store, Clock: clock.System{}}, nil)
 	intent, err := s.Admit(t.Context(), finalization.AdmissionRequest{Ref: ref, Trigger: rules.CaptureEnd})
 	if err != nil {
 		t.Fatal(err)

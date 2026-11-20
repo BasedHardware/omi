@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"google.golang.org/api/cloudkms/v1"
 	"google.golang.org/api/idtoken"
 	"google.golang.org/api/option"
 	gcs "google.golang.org/api/storage/v1"
@@ -17,6 +18,7 @@ import (
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/httpx"
+	"github.com/BasedHardware/omi/backend-go/internal/platform/objectlake"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
 
@@ -45,7 +47,7 @@ type finalizationRuntime struct {
 }
 
 func openFinalizationRuntime(ctx, startup context.Context, cfg config, q *queue.Store) (finalizationRuntime, error) {
-	if !cfg.summaryRepair && cfg.privateArchive == "" && cfg.retractionOrigin == "" {
+	if !cfg.summaryRepair && cfg.privateArchive == "" && cfg.retractionOrigin == "" && cfg.objectBucket == "" {
 		return finalizationRuntime{}, nil
 	}
 	docs, err := docstore.Open(startup, docstore.Config{Project: cfg.firestoreProject})
@@ -58,11 +60,31 @@ func openFinalizationRuntime(ctx, startup context.Context, cfg config, q *queue.
 	if bindErr := runtime.bindMaintenanceAdapters(ctx, startup, cfg, &store); bindErr != nil {
 		return finalizationRuntime{}, errors.Join(bindErr, runtime.close())
 	}
-	wireFinalizationDocuments(runtime.family, store)
+	var offload conversations.TranscriptReader
+	if cfg.objectBucket != "" {
+		reader, lakeErr := openTranscriptReader(startup, cfg, docs)
+		if lakeErr != nil {
+			return finalizationRuntime{}, errors.Join(lakeErr, runtime.close())
+		}
+		offload = reader
+	}
+	wireFinalizationDocuments(runtime.family, store, offload)
 	if cfg.summaryRepair {
 		runtime.scan = &finalizationdocs.SummaryScan{Docs: docs, Family: runtime.family, Clock: clk, MaxAge: cfg.summaryMaxAge}
 	}
 	return runtime, nil
+}
+
+func openTranscriptReader(ctx context.Context, cfg config, docs *docstore.Store) (conversations.TranscriptReader, error) {
+	storage, err := gcs.NewService(ctx, option.WithScopes(gcs.DevstorageReadOnlyScope))
+	if err != nil {
+		return nil, errors.New("could not open object-lake storage reader")
+	}
+	kms, err := cloudkms.NewService(ctx)
+	if err != nil {
+		return nil, errors.New("could not open object-lake KMS reader")
+	}
+	return objectlake.Reader{Enabled: true, Bucket: cfg.objectBucket, KMSKey: cfg.objectKMSKey, Docs: docs, Storage: storage, KMS: kms}, nil
 }
 
 func (m *finalizationRuntime) bindMaintenanceAdapters(ctx, startup context.Context, cfg config, store *finalizationdocs.Store) error {

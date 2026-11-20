@@ -9,26 +9,27 @@ import (
 	"github.com/BasedHardware/omi/backend-go/internal/finalization"
 	"github.com/BasedHardware/omi/backend-go/internal/finalization/rules"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
+	"github.com/BasedHardware/omi/backend-go/internal/platform/objectlake"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
 
 // wireFinalizationDocuments connects the ordinary family to the merged
 // conversation port and the finalization lifecycle store. Registration still
 // requires the serving gateway and the remaining effect ports.
-func wireFinalizationDocuments(service *finalization.Service, store finalizationdocs.Store) {
+func wireFinalizationDocuments(service *finalization.Service, store finalizationdocs.Store, offload conversations.TranscriptReader) {
 	service.Outbox = store
 	service.Lifecycle = store
 	service.Replay = store
 	service.Quiet = store
 	service.Summaries = store
-	service.Documents = finalizationDocuments{store: conversations.Store{Docs: store.Docs, Codec: store.Codec}}
+	service.Documents = finalizationDocuments{store: conversations.Store{Docs: store.Docs, Codec: store.Codec, Offload: offload}}
 }
 
 type finalizationDocuments struct{ store conversations.Store }
 
 func (f finalizationDocuments) Load(ctx context.Context, g queue.Guarded, ref finalization.Ref) (finalization.Conversation, error) {
 	row, err := f.store.Load(ctx, g, conversations.Ref{Owner: ref.Owner, ID: ref.ID})
-	if errors.Is(err, docstore.ErrMissing) || errors.Is(err, conversations.ErrRestricted) {
+	if errors.Is(err, docstore.ErrMissing) || errors.Is(err, conversations.ErrRestricted) || errors.Is(err, objectlake.ErrRestricted) {
 		return finalization.Conversation{}, finalization.ErrStale
 	}
 	return finalization.Conversation{

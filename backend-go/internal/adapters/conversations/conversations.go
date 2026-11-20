@@ -10,6 +10,7 @@ import (
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
+	"github.com/BasedHardware/omi/backend-go/internal/platform/objectlake"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
 
@@ -79,11 +80,17 @@ type Finalization struct {
 	SummaryCoversThrough *time.Time
 }
 
+// TranscriptReader resolves a transcript pointer under the original read guard.
+type TranscriptReader interface {
+	Read(ctx context.Context, live docstore.Live, owner, conversation string, pointer map[string]any) ([]json.RawMessage, error)
+}
+
 // Store implements guarded Load and ApplyFinalization ports. A consumer defines the
 // interface alongside its other ports.
 type Store struct {
-	Docs  *docstore.Store
-	Codec crypt.Codec
+	Docs    *docstore.Store
+	Codec   crypt.Codec
+	Offload TranscriptReader
 }
 
 // Load reads an existing, readable conversation for the guarded owner.
@@ -101,7 +108,7 @@ func (s Store) Load(ctx context.Context, g queue.Guarded, ref Ref) (Conversation
 	if err != nil {
 		return Conversation{}, classify(err)
 	}
-	result, err := s.decode(ref, row)
+	result, err := s.decode(ctx, g, ref, row)
 	if err != nil {
 		return Conversation{}, classify(err)
 	}
@@ -212,15 +219,16 @@ func classify(err error) error {
 		return queue.Classify(err, queue.Hold(CauseOwnerDeleting, time.Minute))
 	case errors.Is(err, docstore.ErrMissing):
 		return queue.Classify(err, queue.Fail(CauseMissing))
-	case errors.Is(err, ErrChanged):
+	case errors.Is(err, ErrChanged), errors.Is(err, objectlake.ErrChanged):
 		return queue.Classify(err, queue.Retry(CauseChanged, 0))
 	case errors.Is(err, ErrPointer):
 		return queue.Classify(err, queue.Fail(CausePointer))
-	case errors.Is(err, ErrRestricted):
+	case errors.Is(err, ErrRestricted), errors.Is(err, objectlake.ErrRestricted):
 		return queue.Classify(err, queue.Fail(CauseRestricted))
-	case errors.Is(err, crypt.ErrUnreadable), errors.Is(err, ErrUndecodable):
+	case errors.Is(err, crypt.ErrUnreadable), errors.Is(err, ErrUndecodable), errors.Is(err, objectlake.ErrCorrupt),
+		errors.Is(err, objectlake.ErrAbsent), errors.Is(err, objectlake.ErrShredded):
 		return queue.Classify(err, queue.Fail(CauseUnreadable))
-	case errors.Is(err, docstore.ErrExists), errors.Is(err, context.DeadlineExceeded),
+	case errors.Is(err, docstore.ErrExists), errors.Is(err, context.DeadlineExceeded), errors.Is(err, objectlake.ErrUnavailable),
 		errors.As(err, &fault) && fault.Kind == docstore.KindTransient:
 		return queue.Classify(err, queue.Retry(CauseUnavailable, 0))
 	default:

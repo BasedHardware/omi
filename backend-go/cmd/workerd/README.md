@@ -27,6 +27,8 @@ Lane B needs to provide a bounded drain and fenced handback API before enabling 
 | `ENRICHMENT_MAX_AGE_HOURS` | 72 | Nonnegative hours, with zero disabling age-based scan phases |
 | `BUCKET_PRIVATE_CLOUD_SYNC` | unset | Private recording bucket for the read-only archive client |
 | `BUCKET_AUDIO_DERIVED` | unset | Additional regional recording bucket |
+| `BUCKET_OBJECT_LAKE`, `OBJECT_LAKE_KMS_KEY` | unset | Both configure guarded offloaded transcript reads |
+| `OBJECT_LAKE_READ_ENABLED` | true | Disable offloaded transcript reads independently of inline reads |
 | `WORKER_MERGE_RETRACTION_ORIGIN` | unset | HTTPS backend origin, using the configured listen finalization OIDC audience |
 | `HEALTH_PORT` | 8080 | 1–65535 |
 | `METRICS_PORT` | 9090 | 1–65535, distinct from health |

@@ -30,6 +30,7 @@ type config struct {
 	summaryRepair                        bool
 	summaryMaxAge                        time.Duration
 	privateArchive, derivedArchive       string
+	objectBucket, objectKMSKey           string
 	retractionOrigin, retractionAudience string
 }
 
@@ -83,6 +84,9 @@ func (c *config) readFinalizationAdapters(lookup lookupEnv) error {
 	if c.privateArchive == "" && c.derivedArchive != "" {
 		c.privateArchive = "omi-private-cloud-sync"
 	}
+	if err := c.readObjectLake(lookup); err != nil {
+		return err
+	}
 	origin, _ := lookup("WORKER_MERGE_RETRACTION_ORIGIN")
 	if origin == "" {
 		return nil
@@ -100,6 +104,19 @@ func (c *config) readFinalizationAdapters(lookup lookupEnv) error {
 		return errors.New("merge retraction requires a listen finalization OIDC audience")
 	}
 	c.retractionOrigin, c.retractionAudience = origin, audience
+	return nil
+}
+
+func (c *config) readObjectLake(lookup lookupEnv) error {
+	if enabled, set := lookup("OBJECT_LAKE_READ_ENABLED"); set && !strings.EqualFold(enabled, "true") {
+		return nil
+	}
+	bucket, _ := lookup("BUCKET_OBJECT_LAKE")
+	key, _ := lookup("OBJECT_LAKE_KMS_KEY")
+	if (bucket == "") != (key == "") {
+		return errors.New("object-lake reads require BUCKET_OBJECT_LAKE and OBJECT_LAKE_KMS_KEY")
+	}
+	c.objectBucket, c.objectKMSKey = bucket, key
 	return nil
 }
 
