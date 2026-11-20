@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 import hashlib
 import math
+import re
 from typing import Protocol, Sequence
 
 
@@ -332,6 +333,7 @@ class WorkResult:
     result_uri: str
     outcome: str = 'success'
     language_receipt: dict | None = field(default=None, compare=False)
+    worker_image_digest: str | None = field(default=None, compare=False)
 
     def __post_init__(self):
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
@@ -340,6 +342,11 @@ class WorkResult:
             raise ValueError('unsupported batch result outcome')
         if not self.result_uri or len(self.result_uri.encode()) > 2048:
             raise ValueError('result_uri must be a bounded durable encrypted reference')
+        if self.worker_image_digest is not None and (
+            type(self.worker_image_digest) is not str
+            or not re.fullmatch(r'sha256:[0-9a-f]{64}', self.worker_image_digest)
+        ):
+            object.__setattr__(self, 'worker_image_digest', None)
         if self.language_receipt is not None:
             from utils.batch_pipeline.language_receipt import validate
 
@@ -353,6 +360,8 @@ class WorkResult:
         # completed results, including idempotent retries across a rolling deploy.
         if self.language_receipt is None:
             value.pop('language_receipt')
+        if self.worker_image_digest is None:
+            value.pop('worker_image_digest')
         return value
 
     def matches_persisted(self, value):
@@ -361,6 +370,10 @@ class WorkResult:
             return False
         expected = self.to_dict()
         existing = dict(value)
+        # The accepted lease completion owns provenance. A replay compares
+        # the original result and never rewrites its stored producer.
+        existing.pop('worker_image_digest', None)
+        expected.pop('worker_image_digest', None)
         if expected.get('language_receipt') is None or existing.get('language_receipt') is None:
             expected.pop('language_receipt', None)
             existing.pop('language_receipt', None)

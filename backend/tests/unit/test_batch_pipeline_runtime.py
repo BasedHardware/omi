@@ -364,7 +364,10 @@ def test_startup_pins_precision_reuses_segmentation_and_owns_one_gpu(monkeypatch
     monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'dedicated_batch')
     monkeypatch.setenv('BATCH_PIPELINE_MODEL_BATCH_SIZE', '8')
     artifacts = SimpleNamespace(fetch_audio=lambda _: b'', persist_result=lambda *args: 'unused')
+    digest = 'sha256:' + 'a' * 64
+    monkeypatch.setattr('diarizer.worker_image.running_worker_digest', lambda: digest)
     worker = startup.load_worker(artifacts)
+    assert worker.worker_image_digest == digest
     assert worker.config.words == 'parakeet' and worker.config.diarizer == 'pyannote'
     assert diarizer.segmentation_batch_size == 8 and diarizer.embedding_batch_size == 8
     assert worker.vad.model._segmentation.batch_size == 8
