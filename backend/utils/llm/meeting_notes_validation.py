@@ -91,7 +91,8 @@ _CODE_RE = re.compile(
     r'(?:^[ \t]{0,3}(?P=fence)[`~]*[ \t]*(?:\n|$)|\Z)|(?P<ticks>`+)(?!`)[\s\S]*?(?<!`)(?P=ticks)(?!`)'
 )
 _ID_LIKE_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,95}\Z')
-_SEGMENT_UUID_RE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', re.I)
+# Segment IDs use random UUIDv4 or deterministic UUIDv5.
+_SEGMENT_UUID_RE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', re.I)
 _CLUSTER_RE = re.compile(r'[?]?[0-9A-Za-z]{1,3}\Z')
 _SAFE_MARKDOWN_SCHEMES = {'http', 'https', 'mailto'}
 _REMOVAL_MARKER = '\x00'

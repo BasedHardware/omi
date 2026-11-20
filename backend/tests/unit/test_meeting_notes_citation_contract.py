@@ -80,9 +80,10 @@ def test_strict_revision_boundary(strict_input, expected, repairs, violations):
 
 
 @pytest.mark.parametrize('safe_fallback', [False, True])
-def test_uuid_parenthetical_drops_unknown_ids_and_recovers_known_sources(safe_fallback):
-    known = '11111111-2222-5333-8444-555555555555'
-    orphan = 'aaaaaaaa-bbbb-5ccc-addd-eeeeeeeeeeee'
+@pytest.mark.parametrize('version', ['4', '5'])
+def test_uuid_parenthetical_drops_unknown_ids_and_recovers_known_sources(safe_fallback, version):
+    known = f'11111111-2222-{version}333-8444-555555555555'
+    orphan = f'aaaaaaaa-bbbb-{version}ccc-addd-eeeeeeeeeeee'
     body = f'- The group took photos. ({orphan})\n- They shared them ({known}; {orphan}).'
     note = Structured(overview=body, sections=[{'heading': 'Photos', 'body_markdown': body}])
 

@@ -882,9 +882,10 @@ def test_legacy_generated_live_sections_are_read_redacted_with_owner_overview_pr
 
 
 @pytest.mark.parametrize('edited_overview', [False, True])
-def test_completed_note_detail_repairs_uuid_citations_without_rewriting_storage(catchup, edited_overview):
-    known = '11111111-2222-5333-8444-555555555555'
-    orphan = 'aaaaaaaa-bbbb-5ccc-addd-eeeeeeeeeeee'
+@pytest.mark.parametrize('version', ['4', '5'])
+def test_completed_note_detail_repairs_uuid_citations_without_rewriting_storage(catchup, edited_overview, version):
+    known = f'11111111-2222-{version}333-8444-555555555555'
+    orphan = f'aaaaaaaa-bbbb-{version}ccc-addd-eeeeeeeeeeee'
     body = f'- The group took photos. ({orphan})\n- They shared them ({known}). (aside)'
     clean = '- The group took photos.\n- They shared them. (aside)'
     edited = f'Owner text ({orphan})'
