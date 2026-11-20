@@ -131,7 +131,23 @@ FIELD_SITES = {
                 'v3_process_fingerprint',
                 'v3_rewrites',
             ),
-        )
+        ),
+        # The claim transfer transaction redirects settled donors and clears legacy notes debt.
+        (
+            'commit_projection.commit',
+            'summary_due_at',
+            'None',
+            (
+                'deleted',
+                'discarded',
+                'home_hidden',
+                'summary_due_at',
+                'sync_content_revision',
+                'sync_merged_into',
+                'v3_claims_transferred_to',
+                'v3_refined',
+            ),
+        ),
     ],
     # Reviewed backfill run ledger: run and partition status, not a conversation lifecycle field.
     'database/conversations_v3_backfill_runs.py': [
@@ -180,6 +196,12 @@ FIELD_SITES = {
                 'v3_process_pending',
             ),
         ),
+        (
+            'store_summary.persist',
+            'status',
+            "'completed'",
+            ('status', 'v3_open_locked', 'v3_process_pending', 'v3_unlocked'),
+        ),
     ],
     'utils/conversations/v3/planner.py': [
         (
@@ -214,7 +236,21 @@ FIELD_SITES = {
                 'v3_derived',
                 'v3_recording_ids',
             ),
-        )
+        ),
+        (
+            'unavailable_preview',
+            'status',
+            "'completed'",
+            (
+                '_v3_claims',
+                'home_hidden',
+                'home_hidden_reason',
+                'status',
+                'tile_state',
+                'v3_process_pending',
+                'v3_unlocked',
+            ),
+        ),
     ],
     'utils/conversations/v3/service.py': [
         ('reconcile.plan', 'status', "prior['status']", ('status',)),
@@ -2573,6 +2609,7 @@ FIELD_SITES = {
                 'dispatch_protocol',
                 'expires_at',
                 'pending_cap_hold_ids',
+                'raw_capture_paths',
                 'result',
                 'status',
                 'updated_at',
@@ -3075,12 +3112,20 @@ FIELD_SITES = {
         ),
         ('_fresh_pick', 'state', "rows[0].get('state')", ('segment_ids', 'state', 'waited')),
     ],
+    'utils/sync/admission_responses.py': [
+        (
+            'owner_cancelled_response',
+            'status',
+            "'failed'",
+            ('job_id', 'lane', 'poll_after_ms', 'reason_code', 'status', 'total_files', 'total_segments'),
+        ),
+    ],
     'utils/sync/owner_cancel_legacy.py': [
         (
             '_fence',
             'status',
             "LEDGER_STATUS; literal aliases=[('LEDGER_STATUS', ('owner_cancelled',))]",
-            ('expires_at', 'owner_cancelled_at', 'pending_cap_hold_ids', 'status', 'updated_at'),
+            ('owner_cancelled_at', 'pending_cap_hold_ids', 'status', 'updated_at'),
         ),
     ],
     'utils/batch_pipeline/owner_cancel.py': [
@@ -3104,7 +3149,7 @@ FIELD_SITES = {
             '_fence',
             'status',
             "LEDGER_STATUS; literal aliases=[('LEDGER_STATUS', ('owner_cancelled',))]",
-            ('expires_at', 'status', 'updated_at'),
+            ('status', 'updated_at'),
         ),
         (
             'cancelled_status',
@@ -3376,6 +3421,7 @@ FIELD_SITES = {
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
+        ('merge_result', 'summary_due_at', 'current + deadline_seconds()', ('summary_due_at',)),
         ('merge_result', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),

@@ -15,13 +15,14 @@ gate) now cancels a batch upload (`bp_` handle) and erases its server copies.
   - Allowance-hold counts are released.
   - Every unit becomes the existing terminal `privacy_blocked`, with `merge_pending=false`, no
     lease, `next=''`, and `owner_cancelled_at`.
-  - The intake is stamped `owner_cancelled_at` and the ledger becomes `owner_cancelled`, both with
-    the standard 45-day `expires_at`.
+  - The intake is stamped `owner_cancelled_at` and the ledger becomes `owner_cancelled`, without a TTL while cleanup is pending.
 - **Erase (retryable).** For each fenced unit, the staged audio/result objects, the artifact rows
   and the job/result rows go first, reusing the privacy purge helpers with a per-transaction
-  re-proof of the fence. Then the private-cloud raw originals go: those whose metadata names this
-  upload and that link to no conversation. The intake is then stamped `owner_cancel_erased_at`. A
-  failure answers `erasure: pending`. The fence holds, and the owner's next call resumes.
+  re-proof of the fence. Then the private-cloud raw originals go: use the intake’s
+  exact archive paths, including reused originals from earlier attempts. Old rows can also match
+  the upload ID in archive metadata. Preserve linked conversation originals. Start the 45-day
+  receipt TTL only after erasure succeeds. A failure answers `erasure: pending` and the phone
+  keeps retrying until the server settles the request.
 - **Status.** A cancelled upload polls as `failed` with `reason_code=owner_cancelled`. Sibling
   recordings from the same upload that were not deleted return to phone custody and re-upload by
   themselves.
@@ -33,7 +34,8 @@ gate) now cancels a batch upload (`bp_` handle) and erases its server copies.
   not redriven, zero remaining seconds), the summary drops its seconds, and the ledger becomes
   `owner_cancelled`. Erasure then deletes each hold's audio/metadata objects and row
   (`cap_hold_erasure.erase`, after re-proving the fence) and the unlinked raw originals. A ledger the
-  recovery already completed answers `already_processed`.
+  recovery already completed answers `already_processed`. Legacy admission in every mode treats
+  a cancelled ledger as terminal, and the ledger keeps its cleanup references until erasure succeeds.
 
 Not covered:
 - Coalesced uploads and live-record handoffs (`bp_wh_`) answer 409 `sync_job_not_cancellable`.

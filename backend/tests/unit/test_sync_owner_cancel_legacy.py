@@ -6,13 +6,16 @@ writes. The recovery claim below uses cap_hold's own unclaimable-state set.
 """
 
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+import json
+from unittest.mock import Mock
 
 import pytest
 
 from database.cap_hold_redrive import PENDING_STATES as REDRIVE_STATES
 from utils.batch_pipeline import owner_cancel
 from utils.batch_pipeline.owner_cancel import Outcome
-from utils.sync import cap_hold, owner_cancel_legacy
+from utils.sync import cap_hold, legacy_dark, owner_cancel_legacy
 
 OWNER = 'owner-synthetic'
 OTHER = 'other-synthetic'
@@ -55,6 +58,7 @@ class FakeLegacyEraser:
         self.fail_holds = fail_holds
         self.erased = []
         self.archives = []
+        self.archive_paths = ()
 
     def erase_hold(self, uid, hold_id):
         row = self.store.rows.get(('hold', uid, hold_id))
@@ -68,8 +72,9 @@ class FakeLegacyEraser:
         self.erased.append(row['audio_path'])
         del self.store.rows[('hold', uid, hold_id)]
 
-    def erase_archives(self, uid, job_id):
+    def erase_archives(self, uid, job_id, paths=()):
         self.archives.append((uid, job_id))
+        self.archive_paths = paths
 
 
 def hold(seconds, **extra):
@@ -187,15 +192,49 @@ def test_recovery_claim_and_fence_serialise_whichever_commits_first():
     assert cap_hold.remaining_seconds(fenced) == 0
 
 
-def test_erasure_failure_keeps_the_fence_and_the_next_call_finishes():
+def test_erasure_failure_keeps_earlier_archive_reachable_past_receipt_ttl():
     store = MemoryLegacyStore()
-    held_upload(store)
+    earlier_archive = f'raw-mobile-batch/{OWNER}/a/prior.bin'
+    held_upload(store, raw_capture_paths=[earlier_archive], expires_at=datetime.fromtimestamp(NOW, timezone.utc))
     first = cancel(store, FakeLegacyEraser(store, fail_holds=1))
     assert first.outcome is Outcome.CANCELLED and first.erasure == 'pending'
-    assert store.rows[('ledger', OWNER, CONTENT)].get('owner_cancel_erased_at') is None
+    ledger = store.rows[('ledger', OWNER, CONTENT)]
+    assert 'expires_at' not in ledger
+    assert 'owner_cancel_erased_at' not in ledger
+    assert ledger['raw_capture_paths'] == [earlier_archive]
     retry = FakeLegacyEraser(store)
-    assert cancel(store, retry, now=NOW + 60).erasure == 'complete'
+    retry_at = NOW + timedelta(days=46).total_seconds()
+    assert cancel(store, retry, now=retry_at).erasure == 'complete'
     assert len(retry.erased) == 2 and retry.archives == [(OWNER, JOB)]
+    assert retry.archive_paths == (earlier_archive,)
+    ledger = store.rows[('ledger', OWNER, CONTENT)]
+    assert 'raw_capture_paths' not in ledger
+    assert ledger['expires_at'] == datetime.fromtimestamp(retry_at, timezone.utc) + timedelta(days=45)
+
+
+@pytest.mark.parametrize('mode', tuple(legacy_dark.LegacySyncMode))
+def test_cancelled_legacy_content_is_terminal_in_duplicate_admission(mode):
+    from database import sync_ledger
+
+    store = MemoryLegacyStore()
+    held_upload(store)
+    assert cancel(store).erasure == 'complete'
+    ledger = store.rows['ledger', OWNER, CONTENT]
+    after_stale = ledger['updated_at'] + timedelta(days=3)
+    decision = legacy_dark.fence_decision(ledger, mode, now=after_stale, batch_adopts_stranded=True)
+    response = legacy_dark.fence_response(decision, total_files=1, lane='fresh')
+    assert response.status_code == 202
+    assert json.loads(response.body)['reason_code'] == 'owner_cancelled'
+    assert json.loads(response.body)['job_id'] == JOB
+
+    ref, transaction = Mock(), Mock()
+    ref.get.return_value.to_dict.return_value = ledger
+    wrapped = getattr(sync_ledger._claim_transaction, 'to_wrap', sync_ledger._claim_transaction)
+    assert wrapped(transaction, ref, 'duplicate', 'fresh', after_stale, missing_owner=JOB) == {
+        'outcome': 'owner_cancelled',
+        'job_id': JOB,
+    }
+    transaction.set.assert_not_called()
 
 
 def test_completed_legacy_content_is_already_processed_and_untouched():
@@ -288,7 +327,7 @@ def test_production_eraser_erases_a_fenced_hold_and_skips_gone_ones(monkeypatch)
     monkeypatch.setattr(cap_hold_erasure, 'erase', lambda uid, snapshot, row: erased.append((uid, row['audio_path'])))
     archives = []
     eraser = owner_cancel_erase.FirestoreEraser(
-        'batch_pipeline_prod', client=object(), delete_archives=lambda uid, raw: archives.append((uid, raw)) or 0
+        'batch_pipeline_prod', client=object(), delete_archives=lambda uid, raw, paths: archives.append((uid, raw)) or 0
     )
     for hold_id in ('h1', 'h2', 'missing'):
         eraser.erase_hold(OWNER, hold_id)

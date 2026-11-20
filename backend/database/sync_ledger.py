@@ -226,6 +226,8 @@ def _claim_transaction(
 ) -> Dict[str, Any]:
     snapshot = ref.get(transaction=transaction)
     existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    if existing.get('status') == 'owner_cancelled':
+        return {'outcome': 'owner_cancelled', 'job_id': existing.get('job_id')}
     if existing.get('dispatch_protocol') == 'stt_cap_hold_v1' and existing.get('status') == 'held':
         if is_valid_held_sync_content_result(existing.get('result')):
             return {'outcome': 'held', 'result': existing['result'], 'job_id': existing.get('job_id')}

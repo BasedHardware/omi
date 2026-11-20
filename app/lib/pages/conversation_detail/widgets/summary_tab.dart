@@ -34,6 +34,11 @@ import 'feedback_sheet.dart';
 
 class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
+  final int liveSummaryOpen;
+  final int liveSummaryTick;
+  final bool Function(int)? claimLiveSummaryOpen;
+  final bool Function()? isLiveSummaryVisible;
+  final String? Function()? liveSummaryInterval;
   final ValueChanged<String>? onOpenSource;
   final String searchQuery;
   final int currentResultIndex;
@@ -50,6 +55,11 @@ class SummaryTab extends StatefulWidget {
   const SummaryTab(
       {super.key,
       this.reviewEnabled = false,
+      this.liveSummaryOpen = 0,
+      this.liveSummaryTick = 0,
+      this.claimLiveSummaryOpen,
+      this.isLiveSummaryVisible,
+      this.liveSummaryInterval,
       this.onOpenSource,
       this.searchQuery = '',
       this.currentResultIndex = -1,
@@ -75,7 +85,12 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   Future<void> _openConversation(BuildContext context, String id) async {
     final known = context.read<ConversationProvider?>()?.conversations.where((c) => c.id == id).firstOrNull;
     final conversation = known ?? await getConversationById(id);
-    if (conversation == null || !context.mounted) return;
+    if (!context.mounted) return;
+    if (conversation == null) {
+      // The tap answers even when the moment's conversation cannot be read (V12).
+      OmiMissingTarget.conversation.show(context, onRetry: () => _openConversation(context, id));
+      return;
+    }
     routeToPage(context, ConversationDetailPage(conversation: conversation));
   }
 
@@ -100,6 +115,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
               !discarded &&
               context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false) &&
               LiveSummarySection.wants(conversation);
+          if (liveWanted && provider.detailAccessUnavailable) return const SizedBox.shrink();
           // Base the surrounding tab state on the summary the user is actually looking at
           // (the displayed source chip), not the canonical server selection.
           final summarySelection = provider.getDisplayedSummarySelection();
@@ -151,6 +167,13 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                           LiveSummarySection(
                             key: ValueKey('live-summary-${conversation.id}'),
                             conversation: conversation,
+                            open: widget.liveSummaryOpen,
+                            refreshTick: widget.liveSummaryTick,
+                            liveInterval: widget.liveSummaryInterval,
+                            claimOpen: widget.claimLiveSummaryOpen,
+                            detailHydrated: provider.hasHydratedDetail(conversation.id),
+                            detailReadFailed: provider.detailLoad == ConversationDetailLoad.failed,
+                            isSummaryVisible: widget.isLiveSummaryVisible,
                             refresh: provider.refreshConversation,
                             onActiveChanged: (active) {
                               if (mounted && active != _liveSummaryActive) {

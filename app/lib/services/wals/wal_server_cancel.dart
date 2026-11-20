@@ -11,7 +11,6 @@ part of 'local_wal_sync.dart';
 /// to local custody to re-upload on their own only once the server confirms nothing will be
 /// transcribed. If the job was already processed they are acknowledged by the normal poll.
 const walServerCancelTombstonesKey = 'walServerCancelTombstones';
-const _serverCancelMaxAge = Duration(days: 60);
 const _serverCancelsPerPass = 5;
 const _serverCancelRetryDelays = [Duration(minutes: 5), Duration(minutes: 30), Duration(hours: 6)];
 
@@ -161,11 +160,6 @@ extension _WalServerCancel on LocalWalSyncImpl {
         final kept = <WalServerCancelTombstone>[];
         var changed = false, asked = 0;
         for (final tombstone in tombstones) {
-          if (nowSecs - tombstone.createdAt > _serverCancelMaxAge.inSeconds) {
-            changed = true;
-            DebugLogManager.logEvent('wal_server_cancel', {'jobId': tombstone.jobId, 'outcome': 'expired'});
-            continue;
-          }
           final mine = tombstone.ownerUid == null || tombstone.ownerUid == owner;
           final due = only == null ? tombstone.nextAttemptAt <= nowSecs : only == tombstone.jobId;
           if (!mine ||
@@ -193,7 +187,7 @@ extension _WalServerCancel on LocalWalSyncImpl {
           kept.add(tombstone.retried(nowSecs, fenced: result.fenced));
           changed = true;
           // A fenced job will never finish: its remaining rows already returned to custody.
-          if (!result.fenced) pending.add(tombstone.jobId);
+          if (!tombstone.fenced && !result.fenced) pending.add(tombstone.jobId);
         }
         if (changed) await _serverCancelStore.save(kept);
         return _ServerCancelPass(pending, answered);

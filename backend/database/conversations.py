@@ -2368,6 +2368,7 @@ def get_conversations_without_photos(
                 'episode_id',
                 'finalization_status',
                 'notes_written_at',
+                'v3_notes_written',
                 *SETTLING_FIELDS,
                 *SUMMARY_DEBT_FIELDS,
                 *transcribing_hold.READ_FIELDS,
@@ -4377,6 +4378,20 @@ def update_conversation_segments(
             update_payload.update(
                 v3_pending=True, v3_pending_since=current.get('v3_pending_since') or datetime.now(timezone.utc)
             )
+            if segment_update_fields is None:
+                # The landing time commits with the speech it describes, and only when speech changed:
+                # field-only writes and no-op retries must not extend the v3 lock.
+                from config.conversations_v3 import SPEECH_LANDED_FIELD
+
+                before = persisted if live_segments is not None else None
+                if before is None:
+                    raw = current.get('transcript_segments') or []
+                    before = _decode_transcript_segments_strict(
+                        uid, raw, bool(current.get('transcript_segments_compressed'))
+                    )
+                speech = ('id', 'start', 'end', 'text')
+                if [[r.get(k) for k in speech] for r in before] != [[r.get(k) for k in speech] for r in accepted]:
+                    update_payload[SPEECH_LANDED_FIELD] = datetime.now(timezone.utc)
         prepared_payload = _prepare_conversation_for_write(
             update_payload,
             uid,

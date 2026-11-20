@@ -82,6 +82,43 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "backend-go-checks.yml/check": {
+      "budget_p50_minutes": 5,
+      "display_name": "check",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 6,
+      "if": "${{ !cancelled() && (github.event_name != 'push' || inputs.nightly_main_sha != '' || needs.port-tasks.outputs.go_changed == 'true') }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "port-tasks",
+      "owner": "CI maintainers",
+      "rationale": "SCA-3180: retain a 5-minute Go-check budget, account for the existing pinned nightly, and allow one extra PR run from the port script path. Main pushes select Go checks only when Go paths or the workflow change. Forecast three additional daily PR runs for replay reference changes from 21 first-parent changes to the selected Python sources over seven days.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-go-checks.yml/port-tasks": {
+      "budget_p50_minutes": 5,
+      "display_name": "port-tasks",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 4,
+      "if": "inputs.nightly_main_sha == ''",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "SCA-3180: one forecast PR run per day for a checkout and focused Python tests. Main pushes also inspect merge metadata with read-only access. The job stays off the pinned nightly. Forecast three additional daily PR runs for replay reference changes from 21 first-parent changes to the selected Python sources over seven days.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "backend-hermetic-e2e.yml/hermetic-e2e": {
       "budget_p50_minutes": 3,
       "display_name": "Hermetic Backend E2E",
@@ -254,13 +291,13 @@
       "display_name": "Backend unit guardrails",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 74,
+      "expected_runs_per_day": 75,
       "if": "needs.ci-tier.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "#21780 runs 38823920783/38827426342 hit the 10m whole-job ceiling; the second completed all 2040 assertions in 535.44s before setup/cleanup pushed it over. A bounded 15m ceiling admits the complete suite. Retain the 3m p50 improvement target and existing runner, triggers, matrix and daily forecast. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
+      "rationale": "#21780 runs 38823920783/38827426342 hit the 10m whole-job ceiling; the second completed all 2040 assertions in 535.44s before setup/cleanup pushed it over. A bounded 15m ceiling admits the complete suite. Retain the 3m p50 improvement target and existing runner, triggers, matrix and daily forecast. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger. SCA-3120 adds the deploy-projection-pump composite to this backend-contract trigger; it changes only with that composite, so one extra daily run is budgeted conservatively.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -273,7 +310,7 @@
       "display_name": "Backend unit shard ${{ matrix.shard }}/8",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 120,
+      "expected_runs_per_day": 121,
       "if": null,
       "matrix": {
         "shard": [
@@ -290,7 +327,7 @@
       "matrix_size": 8,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "2026-11-17 selection v2: shards now wait for the one-minute ci-tier job, which plans the selection once so all eight shards partition the same file list (import-graph selection, ci:full label, main diff since the last green main run plus a rotating 1/8 slice). Backtest over the last 300 backend-touching first-parent main commits (backend/scripts/backtest_backend_unit_selection.py --ref origin/main at 0ce396503a55): mean selected files 2095.4 -> 1042.8 (-50.2%), median 2951 -> 530, full-suite runs 212 -> 42, with no narrow legacy selection lost. The 6-minute p50 assumed a full-suite median; with a 530-file median the p50 forecast drops to 5 minutes per runner (about 1.5 minutes setup plus a smaller test share), keeping the critical path at 1 + 5x8 + 1 = 42 minutes under the 49-minute cap. No measured p50 is claimed; re-seed from completed runs after merge. Prior: 2026-11-03 ciflake eight-shard sizing (run 41672443401).",
+      "rationale": "2026-11-17 selection v2: shards now wait for the one-minute ci-tier job, which plans the selection once so all eight shards partition the same file list (import-graph selection, ci:full label, main diff since the last green main run plus a rotating 1/8 slice). Backtest over the last 300 backend-touching first-parent main commits (backend/scripts/backtest_backend_unit_selection.py --ref origin/main at 0ce396503a55): mean selected files 2095.4 -> 1042.8 (-50.2%), median 2951 -> 530, full-suite runs 212 -> 42, with no narrow legacy selection lost. The 6-minute p50 assumed a full-suite median; with a 530-file median the p50 forecast drops to 5 minutes per runner (about 1.5 minutes setup plus a smaller test share), keeping the critical path at 1 + 5x8 + 1 = 42 minutes under the 49-minute cap. No measured p50 is claimed; re-seed from completed runs after merge. Prior: 2026-11-03 ciflake eight-shard sizing (run 41672443401). SCA-3120 adds the deploy-projection-pump composite to this backend-contract trigger; it changes only with that composite, so one extra daily run is budgeted conservatively.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -303,7 +340,7 @@
       "display_name": "Backend unit suite",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 118,
+      "expected_runs_per_day": 119,
       "if": "${{ always() && !cancelled() }}",
       "matrix": {},
       "matrix_size": 1,
@@ -313,7 +350,7 @@
         "backend-unit-guardrails"
       ],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 116 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 116 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger. SCA-3120 adds the deploy-projection-pump composite to this backend-contract trigger; it changes only with that composite, so one extra daily run is budgeted conservatively.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -326,13 +363,13 @@
       "display_name": "Resolve CI Tier",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 120,
+      "expected_runs_per_day": 121,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily label read over the PR M forecast of 118 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily label read over the PR M forecast of 118 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger. SCA-3120 adds the deploy-projection-pump composite to this backend-contract trigger; it changes only with that composite, so one extra daily run is budgeted conservatively.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1066,7 +1103,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/build-image": {
-      "budget_p50_minutes": 10,
+      "budget_p50_minutes": 13,
       "display_name": "build-image",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 1,
@@ -1079,7 +1116,7 @@
         "record_break_glass"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Builds and pushes backend:<sha7> without deploying so listen-only fixes skip the backend train; estimate one per day, 5-minute placeholder p50.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Builds and pushes backend:<sha7> without deploying so listen-only fixes skip the backend train; estimate one per day, 5-minute placeholder p50.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation. 2026-11-19 SCA-3120 (David-approved .github change): the cloud_run_service choice gains the explicit-only backend-projection-pump selection, served by the new deploy-projection-pump job; the stack deploy job skips it and `all` still expands to the four existing services. Conservative +1-minute p50 forecast for the changed dispatch surface per the SCA-2225 convention; frequencies, timeouts, runners, caps and activation of existing jobs are unchanged. SCA-3120 recovery applies the existing one-minute manual dispatch-input planning allowance. No change to job frequencies, triggers, runners or timeout ceilings. SCA-3318 records the existing one-minute dispatch-input planning allowance. Job timeouts, runners and PR caps are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1088,7 +1125,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/build-role-images": {
-      "budget_p50_minutes": 44,
+      "budget_p50_minutes": 47,
       "display_name": "build-role-images",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 1,
@@ -1101,7 +1138,7 @@
         "record_break_glass"
       ],
       "owner": "Backend platform (plan B role images)",
-      "rationale": "2026-10-21 plan B B2 release train: runs only on a manual gcp_backend.yml mode=build-only dispatch from main (no PR runs); builds, probes and publishes the role images plus listen-edge and a fat-image baseline on the private base; 40-minute p50 budget; forecast at build-image's manual rate because every build-only dispatch runs both jobs B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
+      "rationale": "2026-10-21 plan B B2 release train: runs only on a manual gcp_backend.yml mode=build-only dispatch from main (no PR runs); builds, probes and publishes the role images plus listen-edge and a fat-image baseline on the private base; 40-minute p50 budget; forecast at build-image's manual rate because every build-only dispatch runs both jobs B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation. 2026-11-19 SCA-3120 (David-approved .github change): the cloud_run_service choice gains the explicit-only backend-projection-pump selection, served by the new deploy-projection-pump job; the stack deploy job skips it and `all` still expands to the four existing services. Conservative +1-minute p50 forecast for the changed dispatch surface per the SCA-2225 convention; frequencies, timeouts, runners, caps and activation of existing jobs are unchanged. SCA-3120 recovery applies the existing one-minute manual dispatch-input planning allowance. No change to job frequencies, triggers, runners or timeout ceilings. SCA-3318 records the existing one-minute dispatch-input planning allowance. Job timeouts, runners and PR caps are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1110,11 +1147,11 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/deploy": {
-      "budget_p50_minutes": 9,
+      "budget_p50_minutes": 12,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1.1,
-      "if": "always() && github.ref == 'refs/heads/main' && github.event.inputs.mode == 'deploy' && needs.validate-production-boundary.result == 'success' && needs.firestore_readiness.result == 'success' && (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
+      "if": "always() && github.ref == 'refs/heads/main' && github.event.inputs.mode == 'deploy' && github.event.inputs.cloud_run_service != 'backend-projection-pump' && needs.validate-production-boundary.result == 'success' && needs.firestore_readiness.result == 'success' && (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
       "matrix": {},
       "matrix_size": 1,
       "needs": [
@@ -1123,7 +1160,29 @@
         "record_break_glass"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Deploy job itself is unchanged; estimate one manual backend train per day.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Deploy job itself is unchanged; estimate one manual backend train per day.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation. 2026-11-19 SCA-3120 (David-approved .github change): the cloud_run_service choice gains the explicit-only backend-projection-pump selection, served by the new deploy-projection-pump job; the stack deploy job skips it and `all` still expands to the four existing services. Conservative +1-minute p50 forecast for the changed dispatch surface per the SCA-2225 convention; frequencies, timeouts, runners, caps and activation of existing jobs are unchanged. SCA-3120 recovery applies the existing one-minute manual dispatch-input planning allowance. No change to job frequencies, triggers, runners or timeout ceilings. SCA-3318 records the existing one-minute dispatch-input planning allowance. Job timeouts, runners and PR caps are unchanged.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend.yml/deploy-projection-pump": {
+      "budget_p50_minutes": 27,
+      "display_name": "deploy-projection-pump",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0.1,
+      "if": "always() && github.ref == 'refs/heads/main' && github.event.inputs.mode == 'deploy' && github.event.inputs.environment == 'prod' && github.event.inputs.cloud_run_service == 'backend-projection-pump' && needs.validate-production-boundary.result == 'success' && needs.firestore_readiness.result == 'success' && (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "validate-production-boundary",
+        "firestore_readiness",
+        "record_break_glass"
+      ],
+      "owner": "Backend platform / existing Omi Control Release",
+      "rationale": "2026-11-19 SCA-3120 (David-approved .github change): dedicated backend-projection-pump deploy job, manual prod dispatch with cloud_run_service=backend-projection-pump only; no PR, automatic, development or all-services runs, and the stack deploy job never runs for that selection. Reuses the admitted fat image (no build or push), so a 25-minute p50 planning budget covers gateway checks, one candidate plus GMP sidecar revision, readiness and release-vector verification. One run per ten days is an unmeasured allowance for the first dark deploy and later ramp steps; replace with observed runtime after the first dispatch. SCA-3120 recovery applies the existing one-minute manual dispatch-input planning allowance. No change to job frequencies, triggers, runners or timeout ceilings. SCA-3318 records the existing one-minute dispatch-input planning allowance. Job timeouts, runners and PR caps are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1132,7 +1191,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/firestore_readiness": {
-      "budget_p50_minutes": 9,
+      "budget_p50_minutes": 12,
       "display_name": "firestore_readiness",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1.1,
@@ -1141,7 +1200,7 @@
       "matrix_size": 1,
       "needs": "validate-production-boundary",
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-11-01 keyless index check: the gate now mints an OIDC token through the deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. No trigger, matrix, or runner change; auth cost is one STS exchange, so the budget is unchanged. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-11-01 keyless index check: the gate now mints an OIDC token through the deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. No trigger, matrix, or runner change; auth cost is one STS exchange, so the budget is unchanged. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation. 2026-11-19 SCA-3120 (David-approved .github change): the cloud_run_service choice gains the explicit-only backend-projection-pump selection, served by the new deploy-projection-pump job; the stack deploy job skips it and `all` still expands to the four existing services. Conservative +1-minute p50 forecast for the changed dispatch surface per the SCA-2225 convention; frequencies, timeouts, runners, caps and activation of existing jobs are unchanged. SCA-3120 recovery applies the existing one-minute manual dispatch-input planning allowance. No change to job frequencies, triggers, runners or timeout ceilings. SCA-3318 records the existing one-minute dispatch-input planning allowance. Job timeouts, runners and PR caps are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1150,7 +1209,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/operator-qualify-publish": {
-      "budget_p50_minutes": 16,
+      "budget_p50_minutes": 19,
       "display_name": "operator-qualify-publish",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 1,
@@ -1159,7 +1218,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "Backend platform / existing Omi Control Release",
-      "rationale": "David-approved 2026-11-16 source preparation only: one manual prod-gated native AMD64 exact-image qualification/publication mode on a standard ubuntu-24.04 runner. No PR/automatic runs, image rebuild, new capacity or dispatch authorized by this source change. Fifteen-minute initial planning budget and one potential operator run/day are unmeasured guard allowances; replace with real execution evidence after separately approved dispatch. Contract remains closed while registry authorization is unverified. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
+      "rationale": "David-approved 2026-11-16 source preparation only: one manual prod-gated native AMD64 exact-image qualification/publication mode on a standard ubuntu-24.04 runner. No PR/automatic runs, image rebuild, new capacity or dispatch authorized by this source change. Fifteen-minute initial planning budget and one potential operator run/day are unmeasured guard allowances; replace with real execution evidence after separately approved dispatch. Contract remains closed while registry authorization is unverified. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation. 2026-11-19 SCA-3120 (David-approved .github change): the cloud_run_service choice gains the explicit-only backend-projection-pump selection, served by the new deploy-projection-pump job; the stack deploy job skips it and `all` still expands to the four existing services. Conservative +1-minute p50 forecast for the changed dispatch surface per the SCA-2225 convention; frequencies, timeouts, runners, caps and activation of existing jobs are unchanged. SCA-3120 recovery applies the existing one-minute manual dispatch-input planning allowance. No change to job frequencies, triggers, runners or timeout ceilings. SCA-3318 records the existing one-minute dispatch-input planning allowance. Job timeouts, runners and PR caps are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1168,7 +1227,7 @@
       "runs_on": "ubuntu-24.04"
     },
     "gcp_backend.yml/record_break_glass": {
-      "budget_p50_minutes": 10,
+      "budget_p50_minutes": 13,
       "display_name": "record_break_glass",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0.1,
@@ -1177,7 +1236,25 @@
       "matrix_size": 1,
       "needs": "firestore_readiness",
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Audit job runs only on a break-glass dispatch of either mode; estimate one per ten days.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Audit job runs only on a break-glass dispatch of either mode; estimate one per ten days.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation. 2026-11-19 SCA-3120 (David-approved .github change): the cloud_run_service choice gains the explicit-only backend-projection-pump selection, served by the new deploy-projection-pump job; the stack deploy job skips it and `all` still expands to the four existing services. Conservative +1-minute p50 forecast for the changed dispatch surface per the SCA-2225 convention; frequencies, timeouts, runners, caps and activation of existing jobs are unchanged. SCA-3120 recovery applies the existing one-minute manual dispatch-input planning allowance. No change to job frequencies, triggers, runners or timeout ceilings. SCA-3318 records the existing one-minute dispatch-input planning allowance. Job timeouts, runners and PR caps are unchanged.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend.yml/recover-projection-pump-cap": {
+      "budget_p50_minutes": 5,
+      "display_name": "recover-projection-pump-cap",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0.1,
+      "if": "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.mode == 'recover-pump-cap' && inputs.environment == 'prod' && inputs.cloud_run_service == 'backend-projection-pump' && !inputs.break_glass_lock && !inputs.skip_eligibility_proof && needs.validate-production-boundary.result == 'success'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "validate-production-boundary",
+      "owner": "Release",
+      "rationale": "SCA-3318 one-time manual recovery under prod approval. Five-minute planning estimate for bounded validation, one service PATCH, and readback.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1186,7 +1263,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/repair-traffic": {
-      "budget_p50_minutes": 10,
+      "budget_p50_minutes": 13,
       "display_name": "repair-traffic",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0.1,
@@ -1195,7 +1272,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Traffic repair is unchanged and rare; estimate one per ten days.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Traffic repair is unchanged and rare; estimate one per ten days.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation. 2026-11-19 SCA-3120 (David-approved .github change): the cloud_run_service choice gains the explicit-only backend-projection-pump selection, served by the new deploy-projection-pump job; the stack deploy job skips it and `all` still expands to the four existing services. Conservative +1-minute p50 forecast for the changed dispatch surface per the SCA-2225 convention; frequencies, timeouts, runners, caps and activation of existing jobs are unchanged. SCA-3120 recovery applies the existing one-minute manual dispatch-input planning allowance. No change to job frequencies, triggers, runners or timeout ceilings. SCA-3318 records the existing one-minute dispatch-input planning allowance. Job timeouts, runners and PR caps are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1204,16 +1281,34 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/validate-production-boundary": {
-      "budget_p50_minutes": 9,
+      "budget_p50_minutes": 12,
       "display_name": "validate-production-boundary",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1.1,
-      "if": "github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only'",
+      "if": "github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'recover-pump-cap'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Runs for deploy and build-only dispatches; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Runs for deploy and build-only dispatches; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation. 2026-11-19 SCA-3120 (David-approved .github change): the cloud_run_service choice gains the explicit-only backend-projection-pump selection, served by the new deploy-projection-pump job; the stack deploy job skips it and `all` still expands to the four existing services. Conservative +1-minute p50 forecast for the changed dispatch surface per the SCA-2225 convention; frequencies, timeouts, runners, caps and activation of existing jobs are unchanged. SCA-3120 recovery applies the existing one-minute manual dispatch-input planning allowance. No change to job frequencies, triggers, runners or timeout ceilings. SCA-3318 records the existing one-minute dispatch-input planning allowance. Job timeouts, runners and PR caps are unchanged.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend_auto_dev.yml/admit_source": {
+      "budget_p50_minutes": 5,
+      "display_name": "admit_source",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": "(needs.scope.outputs.applies == 'true' || needs.scope.outputs.workerd == 'true') && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "scope",
+      "owner": "CI maintainers",
+      "rationale": "SCA-3174 splits GitHub-only source admission from Firestore and dev registry authentication. Conservative five-minute placeholder for the non-PR job.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1225,13 +1320,16 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
+      "expected_runs_per_day": 1,
+      "if": "needs.scope.outputs.applies == 'true'",
       "matrix": {},
       "matrix_size": 1,
-      "needs": "firestore_readiness",
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "needs": [
+        "scope",
+        "firestore_readiness"
+      ],
+      "owner": "Omi backend maintainers",
+      "rationale": "2026-11-19 backend-go image publishing adds a separate path; this job now requires both backend scope and admitted source readiness and remains skipped for workerd-only changes. Forecast one eligible daily release run (previously unbudgeted); 5-minute p50 is unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1243,13 +1341,37 @@
       "budget_p50_minutes": 5,
       "display_name": "firestore_readiness",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "needs.scope.outputs.applies == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository",
+      "expected_runs_per_day": 1,
+      "if": "needs.scope.outputs.applies == 'true'",
       "matrix": {},
       "matrix_size": 1,
-      "needs": "scope",
+      "needs": [
+        "scope",
+        "admit_source"
+      ],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-11-01 keyless index check: the gate now mints an OIDC token through the dev deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. No trigger, matrix, or runner change; auth cost is one STS exchange, so the budget is unchanged.",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-11-01 keyless index check: the gate now mints an OIDC token through the dev deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. SCA-3174 keeps the gate on backend service deployments after shared GitHub-only SHA admission. Forecast one eligible daily release run.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend_auto_dev.yml/publish_workerd": {
+      "budget_p50_minutes": 5,
+      "display_name": "Build and publish workerd development image",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": "needs.scope.outputs.workerd == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "scope",
+        "admit_source"
+      ],
+      "owner": "Omi backend maintainers",
+      "rationale": "2026-11-19 SCA-3174: publish an amd64 workerd image from the admitted source SHA to the dev registry using dev Workload Identity; no service deployment. Conservative 5-minute p50 placeholder; workflow_run is non-PR, so PR frequency is zero.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1259,15 +1381,15 @@
     },
     "gcp_backend_auto_dev.yml/scope": {
       "budget_p50_minutes": 5,
-      "display_name": "Decide backend deployment scope",
+      "display_name": "Decide backend build and deployment scope",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "owner": "Omi backend maintainers",
+      "rationale": "2026-11-19 SCA-3174: added a backend-go/ diff output for a separately admitted workerd image publish; backend deployment scope remains independent. Existing 5-minute p50 and non-PR event frequency are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1420,7 +1542,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_diarizer.yml/deploy": {
-      "budget_p50_minutes": 23,
+      "budget_p50_minutes": 24,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1429,7 +1551,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change; SCA-2149: opt-in preserve-live dispatch inputs add bounded inventory/dry-run/CAS/spec verification calls; reserve one minute p50 headroom, no new automatic runs or jobs; SCA-2160 review repair: isolate the helper in a single-file immutable checkout and route rollback through the same writer; reserve one further minute for the additional checkout, with no new job or automatic trigger",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change; SCA-2149: opt-in preserve-live dispatch inputs add bounded inventory/dry-run/CAS/spec verification calls; reserve one minute p50 headroom, no new automatic runs or jobs; SCA-2160 review repair: isolate the helper in a single-file immutable checkout and route rollback through the same writer; reserve one further minute for the additional checkout, with no new job or automatic trigger; SCA-2944 (David 2026-11-19): the worker_dry_run input adds a no-write dry-run step (server dry-runs only, no build or push) on manual dispatch; one minute p50 headroom records the trigger change, with no new job or automatic trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1966,6 +2088,25 @@
       },
       "runs_on": null
     },
+    "main_nightly_full.yml/backend-go-checks": {
+      "budget_p50_minutes": 5,
+      "display_name": "backend-go-checks",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu. Added 2026-11-19 with backend-go-checks.yml so the Go backend foundation is checked nightly against pinned main.",
+      "reusable": "./.github/workflows/backend-go-checks.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
     "main_nightly_full.yml/backend-hermetic-e2e": {
       "budget_p50_minutes": 5,
       "display_name": "backend-hermetic-e2e",
@@ -2227,6 +2368,7 @@
         "backend-checks",
         "backend-edge",
         "backend-emulator-proofs",
+        "backend-go-checks",
         "backend-hermetic-e2e",
         "backend-unit-tests",
         "desktop-backend-contracts",
@@ -2249,7 +2391,7 @@
         "windows-preflight-portability"
       ],
       "owner": "CI maintainers",
-      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu. Report also waits on sdk-dart so the Dart device SDK suite is reported nightly.",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu. Report also waits on sdk-dart so the Dart device SDK suite is reported nightly, and on backend-go-checks so the Go backend foundation is reported nightly.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3562,6 +3704,42 @@
         }
       }
     },
+    "backend-go-checks.yml": {
+      "name": "Backend Go Checks",
+      "owner": "CI maintainers",
+      "rationale": "SCA-3180: path-selected PR validation and read-only port task drafts on main pushes. Replay coverage includes the Python driver and direct finalization and storage entry points.",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "backend-go/**",
+            "backend/testing/finalization_replay/**",
+            "backend/utils/conversations/finalizer.py",
+            "backend/utils/conversations/process_conversation.py",
+            "backend/utils/conversations/lifecycle.py",
+            "backend/database/conversation_finalization_jobs.py",
+            "backend/database/conversations.py",
+            ".github/scripts/go_port_tasks.py",
+            ".github/scripts/test_go_port_tasks.py",
+            ".github/workflows/backend-go-checks.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "backend-hermetic-e2e.yml": {
       "name": "Backend Hermetic E2E",
       "owner": "CI maintainers",
@@ -3612,7 +3790,7 @@
     "backend-unit-tests.yml": {
       "name": "Backend Unit Tests",
       "owner": "CI maintainers",
-      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively. The 2026-10-18 JIT retirement removes the deleted local QA harness from this workflow's path filter. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. The 2026-10-26 memory-maintenance-job retirement drops the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
+      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively. The 2026-10-18 JIT retirement removes the deleted local QA harness from this workflow's path filter. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. The 2026-10-26 memory-maintenance-job retirement drops the deleted gcp_memory_maintenance_job*.yml paths from this trigger. SCA-3120 adds the deploy-projection-pump composite to this backend-contract trigger; it changes only with that composite, so one extra daily run is budgeted conservatively.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -3625,6 +3803,7 @@
             ".github/actions/detect-changes/**",
             ".github/actions/ci-tier/**",
             ".github/actions/deploy-backend-stack/**",
+            ".github/actions/deploy-projection-pump/**",
             ".github/actions/sync-backfill-lifecycle/**",
             ".github/actions/firestore-readiness/**",
             ".github/actions/release-eligibility/action.yml",
@@ -3678,6 +3857,7 @@
             ".github/actions/detect-changes/**",
             ".github/actions/ci-tier/**",
             ".github/actions/deploy-backend-stack/**",
+            ".github/actions/deploy-projection-pump/**",
             ".github/actions/sync-backfill-lifecycle/**",
             ".github/actions/firestore-readiness/**",
             ".github/actions/release-eligibility/action.yml",
@@ -4538,7 +4718,7 @@
     "gcp_backend.yml": {
       "name": "Deploy Backend to Cloud RUN",
       "owner": "CI maintainers",
-      "rationale": "Manual-only backend deploy workflow. 2026-10-20 adds mode=build-only (image build and push, no deploy) alongside deploy and repair-traffic-only; no automatic trigger.. 2026-10-21 plan B B2 (named by David 2026-10-21): service_images input for mode=deploy role-image opt-in, and build-only also publishes the role images (build-role-images job). B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-10-26 dispatchtag adds the required requested_by dispatch input. 2026-11-15 SCA-2225: typed Cloud Run service selection narrows the existing manual deploy route; global serialization, schedule, jobs, runners, matrix, expected frequencies and global caps remain unchanged; job p50 forecasts are conservatively updated below for the dispatch-input inventory rule. No parallel activation or dispatch-frequency increase is authorized. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged.",
+      "rationale": "Manual-only backend deploy workflow. 2026-10-20 adds mode=build-only (image build and push, no deploy) alongside deploy and repair-traffic-only; no automatic trigger.. 2026-10-21 plan B B2 (named by David 2026-10-21): service_images input for mode=deploy role-image opt-in, and build-only also publishes the role images (build-role-images job). B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-10-26 dispatchtag adds the required requested_by dispatch input. 2026-11-15 SCA-2225: typed Cloud Run service selection narrows the existing manual deploy route; global serialization, schedule, jobs, runners, matrix, expected frequencies and global caps remain unchanged; job p50 forecasts are conservatively updated below for the dispatch-input inventory rule. No parallel activation or dispatch-frequency increase is authorized. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. 2026-11-19 SCA-3120 (David-approved .github change): the cloud_run_service choice gains the explicit-only backend-projection-pump selection, served by the new deploy-projection-pump job; the stack deploy job skips it and `all` still expands to the four existing services. Conservative +1-minute p50 forecast for the changed dispatch surface per the SCA-2225 convention; frequencies, timeouts, runners, caps and activation of existing jobs are unchanged. SCA-3120 recovery adds manual inputs for the reviewed pump control SHA and Release disposition. The dispatch-input inventory uses the existing one-minute p50 planning allowance per job. SCA-3318 adds a one-time manual pump-only recovery mode. No automatic or PR trigger.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4560,13 +4740,14 @@
             },
             "cloud_run_service": {
               "default": "all",
-              "description": "Cloud Run deploy target; all retains the existing four-service path",
+              "description": "Cloud Run deploy target; all retains the existing four-service path; backend-projection-pump is explicit-only (SCA-3120)",
               "options": [
                 "all",
                 "backend",
                 "backend-sync",
                 "backend-sync-backfill",
-                "backend-integration"
+                "backend-integration",
+                "backend-projection-pump"
               ],
               "required": "false",
               "type": "choice"
@@ -4604,10 +4785,26 @@
                 "deploy",
                 "build-only",
                 "repair-traffic-only",
-                "operator-qualify-publish"
+                "operator-qualify-publish",
+                "recover-pump-cap"
               ],
               "required": "true",
               "type": "choice"
+            },
+            "pump_control_sha": {
+              "default": "",
+              "description": "Projection pump only. Full reviewed SHA of the workflow and deploy controls on main.",
+              "required": "false"
+            },
+            "pump_recovery_etag": {
+              "default": "",
+              "description": "SCA-3318 cap recovery only. Fresh Cloud Run v2 service etag from Release readback.",
+              "required": "false"
+            },
+            "pump_release_disposition": {
+              "default": "",
+              "description": "Existing projection pump only. Release comment UUID, serving revision, source SHA, digest-pinned image (space-separated).",
+              "required": "false"
             },
             "release_sha": {
               "default": "",
@@ -4998,7 +5195,7 @@
     "gcp_diarizer.yml": {
       "name": "Deploy Diarizer to GKE",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged; SCA-2149 adds opt-in preserve_live_worker and admitted worker_live_baseline dispatch inputs; manual-only trigger and runner unchanged; SCA-2160 adds the guarded worker_rollback_receipt dispatch input; rollback reuses the existing prod environment and shared writer",
+      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged; SCA-2149 adds opt-in preserve_live_worker and admitted worker_live_baseline dispatch inputs; manual-only trigger and runner unchanged; SCA-2160 adds the guarded worker_rollback_receipt dispatch input; rollback reuses the existing prod environment and shared writer; SCA-2944 (David 2026-11-19) adds the worker_dry_run input: a server-dry-run-only preserve-live run under the same prod-train lock that never writes, builds or pushes",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -5049,6 +5246,12 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "worker_dry_run": {
+              "default": "false",
+              "description": "Preserve-live only, under the shared lock; never writes, builds or pushes. Without a rollback receipt: forward admission plus a no-op prior-image admission (inverse not verified). With worker_rollback_receipt: server dry-run of the real inverse CAS",
+              "required": "false",
+              "type": "boolean"
             },
             "worker_live_baseline": {
               "default": "",

@@ -5,6 +5,7 @@ Scheduler, so every race is a real interleaving of committed transactions.
 """
 
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -42,7 +43,7 @@ class FakeEraser:
         for table in ('jobs', 'results'):
             self.store.rows.pop((table, segment_id), None)
 
-    def erase_archives(self, uid, job_id):
+    def erase_archives(self, uid, job_id, paths=()):
         if self.fail_archives:
             self.fail_archives -= 1
             raise RuntimeError('archive listing unavailable')
@@ -327,17 +328,26 @@ def test_a_fence_that_wins_the_race_leaves_nothing_for_workers_to_lease_or_recov
 def test_cancel_is_idempotent_and_a_retry_finishes_erasure():
     store = MemoryStore()
     admit(store, ['a'])
+    expires = datetime.fromtimestamp(150, timezone.utc)
+    store.rows['intakes', JOB]['expires_at'] = expires
+    store.rows['content', f'{OWNER}/{CONTENT}']['expires_at'] = expires
     first = cancel(store, FakeEraser(store, fail_archives=1))
     assert first.outcome is Outcome.CANCELLED and first.erasure == 'pending'
     assert 'owner_cancel_erased_at' not in store.rows['intakes', JOB]
+    assert 'expires_at' not in store.rows['intakes', JOB]
+    assert 'expires_at' not in store.rows['content', f'{OWNER}/{CONTENT}']
     again = FakeEraser(store)
-    second = cancel(store, again, now=200.0)
+    retry_at = 100 + timedelta(days=46).total_seconds()
+    second = cancel(store, again, now=retry_at)
     assert second.outcome is Outcome.CANCELLED and second.erasure == 'complete'
     assert again.archive_calls == [(OWNER, JOB)]
     assert store.rows['intakes', JOB]['owner_cancelled_at'] == 100.0  # original fence time is kept
-    assert store.rows['intakes', JOB]['owner_cancel_erased_at'] == 200.0
+    assert store.rows['intakes', JOB]['owner_cancel_erased_at'] == retry_at
+    receipt_expiry = datetime.fromtimestamp(retry_at, timezone.utc) + timedelta(days=45)
+    assert store.rows['intakes', JOB]['expires_at'] == receipt_expiry
+    assert store.rows['content', f'{OWNER}/{CONTENT}']['expires_at'] == receipt_expiry
     third = FakeEraser(store)
-    assert cancel(store, third, now=300.0).erasure == 'complete'
+    assert cancel(store, third, now=retry_at + 1).erasure == 'complete'
     assert third.archive_calls == [] and third.deleted_uris == []
 
 
@@ -443,7 +453,7 @@ def test_production_eraser_erases_objects_then_rows_under_a_refencing_transactio
         'batch_pipeline_prod',
         client=_Client(rows),
         delete_uri=lambda uid, uri: deleted.append((uid, uri)),
-        delete_archives=lambda uid, raw: calls.append(('archives', uid, raw)) or 0,
+        delete_archives=lambda uid, raw, paths: calls.append(('archives', uid, raw)) or 0,
     )
     eraser.erase_unit(OWNER, 'a')
     eraser.erase_archives(OWNER, 'bp_upload-1')
@@ -467,7 +477,7 @@ def test_production_eraser_refuses_a_row_the_fence_did_not_write(monkeypatch, ro
         'batch_pipeline_prod',
         client=_Client({('jobs', 'a'): row}),
         delete_uri=lambda uid, uri: pytest.fail('must not delete objects'),
-        delete_archives=lambda uid, raw: 0,
+        delete_archives=lambda uid, raw, paths: 0,
     )
     with pytest.raises(owner_cancel_erase.UnitNotFenced):
         eraser.erase_unit(OWNER, 'a')
@@ -494,8 +504,10 @@ class _Blob:
     def __init__(self, name, metadata, generation=7, missing=False):
         self.name, self.metadata, self.generation, self.missing = name, metadata, generation, missing
         self.deleted = None
+        self.metageneration = 3
 
-    def delete(self, *, if_generation_match, timeout):
+    def delete(self, *, if_generation_match, if_metageneration_match, timeout):
+        assert if_metageneration_match == self.metageneration
         from google.cloud.exceptions import NotFound
 
         if self.missing:
@@ -508,15 +520,19 @@ def test_archive_erasure_keeps_originals_linked_to_conversations_and_other_uploa
 
     blobs = {
         'raw-sync': [
-            _Blob('raw-sync/u/a/x.bin', {'sync_job_id': 'upload-1', 'conversation_id': 'unknown'}),
-            _Blob('raw-sync/u/a/y.bin', {'sync_job_id': 'upload-1', 'conversation_ids': '["conv-1"]'}),
-            _Blob('raw-sync/u/a/z.bin', {'sync_job_id': 'upload-2'}),
+            _Blob('raw-sync/owner-synthetic/a/x.bin', {'sync_job_id': 'upload-1', 'conversation_id': 'unknown'}),
+            _Blob('raw-sync/owner-synthetic/a/y.bin', {'sync_job_id': 'upload-1', 'conversation_ids': '["conv-1"]'}),
+            _Blob('raw-sync/owner-synthetic/a/z.bin', {'sync_job_id': 'upload-2'}),
+            _Blob('raw-sync/owner-synthetic/a/earlier.bin', {'sync_job_id': 'prior-attempt'}),
         ],
         'raw-mobile-batch': [
-            _Blob('raw-mobile-batch/u/b/x.bin', {'sync_job_id': 'upload-1'}, generation=9),
-            _Blob('raw-mobile-batch/u/b/live.bin', {'sync_job_id': 'upload-1', 'conversation_id': 'live-conv'}),
-            _Blob('raw-mobile-batch/u/b/bad.bin', {'sync_job_id': 'upload-1', 'conversation_ids': '{'}),
-            _Blob('raw-mobile-batch/u/b/gone.bin', {'sync_job_id': 'upload-1'}, missing=True),
+            _Blob('raw-mobile-batch/owner-synthetic/b/x.bin', {'sync_job_id': 'upload-1'}, generation=9),
+            _Blob(
+                'raw-mobile-batch/owner-synthetic/b/live.bin',
+                {'sync_job_id': 'upload-1', 'conversation_id': 'live-conv'},
+            ),
+            _Blob('raw-mobile-batch/owner-synthetic/b/bad.bin', {'sync_job_id': 'upload-1', 'conversation_ids': '{'}),
+            _Blob('raw-mobile-batch/owner-synthetic/b/gone.bin', {'sync_job_id': 'upload-1'}, missing=True),
         ],
     }
     prefixes = []
@@ -532,11 +548,13 @@ def test_archive_erasure_keeps_originals_linked_to_conversations_and_other_uploa
             return Bucket()
 
     monkeypatch.setattr(storage, '_get_storage_client', lambda: Client())
-    assert storage.delete_unlinked_upload_archives(OWNER, 'upload-1') == 2
+    earlier = 'raw-sync/owner-synthetic/a/earlier.bin'
+    assert storage.delete_unlinked_upload_archives(OWNER, 'upload-1', (earlier,)) == 3
     assert prefixes == [f'raw-sync/{OWNER}/', f'raw-mobile-batch/{OWNER}/']
     assert [b.name for group in blobs.values() for b in group if b.deleted is not None] == [
-        'raw-sync/u/a/x.bin',
-        'raw-mobile-batch/u/b/x.bin',
+        'raw-sync/owner-synthetic/a/x.bin',
+        earlier,
+        'raw-mobile-batch/owner-synthetic/b/x.bin',
     ]
     assert blobs['raw-mobile-batch'][0].deleted == 9
     with pytest.raises(ValueError):

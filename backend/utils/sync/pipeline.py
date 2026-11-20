@@ -3095,7 +3095,7 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                         from database.sync_cap_holds import mark_content_held
 
                         ledger_writer = mark_content_held
-                        ledger_extra = {'hold_ids': list(cap_hold_receipts)}
+                        ledger_extra = {'hold_ids': list(cap_hold_receipts), 'raw_capture_paths': raw_capture_paths}
                     completed_ledger = await run_blocking(
                         db_executor,
                         ledger_writer,
@@ -3775,7 +3775,7 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                     from database.sync_cap_holds import mark_content_held
 
                     ledger_writer = mark_content_held
-                    ledger_extra = {'hold_ids': list(cap_holds)}
+                    ledger_extra = {'hold_ids': list(cap_holds), 'raw_capture_paths': raw_capture_paths}
                 completed_ledger = await run_blocking(
                     db_executor,
                     ledger_writer,

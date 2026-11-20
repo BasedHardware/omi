@@ -14,7 +14,8 @@ from contextlib import ExitStack, nullcontext
 
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks, Header
-from typing import Annotated, Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional, cast
+from starlette.datastructures import Headers
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -80,7 +81,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.reprocess_contract import DERIVED_EFFECTS_TRANSCRIPT_FIELD, FIRST_PARTY_SUMMARY_SOURCE
 from utils.conversations.analytics import build_conversation_analytics
-from utils.conversations.render import redact_conversations_for_list
+from utils.conversations.render import redact_conversations_for_list, redact_legacy_live_recap_sections
 from utils.conversations.onopen_translation import translate_open_page
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
@@ -165,13 +166,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from config.conversations_v3 import conversations_v3_enabled
+from config.conversations_v3 import conversations_v3_enabled, live_recap_enabled
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
-from utils.conversations.v3 import live as v3_live
-from database import conversations_v3_live
+from utils.conversations.v3 import live as v3_live, policy as v3_policy
+from database import conversations_v3_live, conversations_v3_processing
 from utils.conversations import list_page_headers
 
 router = APIRouter()
@@ -201,6 +202,13 @@ def get_live_conversation(
     )
     if compact is not None:
         compact['finished_at'] = row.get('finished_at')
+        if row.get('is_locked'):
+            compact['is_locked'] = True
+        elif isinstance(row.get('v3_recording_ids'), list):
+            # Identifiers only, from the authenticated owner's existing live-window read.
+            compact['v3_recording_ids'] = [
+                rid for rid in row['v3_recording_ids'][-8:] if isinstance(rid, str) and rid and '/' not in rid
+            ]
     if compact and 'structured' in compact:
         compact['structured'] = {
             key: compact['structured'][key] for key in ('title', 'emoji') if key in compact['structured']
@@ -1365,6 +1373,15 @@ def get_conversation_by_id(
             response.headers['X-Translation-Status'] = translation_status
             if next_cursor is not None:
                 response.headers['X-Translation-Cursor'] = next_cursor
+    preview = None
+    if conversation.get('id') == conversation_id and live_recap_enabled(uid):
+        preview = conversations_v3_processing.read_live_summary(uid, conversation)
+    else:
+        redact_legacy_live_recap_sections(conversation)
+    conversation.pop('live_summary', None)
+    conversation.pop(v3_policy.LIVE_SUMMARY_FIELD, None)
+    if preview:
+        conversation['live_summary'] = preview
     return historical_projection.project(transcribing_hold.project(conversation))
 
 
@@ -2934,9 +2951,15 @@ def open_historical_summary(
     },
 )
 async def conversation_summary_stream(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    def reject_live_target(conversation):
+        if v3_policy.live_summary_target(conversation) and not conversation.get('v3_unlocked'):
+            detail = 'use_live_recap_stream' if live_recap_enabled(uid) else 'live_recap_unavailable'
+            raise HTTPException(404, detail)
+
     conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
+    reject_live_target(conversation)
     await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
-    if conversation.get('v3_derived') and conversation.get('status') == 'in_progress':
+    if v3_summary.needs_open_reconcile(conversation):
         from utils.conversations.v3.service import reconcile
 
         try:
@@ -2949,9 +2972,43 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
         except Exception as exc:
             logger.warning('event=v3_on_open_reconcile outcome=stored exception_type=%s', type(exc).__name__)
         conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
+        reject_live_target(conversation)
     token = await v3_summary.prepare(uid, conversation)
     return StreamingResponse(
         v3_summary.stream(uid, conversation, token=token),
+        media_type='text/event-stream',
+        headers={'Cache-Control': 'no-cache'},
+    )
+
+
+@router.get(
+    '/v1/conversations/{conversation_id}/summary/live-catchup/stream',
+    tags=['conversations'],
+    response_class=StreamingResponse,
+    responses={200: {'content': {'text/event-stream': {'schema': {'type': 'string'}}}}},
+)
+async def conversation_live_catchup_stream(
+    conversation_id: str, uid: str = Depends(auth.get_current_user_uid), request: Request = cast(Request, None)
+):
+    from utils.conversations.v3.recap_telemetry import observe
+
+    if not live_recap_enabled(uid):
+        raise HTTPException(404, 'live_recap_unavailable')
+    observation = observe(uid, request.headers if request is not None else Headers())
+    observation.record('request_received')
+    try:
+        row = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
+        if row.get('id') != conversation_id or not v3_policy.live_summary_target(row):
+            raise HTTPException(status_code=404, detail='Live conversation not available')
+        if not live_recap_enabled(uid):
+            raise HTTPException(404, 'live_recap_unavailable')
+        await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
+    except HTTPException:
+        observation.record('admission_refused')
+        raise
+    token = await v3_summary.prepare(uid, row, live=True, observation=observation)
+    return StreamingResponse(
+        v3_summary.stream(uid, row, token=token, live=True, observation=observation),
         media_type='text/event-stream',
         headers={'Cache-Control': 'no-cache'},
     )

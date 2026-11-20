@@ -27,7 +27,7 @@ class FirestoreEraser:
         *,
         client: Any = None,
         delete_uri: Callable[[str, str], None] = delete_batch_object,
-        delete_archives: Callable[[str, str], int] = delete_unlinked_upload_archives,
+        delete_archives: Callable[[str, str, tuple[str, ...]], int] = delete_unlinked_upload_archives,
     ):
         self.namespace = namespace
         self._client = client
@@ -72,7 +72,7 @@ class FirestoreEraser:
 
         FirestoreLegacyEraser().erase_hold(uid, hold_id)
 
-    def erase_archives(self, uid: str, job_id: str) -> None:
-        # Originals carry the router's upload id; a batch handle adds the protocol prefix,
-        # and a legacy handle is the upload id itself.
-        self.delete_archives(uid, job_id.removeprefix(JOB_PREFIX))
+    def erase_archives(self, uid: str, job_id: str, paths: tuple[str, ...] = ()) -> None:
+        # Older receipts only have the router's job id. New receipts also record
+        # the exact objects returned by create-only archive writes, including reused ones.
+        self.delete_archives(uid, job_id.removeprefix(JOB_PREFIX), paths)

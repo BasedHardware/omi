@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 
 import pytest
@@ -11,17 +12,34 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 
 
-@pytest.fixture(params=[('deploy-backend-stack', 'sync', '50'), ('sync-backfill-lifecycle', 'sync-backfill', '40')])
+PROD_BRANCH = re.compile(r"^\$\{\{ inputs\.runtime_env == 'prod' && '([^']*)' \|\| '([^']*)' \}\}$")
+
+
+@pytest.fixture(
+    params=[
+        ('deploy-backend-stack', 'sync', '50', 'live-max-scale'),
+        # 2026-11-20: integration reads its live cap too, so a capacity revision (35 -> 45) is not
+        # reset by the next train. Prod fresh-service default stays the former 35 literal.
+        ('deploy-backend-stack', 'integration', '35', 'live-integration-max-scale'),
+        ('sync-backfill-lifecycle', 'sync-backfill', '40', 'live-max-scale'),
+    ]
+)
 def action(request):
-    name, suffix, fallback = request.param
+    name, suffix, fallback, step_id = request.param
     steps = yaml.safe_load((ROOT / '.github/actions' / name / 'action.yml').read_text())['runs']['steps']
-    resolver = next(step for step in steps if step.get('id') == 'live-max-scale')
+    resolver = next(step for step in steps if step.get('id') == step_id)
     deploy = next(step for step in steps if step.get('id') == f'deploy-backend-{suffix}')
     assert steps.index(resolver) < steps.index(deploy)
     assert resolver['env']['CLOUD_RUN_SERVICE'] == '${{ inputs.service }}-' + suffix
     assert resolver['env']['CLOUD_RUN_PROJECT'] == '${{ inputs.project_id }}'
     assert resolver['env']['CLOUD_RUN_REGION'] == '${{ inputs.region }}'
-    assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in deploy['with']['flags']
+    assert f'--max-instances=${{{{ steps.{step_id}.outputs.max_scale }}}}' in deploy['with']['flags']
+    if suffix == 'integration':
+        # The resolver runs exactly when the deploy it feeds runs; a skipped resolver would
+        # hand the deploy an empty cap.
+        assert resolver['if'] == deploy['if']
+        prod, dev = PROD_BRANCH.match(resolver['env']['DEFAULT_MAX_SCALE']).groups()
+        assert (prod, dev) == ('35', '50')
     if suffix == 'sync-backfill':
         # Worker/platform/dispatch retain their cap read; routing must leave
         # the omitted backfill worker uninspected. Exercise the actual shell
@@ -34,8 +52,32 @@ def action(request):
     return resolver, 'custom-' + suffix, fallback
 
 
-def resolve(tmp_path, action, *, service_cap=None, revision_cap=None, missing=False, exit_code=0, payload=None):
+def resolve(
+    tmp_path,
+    action,
+    *,
+    service_cap=None,
+    revision_cap=None,
+    missing=False,
+    exit_code=0,
+    payload=None,
+    traffic=None,
+    revisions=None,
+    revision_exit=0,
+    branch='prod',
+):
     resolver, service, _fallback = action
+    serving = action[1].endswith('-integration')
+    if serving and traffic is None:
+        # Integration reads the cap of the revision receiving traffic, never the latest template.
+        # Without a revision cap in a shared case, no revision receives traffic, so the service cap
+        # (or the default) is the only input.
+        traffic = (
+            [{'revisionName': 'serving-rev', 'percent': 100}, {'revisionName': 'candidate-rev', 'percent': 0}]
+            if revision_cap is not None
+            else []
+        )
+        revisions = {'serving-rev': revision_cap, 'candidate-rev': '35'} if revisions is None else revisions
     if payload is None:
         payload = (
             []
@@ -46,30 +88,42 @@ def resolve(tmp_path, action, *, service_cap=None, revision_cap=None, missing=Fa
                     'spec': {
                         'template': {'metadata': {'annotations': {'autoscaling.knative.dev/maxScale': revision_cap}}}
                     },
+                    'status': {'traffic': traffic or []},
                 }
             ]
         )
     (tmp_path / 'response.json').write_text(json.dumps(payload))
+    for name, cap in (revisions or {}).items():
+        annotations = {} if cap is None else {'autoscaling.knative.dev/maxScale': cap}
+        (tmp_path / f'rev-{name}.json').write_text(json.dumps({'metadata': {'annotations': annotations}}))
     executable = tmp_path / 'gcloud'
     executable.write_text(
         '#!/bin/bash\n'
         'printf "%s\\n" "$@" > "$CAP_TEST_DIR/args"\n'
+        'printf "%s\\n" "$*" >> "$CAP_TEST_DIR/calls"\n'
+        'if [[ "$2" == revisions ]]; then cat "$CAP_TEST_DIR/rev-$4.json"; exit "$CAP_TEST_REVISION_EXIT"; fi\n'
+        'cp "$CAP_TEST_DIR/args" "$CAP_TEST_DIR/list-args"\n'
         'cat "$CAP_TEST_DIR/response.json"\n'
         'exit "$CAP_TEST_EXIT"\n'
     )
     executable.chmod(0o755)
     output = tmp_path / 'output'
     env = dict(os.environ, PATH=str(tmp_path) + os.pathsep + os.environ['PATH'])
+    default = resolver['env'].get('DEFAULT_MAX_SCALE', '')
+    match = PROD_BRANCH.match(default)
     env.update(
+        DEFAULT_MAX_SCALE=match.group(1 if branch == 'prod' else 2) if match else default,
         CLOUD_RUN_SERVICE=service,
         CLOUD_RUN_PROJECT='test-project',
         CLOUD_RUN_REGION='us-central1',
         GITHUB_OUTPUT=str(output),
         CAP_TEST_DIR=str(tmp_path),
         CAP_TEST_EXIT=str(exit_code),
+        CAP_TEST_REVISION_EXIT=str(revision_exit),
     )
     result = subprocess.run(['bash', '-c', resolver['run']], env=env, capture_output=True, text=True)
-    args = (tmp_path / 'args').read_text().splitlines()
+    args = (tmp_path / 'list-args').read_text().splitlines()
+    assert (tmp_path / 'calls').read_text().splitlines()[0].startswith('run services list ')
     assert args[:3] == ['run', 'services', 'list']
     assert '--project=test-project' in args
     assert '--region=us-central1' in args
@@ -78,10 +132,12 @@ def resolve(tmp_path, action, *, service_cap=None, revision_cap=None, missing=Fa
 
 
 @pytest.mark.parametrize('cap', ['8', '16', '32', '80'])
-def test_service_cap_wins_over_stale_revision(tmp_path, action, cap):
+def test_service_cap_takes_precedence_over_stale_revision(tmp_path, action, cap):
     result, output = resolve(tmp_path, action, service_cap=cap, revision_cap='40')
     assert result.returncode == 0, result.stderr
-    assert output.splitlines()[0] == f'max_scale={cap}'
+    # Integration mirrors the headroom gate: min(service cap, receiving revision caps).
+    expected = str(min(int(cap), 40)) if action[1].endswith('-integration') else cap
+    assert output.splitlines()[0] == f'max_scale={expected}'
 
 
 def test_legacy_revision_cap_is_preserved(tmp_path, action):
@@ -125,7 +181,9 @@ def test_cap_ceiling_before_shell_arithmetic(tmp_path, action, cap):
     assert output.splitlines()[0] == f'max_scale={expected}'
 
 
-@pytest.mark.parametrize('action', [('sync-backfill-lifecycle', 'sync-backfill', '40')], indirect=True)
+@pytest.mark.parametrize(
+    'action', [('sync-backfill-lifecycle', 'sync-backfill', '40', 'live-max-scale')], indirect=True
+)
 @pytest.mark.parametrize('cap,expected', [('1', 6), ('8', 48), ('16', 90), ('40', 90), ('501', 90)])
 @pytest.mark.parametrize('exists', [True, False])
 def test_backfill_queue_create_and_update_obey_live_capacity(tmp_path, action, cap, expected, exists):
@@ -174,3 +232,98 @@ def test_backfill_queue_create_and_update_obey_live_capacity(tmp_path, action, c
         assert (
             calls[3] == 'tasks queues update sync-jobs --location=us-central1 --project=test-project --max-attempts=5'
         )
+
+
+INTEGRATION = ('deploy-backend-stack', 'integration', '35', 'live-integration-max-scale')
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+def test_integration_ignores_no_traffic_candidate_cap(tmp_path, action):
+    # A failed or held train leaves a no-traffic candidate as the latest template; its cap
+    # must not replace the cap of the revision actually serving (panel F1, 2026-11-20).
+    traffic = [{'revisionName': 'cap45', 'percent': 100}, {'revisionName': 'candidate', 'percent': 0}]
+    result, output = resolve(tmp_path, action, traffic=traffic, revisions={'cap45': '45', 'candidate': '35'})
+    assert result.returncode == 0, result.stderr
+    assert output.splitlines()[0] == 'max_scale=45'
+    calls = (tmp_path / 'calls').read_text()
+    assert 'revisions describe cap45 ' in calls
+    assert 'candidate' not in calls
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+def test_integration_split_traffic_keeps_smallest_receiving_cap(tmp_path, action):
+    traffic = [{'revisionName': 'a', 'percent': 90}, {'revisionName': 'b', 'percent': 10}]
+    result, output = resolve(tmp_path, action, traffic=traffic, revisions={'a': '45', 'b': '40'})
+    assert result.returncode == 0, result.stderr
+    assert output.splitlines()[0] == 'max_scale=40'
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+@pytest.mark.parametrize('branch,expected', [('prod', '35'), ('dev', '50')])
+def test_integration_without_serving_revision_uses_branch_default(tmp_path, action, branch, expected):
+    result, output = resolve(tmp_path, action, traffic=[], revisions={}, branch=branch)
+    assert result.returncode == 0, result.stderr
+    assert output.splitlines()[0] == f'max_scale={expected}'
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+def test_integration_dev_fresh_service_uses_dev_default(tmp_path, action):
+    result, output = resolve(tmp_path, action, missing=True, branch='dev')
+    assert result.returncode == 0, result.stderr
+    assert output.splitlines()[0] == 'max_scale=50'
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+def test_integration_revision_read_failure_stops_deploy(tmp_path, action):
+    result, output = resolve(tmp_path, action, revision_cap='45', revision_exit=1)
+    assert result.returncode != 0
+    assert output == ''
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+@pytest.mark.parametrize('name', ['Bad_Name', 'a b', '-x', 7])
+def test_integration_invalid_serving_revision_stops_deploy(tmp_path, action, name):
+    # A resolvable cap file exists for the bogus name, so only the name validation can stop it.
+    result, output = resolve(
+        tmp_path, action, traffic=[{'revisionName': name, 'percent': 100}], revisions={str(name): '45'}
+    )
+    assert result.returncode != 0
+    assert output == ''
+    assert 'revisions describe' not in (tmp_path / 'calls').read_text()
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+@pytest.mark.parametrize('branch,expected', [('prod', '35'), ('dev', '45')])
+def test_integration_uncapped_receiving_revision_counts_as_default(tmp_path, action, branch, expected):
+    # lead2 FIX-FIRST 2026-11-20: 50/50 uncapped + cap45 must give min(default, 45), not 45.
+    traffic = [{'revisionName': 'uncapped', 'percent': 50}, {'revisionName': 'cap45', 'percent': 50}]
+    result, output = resolve(
+        tmp_path, action, traffic=traffic, revisions={'uncapped': None, 'cap45': '45'}, branch=branch
+    )
+    assert result.returncode == 0, result.stderr
+    assert output.splitlines()[0] == f'max_scale={expected}'
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+@pytest.mark.parametrize('service_cap,revision_cap', [('45\n3', None), ('45', '45\n3'), ('', None), ('45', '')])
+def test_integration_rejects_a_cap_that_is_not_one_whole_number(tmp_path, action, service_cap, revision_cap):
+    # Panel F2/F6: a multi-line or empty cap fails as a whole instead of splitting into caps.
+    traffic = [{'revisionName': 'serving', 'percent': 100}] if revision_cap is not None else []
+    result, output = resolve(
+        tmp_path, action, service_cap=service_cap, traffic=traffic, revisions={'serving': revision_cap}
+    )
+    assert result.returncode != 0
+    assert output == ''
+    assert 'Invalid Cloud Run maxScale' in result.stderr
+
+
+@pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
+@pytest.mark.parametrize('service_cap,revision_cap,expected', [('50', '35', '35'), ('40', '45', '40')])
+def test_integration_service_and_revision_caps_take_the_minimum(tmp_path, action, service_cap, revision_cap, expected):
+    # Panel F3: matches deploy_headroom caps(), which takes min(service cap, receiving revision caps).
+    traffic = [{'revisionName': 'serving', 'percent': 100}]
+    result, output = resolve(
+        tmp_path, action, service_cap=service_cap, traffic=traffic, revisions={'serving': revision_cap}
+    )
+    assert result.returncode == 0, result.stderr
+    assert output.splitlines()[0] == f'max_scale={expected}'

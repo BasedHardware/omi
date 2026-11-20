@@ -58,7 +58,7 @@ class LegacyEraser(Protocol):
     def erase_hold(self, uid: str, hold_id: str) -> None:
         """Erase one fenced hold's objects and row; a no-op when absent. Raises on failure."""
 
-    def erase_archives(self, uid: str, job_id: str) -> None:
+    def erase_archives(self, uid: str, job_id: str, paths: tuple[str, ...]) -> None:
         """Erase the upload's unlinked private-cloud originals. Raises on failure."""
 
 
@@ -81,7 +81,11 @@ def _fence(tx: Any, uid: str, job_id: str, content_id: str, now: float) -> tuple
     hold_ids = tuple(sorted({h for h in ledger.get('cap_hold_ids') or () if isinstance(h, str) and h}))
     if ledger.get('status') == LEDGER_STATUS:
         erased = ledger.get('owner_cancel_erased_at') is not None
-        return CancelResult(Outcome.CANCELLED, erasure='complete' if erased else 'pending'), hold_ids
+        paths = tuple(ledger.get('raw_capture_paths') or ()) if not erased else ()
+        return (
+            CancelResult(Outcome.CANCELLED, erasure='complete' if erased else 'pending', archive_paths=paths),
+            hold_ids,
+        )
     if ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(ledger.get('result')):
         return CancelResult(Outcome.ALREADY_PROCESSED, conversation_ids(ledger.get('result'))), ()
     if ledger.get('dispatch_protocol') != HOLD_PROTOCOL or ledger.get('status') != 'held':
@@ -119,6 +123,7 @@ def _fence(tx: Any, uid: str, job_id: str, content_id: str, now: float) -> tuple
     if (delta_seconds or delta_count) and summary.get('version') == 2:
         tx.put('summary', uid, 'current', cap_hold.summary_after(summary, delta_seconds, delta_count))
     updated = datetime.fromtimestamp(now, timezone.utc)
+    ledger.pop('expires_at', None)
     tx.put(
         'ledger',
         uid,
@@ -129,17 +134,21 @@ def _fence(tx: Any, uid: str, job_id: str, content_id: str, now: float) -> tuple
             'pending_cap_hold_ids': [],
             'owner_cancelled_at': now,
             'updated_at': updated,
-            'expires_at': updated + timedelta(days=LEDGER_RETENTION_DAYS),
         },
     )
-    return CancelResult(Outcome.CANCELLED, erasure='pending'), hold_ids
+    paths = tuple(ledger.get('raw_capture_paths') or ())
+    return CancelResult(Outcome.CANCELLED, erasure='pending', archive_paths=paths), hold_ids
 
 
 def _mark_erased(tx: Any, uid: str, job_id: str, content_id: str, now: float) -> None:
     ledger = tx.get('ledger', uid, content_id)
-    if ledger.get('job_id') == job_id and ledger.get('status') == LEDGER_STATUS:
-        if ledger.get('owner_cancel_erased_at') is None:
-            tx.put('ledger', uid, content_id, {**ledger, 'owner_cancel_erased_at': now})
+    if ledger.get('job_id') != job_id or ledger.get('status') != LEDGER_STATUS:
+        raise RuntimeError('legacy owner cancellation fence missing')
+    if ledger.get('owner_cancel_erased_at') is not None:
+        return
+    expires = datetime.fromtimestamp(now, timezone.utc) + timedelta(days=LEDGER_RETENTION_DAYS)
+    ledger.pop('raw_capture_paths', None)
+    tx.put('ledger', uid, content_id, {**ledger, 'owner_cancel_erased_at': now, 'expires_at': expires})
 
 
 def cancel_legacy_upload(
@@ -155,7 +164,7 @@ def cancel_legacy_upload(
     try:
         for hold_id in hold_ids:
             eraser.erase_hold(uid, hold_id)
-        eraser.erase_archives(uid, job_id)
+        eraser.erase_archives(uid, job_id, result.archive_paths)
         store.run(lambda tx: _mark_erased(tx, uid, job_id, content_id, now))
     except Exception as error:  # The fence holds; the owner's next call resumes erasure.
         logger.warning(

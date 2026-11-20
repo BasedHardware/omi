@@ -138,7 +138,7 @@ both go there; the server erases a legacy upload's cap holds.
 - **Order.** The job id is written to a durable tombstone before the local file goes. If the
   tombstone cannot be saved, the recording is kept.
 - **Retries.** A 409 (the job is being processed), an offline phone or a server error keeps the
-  tombstone. Later reconcile passes retry it, backing off from 5 min to 6 h, for at most 60 days.
+  tombstone. Later reconcile passes retry it, backing off from 5 min to 6 h, until the server settles the request.
 - **Siblings.** While a cancel is unanswered, the job is not polled. Rows that shared the upload
   but were not deleted keep waiting. Once the server confirms the fence, they return to `miss`
   and re-upload on their own.
@@ -158,6 +158,15 @@ both go there; the server erases a legacy upload's cap holds.
 | 6 | `widgets/phone_custody_home_render_test.dart` (real conversations page) |
 
 ## Upload refusals and attention
+
+HTTP 503 `record_capture_pending` asks the app to retain the submitted WALs.
+The upload gate applies the response body's `retry_after_seconds` to that recording,
+using the WAL upload group (conversation, session, batch family, location)
+and bounded backoff with jitter on repeated refusals. WALs without a session
+ID are paced by the submitted file names. The wait survives an app restart for
+the signed-in account. Automatic and single-file
+uploads both respect it. Subsequent sync passes can send the WAL when the
+deadline passes, and acceptance clears the backoff.
 
 HTTP 400/413 is feedback for Omi, not a per-recording user repair. The ledger
 stores only a closed reason token, HTTP status, first refusal time and last

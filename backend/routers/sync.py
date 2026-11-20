@@ -112,7 +112,11 @@ from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from routers.listen.contracts import persisted_started_seconds
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from utils.sync.cap_hold import hold_capture_if_exhausted
-from utils.sync.admission_responses import sync_content_in_progress_response, sync_finalization_retrying
+from utils.sync.admission_responses import (
+    owner_cancelled_response,
+    sync_content_in_progress_response,
+    sync_finalization_retrying,
+)
 from utils.analytics import record_sync_v1_usage as record_usage
 from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
@@ -1149,6 +1153,10 @@ async def sync_local_files_v2(
                 content={'code': 'sync_repair_bundle_changed', 'detail': 'Retain the original complete local upload'},
             )
 
+        ledger = await run_blocking(db_executor, legacy_dark.read_ledger_row, uid, content_id)
+        if (ledger or {}).get('status') == 'owner_cancelled':
+            return owner_cancelled_response(ledger.get('job_id'), total_files=len(files), lane=lane_decision.lane.value)
+
         archive_paths = None
 
         async def archive_originals():
@@ -1387,6 +1395,9 @@ async def sync_local_files_v2(
             job_id,
             lane_decision.lane.value,
         )
+        if claim.get('outcome') == 'owner_cancelled':
+            await run_blocking(db_executor, mark_job_failed, job_id, 'Owner cancelled', reason_code='owner_cancelled')
+            return owner_cancelled_response(claim.get('job_id'), total_files=len(files), lane=lane_decision.lane.value)
         if claim.get('outcome') in {'completed', 'held'}:
             cached_result = claim.get('result') or {}
             await run_blocking(db_executor, mark_job_completed, job_id, cached_result)

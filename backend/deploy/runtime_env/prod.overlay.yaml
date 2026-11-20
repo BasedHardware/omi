@@ -581,6 +581,9 @@ overlay:
         # (SCA-2283).
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         secrets:
+          CONVERSATIONS_V3_LIVE_RECAP_COHORT:
+            secret: CONVERSATIONS_V3_LIVE_RECAP_COHORT
+            version: '1'
           SONIOX_API_KEY:
             secret: SONIOX_API_KEY
             version: latest
@@ -1838,6 +1841,15 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          # Provider backlog release authority (backlog-release-meter runbook step 4; David 2026-11-18):
+          # the single fenced heartbeat writer, allowlist-only for four support owners at 60 units/hour.
+          # Reach 0 is unlimited. Close: STATE closed (or WRITER disabled; the gate expires in 180s).
+          BATCH_PIPELINE_BACKLOG_RELEASE_WRITER: {value: enabled, category: config}
+          BATCH_PIPELINE_BACKLOG_RELEASE_STATE: {value: open, category: config}
+          BATCH_PIPELINE_BACKLOG_RELEASE_RATE_PER_HOUR: {value: '60', category: config}
+          BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS: {value: '0', category: config}
+          BATCH_PIPELINE_BACKLOG_RELEASE_MODE: {value: allowlist_only, category: config}
+          BATCH_PIPELINE_BACKLOG_RELEASE_OWNER_KEYS: {value: '30a9aadced4e2bc0aec94b34ebd9c4563f37e64b84399557fd24a0377dd8e223,70a8958da857b008477b9ab8ba52205bf5d4f7f61b4ed18d1e48b70344a3e80d,aac672257a5b347976517c0d65483bc11538a6c75cf3d16523cf6a4f884bf5e1,c68953b9fdbdcd5528b856fd4d50097e14c6b5eb4f48968115783ade222e59b1,cbf55865bc7f785d18a634a4615a21f052bbea40f4b9d5e726dec3dcbae40c26,cc49ba0944135998f50e3a8c1655ff8ce39ed6e6177e0fa2d9a5b7a83af99d87,f5d5e95afa2e18b4073f43099f4499f99326a2d3f2c50219dfa26013060cb177', category: config}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -2144,6 +2156,35 @@ overlay:
             value: 'true'
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+      # SCA-3120: dedicated projection pump, prod only (never dev, auto-dev or staging).
+      # Deployed only by gcp_backend.yml cloud_run_service=backend-projection-pump through
+      # .github/actions/deploy-projection-pump; `all` keeps the four services above.
+      # Starts from backend-integration's composed contract (env, secrets incl. the
+      # SONIOX_API_KEY that main.py's validate_streaming_stt_env requires, identity,
+      # forbidden_env, --timeout) and overrides only the keys below. Ships dark: both
+      # batch loops off. OMI_PROCESS_ROLE=projection_pump keeps main.py startup to the
+      # pump's set (no FSR reconcilers, messaging or cohort pollers); see config/process_role.py.
+      # Ramp and rollback: docs/listen_pusher_pipeline/changes/2026-11-19-projection-pump-deploy-target.md.
+      backend-projection-pump:
+        derive_from: backend-integration
+        env:
+          # Startup isolation, independent of the pump flag: stopping the pump keeps the
+          # reconcilers off. Never unset here while the service runs (unset = full startup).
+          OMI_PROCESS_ROLE:
+            value: projection_pump
+          # Kill switches stay off on first deploy. Enable the pump on this service only,
+          # never on backend-integration (the selector is service-wide). Rollback: 'false'.
+          BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'false', category: rollout}
+          # Bundle (ii) safe start: one page per tick, 2 s post-work sleep, 8 owner drains.
+          BATCH_PIPELINE_PUMP_SWEEP_PAGES: {value: '1', category: rollout}
+          BATCH_PIPELINE_PUMP_TICK_SECONDS: {value: '2', category: rollout}
+          BATCH_PIPELINE_MAX_OWNER_DRAINS: {value: '8', category: rollout}
+          # Bill this service's Firestore reads to itself, not to backend-integration.
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: backend-projection-pump
+          # Independent language recovery stays on the recovery role (backend-integration) only.
+          BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'false', category: ops_kill}
     jobs:
       notifications-job:
         flags:

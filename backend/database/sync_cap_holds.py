@@ -30,6 +30,7 @@ def mark_content_held(
     *,
     run_token: str | None = None,
     run_epoch: int | None = None,
+    raw_capture_paths: list[str] | None = None,
 ) -> bool:
     if not hold_ids or not is_valid_held_sync_content_result(result):
         raise ValueError('durable held audio receipts required')
@@ -48,6 +49,7 @@ def mark_content_held(
                 'dispatch_protocol': PROTOCOL,
                 'result': result,
                 'cap_hold_ids': sorted(set(hold_ids)),
+                'raw_capture_paths': list(raw_capture_paths or ()),
                 'pending_cap_hold_ids': sorted(set(hold_ids)),
                 'updated_at': datetime.now(timezone.utc),
                 # An unprocessed capture must survive inactive accounts.

@@ -247,8 +247,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           : l.syncCardReadyCount(groupRecordingBlocks(readyWals).length);
       action = statusActionPill(l.sync, OmiColors.accent, startSync);
     } else if (p.derivedWals.stalledUploadsAt().isNotEmpty) {
-      title = l.transcriptionUnavailable;
-      titleColor = Colors.orangeAccent;
+      title = l.deviceUploadsWaitingOnServer;
+      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
       action = statusActionPill(l.syncDetailsTitle, OmiColors.accent,
           () => showSyncDetailsSheet(context, onHowSyncingWorks: () => _showInfoSheet(context)));
     } else {
@@ -836,7 +836,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
   (Color, String) _rowLabel(Wal wal) {
     if (wal.status == WalStatus.uploaded && !wal.countsAsPendingWork()) {
-      return (OmiColors.textSecondary, context.l10n.transcriptionUnavailable);
+      return (OmiColors.textSecondary, context.l10n.syncDetailsTranscribing);
     }
     final state = wal.syncDisplayState;
     var (color, _, label) = _rowVisual(state, rejectionReason: wal.uploadRejectionReason);

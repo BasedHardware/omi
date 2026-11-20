@@ -263,7 +263,7 @@ void main() {
     expect(polled, isEmpty);
     expect(sibling.status, WalStatus.uploaded);
 
-    now = now.add(const Duration(minutes: 6));
+    now = now.add(const Duration(days: 61));
     answer = const SyncJobCancelResult(SyncJobCancelOutcome.cancelled);
     await sync.reconcileUploadedWals();
     expect(asked, ['bp_job', 'bp_job']);

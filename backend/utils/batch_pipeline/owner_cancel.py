@@ -64,6 +64,7 @@ class CancelResult:
     outcome: Outcome
     conversation_ids: tuple[str, ...] = ()
     erasure: str | None = None  # 'complete' | 'pending' for CANCELLED
+    archive_paths: tuple[str, ...] = ()
 
 
 class CancelDisabled(RuntimeError):
@@ -74,7 +75,7 @@ class Eraser(Protocol):
     def erase_unit(self, uid: str, segment_id: str) -> None:
         """Erase one fenced unit's objects and rows; a no-op for an absent row. Raises on failure."""
 
-    def erase_archives(self, uid: str, job_id: str) -> None:
+    def erase_archives(self, uid: str, job_id: str, paths: tuple[str, ...]) -> None:
         """Erase the upload's unlinked private-cloud originals. Raises on failure."""
 
     def erase_hold(self, uid: str, hold_id: str) -> None:
@@ -167,7 +168,11 @@ def _fence(tx, uid: str, job_id: str, now: float) -> tuple[CancelResult, tuple[s
     segments = tuple(intake.get('segment_ids') or ())
     if intake.get('owner_cancelled_at') is not None:
         erased = intake.get('owner_cancel_erased_at') is not None
-        return CancelResult(Outcome.CANCELLED, erasure='complete' if erased else 'pending'), segments
+        paths = tuple(intake.get('raw_capture_paths') or ()) if not erased else ()
+        return (
+            CancelResult(Outcome.CANCELLED, erasure='complete' if erased else 'pending', archive_paths=paths),
+            segments,
+        )
     content_id = intake.get('content_id')
     if intake.get('coalesce_group') or not isinstance(content_id, str) or not content_id:
         return CancelResult(Outcome.NOT_CANCELLABLE), ()
@@ -209,18 +214,29 @@ def _fence(tx, uid: str, job_id: str, now: float) -> tuple[CancelResult, tuple[s
             hold['held_count'] = max(0, hold.get('held_count', 0) - count)
             hold['active'] = hold['held_count'] > 0
             tx.put(ALLOWANCE_OWNERS, key, hold)
-    expires = datetime.fromtimestamp(now, timezone.utc) + timedelta(days=LEDGER_RETENTION_DAYS)
-    tx.put('intakes', job_id, {**intake, 'owner_cancelled_at': now, 'expires_at': expires})
+    intake.pop('expires_at', None)
+    tx.put('intakes', job_id, {**intake, 'owner_cancelled_at': now})
     if ledger:
+        ledger.pop('expires_at', None)
         updated = datetime.fromtimestamp(now, timezone.utc)
-        tx.put('content', ledger_key, {**ledger, 'status': LEDGER_STATUS, 'updated_at': updated, 'expires_at': expires})
-    return CancelResult(Outcome.CANCELLED, erasure='pending'), segments
+        tx.put('content', ledger_key, {**ledger, 'status': LEDGER_STATUS, 'updated_at': updated})
+    paths = tuple(intake.get('raw_capture_paths') or ())
+    return CancelResult(Outcome.CANCELLED, erasure='pending', archive_paths=paths), segments
 
 
 def _mark_erased(tx, uid: str, job_id: str, now: float) -> None:
     intake = tx.get('intakes', job_id)
-    if intake and intake.get('owner_id') == uid and intake.get('owner_cancel_erased_at') is None:
-        tx.put('intakes', job_id, {**intake, 'owner_cancel_erased_at': now})
+    if not intake or intake.get('owner_id') != uid or intake.get('owner_cancelled_at') is None:
+        raise RuntimeError('owner cancellation fence missing')
+    if intake.get('owner_cancel_erased_at') is not None:
+        return
+    expires = datetime.fromtimestamp(now, timezone.utc) + timedelta(days=LEDGER_RETENTION_DAYS)
+    ledger_key = f"{uid}/{intake['content_id']}"
+    ledger = tx.get('content', ledger_key)
+    intake.pop('raw_capture_paths', None)
+    tx.put('intakes', job_id, {**intake, 'owner_cancel_erased_at': now, 'expires_at': expires})
+    if ledger.get('job_id') == job_id and ledger.get('status') == LEDGER_STATUS:
+        tx.put('content', ledger_key, {**ledger, 'expires_at': expires})
 
 
 def cancel_owner_upload(
@@ -249,7 +265,7 @@ def cancel_owner_upload(
     try:
         for segment_id in segments:
             eraser.erase_unit(uid, segment_id)
-        eraser.erase_archives(uid, job_id)
+        eraser.erase_archives(uid, job_id, result.archive_paths)
         store.run(lambda tx: _mark_erased(tx, uid, job_id, now))
     except Exception as error:  # The fence holds; the owner's next call resumes erasure.
         logger.warning(

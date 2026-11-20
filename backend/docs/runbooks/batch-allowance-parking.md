@@ -123,6 +123,18 @@ in-flight attempts can finish together; checkpoint transactions and individual
 document reads are not row attempts and are outside this rate. Never multiply
 the limit by running another driver. Stop on any unexpected error; in-flight
 transactions drain, no new rows start, and the failed page is not checkpointed.
+The stop line is `{"errors": N, "error_type": ..., "retryable": ...}`, plus
+`cause_types` for the explicit cause chain (`__cause__`, and `RetryError.cause`) and `sibling_types` when other
+concurrent owner groups also failed on that page. It names only exception
+classes, never a message, which can name documents. `retryable: true` means
+every failure on the page, through its whole cause chain, is a transient
+Firestore/RPC class (Aborted, DeadlineExceeded, InternalServerError,
+ResourceExhausted, ServiceUnavailable, an expired transaction), exhausted
+transaction contention, or `MigrationOwnerChanged` (a discovery hint went stale
+before that row was parked), and no link in any chain is a fatal RPC status such as PermissionDenied or NotFound. Because the failed page is replayed idempotently,
+the release owner may relaunch such a stop from the retained checkpoint under
+the standing recovery disposition on SCA-2198. Any other stop stays stopped for
+the tool owner.
 
 Each page discovers at most 100 candidate rows, rechecks every row transactionally,
 and CAS-advances `<namespace>_migrations/allowance_parking_v1`. A crash can replay
