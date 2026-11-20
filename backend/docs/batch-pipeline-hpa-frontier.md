@@ -1,12 +1,5 @@
 # Batch worker HPA retune frontier (2026-11-03)
 
-> **Superseded floor (2026-11-20):** #25842 (SCA-3274) raised the live floor to
-> min 6/max 16 as L4 stockout insurance. The 41/0.56/1800 targets and the 4/16
-> results below are the historical retune record; do not restore min 4 from this
-> page. At 6/16 the current 3h fixture sits on the floor (mean/max 6.0/6, zero hot).
-> The frontier script's absolute 3h/shed gates were calibrated for floor 4 and do
-> not yet rerun at 6/16 (tracked on SCA-3274).
-
 The 40/0.6 retune in #24481 was reverted by #24493 before cluster apply: it
 starved 35 minutes in the existing 24h max-of-two replay. This replacement uses
 **41 ready units / 0.56 chain wall seconds per second**, preserving min 4/max 16,
@@ -105,7 +98,7 @@ The lead applies at current volume only. First confirm pending timeliness
 rules and both composite indexes are active/READY per
 [the projection runbook](../charts/monitoring/batch-projection/README.md).
 Capture private live values/manifest/image; reconcile any min6/max12 overrides
-against the live ruling min6/max16 (#25842). Render the merged chart with production values,
+against the ruling min4/max16. Render the merged chart with production values,
 keep the worker image, runtime bindings, profiling-on and 1500s drain intact,
 and inspect the two targets, min/max, OD placement and downscale behavior before
 Helm upgrade. The adapter is unchanged; compare privately captured live rules
@@ -123,7 +116,7 @@ speech loss and treats wedges/latency as alert-only; the lead must confirm the
 separate observer and response authority, not assume automatic hard-3 rollback.
 
 Roll back on timeliness/throughput/T3 regression to targets 32/0.5, keeping
-min6/max16 (#25842), window1800 and 1/600s, e.g. on the same reviewed Helm upgrade command:
+min4/max16, window1800 and 1/600s, e.g. on the same reviewed Helm upgrade command:
 `--set autoscaling.targetQueuedUnitsPerWorker=32 --set-string autoscaling.targetChainBusyPerWorker=0.5`.
 Alternatively restore the captured known-good release after inspecting its
 values/image. The adapter need not change. Before streaming retirement doubles

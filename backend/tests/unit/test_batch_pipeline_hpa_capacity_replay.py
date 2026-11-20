@@ -22,15 +22,16 @@ def test_historical_volume_capacity_retains_the_retune_witness():
 
 def test_current_volume_capacity_stays_cool_and_at_the_audited_floor():
     # #25842 (SCA-3274, 2026-11-20) raised the live GPU floor 4 -> 6 as L4 stockout
-    # insurance (the RollingUpdate maxSurge: 0 strategy keeps nodes through rolls). At
-    # current volume the fleet sits on that floor, and at n >= 6 the hot threshold
-    # (0.85 * n) is above the fixture's peak demand, so hot == 0 is guaranteed by the
-    # floor; the queueing witness is the 4/16 test above. HISTORICAL_CFG keeps 4/16.
+    # insurance. At current volume the fleet sits on that floor. This pins the live
+    # bounds and the floor's headroom; the queueing witness is the 4/16 test above.
     result = FRONTIER.stats(FRONTIER.series, FRONTIER.cfg)
     assert FRONTIER.cfg['min_replicas'] == 6
     assert FRONTIER.cfg['max_replicas'] == 16
     assert result['mean'] == pytest.approx(6.0, abs=0.01)
     assert result['max'] == 6
+    # The floor alone keeps current volume cool: peak 5m chain demand per pod stays
+    # under the hot threshold at min_replicas, so hot == 0 follows from that margin.
+    assert max(FRONTIER.series['chain_5m_per_pod']) <= 0.85 * FRONTIER.cfg['min_replicas']
     assert result['hot'] == 0
     assert result['floor']
 

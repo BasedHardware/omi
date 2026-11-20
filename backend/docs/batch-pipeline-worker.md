@@ -350,7 +350,7 @@ not double-count slot wait. Production must keep stage profiling enabled.
 The reverted 40/0.6 retune (#24481, reverted by #24493 before cluster apply)
 starved 35 minutes in the existing 24h replay. The replacement preserves every
 existing replay assertion: current 3h fixture mean/max 4.34/5 with zero hot
-minutes at the then-live 4/16 bounds (at the 6/16 floor from #25842 it is 6.0/6), older measured 24h mean/max 6.37/15 with zero starvation and backlog
+minutes, older measured 24h mean/max 6.37/15 with zero starvation and backlog
 dominance. The current-volume step model has worst wait 3.35 minutes and catches
 up in 10 minutes. These are fixture/model results, not production throughput or
 p95 qualification. The [search frontier](batch-pipeline-hpa-frontier.md) records
