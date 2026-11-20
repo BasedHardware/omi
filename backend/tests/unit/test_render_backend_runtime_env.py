@@ -819,13 +819,18 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         'backend-sync-backfill': common,
         'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
     }
+    # Version-pinned, single-role bindings. David 2026-11-20 (SCA-3063): the internal TestFlight
+    # live-recap cohort mounts version 1 on the conversation API role only; other roles must not bind it.
+    pinned = {
+        'backend': {('CONVERSATIONS_V3_LIVE_RECAP_COHORT', 'CONVERSATIONS_V3_LIVE_RECAP_COHORT', '1')},
+    }
     prod = _MANIFEST['environments']['prod']
     for service, names in baseline.items():
         refs = _MODULE['_render_secret_entries'](prod['cloud_run']['services'][service]['secrets'])
         assert {
             (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
             for entry in refs
-        } == {(name, name, 'latest') for name in names}, service
+        } == {(name, name, 'latest') for name in names} | pinned.get(service, set()), service
     backend_env = prod['cloud_run']['services']['backend']['env']
     token = backend_env['PROACTIVITY_V2_POSTHOG_TOKEN']['value']
     assert token.startswith('phc_')
