@@ -1,0 +1,82 @@
+# The production label selector and its cadence require live qualification.
+evaluation_interval: 1m
+tests:
+  - name: maintenance-shaped inputs with a healthy probe stay quiet
+    interval: 1m
+    input_series:
+      - series: &accepts 'omi_listen_accepted_total{job="backend-listen-metrics"}'
+        values: '0+20x5'
+      - series: &failures 'omi_fallback_total{job="backend-listen-metrics",component="other",from_mode="cache_write",reason="connection_error",outcome="degraded"}'
+        values: '0x5'
+      - series: &probe 'probe_success{job="redis-connection-probe",environment="prod",target="prod-serving-redis"}'
+        values: '1x5'
+    promql_expr_test:
+      - expr: &condition >-
+          (((sum(increase(omi_fallback_total{job=~"backend-listen-metrics|pusher-metrics",component="other",from_mode="cache_write",reason=~"auth_error|connection_error|timeout",outcome="degraded"}[5m]))
+          / clamp_min(sum(increase(omi_listen_accepted_total{job="backend-listen-metrics"}[5m])), 1) > bool 0.5)
+          * (sum(increase(omi_listen_accepted_total{job="backend-listen-metrics"}[5m])) >= bool 50)) == 1)
+          or on() (max(probe_success{job="redis-connection-probe",environment="prod",target="prod-serving-redis"}
+          and (time() - timestamp(probe_success{job="redis-connection-probe",environment="prod",target="prod-serving-redis"}) < 120)) == bool 0)
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 0
+  - name: unavailable Redis pages with zero listen accepts
+    interval: 1m
+    input_series:
+      - series: *accepts
+        values: '0x5'
+      - series: *probe
+        values: '0x5'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 1
+  - name: unavailable Redis pages even with absent listen metrics
+    interval: 1m
+    input_series:
+      - series: *probe
+        values: '0x5'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 1
+  - name: both branches produce one alert instance
+    interval: 1m
+    input_series:
+      - series: *accepts
+        values: '0+20x5'
+      - series: *failures
+        values: '0+20x5'
+      - series: *probe
+        values: '0x5'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 1
+  - name: stale probe data is unknown without independent evidence
+    interval: 1m
+    input_series:
+      - series: *probe
+        values: '0 0 _ _ _ _'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples: []
+  - name: verified recovery clears with no listen series
+    interval: 1m
+    input_series:
+      - series: *probe
+        values: '0 0 0 0 1 1'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 0

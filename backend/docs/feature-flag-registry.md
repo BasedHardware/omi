@@ -898,6 +898,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_VERTEX_RESERVATION_STATES` | Per-model active/inactive/unknown/auto JSON overrides; read per request, invalid JSON fails open | backend, llm-gateway | env | open | env_var | env_var | env_var (desktop-backend); {"gemini-2.5-flash":"inactive"} (llm-gateway (chart)) | — | keep | keep | — | auditfix |
 | `OMI_WHATSAPP_PROVIDER` | Installed WhatsApp provider selection; currently keiki only. | backend | env | closed | — | — | keiki | — | keep | keep | — | auditfix |
 | `OPEN_LOOPS_CARD_POLISH_ENABLED` | Default off; allow the single cheap-model polish call for open-loop review cards (deterministic template is the default) | backend | env | closed | — | — | — | — | keep | keep | — | review-desk |
+| `PAGER_SENDER_ENABLED` | Default false; permit the dedicated operations pager to dispatch claimed Bark deliveries. | backend | env | closed | — | — | — | — | keep | keep | — | Release / SCA-2116 |
 | `PARAKEET_ATTENTION_MODE` | Choose full versus local attention on Parakeet GPU | backend | env | closed | — | — | auto (parakeet (chart)) | — | keep | keep | — | unowned |
 | `PARAKEET_DIARIZATION` | Enable prerecorded Parakeet diarization | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `PARAKEET_INFERENCE_MODE` | Choose Parakeet transcription inference backend | backend | env | closed | — | nemo (parakeet (chart)) | nemo (parakeet (chart)) | — | keep | keep | — | unowned |
@@ -1485,6 +1486,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_VERTEX_PT_TARGET_LOCATION` — Moved Vertex order location; default us; global explicitly widens residency (fail: closed)
 - `OPEN_LOOPS_CARD_POLISH_ENABLED` — Default off; allow the single cheap-model polish call for open-loop review cards (deterministic template is the default) (fail: closed)
 - `OPEN_LOOPS_ENABLED` — Default on; extract open-loop fields in the notes call, persist them server-only, and run the once-per-day open-loop daily pass (fail: open)
+- `PAGER_SENDER_ENABLED` — Default false; permit the dedicated operations pager to dispatch claimed Bark deliveries. (fail: closed)
 - `PARAKEET_DIARIZATION` — Enable prerecorded Parakeet diarization (fail: closed)
 - `PARAKEET_JA_WINDOW_PERCENT` — Default zero; owner-hash share whose Japanese live sessions may take the Parakeet window on the ja model (parakeet-tdt_ctc-0.6b-ja) instead of Soniox/Modulate (fail: closed)
 - `PARAKEET_USE_V2` — Select Parakeet prerecorded v2 pipeline (fail: open)

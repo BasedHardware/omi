@@ -31,6 +31,36 @@
   },
   "budgets": [
     {
+      "collection": "pager_events",
+      "owner": "SCA-2116 operations pager",
+      "unit": "signed Grafana event admission",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 300,
+      "basis": "planning-bound",
+      "source": "backend/paging/README.md and run-fixture.sh; one lookup per admission including warm replays, assuming at most 300 events/day for the sole Redis route. Operations database only.",
+      "reviewed": "2026-11-20"
+    },
+    {
+      "collection": "pager_deliveries",
+      "owner": "SCA-2116 operations pager",
+      "unit": "due drain tick",
+      "reads_per_unit_budget": 12,
+      "reads_per_day_budget": 20000,
+      "basis": "planning-bound",
+      "source": "backend/paging/README.md and run-fixture.sh; one Scheduler poll/minute, up to four due rows with two delivery lookups each per tick, plus admission, acknowledgement and transaction retry headroom. Operations database only.",
+      "reviewed": "2026-11-20"
+    },
+    {
+      "collection": "pager_recipient_limits",
+      "owner": "SCA-2116 operations pager",
+      "unit": "first claim of an episode for one recipient",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 300,
+      "basis": "planning-bound",
+      "source": "backend/paging/README.md and run-fixture.sh; one extra lookup on initial claim, assuming at most 300 admitted events/day for the pilot. Operations database only.",
+      "reviewed": "2026-11-20"
+    },
+    {
       "collection": "conversation_erasure_jobs",
       "owner": "backend conversation deletion (accepted-delete erasure obligations)",
       "unit": "conversation delete accepted behind a busy account gate",

@@ -412,6 +412,8 @@ _add(
         domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
     )
 )
+# The pager's separate operations database uses a built-in next_at index.
+_add(DriverEntry('paging.store.due_deliveries', base={'now': T0}))
 # Sealed owner groups use an existing single-field uid index on obligations.
 _add(
     DriverEntry(

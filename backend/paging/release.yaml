@@ -1,0 +1,85 @@
+# Release review manifest. This file has no provisioning side effects.
+issue: SCA-2116
+owner: Release
+project: omi-paging-ops-prod
+region: us-central1
+firestore:
+  database: pager
+  mode: firestore-native
+  deleteProtection: enabled
+  collections: [pager_events, pager_deliveries, pager_recipient_limits]
+  databaseCondition: 'resource.name == "projects/omi-paging-ops-prod/databases/pager"'
+cloudRun:
+  service: omi-pager
+  buildContext: .
+  dockerfile: backend/paging/Dockerfile
+  platform: linux/amd64
+  artifactRepository: us-central1-docker.pkg.dev/omi-paging-ops-prod/pager/omi-pager
+  image: reviewed-head-digest-required
+  runtimeIdentity: pager-runtime@omi-paging-ops-prod.iam.gserviceaccount.com
+  cpuAllocation: request
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 8
+  timeoutSeconds: 60
+  ingress: all
+  invokerIamCheck: disabled
+  env:
+    PAGER_FIRESTORE_PROJECT: omi-paging-ops-prod
+    PAGER_FIRESTORE_DATABASE: pager
+    PAGER_AUDIENCE: exact-cloud-run-service-url-required
+    PAGER_SENDER_ENABLED: 'false'
+  secretEnv:
+    PAGER_GRAFANA_HMAC: projects/omi-paging-ops-prod/secrets/pager-grafana-redis-hmac/versions/REVIEWED_VERSION
+    PAGER_BARK_DEVICE_KEY: projects/omi-paging-ops-prod/secrets/pager-bark-oncall-primary/versions/REVIEWED_VERSION
+iam:
+  runtime:
+    principal: serviceAccount:pager-runtime@omi-paging-ops-prod.iam.gserviceaccount.com
+    firestoreCustomRole: projects/omi-paging-ops-prod/roles/pagerRuntime
+    firestorePermissions:
+      - datastore.databases.get
+      - datastore.entities.get
+      - datastore.entities.list
+      - datastore.entities.create
+      - datastore.entities.update
+    secretRole: roles/secretmanager.secretAccessor
+    secrets: [pager-grafana-redis-hmac, pager-bark-oncall-primary]
+  history:
+    principal: user:david@scalingforever.com
+    role: roles/datastore.viewer
+    resource: projects/omi-paging-ops-prod/databases/pager
+    logRole: roles/logging.viewer
+    logProject: omi-paging-ops-prod
+  acknowledgement:
+    caller: user:david@scalingforever.com
+    role: roles/iam.serviceAccountOpenIdTokenCreator
+    resource: pager-operator@omi-paging-ops-prod.iam.gserviceaccount.com
+    path: /internal/ack/{delivery_id}
+    audienceSuffix: /internal/ack
+  scheduler:
+    principal: serviceAccount:pager-scheduler@omi-paging-ops-prod.iam.gserviceaccount.com
+    job: projects/omi-paging-ops-prod/locations/us-central1/jobs/omi-pager-drain
+    schedule: '* * * * *'
+    timeZone: Etc/UTC
+    method: POST
+    path: /internal/drain
+    audienceSuffix: /internal/drain
+    initialState: paused
+    attemptDeadlineSeconds: 60
+    retryCount: 0
+grafana:
+  instance: https://monitor.omi.me
+  receiver: Omi - Redis phone wake
+  publisherPath: /v1/publish/grafana-redis
+  signatureHeader: X-Grafana-Alerting-Signature
+  timestampHeader: X-Grafana-Alerting-Timestamp
+  ruleUid: omi-redis-cache-conn-page
+  targetLabel: paging_target
+  target: prod-serving-redis
+  disableResolveMessage: false
+  removeRuleMuteReference: omi-tier-silent
+recipient:
+  route: redis-wake
+  id: oncall-primary
+  channel: bark
+  endpoint: https://api.day.app/push
