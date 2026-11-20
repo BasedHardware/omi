@@ -157,9 +157,8 @@ def _apply_rows(store, rows, now, concurrency, limiter):
             if failure is not None:
                 # Only the first failure propagates. Keep the others so the
                 # operator's stop classification sees every owner group's error.
-                failure.migration_sibling_errors = tuple(
-                    error for error in (future.exception() for future in pending if not future.cancelled()) if error
-                )
+                siblings = (future.exception() for future in pending if not future.cancelled())
+                setattr(failure, 'migration_sibling_errors', tuple(error for error in siblings if error))
     return parked, fenced
 
 
