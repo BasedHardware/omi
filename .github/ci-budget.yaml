@@ -1502,7 +1502,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_diarizer.yml/deploy": {
-      "budget_p50_minutes": 23,
+      "budget_p50_minutes": 24,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1511,7 +1511,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change; SCA-2149: opt-in preserve-live dispatch inputs add bounded inventory/dry-run/CAS/spec verification calls; reserve one minute p50 headroom, no new automatic runs or jobs; SCA-2160 review repair: isolate the helper in a single-file immutable checkout and route rollback through the same writer; reserve one further minute for the additional checkout, with no new job or automatic trigger",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change; SCA-2149: opt-in preserve-live dispatch inputs add bounded inventory/dry-run/CAS/spec verification calls; reserve one minute p50 headroom, no new automatic runs or jobs; SCA-2160 review repair: isolate the helper in a single-file immutable checkout and route rollback through the same writer; reserve one further minute for the additional checkout, with no new job or automatic trigger; SCA-2944 (David 2026-11-19): the worker_dry_run input adds a no-write dry-run step (server dry-runs only, no build or push) on manual dispatch; one minute p50 headroom records the trigger change, with no new job or automatic trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5136,7 +5136,7 @@
     "gcp_diarizer.yml": {
       "name": "Deploy Diarizer to GKE",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged; SCA-2149 adds opt-in preserve_live_worker and admitted worker_live_baseline dispatch inputs; manual-only trigger and runner unchanged; SCA-2160 adds the guarded worker_rollback_receipt dispatch input; rollback reuses the existing prod environment and shared writer",
+      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged; SCA-2149 adds opt-in preserve_live_worker and admitted worker_live_baseline dispatch inputs; manual-only trigger and runner unchanged; SCA-2160 adds the guarded worker_rollback_receipt dispatch input; rollback reuses the existing prod environment and shared writer; SCA-2944 (David 2026-11-19) adds the worker_dry_run input: a server-dry-run-only preserve-live run under the same prod-train lock that never writes, builds or pushes",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -5187,6 +5187,12 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "worker_dry_run": {
+              "default": "false",
+              "description": "Preserve-live only, under the shared lock; never writes, builds or pushes. Without a rollback receipt: forward admission plus a no-op prior-image admission (inverse not verified). With worker_rollback_receipt: server dry-run of the real inverse CAS",
+              "required": "false",
+              "type": "boolean"
             },
             "worker_live_baseline": {
               "default": "",
