@@ -128,6 +128,7 @@ def merge():
         "database._client": client_stub,
         "database.conversations": conversations_stub,
         "database.conversation_tombstones": tombstones_stub,
+        "database.conversations_v3_backfill_runs": ModuleType("database.conversations_v3_backfill_runs"),
         "database.vector_db": vector_db_stub,
         "database.redis_db": redis_db_stub,
         "database.users": users_stub,

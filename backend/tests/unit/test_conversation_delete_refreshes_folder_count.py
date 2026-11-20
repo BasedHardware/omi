@@ -14,6 +14,7 @@ UID = 'uid-folder-count'
 def _delete(monkeypatch, row):
     deleted = []
     refreshed = []
+    monkeypatch.setattr(merge_conversations, '_purge_rederive_priors', lambda *a: None)
     monkeypatch.setattr(merge_conversations.conversations_db, 'get_conversation', lambda uid, cid: dict(row))
     monkeypatch.setattr(
         merge_conversations.conversations_db, 'delete_conversation', lambda uid, cid: deleted.append(cid)
@@ -43,6 +44,7 @@ def test_a_failed_count_refresh_does_not_fail_the_delete(monkeypatch):
     def _boom(uid, folder_id):
         raise RuntimeError('firestore unavailable')
 
+    monkeypatch.setattr(merge_conversations, '_purge_rederive_priors', lambda *a: None)
     monkeypatch.setattr(merge_conversations.conversations_db, 'get_conversation', lambda uid, cid: {'folder_id': 'f1'})
     monkeypatch.setattr(merge_conversations.conversations_db, 'delete_conversation', lambda uid, cid: None)
     monkeypatch.setattr(folders_db, 'update_folder_conversation_count', _boom)
