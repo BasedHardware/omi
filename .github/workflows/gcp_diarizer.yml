@@ -424,9 +424,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Every call here is bounded so the step always ends with a verdict and the
-      # always() summary/notify steps run. batch-pipeline-worker rolls in place
-      # (maxSurge 0) with up to a 1500 s drain per pod, so its wait covers drain plus
-      # GPU startup. A lost runner (run
+      # always() summary/notify steps run. batch-pipeline-worker is Recreate with a
+      # 1500 s drain, so its wait covers drain plus GPU startup. A lost runner (run
       # 39456573983, 2026-10-20) still ends with no conclusion: re-run the job.
       - name: Verify rollout
         if: inputs.worker_dry_run != true
