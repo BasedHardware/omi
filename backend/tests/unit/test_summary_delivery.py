@@ -152,9 +152,20 @@ def test_actions_events_title_and_empty_sections_do_not_satisfy_summary():
 
 def test_empty_model_output_retains_debt_and_prior_good_output(enabled):
     row = debt()
-    with pytest.raises(delivery.SummaryOutputUnavailable):
-        delivery.merge_result(row, minimum(), 'u', now=300)
+    token = delivery.PROCESS_CONTEXT.set({'owner': 'worker', 'claimed': False})
+    try:
+        with pytest.raises(delivery.SummaryOutputUnavailable):
+            delivery.merge_result(row, minimum(), 'u', now=300)
+    finally:
+        delivery.PROCESS_CONTEXT.reset(token)
     assert row['summary_due_at'] == 220
+    # A request path has no consumer to catch the fence: it records the empty
+    # attempt and commits with the debt still armed instead of raising.
+    request_write = minimum()
+    receipt = delivery.merge_result(row, request_write, 'u', now=300)
+    assert receipt is not None and receipt['reason'] == 'empty_output' and not receipt['present']
+    assert request_write['summary_due_at'] == 220
+    assert not request_write.get('summary_completed_at')
     # A failed model attempt never gets to overwrite a prior usable summary:
     # the enriched row now commits (no lane stranding without an outbox), but
     # the banked content and receipts are re-applied onto the write instead
@@ -174,6 +185,32 @@ def test_empty_model_output_retains_debt_and_prior_good_output(enabled):
     assert empty_write['summary_output_present'] is True
     assert empty_write['summary_completed_at'] == 150
     assert empty_write['summary_due_at'] is None
+
+
+def test_empty_output_on_a_finalization_owned_row_keeps_the_job_retryable(enabled):
+    """The repair pass refuses a generation-owned row, so the raise must survive."""
+    row = {**debt(), 'finalization_job_id': 'job-1'}
+    assert delivery.refusal(row) == 'generation_owned'
+    with pytest.raises(delivery.SummaryOutputUnavailable):
+        delivery.merge_result(row, minimum(), 'u', now=300)
+
+
+def test_empty_output_on_a_projection_verified_row_commits_with_debt(enabled):
+    """A verified batch-projection handoff is repair-eligible, so the empty attempt commits."""
+    row = {
+        **debt(),
+        'finalization_job_id': 'job-1',
+        'finalization_revision': 4,
+        'record_lane_owner': 'batch_live_v1',
+        'record_projection_revision': 4,
+        'summary_projection_finalization': {'job_id': 'job-1', 'revision': 4},
+    }
+    assert delivery.refusal(row) is None
+    write = minimum()
+    receipt = delivery.merge_result(row, write, 'u', now=300)
+    assert receipt is not None and receipt['reason'] == 'empty_output' and not receipt['present']
+    assert write['summary_due_at'] == 220
+    assert not write.get('summary_completed_at')
 
 
 def test_lost_ack_does_not_emit_second_terminal_receipt(enabled):
