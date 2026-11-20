@@ -244,6 +244,23 @@ class PreservationTests(unittest.TestCase):
                     self.deploy()
                 self.assertEqual(self.cluster.writes, 0)
 
+    def test_surge_capable_strategy_refuses_on_its_own_gate(self):
+        # The baseline is captured after the mutation, so only the strategy gate can refuse.
+        for strategy in (
+            {"type": "RollingUpdate"},
+            {"type": "RollingUpdate", "rollingUpdate": {"maxUnavailable": "25%"}},
+            {"type": "RollingUpdate", "rollingUpdate": {"maxSurge": 1, "maxUnavailable": 0}},
+            {"type": "RollingUpdate", "rollingUpdate": {"maxSurge": "25%", "maxUnavailable": "25%"}},
+            {},
+        ):
+            with self.subTest(strategy=strategy):
+                self.cluster = Cluster()
+                self.cluster.target["spec"]["strategy"] = strategy
+                with self.assertRaisesRegex(ValueError, "worker must roll without surge GPUs"):
+                    self.baseline = worker.snapshot(self.cluster)[1]
+                    self.deploy()
+                self.assertEqual(self.cluster.writes, 0)
+
     def test_no_surge_rolling_update_is_admitted_and_preserved(self):
         # SCA-3274: the worker rolls in place with maxSurge 0 so no GPU node empties mid-roll.
         for rolling in ({"maxSurge": 0, "maxUnavailable": "25%"}, {"maxSurge": "0%", "maxUnavailable": 1}):

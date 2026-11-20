@@ -363,13 +363,13 @@ volume, watch one shed cycle plus 24h, and decide capacity before streaming
 retirement raises batch volume. Keep the 1800s stabilization and one pod per
 600s stockout policy; the older replay does not faithfully enforce that period.
 The chain metric and adapter stay unchanged. Kill switch: restore targets
-32/0.5 with the same min 4/max 16 and downscale policy, or roll back the Helm
+32/0.5 with the same min 6/max 16 and downscale policy, or roll back the Helm
 release after checking its saved values/image. No new environment setting.
 
 For this HPA retune's regression, the lead restores targets 32/0.5 with the HPA
-on, min 4/max 16 and the existing downscale policy. For a separate whole-worker
+on, min 6/max 16 and the existing downscale policy. For a separate whole-worker
 qualification failure, the lead restores the privately captured known-good
-image/runtime bindings while preserving the ruling floor of four Ready
+image/runtime bindings while preserving the ruling floor of six Ready
 on-demand workers. Capture release values/manifest before either operation;
 keep the image pinned and the 1500s SIGTERM drain intact. Verify the single OD
 deployment/image, HPA budget and count classes. Production has no Spot companion.
