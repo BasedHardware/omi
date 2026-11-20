@@ -107,6 +107,23 @@ def test_worker_transport_distinguishes_tcp_availability_from_tls_trust(monkeypa
         erase._erase_at_worker('tenant', 'job', 'claim')
 
 
+def test_tls_context_setup_timeout_cannot_authorize_recovery(monkeypatch):
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv('GO_QUEUE_ERASE_URL', 'https://worker.example/internal/v1/tenant-erase')
+    monkeypatch.setenv('GO_QUEUE_ERASE_AUDIENCE', 'worker')
+    monkeypatch.setattr(erase, '_oidc_token', lambda _: 'token')
+    monkeypatch.setattr(erase.socket, 'create_connection', MagicMock())
+    monkeypatch.setattr(erase.ssl, 'create_default_context', MagicMock(side_effect=TimeoutError()))
+    monkeypatch.setattr(receipts, 'record', MagicMock(return_value={}))
+    recover = MagicMock()
+    monkeypatch.setattr(erase, '_erase_at_postgres', recover)
+
+    with pytest.raises(erase.EraseRejected, match='TLS context setup failed'):
+        erase.require_committed_erase('tenant', 'job', 'token', lambda: datetime.now(timezone.utc), lambda _: None)
+    recover.assert_not_called()
+
+
 def test_recovery_is_off_without_a_database_binding(monkeypatch):
     monkeypatch.delenv('GO_QUEUE_ERASE_RECOVERY_DATABASE_URL', raising=False)
     assert erase._erase_at_postgres('tenant', datetime.now(timezone.utc)) is False

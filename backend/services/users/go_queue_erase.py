@@ -96,7 +96,11 @@ def _erase_at_worker(uid: str, job_id: str, claim: str) -> None:
         _raise_transport_error(error)
     with raw:
         try:
-            secured = ssl.create_default_context().wrap_socket(raw, server_hostname=parsed.hostname)
+            tls = ssl.create_default_context()
+        except OSError:
+            raise EraseRejected('Go queue erase TLS context setup failed') from None
+        try:
+            secured = tls.wrap_socket(raw, server_hostname=parsed.hostname)
         except TimeoutError:
             raise EraseUnavailable('Go queue erase TLS handshake timed out') from None
         except OSError:
