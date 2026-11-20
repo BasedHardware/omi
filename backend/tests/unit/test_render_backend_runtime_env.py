@@ -818,6 +818,7 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
         'backend-sync-backfill': common,
         'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
+        'backend-projection-pump': common | {'POSTHOG_EVENTS_API_KEY'},
     }
     # Version-pinned, single-role bindings. David 2026-11-20 (SCA-3063): the internal TestFlight
     # live-recap cohort mounts version 1 on the conversation API role only; other roles must not bind it.
@@ -831,6 +832,12 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
             (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
             for entry in refs
         } == {(name, name, 'latest') for name in names} | pinned.get(service, set()), service
+    assert set(baseline) == set(prod['cloud_run']['services']), 'every prod Cloud Run role needs an approved secret set'
+    for env_name, env in _MANIFEST['environments'].items():
+        for service, spec in env.get('cloud_run', {}).get('services', {}).items():
+            if (env_name, service) != ('prod', 'backend'):
+                assert 'CONVERSATIONS_V3_LIVE_RECAP_COHORT' not in (spec.get('secrets') or {}), (env_name, service)
+                assert 'CONVERSATIONS_V3_LIVE_RECAP_COHORT' not in (spec.get('env') or {}), (env_name, service)
     backend_env = prod['cloud_run']['services']['backend']['env']
     token = backend_env['PROACTIVITY_V2_POSTHOG_TOKEN']['value']
     assert token.startswith('phc_')
