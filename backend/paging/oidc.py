@@ -107,6 +107,10 @@ class OIDCVerifier:
             self.lock.release()
 
 
-if __name__ == '__main__':
+def main():
     with httpx.Client(trust_env=False) as client:
         sys.stdout.write(json.dumps(fetch_certificates(client, _CERT_TIMEOUT)))
+
+
+if __name__ == '__main__':
+    main()
