@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from database.batch_pipeline_allowance_migration import RowRateLimiter, apply_page, counts
 from database.batch_pipeline_store import FirestoreStore
-from utils.executors import shutdown_executors
+from utils.executors import db_executor, shutdown_executors
 
 
 def main():
@@ -33,10 +33,12 @@ def main():
         parser.error('max-pages must be 1..10000')
     if not 1 <= args.concurrency <= 32:
         parser.error('concurrency must be 1..32')
-    try:
-        limiter = RowRateLimiter(args.max_rows_per_second)
-    except ValueError as error:
-        parser.error(str(error))
+    limiter = None
+    if args.apply:
+        try:
+            limiter = RowRateLimiter(args.max_rows_per_second)
+        except ValueError as error:
+            parser.error(str(error))
     if args.stage == 'prod' and (
         os.getenv('FIRESTORE_EMULATOR_HOST')
         or os.getenv('GCP_AGENT_TIER') != ('prod-operator' if args.apply else 'ro-prod')
@@ -50,7 +52,13 @@ def main():
         return
     try:
         for _ in range(args.max_pages):
-            report = apply_page(store, time.time(), concurrency=args.concurrency, rate_limiter=limiter)
+            report = apply_page(
+                store,
+                time.time(),
+                concurrency=args.concurrency,
+                rate_limiter=limiter,
+                executor=db_executor if args.concurrency > 1 else None,
+            )
             print(json.dumps(report), flush=True)
             if report['complete']:
                 break

@@ -47,11 +47,12 @@ def entries():
         DriverEntry('database.batch_pipeline_allowance_migration.counts', domains={'store': stores}),
         DriverEntry(
             'database.batch_pipeline_allowance_migration.apply_page',
-            domains={'store': stores, 'concurrency': [1, 32]},
+            domains={'store': stores, 'concurrency': [1]},
             neutrals={
                 'now': (3000000.0, 'checkpoint clock only'),
                 'size': (100, 'page bound only'),
                 'rate_limiter': (None, 'attempt pacing does not affect the query shape'),
+                'executor': (None, 'sequential driver does not submit work to an executor'),
             },
             trials=2,
             setup=seed_checkpoint,

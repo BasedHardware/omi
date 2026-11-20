@@ -1,5 +1,6 @@
 """Allowance parking/release on the shared sim, Firestore and Postgres matrix."""
 
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock
 from threading import Barrier, Lock
 import time
@@ -20,6 +21,12 @@ from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture
+def pool():
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        yield executor
 
 
 @pytest.fixture
@@ -357,7 +364,7 @@ def test_privacy_fence_prevents_release_without_resurrecting_work(h):
 
 
 @pytest.mark.parametrize('concurrency', [1, 4])
-def test_migration_count_only_resume_and_cas(h, monkeypatch, concurrency):
+def test_migration_count_only_resume_and_cas(pool, h, monkeypatch, concurrency):
     if h.name != 'emulator':
         pytest.skip('Firestore migration queries require the actual emulator')
     monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')
@@ -367,36 +374,36 @@ def test_migration_count_only_resume_and_cas(h, monkeypatch, concurrency):
     assert counts(h.store) == {'retry': 3, 'allowance_retry': 3, 'policy_held': 0}
     assert get(h)['state'] == 'retry'  # Dry-run cannot mutate rows.
     monkeypatch.delenv('BATCH_ALLOWANCE_PARK_ENABLED')
-    assert apply_page(h.store, 10, size=1, concurrency=concurrency)['parked'] == 1
+    assert apply_page(h.store, 10, size=1, executor=pool, concurrency=concurrency)['parked'] == 1
     # The scheduler can race the migration's next page. Its state CAS and the
     # migration predicate must neither append nor count a parked row twice.
     assert queue.recover(100) == 2
-    assert apply_page(h.store, 101, size=1, concurrency=concurrency)['complete']
+    assert apply_page(h.store, 101, size=1, executor=pool, concurrency=concurrency)['complete']
     assert counts(h.store) == {'retry': 0, 'allowance_retry': 0, 'policy_held': 3}
-    assert apply_page(h.store, 102, size=1, concurrency=concurrency)['parked'] == 0
+    assert apply_page(h.store, 102, size=1, executor=pool, concurrency=concurrency)['parked'] == 0
 
 
 @pytest.mark.parametrize('concurrency', [1, 4])
-def test_migration_failure_preserves_checkpoint(h, monkeypatch, concurrency):
+def test_migration_failure_preserves_checkpoint(pool, h, monkeypatch, concurrency):
     if h.name != 'emulator':
         pytest.skip('Firestore migration queries require the actual emulator')
     monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')
     hold(h, 'a')
     hold(h, 'b', capture=2, now=4)
     monkeypatch.delenv('BATCH_ALLOWANCE_PARK_ENABLED')
-    assert apply_page(h.store, 10, size=1, concurrency=concurrency)['parked'] == 1
+    assert apply_page(h.store, 10, size=1, executor=pool, concurrency=concurrency)['parked'] == 1
     marker = h.store.client.collection(f'{h.namespace}_migrations').document(KEY)
     before = marker.get().to_dict()
     original = h.store.run
     monkeypatch.setattr(h.store, 'run', Mock(side_effect=RuntimeError('injected failure')))
     with pytest.raises(RuntimeError, match='injected failure'):
-        apply_page(h.store, 11, size=1, concurrency=concurrency)
+        apply_page(h.store, 11, size=1, executor=pool, concurrency=concurrency)
     assert marker.get().to_dict() == before
     monkeypatch.setattr(h.store, 'run', original)
-    assert apply_page(h.store, 12, size=1, concurrency=concurrency)['parked'] == 1
+    assert apply_page(h.store, 12, size=1, executor=pool, concurrency=concurrency)['parked'] == 1
 
 
-def test_migration_parallel_commit_fences_and_stale_page_replay(h, monkeypatch):
+def test_migration_parallel_commit_fences_and_stale_page_replay(pool, h, monkeypatch):
     if h.name != 'emulator':
         pytest.skip('Firestore migration requires actual transaction commits')
     monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')
@@ -440,7 +447,7 @@ def test_migration_parallel_commit_fences_and_stale_page_replay(h, monkeypatch):
                     active.remove(identity[0])
 
     monkeypatch.setattr(h.store, 'run', run)
-    report = migration.apply_page(h.store, 20, concurrency=2)
+    report = migration.apply_page(h.store, 20, executor=pool, concurrency=2)
     assert report == {'examined': 4, 'parked': 3, 'fenced': 1, 'complete': True}
     assert seen.index('a') < seen.index('c')
     monkeypatch.setattr(h.store, 'run', original)
@@ -448,7 +455,7 @@ def test_migration_parallel_commit_fences_and_stale_page_replay(h, monkeypatch):
     owners = h.store.client.collection(f'{h.namespace}_allowance_holds')
     marks = {label: owners.document(owner_key(h.uid(label))).get().to_dict() for label in ('owner', 'other')}
     # Re-examine already parked rows from the stale page: zero new holds/writes.
-    assert migration._apply_rows(h.store, rows, 21, 4, migration.RowRateLimiter(50)) == (0, 1)
+    assert migration._apply_rows(h.store, rows, 21, 4, migration.RowRateLimiter(50), pool) == (0, 1)
     assert {key: get(h, key) for key in before} == before
     assert {label: owners.document(owner_key(h.uid(label))).get().to_dict() for label in marks} == marks
     assert marks['owner']['held_count'] == 2 and marks['other']['held_count'] == 1
@@ -456,7 +463,7 @@ def test_migration_parallel_commit_fences_and_stale_page_replay(h, monkeypatch):
 
 
 @pytest.mark.parametrize('retry_kind', ['outer_read', 'sdk_commit'])
-def test_migration_sdk_retry_is_rate_limited(h, monkeypatch, retry_kind):
+def test_migration_sdk_retry_is_rate_limited(pool, h, monkeypatch, retry_kind):
     if h.name != 'emulator':
         pytest.skip('Actual Firestore SDK transaction retry required')
     monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')
@@ -509,7 +516,7 @@ def test_migration_sdk_retry_is_rate_limited(h, monkeypatch, retry_kind):
         return original(retry_once, **options)
 
     monkeypatch.setattr(h.store, 'run', run)
-    assert migration.apply_page(h.store, 10, concurrency=2, rate_limiter=limiter)['parked'] == 1
+    assert migration.apply_page(h.store, 10, executor=pool, concurrency=2, rate_limiter=limiter)['parked'] == 1
     assert len(attempts) == acquire.call_count == 2
     monkeypatch.setattr(h.store, 'run', original)
     assert get(h)['state'] == STATE
@@ -517,7 +524,7 @@ def test_migration_sdk_retry_is_rate_limited(h, monkeypatch, retry_kind):
 
 
 @pytest.mark.parametrize('concurrency,row_reads', [(1, 5), (2, 4)])
-def test_migration_rpc_envelope_keeps_fences_and_batches_only_job_owner(h, monkeypatch, concurrency, row_reads):
+def test_migration_rpc_envelope_keeps_fences_and_batches_only_job_owner(pool, h, monkeypatch, concurrency, row_reads):
     if h.name != 'emulator':
         pytest.skip('Measure actual SDK RPCs against loopback Firestore')
     monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')
@@ -529,7 +536,7 @@ def test_migration_rpc_envelope_keeps_fences_and_batches_only_job_owner(h, monke
     for name in ('begin_transaction', 'batch_get_documents', 'commit', 'run_query'):
         calls[name] = Mock(wraps=getattr(api, name))
         monkeypatch.setattr(api, name, calls[name])
-    assert apply_page(h.store, 10, concurrency=concurrency)['parked'] == 1
+    assert apply_page(h.store, 10, executor=pool, concurrency=concurrency)['parked'] == 1
     # Page overhead: initial progress get + query + begin/get/commit checkpoint.
     assert calls['begin_transaction'].call_count == 2
     assert calls['batch_get_documents'].call_count == row_reads + 2
