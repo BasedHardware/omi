@@ -31,6 +31,8 @@ GLOBAL_DAILY_LIMIT_ENV = 'HISTORICAL_SUMMARY_GLOBAL_DAILY_LIMIT'
 DEFAULT_GATE_HOURS = 72.0
 DEFAULT_GLOBAL_DAILY_LIMIT = 10000
 UNTRUSTED = 'untrusted'
+TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
+BLOCKED_REASON = 'historical_on_open'
 # ``structured.title_provenance`` of a historical row's deterministic title. Like
 # ``server_minimum`` it is a stand-in, not a real title: the open-time summary
 # replaces it and Home's short-fragment rules still apply. Unlike
@@ -74,6 +76,11 @@ def global_daily_limit() -> int:
     except ValueError:
         return DEFAULT_GLOBAL_DAILY_LIMIT
     return max(value, 0)
+
+
+def epoch(value: Any) -> float | None:
+    """Seconds since the epoch for an aware/naive (UTC) datetime or a positive number; else None."""
+    return _epoch(value)
 
 
 def _epoch(value: Any) -> float | None:

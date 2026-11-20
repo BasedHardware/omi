@@ -533,6 +533,8 @@ class ProjectionSession:
             'enrichment_required': bool(
                 assigned.get('id') and (not repeat_only or assigned.get('_sync_lineage_completion_pending'))
             ),
+            # T1+: the row settles in place of an enrichment mark (utils/conversations/historical_ingest.py).
+            **({'historical': True} if assigned.get('processing_tier') == 'historical' else {}),
         }
         from database.batch_pipeline_source_reuse import claim
 

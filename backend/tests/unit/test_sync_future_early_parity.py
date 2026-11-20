@@ -222,7 +222,35 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
                 )
             else:
                 actual, baseline = without_staging(actual), without_staging(baseline)
+                # T1+ historical ingest touches creation, merged-row settlement and hold
+                # completion, never early placement or coverage. Compare everything else.
+                actual, baseline = without_historical_tier(actual), without_historical_tier(baseline)
         assert actual == baseline, path
+
+
+HISTORICAL_TIER_FUNCTIONS = (
+    'process_segment',
+    '_reprocess_merged_conversations',
+    '_reprocess_conversation_after_update',
+)
+HISTORICAL_TIER_IMPORTS = (
+    'from utils.conversations import historical_ingest\n',
+    'from utils.sync.intake_completion import HISTORICAL_RESPONSE_KEY\n',
+)
+
+
+def without_historical_tier(text):
+    for line in HISTORICAL_TIER_IMPORTS:
+        text = text.replace(line, '', 1)
+    lines = text.splitlines(keepends=True)
+    spans = [
+        (node.lineno - 1 - len(node.decorator_list), node.end_lineno)
+        for node in ast.parse(text).body
+        if isinstance(node, ast.FunctionDef) and node.name in HISTORICAL_TIER_FUNCTIONS
+    ]
+    for start, end in sorted(spans, reverse=True):
+        lines[start:end] = []
+    return ''.join(lines)
 
 
 def test_anchor_contention_is_503_before_staging_or_acknowledgement(client, monkeypatch, tmp_path):

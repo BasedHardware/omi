@@ -16,6 +16,12 @@ T0 = datetime(2026, 10, 29, 1, 4, tzinfo=timezone.utc)
 NOW = T0 + timedelta(hours=4)
 
 
+@pytest.fixture(autouse=True)
+def full_processing_tier(monkeypatch):
+    # T0 is a fixed date that ages past the enrichment gate; these tests pin full-processing late audio.
+    monkeypatch.setenv('SYNC_HISTORICAL_TIER_ENABLED', 'false')
+
+
 def test_recorded_end_ignores_four_hour_upload_delay():
     span = recorded_span(T0, [{'start': 0, 'end': 20}, {'start': 30, 'end': 40}])
     assert span == (T0, T0 + timedelta(seconds=40))
