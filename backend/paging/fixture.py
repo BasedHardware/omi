@@ -1,6 +1,5 @@
 """Exercise the real endpoint and Firestore transactions with an isolated Bark transport."""
 
-import asyncio
 from base64 import urlsafe_b64encode
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -8,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import hmac
 import json
 import os
+from threading import Event
 import time
 import unittest
 from unittest.mock import Mock, patch
@@ -80,7 +80,7 @@ class PagerVerificationFixture(unittest.TestCase):
             return verifier('Bearer ' + value, AUDIENCE + DRAIN, SCHEDULER_SA)
 
         verifier = OIDCVerifier(
-            lambda: httpx.AsyncClient(transport=httpx.MockTransport(fetch)), clock=lambda: monotonic_time
+            lambda: httpx.Client(transport=httpx.MockTransport(fetch)), clock=lambda: monotonic_time
         )
         self.assertFalse(authorize('invalid.token.signature'))
         self.assertFalse(authorize(token(exp='malformed')))
@@ -116,28 +116,54 @@ class PagerVerificationFixture(unittest.TestCase):
             attempts.append(request)
             return httpx.Response(200, headers={'Cache-Control': 'max-age=3600'}, json={'kid': 'malformed'})
 
-        verifier = OIDCVerifier(lambda: httpx.AsyncClient(transport=httpx.MockTransport(fetch)))
+        verifier = OIDCVerifier(lambda: httpx.Client(transport=httpx.MockTransport(fetch)))
+        self.addCleanup(verifier.worker.shutdown)
         for _ in range(2):
             with self.assertRaises(TransportError):
                 verifier.certificates('https://www.googleapis.com/oauth2/v1/certs', 'GET')
         self.assertEqual(len(attempts), 2)
 
+    def test_certificate_deadline_bounds_wait_and_retains_the_refresh_slot(self):
+        started = Event()
+        unstall = Event()
+        calls = []
+
+        def fetch(request):
+            calls.append(request)
+            started.set()
+            unstall.wait(timeout=2)
+            return httpx.Response(200, json={})
+
+        verifier = OIDCVerifier(lambda: httpx.Client(transport=httpx.MockTransport(fetch)))
+        self.addCleanup(verifier.worker.shutdown)
+        self.addCleanup(unstall.set)
+        with patch.object(oidc, '_CERT_TIMEOUT', 0.15):
+            for _ in range(3):
+                with self.assertRaises(TransportError) as error:
+                    verifier.certificates('https://www.googleapis.com/oauth2/v1/certs', 'GET')
+                self.assertIsInstance(error.exception.__cause__, TimeoutError)
+                self.assertTrue(started.is_set())
+                self.assertFalse(verifier.refresh.done())
+                self.assertIsNone(verifier.certs)
+        self.assertEqual(len(calls), 1)
+
     def test_certificate_deadline_covers_response_headers_and_body(self):
         stages = []
 
-        class SlowBody(httpx.AsyncByteStream):
-            async def __aiter__(self):
+        class SlowBody(httpx.SyncByteStream):
+            def __iter__(self):
                 stages.append('body_started')
-                await asyncio.sleep(0.2)
+                time.sleep(0.2)
                 stages.append('body_complete')
                 yield b'{}'
 
-        async def fetch(_):
-            await asyncio.sleep(0.15)
+        def fetch(_):
+            time.sleep(0.15)
             stages.append('headers')
             return httpx.Response(200, stream=SlowBody())
 
-        verifier = OIDCVerifier(lambda: httpx.AsyncClient(transport=httpx.MockTransport(fetch)))
+        verifier = OIDCVerifier(lambda: httpx.Client(transport=httpx.MockTransport(fetch)))
+        self.addCleanup(verifier.worker.shutdown)
         with patch.object(oidc, '_CERT_TIMEOUT', 0.3):
             with self.assertRaises(TransportError) as error:
                 verifier.certificates('https://www.googleapis.com/oauth2/v1/certs', 'GET')

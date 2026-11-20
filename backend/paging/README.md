@@ -90,7 +90,7 @@ their HTTP freshness lifetime, capped at one hour. No history API is exposed.
    single output series that fires on the established ratio gate OR a fresh
    failed probe. Any fresh failed series wins over a fresh healthy peer for the
    same allowlisted target. An expired failure cannot override fresh healthy
-   evidence. Retain last state for missing probe telemetry when the ratio
+   evidence. Set `noDataState=KeepLast` to retain state for missing probe telemetry when the ratio
    cannot independently establish an outage. Verify the separate telemetry
    health signal and the actual probe cadence. The PromQL fixture checks the
    combined behavior with an illustrative probe selector.

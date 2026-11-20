@@ -1,6 +1,6 @@
 """Verify Google ID tokens with a bounded, per-worker signing certificate cache."""
 
-import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import json
 import re
 from threading import Lock
@@ -20,11 +20,11 @@ _JWT = re.compile(r'[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+')
 
 class OIDCVerifier:
     def __init__(self, client_factory=None, *, clock=monotonic):
-        self.client_factory = (
-            client_factory if client_factory is not None else lambda: httpx.AsyncClient(trust_env=False)
-        )
+        self.client_factory = client_factory if client_factory is not None else lambda: httpx.Client(trust_env=False)
         self.clock = clock
         self.lock = Lock()
+        self.worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pager-oidc")
+        self.refresh = None
         self.certs = None
         self.expires_at = 0
 
@@ -47,16 +47,24 @@ class OIDCVerifier:
             return False
         return verified.get('email') == principal and verified.get('email_verified') is True
 
-    async def fetch(self, timeout):
-        async with asyncio.timeout(timeout), self.client_factory() as client:
-            async with client.stream('GET', _CERT_URL, timeout=timeout, follow_redirects=False) as response:
+    def fetch(self, deadline):
+        started_at = self.clock()
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise TimeoutError()
+        with self.client_factory() as client:
+            with client.stream('GET', _CERT_URL, timeout=remaining, follow_redirects=False) as response:
                 response.raise_for_status()
                 body = bytearray()
-                async for chunk in response.aiter_bytes():
+                for chunk in response.iter_bytes():
+                    if monotonic() >= deadline:
+                        raise TimeoutError()
                     if len(body) + len(chunk) > _MAX_CERT_BYTES:
                         raise auth_errors.TransportError('pager signing certificate response exceeded size budget')
                     body.extend(chunk)
-                return bytes(body), response.headers
+                if monotonic() >= deadline:
+                    raise TimeoutError()
+                return bytes(body), response.headers, started_at
 
     def certificates(self, url, method):
         deadline = monotonic() + _CERT_TIMEOUT
@@ -66,17 +74,15 @@ class OIDCVerifier:
             if self.certs is not None and self.clock() < self.expires_at:
                 return self.certs
             self.certs = None
-            started_at = self.clock()
-            remaining = deadline - monotonic()
-            if remaining <= 0:
-                raise auth_errors.TransportError('pager signing certificate deadline elapsed')
-            # The caller is a synchronous Gunicorn thread. Do not wait for a
-            # cancelled DNS executor call during asyncio.run() shutdown.
-            loop = asyncio.new_event_loop()
+            # Keep the slot occupied if the caller times out during a blocking
+            # resolver call. Later requests can wait on it but cannot queue more.
+            if self.refresh is None:
+                self.refresh = self.worker.submit(self.fetch, deadline)
             try:
-                body, headers = loop.run_until_complete(self.fetch(remaining))
+                body, headers, started_at = self.refresh.result(timeout=max(0, deadline - monotonic()))
             finally:
-                loop.close()
+                if self.refresh.done():
+                    self.refresh = None
             certs = json.loads(body)
             if not isinstance(certs, dict) or not certs:
                 raise ValueError('empty signing certificate map')
