@@ -11,7 +11,10 @@ import (
 
 // ClaimRefresh binds the survivor revision to the current donor job epoch.
 func (s Store) ClaimRefresh(ctx context.Context, g queue.Guarded, claim finalization.Claim, result finalization.SmartAbsorbResult) error {
-	return s.updateRefresh(ctx, g, claim, result, false)
+	if err := s.updateRefresh(ctx, g, claim, result, false); err != nil {
+		return err
+	}
+	return s.RepointEpisode(ctx, g, claim, result)
 }
 
 // CheckpointRefresh records that the currently owned revision was processed.
