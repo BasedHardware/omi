@@ -26,7 +26,8 @@ func mergedTranscript(codec crypt.Codec, donorRef finalization.Ref, target, dono
 	if err != nil {
 		return absorbTranscript{}, err
 	}
-	standard := field[string](target, "data_protection_level") == "standard"
+	standard := field[string](target, "data_protection_level") == "standard" &&
+		field[string](donor, "data_protection_level") == "standard"
 	if standard && !field[bool](target, "transcript_segments_compressed") && !field[bool](donor, "transcript_segments_compressed") {
 		return absorbTranscript{value: joined}, nil
 	}
@@ -118,5 +119,29 @@ func normalizeSegmentValues(segment document) error {
 		}
 	}
 	// Any nested numbers remain JSON numbers inside the re-encoded payload.
+	return nil
+}
+
+// sealRetainedAbsorbContent applies the canonical enhanced JSON wire format to
+// retained conversation blobs before changing the document's protection level.
+func sealRetainedAbsorbContent(codec crypt.Codec, owner string, row, patch document) error {
+	for _, blob := range []struct {
+		name   string
+		prefix byte
+	}{
+		{"open_loop_extractions", '{'}, {"manual_speaker_assignments", '{'}, {"user_corrections", '['},
+	} {
+		value := row[blob.name]
+		if value == nil {
+			continue
+		}
+		marker := blob.name + "_compressed"
+		encoded, err := codec.UpgradeJSON(owner, value, field[bool](row, marker), blob.prefix)
+		if err != nil {
+			return err
+		}
+		patch[blob.name], patch[marker] = encoded, true
+	}
+	patch["data_protection_level"] = "enhanced"
 	return nil
 }

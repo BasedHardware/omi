@@ -106,10 +106,7 @@ func sameAbsorbPartition(target, donor document) bool {
 	device := field[string](donor, "client_device_id")
 	level := field[string](target, "data_protection_level")
 	donorLevel := field[string](donor, "data_protection_level")
-	// An existing enhanced survivor can seal a standard donor's inline speech
-	// without rewriting the survivor's other derived data.
-	compatible := donorLevel == "standard" && (level == "standard" || level == "enhanced") ||
-		donorLevel == "enhanced" && level == "enhanced"
+	compatible := (level == "standard" || level == "enhanced") && (donorLevel == "standard" || donorLevel == "enhanced")
 	return compatible &&
 		field[string](target, "status") == string(rules.Completed) && field[string](donor, "status") == string(rules.Completed) &&
 		field[string](donor, "source") == field[string](target, "source") && device != "" && device == field[string](target, "client_device_id")
@@ -155,6 +152,11 @@ func (s Store) absorbTargetPatch(rows absorbRows, donorRef finalization.Ref, ids
 	patch := document{"transcript_segments": cut.value, "transcript_segments_compressed": cut.compressed,
 		"finished_at": field[time.Time](donor, "finished_at"), "has_content": true,
 		"sync_content_revision": rev + 1, "sync_merged_from": ids, "smart_merge": state}
+	if field[string](target, "data_protection_level") == "standard" && field[string](donor, "data_protection_level") == "enhanced" {
+		if err := sealRetainedAbsorbContent(s.Codec, donorRef.Owner, target, patch); err != nil {
+			return nil, finalization.SmartAbsorbResult{}, err
+		}
+	}
 	stageSummaryRearm(target, patch, now)
 	projected := maps.Clone(target)
 	maps.Copy(projected, patch)
