@@ -1559,6 +1559,7 @@ export interface Conversation {
   is_locked?: boolean;
   kind?: "conversation" | "voice_work" | "media" | "background" | null;
   language?: string | null;
+  live_summary?: LiveSummaryPreview | null;
   manual_end?: boolean | null;
   meeting_dedup_speech_s?: number | null;
   meeting_duration_s?: number | null;
@@ -1572,6 +1573,7 @@ export interface Conversation {
   processing_deferred?: boolean;
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
+  processing_tier?: "historical" | null;
   record_audio_partial?: RecordAudioPartial | null;
   recorded_end?: string | null;
   recorded_start?: string | null;
@@ -1586,6 +1588,7 @@ export interface Conversation {
   structured: Structured;
   suggested_summarization_apps?: Array<string>;
   summary_covers_through?: string | null;
+  summary_on_open?: boolean | null;
   summary_retryable?: boolean | null;
   sync_content_revision?: number | null;
   sync_relevance?: "keep" | "review" | null;
@@ -1783,6 +1786,7 @@ export interface ConversationSearchItem {
   is_locked?: boolean;
   kind?: "conversation" | "voice_work" | "media" | "background" | null;
   language?: string | null;
+  live_summary?: LiveSummaryPreview | null;
   manual_end?: boolean | null;
   match_snippets?: Array<TranscriptMatchSnippet>;
   meeting_dedup_speech_s?: number | null;
@@ -1797,6 +1801,7 @@ export interface ConversationSearchItem {
   processing_deferred?: boolean;
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
+  processing_tier?: "historical" | null;
   record_audio_partial?: RecordAudioPartial | null;
   recorded_end?: string | null;
   recorded_start?: string | null;
@@ -1811,6 +1816,7 @@ export interface ConversationSearchItem {
   structured: Structured;
   suggested_summarization_apps?: Array<string>;
   summary_covers_through?: string | null;
+  summary_on_open?: boolean | null;
   summary_retryable?: boolean | null;
   sync_content_revision?: number | null;
   sync_relevance?: "keep" | "review" | null;
@@ -3455,6 +3461,11 @@ export interface LiveConversation {
   status: ConversationStatus;
   structured: Structured;
   tile_state?: "live" | "transcribing" | "writing" | "done" | "failed" | null;
+}
+
+export interface LiveSummaryPreview {
+  structured: Structured;
+  summary_covers_through: string;
 }
 
 export interface LlmTotalCostResponse {
@@ -7233,6 +7244,7 @@ export interface OmiApiSchemas {
   "LegacyProactiveIntent": LegacyProactiveIntent;
   "LinkCalendarEventRequest": LinkCalendarEventRequest;
   "LiveConversation": LiveConversation;
+  "LiveSummaryPreview": LiveSummaryPreview;
   "LlmTotalCostResponse": LlmTotalCostResponse;
   "LlmUsageFeatureResponse": LlmUsageFeatureResponse;
   "LlmUsageRecordResponse": LlmUsageRecordResponse;
@@ -9273,6 +9285,27 @@ export interface OmiApiPaths {
         "200": ConversationStatusResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/summary/live-catchup/stream": {
+    get: {
+      operationId: "conversation_live_catchup_stream_v1_conversations__conversation_id__summary_live_catchup_stream_get";
+      responses: {
+        "200": unknown;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/summary/open": {
+    post: {
+      operationId: "open_historical_summary_v1_conversations__conversation_id__summary_open_post";
+      responses: {
+        "200": Conversation;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -15404,7 +15437,7 @@ export async function synthesize_connector_data_v1_connectors_synthesize_post(he
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_conversations_v1_conversations_get(query: { limit?: number, offset?: number, statuses?: string | null, include_discarded?: boolean, sources?: string | null, start_date?: string | null, end_date?: string | null, folder_id?: string | null, starred?: boolean | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Conversation>> {
+export async function get_conversations_v1_conversations_get(query: { limit?: number, offset?: number, statuses?: string | null, include_discarded?: boolean, sources?: string | null, start_date?: string | null, end_date?: string | null, folder_id?: string | null, starred?: boolean | null, cursor?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Conversation>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations`;
   const _params = query ? Object.entries(query)
@@ -16433,6 +16466,25 @@ export async function patch_conversation_summary_v1_conversations__conversation_
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function open_historical_summary_v1_conversations__conversation_id__summary_open_post(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/summary/open`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -24388,4 +24440,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 556 client methods generated.
+// Total: 557 client methods generated.

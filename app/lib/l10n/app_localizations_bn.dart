@@ -9091,7 +9091,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'এই রেকর্ডিংটি আপলোড হয়েছে কিন্তু Omi এখনও কথোপকথন তৈরি করছে। এখন মুছে ফেললে এবং প্রক্রিয়া ব্যর্থ হলে এটি আর পুনরুদ্ধার করা যাবে না। তবুও মুছবেন?';
+      'এই রেকর্ডিংটি ইতিমধ্যে আপলোড হয়েছে এবং Omi এটি প্রক্রিয়া করছে। এখানে মুছলে ফোনের কপিটি মুছে যাবে। প্রক্রিয়াকরণ ব্যর্থ হলে Omi এই ফোন থেকে আবার চেষ্টা করতে পারবে না।';
 
   @override
   String get syncCardAllBackedUp => 'সব রেকর্ডিং সিঙ্ক হয়েছে';
@@ -14487,14 +14487,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'সম্প্রতি';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration ধরে সংযোগ বিচ্ছিন্ন';
-  }
-
-  @override
   String get deviceControls => 'নিয়ন্ত্রণ';
 
   @override
@@ -15430,6 +15422,11 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'আপডেটটি ইনস্টল হয়নি। আপনার পেনড্যান্ট বর্তমান ফার্মওয়্যারে ($version) কাজ করছে। আপডেট আবার চেষ্টা না করে সাপোর্টের সাথে যোগাযোগ করুন।';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15471,7 +15468,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15555,4 +15552,166 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'সার্ভারের জানানো কাজ';
+
+  @override
+  String get finishNothingToProcess => 'এখনও প্রক্রিয়া করার কিছু নেই।';
+
+  @override
+  String get finishStillProcessing => 'এখনও প্রক্রিয়া চলছে। এটি হোমে দেখা যাবে।';
+
+  @override
+  String get finishBackToHome => 'হোমে ফিরে যান';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'এই কথোপকথন শেষ হলে সারাংশ';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'সার্ভারে অপেক্ষায় থাকা আপলোড';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'আপনার অডিও আপনার ডিভাইস বা ফোনে নিরাপদ আছে';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time পর্যন্ত সারসংক্ষেপ';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'সাম্প্রতিক প্রতিলিপি';
+
+  @override
+  String get finishAlreadySaved => 'ইতিমধ্যে সংরক্ষিত হয়েছে। এটি হোমে আছে।';
+
+  @override
+  String get finishAudioNotReceived => 'অডিও এখনও পথে আছে।';
+
+  @override
+  String get finishFailedOffline => 'সফল হয়নি। আপনার অডিও নিরাপদ।';
+
+  @override
+  String get finishFailed => 'সফল হয়নি। আপনার অডিও নিরাপদ।';
+
+  @override
+  String get micBlockedCannotRecord => 'রেকর্ড করতে মাইক্রোফোনের অনুমতি দিন।';
+
+  @override
+  String get couldNotStartRecording => 'রেকর্ডিং শুরু করা যায়নি।';
+
+  @override
+  String get restorePurchasesFailed => 'আপনার প্ল্যান যাচাই করা যায়নি।';
+
+  @override
+  String get firmwareCheckFailed => 'আপডেট চেক করা যায়নি।';
+
+  @override
+  String get conversationStillPublic => 'এটি এখনও লিঙ্কের মাধ্যমে শেয়ার করা আছে।';
+
+  @override
+  String get goalSaveFailed => 'আপনার লক্ষ্য সংরক্ষণ করা যায়নি।';
+
+  @override
+  String get goalDeleteFailed => 'মুছে ফেলা যায়নি। লক্ষ্যটি ফিরিয়ে আনা হয়েছে।';
+
+  @override
+  String get goalsLoadFailed => 'আপনার লক্ষ্যগুলি লোড করা যায়নি।';
+
+  @override
+  String get missingTargetEndedRecording => 'এই রেকর্ডিংটি শেষ হয়ে গেছে।';
+
+  @override
+  String get missingTargetMemory => 'এই স্মৃতিটি আর নেই।';
+
+  @override
+  String get missingTargetTask => 'এই কাজটি আর নেই।';
+
+  @override
+  String get missingTargetConversation => 'এই কথোপকথনটি খোলা যায়নি।';
+
+  @override
+  String get couldNotRefreshConversations => 'রিফ্রেশ করা যায়নি।';
+
+  @override
+  String get connectDeviceForOfflineSync => 'সিঙ্ক করতে আপনার Omi সংযোগ করুন।';
+
+  @override
+  String get useDifferentAccountMessage => 'আপনি সাইন আউট হয়ে যাবেন এবং এই ফোনের Omi সেটিংস রিসেট হয়ে যাবে।';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'চশমা খুঁজে পাওয়া যায়নি। চালু আছে কি?';
+
+  @override
+  String get couldNotMoveTask => 'কাজটি সরানো যায়নি।';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'মুছে ফেলা হয়েছে। $countটি লক করা কাজ রাখা হয়েছে।',
+      one: 'মুছে ফেলা হয়েছে। 1টি লক করা কাজ রাখা হয়েছে।',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'এই পরিবর্তনটি সংরক্ষণ করা যায়নি।';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'আপনার সেটিংস লোড করা যায়নি।';
+
+  @override
+  String get waitForOmiToFinish => 'Omi-এর কাজ শেষ হওয়া পর্যন্ত অপেক্ষা করুন।';
+
+  @override
+  String get voiceNoteTooShort => 'খুবই ছোট। রেকর্ড করতে চেপে ধরুন।';
+
+  @override
+  String get submitAppMissingFields => 'জমা দিতে নাম, বিবরণ, ছবি, ক্যাটাগরি এবং সক্ষমতা যোগ করুন।';
+
+  @override
+  String get appSetupNotFinished => 'সেটআপ এখনও সম্পূর্ণ হয়নি।';
+
+  @override
+  String get finishNothingKeptTitle => 'রাখার মতো কিছু নেই';
+
+  @override
+  String get submitAppFinishDetails => 'জমা দিতে উপরে সক্ষমতা এবং মূল্যের বিবরণ সম্পূর্ণ করুন।';
+
+  @override
+  String get finishNothingNew => 'এখনও নতুন কিছু নেই।';
+
+  @override
+  String get takingLongerThanUsual => 'সাধারণের চেয়ে বেশি সময় লাগছে। এটি শীঘ্রই হোমে আসবে।';
+
+  @override
+  String get couldNotCheckOnIt => 'এটি যাচাই করা যায়নি। আবার চেষ্টা করুন।';
+
+  @override
+  String get upgradeToOpenThisOne => 'এটি খুলতে আপগ্রেড করুন।';
+
+  @override
+  String get missingTargetConversationGone => 'এই কথোপকথনটি মুছে ফেলা হয়েছে।';
+
+  @override
+  String get cantConnectRightNow => 'এখন সংযোগ করা যাচ্ছে না।';
+
+  @override
+  String get loadOlderFailed => 'পুরোনোগুলি লোড করা যায়নি। আবার চেষ্টা করতে ট্যাপ করুন।';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'শুনছি · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'পরিবর্তন করতে এটি শেষ হওয়া পর্যন্ত অপেক্ষা করুন।';
+
+  @override
+  String get finishedSummaryReady => 'সারসংক্ষেপ প্রস্তুত';
+
+  @override
+  String get writingSummaryStatus => 'সারসংক্ষেপ লেখা হচ্ছে…';
+
+  @override
+  String get stillWorkingOnIt => 'এখনও কাজ চলছে।';
 }

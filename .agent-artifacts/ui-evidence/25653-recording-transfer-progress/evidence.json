@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-recording-transfer-progress.png",
+      "platform": "mobile-ios",
+      "description": "Recording Details shows the selected synthetic recording at 38% and 50.0 KB/s in an iOS-themed Flutter test runtime.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

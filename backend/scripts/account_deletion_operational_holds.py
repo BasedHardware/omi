@@ -31,7 +31,9 @@ from utils.cloud_tasks import enqueue_account_deletion_wipe
 from database.account_deletion_operational_holds import (
     object_digest,
     plan_digest,
+    shard_release_approval,
     validate_release_plan,
+    OPERATIONAL_HOLD_RELEASE_PLAN_SHARDS,
     PRESERVATION_LEDGER_SHA256,
 )
 
@@ -154,10 +156,17 @@ def register_plan(transaction, client, uid, job_id, token, approval):
     marker = (snapshot.to_dict() or {}) if snapshot.exists else {}
     if marker.get('wipe_status') != 'failed' or marker.get('wipe_job_id') != job_id:
         raise ValueError('deletion job changed or is no longer failed')
+    manifest, shards = shard_release_approval(uid, approval)
     existing = marker.get('operational_hold_release_approval')
-    if existing is not None and existing != approval:
-        raise ValueError('existing operational approval must not be overwritten')
-    transaction.update(ref, {'operational_hold_release_approval': approval})
+    if existing is not None:
+        if existing not in (approval, manifest):
+            raise ValueError('existing operational approval must not be overwritten')
+        return
+    shard_collection = ref.collection(OPERATIONAL_HOLD_RELEASE_PLAN_SHARDS)
+    # Publish the manifest and every populated prefix atomically.
+    for prefix, shard in shards.items():
+        transaction.create(shard_collection.document(prefix), shard)
+    transaction.update(ref, {'operational_hold_release_approval': manifest})
 
 
 def main() -> None:

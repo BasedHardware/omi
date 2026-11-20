@@ -9103,7 +9103,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Rakaman ini telah dimuat naik tetapi Omi masih mencipta perbualan. Jika anda padam sekarang dan pemprosesan gagal, ia tidak dapat dipulihkan. Padam juga?';
+      'Rakaman ini sudah dimuat naik dan sedang diproses oleh Omi. Memadamnya di sini membuang salinan pada telefon. Jika pemprosesan gagal, Omi tidak boleh mencuba semula dari telefon ini.';
 
   @override
   String get syncCardAllBackedUp => 'Semua rakaman tersegerak';
@@ -14526,14 +14526,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Baru-baru ini';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Terputus selama $duration';
-  }
-
-  @override
   String get deviceControls => 'Kawalan';
 
   @override
@@ -15472,6 +15464,11 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Kemas kini tidak dipasang. Loket anda masih berfungsi dengan perisian tegar semasa ($version). Sila hubungi sokongan dan bukannya mencuba kemas kini sekali lagi.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15513,7 +15510,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15597,4 +15594,166 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Kerja yang dilaporkan pelayan';
+
+  @override
+  String get finishNothingToProcess => 'Belum ada apa-apa untuk diproses.';
+
+  @override
+  String get finishStillProcessing => 'Masih diproses. Ia akan muncul di Laman Utama.';
+
+  @override
+  String get finishBackToHome => 'Kembali ke Laman Utama';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Ringkasan apabila perbualan ini tamat';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Fail yang dimuat naik sedang menunggu pada pelayan';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Audio anda selamat pada peranti atau telefon anda';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Ringkasan sehingga $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Transkrip terkini';
+
+  @override
+  String get finishAlreadySaved => 'Sudah disimpan. Ia ada di Skrin Utama.';
+
+  @override
+  String get finishAudioNotReceived => 'Audio masih dalam perjalanan.';
+
+  @override
+  String get finishFailedOffline => 'Tidak berjaya. Audio anda selamat.';
+
+  @override
+  String get finishFailed => 'Tidak berjaya. Audio anda selamat.';
+
+  @override
+  String get micBlockedCannotRecord => 'Benarkan mikrofon untuk merakam.';
+
+  @override
+  String get couldNotStartRecording => 'Tidak dapat memulakan rakaman.';
+
+  @override
+  String get restorePurchasesFailed => 'Tidak dapat menyemak pelan anda.';
+
+  @override
+  String get firmwareCheckFailed => 'Tidak dapat menyemak kemas kini.';
+
+  @override
+  String get conversationStillPublic => 'Ia masih dikongsi melalui pautan.';
+
+  @override
+  String get goalSaveFailed => 'Tidak dapat menyimpan matlamat anda.';
+
+  @override
+  String get goalDeleteFailed => 'Tidak dapat memadam. Matlamat dipulihkan.';
+
+  @override
+  String get goalsLoadFailed => 'Tidak dapat memuatkan matlamat anda.';
+
+  @override
+  String get missingTargetEndedRecording => 'Rakaman itu telah tamat.';
+
+  @override
+  String get missingTargetMemory => 'Kenangan itu tiada lagi.';
+
+  @override
+  String get missingTargetTask => 'Tugas itu tiada lagi.';
+
+  @override
+  String get missingTargetConversation => 'Tidak dapat membuka perbualan ini.';
+
+  @override
+  String get couldNotRefreshConversations => 'Tidak dapat memuat semula.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Sambungkan Omi anda untuk segerak.';
+
+  @override
+  String get useDifferentAccountMessage => 'Anda akan dilog keluar dan tetapan Omi telefon ini akan ditetapkan semula.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Cermin mata tidak ditemui. Adakah ia dihidupkan?';
+
+  @override
+  String get couldNotMoveTask => 'Tidak dapat memindahkan tugas itu.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dipadam. $count tugas berkunci dikekalkan.',
+      one: 'Dipadam. 1 tugas berkunci dikekalkan.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Tidak dapat menyimpan perubahan itu.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Tidak dapat memuatkan tetapan anda.';
+
+  @override
+  String get waitForOmiToFinish => 'Tunggu Omi selesai.';
+
+  @override
+  String get voiceNoteTooShort => 'Terlalu pendek. Tahan untuk merakam.';
+
+  @override
+  String get submitAppMissingFields => 'Tambah nama, penerangan, imej, kategori dan keupayaan untuk menghantar.';
+
+  @override
+  String get appSetupNotFinished => 'Persediaan belum selesai.';
+
+  @override
+  String get finishNothingKeptTitle => 'Tiada Yang Perlu Dikekalkan';
+
+  @override
+  String get submitAppFinishDetails => 'Lengkapkan butiran keupayaan dan harga di atas untuk menghantar.';
+
+  @override
+  String get finishNothingNew => 'Belum ada yang baharu.';
+
+  @override
+  String get takingLongerThanUsual => 'Mengambil masa lebih lama daripada biasa. Ia akan tersedia di Skrin Utama.';
+
+  @override
+  String get couldNotCheckOnIt => 'Tidak dapat menyemak. Cuba lagi.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Naik taraf untuk membuka yang ini.';
+
+  @override
+  String get missingTargetConversationGone => 'Perbualan itu telah dipadam.';
+
+  @override
+  String get cantConnectRightNow => 'Tidak dapat berhubung buat masa ini.';
+
+  @override
+  String get loadOlderFailed => 'Tidak dapat memuatkan yang lebih lama. Ketik untuk cuba lagi.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Mendengar · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Tunggu sehingga tamat untuk mengubahnya.';
+
+  @override
+  String get finishedSummaryReady => 'Ringkasan sedia';
+
+  @override
+  String get writingSummaryStatus => 'Menulis ringkasan…';
+
+  @override
+  String get stillWorkingOnIt => 'Masih memprosesnya.';
 }

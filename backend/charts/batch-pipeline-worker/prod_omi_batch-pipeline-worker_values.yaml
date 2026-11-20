@@ -12,15 +12,20 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-# Floor 4 (David D4, 2026-11-06, coordinator ask bc18db). Ceiling 16 (David,
-# 2026-11-16 16:41Z: backlog 25k ready at 8 pods; applied live 16:50Z and
-# persisted here so a worker Helm upgrade keeps it; node pool max is 18).
-# replicaCount and autoscaling.minReplicas are one floor setting; change both.
-# Rollback: maxReplicas 8. OD-first placement stays unchanged.
-replicaCount: 4
+# Floor 6 (David, 2026-11-20, superseding D4's floor 4 of 2026-11-06): over the
+# prior 3 days the HPA never asked for fewer than 6 workers, so the floor costs
+# ~0 extra machine-hours at current demand and keeps 6 L4s standing through an
+# L4 stockout (incident SCA-3274). The batch-pipeline-pool node minimum matches
+# it (operator-managed, docs/runbooks/batch-vendor-routing-capacity.md).
+# Ceiling 16 (David, 2026-11-16 16:41Z: backlog 25k ready at 8 pods; applied
+# live 16:50Z and persisted here so a worker Helm upgrade keeps it; node pool
+# max is 18). replicaCount and autoscaling.minReplicas are one floor setting;
+# change both. Rollback: floor 4 (both values and the node pool minimum);
+# ceiling rollback maxReplicas 8. OD-first placement stays unchanged.
+replicaCount: 6
 autoscaling:
   enabled: true
-  minReplicas: 4
+  minReplicas: 6
   maxReplicas: 16
   balancedPools:
     enabled: false

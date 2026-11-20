@@ -359,6 +359,7 @@ class PipelineWorker:
         language_of: Callable | None = None,
         timings: StageTimings | None = None,
     ):
+        self.worker_image_digest: str | None = None
         self.config = config or ProviderConfig()
         # Reject unavailable candidates, never silently select another provider.
         self.words = words_providers[self.config.words]
@@ -784,7 +785,11 @@ class PipelineWorker:
                 fail(item, exc, 'persist')
                 return
             results[slot] = WorkResult(
-                item.segment_id, uri, 'silence' if silent else 'success', language_receipt=language_receipt
+                item.segment_id,
+                uri,
+                'silence' if silent else 'success',
+                language_receipt=language_receipt,
+                worker_image_digest=self.worker_image_digest,
             )
             if has_silence:
                 silence_records.append(item.segment_id)
@@ -1278,6 +1283,7 @@ class PipelineWorker:
                             uri,
                             'silence' if state['silence'] else 'success',
                             language_receipt=language_receipt,
+                            worker_image_digest=self.worker_image_digest,
                         )
                     )
                     if silence is not None:

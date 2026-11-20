@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import math
 import time
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 
 from google.cloud import firestore
 from prometheus_client import Counter
@@ -36,7 +36,12 @@ COLLECTION = 'stt_cap_hold_reservations'
 DOCUMENT = 'current'
 STALE_SECONDS = 6 * 3600  # alert threshold only; a pending reservation is never released by age
 PRUNE_SECONDS = 7 * 24 * 3600  # other-period entries no longer count; drop them after a week
-MAX_OPEN = 200  # far above a backlog page; a bound, not a quota
+# A bound, not a quota. One sweep admits up to 100 turns x 10 items for a single owner before any batch
+# outcome can settle, so a page-sized bound refused legitimate hand-offs: production owners sat at 201-205
+# live holds (censored at the old 200) and their held audio stopped advancing. 1000 matches that burst
+# ceiling, and the ledger document stays ~150 KB, far under Firestore's 1 MiB limit. The settle pass in
+# reserve() keeps terminal entries out, so this bounds live work only.
+MAX_OPEN = 1000
 OUTCOMES = ('projected', 'failed', 'abandoned', 'pruned', 'stale')
 
 logger = logging.getLogger(__name__)
@@ -69,6 +74,26 @@ def _valid_units(units: object) -> float:
     if isinstance(units, bool) or not isinstance(units, (int, float)) or not math.isfinite(units) or units < 0:
         raise ValueError('reservation units must be a finite non-negative number')
     return float(units)
+
+
+class ReservationBoundExceeded(ValueError):
+    """A ledger is full of live reservations: the hand-off is deferred, not failed.
+
+    ``live`` is the entry count after the settle pass and ``settled`` is how many terminal entries that
+    pass released. ``settled == 0`` means every entry is genuinely live (backpressure); ``settled > 0``
+    means terminal entries were released and the ledger is still full, which is the deadlock signature.
+    """
+
+    def __init__(self, live: int, settled: int) -> None:
+        super().__init__('cap-hold reservation bound exceeded')
+        self.live = live
+        self.settled = settled
+
+
+class _Ledger(NamedTuple):
+    units: float
+    settled: int
+    live: int
 
 
 def reserve(
@@ -106,9 +131,15 @@ def reserve(
     if not try_reserve():
         # Older sweeps could erase a projected hold without releasing its reservation.
         # Settle those entries outside the reservation transaction, then recheck the bound.
-        open_units(uid, period, status_reader=batch_status, now=stamp, firestore_client=client)
+        ledger = _open_ledger(uid, period, status_reader=batch_status, now=stamp, firestore_client=client)
         if not try_reserve():
-            raise ValueError('cap-hold reservation bound exceeded')
+            logger.warning(
+                'event=cap_hold_reservation outcome=bound_exceeded live=%d settled=%d max_open=%d',
+                ledger.live,
+                ledger.settled,
+                MAX_OPEN,
+            )
+            raise ReservationBoundExceeded(live=ledger.live, settled=ledger.settled)
 
 
 def release_projected(uid: str, hold_id: str, batch_job_id: str) -> None:
@@ -131,12 +162,24 @@ def open_units(
     error log and ``outcome=stale``. Entries from another period stop counting immediately and are pruned
     after ``PRUNE_SECONDS``.
     """
+    return _open_ledger(uid, period, status_reader=status_reader, now=now, firestore_client=firestore_client).units
+
+
+def _open_ledger(
+    uid: str,
+    period: str,
+    *,
+    status_reader: StatusReader,
+    now: float | None = None,
+    firestore_client: Any = None,
+) -> _Ledger:
+    """Settle known outcomes once and report open units, entries released, and entries still live."""
     client = firestore_client or get_firestore_client()
     ref = _ref(uid, client)
     snapshot = ref.get()
     entries = _entries(snapshot.to_dict() if snapshot.exists else None)
     if not entries:
-        return 0.0
+        return _Ledger(0.0, 0, 0)
     stamp = time.time() if now is None else now
     settled: dict[str, tuple[str, str]] = {}
     stale: dict[str, str] = {}
@@ -153,11 +196,12 @@ def open_units(
             stale[hold_id] = batch_job_id
     if settled or stale:
         _settle(uid, settled, stale, stamp, client)
-    return sum(
+    units = sum(
         float(entry.get('units') or 0)
         for hold_id, entry in entries.items()
         if hold_id not in settled and entry.get('period') == period
     )
+    return _Ledger(units, len(settled), len(entries) - len(settled))
 
 
 def _settle(uid: str, settled: dict[str, tuple[str, str]], stale: dict[str, str], stamp: float, client: Any) -> None:

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+from contextlib import nullcontext
+from dataclasses import dataclass
 import hashlib
 import logging
 import os
@@ -18,10 +20,11 @@ from typing import TYPE_CHECKING
 
 from prometheus_client import Counter
 
-from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, matches_live_privacy_version
 from database.batch_privacy_attempt import with_batch_privacy_attempt
 from config.batch_pipeline import (
     projection_followup_backoff_seconds,
+    projection_followup_early_coalesce_enabled,
     projection_followup_page_enabled,
     projection_followup_slots,
     projection_pagination_enabled,
@@ -30,6 +33,7 @@ from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
 from database.batch_pipeline_store import PROJECTION_FINISH_STATES
 from database.batch_pipeline_projection_claim import projection_claim
+from database.batch_pipeline_projection_session import FollowupPrivacyProof, ready_followup_privacy_ids
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.projection import (
     error_site_field,
@@ -82,6 +86,15 @@ FOLLOWUP_TIMEOUT_SECONDS = 120.0
 CLAIM_RELEASE_TIMEOUT_SECONDS = 2.0
 
 
+@dataclass(frozen=True)
+class PersistedFollowup:
+    job: dict
+    entry: dict
+    binding: ProjectionBinding
+    proof: FollowupPrivacyProof | None = None
+    coalesced: bool = False
+
+
 class ProjectionFollowups:
     def __init__(self, projector: Projector):
         self.projector = projector
@@ -98,12 +111,15 @@ class ProjectionFollowups:
         store = projector.store.store
         # Only existing periodic Firestore discovery pages, before local backoff.
         # Targeted/owed repairs and simulated/Postgres stores are outside this measurement.
-        self.discovery = ProjectionDiscovery(store, on_page=observer_for_store(store))
+        self.discovery = ProjectionDiscovery(
+            store, on_page=observer_for_store(store), outbox_coverage=getattr(projector, 'has_outbox_coverage', None)
+        )
         self.due_clock = FollowupClock(projector)
         self.due_pass_before: float | None = None
         self.page = 0
         self.pages: dict[str, int] = {}
         self.completion_attempts: set[tuple[int, ProjectionBinding]] = set()
+        self.completed_probes: dict[int, dict[ProjectionBinding, FollowupPrivacyProof]] = {}
         self.backoff_ceiling = projection_followup_backoff_seconds()
         # Desync needs the keyset cursor: with pagination off every page is the
         # head, so offset, backoff and pass bounds stay off (the legacy path).
@@ -353,6 +369,7 @@ class ProjectionFollowups:
         page = self.pages.pop(segment, None)
         if page is not None and page not in self.pages.values():
             self.completion_attempts = {key for key in self.completion_attempts if key[0] != page}
+            self.completed_probes.pop(page, None)
 
     def finished(self, segment, task, *, targeted=False):
         self.tasks.pop(segment, None)
@@ -366,25 +383,60 @@ class ProjectionFollowups:
             self.owed.clear()
             self.pages.clear()
             self.completion_attempts.clear()
+            self.completed_probes.clear()
         if targeted:
             self.launch_targeted()
         else:
             self.launch()  # Refill immediately, without another 20s serving sleep.
 
-    def read_persisted(self, segment):
+    @staticmethod
+    def privacy_ids(segment, binding, job, entry):
+        try:
+            return ready_followup_privacy_ids(segment, binding, job, entry)
+        except (TypeError, ValueError, KeyError, AttributeError):
+            # Malformed or partially migrated hints still take the authoritative path.
+            return None
+
+    def read_persisted(self, segment, *, prior=None, hints=None):
         store = self.projector.store
-        _, _, binding = store.read(segment)
+        job, entry, binding = hints if hints is not None else store.read(segment)
+        ids = self.privacy_ids(segment, binding, job, entry) if prior is not None else None
+        if prior is not None and ids is not None:
+            proof = prior.get(binding)
+            if (
+                proof is not None
+                and proof.client is store.client
+                and ids <= proof.ids
+                and time.monotonic() < proof.expires_at
+                and matches_live_privacy_version(
+                    store.client, binding.owner_id, binding.privacy_generation, proof.version
+                )
+            ):
+                return PersistedFollowup(job, entry, binding, proof, coalesced=True)
         session = store.session(segment, binding, self.projector.clock())
+        session.capture_followup_privacy = ids is not None
         try:
             store.check(session)
         except ProjectionReplay:
             # Use the validated transaction snapshot, never the initial fetch hint.
             if session.entry.get('projection'):
-                return session.job, session.entry, binding
+                proof = getattr(session, 'followup_privacy_proof', None)
+                if proof is not None:
+                    verified = self.privacy_ids(segment, binding, session.job, session.entry)
+                    if verified is None or not verified <= proof.ids:
+                        proof = None
+                return PersistedFollowup(session.job, session.entry, binding, proof)
         raise ProjectionBlocked('complete ordered assignment required before follow-up')
 
     @with_batch_privacy_attempt
-    async def run(self, segment):
+    async def run(self, segment, *, track_backoff=True):
+        slots = getattr(self.projector, 'outbox_followup_slots', None)
+        # During mixed discovery both queues share one process-wide effect
+        # budget. Queueing for it does not spend the follow-up attempt clock.
+        async with slots if isinstance(slots, asyncio.Semaphore) else nullcontext():
+            return await self.run_attempt(segment, track_backoff=track_backoff)
+
+    async def run_attempt(self, segment, *, track_backoff):
         try:
             # Cancel this coordinator, not the drain. The persisted/ready outbox
             # row remains eligible for a later sweep, including a lost reply
@@ -393,7 +445,7 @@ class ProjectionFollowups:
                 outcome = await self._run(segment)
                 # Hint persistence shares the attempt's original deadline. A
                 # slow DB must not pin a follow-up slot after useful work ended.
-                if outcome == 'incomplete' and segment in self.due_clock.entries:
+                if track_backoff and outcome == 'incomplete' and segment in self.due_clock.entries:
                     deferred = await run_blocking(
                         db_executor, self.due_clock.settle, segment, outcome, projection_followup_backoff_seconds()
                     )
@@ -404,7 +456,11 @@ class ProjectionFollowups:
             outcome = 'timeout'
         finally:
             self.due_clock.entries.pop(segment, None)
-        self.note(segment, outcome)
+        if track_backoff:
+            self.note(segment, outcome)
+        else:
+            OUTCOMES.labels(outcome).inc()
+        return outcome
 
     @staticmethod
     def unit_key(segment: str) -> str:
@@ -419,12 +475,39 @@ class ProjectionFollowups:
             db_executor, projection_claim, store.store.namespace + ':followup', owner_key(segment)
         )
         entered = False
+        completed_probe: tuple[int, ProjectionBinding, FollowupPrivacyProof] | None = None
         try:
             acquired = await run_blocking(db_executor, claim.__enter__)
             entered = True
             if not acquired:
                 return 'claim_busy'
-            job, entry, binding = await run_blocking(db_executor, self.read_persisted, segment)
+            page = self.pages.get(segment)
+            early = (
+                page is not None and projection_followup_page_enabled() and projection_followup_early_coalesce_enabled()
+            )
+            if early and page is not None:
+                prior = self.completed_probes.get(page, {}).copy()
+                persisted = await run_blocking(db_executor, self.read_persisted, segment, prior=prior)
+            else:
+                persisted = await run_blocking(db_executor, self.read_persisted, segment)
+            job, entry, binding = persisted.job, persisted.entry, persisted.binding
+            if persisted.coalesced:
+                # A recovery wake, page cleanup or shutdown may have invalidated
+                # the process-local witness while the token read was in flight.
+                if (
+                    page is not None
+                    and self.pages.get(segment) == page
+                    and persisted.proof is not None
+                    and self.completed_probes.get(page, {}).get(binding) is persisted.proof
+                    and time.monotonic() < persisted.proof.expires_at
+                    and not self.closed
+                    and projection_followup_page_enabled()
+                    and projection_followup_early_coalesce_enabled()
+                ):
+                    OUTCOMES.labels('early_check_skipped').inc()
+                    return 'coalesced'
+                persisted = await run_blocking(db_executor, self.read_persisted, segment, hints=(job, entry, binding))
+                job, entry, binding = persisted.job, persisted.entry, persisted.binding
             if projection_followup_page_enabled():
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 if not policy.async_projection:
@@ -441,9 +524,9 @@ class ProjectionFollowups:
                 await self.finish_part(item, binding, receipt, int(index) if index is not None else None)
             # Usage is resolved only when every sibling has ready receipts;
             # complete() atomically fences ledger/usage/client status as before.
-            page = self.pages.get(segment, 0)
-            key = (page, binding)
-            coalesce = projection_followup_page_enabled() and was_ready and page != 0
+            current_page = self.pages.get(segment, 0)
+            key = (current_page, binding)
+            coalesce = projection_followup_page_enabled() and was_ready and current_page != 0
             if coalesce:
                 if key in self.completion_attempts:
                     return 'coalesced'
@@ -466,6 +549,17 @@ class ProjectionFollowups:
             # a partial holds). The sibling's own follow-up probes completion.
             if result is not None and result.get('reason_code') == 'source_deleted':
                 return 'source_deleted'
+            if (
+                early
+                and page is not None
+                and coalesce
+                and result is not None
+                and result.get('reason_code') is None
+                and persisted.proof is not None
+                and page == self.pages.get(segment)
+                and not self.closed
+            ):
+                completed_probe = (page, binding, persisted.proof)
             return 'completed' if result is not None else 'incomplete'
         except (ProjectionBlocked, BatchPrivacyBlocked) as error:
             logger.info(
@@ -495,6 +589,11 @@ class ProjectionFollowups:
                     logger.warning(
                         'event=batch_projection_followup action=release outcome=timeout unit=%s', self.unit_key(segment)
                     )
+                else:
+                    if completed_probe is not None:
+                        probe_page, binding, proof = completed_probe
+                        if probe_page == self.pages.get(segment) and not self.closed:
+                            self.completed_probes.setdefault(probe_page, {})[binding] = proof
 
     async def step(self, policy, phase, executor, function, *args, **kwargs):
         with projection_phase(phase, policy):

@@ -9,6 +9,19 @@ keep their existing recovery.
 
 ## Readers, writers and sweeps
 
+Sync upload intake can establish a monthly allowance refusal after it has
+selected the Omi-funded GPU route. The bounded probe uses the same batch-funded
+resolver with an already verified monthly usage total. An unavailable total,
+budget denial or ambiguous decision leaves the upload on the ordinary worker
+path. Sync upload enforces the independent Unlimited V2 backfill day cap. The
+admission transaction rechecks the release cursor and usage period before
+inserting the job and owner's held count together.
+New holds have no ready-queue link, so workers predating SCA-2195 cannot lease
+them. Observe committed uploads with
+`omi_stt_cap_dispatch_decisions_total{path="batch_intake",outcome="held",reason="allowance_exhausted"}`.
+The `batch_allowance_intake` log also records the number of parked units per
+commit.
+
 `Scheduler.defer` (GPU worker and backend) parks new refusals transactionally;
 `Scheduler.recover` (both services) parks old-worker retry decisions. The
 operator migration and scheduler use the same CAS helper in
@@ -23,13 +36,7 @@ held owners with one leader at this rate). There is no per-recording poll.
 The generation reads both the commercial subscription and
 `referral_campaign_grant`. It hashes commercial authority/validity, campaign
 enablement, the grant fields admission consumes, the shared effective plan
-projection, and the UTC usage month (UTC day when the optional backfill day cap
-is enabled). The daily signal prevents a re-parked day-cap refusal from waiting
-until next month. Discovery may reoffer a still-capped row once per day; normal
-admission still refuses it, without changing entitlement or allowance amounts.
-This adds at most one generation recheck/release attempt per owner per day while
-that cap is enabled; repeated large daily bursts need the same cost remeasurement
-as other repeated generation bursts. Grant claims/extensions and starts, expiry
+projection, and the UTC usage month. Grant claims/extensions and starts, expiry
 or paid-coverage time boundaries therefore change discovery even without a
 commercial write. Other usage counters and profile fields do not. This uses
 `effective_subscription_payload`, the same promotion composition as admission;
@@ -188,6 +195,13 @@ the durable progress document; do not undo safely parked rows to roll back speed
 No saving is claimed by this tool change or its synthetic/emulator tests.
 
 ## Rollback and production acceptance
+
+Set `BATCH_ALLOWANCE_INTAKE_PARK_ENABLED=off` on upload-serving roles to stop
+new intake holds. Existing holds still release and newly refused jobs still
+park through the worker and recovery paths. For rollback past the original
+parking protocol, turn intake parking off before disabling the controller
+and worker parking below. Keep the parking-aware controller until held stock
+drains.
 
 Kill switch: `BATCH_ALLOWANCE_PARK_ENABLED=off` on **backend-integration and
 every GPU worker**, read live per transition; unset/on keeps parking enabled.

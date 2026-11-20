@@ -122,7 +122,7 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
       }
       final snapshot = census;
       // Ownership proof is intentionally NOT required. Foreign/held references
-      // reserve their own files; all accounts share the same 45-day age rule.
+      // reserve their own files; all accounts share the same reclaim age rule.
       if (!snapshot.complete || snapshot.summary['memory_snapshot_available'] != true || !preferences.complete) {
         result = 'incomplete_census';
         return;

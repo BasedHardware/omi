@@ -89,10 +89,12 @@ void main() {
     await dir.delete(recursive: true);
   });
 
-  test('classifies every class, strict frames and the inclusive 28-day boundary without writes', () async {
+  test('classifies every class, strict frames and the inclusive recovery-window boundary without writes', () async {
     final files = [
-      name(now - 28 * 86400),
-      name(now - 28 * 86400 - 1),
+      name(now - orphanRecoveryWindowSeconds),
+      name(now - orphanRecoveryWindowSeconds - 1),
+      // Admissible under the 60-day server lookback; the 28-day window used to expire it.
+      name(now - 40 * 86400),
       name(now),
       '${name(now)}.part',
       '${name(now)}.torn',
@@ -111,7 +113,9 @@ void main() {
     expect(result.orphans.where((f) => f.classification == 'working').length, 4);
     expect(result.orphans.where((f) => f.classification == 'unparseable').length, 2);
     expect(result.orphans.where((f) => f.classification == 'expired').length, 1);
-    expect(result.orphans.where((f) => f.classification == 'recoverable').length, 2);
+    expect(result.orphans.where((f) => f.classification == 'recoverable').length, 3);
+    expect(
+        result.orphans.singleWhere((f) => f.filePath.endsWith(name(now - 40 * 86400))).classification, 'recoverable');
     for (final f in files) {
       expect(await File('${dir.path}/$f').readAsBytes(), before[f]);
     }
@@ -994,9 +998,9 @@ void main() {
     });
   }
 
-  test('manual upload after 30 days marks outsideRecoveryWindow and retains the held file', () async {
+  test('manual upload past the server lookback marks outsideRecoveryWindow and retains the held file', () async {
     var seconds = now;
-    const capture = now - 28 * 86400;
+    const capture = now - orphanRecoveryWindowSeconds;
     final file = await audio(name(capture));
     final bytes = await file.readAsBytes();
     var uploads = 0;
@@ -1013,7 +1017,7 @@ void main() {
             geolocation}) async {
           uploads++;
           expect(audioStartSeconds, capture.toDouble());
-          expect(seconds - capture, greaterThan(30 * 86400));
+          expect(seconds - capture, greaterThan(serverSyncLookbackSeconds));
           throw const SyncRecoveryWindowExceededException();
         }));
     await sync.recoverOrphanAudio();
@@ -1285,7 +1289,7 @@ void main() {
   });
 
   test('expiry while waiting for adoption is counted and retains the original', () async {
-    await audio(name(now - 28 * 86400));
+    await audio(name(now - orphanRecoveryWindowSeconds));
     var seconds = now;
     final events = <Map<String, Object?>>[];
     final sync = await ledger(
@@ -1302,7 +1306,7 @@ void main() {
   });
 
   test('expiry after the budget timestamp is rechecked immediately before admission', () async {
-    final file = await audio(name(now - 28 * 86400));
+    final file = await audio(name(now - orphanRecoveryWindowSeconds));
     final bytes = await file.readAsBytes();
     var censusComplete = false, postCensusClockReads = 0;
     final events = <Map<String, Object?>>[];

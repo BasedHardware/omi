@@ -1,0 +1,8 @@
+image:
+  digest: ""
+replicaCount: 1
+workers: 4
+podMonitoring:
+  enabled: true
+migration:
+  enabled: false

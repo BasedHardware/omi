@@ -7,9 +7,13 @@ from database.action_item_fence import fenced_action_item_commit
 from database.home_feed_writer import suppress_during_account_erasure
 import logging
 from typing import Any
+from uuid import uuid4
+
+from google.cloud import firestore
 
 from database.quiet_check_retirement import stop_quiet_checks_for_account
-from database._client import get_data_plane_firestore_client
+from database._client import get_data_plane_firestore_client, run_transactional
+from database.batch_account_authority import account_authority_writer_enabled, mutate_account_authority
 from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD
 from database.people_generation import generation_ref
 from database.staged_promote_cache import invalidate_around_write
@@ -46,6 +50,7 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
         app_ref.delete()
         delete_app_cache_by_id(app_id)
     user_ref = client.collection('users').document(uid)
+    atomic_root = account_authority_writer_enabled()
     root_exists = user_ref.get().exists
 
     # Enumerate subcollections live even when the root document is missing.
@@ -75,7 +80,17 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     # people_meta was enumerated. Missing metadata never authorizes memo reuse.
     generation_ref(user_ref).delete()
 
-    if root_exists:
+    if root_exists and atomic_root:
+        operation_id = uuid4().hex
+
+        @firestore.transactional
+        def delete_root(transaction):
+            snapshot = user_ref.get(transaction=transaction)
+            if snapshot.exists:
+                mutate_account_authority(transaction, user_ref, operation_id, None, client=client, preimage=snapshot)
+
+        run_transactional(client, delete_root, transient=True)
+    elif root_exists:
         logger.info(f"Deleting user document: {uid}")
         user_ref.delete()
     stop_quiet_checks_for_account(uid, firestore_client=client)

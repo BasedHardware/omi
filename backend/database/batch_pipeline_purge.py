@@ -11,7 +11,12 @@ from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
 from database import record_wal_capacity
 from utils.batch_pipeline.record_wal_erasure import purge_record_wal_owner
-from database.batch_pipeline_privacy import advance_privacy_generation, finish_privacy_purge, privacy_owner_key
+from database.batch_pipeline_privacy import (
+    PRIVACY_COLLECTION,
+    advance_privacy_generation,
+    finish_privacy_purge,
+    privacy_owner_key,
+)
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
 from database.batch_pipeline_allowance_hold import STATE as ALLOWANCE_HELD, OWNERS as ALLOWANCE_OWNERS
 
@@ -137,7 +142,8 @@ def _erase_artifact(
     delete_uri: Callable[[str, str], None],
     fence: Callable[[Any], None] | None = None,
     client: Any = None,
-) -> None:
+) -> bool:
+    """Erase an artifact, returning whether its upload receipt had to stay."""
     # The default deleter enforces the requested owner's configured storage
     # prefix before any metadata repair. A foreign URI raises, so the purge
     # cannot acknowledge erasure or transfer deletion authority to that row.
@@ -173,6 +179,7 @@ def _erase_artifact(
             raise ValueError('a fenced artifact erase needs the client that owns the row')
         fenced(client.transaction())
     mirror_refresh(namespace, [('artifacts', snapshot.id)])
+    return pending
 
 
 def purge_batch_owner(
@@ -181,6 +188,7 @@ def purge_batch_owner(
     firestore_client: Any = None,
     conversation_id: str | None = None,
     reason: str = 'deleted',
+    protection_generation: int | None = None,
     namespaces: Iterable[str] = NAMESPACES,
     delete_uri: Callable[[str, str], None] | None = None,
 ) -> int:
@@ -203,7 +211,16 @@ def purge_batch_owner(
     generation = 0
     if reason not in {'deleted', 'data_protection'}:
         raise ValueError('bounded privacy reason required')
-    if conversation_id is None:
+    if protection_generation is not None:
+        if conversation_id is not None or reason != 'data_protection' or protection_generation < 1:
+            raise ValueError('expected an account protection purge intent')
+        row = client.collection(PRIVACY_COLLECTION).document(key).get().to_dict() or {}
+        if row.get('generation', 0) < protection_generation:
+            raise RuntimeError('missing committed protection purge intent')
+        if row.get('generation') != protection_generation or row.get('purging') is not True:
+            return 0  # This intent already completed or a newer purge owns cleanup.
+        generation = protection_generation
+    elif conversation_id is None:
         generation = advance_privacy_generation(client, uid, blocked=reason == 'deleted')
     else:
         tombstone = (

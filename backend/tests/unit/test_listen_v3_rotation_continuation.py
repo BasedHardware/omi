@@ -138,3 +138,36 @@ def test_supersede_accepts_a_pointer_this_socket_left_on_its_own_recording():
         firestore_client=store,
     )
     assert moved == 'moved' and store.rows[ROOT]['live_continuation']['conversation_id'] == 'new'
+
+
+@pytest.mark.anyio
+async def test_a_failed_pointer_move_still_finishes_the_successor_and_counts_it(monkeypatch):
+    from routers.listen import conversations as controller_module
+
+    harness = _harness(monkeypatch)
+    controller, sealed = _connect(harness)
+    await controller.prepare()
+    first = controller.host.state.current_conversation_id
+    outcomes = []
+    monkeypatch.setattr(controller_module, 'record_rotation', outcomes.append)
+
+    def broken(*args, **kwargs):
+        raise RuntimeError('firestore')
+
+    monkeypatch.setattr(controller_module, 'supersede_live_continuation', broken)
+    call = harness.call
+
+    async def calls(fn, *args, **kwargs):
+        if fn is broken:
+            return fn(*args, **kwargs)
+        return await call(fn, *args, **kwargs)
+
+    controller.host.persistence.call = calls
+    events = len(harness.events)
+    harness.now += timedelta(minutes=3)
+    await controller._rotate_v3_recording(first)
+    successor = controller.host.state.current_conversation_id
+    assert successor != first and sealed == [first]
+    assert 'pointer_failed' in outcomes and 'rotated' in outcomes
+    assert harness.pointer == successor  # the Redis in-progress id and the tail ran
+    assert len(harness.events) > events  # send_conversation_session reached the phone

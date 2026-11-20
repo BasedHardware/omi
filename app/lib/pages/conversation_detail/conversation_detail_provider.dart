@@ -61,6 +61,7 @@ class ConversationDetailProvider extends ChangeNotifier
     Future<RecordingTranscript?> Function(String)? fetchRecording,
     ConversationReprocessCall? reprocess,
     ConversationDetailFetchCall? fetchConversation,
+    Future<ConversationByIdResult> Function(String)? fetchConversationResult,
     SpeakerRejectionCall? rejectSpeaker,
     EnabledSummaryAppsFetch? fetchEnabledSummaryApps,
     SuggestedSummaryAppsFetch? fetchSuggestedSummaryApps,
@@ -85,7 +86,13 @@ class ConversationDetailProvider extends ChangeNotifier
                 : (_) async => null),
         _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
         _reprocess = reprocess ?? reProcessConversationServer,
-        _fetchConversation = fetchConversation ?? ((id) => getConversationById(id, userInitiated: true)),
+        _fetchConversationResult = fetchConversationResult ??
+            (fetchConversation == null
+                ? ((id) => getConversationDetailReadResult(id, userInitiated: true))
+                : ((id) async {
+                    final value = await fetchConversation(id);
+                    return (item: value, ok: value != null, inaccessible: false);
+                  })),
         enabledSummaryAppsFetch = fetchEnabledSummaryApps ?? fetchInstalledSummaryApps,
         suggestedSummaryAppsFetch = fetchSuggestedSummaryApps ?? fetchConversationSuggestedSummaryApps,
         preferredSummaryAppWrite = writePreferredSummaryApp ?? writeServerPreferredSummaryApp,
@@ -113,7 +120,7 @@ class ConversationDetailProvider extends ChangeNotifier
   final SuggestedSummaryAppsFetch suggestedSummaryAppsFetch;
   @override
   final PreferredSummaryAppWrite preferredSummaryAppWrite;
-  final ConversationDetailFetchCall _fetchConversation;
+  final Future<ConversationByIdResult> Function(String) _fetchConversationResult;
   final SpeakerRejectionCall _rejectSpeaker;
   String? _speakerSummaryConversationId;
   int _speakerEditGeneration = 0;
@@ -561,7 +568,7 @@ class ConversationDetailProvider extends ChangeNotifier
       }
       // This also follows a safety-WAL donor's bridge redirect. Reprocess
       // itself does not follow that redirect or accept a deleted conversation.
-      final current = await _fetchConversation(conversationId);
+      final current = (await _fetchConversationResult(conversationId)).item;
       if (current == null ||
           current.deleted ||
           _speakerConversationDeleted(conversationId) ||
@@ -708,6 +715,18 @@ class ConversationDetailProvider extends ChangeNotifier
 
   /// The last [refreshConversation] that the page asked to track ([trackLoad]).
   ConversationDetailLoad detailLoad = ConversationDetailLoad.idle;
+  bool _detailAccessUnavailable = false;
+  bool get detailAccessUnavailable => _detailAccessUnavailable;
+  ({String owner, ServerConversation row})? _hydratedDetail;
+
+  bool hasHydratedDetail(String id) {
+    final detail = _hydratedDetail;
+    return !_detailAccessUnavailable &&
+        detail != null &&
+        detail.owner == SharedPreferencesUtil().uid &&
+        detail.row.id == id &&
+        identical(detail.row, conversationOrNull);
+  }
 
   /// Whether the open conversation is being reprocessed right now.
   bool get isReprocessingOpenConversation =>
@@ -1269,11 +1288,13 @@ class ConversationDetailProvider extends ChangeNotifier
     }
     if (_cachedConversationId != conversation.id) {
       detailLoad = ConversationDetailLoad.idle;
+      _detailAccessUnavailable = false;
       _refreshGeneration++;
       resetSuggestedSummaryApps();
     }
     _cachedConversation = conversation;
     _cachedConversationId = conversation.id;
+    _hydratedDetail = null;
     _endedSpeakerLabelingSessionIds.remove(conversation.id);
     notifyListeners();
   }
@@ -1283,6 +1304,7 @@ class ConversationDetailProvider extends ChangeNotifier
   /// silent and never overwrite a tracked failure with "loading".
   Future<bool> refreshConversation({bool trackLoad = false}) async {
     final openedId = conversationOrNull?.id;
+    final ownerUid = SharedPreferencesUtil().uid;
     if (openedId == null) return false;
     if (openedId.startsWith('ondevice-')) {
       detailLoad = ConversationDetailLoad.idle;
@@ -1296,8 +1318,11 @@ class ConversationDetailProvider extends ChangeNotifier
       notifyListeners();
     }
     ServerConversation? updatedConversation;
+    var inaccessible = false;
     try {
-      updatedConversation = await _fetchConversation(openedId);
+      final result = await _fetchConversationResult(openedId);
+      updatedConversation = result.item;
+      inaccessible = result.inaccessible;
       if (updatedConversation != null) {
         updatedConversation = OnDeviceTranscriptionController.instance.displayConversation(updatedConversation);
       }
@@ -1307,11 +1332,13 @@ class ConversationDetailProvider extends ChangeNotifier
     // A newer read, another conversation or a reprocess result superseded this one: it owns the
     // page now, including [detailLoad].
     if (_isDisposed ||
+        SharedPreferencesUtil().uid != ownerUid ||
         generation != _refreshGeneration ||
         speakerGeneration != _speakerEditGeneration ||
         conversationOrNull?.id != openedId) {
       return false;
     }
+    if (updatedConversation != null || inaccessible) _detailAccessUnavailable = inaccessible;
     if (updatedConversation != null) {
       if (updatedConversation.id != openedId) {
         if (!_syncConversationId.hasMatch(openedId)) return false;
@@ -1327,6 +1354,7 @@ class ConversationDetailProvider extends ChangeNotifier
         TranscriptionPendingConversations.observe(updatedConversation);
         conversationProvider?.updateConversation(updatedConversation);
         _cachedConversation = updatedConversation;
+        _hydratedDetail = (owner: ownerUid, row: conversationOrNull ?? updatedConversation);
         clearSettledSummaryFailure(updatedConversation);
         resetRecordingTranscript();
       }

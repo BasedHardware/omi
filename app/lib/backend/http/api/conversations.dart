@@ -1,5 +1,7 @@
 import 'package:omi/utils/analytics/lag_work_registry.dart';
 import 'sync_upload_refusal.dart';
+import 'conversation_page_headers.dart';
+export 'conversation_page_headers.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -150,8 +152,10 @@ Future<List<ServerConversation>> getConversations({
 Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversationsResult({
   Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
   void Function(int)? onStorageCount,
+  void Function(ConversationPageHeaders)? onPageHeaders,
   int limit = 50,
   int offset = 0,
+  String? cursor,
   List<ConversationStatus> statuses = const [],
   bool includeDiscarded = false,
   DateTime? startDate,
@@ -169,6 +173,7 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
     endDate: endDate,
     folderId: folderId,
     starred: starred,
+    cursor: cursor,
   );
 
   final held = <String, ServerConversation>{};
@@ -197,6 +202,7 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
         threshold: conversationListBackgroundParseBytes,
         debugName: 'conversation_list_parse');
     onStorageCount?.call(int.tryParse(response.headers['x-omi-conversation-page-size'] ?? '') ?? memories.length);
+    onPageHeaders?.call(ConversationPageHeaders.parse(response.headers));
     // Preserve an exact local fallback for each server omission. If a later
     // overlay refresh drops this episode, its members can still render on Home.
     final retained =
@@ -516,7 +522,9 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   return [];
 }
 
-Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId,
+typedef ConversationByIdResult = ({ServerConversation? item, bool ok, bool inaccessible});
+
+Future<ConversationByIdResult> getConversationDetailReadResult(String conversationId,
     {bool userInitiated = false}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
@@ -524,20 +532,30 @@ Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String c
     method: 'GET',
     body: '',
   );
-  if (response == null) return (item: null, ok: false);
+  if (response == null) return (item: null, ok: false, inaccessible: false);
   if (response.statusCode == 200) {
-    return (item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>), ok: true);
+    return (
+      item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+      ok: true,
+      inaccessible: false
+    );
   } else if (response.statusCode == 402) {
     // Locked conversations are still returned by the list endpoint as a
     // redacted completed row, but their detail endpoint intentionally returns
     // 402. Treat that response as an authoritative terminal result for
     // lifecycle reconciliation so a stale Processing card is cleared.
     Logger.debug('Conversation is locked/redacted: $conversationId');
-    return (item: null, ok: true);
+    return (item: null, ok: true, inaccessible: true);
   } else if (response.statusCode == 404) {
-    return (item: null, ok: true);
+    return (item: null, ok: true, inaccessible: true);
   }
-  return (item: null, ok: false);
+  return (item: null, ok: false, inaccessible: response.statusCode == 401 || response.statusCode == 403);
+}
+
+Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId,
+    {bool userInitiated = false}) async {
+  final result = await getConversationDetailReadResult(conversationId, userInitiated: userInitiated);
+  return (item: result.item, ok: result.ok);
 }
 
 /// Per local day in [tz], how many noise/media clips the server folded away from Home
@@ -589,6 +607,7 @@ String conversationCollectionUrl(
   DateTime? endDate,
   String? folderId,
   bool? starred,
+  String? cursor,
 }) {
   final root = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
   var url =
@@ -604,6 +623,9 @@ String conversationCollectionUrl(
   }
   if (starred != null) {
     url += '&starred=$starred';
+  }
+  if (cursor != null && cursor.isNotEmpty) {
+    url += '&cursor=${Uri.encodeQueryComponent(cursor)}';
   }
   return url;
 }
@@ -629,10 +651,14 @@ class ConversationApi {
     bool? starred,
     Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
     void Function(int)? onStorageCount,
+    void Function(ConversationPageHeaders)? onPageHeaders,
+    String? cursor,
   }) =>
       _listHomeConversations(this,
           limit: limit,
           offset: offset,
+          cursor: cursor,
+          onPageHeaders: onPageHeaders,
           statuses: statuses,
           includeDiscarded: includeDiscarded,
           startDate: startDate,

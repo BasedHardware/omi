@@ -278,3 +278,136 @@ async def test_runtime_teardown_drains_pending_rotations(monkeypatch):
     await runtime._teardown_components()
     runtime.conversations.drain_rotations.assert_awaited_once_with()
     assert order == ['drain']
+
+
+def _failed_create_store(monkeypatch, stray_updates=None):
+    from unittest.mock import Mock
+
+    from database import recording_sessions, redis_db
+    from tests.unit.test_recording_sessions import _FakeFirestore
+    from utils.conversations import lifecycle
+
+    current, stray = _row('current', False), _row('stray', False)
+    stray.update({'server_batch_audio_received': False, **(stray_updates or {})})
+    db = _FakeFirestore({_key('current'): current})
+    monkeypatch.setattr(recording_sessions.firestore, 'transactional', lambda fn: fn)
+    monkeypatch.setattr(recording_sessions, 'get_firestore_client', lambda: db)
+    monkeypatch.setattr(server_batch_audio, 'get_firestore_client', lambda: db)
+    monkeypatch.setattr(recording_sessions, 'invalidate_people_stats_cache', lambda *a: None)
+    monkeypatch.setattr(recording_sessions, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
+    monkeypatch.setattr(conversations, 'get_conversation', lambda uid, cid, **kw: db.documents.get(_key(cid)))
+    monkeypatch.setattr(conversations, 'delete_conversation_photos', lambda *a: None)
+    monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', Mock())
+    monkeypatch.setattr(redis_db, 'set_in_progress_conversation_id', lambda *a: None)
+    return db, stray
+
+
+def _failing_rotation_host(db, stray, *, archive=None, during_create=None):
+    from fastapi import WebSocketException
+
+    h = archive_host()
+    h.server_batch_only = True
+    h.state = SimpleNamespace(current_conversation_id='current', active=True, first_audio_byte_timestamp=None)
+    h.recording_session_ids_by_conversation = {'current': 'session-1'}
+    h.recording_session_id = 'session-1'
+    h.transcripts = SimpleNamespace(flush_speaker_assignments=AsyncMock())
+
+    async def call(fn, *args, **kwargs):
+        kwargs.pop('read_site', None)
+        return fn(*args, **kwargs)
+
+    h.persistence = SimpleNamespace(call=call)
+    controller = LiveConversationController(h)
+    h.conversations = controller
+    h.receiver = SimpleNamespace(raw_archive=archive or LiveAudioArchive(h))
+
+    async def create(*, rollover=False, supersede=None):
+        # The successor is bound and labels the socket, then its arm fails before the switch.
+        h.recording_session_id = 'session-2'
+        h.recording_session_ids_by_conversation['stray'] = 'session-2'
+        db.documents[_key('stray')] = stray
+        if during_create is not None:
+            await during_create()
+        raise RuntimeError('arm failed')
+
+    controller.create_new_in_progress_conversation = create
+    return controller, h
+
+
+@pytest.mark.asyncio
+async def test_a_failed_create_publishes_the_barrier_then_deletes_its_empty_successor(monkeypatch):
+    db, stray = _failed_create_store(monkeypatch)
+    controller, h = _failing_rotation_host(db, stray)
+    await controller._rotate_v3_recording('current')
+    assert _key('stray') not in db.documents  # real tombstone_and_delete_empty_conversation
+    assert h.state.current_conversation_id == 'current' and h.recording_session_id == 'session-1'
+    assert h.recording_session_ids_by_conversation == {'current': 'session-1'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'audio',
+    [
+        {'has_content': True},
+        {'server_batch_audio_received': True},
+        {'server_batch_audio_start': 1000.0, 'server_batch_audio_end': 1001.0},
+    ],
+)
+async def test_a_failed_create_keeps_a_successor_that_has_audio(monkeypatch, audio):
+    from routers.listen import conversations as controller_module
+
+    outcomes = []
+    monkeypatch.setattr(controller_module, 'record_rotation', outcomes.append)
+    db, stray = _failed_create_store(monkeypatch, audio)
+    controller, _ = _failing_rotation_host(db, stray)
+    await controller._rotate_v3_recording('current')
+    assert _key('stray') in db.documents
+    assert outcomes == ['successor_kept', 'create_failed']
+
+
+@pytest.mark.asyncio
+async def test_frames_during_a_failed_create_never_bind_to_its_successor(remote, monkeypatch):  # noqa: F811
+    db, stray = _failed_create_store(monkeypatch)
+    monkeypatch.setattr(
+        live_audio_archive,
+        'note_server_batch_audio',
+        lambda uid, cid, start, end, **kw: server_batch_audio.note_server_batch_audio(
+            uid, cid, start, end, firestore_client=db, **kw
+        ),
+    )
+    monkeypatch.setattr(
+        live_audio_archive,
+        'note_server_batch_audio_received',
+        lambda uid, cid, **kw: server_batch_audio.note_server_batch_audio_received(uid, cid, firestore_client=db, **kw),
+    )
+    successor_bound = asyncio.Event()
+    frame_appended = asyncio.Event()
+
+    async def overlap_with_append():
+        successor_bound.set()
+        await frame_appended.wait()
+
+    controller, h = _failing_rotation_host(db, stray, during_create=overlap_with_append)
+    archive = h.receiver.raw_archive
+    labels = []
+
+    async def produce():
+        for index in range(40):
+            if index == 1:
+                await successor_bound.wait()
+            # The receiver binds audio by current_conversation_id; the session label may already
+            # name the stray's recording session while its create is in flight.
+            labels.append(h.recording_session_id)
+            packet = struct.pack('<160h', *[index] * 160)
+            await archive.append(packet, h.state.current_conversation_id, 1000 + index * 0.01, 160, decoded=packet)
+            if index == 1:
+                frame_appended.set()
+            await asyncio.sleep(0)
+
+    await asyncio.wait_for(asyncio.gather(produce(), controller._rotate_v3_recording('current')), timeout=10)
+    await archive.close()
+    assert 'session-2' in labels  # the residual window the comment describes was exercised
+    assert _key('stray') not in db.documents
+    current = db.documents[_key('current')]
+    assert current['server_batch_audio_start'] == 1000 and current['server_batch_audio_end'] >= 1000.39
+    assert not archive.uncommitted
