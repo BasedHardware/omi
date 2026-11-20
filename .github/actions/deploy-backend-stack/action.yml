@@ -1232,7 +1232,9 @@ runs:
         # Integration carries its cap on the serving revision (no service cap), so a capacity revision's
         # cap survives the next train instead of being reset to the former 35 literal (2026-11-20).
         # Order: service-level cap; else the cap of the revisions receiving traffic (never the latest
-        # template, which can be a no-traffic candidate); else the fresh-service default.
+        # template, which can be a no-traffic candidate); else the fresh-service default. A receiving
+        # revision with no cap annotation also takes the default (35 in prod, the former literal).
+        # Bounds: the 500 ceiling here and the headroom gate; there is no service cap to pin in ops.
         # Listing distinguishes a fresh service from an API/auth failure, which must stop deployment.
         SOURCE="$(gcloud run services list \
           --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
@@ -1247,7 +1249,7 @@ runs:
                   | if type == "string" then "cap " + . else error("Invalid Cloud Run maxScale") end
               else [.[0].status.traffic[]? | select((.percent // 0) > 0) | .revisionName]
                 | if length == 0 then "default"
-                  elif any(.[]; type != "string" or test("^[a-z][a-z0-9-]{0,62}$") | not)
+                  elif any(.[]; (type == "string" and test("^[a-z][a-z0-9-]{0,62}$")) | not)
                     then error("Invalid serving revision") else "revisions " + join(" ") end end')"
         CAPS=()
         case "$SOURCE" in

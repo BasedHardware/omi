@@ -275,6 +275,10 @@ def test_integration_revision_read_failure_stops_deploy(tmp_path, action):
 @pytest.mark.parametrize('action', [INTEGRATION], indirect=True)
 @pytest.mark.parametrize('name', ['Bad_Name', 'a b', '-x', 7])
 def test_integration_invalid_serving_revision_stops_deploy(tmp_path, action, name):
-    result, output = resolve(tmp_path, action, traffic=[{'revisionName': name, 'percent': 100}], revisions={})
+    # A resolvable cap file exists for the bogus name, so only the name validation can stop it.
+    result, output = resolve(
+        tmp_path, action, traffic=[{'revisionName': name, 'percent': 100}], revisions={str(name): '45'}
+    )
     assert result.returncode != 0
     assert output == ''
+    assert 'revisions describe' not in (tmp_path / 'calls').read_text()
