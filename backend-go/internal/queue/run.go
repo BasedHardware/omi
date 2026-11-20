@@ -8,7 +8,6 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/BasedHardware/omi/backend-go/internal/platform/pg"
 	"github.com/BasedHardware/omi/backend-go/internal/queue/rules"
 )
 
@@ -178,14 +177,11 @@ blocked_since=clock_timestamp(),lease_until=NULL`, r.store.cfg.GateTimeout.Micro
 // job returns to where it was waiting. It runs during shutdown, so it does not depend on the
 // caller's context still being live.
 func (r *Run) unclaim(ctx context.Context) error {
-	ctx, cancel := pg.Cleanup(ctx, 3*time.Second)
-	defer cancel()
-	waitsForSecret := r.job.Gated && !r.job.Initializing && r.job.intent == nil
-	return r.transition(ctx, `attempts=attempts-1,lease_until=NULL,
-state=CASE WHEN $3 THEN 'blocked' ELSE 'ready' END,
-ready_at=clock_timestamp()+(CASE WHEN $3 THEN $4::bigint ELSE 0 END)*interval '1 microsecond',
-blocked_since=CASE WHEN $3 THEN clock_timestamp() ELSE blocked_since END`,
-		waitsForSecret, r.store.cfg.GateTimeout.Microseconds())
+	released, err := r.store.releaseClaims(ctx, []lease{r.lease})
+	if err == nil && released == 0 {
+		return ErrLease
+	}
+	return err
 }
 
 type waitKind uint8
