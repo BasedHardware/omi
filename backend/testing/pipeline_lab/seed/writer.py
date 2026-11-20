@@ -83,12 +83,22 @@ def _reason(error: BaseException) -> str:
     return f'{type(error).__name__}: {message}' if message else type(error).__name__
 
 
+REVIVED_TIME_FIELDS = ('summary_covers_through', 'v3_pending_since', 'recorded_start', 'recorded_end')
+
+
 def revive_claim_times(row: dict[str, Any]) -> dict[str, Any]:
     """A v3 recording's ``claims`` hold Firestore timestamps; the corpus stores them as ISO strings.
 
     The planner compares claim spans with segment datetimes (``planner._contains_line``), so a
     string span fails with ``TypeError`` on every reconcile.
     """
+    # Product time fields whose names don't end in ``_at``; refinement compares
+    # ``summary_covers_through >= finished_at`` and a string fails every pass with ``TypeError``.
+    for key in REVIVED_TIME_FIELDS:
+        if isinstance(row.get(key), str):
+            parsed = parse_time(row[key])
+            if parsed is not None:
+                row[key] = parsed
     claims = row.get('claims')
     if isinstance(claims, list):
         row['claims'] = [

@@ -336,3 +336,19 @@ def test_seeded_recording_claims_get_datetimes_back():
     )
     assert all(isinstance(row['claims'][0][k], datetime) for k in ('start', 'end'))
     assert revive_claim_times({'id': 'x'}) == {'id': 'x'}
+
+
+def test_seeded_v3_time_fields_without_at_suffix_get_datetimes_back():
+    from datetime import datetime
+
+    from testing.pipeline_lab.seed.writer import revive_claim_times
+
+    row = revive_claim_times(
+        {
+            'summary_covers_through': '2026-03-14T09:05:00Z',
+            'v3_pending_since': '2026-03-14T09:00:00+00:00',
+            'title': '2026-03-14T09:00:00Z',
+        }
+    )
+    assert isinstance(row['summary_covers_through'], datetime) and isinstance(row['v3_pending_since'], datetime)
+    assert row['title'] == '2026-03-14T09:00:00Z'

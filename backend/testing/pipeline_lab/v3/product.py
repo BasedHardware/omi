@@ -272,3 +272,103 @@ def install_emulator_size_errors(stack: ExitStack) -> None:
         return original(error) or ('document' if EMULATOR_ENTITY_TOO_LARGE in str(error) else None)
 
     stack.enter_context(patch.object(store, 'size_error', size_error))
+
+
+TRACE_ENV = 'OMI_PIPELINE_LAB_V3_TRACE'
+
+
+def install_planner_trace(stack: ExitStack) -> None:
+    """Diagnostics (``OMI_PIPELINE_LAB_V3_TRACE=<file>``): per builder pass, what ``store.load`` returned and
+    what ``preserve_finished_windows`` planned. Times, ids, statuses and counts only; never text."""
+    import json
+    import os
+    from unittest.mock import patch
+
+    target = os.environ.get(TRACE_ENV)
+    if not target:
+        return
+    from database import conversations_v3 as store
+    from utils.conversations.v3 import planner
+
+    original_load = store.load
+    original_preserve = planner.preserve_finished_windows
+
+    def iso(value: Any) -> Any:
+        return value.isoformat() if hasattr(value, 'isoformat') else value
+
+    def write(row: dict[str, Any]) -> None:
+        with open(target, 'a', encoding='utf-8') as handle:
+            handle.write(json.dumps(row, default=str) + '\n')
+
+    def load(uid: str, *args: Any, **kwargs: Any) -> Any:
+        result = original_load(uid, *args, **kwargs)
+        recordings, existing = result[0], result[1]
+        write(
+            {
+                'event': 'load',
+                'kwargs': sorted(kwargs),
+                'recordings': [
+                    {
+                        'id': rid[:8],
+                        'status': r.get('status'),
+                        'pending': r.get('v3_pending'),
+                        'claims': [
+                            (str(c.get('conversation_id'))[:8], iso(c.get('start')), iso(c.get('end')))
+                            for c in r.get('claims') or []
+                        ],
+                        'segments': len(r.get('transcript_segments') or []),
+                        'continues': r.get('_v3_page_continues'),
+                    }
+                    for rid, r in recordings.items()
+                ],
+                'existing': [
+                    {
+                        'id': cid[:8],
+                        'status': r.get('status'),
+                        'unlocked': r.get('v3_unlocked'),
+                        'start': iso(r.get('started_at')),
+                        'end': iso(r.get('finished_at')),
+                        'rids': [x[:8] for x in r.get('v3_recording_ids') or []],
+                    }
+                    for cid, r in existing.items()
+                ],
+            }
+        )
+        return result
+
+    def preserve(planned: Any, existing: Any, *args: Any, **kwargs: Any) -> Any:
+        before = [
+            {
+                'start': iso(w['lines'][0]['start']),
+                'end': iso(max(l['end'] for l in w['lines'])),
+                'finished': w.get('finished'),
+                'locked': w.get('locked'),
+                'n': len(w['lines']),
+                'defer': w.get('_defer_lock'),
+            }
+            for w in planned
+            if w.get('lines')
+        ]
+        result = original_preserve(planned, existing, *args, **kwargs)
+        write(
+            {
+                'event': 'preserve',
+                'planned': before,
+                'result': [
+                    {
+                        'start': iso(w['lines'][0]['start']) if w.get('lines') else None,
+                        'n': len(w.get('lines') or []),
+                        'finished': w.get('finished'),
+                        'existing_id': str(w.get('existing_id'))[:8],
+                        'held': w.get('_held_provisional'),
+                        'defer': w.get('_defer_lock'),
+                    }
+                    for w in result
+                ],
+                'kwargs': {k: v for k, v in kwargs.items() if isinstance(v, bool)},
+            }
+        )
+        return result
+
+    stack.enter_context(patch.object(store, 'load', load))
+    stack.enter_context(patch.object(planner, 'preserve_finished_windows', preserve))
