@@ -159,6 +159,76 @@ def test_an_exact_hold_on_a_later_locked_row_beats_an_earlier_row_claim():
     assert planner.Ownership({'wide': wide, 'exact': other}, recordings).owner_of(line)['id'] == 'wide'
 
 
+def test_a_source_qualified_exact_hold_beats_an_earlier_legacy_one():
+    # A locked legacy row (no v3_recording_ids) and an open v3 row both publish the turn exactly; the
+    # row that names the line's recording owns it, even though locked rows are scanned first.
+    segments = [{'id': 'x', 'text': 'held turn', 'start': 300, 'end': 330}]
+    groups = outline.stretches([recording(segments=segments)], NOW + timedelta(hours=4))
+    (line,) = groups[0]['lines']
+    held = [{'id': 'x', 'text': 'held turn', 'start': 0.0, 'end': 30.0}]
+    span = {'started_at': NOW + timedelta(seconds=300), 'finished_at': NOW + timedelta(seconds=330)}
+    legacy = {'id': 'legacy', 'status': 'completed', 'transcript_segments': held, **span}
+    live = {'id': 'live', 'status': 'in_progress', 'v3_recording_ids': ['r'], 'transcript_segments': held, **span}
+    assert planner.Ownership({'legacy': legacy, 'live': live}, {'r': {'claims': []}}).owner_of(line)['id'] == 'live'
+    # With no source-qualified holder, the legacy exact hold still wins over containment.
+    assert planner.Ownership({'legacy': legacy}, {'r': {'claims': []}}).owner_of(line)['id'] == 'legacy'
+
+
+def _claimed_by(cid, minutes):
+    return {'r': {'claims': [{'conversation_id': cid, 'start': NOW, 'end': NOW + timedelta(minutes=minutes)}]}}
+
+
+def test_a_deleted_open_row_never_owns_a_line():
+    # A deleted open card is left to the time-matched tombstone path, as before: it never takes a line
+    # from the locked row whose claim covers it, even when it lists the exact segment.
+    segments = [{'id': 'x', 'text': 'held turn', 'start': 300, 'end': 330}]
+    groups = outline.stretches([recording(segments=segments)], NOW + timedelta(hours=4))
+    (line,) = groups[0]['lines']
+    locked = {**_locked([], 10), 'v3_recording_ids': ['r']}
+    gone = {
+        'id': 'gone',
+        'status': 'in_progress',
+        'deleted': True,
+        'v3_recording_ids': ['r'],
+        'started_at': NOW + timedelta(seconds=300),
+        'finished_at': NOW + timedelta(seconds=330),
+        'transcript_segments': [{'id': 'x', 'text': 'held turn', 'start': 0.0, 'end': 30.0}],
+    }
+    ownership = planner.Ownership({'locked': locked, 'gone': gone}, _claimed_by('locked', 10))
+    assert ownership.owner_of(line)['id'] == 'locked'
+
+
+def test_an_exact_hold_needs_the_same_timing():
+    # A row holding the same segment id at another time does not hold this line; the claim decides.
+    segments = [{'id': 'x', 'text': 'retimed turn', 'start': 400, 'end': 430}]
+    groups = outline.stretches([recording(segments=segments)], NOW + timedelta(hours=4))
+    (line,) = groups[0]['lines']
+    stale = {
+        'id': 'stale',
+        'status': 'in_progress',
+        'v3_recording_ids': ['r'],
+        'started_at': NOW + timedelta(seconds=300),
+        'finished_at': NOW + timedelta(seconds=500),
+        'transcript_segments': [{'id': 'x', 'text': 'retimed turn', 'start': 0.0, 'end': 30.0}],
+    }
+    locked = {**_locked([], 10), 'v3_recording_ids': ['r']}
+    ownership = planner.Ownership({'locked': locked, 'stale': stale}, _claimed_by('locked', 10))
+    assert ownership.owner_of(line)['id'] == 'locked'
+
+
+@pytest.mark.parametrize('cohesion', [False, True])
+def test_a_tombstone_never_pins_a_cap_cut(cohesion):
+    # A deleted locked card holding the first twenty minutes keeps its speech isolated in routing,
+    # but the cap does not reuse its cut: the stretch is cut at two hours as if it were not there.
+    segments = [{'text': str(i), 'start': i * 60, 'end': i * 60 + 10} for i in range(180)]
+    groups = outline.stretches([recording(segments=segments)], NOW + timedelta(hours=4))
+    tomb = {**_locked(deepcopy(segments[:21]), 20), 'deleted': True}
+    ownership = planner.Ownership({'locked': tomb}, {'r': {'claims': []}})
+    assert ownership.owner_of(groups[0]['lines'][0])['id'] == 'locked'  # routing still sees it
+    windows = planner.windows(groups, [[entry()]], cohesion=cohesion, ownership=ownership)
+    assert [w['lines'][0]['start'] for w in windows] == [NOW, NOW + timedelta(minutes=120)]
+
+
 @pytest.mark.parametrize('gap', [5, 15.056, 20])
 def test_model_resume_cannot_cross_recorded_silence(gap):
     a = recording('a')

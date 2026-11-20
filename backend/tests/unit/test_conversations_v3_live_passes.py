@@ -59,7 +59,8 @@ async def reconcile_at(strict, monkeypatch, now, outline_entries=None, derive_ru
         existing = {
             p[3]: {**deepcopy(r), '_v3_revision': 1}
             for p, r in strict.rows.items()
-            if len(p) == 4 and p[2] == 'conversations' and r.get('v3_derived') and not r.get('deleted')
+            # Tombstones load too: store.load reads every row a recording's claims name.
+            if len(p) == 4 and p[2] == 'conversations' and r.get('v3_derived')
         }
         return recordings, existing, []
 
@@ -611,3 +612,65 @@ async def test_an_open_tail_turn_inside_the_prefix_claim_stays_in_the_open_tail(
         owners = ownership(rows)
         assert all(len(ids) == 1 for ids in owners.values()), owners
         assert owners['t'] == [tail['id']]
+
+
+def tombstone(segments, first, last, claims):
+    start = T0 + timedelta(seconds=segments[first]['start'])
+    end = T0 + timedelta(seconds=segments[last]['end'])
+    claims.append({'conversation_id': 'tomb', 'start': start, 'end': end})
+    return {
+        'id': 'tomb',
+        'v3_derived': True,
+        'deleted': True,
+        'status': 'completed',
+        'v3_recording_ids': ['r'],
+        'started_at': start,
+        'finished_at': end,
+        'transcript_segments': [
+            {**s, 'start': s['start'] - segments[first]['start'], 'end': s['end'] - segments[first]['start']}
+            for s in segments[first : last + 1]
+        ],
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('gap, lock', [(300, 300), (900, 900)])
+async def test_valid_speech_either_side_of_a_deleted_card_survives(strict, monkeypatch, gap, lock):
+    # The owner deleted the middle card of one stretch; its tombstone keeps the claim. The deleted
+    # speech stays isolated in the tombstone's window (skipped), and the valid turns either side are
+    # built as live cards, not joined into one window that time-matches the tombstone and is dropped.
+    timing(monkeypatch, gap, lock)
+    segments = speech(30)
+    end = T0 + timedelta(seconds=segments[-1]['end'])
+    put_recording(strict, segments, status='completed', landed=end)
+    claims = []
+    strict.rows[path('tomb')] = tombstone(segments, 10, 19, claims)
+    strict.rows[path('r')]['claims'] = claims
+    assert await reconcile_at(strict, monkeypatch, end + timedelta(seconds=max(gap, lock) + 60)) == 'committed'
+    live = [r for r in derived(strict)]
+    kept = {s['id'] for r in live for s in r.get('transcript_segments') or []}
+    assert {f's{i}' for i in (*range(10), *range(20, 30))} <= kept, sorted(kept)
+    assert not kept & {f's{i}' for i in range(10, 20)}
+    assert strict.rows[path('tomb')]['deleted']
+
+
+@pytest.mark.asyncio
+async def test_one_ownership_index_per_plan(strict, monkeypatch):
+    # The cap and both projections share one Ownership per plan (cost: one index, one rule).
+    from utils.conversations.v3 import planner
+
+    built = []
+    real = planner.Ownership
+
+    class Counting(real):
+        def __init__(self, *args, **kwargs):
+            built.append(1)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(planner, 'Ownership', Counting)
+    timing(monkeypatch, 300, 300)
+    segments = speech(300)
+    end = T0 + timedelta(seconds=segments[-1]['end'])
+    put_recording(strict, segments, status='in_progress', landed=end)
+    assert await reconcile_at(strict, monkeypatch, end + timedelta(seconds=30)) == 'committed'
+    assert built == [1]

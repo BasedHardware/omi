@@ -366,14 +366,16 @@ async def reconcile(
         }
 
         async def plan():
+            # One ownership index per plan (adoption can add rows before a replan), shared by the
+            # two-hour cap and both projections below.
+            ownership = planner.Ownership(existing, recordings)
             proposed = planner.windows(
                 groups,
                 outlines,
                 cohesion=cohesion,
                 silence_gap=silence_gap,
                 defer_topic_lock=custom_timing,
-                # The cap and preserve_finished_windows share one ownership rule.
-                ownership=planner.Ownership(existing, recordings),
+                ownership=ownership,
             )
             merge = refinement.candidate(proposed, existing, recordings) if refine_locked else None
             if merge and await run_blocking(db_executor, store.merge_donors_have_tasks, uid, merge[1]['_v3_absorbed']):
@@ -385,13 +387,13 @@ async def reconcile(
                 reserved = {merged['id'], *merged['_v3_absorbed']}
                 candidates = proposed[:index] + proposed[index + 1 :]
             windows = planner.preserve_finished_windows(
-                candidates, existing, recordings, protect_provisional=custom_timing
+                candidates, existing, recordings, protect_provisional=custom_timing, ownership=ownership
             )
             if reserved.intersection(window.get('existing_id') for window in windows):
                 merge = None
                 reserved.clear()
                 windows = planner.preserve_finished_windows(
-                    proposed, existing, recordings, protect_provisional=custom_timing
+                    proposed, existing, recordings, protect_provisional=custom_timing, ownership=ownership
                 )
             # A retained finished conversation owns its id by claim evidence; a fresh window that sorts
             # before it (late speech overlapping its start) must not time-match the same id. Two planned

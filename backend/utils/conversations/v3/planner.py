@@ -574,23 +574,30 @@ class Ownership:
     """Who owns each planned line: one rule for the two-hour cap and ``preserve_finished_windows``.
 
     1. Exact hold first, across every loaded row (locked, then open): the row published this segment
-       (id and timing, or text without an id) from the line's own recording.
+       (id and timing, or text without an id). A row that names the line's recording in
+       ``v3_recording_ids`` wins over a legacy row that names none.
     2. Only when no row holds it exactly: containment on the line's own recording, locked rows first
        (``_contains_line``: inside the row's window and its audio claim, or its window alone when the
        recording keeps no claims). A revised turn (new id, same audio) stays with its row.
+
+    A deleted locked row (a tombstone) still owns its lines, so routing keeps the deleted speech in its
+    own window (the builder skips it) and it never joins the valid speech either side. The cap never
+    reuses a tombstone's cut (``locked_run_end``).
     """
 
     def __init__(self, existing, recordings=None):
         rows = [
             row
             for row in (existing or {}).values()
-            if not row.get('deleted')
-            and row.get('started_at')
+            if row.get('started_at')
             and row.get('finished_at')
             and not (row.get('v3_refined') and row.get('v3_claims_transferred_to'))
+            # Tombstones count only where they are locked, as finished windows always did.
+            and not (row.get('deleted') and is_unlocked(row))
         ]
         self.rows = [r for r in rows if not is_unlocked(r)] + [r for r in rows if is_unlocked(r)]
-        self.locked_ids = {r['id'] for r in self.rows if not is_unlocked(r)}
+        self.tombstone_ids = {r['id'] for r in self.rows if r.get('deleted')}
+        self.locked_ids = {r['id'] for r in self.rows if not is_unlocked(r)} - self.tombstone_ids
         self._keys = {r['id']: _segment_keys(r) for r in self.rows}
         self._claims: dict[str, Any] = {}
         for rid, recording in (recordings or {}).items():
@@ -609,10 +616,13 @@ class Ownership:
 
     def _owner(self, line):
         rid = line['conversation_id']
-        for row in self.rows:
-            sources = row.get('v3_recording_ids')
-            if (not sources or rid in sources) and _holds_line(row, line, self._keys[row['id']]):
-                return row
+        exact = [row for row in self.rows if _holds_line(row, line, self._keys[row['id']])]
+        sourced = next((row for row in exact if rid in (row.get('v3_recording_ids') or ())), None)
+        if sourced is not None:
+            return sourced
+        legacy = next((row for row in exact if not row.get('v3_recording_ids')), None)
+        if legacy is not None:
+            return legacy
         claims = self._claims.get(rid)
         return next(
             (r for r in self.rows if _contains_line(r, line, None if claims is None else claims.get(r['id'], ()))),
@@ -643,8 +653,11 @@ def _contains_line(row, line, spans):
     return _holds_line(row, line)
 
 
-def preserve_finished_windows(planned, existing, recordings=None, *, protect_provisional=False):
-    """Late speech cannot move a published finished conversation's boundaries."""
+def preserve_finished_windows(planned, existing, recordings=None, *, protect_provisional=False, ownership=None):
+    """Late speech cannot move a published finished conversation's boundaries.
+
+    ``ownership``: the plan's ``Ownership`` (the one the two-hour cap used); built here when omitted.
+    """
     finished = [
         row
         for row in existing.values()
@@ -681,7 +694,7 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
             published_ids.add(row['id'])
             files = published.setdefault(p['recording_id'], {}).setdefault('files', {})
             files.setdefault(p['audio_file_id'], []).append((p['start'], p['end']))
-    ownership = Ownership(existing, recordings)
+    ownership = ownership if ownership is not None else Ownership(existing, recordings)
     retained, fresh = {}, []
     published_partitions = set()
     fresh_metadata = {'_published': published, '_published_ids': published_ids}
