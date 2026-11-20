@@ -165,7 +165,9 @@ def _conversation_report(conversation_id: str, data: dict[str, Any] | None) -> d
     if data is None:
         return {'id': conversation_id, 'exists': False}
     present, segment_count = _segment_shape(data)
-    structured = data.get('structured') if isinstance(data.get('structured'), dict) else {}
+    structured = data.get('structured')
+    if not isinstance(structured, dict):
+        structured = {}
     return {
         'id': conversation_id,
         'exists': True,

@@ -490,6 +490,7 @@ def export(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) -
         zip_sha, zip_bytes = _file_sha256(zip_path)
         stamp = built["generated_at"].strftime("%Y%m%dT%H%M%SZ")
         object_name = f"{ctx.ticket}/{uid[:6]}-{stamp}.zip"
+        assert client is not None  # resolved above whenever ctx.apply
         blob = client.bucket(EXPORT_BUCKET).blob(object_name)
         blob.metadata = {"sha256": zip_sha, "approval": approval}
         blob.upload_from_filename(zip_path, content_type="application/zip", if_generation_match=0)
