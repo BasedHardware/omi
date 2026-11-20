@@ -1002,3 +1002,36 @@ def test_late_paid_restore_failure_is_retried(lane):
     with pytest.raises(HTTPException) as raised:
         run(lane)
     assert raised.value.status_code == 503
+
+
+def test_late_paid_subscription_read_outage_is_retried(lane, monkeypatch):
+    def retrieve(*args):
+        raise stripe.error.APIConnectionError('fixture outage')
+
+    monkeypatch.setattr(payment.stripe.Subscription, 'retrieve', retrieve)
+    lane.current = _stored_basic()
+    lane.event = _invoice_event('invoice.paid')
+    with pytest.raises(HTTPException) as raised:
+        run(lane)
+    assert raised.value.status_code == 503
+    assert lane.current == _stored_basic()
+
+
+def test_late_paid_restore_uses_customer_lookup_and_newer_invoice_shape(lane, monkeypatch):
+    monkeypatch.setattr(payment.users_db, 'get_user_by_stripe_customer_id', lambda customer: {'uid': 'fixture-user'})
+    lane.current = _stored_basic()
+    lane.stripe_obj = _canceled_snapshot()
+    lane.stripe_obj['metadata'] = {}
+    lane.event = {
+        'id': 'evt-invoice',
+        'type': 'invoice.paid',
+        'data': {
+            'object': {
+                'id': 'in-renewal',
+                'status': 'paid',
+                'parent': {'subscription_details': {'subscription': 'sub-current'}},
+            }
+        },
+    }
+    run(lane)
+    assert lane.current.plan == PlanType.unlimited_v2

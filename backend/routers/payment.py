@@ -1429,6 +1429,14 @@ async def _restore_paid_cancel_grace(invoice: dict, subscription_obj: dict) -> N
         return
     uid = (subscription_obj.get('metadata') or {}).get('uid')
     if not uid:
+        customer_id = subscription_obj.get('customer')
+        user = (
+            await run_blocking(db_executor, users_db.get_user_by_stripe_customer_id, customer_id)
+            if customer_id
+            else None
+        )
+        uid = user.get('uid') if user else None
+    if not uid:
         return
     subscription_id = subscription_obj.get('id')
     if await _deletion_webhook_blocks_entitlement(uid, subscription_id):
@@ -1968,9 +1976,14 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
         subscription_id = _invoice_subscription_id(invoice)
         if subscription_id:
             try:
-                subscription = await run_blocking(
-                    stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
-                )
+                try:
+                    subscription = await run_blocking(
+                        stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
+                    )
+                except (stripe.error.APIConnectionError, stripe.error.RateLimitError, stripe.error.APIError) as error:
+                    # A transient read failure must be retried: a 200 here would drop a late
+                    # renewal payment (grace restore) or a paid app renewal for good.
+                    raise HTTPException(503, f"Invoice subscription read: {type(error).__name__}") from None
                 metadata = subscription.get('metadata') or {}
                 app_id = metadata.get('app_id')
                 uid = metadata.get('uid')
