@@ -242,7 +242,16 @@ def test_list_flags_overdue_reviews_and_holds_missing_audit(client):
     client.docs["legal_holds/c"] = {"schema_version": "legal_hold.v1", "issuer": "admin", "active": False}
     result, record = _run(holds.list_holds, _ctx(), all=False)
     assert [hold["uid"] for hold in result["holds"]] == ["a", "b"]
-    assert record.summary == {"holds": 2, "review_overdue": 1, "missing_audit": 1}
+    assert record.summary == {"holds": 2, "review_overdue": 1, "missing_audit": 1, "capped": False}
+    assert result["capped"] is False and result["scanned"] == 3
+
+
+def test_list_reports_a_scan_that_hit_its_bound(client, monkeypatch):
+    monkeypatch.setattr(holds, "_HOLD_SCAN_LIMIT", 2)
+    for uid in ("a", "b", "c"):
+        client.docs[f"legal_holds/{uid}"] = {"schema_version": "legal_hold.v1", "issuer": "admin", "active": True}
+    result, record = _run(holds.list_holds, _ctx(), all=False)
+    assert result["capped"] is True and record.summary["capped"] is True
 
 
 def test_audit_write_failure_stops_the_command_before_it_runs(client):

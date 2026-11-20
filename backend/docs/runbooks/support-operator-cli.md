@@ -68,6 +68,9 @@ flags them as `missing_audit`, and `hold place` on them backfills the fields.
   (tracked on SCA-3339), file the list on the ticket and the SCA issue. Do not
   erase by hand. If the tombstone scan reports `capped`, deferred deletes past
   the cap are not listed; escalate on SCA-3339 before closing the ticket.
+- A held cascade delete does not cancel the conversation's action-item
+  reminders until its erasure runs after release; the conversation itself is
+  hidden at once.
 
 ### Kill switch
 

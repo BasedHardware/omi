@@ -102,6 +102,10 @@ def accept_deletion(
         tombstone = tombstone_ref.get(transaction=transaction)
         tombstone_exists = tombstone.exists
         owed = obligation_ref.get(transaction=transaction) if arm_erasure else None
+        # A held non-cascade delete arms nothing, but an obligation an earlier accept armed still erases it.
+        prior_owed = (
+            obligation_ref.get(transaction=transaction).exists if legal_hold_deferred and not arm_erasure else False
+        )
         row = (row_snapshot.to_dict() or {}) if row_snapshot.exists else {}
         # Merge donors are read now, while the row exists: their canonical audio is erased with it.
         # A retry after the row is gone keeps the donors an earlier acceptance recorded.
@@ -113,13 +117,13 @@ def accept_deletion(
             payload = _tombstone_payload(conversation_id, row)
             if legal_hold_deferred:
                 payload['legal_hold_deferred'] = True
-                payload['erasure_armed'] = arm_erasure
+                payload['erasure_armed'] = arm_erasure or prior_owed
             transaction.create(tombstone_ref, payload)
         elif legal_hold_deferred:
             # A held retry (or a cascade after a held non-cascade delete) must stay
             # visible to release follow-up, and armed erasure is never un-armed.
             existing = tombstone.to_dict() or {}
-            armed = existing.get('erasure_armed') is True or arm_erasure
+            armed = existing.get('erasure_armed') is True or arm_erasure or prior_owed
             if existing.get('legal_hold_deferred') is not True or existing.get('erasure_armed') is not armed:
                 transaction.update(tombstone_ref, {'legal_hold_deferred': True, 'erasure_armed': armed})
         if row_snapshot.exists and not row.get('deleted'):
@@ -133,6 +137,15 @@ def accept_deletion(
             transaction.set(obligation_ref, owed_fields)
 
     _in_transaction(client, body)
+
+
+def clear_legal_hold_deferral(uid: str, conversation_id: str, *, firestore_client: Any = None) -> None:
+    """The held accept fell through to a normal delete: release follow-up no longer owes it."""
+    from database._client import get_firestore_client
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    tombstone_ref = client.collection('users').document(uid).collection(COLLECTION).document(conversation_id)
+    tombstone_ref.update({'legal_hold_deferred': False})
 
 
 def _in_transaction(client: Any, body: Any) -> Any:

@@ -25,6 +25,7 @@ _EVENTS_SHOWN = 20
 # Paged by document id; an operator read of one account, at most this many tombstones.
 _TOMBSTONE_SCAN_LIMIT = 50000
 _TOMBSTONE_PAGE = 500
+_HOLD_SCAN_LIMIT = 2000
 
 
 class HoldCommandError(RuntimeError):
@@ -184,7 +185,10 @@ def release(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) 
 def list_holds(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) -> dict[str, Any]:
     client = _firestore_client()
     now = _now()
-    holds = legal_holds.list_legal_holds(active_only=not args.all, firestore_client=client)
+    # Scan everything (bounded) and filter here, so a scan that hit the bound is reported.
+    scanned = legal_holds.list_legal_holds(active_only=False, limit=_HOLD_SCAN_LIMIT, firestore_client=client)
+    capped = len(scanned) >= _HOLD_SCAN_LIMIT
+    holds = scanned if args.all else [hold for hold in scanned if hold.get("active") is True]
     for hold in holds:
         review_by = hold.get("review_by")
         hold["review_overdue"] = isinstance(review_by, datetime) and review_by <= now
@@ -193,8 +197,9 @@ def list_holds(args: argparse.Namespace, ctx: ActionContext, record: ActionRecor
         "holds": len(holds),
         "review_overdue": sum(1 for hold in holds if hold["review_overdue"]),
         "missing_audit": sum(1 for hold in holds if hold["missing_audit"]),
+        "capped": capped,
     }
-    return {"holds": holds}
+    return {"holds": holds, "scanned": len(scanned), "capped": capped}
 
 
 def _assert_fence(uid: str, client: Any, *, expect_active: bool) -> None:

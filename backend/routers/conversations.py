@@ -1763,6 +1763,7 @@ def _accept_held_conversation_delete(
     conversation_tombstones.accept_deletion(uid, conversation_id, legal_hold_deferred=True, arm_erasure=cascade)
     if not cascade and not _legal_hold_defers_delete(uid):
         logger.info('event=conversation_delete outcome=held_released_during_delete')
+        conversation_tombstones.clear_legal_hold_deferral(uid, conversation_id)
         return None
     logger.info('event=conversation_delete outcome=held_deferred cascade=%s', cascade)
     record_product_event('conversation_deleted', request=http_request)
