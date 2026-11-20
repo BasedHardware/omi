@@ -903,9 +903,8 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
         if after > stored and after > rederive_store.SOURCE_MAX_BYTES:
             # Growing a source past the document limit fails every retry; block before any write.
             raise Conflict('document_too_large')
-    if len(sources) + len(retire) + len(lineage) + 2 > store.BATCH_MAX_WRITES:
-        # The final batch writes every committed source, every retire patch, a row and the lease in one
-        # transaction; more than Firestore's write cap would fail on every retry.
+    if len(sources) + 2 * len(retire) + len(lineage) + 2 > store.BATCH_MAX_WRITES:
+        # Reserve a write for each retirement and its task-link marker, plus the lineage, row and lease.
         raise Conflict('backfill_partition_budget')
     new_sources = {row['id']: set(row.get('v3_recording_ids') or []) for row in write}
     priors = []

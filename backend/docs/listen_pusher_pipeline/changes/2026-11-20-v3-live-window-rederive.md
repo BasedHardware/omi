@@ -28,7 +28,7 @@ an explicit operator run are needed before live data is repaired. Start with the
 read-only, no-model dry-run and inspect protected rows, unclaimed speech and size
 refusals before committing. Set the flag to `off` to stop new steps. Use
 `undo --run` to revert a started repair when its custody guards permit it. Before
-undo, verify the action-item API workers serve the transactional source check.
+repair or undo, verify the action-item API workers serve the transactional source check.
 
 ## Verification
 

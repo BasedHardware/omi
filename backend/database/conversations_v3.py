@@ -17,6 +17,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from database._client import get_firestore_client
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
+from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -735,6 +736,8 @@ def commit_projection(
             for cid, patch in retire.items():
                 if cid not in written:
                     tx.update(coll.document(cid), patch)
+                if cid in retired:
+                    tx.set(removal_ref(user, cid), {'retired_by_repair': True})
         replaced = {r['id'] for r in batch_rows} | set(absorbed) | (set(remove) | retired if final else set())
         for rid, recording in recordings.items():
             if recording.get('deleted') or recording.get('sync_merged_into'):
@@ -827,8 +830,11 @@ def commit_projection(
         return observed
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
-    # The final batch also deletes a re-derive's retired copies.
-    max_rows = max(1, BATCH_MAX_WRITES - len(recordings) - len(remove) - len(all_absorbed) - len(retire) - 1)
+    # Reserve final-batch space for removal, retirement, lineage and task-link fences.
+    fixed_writes = len(recordings) + len(remove) + len(all_absorbed) + len(retire) + len(retired) + 1
+    if retired and fixed_writes + bool(rows) > BATCH_MAX_WRITES:
+        raise Conflict('backfill_partition_budget')
+    max_rows = max(1, BATCH_MAX_WRITES - fixed_writes)
     batches, current, size = [], [], 0
     for raw, encoded in zip(rows, prepared):
         amount = len(json.dumps(encoded, default=str).encode())
