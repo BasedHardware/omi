@@ -74,8 +74,8 @@ class _EraseHTTPResponse(http.client.HTTPResponse):
         try:
             super().begin()
         except (OSError, http.client.HTTPException):
-            # The stdlib parses the final status before reading response headers.
-            if isinstance(self.status, int) and self.status not in _RETRYABLE_WORKER_HTTP_STATUSES | {200}:
+            # The stdlib uses a sentinel until it parses the final status line.
+            if self.status in range(100, 1000) and self.status not in _RETRYABLE_WORKER_HTTP_STATUSES | {200}:
                 raise EraseRejected('Go queue erase request rejected') from None
             raise
 
