@@ -57,10 +57,13 @@ func (s Store) repointEpisode(tx *docstore.Tx, claim finalization.Claim, result 
 	}
 	ids := field[[]any](row, "conversation_ids")
 	if !found || !slices.Contains(ids, any(donor.ID)) {
-		if found && slices.Contains(ids, any(result.Survivor.ID)) && episodeOwner(to) == episode {
+		if !found || !slices.Contains(ids, any(result.Survivor.ID)) || episodeOwner(to) != episode {
+			return finalization.ErrStale
+		}
+		if to.fullyBound(episode) {
 			return nil
 		}
-		return finalization.ErrStale
+		return to.bind(tx, episode, now)
 	}
 	return s.writeEpisodeRepoint(tx, path, row, donor, result.Survivor, to, episode, now)
 }

@@ -11,20 +11,21 @@ import (
 // Service admits durable intents and runs ordinary finalization. The binary
 // supplies the ports. Admitting and running can be deployed separately.
 type Service struct {
-	Queue        *queue.Store
-	Outbox       Outbox
-	Documents    Documents
-	Lifecycle    Lifecycle
-	Replay       ReplayStore
-	Quiet        QuietStore
-	Episodes     EpisodePort
-	Summaries    SummaryStore
-	Meeting      MeetingEvidence
-	Batch        BatchCustody
-	Gateway      Gateway
-	Effects      Effects
-	Targets      IntegrationTargets
-	Integrations Integrations
+	Queue         *queue.Store
+	Outbox        Outbox
+	Documents     Documents
+	Lifecycle     Lifecycle
+	Replay        ReplayStore
+	Quiet         QuietStore
+	Episodes      EpisodePort
+	EpisodeIntake EpisodeIntakeStore
+	Summaries     SummaryStore
+	Meeting       MeetingEvidence
+	Batch         BatchCustody
+	Gateway       Gateway
+	Effects       Effects
+	Targets       IntegrationTargets
+	Integrations  Integrations
 }
 
 // Admit commits the outbox before dispatch. If dispatch fails the returned

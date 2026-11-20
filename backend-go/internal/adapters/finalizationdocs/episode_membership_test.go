@@ -9,6 +9,7 @@ import (
 	"github.com/BasedHardware/omi/backend-go/internal/finalization"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
+	"github.com/BasedHardware/omi/backend-go/internal/queue/queuetest"
 )
 
 func TestF26IntakeThenAbsorbRepointsMembershipAndReceiptsOnce(t *testing.T) {
@@ -35,9 +36,10 @@ func TestF26IntakeThenAbsorbRepointsMembershipAndReceiptsOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := queue.AdmittingForTest(t, donor.Owner)
+	h := queuetest.Open(t, queuetest.Policy(), finalization.Declaration(Causes()...))
+	service := finalization.Service{Queue: h.Store, EpisodeIntake: store}
 	for range 2 {
-		id, intakeErr := store.AttachEpisodeIntake(t.Context(), a, donor, uploaded.UpdateTime, true)
+		id, intakeErr := service.AttachEpisodeIntake(t.Context(), donor, uploaded.UpdateTime, true)
 		if intakeErr != nil || id != "covering" {
 			t.Fatalf("intake: %q %v", id, intakeErr)
 		}
@@ -62,6 +64,13 @@ func TestF26IntakeThenAbsorbRepointsMembershipAndReceiptsOnce(t *testing.T) {
 		if repointErr := store.RepointEpisode(t.Context(), g, claim, result); repointErr != nil {
 			t.Fatal(repointErr)
 		}
+	}
+	// A partially migrated reverse link can be repaired without consuming receipts again.
+	partial := read(t, bench, benchPath(survivor))
+	delete(partial, "episode_id")
+	put(t, bench, benchPath(survivor), partial)
+	if repointErr := store.RepointEpisode(t.Context(), g, claim, result); repointErr != nil {
+		t.Fatal(repointErr)
 	}
 	updated := read(t, bench, episode)
 	ids := field[[]any](updated, "conversation_ids")

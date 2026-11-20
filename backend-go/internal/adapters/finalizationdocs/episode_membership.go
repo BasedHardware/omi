@@ -49,7 +49,7 @@ func readEpisodeMember(tx *docstore.Tx, ref finalization.Ref) (episodeMember, er
 
 func episodeMemberVisible(m episodeMember) bool {
 	return !m.tombstoned && !m.written.IsZero() && absorbVisible(m.row) && !field[bool](m.row, "is_deleted") &&
-		!field[bool](m.row, "recording") && !field[bool](m.row, "v3_derived") &&
+		field[string](m.row, "data_protection_level") != "private" && !field[bool](m.row, "recording") && !field[bool](m.row, "v3_derived") &&
 		field[string](m.row, "capture_time_trust") != "untrusted" && field[string](m.row, "sync_merged_into") == ""
 }
 
@@ -60,6 +60,11 @@ func episodeOwner(m episodeMember) string {
 func (m episodeMember) canBind(episode string) bool {
 	primary, reverse := field[string](m.link, "episode_id"), field[string](m.row, "episode_id")
 	return (primary == "" || primary == episode) && (reverse == "" || reverse == episode)
+}
+
+func (m episodeMember) fullyBound(episode string) bool {
+	return field[string](m.link, "episode_id") == episode && field[string](m.row, "episode_id") == episode &&
+		slices.Contains(field[[]any](m.link, "episode_ids"), any(episode))
 }
 
 func (m episodeMember) bind(tx *docstore.Tx, episode string, now time.Time) error {
@@ -110,10 +115,7 @@ func attachEpisodeIntake(tx *docstore.Tx, ref finalization.Ref, written, now tim
 		return "", finalization.ErrStale
 	}
 	if owned := episodeOwner(member); owned != "" {
-		if !member.canBind(owned) {
-			return "", finalization.ErrStale
-		}
-		return owned, nil
+		return repairIntakeMembership(tx, ref, member, owned, written, now)
 	}
 	if !member.written.Equal(written) {
 		return "", finalization.ErrStale
@@ -130,6 +132,30 @@ func attachEpisodeIntake(tx *docstore.Tx, ref finalization.Ref, written, now tim
 		return "", nil
 	}
 	return joinIntakeEpisode(tx, ref, member, start, end, now)
+}
+
+func repairIntakeMembership(tx *docstore.Tx, ref finalization.Ref, member episodeMember, id string, written, now time.Time) (string, error) {
+	if !member.canBind(id) {
+		return "", finalization.ErrStale
+	}
+	if member.fullyBound(id) {
+		return id, nil
+	}
+	if !member.written.Equal(written) {
+		return "", finalization.ErrStale
+	}
+	path, err := docstore.Doc("users", ref.Owner, "episodes", id)
+	if err != nil {
+		return "", err
+	}
+	var row document
+	if _, readErr := tx.Get(path, &row); readErr != nil {
+		return "", readErr
+	}
+	if !slices.Contains(field[[]any](row, "conversation_ids"), any(ref.ID)) {
+		return "", finalization.ErrStale
+	}
+	return id, member.bind(tx, id, now)
 }
 
 func joinIntakeEpisode(tx *docstore.Tx, ref finalization.Ref, member episodeMember, start, end, now time.Time) (string, error) {
