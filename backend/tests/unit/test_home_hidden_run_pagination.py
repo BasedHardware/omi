@@ -28,6 +28,7 @@ def owner(before=30, hidden=150, after=100, *, reason='home_hidden'):
     data = rows(before + hidden + after)
     for row in data:
         row['status'] = 'completed'
+        row['finished_at'] = row['started_at']
     for row in data[before : before + hidden]:
         if reason == 'recording':
             row['recording'] = True

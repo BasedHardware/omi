@@ -558,6 +558,8 @@ def test_locked_refinement_commits_redirect_and_transferred_claims_together(stri
     existing = {path[-1]: {**strict.rows[path], '_v3_revision': 1} for path in (older, later)}
     survivor = {
         **existing['older'],
+        'created_at': AT,
+        'structured': {},
         'started_at': AT,
         'finished_at': end,
         'v3_recording_ids': ['r'],
@@ -601,7 +603,15 @@ def test_full_builder_prunes_stale_provisional_lease_ids(strict):
     strict.rows[live] = {'id': 'live', 'v3_unlocked': True, 'status': 'processing'}
     strict.rows[settled] = {'id': 'settled', 'v3_unlocked': False, 'status': 'completed'}
     existing = {path[-1]: {**strict.rows[path], '_v3_revision': 1} for path in (live, settled)}
-    new = {'id': 'new', 'v3_unlocked': True, 'status': 'in_progress'}
+    new = {
+        'id': 'new',
+        'v3_unlocked': True,
+        'status': 'in_progress',
+        'created_at': AT,
+        'started_at': AT,
+        'finished_at': AT,
+        'structured': {},
+    }
     store.commit_projection('synthetic', token, {}, existing, [new], [], firestore_client=strict)
     assert strict.rows[L]['unlocked_ids'] == ['new']
     assert strict.rows[live]['v3_unlocked']
@@ -663,6 +673,8 @@ def test_preview_deadline_keeps_a_durable_sweep_obligation_until_lock(strict):
     raw = {'id': 'r', **strict.rows[R], '_v3_revision': 1}
     preview = {
         'id': 'preview',
+        'created_at': AT,
+        'structured': {},
         'status': 'in_progress',
         'v3_unlocked': True,
         'started_at': AT,
@@ -701,6 +713,8 @@ def test_scoped_preview_commit_sets_wake_without_delaying_pending_speech(strict,
     due = AT + timedelta(minutes=30)
     preview = {
         'id': 'preview',
+        'created_at': AT,
+        'structured': {},
         'status': 'processing',
         'v3_unlocked': True,
         'started_at': AT,

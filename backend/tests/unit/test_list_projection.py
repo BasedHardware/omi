@@ -606,7 +606,7 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(store, monk
 
     monkeypatch.setattr(conversation_routes.conversations_db, 'get_conversations_without_photos', source)
     monkeypatch.setattr(conversation_routes, '_heal_locked_conversations_if_eligible', heal)
-    monkeypatch.setattr(conversation_routes, 'redact_conversations_for_list', lambda page: None)
+    monkeypatch.setattr(conversation_routes, 'redact_conversation_for_list', lambda row: row)
     monkeypatch.setattr(
         conversation_routes,
         'list_read_budget_for_request',

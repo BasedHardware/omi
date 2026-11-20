@@ -10,6 +10,7 @@ from utils.generated_compute import require_generated_compute, generated_compute
 import asyncio
 import hashlib
 import os
+from collections.abc import Mapping
 from contextlib import ExitStack, nullcontext
 
 from fastapi.responses import StreamingResponse
@@ -81,7 +82,11 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.reprocess_contract import DERIVED_EFFECTS_TRANSCRIPT_FIELD, FIRST_PARTY_SUMMARY_SOURCE
 from utils.conversations.analytics import build_conversation_analytics
-from utils.conversations.render import redact_conversations_for_list, redact_legacy_live_recap_sections
+from utils.conversations.render import (
+    redact_conversation_for_list,
+    redact_conversations_for_list,
+    redact_legacy_live_recap_sections,
+)
 from utils.conversations.onopen_translation import translate_open_page
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
@@ -1221,14 +1226,18 @@ def get_conversations(
     if response is not None:
         list_page_headers.apply(response, page)
     _heal_locked_conversations_if_eligible(uid, conversations)
-    conversations = [
-        historical_projection.project(
+    projected = []
+    for row in conversations:
+        # Presentation and redaction expect a structured object. Let the row
+        # contract report a malformed value before either can crash or mask it.
+        if 'structured' in row and not isinstance(row['structured'], Mapping):
+            projected.append(row)
+            continue
+        wire = historical_projection.project(
             transcribing_hold.project(home_step.project(row, show_held=show_held), home_list=True)
         )
-        for row in conversations
-    ]
-    redact_conversations_for_list(conversations)
-    conversations = row_contract.readable_rows(conversations, surface='v1_conversations')
+        projected.append(redact_conversation_for_list(wire))
+    conversations = row_contract.readable_rows(projected, surface='v1_conversations')
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')

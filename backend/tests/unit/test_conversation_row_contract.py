@@ -6,10 +6,10 @@ Synthetic data only.
 import logging
 from datetime import timedelta
 from types import SimpleNamespace
-from typing import List
 
 import pytest
-from pydantic import TypeAdapter
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from database import conversations as db, conversations_v3 as store, conversations_v3_leases as leases
 from database.fsr_cache_telemetry import OMI_FALLBACK_TOTAL
@@ -126,12 +126,22 @@ def test_list_read_skips_only_the_malformed_row(caplog):
     assert [c.id for c in row_contract.readable_models(rows, surface='unit', model=Conversation)] == ['a', 'b']
 
 
-def test_get_conversations_returns_the_rest_of_a_page_with_one_malformed_row(monkeypatch):
+@pytest.mark.parametrize(
+    'malformed',
+    [
+        _broken(),
+        _row('bad', structured=[], is_locked=True),
+        _row('bad', structured=['invalid']),
+        _row('bad', structured=None, is_locked=True),
+    ],
+    ids=['participant-source', 'empty-list', 'nonempty-list', 'null'],
+)
+def test_get_conversations_returns_the_rest_of_a_page_with_one_malformed_row(monkeypatch, caplog, malformed):
     from utils.episodes import home_membership
 
-    page = [_row('a'), _broken('bad'), _row('b')]
+    page = [_row('a'), malformed, _row('b', is_locked=True, structured={'action_items': 'redacted on list reads'})]
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'true')
     monkeypatch.setattr(routes, 'home_transcription_presentation_gate_enabled', lambda: False)
-    monkeypatch.setattr(routes, 'home_step_projection_enabled', lambda: False)
     monkeypatch.setattr(home_membership, 'held_for', lambda request: False)
     monkeypatch.setattr(home_membership, 'live_suppression_for', lambda *a: False)
     monkeypatch.setattr(home_membership, 'project_list', lambda uid, rows, *a, **kw: rows)
@@ -145,18 +155,20 @@ def test_get_conversations_returns_the_rest_of_a_page_with_one_malformed_row(mon
     )
     monkeypatch.setattr(db, 'get_conversations_without_photos', lambda *a, **kw: [dict(row) for row in page])
     monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
-    result = routes.get_conversations(
-        uid='synthetic',
-        statuses='processing,completed',
-        sources=None,
-        start_date=None,
-        end_date=None,
-        folder_id=None,
-        starred=None,
-    )
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: 'synthetic'
+    before = _skips()
+    with TestClient(app) as client:
+        response = client.get('/v1/conversations')
+
+    assert response.status_code == 200
+    result = response.json()
     assert [row['id'] for row in result] == ['a', 'b']
-    # The declared response model accepts the page FastAPI would serialize.
-    assert [c.id for c in TypeAdapter(List[Conversation]).validate_python(result)] == ['a', 'b']
+    assert result[0]['home_step'] == 'ready'
+    assert result[1]['structured']['action_items'] == []
+    assert _skips() == before + 1
+    assert 'surface=v1_conversations conversation_id=bad' in caplog.text
 
 
 async def test_search_exact_reference_drops_a_malformed_row(monkeypatch):
