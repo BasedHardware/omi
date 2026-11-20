@@ -52,7 +52,7 @@ The README's hard rules come first. In practice:
 ## Product tests the lab leans on
 
 - **A stubbed loader must match production.** v3 multi-pass unit harnesses, such as
-  `tests/unit/test_conversations_v3_live_passes.py`, stub `store.load`. Production reads every row a
+  `backend/tests/unit/test_conversations_v3_live_passes.py`, stub `store.load`. Production reads every row a
   recording's claims name, deleted rows included. A stub that drops tombstones lets deletion and
   ownership tests pass without testing anything.
 - **Mutation pass for custody and ownership tests.** Revert each ownership decision one at a time and
@@ -69,7 +69,7 @@ The README's hard rules come first. In practice:
   - Stop only PIDs you started, after reading `ps -o pid,etime,command -p PID`.
   - Use `make dev-down` for a stack you started.
 - **Bound every run.**
-  - Run lab tests under `bin/omi-heavy run` with a deadline, such as `perl -e 'alarm 600; exec @ARGV' ...`.
+  - Run lab tests with a deadline, such as `perl -e 'alarm 600; exec @ARGV' ...`, through the host's heavy-command queue where it has one.
   - Run each test file in its own process, as CI does.
   - Check for leftovers when the run ends.
 - **Clean up when the experiment ends.** Stop your stack, your LLM tunnel and any inspector you started,
