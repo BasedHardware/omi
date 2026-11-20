@@ -79,6 +79,29 @@ def test_strict_revision_boundary(strict_input, expected, repairs, violations):
     assert_visible_invariants(note)
 
 
+@pytest.mark.parametrize('safe_fallback', [False, True])
+def test_uuid_parenthetical_drops_unknown_ids_and_recovers_known_sources(safe_fallback):
+    known = '11111111-2222-5333-8444-555555555555'
+    orphan = 'aaaaaaaa-bbbb-5ccc-addd-eeeeeeeeeeee'
+    body = f'- The group took photos. ({orphan})\n- They shared them ({known}; {orphan}).'
+    note = Structured(overview=body, sections=[{'heading': 'Photos', 'body_markdown': body}])
+
+    report = enforce_structured_presentation_contract(note, {known}, safe_fallback=safe_fallback)
+
+    clean = '- The group took photos.\n- They shared them.'
+    assert note.overview == note.sections[0].body_markdown == clean
+    assert note.sections[0].source_segment_ids == [known]
+    assert report.repairs == {'unknown_citation_dropped'}
+    assert not report.needs_revision
+
+
+def test_uuid_citation_repair_preserves_context_and_code():
+    uuid = 'aaaaaaaa-bbbb-5ccc-addd-eeeeeeeeeeee'
+    body = f'Photo notes (edited) include ID ({uuid} in the export), `({uuid})`, and [the link](https://example.com/{uuid}).'
+
+    assert repair_note_citations(body, set()) == (body, [])
+
+
 def test_recovery_is_scoped_to_the_owning_object():
     note = Structured(
         title='Title [s01234]',

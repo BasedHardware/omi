@@ -881,6 +881,37 @@ def test_legacy_generated_live_sections_are_read_redacted_with_owner_overview_pr
     assert catchup['structured'] == legacy
 
 
+@pytest.mark.parametrize('edited_overview', [False, True])
+def test_completed_note_detail_repairs_uuid_citations_without_rewriting_storage(catchup, edited_overview):
+    known = '11111111-2222-5333-8444-555555555555'
+    orphan = 'aaaaaaaa-bbbb-5ccc-addd-eeeeeeeeeeee'
+    body = f'- The group took photos. ({orphan})\n- They shared them ({known}). (aside)'
+    clean = '- The group took photos.\n- They shared them. (aside)'
+    edited = f'Owner text ({orphan})'
+    catchup.update(
+        status='completed',
+        v3_notes_written=True,
+        structured={
+            'title': 'Photos',
+            'overview': edited if edited_overview else f'## Sharing\n\n{body}',
+            'sections': [{'heading': 'Sharing', 'body_markdown': body, 'source_segment_ids': []}],
+        },
+        transcript_segments=[{'id': known, 'text': 'They shared them.', 'start': 0, 'end': 1}],
+        apps_results=[{'app_id': 'custom', 'content': edited}],
+    )
+    before = deepcopy(catchup)
+
+    detail = routes.get_conversation_by_id(
+        'live', source=None, include_discarded=None, uid='synthetic', include_translations=False
+    )
+
+    assert detail['structured']['sections'][0]['body_markdown'] == clean
+    assert detail['structured']['overview'] == (edited if edited_overview else f'## Sharing\n\n{clean}')
+    assert detail['structured']['sections'][0]['source_segment_ids'] == [detail['transcript_segments'][0]['id']]
+    assert detail['apps_results'] == before['apps_results']
+    assert catchup['structured'] == before['structured']
+
+
 @pytest.mark.asyncio
 async def test_explicit_summary_open_locks_configured_preview_with_live_recap_present(monkeypatch):
     row = {

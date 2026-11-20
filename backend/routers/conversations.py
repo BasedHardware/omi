@@ -81,7 +81,11 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.reprocess_contract import DERIVED_EFFECTS_TRANSCRIPT_FIELD, FIRST_PARTY_SUMMARY_SOURCE
 from utils.conversations.analytics import build_conversation_analytics
-from utils.conversations.render import redact_conversations_for_list, redact_legacy_live_recap_sections
+from utils.conversations.render import (
+    present_generated_note_sections,
+    redact_conversations_for_list,
+    redact_legacy_live_recap_sections,
+)
 from utils.conversations.onopen_translation import translate_open_page
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
@@ -1382,7 +1386,7 @@ def get_conversation_by_id(
     conversation.pop(v3_policy.LIVE_SUMMARY_FIELD, None)
     if preview:
         conversation['live_summary'] = preview
-    return historical_projection.project(transcribing_hold.project(conversation))
+    return present_generated_note_sections(historical_projection.project(transcribing_hold.project(conversation)))
 
 
 @router.patch(

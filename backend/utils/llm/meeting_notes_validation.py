@@ -91,6 +91,7 @@ _CODE_RE = re.compile(
     r'(?:^[ \t]{0,3}(?P=fence)[`~]*[ \t]*(?:\n|$)|\Z)|(?P<ticks>`+)(?!`)[\s\S]*?(?<!`)(?P=ticks)(?!`)'
 )
 _ID_LIKE_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,95}\Z')
+_SEGMENT_UUID_RE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', re.I)
 _CLUSTER_RE = re.compile(r'[?]?[0-9A-Za-z]{1,3}\Z')
 _SAFE_MARKDOWN_SCHEMES = {'http', 'https', 'mailto'}
 _REMOVAL_MARKER = '\x00'
@@ -150,6 +151,7 @@ def _repair_note_citation_pass(
     valid_ids: set[str],
     *,
     safe_fallback: bool = True,
+    uuid_parentheticals_only: bool = False,
     report: Optional[PresentationContractReport] = None,
 ) -> tuple[str, list[str]]:
     """Render-time sweep and generation-time gate; never edit a partial bracket unit.
@@ -158,6 +160,8 @@ def _repair_note_citation_pass(
     links take precedence over that grammar, including ID-shaped ordinary labels.
     Mixed brackets containing known IDs require revision, or unwrap their remaining prose in fallback.
     """
+    if uuid_parentheticals_only and not _SEGMENT_UUID_RE.search(text):
+        return text, []
     report = report if report is not None else PresentationContractReport()
     protected: dict[str, str] = {}
     # Pick a collision-free namespace even for adversarial/user-written examples.
@@ -180,6 +184,24 @@ def _repair_note_citation_pass(
 
     def unit(match: re.Match[str]) -> str:
         value = match.group(0)
+        if value.startswith('('):
+            tokens = [token.strip() for token in re.split(r'[;,]', value[1:-1]) if token.strip()]
+            if tokens and all(_SEGMENT_UUID_RE.fullmatch(token) for token in tokens):
+                ids = [token for token in tokens if token in valid_ids]
+                reason = 'inline_source_citation' if len(ids) == len(tokens) else 'unknown_citation_dropped'
+                return remove(ids, reason)
+            if uuid_parentheticals_only:
+                return value
+            ids = []
+            for token in tokens:
+                nested_link = _MARKDOWN_LINK_RE.fullmatch(token)
+                candidate = nested_link.group(1).strip() if nested_link else token
+                if candidate not in valid_ids:
+                    return _BRACKET_UNIT_RE.sub(unit, value)
+                ids.append(candidate)
+            return remove(ids) if ids else value
+        if uuid_parentheticals_only:
+            return value
         link = _MARKDOWN_LINK_RE.fullmatch(value)
         if link:
             label, destination = (part.strip() for part in link.groups())
@@ -192,16 +214,6 @@ def _repair_note_citation_pass(
                 report.repairs.add('unsafe_markdown_link')
                 return label
             return protect(value)
-        if value.startswith('('):
-            tokens = [token.strip() for token in re.split(r'[;,]', value[1:-1]) if token.strip()]
-            ids = []
-            for token in tokens:
-                nested_link = _MARKDOWN_LINK_RE.fullmatch(token)
-                candidate = nested_link.group(1).strip() if nested_link else token
-                if candidate not in valid_ids:
-                    return _BRACKET_UNIT_RE.sub(unit, value)
-                ids.append(candidate)
-            return remove(ids) if ids else value
         content = value[1:-1].translate(_ADORNMENTS).strip()
         ids = _bracket_ids(content, valid_ids)
         if ids:
@@ -230,19 +242,21 @@ def _repair_note_citation_pass(
         return protect(value)
 
     text = _CITATION_UNIT_RE.sub(unit, text)
-    for source_id in sorted(valid_ids, key=lambda value: (-len(value), value)):
-        pattern = _id_pattern(source_id)
-        if pattern.search(text):
-            if safe_fallback:
-                text = pattern.sub(_REMOVAL_MARKER, text)
-                report.repairs.add('source_id_in_prose')
-            else:
-                report.violations.add('source_id_in_prose')
-    without_speakers = _SPEAKER_PLACEHOLDER_RE.sub(_REMOVAL_MARKER, text)
-    if without_speakers != text:
-        report.repairs.add('speaker_placeholder')
-    without_speakers = _clean_parenthetical_removals(without_speakers)
-    text = _clean_after_removal(without_speakers) if _REMOVAL_MARKER in without_speakers else without_speakers
+    if not uuid_parentheticals_only:
+        for source_id in sorted(valid_ids, key=lambda value: (-len(value), value)):
+            pattern = _id_pattern(source_id)
+            if pattern.search(text):
+                if safe_fallback:
+                    text = pattern.sub(_REMOVAL_MARKER, text)
+                    report.repairs.add('source_id_in_prose')
+                else:
+                    report.violations.add('source_id_in_prose')
+        without_speakers = _SPEAKER_PLACEHOLDER_RE.sub(_REMOVAL_MARKER, text)
+        if without_speakers != text:
+            report.repairs.add('speaker_placeholder')
+        text = without_speakers
+    cleaned = _clean_parenthetical_removals(text)
+    text = _clean_after_removal(cleaned) if _REMOVAL_MARKER in cleaned else cleaned
     if '\x01' in text:
         text = text.replace('\x01', '').strip()
     for key, value in reversed(protected.items()):
@@ -255,12 +269,22 @@ def repair_note_citations(
     valid_ids: set[str],
     *,
     safe_fallback: bool = True,
+    uuid_parentheticals_only: bool = False,
     report: Optional[PresentationContractReport] = None,
 ) -> tuple[str, list[str]]:
-    """Sweep to a fixed point: removing an inner unit may expose an outer shell."""
+    """Sweep to a fixed point: removing an inner unit may expose an outer shell.
+
+    Stored note presentation can opt into just UUID-only citation units.
+    """
     recovered: list[str] = []
     while True:
-        cleaned, ids = _repair_note_citation_pass(text, valid_ids, safe_fallback=safe_fallback, report=report)
+        cleaned, ids = _repair_note_citation_pass(
+            text,
+            valid_ids,
+            safe_fallback=safe_fallback,
+            uuid_parentheticals_only=uuid_parentheticals_only,
+            report=report,
+        )
         recovered.extend(ids)
         if cleaned == text:
             return cleaned, list(dict.fromkeys(recovered))
@@ -299,7 +323,7 @@ def enforce_structured_presentation_contract(
     Citation-only syntax is repaired deterministically and moved into the typed
     evidence field. A known source ID in ordinary prose is ambiguous and asks
     the caller for one revision pass. ``safe_fallback`` removes that identifier
-    after the revision budget is exhausted. Unknown UUID-like text is preserved.
+    after the revision budget is exhausted. UUID-like prose outside citation units is preserved.
     """
 
     report = PresentationContractReport()
