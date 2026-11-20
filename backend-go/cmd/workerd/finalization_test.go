@@ -168,7 +168,11 @@ func TestF35ManualRedriveResumesFanoutWithoutAnotherAutomaticGrant(t *testing.T)
 	if failed.Outcome == nil || *failed.Outcome != queue.TerminalFailure || failed.BudgetRequeues != 1 {
 		t.Fatalf("expected one spent budget: %+v", failed)
 	}
-	if redriveErr := s.Redrive(t.Context(), intent); redriveErr != nil {
+	if staleErr := s.Redrive(t.Context(), intent, failed.Token+1); !errors.Is(staleErr, queue.ErrState) {
+		t.Fatalf("redrive with wrong epoch: %v", staleErr)
+	}
+
+	if redriveErr := s.Redrive(t.Context(), intent, failed.Token); redriveErr != nil {
 		t.Fatal(redriveErr)
 	}
 	settled := h.Settled(intent.JobID)

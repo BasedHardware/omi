@@ -36,11 +36,11 @@ func (s *Service) persistError(ctx context.Context, run *queue.Run, claim Claim,
 
 // Redrive reopens the exact parked managed job. If SQL redrive fails after the
 // Firestore transaction, repeating this operation completes the pending handoff.
-func (s *Service) Redrive(ctx context.Context, intent Intent) error {
-	if !intent.valid() || intent.RequiresBYOK {
+func (s *Service) Redrive(ctx context.Context, intent Intent, expectedEpoch int64) error {
+	if !intent.valid() || intent.RequiresBYOK || expectedEpoch <= 0 {
 		return ErrInvalid
 	}
-	err := s.Queue.Tenant(ctx, intent.Ref.Owner, func(scope *queue.Scope) error {
+	return s.Queue.Tenant(ctx, intent.Ref.Owner, func(scope *queue.Scope) error {
 		return scope.Subject(ctx, Kind, intent.Ref.ID, func() error {
 			job, err := scope.Get(ctx, intent.JobID)
 			if err != nil {
@@ -48,14 +48,13 @@ func (s *Service) Redrive(ctx context.Context, intent Intent) error {
 			}
 			existing, err := readIntent(job)
 			if err != nil || job.Kind != Kind || existing != intent || job.State != queue.StateParked ||
-				job.Outcome == nil || *job.Outcome != queue.TerminalFailure {
+				job.Outcome == nil || *job.Outcome != queue.TerminalFailure || job.Token != expectedEpoch {
 				return queue.ErrState
 			}
-			return s.Replay.PrepareRedrive(ctx, scope.Admitting(), intent, job.Token, job.BudgetRequeues)
+			if prepareErr := s.Replay.PrepareRedrive(ctx, scope.Admitting(), intent, expectedEpoch, job.BudgetRequeues); prepareErr != nil {
+				return prepareErr
+			}
+			return scope.Redrive(ctx, intent.JobID, expectedEpoch)
 		})
 	})
-	if err != nil {
-		return err
-	}
-	return s.Queue.Redrive(ctx, intent.JobID)
 }
