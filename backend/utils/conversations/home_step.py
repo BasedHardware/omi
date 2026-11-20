@@ -103,6 +103,10 @@ def classify(row: Mapping[str, Any], *, show_held: bool = False) -> str | None:
         elif _older_than(anchor, seconds):
             PROCESSING_AGE_TOTAL.labels(reason=HomeProcessingAgeReason.EXPIRED).inc()
             return FAILED
+        # A derived preview outside the live slot still shows its outline.
+        # Keep the normal age bound if its source stops reaching the builder.
+        if status == 'processing' and row.get('v3_derived') and row.get('tile_state') == 'live' and title:
+            return READY
         # A placeholder stamped on a capture stub is not evidence of a transcript.
         return TRANSCRIBING if untitled_pending(structured) else WRITING_NOTES
     if status == 'failed':

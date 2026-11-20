@@ -5,10 +5,15 @@ GOLANGCI_VERSION := v2.15.0
 GOLANGCI ?= $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 # The conformance kit (stub server, vectors, black-box suites). Optional.
 KIT ?=
+IMAGE ?= omi-workerd:local
+PLATFORM ?= linux/amd64
 
-.PHONY: build fmt vet lint arch test quick check test-public
+.PHONY: build image fmt vet lint arch test quick check test-public
 build:
 	$(GO) build -o bin/jobd ./cmd/jobd
+
+image:
+	docker build --platform "$(PLATFORM)" --tag "$(IMAGE)" .
 
 fmt:
 	$(GOLANGCI) fmt ./...

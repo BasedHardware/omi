@@ -1419,7 +1419,7 @@ def test_automatic_firestore_readiness_contract_requires_current_main_then_admit
     stale_source_workflow = copy.deepcopy(workflow)
     current_main_checkout = next(
         step
-        for step in stale_source_workflow['jobs']['firestore_readiness']['steps']
+        for step in stale_source_workflow['jobs']['admit_source']['steps']
         if step.get('name') == 'Checkout current main for automatic source admission'
     )
     current_main_checkout['with']['ref'] = '${{ github.event.workflow_run.head_sha }}'
