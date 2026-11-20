@@ -60,6 +60,7 @@ against Postgres, each test in its own database (`internal/platform/pgtest`).
 | The watcher sleeps until the next timer, and backs off on work it cannot claim | `rules.IdleWait`, `Workers.idle` | `TestIdleWaitSleepsUntilDueWithinBounds` |
 | A cause no kind declared is recorded as `unknown` | `registry.known` | `TestUndeclaredCauseIsRecordedAsUnknown` |
 | Admission acquires its barrier and checks for erasure in one client statement, reading the tombstone after the lock | `Store.Tenant`, `queue_acquire_tenant` | `TestAdmissionSeesEraseCommittedWhileWaitingForLock`, `TestTenantScopeTakesTwoClientStatements` |
+| Queue-only erase waits for guards, purges tenant queue rows, and records the tombstone while preserving the remote-cleanup completion bit | `Store.EraseQueue` | `TestEraseQueueWaitsForGuardAndCascades`, `TestEraseQueueIncludesAdmissionThatCommitsWhileItWaits`, `TestQueueOnlyErasePreservesRemoteCompletion` |
 | Every job field is scanned from its matching column | `columns`, `scan` | `TestJobScanMatchesItsProjection` |
 | A database whose applied migration differs from the embedded file is refused | `Store.Migrate`, `Store.Ready` | `TestMigrateRefusesAnEditedMigration` |
 
