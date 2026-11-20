@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -67,6 +68,8 @@ func TestDrainDeadlineRefundsWorkAndReconciliationForAnotherReplica(t *testing.T
 	s.cfg.DeterministicMax = 1
 	entered := make(chan Job, 3)
 	unblock := make(chan struct{})
+	var unblockOnce sync.Once
+	releaseHandlers := func() { unblockOnce.Do(func() { close(unblock) }) }
 	wait := func(work context.Context, j Job) {
 		entered <- j
 		<-work.Done()
@@ -89,7 +92,7 @@ func TestDrainDeadlineRefundsWorkAndReconciliationForAnotherReplica(t *testing.T
 			return Resolved()
 		},
 	})
-	defer close(unblock)
+	t.Cleanup(releaseHandlers)
 	enqueue(t, ctx, s, demo("normal", "owner"))
 	for _, key := range []string{"secret", "reconcile"} {
 		enqueue(t, ctx, s, gated(demo(key, "owner")))
@@ -118,6 +121,10 @@ func TestDrainDeadlineRefundsWorkAndReconciliationForAnotherReplica(t *testing.T
 	case <-time.After(5 * time.Second):
 		t.Fatal("drain waited for handlers that ignored cancellation")
 	}
+	// Drain refunds the claims at the deadline but deliberately doesn't wait for handlers
+	// that ignore cancellation. Release and join them before asserting what they reported.
+	releaseHandlers()
+	w.Stop()
 	for key := range claims {
 		j, err := s.Get(ctx, key)
 		want := StateReady
@@ -152,6 +159,7 @@ func TestDrainDeadlineRefundsWorkAndReconciliationForAnotherReplica(t *testing.T
 			t.Fatalf("peer claim for %s: %+v %v", key, j, err)
 		}
 	}
+	peer.Stop()
 	if len(reports.all())+len(peerReports.all()) != 0 {
 		t.Fatalf("worker reports: %v, %v", reports.all(), peerReports.all())
 	}
