@@ -185,9 +185,10 @@ def test_outline_prompt_uses_configured_silence_threshold():
         'end': recordings['r']['finished_at'],
         'fingerprint': 'synthetic',
     }
-    configured = outline.messages(group, timezone.utc, cohesion=True, silence_gap=timedelta(seconds=900))
+    # A gap at or under five minutes keeps the hard boundary; a longer one cuts at sit-downs instead.
+    configured = outline.messages(group, timezone.utc, cohesion=True, silence_gap=timedelta(seconds=240))
     baseline = outline.messages(group, timezone.utc, cohesion=True)
-    assert '900 seconds of recorded silence' in configured[0][1]
+    assert '240 seconds of recorded silence' in configured[0][1]
     assert 'Five minutes of recorded silence' in baseline[0][1]
     assert context.cache_key(group, configured) != context.cache_key(group, baseline)
 

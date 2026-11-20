@@ -65,6 +65,8 @@ def stretch_cohesion_enabled() -> bool:
 
 
 DEFAULT_BOUNDARY_SECONDS = 300
+# Stamped by the transaction that makes new recording speech visible; custom lock timing counts from it.
+SPEECH_LANDED_FIELD = 'v3_speech_landed_at'
 
 
 def _boundary_seconds(key: str, maximum: int) -> int:
