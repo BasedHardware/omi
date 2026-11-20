@@ -531,7 +531,7 @@ def test_archive_erasure_keeps_originals_linked_to_conversations_and_other_uploa
                 'raw-mobile-batch/owner-synthetic/b/live.bin',
                 {'sync_job_id': 'upload-1', 'conversation_id': 'live-conv'},
             ),
-            _Blob('raw-mobile-batch/owner-synthetic/b/bad.bin', {'sync_job_id': 'upload-1', 'conversation_ids': '{'}),
+            _Blob('raw-mobile-batch/owner-synthetic/b/bad.bin', {'sync_job_id': 'unrelated', 'conversation_ids': '{'}),
             _Blob('raw-mobile-batch/owner-synthetic/b/gone.bin', {'sync_job_id': 'upload-1'}, missing=True),
         ],
     }
@@ -559,6 +559,65 @@ def test_archive_erasure_keeps_originals_linked_to_conversations_and_other_uploa
     assert blobs['raw-mobile-batch'][0].deleted == 9
     with pytest.raises(ValueError):
         storage.delete_unlinked_upload_archives(OWNER, '')
+
+
+@pytest.mark.parametrize('lane', ['batch', 'legacy'])
+@pytest.mark.parametrize('earlier_original_exists', [False, True])
+def test_old_receipt_requires_archive_ownership_proof(monkeypatch, lane, earlier_original_exists):
+    from tests.unit import test_sync_owner_cancel_legacy as legacy
+    from utils.batch_pipeline.owner_cancel_erase import FirestoreEraser
+    from utils.other import storage
+
+    if lane == 'batch':
+        store = MemoryStore()
+        admit(store, ['a'])
+        receipt_key = ('intakes', JOB)
+        job_id = JOB.removeprefix('bp_')
+        eraser = FakeEraser(store)
+        cancel_upload = cancel
+    else:
+        store = legacy.MemoryLegacyStore()
+        legacy.held_upload(store)
+        receipt_key = ('ledger', OWNER, legacy.CONTENT)
+        job_id = legacy.JOB
+        eraser = legacy.FakeLegacyEraser(store)
+        cancel_upload = legacy.cancel
+
+    assert 'raw_capture_paths' not in store.rows[receipt_key]
+    prefix = f'raw-mobile-batch/{OWNER}/'
+    earlier = _Blob(prefix + 'same-recording.bin', {'sync_job_id': 'earlier-attempt'})
+    known = _Blob(prefix + 'current-attempt.bin', {'sync_job_id': job_id})
+    linked = _Blob(prefix + 'conversation.bin', {'sync_job_id': 'unrelated', 'conversation_ids': '["conversation"]'})
+    originals = [known, linked, earlier] if earlier_original_exists else [known, linked]
+
+    class Bucket:
+        def list_blobs(self, *, prefix, versions):
+            assert versions is True
+            return [blob for blob in originals if blob.name.startswith(prefix) and blob.deleted is None]
+
+    class Client:
+        def bucket(self, name):
+            return Bucket()
+
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: Client())
+    eraser.erase_archives = FirestoreEraser('batch_pipeline_prod').erase_archives
+
+    first = cancel_upload(store, eraser)
+    assert first.outcome is Outcome.CANCELLED
+    assert known.deleted == known.generation
+    assert linked.deleted is None
+    assert earlier.deleted is None
+    if earlier_original_exists:
+        assert first.erasure == 'pending'
+        retry = cancel_upload(store, eraser, now=timedelta(days=46).total_seconds())
+        assert retry.erasure == 'pending'
+        row = store.rows[receipt_key]
+        assert 'expires_at' not in row
+        assert 'owner_cancel_erased_at' not in row
+        assert earlier.deleted is None
+    else:
+        assert first.erasure == 'complete'
+        assert 'expires_at' in store.rows[receipt_key]
 
 
 def test_durable_status_answers_a_cancelled_upload_without_redrive():

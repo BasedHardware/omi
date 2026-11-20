@@ -20,7 +20,9 @@ gate) now cancels a batch upload (`bp_` handle) and erases its server copies.
   and the job/result rows go first, reusing the privacy purge helpers with a per-transaction
   re-proof of the fence. Then the private-cloud raw originals go: use the intake’s
   exact archive paths, including reused originals from earlier attempts. Old rows can also match
-  the upload ID in archive metadata. Preserve linked conversation originals. Start the 45-day
+  the upload ID in archive metadata. If an older row has no exact paths and an unlinked original
+  has no matching job ID, preserve the object and leave erasure pending. Preserve linked
+  conversation originals. Start the 45-day
   receipt TTL only after erasure succeeds. A failure answers `erasure: pending` and the phone
   keeps retrying until the server settles the request.
 - **Status.** A cancelled upload polls as `failed` with `reason_code=owner_cancelled`. Sibling
