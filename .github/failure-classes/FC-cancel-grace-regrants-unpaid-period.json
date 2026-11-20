@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-cancel-grace-regrants-unpaid-period",
+  "family": "projection-contract",
+  "violated_contract": "Paid-through cancel grace may keep a paid plan after a subscription reaches status canceled only when the current period was paid. A renewal that dunning, a void or an uncollectible mark left unpaid also ends canceled with a future current_period_end; projecting it as an active paid plan re-grants the whole unpaid period, and because entitlement reads only the stored row, nothing later corrects it.",
+  "canonical_prevention": "Gate the grace branch on the subscription's latest invoice having status paid (read from Stripe when the event carries only its id, and retry the webhook on a read failure rather than guess). End an existing grace when invoice.voided or invoice.marked_uncollectible arrives for the latest invoice of a canceled subscription that is still the user's stored paid subscription; leave superseded invoices of live subscriptions alone. Pin unpaid, voided, uncollectible, missing and string-id invoice cases with webhook characterization tests.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_subscription_ingestion_characterization.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/payment.py"
+  ],
+  "status": "open"
+}
