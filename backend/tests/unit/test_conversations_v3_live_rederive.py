@@ -812,6 +812,26 @@ async def test_undo_refuses_when_a_source_the_run_named_is_gone(owner, strict, l
     assert conversations(strict) == after
 
 
+@pytest.mark.asyncio
+async def test_undo_checks_every_source_before_restoring_any_group(owner, strict, ledger):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows, source('r9', AT + timedelta(minutes=30), words=400))
+    await rederive()
+    assert len(backfill._undo_groups(priors(strict))) == 2
+    # The created card's group sorts after the lunch group; its source is gone.
+    strict.rows.pop(path('r9'))
+    after = conversations(strict)
+    assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': 'undo_source_missing'}
+    assert conversations(strict) == after
+
+
+def test_a_copy_is_never_recorded_at_a_protection_level_the_row_left(strict):
+    strict.rows[path('c0')] = {'id': 'c0', 'data_protection_level': 'enhanced'}
+    with pytest.raises(store.Conflict, match='source_changed'):
+        runs.save_priors(UID, RUN, [{'id': 'c0', 'raw': {'id': 'c0'}, 'claims': []}], firestore_client=strict)
+    assert not priors(strict)
+
+
 def test_a_resumed_attempt_keeps_the_first_copy_of_a_row(strict):
     first = {'id': 'c0', 'raw': {'id': 'c0', 'title': 'before'}, 'claims': [{'recording_id': 'r0', 'index': 0}]}
     later = {'id': 'c0', 'raw': {'id': 'c0', 'title': 'later'}, 'claims': [{'recording_id': 'r0', 'index': 3}]}

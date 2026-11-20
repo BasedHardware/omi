@@ -3050,6 +3050,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
         conversations_v3_backfill_runs.purge_conversation_priors(uid, stamped, 'protection', firestore_client=db)
 
+    late_stamped = set()
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
             logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
@@ -3062,6 +3063,8 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                 return False
             if current.get('data_protection_level', 'standard') == target_level:
                 return False
+            if current.get('v3_rederive_live_run') and doc_snapshot.id not in stamped:
+                late_stamped.add(doc_snapshot.id)
             payload = {'data_protection_level': target_level}
             had_match_scores = match_scores.FIELD in current
             if 'transcript_segments' in current and not isinstance(current['transcript_segments'], dict):
@@ -3104,6 +3107,13 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
         if not run_preloaded_transactional(db, _migrate):
             continue
+        if late_stamped and doc_snapshot.id in late_stamped:
+            # Stamped by a live re-derive after the snapshot above: its copy is at the old level too.
+            from database import conversations_v3_backfill_runs
+
+            conversations_v3_backfill_runs.purge_conversation_priors(
+                uid, [doc_snapshot.id], 'protection', firestore_client=db
+            )
 
         # Photos retain their separate batched migration path.
         photos_ref = doc_snapshot.reference.collection('photos')

@@ -432,6 +432,7 @@ def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
     deleted = client.collection('users').document(uid).collection('deleted_conversations')
     if purged_reason(entries):
         return purged_reason(entries)
+    named = set()
     for entry in entries:
         cid = entry['id']
         if deleted.document(cid).get().exists:
@@ -446,6 +447,12 @@ def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
             return 'undo_newer_run_first'
         if stamp == run_id and owner_changed(row, entry):
             return 'owner_edited_rebuilt_row'
+        if stamp == run_id:
+            named.update(c['recording_id'] for c in entry.get('claims') or [])
+            named.update(entry.get('sources') or [])
+    # Every source any group will repair, before the first group restores.
+    if any(not coll.document(rid).get().exists for rid in sorted(named)):
+        return 'undo_source_missing'
     return None
 
 
