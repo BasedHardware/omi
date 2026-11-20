@@ -125,9 +125,11 @@ def render_chart(contract: DeploymentContract, environment: str, helm_binary: st
         text=True,
     )
     if result.returncode:
-        detail = result.stderr.strip() or result.stdout.strip() or "Helm did not report an error"
-        raise ValueError(f"{environment}/{contract.service}: helm template failed: {detail}")
-    return [document for document in yaml.safe_load_all(result.stdout) if isinstance(document, dict)]
+        raise ValueError("Helm template failed")
+    try:
+        return [document for document in yaml.safe_load_all(result.stdout) if isinstance(document, dict)]
+    except yaml.YAMLError:
+        raise ValueError("Helm returned invalid YAML") from None
 
 
 def deployment_for(documents: Iterable[dict[str, Any]], expected_name: str) -> dict[str, Any] | None:
@@ -172,10 +174,7 @@ def validate_rendered_deployment(
     errors: list[str] = []
     expected_service_account = release_name(contract, environment)
     if pod_spec.get("serviceAccountName") != expected_service_account:
-        errors.append(
-            f"{prefix}: serviceAccountName must be {expected_service_account!r}, "
-            f"got {pod_spec.get('serviceAccountName')!r}"
-        )
+        errors.append(f"{prefix}: serviceAccountName must be {expected_service_account!r}")
 
     container = _container(deployment, contract.service)
     if container is None:
@@ -184,7 +183,7 @@ def validate_rendered_deployment(
     image = container.get("image")
     expected = expected_image(contract, environment)
     if image != expected:
-        errors.append(f"{prefix}: immutable image must be {expected!r}, got {image!r}")
+        errors.append(f"{prefix}: immutable image must match the deployment contract")
     if not isinstance(image, str) or not image or image.endswith(":latest"):
         errors.append(f"{prefix}: image must not be empty or use the latest tag")
 
@@ -204,7 +203,7 @@ def validate_rendered_deployment(
         actual = _mapping(env.get(name)).get("value")
         rendered_expected = expected_value.format(**replacements)
         if actual != rendered_expected:
-            errors.append(f"{prefix}: {name} must be {rendered_expected!r}, got {actual!r}")
+            errors.append(f"{prefix}: {name} must be set to the deployment contract value")
 
     expected_secret = f"{environment}-omi-backend-secrets"
     has_shared_secret_ref = False
@@ -220,12 +219,9 @@ def validate_rendered_deployment(
         ref = _mapping(_mapping(entry.get("valueFrom")).get("secretKeyRef"))
         if ref:
             if not ref.get("name") or not ref.get("key"):
-                errors.append(f"{prefix}: secretKeyRef for {entry.get('name')!r} needs non-empty name and key")
+                errors.append(f"{prefix}: secretKeyRef needs a non-empty name and key")
             elif ref.get("name") != expected_secret:
-                errors.append(
-                    f"{prefix}: secretKeyRef for {entry.get('name')!r} must target {expected_secret!r}, "
-                    f"got {ref.get('name')!r}"
-                )
+                errors.append(f"{prefix}: secretKeyRef must target {expected_secret!r}")
             else:
                 has_shared_secret_ref = True
     if contract.required_secret_name and not has_shared_secret_ref:
@@ -264,8 +260,8 @@ def validate_all_contracts(renderer: Renderer, helm_binary: str = "helm") -> lis
         for contract in CONTRACTS:
             try:
                 documents = renderer(contract, environment, helm_binary)
-            except ValueError as exc:
-                errors.append(str(exc))
+            except ValueError:
+                errors.append(f"{environment}/{contract.service}: Helm render failed or returned invalid YAML")
                 continue
             errors.extend(validate_rendered_deployment(contract, environment, documents))
     return errors

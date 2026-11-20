@@ -129,7 +129,7 @@ def test_stale_or_fallback_image_is_rejected_at_rendered_outcome(contracts: Simp
         contracts.CONTRACTS[0], "dev", [_deployment(contracts, image="gcr.io/based-hardware-dev/backend:latest")]
     )
 
-    assert any("immutable image must be" in failure for failure in failures)
+    assert any("immutable image must match" in failure for failure in failures)
     assert any("must not be empty or use the latest tag" in failure for failure in failures)
 
 
@@ -145,6 +145,46 @@ def test_wrong_runtime_identity_and_secret_reference_are_rejected(contracts: Sim
     assert any("serviceAccountName must be" in failure for failure in failures)
     assert any("GOOGLE_CLOUD_PROJECT must be" in failure for failure in failures)
     assert any("secretKeyRef" in failure and "dev-omi-backend-secrets" in failure for failure in failures)
+
+
+def test_failure_diagnostics_omit_rendered_values(monkeypatch, capsys, contracts: SimpleNamespace):
+    deployment = _deployment(contracts, image="synthetic-image-secret")
+    pod = deployment["spec"]["template"]["spec"]
+    pod["serviceAccountName"] = "synthetic-account-secret"
+    env = pod["containers"][0]["env"]
+    env[1]["value"] = "synthetic-env-secret"
+    env[2]["valueFrom"]["secretKeyRef"]["name"] = "synthetic-reference-secret"
+    env.append({"name": "synthetic-name-secret", "valueFrom": {"secretKeyRef": {"key": "synthetic-key-secret"}}})
+    namespace = contracts.main.__globals__
+
+    def fake_render(_contract, environment, _helm):
+        if environment == "prod":
+            raise ValueError("synthetic-render-exception-secret")
+        return [deployment]
+
+    monkeypatch.setitem(namespace, "render_chart", fake_render)
+    monkeypatch.setitem(namespace, "CONTRACTS", (contracts.CONTRACTS[0],))
+    monkeypatch.setattr(contracts.shutil, "which", lambda _: "/test/helm")
+
+    assert contracts.main() == 1
+    diagnostics = capsys.readouterr().err
+    assert "synthetic-" not in diagnostics
+    for name in ("serviceAccountName", "immutable image", "GOOGLE_CLOUD_PROJECT", "secretKeyRef", "Helm render"):
+        assert name in diagnostics
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stdout"),
+    [(1, "synthetic-stdout-secret"), (0, "key: [synthetic-yaml-secret")],
+)
+def test_helm_output_never_escapes_in_render_error(monkeypatch, contracts, returncode, stdout):
+    result = SimpleNamespace(returncode=returncode, stdout=stdout, stderr="synthetic-stderr-secret")
+    monkeypatch.setattr(contracts.subprocess, "run", lambda *_args, **_kwargs: result)
+
+    with pytest.raises(ValueError, match="Helm") as exc:
+        contracts.render_chart(contracts.CONTRACTS[0], "dev", "helm")
+    assert "synthetic-" not in str(exc.value)
+    assert exc.value.__suppress_context__ or exc.value.__context__ is None
 
 
 def test_render_command_uses_the_deploy_immutable_tag_override(monkeypatch, contracts: SimpleNamespace):
