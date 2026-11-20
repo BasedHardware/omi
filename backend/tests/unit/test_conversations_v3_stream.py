@@ -883,24 +883,33 @@ def test_legacy_generated_live_sections_are_read_redacted_with_owner_overview_pr
 
 @pytest.mark.parametrize('edited_overview', [False, True])
 @pytest.mark.parametrize('version', ['4', '5'])
-def test_completed_note_detail_repairs_uuid_citations_without_rewriting_storage(catchup, edited_overview, version):
+def test_completed_note_detail_repairs_uuid_citations_without_rewriting_storage(
+    catchup, monkeypatch, edited_overview, version
+):
     known = f'11111111-2222-{version}333-8444-555555555555'
     orphan = f'aaaaaaaa-bbbb-{version}ccc-addd-eeeeeeeeeeee'
     body = f'- The group took photos. ({orphan})\n- They shared them ({known}). (aside)'
     clean = '- The group took photos.\n- They shared them. (aside)'
     edited = f'Owner text ({orphan})'
+    existing = 'existing-source'
+    sources = [existing, known] if edited_overview else [existing]
     catchup.update(
         status='completed',
         v3_notes_written=True,
         structured={
             'title': 'Photos',
             'overview': edited if edited_overview else f'## Sharing\n\n{body}',
-            'sections': [{'heading': 'Sharing', 'body_markdown': body, 'source_segment_ids': []}],
+            'sections': [{'heading': 'Sharing', 'body_markdown': body, 'source_segment_ids': sources}],
         },
-        transcript_segments=[{'id': known, 'text': 'They shared them.', 'start': 0, 'end': 1}],
+        transcript_segments=[
+            {'id': existing, 'text': 'They took photos.', 'start': 0, 'end': 1},
+            {'id': known, 'text': 'They shared them.', 'start': 1, 'end': 2},
+        ],
         apps_results=[{'app_id': 'custom', 'content': edited}],
     )
-    before = deepcopy(catchup)
+    fetched = deepcopy(catchup)
+    before = deepcopy(fetched)
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *args, **kwargs: fetched)
 
     detail = routes.get_conversation_by_id(
         'live', source=None, include_discarded=None, uid='synthetic', include_translations=False
@@ -908,9 +917,11 @@ def test_completed_note_detail_repairs_uuid_citations_without_rewriting_storage(
 
     assert detail['structured']['sections'][0]['body_markdown'] == clean
     assert detail['structured']['overview'] == (edited if edited_overview else f'## Sharing\n\n{clean}')
-    assert detail['structured']['sections'][0]['source_segment_ids'] == [detail['transcript_segments'][0]['id']]
+    assert detail['structured']['sections'][0]['source_segment_ids'] == [
+        segment['id'] for segment in detail['transcript_segments']
+    ]
     assert detail['apps_results'] == before['apps_results']
-    assert catchup['structured'] == before['structured']
+    assert fetched['structured'] == before['structured']
 
 
 @pytest.mark.asyncio

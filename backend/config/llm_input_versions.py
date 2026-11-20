@@ -19,9 +19,10 @@ construction): those must not re-buy anything.
 from __future__ import annotations
 
 NOTES_PROMPT_VERSION = 'notes-9'
-# notes-9 strips UUID-only citation units from newly generated notes. Existing
-# versioned checkpoints are reusable because the V3 detail projection repairs
-# the same citation form on read, without buying another model call.
+# notes-9 strips UUID-only citation units from newly generated notes. Keep
+# older versioned checkpoints reusable. The completed V3 detail GET repairs
+# stored section bodies and their matching derived overview on read. Other
+# fields and cached summaries on other read surfaces keep their saved text.
 # notes-8 only lets a stored row's schema-hidden title_provenance read back as
 # 'historical_minimum' (models/structured.py); prompt, schema and output are unchanged,
 # so notes-7 checkpoints stay reusable and nothing is re-bought.

@@ -109,6 +109,7 @@ def _clean_after_removal(text: str) -> str:
     text = re.sub(rf'{marker}(?:[ \t]*{marker})+', _REMOVAL_MARKER, text)
     text = re.sub(rf'[ \t]+{marker}[ \t]+', ' ', text)
     text = re.sub(rf'[ \t]+{marker}(?=[,.;:]|\n|$)', '', text)
+    text = re.sub(rf'(?<=\w){marker}[ \t]+(?=\w)', ' ', text)
     text = re.sub(rf'{marker}[ \t]+', '', text)
     return text.replace(_REMOVAL_MARKER, '').strip()
 
@@ -186,13 +187,14 @@ def _repair_note_citation_pass(
     def unit(match: re.Match[str]) -> str:
         value = match.group(0)
         if value.startswith('('):
-            tokens = [token.strip() for token in re.split(r'[;,]', value[1:-1]) if token.strip()]
-            if tokens and all(_SEGMENT_UUID_RE.fullmatch(token) for token in tokens):
-                ids = [token for token in tokens if token in valid_ids]
-                reason = 'inline_source_citation' if len(ids) == len(tokens) else 'unknown_citation_dropped'
+            uuid_tokens = [token for token in re.split(r'[\s,;]+', value[1:-1]) if token]
+            if uuid_tokens and all(_SEGMENT_UUID_RE.fullmatch(token) for token in uuid_tokens):
+                ids = [token for token in uuid_tokens if token in valid_ids]
+                reason = 'inline_source_citation' if len(ids) == len(uuid_tokens) else 'unknown_citation_dropped'
                 return remove(ids, reason)
             if uuid_parentheticals_only:
                 return value
+            tokens = [token.strip() for token in re.split(r'[;,]', value[1:-1]) if token.strip()]
             ids = []
             for token in tokens:
                 nested_link = _MARKDOWN_LINK_RE.fullmatch(token)
