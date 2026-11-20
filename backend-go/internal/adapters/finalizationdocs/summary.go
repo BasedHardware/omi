@@ -167,6 +167,7 @@ func updateSummary(outbox, row document, ref finalization.Ref, id string, action
 			return err
 		}
 		outbox["task_token"] = strings.ReplaceAll(token, "-", "")
+		outbox["wake_check_after"] = int64(0)
 	}
 	outbox["document_id"], outbox["uid"], outbox["conversation_id"] = id, ref.Owner, ref.ID
 	outbox["first_pending_at"], outbox["latest_pending_at"] = unix(pending), unix(now)
