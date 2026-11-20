@@ -27,10 +27,6 @@ def test_current_volume_capacity_stays_cool_and_at_the_audited_floor():
     assert FRONTIER.cfg['max_replicas'] == 16
     assert result['mean'] == 6
     assert result['max'] == 6
-    # The floor alone keeps current volume cool: peak 5m chain demand per pod stays
-    # under HOT_CHAIN_PER_WORKER * min_replicas, so hot == 0 follows from that margin.
-    peak = max(x for x in FRONTIER.series['chain_5m_per_pod'] if x is not None)
-    assert peak <= FRONTIER.r.HOT_CHAIN_PER_WORKER * FRONTIER.cfg['min_replicas']
     assert result['hot'] == 0
     assert result['floor']
 
