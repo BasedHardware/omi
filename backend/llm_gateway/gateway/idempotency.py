@@ -1,8 +1,14 @@
 """HTTP contract for opted-in chat completion idempotency."""
 
+import asyncio
+from concurrent.futures import Future
+from contextvars import copy_context
+from dataclasses import dataclass
 from collections.abc import Awaitable, Callable
 import json
-from typing import Any, ParamSpec, TypeVar
+import os
+from threading import BoundedSemaphore
+from typing import Any, TypeVar
 from uuid import UUID
 
 from fastapi import Request
@@ -13,17 +19,34 @@ from config.refactor_modes import default_on
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.credentials import CredentialContext
 from llm_gateway.gateway.idempotency_store import IdempotencyError, Operation, Store, StoredResponse
-from utils.executors import ExecutorSaturatedError, gateway_idempotency_executor, run_blocking
+from utils.executors import (
+    ExecutorSaturatedError,
+    GATEWAY_SETTLEMENT_WORKERS,
+    gateway_idempotency_executor,
+    gateway_settlement_executor,
+    run_blocking,
+)
 
 HEADER = 'idempotency-key'
 ACK_HEADER = 'X-Omi-Idempotency-Key'
 MAX_REQUEST_BYTES = 1024 * 1024
 PROVIDERS = frozenset({'openai', 'openrouter', 'anthropic'})
 
-KEYED_POSTS = Counter('llm_gateway_keyed_posts_total', 'Authenticated chat POSTs using the keyed protocol')
+ENVIRONMENT_SETTING = 'LLM_GATEWAY_IDEMPOTENCY_ENVIRONMENT'
+ENVIRONMENTS = frozenset({'dev', 'prod', 'local'})
+KEYED_POSTS = Counter(
+    'llm_gateway_keyed_posts_total', 'Authenticated chat POSTs using the keyed protocol', ['environment']
+)
 OUTCOMES = Counter('llm_gateway_idempotency_outcomes_total', 'Keyed chat outcomes', ['method', 'outcome'])
-P = ParamSpec('P')
 T = TypeVar('T')
+_settlement_slots = BoundedSemaphore(GATEWAY_SETTLEMENT_WORKERS)
+
+
+@dataclass(frozen=True)
+class KeyedRequest:
+    key: str
+    scope: str
+    environment: str
 
 
 def _key(value: str) -> str:
@@ -52,9 +75,9 @@ async def _request_body(request: Request) -> dict[str, Any]:
     return body
 
 
-async def _storage(fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+async def _storage(work: Awaitable[T]) -> T:
     try:
-        return await run_blocking(gateway_idempotency_executor, fn, *args, **kwargs)
+        return await work
     except ExecutorSaturatedError as exc:
         raise IdempotencyError(503, 'idempotency_store_busy', retry_after='2') from exc
     except IdempotencyError:
@@ -65,10 +88,10 @@ async def _storage(fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
 
 
 def _claim(
-    operation: Operation, body: dict[str, Any], credentials: CredentialContext
+    operation: Operation, body: dict[str, Any], credentials: CredentialContext, environment: str
 ) -> tuple[Store, StoredResponse | None]:
     store = Store(operation)
-    return store, store.claim_or_replay(Operation.canonical_request(body, credentials))
+    return store, store.claim_or_replay(Operation.canonical_request(body, credentials), environment)
 
 
 def _error(exc: IdempotencyError, method: str) -> JSONResponse:
@@ -96,9 +119,10 @@ async def complete(
     request: Request,
     caller: ServiceCaller,
     credentials: CredentialContext,
-    invoke: Callable[[dict[str, Any], str, str], Awaitable[JSONResponse]],
+    invoke: Callable[[dict[str, Any], KeyedRequest], Awaitable[JSONResponse]],
 ) -> Response:
-    KEYED_POSTS.inc()
+    environment = os.getenv(ENVIRONMENT_SETTING, '').strip()
+    KEYED_POSTS.labels(environment if environment in ENVIRONMENTS else 'unknown').inc()
     try:
         values = request.headers.getlist(HEADER)
         if len(values) != 1:
@@ -108,25 +132,43 @@ async def complete(
             header.startswith('x-omi-proactivity-') for header in request.headers
         ):
             raise IdempotencyError(400, 'idempotency_proactivity_unsupported')
+        if environment not in ENVIRONMENTS:
+            raise IdempotencyError(503, 'idempotency_environment_unavailable')
         operation = Operation.for_caller(caller, key)
-        body = await _request_body(request)
-        store, replay = await _storage(_claim, operation, body, credentials)
-        if replay is not None:
-            OUTCOMES.labels('post', 'replay').inc()
-            return _replay(key, replay)
+        if not _settlement_slots.acquire(blocking=False):
+            raise IdempotencyError(503, 'idempotency_store_busy', retry_after='2')
+        settlement: Future[None] | None = None
+        try:
+            body = await _request_body(request)
+            store, replay = await _storage(
+                run_blocking(gateway_idempotency_executor, _claim, operation, body, credentials, environment)
+            )
+            if replay is not None:
+                OUTCOMES.labels('post', 'replay').inc()
+                return _replay(key, replay)
 
-        # If canceled or killed here, the claim stays fenced and ages to indeterminate.
-        response = await invoke(body, key, operation.document_id)
-        if response.status_code >= 500:
-            await _storage(store.finish, None)
-            OUTCOMES.labels('post', 'indeterminate').inc()
-        else:
-            saved = StoredResponse(response.status_code, bytes(response.body))
-            await _storage(store.finish, saved)
-            OUTCOMES.labels('post', 'committed').inc()
-            response.headers[ACK_HEADER] = key
-        response.headers['Cache-Control'] = 'no-store'
-        return response
+            # If canceled before the provider returns, the claim stays fenced.
+            response = await invoke(body, KeyedRequest(key, operation.document_id, environment))
+            saved = None if response.status_code >= 500 else StoredResponse(response.status_code, bytes(response.body))
+            # Only permit holders submit to this executor. Keep the permit until
+            # the actual worker exits, even if the HTTP waiter is canceled.
+            try:
+                settlement = gateway_settlement_executor.submit(copy_context().run, store.finish, saved)
+            except RuntimeError as exc:
+                raise IdempotencyError(503, 'idempotency_store_unavailable') from exc
+            await _storage(asyncio.wrap_future(settlement))
+            if saved is None:
+                OUTCOMES.labels('post', 'indeterminate').inc()
+            else:
+                OUTCOMES.labels('post', 'committed').inc()
+                response.headers[ACK_HEADER] = key
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        finally:
+            if settlement is None:
+                _settlement_slots.release()
+            else:
+                settlement.add_done_callback(lambda _: _settlement_slots.release())
     except IdempotencyError as exc:
         return _error(exc, 'post')
 
@@ -138,7 +180,9 @@ def _lookup(operation: Operation) -> StoredResponse:
 async def lookup(caller: ServiceCaller, value: str) -> Response:
     try:
         key = _key(value)
-        response = await _storage(_lookup, Operation.for_caller(caller, key))
+        response = await _storage(
+            run_blocking(gateway_idempotency_executor, _lookup, Operation.for_caller(caller, key))
+        )
         if response.status != 200:
             # A deterministic error can be replayed by POST, but has no completion.
             raise IdempotencyError(404, 'idempotency_not_found')

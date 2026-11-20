@@ -606,7 +606,9 @@ dispatch. Keyed callers use the existing service bearer
 and caller headers and must supply `X-Omi-User-Uid`. The gateway scopes each
 key to the authenticated service caller, user, and optional
 `X-Omi-Tenant-Id`. It compares the canonical JSON body and forwarded
-credential context. The request limit is 1 MiB.
+credential context. The order of names inside each structured-output schema's
+`properties` is significant. Other JSON object keys remain order-independent.
+The request limit is 1 MiB.
 
 Keyed calls support OpenAI, OpenRouter, and Anthropic serving routes with
 `stream` absent or set to the JSON boolean `false`. Proactivity feature and
@@ -624,7 +626,7 @@ the usual routing policy.
 | Result expired | HTTP 410 `idempotency_expired`. The claim still fences the key |
 | Claim TTL elapsed and the document still exists | HTTP 410 `idempotency_expired`. The gateway does not renew the claim |
 | Storage unavailable or feature disabled | HTTP 503. The operation cannot start without a durable claim |
-| Keyed storage saturated | HTTP 503 `idempotency_store_busy` with `Retry-After: 2`. A rejected settlement leaves the claim fenced |
+| Keyed storage saturated | HTTP 503 `idempotency_store_busy` with `Retry-After: 2` before claim or dispatch |
 
 `GET /v1/chat/completions/operations/{key}` uses the same auth and scope and
 returns only a committed successful completion. A missing result returns 404.
@@ -654,8 +656,12 @@ for both collection groups. The gateway requires
 customer project and database for claims, responses, and deletion-marker reads.
 Verify the gateway runtime identity has access there. Development compute
 and the customer project intentionally differ. This pin applies only to
-keyed storage. The keyed storage executor admits eight running and eight queued
-transactions per replica. Unkeyed work and accounting use their existing pool.
+keyed storage. The claim and lookup executor admits eight running and eight
+queued transactions per replica. A keyed POST must reserve one of eight separate
+settlement slots before reading the body or creating a claim. Claim and lookup
+contention cannot take those slots. Cancellation releases an unused slot or,
+when settlement has started, releases it once the worker exits. Unkeyed work
+and accounting use their existing pool.'"
 
 The Helm values accept a gateway-only Kubernetes secret named
 `<stage>-omi-llm-gateway-idempotency-keys` in the gateway namespace. Its optional entries use the same names as the gateway environment settings
@@ -681,57 +687,86 @@ dedicated operations URL, including during a rollback.
 ### Rollout readback
 
 Measure excess provider attempts per 1,000 keyed POSTs over a settled window
-that contains replay traffic. Take the denominator from the increase in
-`llm_gateway_keyed_posts_total` for that window. Collect these read-only inputs
-before the claim TTL or any account wipe can remove claims from the cohort.
+that contains replay traffic. The first production readback uses only
+`prod`. The dev and prod charts set `LLM_GATEWAY_IDEMPOTENCY_ENVIRONMENT`
+explicitly. It stamps new claims, keyed ledger rows and the keyed POST counter.
+Use `sum(increase(llm_gateway_keyed_posts_total{environment="prod"}[<window>]))`
+as the denominator, evaluated at the window end. Collect the read-only inputs
+before claim TTL or account erasure can remove cohort records.
 
-- `claims` is a customer Firestore collection-group query on
-  `llm_gateway_idempotency_claims` with `window_start <= started_at < window_end`.
-  Project the document ID as `scope`, plus `state`. If the range index is
-  unavailable, scan the projected `started_at` and `state` fields during the
-  bounded rollout cohort and apply the same time filter in the extract.
-- `attempts` is the union of the participating gateway replicas' accounting
-  Firestore ledgers (`llm_gateway_attempts`). For each claim scope, fetch all
-  matching `idempotency_scope` rows, including late arrivals after window end.
-  Also fetch scoped ledger rows from the window to detect missing claims.
-  Project `idempotency_scope AS scope`, `attempt_id` and an
-  `in_window` boolean based on `occurred_at`. Deduplicate copies of the same
-  attempt ID across extracts.
+- `claims` projects the customer Firestore claim document ID as `scope`, plus
+  `state`, `started_at` and `environment`. Extract the chosen environment and
+  `window_start <= started_at < window_end` from the
+  `llm_gateway_idempotency_claims` collection group. If the range index is
+  unavailable, scan those projected fields during the bounded rollout and
+  apply the same filters in the extract.
+- `attempts` projects `idempotency_scope AS scope`, `attempt_id`,
+  `occurred_at` as a timestamp, and `idempotency_environment AS environment`
+  from the participating replicas' `llm_gateway_attempts` ledgers. Extract
+  rows in the chosen environment for each cohort scope, including late rows
+  after window end, and all scoped ledger rows occurring within the window.
+  Keep `user_uid` for the next lookup only.
+- `claim_lookup` contains point reads in customer Firestore for every
+  in-window ledger scope absent from the claim cohort. Read
+  `users/{user_uid}/llm_gateway_idempotency_claims/{scope}` and project
+  `scope`, `started_at` and `environment` for found documents. Only a
+  matching-environment claim confirmed outside the window excludes a
+  ledger-only scope. Missing claims, mismatched stamps, and found claims
+  that should have been in the extract leave coverage unknown. Treat lookup
+  errors as an incomplete measurement.
 
-Run the following against those inputs. `@keyed_posts` is the Prometheus
-denominator. An unresolved claim or a missing ledger event gives unknown
-coverage, even if both scraped counters agree. A claim with a committed
-pre-dispatch rejection and no ledger row is conservatively unknown as well.
+Run the query with `@environment = 'prod'`, `@window_start` and
+`@window_end` matching the scrape window, and `@keyed_posts` set to the
+environment-filtered denominator. A committed pre-dispatch rejection with
+no ledger row is conservatively unknown as well.
 
 ```sql
-WITH by_scope AS (
+WITH cohort AS (
+  SELECT scope, state
+  FROM claims
+  WHERE environment = @environment
+    AND started_at >= @window_start AND started_at < @window_end
+), by_scope AS (
   SELECT scope, COUNT(DISTINCT attempt_id) AS attempts,
-         LOGICAL_OR(in_window) AS in_window
+         MAX(CASE WHEN occurred_at >= @window_start AND occurred_at < @window_end
+                  THEN 1 ELSE 0 END) AS in_window
   FROM attempts
+  WHERE environment = @environment
   GROUP BY scope
+), scoped AS (
+  SELECT c.scope, c.state, COALESCE(a.attempts, 0) AS attempts, 1 AS has_claim
+  FROM cohort AS c LEFT JOIN by_scope AS a ON c.scope = a.scope
+  UNION ALL
+  SELECT a.scope, NULL AS state, a.attempts, 0 AS has_claim
+  FROM by_scope AS a
+  WHERE a.in_window = 1
+    AND NOT EXISTS (SELECT 1 FROM cohort AS c WHERE c.scope = a.scope)
+    AND NOT EXISTS (
+      SELECT 1 FROM claim_lookup AS l
+      WHERE l.scope = a.scope AND l.environment = @environment
+        AND (l.started_at < @window_start OR l.started_at >= @window_end)
+    )
 ), coverage AS (
   SELECT
-    COALESCE(SUM(GREATEST(COALESCE(a.attempts, 0) - 1, 0)), 0) AS observed_excess,
-    COUNTIF(c.scope IS NULL OR c.state IS DISTINCT FROM 'committed'
-            OR COALESCE(a.attempts, 0) = 0) AS unknown_scopes,
-    COUNTIF(c.scope IS NOT NULL) AS claims
-  FROM claims AS c
-  FULL OUTER JOIN by_scope AS a ON c.scope = a.scope
-  WHERE c.scope IS NOT NULL OR a.in_window
+    COALESCE(SUM(CASE WHEN attempts > 1 THEN attempts - 1 ELSE 0 END), 0) AS observed_excess,
+    COALESCE(SUM(CASE WHEN state = 'committed' AND attempts > 0 THEN 0 ELSE 1 END), 0)
+      AS unknown_scopes,
+    COALESCE(SUM(has_claim), 0) AS claims
+  FROM scoped
 )
 SELECT observed_excess, unknown_scopes, claims,
-       IF(unknown_scopes = 0 AND claims > 0,
-          SAFE_DIVIDE(1000.0 * observed_excess, @keyed_posts), NULL)
-          AS excess_per_1000_keyed_posts
+       CASE WHEN unknown_scopes = 0 AND claims > 0
+            THEN 1000.0 * observed_excess / NULLIF(@keyed_posts, 0)
+       END AS excess_per_1000_keyed_posts
 FROM coverage;
 ```
 
-Require complete claim and ledger extracts and check the keyed provider-attempt
-and accounting-delivery counter deltas independently. Treat a known gap in
-either extract or counter coverage as unknown. Accept the zero target only
-with a nonempty cohort, replay traffic, and complete coverage. If a claim
-can no longer be enumerated because of TTL or account erasure, the affected
-window is incomplete. Track replay, conflict, pending, indeterminate,
+Require complete claim and ledger extracts. Independently compare the keyed
+provider-attempt and accounting-delivery counter deltas from the same
+environment's scrape targets. A known extract or counter gap makes coverage
+unknown. Accept the zero target only with a nonempty cohort, replay traffic,
+and complete coverage. A claim removed by TTL or erasure makes the affected
+window incomplete. Track replay, conflict, pending, indeterminate,
 saturation and storage errors in `llm_gateway_idempotency_outcomes_total`.
 
 ## Provider Execution

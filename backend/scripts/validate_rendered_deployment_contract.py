@@ -71,6 +71,7 @@ CONTRACTS = (
         service="llm-gateway",
         image_name="llm-gateway",
         required_secret_name=True,
+        expected_env=(("LLM_GATEWAY_IDEMPOTENCY_ENVIRONMENT", "{environment}"),),
         optional_scoped_secrets=(
             ("LLM_GATEWAY_IDEMPOTENCY_ENCRYPTION_SECRET", "omi-llm-gateway-idempotency-keys"),
             ("LLM_GATEWAY_IDEMPOTENCY_SECONDARY_ENCRYPTION_SECRET", "omi-llm-gateway-idempotency-keys"),

@@ -30,6 +30,7 @@ def gateway(monkeypatch):
     provider = FakeChatCompletionProvider()
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'test-gateway-service-token')
     monkeypatch.delenv('LLM_GATEWAY_IDEMPOTENCY_ENABLED', raising=False)
+    monkeypatch.setenv(idempotency.ENVIRONMENT_SETTING, 'prod')
     monkeypatch.setitem(
         app.dependency_overrides, dependencies.get_provider_registry, lambda: ProviderRegistry({'openai': provider})
     )
@@ -121,6 +122,7 @@ def test_rendered_dev_gateway_uses_customer_firestore(gateway, monkeypatch, rend
     compute = env['GOOGLE_CLOUD_PROJECT']['value']
     assert compute == 'based-hardware-dev'
     assert env[idempotency_store.DATA_PLANE_ENV]['value'] == customer == 'based-hardware'
+    assert env[idempotency.ENVIRONMENT_SETTING]['value'] == 'dev'
     for entry in (idempotency_store.ACTIVE_SECRET_ENV, idempotency_store.SECONDARY_SECRET_ENV):
         assert env[entry]['valueFrom']['secretKeyRef'] == {
             'name': 'dev-omi-llm-gateway-idempotency-keys',
@@ -175,3 +177,125 @@ def test_saturated_keyed_storage_is_rejected_without_blocking_legacy(gateway):
         release.set()
         for future in futures:
             assert future.result(timeout=2)
+
+
+def test_no_settlement_permit_rejects_before_claim(gateway, monkeypatch):
+    client, headers, provider = gateway
+
+    def no_claim(*args):
+        pytest.fail('request without a settlement permit reached claim')
+
+    monkeypatch.setattr(idempotency, '_claim', no_claim)
+    permits = idempotency._settlement_slots
+    count = idempotency.GATEWAY_SETTLEMENT_WORKERS
+    for _ in range(count):
+        assert permits.acquire(blocking=False)
+    try:
+        response = client.post(POST, json=BODY, headers=headers)
+        assert response.status_code == 503
+        assert response.json()['error']['code'] == 'idempotency_store_busy'
+        assert response.headers['Retry-After'] == '2'
+        assert not provider.calls
+    finally:
+        for _ in range(count):
+            permits.release()
+
+
+def test_post_counter_uses_bounded_writer_environment(gateway, monkeypatch):
+    client, headers, provider = gateway
+    monkeypatch.setattr(idempotency, '_claim', lambda *_: pytest.fail('bad environment reached claim'))
+    for value, label in (('prod', 'prod'), ('dev', 'dev'), ('unexpected', 'unknown')):
+        monkeypatch.setenv(idempotency.ENVIRONMENT_SETTING, value)
+        counter = idempotency.KEYED_POSTS.labels(label)
+        previous = counter._value.get()
+        if label == 'unknown':
+            response = client.post(POST, json=BODY, headers=headers)
+            assert response.status_code == 503
+            assert response.json()['error']['code'] == 'idempotency_environment_unavailable'
+        else:
+            response = client.post(POST, json=BODY, headers={**headers, 'Idempotency-Key': 'invalid'})
+            assert response.status_code == 400
+        assert counter._value.get() == previous + 1
+    assert not provider.calls
+
+
+def test_readback_excludes_confirmed_boundary_scope_and_other_environments():
+    import sqlite3
+
+    guide = Path(__file__).resolve().parents[2] / 'docs' / 'llm_gateway.mdx'
+    readback = guide.read_text().split('### Rollout readback', 1)[1]
+    query = readback.split('```sql\n', 1)[1].split('```', 1)[0]
+    db = sqlite3.connect(':memory:')
+    try:
+        db.executescript("""
+            CREATE TABLE claims (scope TEXT, state TEXT, started_at INTEGER, environment TEXT);
+            CREATE TABLE attempts (scope TEXT, attempt_id TEXT, occurred_at INTEGER, environment TEXT);
+            CREATE TABLE claim_lookup (scope TEXT, started_at INTEGER, environment TEXT);
+            INSERT INTO claims VALUES ('prod', 'committed', 11, 'prod'), ('dev', 'pending', 11, 'dev');
+            INSERT INTO attempts VALUES ('prod', 'paid', 12, 'prod'), ('boundary', 'late', 12, 'prod'),
+                ('prod', 'other-environment-replay', 12, 'dev'), ('dev', 'dev-only', 12, 'dev');
+            INSERT INTO claim_lookup VALUES ('boundary', 9, 'prod');
+            """)
+        args = dict(environment='prod', window_start=10, window_end=20, keyed_posts=1000)
+        assert db.execute(query, args).fetchone() == (0, 0, 1, 0)
+        db.execute("INSERT INTO attempts VALUES ('orphan', 'missing', 12, 'prod')")
+        assert db.execute(query, args).fetchone() == (0, 1, 1, None)
+        db.execute("INSERT INTO claims VALUES ('silent-crash', 'pending', 14, 'prod')")
+        db.execute("INSERT INTO attempts VALUES ('prod', 'second-late-attempt', 22, 'prod')")
+        assert db.execute(query, args).fetchone() == (1, 2, 2, None)
+    finally:
+        db.close()
+
+
+def test_cancellation_does_not_release_a_running_settlement_permit(monkeypatch):
+    import asyncio
+
+    from fastapi import Request
+    from fastapi.responses import JSONResponse
+
+    from llm_gateway.gateway.auth import ServiceCaller
+    from llm_gateway.gateway.credentials import build_omi_managed_credential_context
+
+    monkeypatch.setenv(idempotency.ENVIRONMENT_SETTING, 'local')
+    monkeypatch.delenv('LLM_GATEWAY_IDEMPOTENCY_ENABLED', raising=False)
+    entered, release = Event(), Event()
+    permits = idempotency._settlement_slots
+
+    def finish(_saved):
+        entered.set()
+        assert release.wait(5)
+
+    monkeypatch.setattr(idempotency, '_claim', lambda *_: (SimpleNamespace(finish=finish), None))
+
+    async def receive():
+        return {'type': 'http.request', 'body': b'{}'}
+
+    async def invoke(_body, _keyed):
+        return JSONResponse({'synthetic': True})
+
+    async def exercise():
+        caller = ServiceCaller(name='backend', user_uid='test-owner')
+        request = Request({'type': 'http', 'headers': [(b'idempotency-key', str(uuid4()).encode())]}, receive)
+        task = asyncio.create_task(
+            idempotency.complete(request, caller, build_omi_managed_credential_context(caller), invoke)
+        )
+        held = 0
+        try:
+            assert await asyncio.to_thread(entered.wait, 3)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            while permits.acquire(blocking=False):
+                held += 1
+            assert held == idempotency.GATEWAY_SETTLEMENT_WORKERS - 1
+            release.set()
+            async with asyncio.timeout(3):
+                while not permits.acquire(blocking=False):
+                    await asyncio.sleep(0.01)
+            held += 1
+        finally:
+            release.set()
+            for _ in range(held):
+                permits.release()
+
+    asyncio.run(exercise())

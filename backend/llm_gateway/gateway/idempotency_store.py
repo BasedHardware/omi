@@ -1,5 +1,6 @@
 """Durable claim and encrypted result for one keyed, non-streaming completion."""
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -41,6 +42,56 @@ class IdempotencyError(Exception):
         self.retry_after = retry_after
 
 
+def _property_orders(schema: object, path: tuple[str | int, ...]) -> Iterator[tuple[tuple[str | int, ...], list[str]]]:
+    if not isinstance(schema, dict):
+        return
+    properties = schema.get('properties')
+    if isinstance(properties, dict):
+        yield path, list(properties)
+
+    # Follow schema-valued keywords only. Objects in examples, enum values
+    # and defaults are ordinary JSON values, even if they contain "properties".
+    for keyword in ('properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas', 'dependencies'):
+        children = schema.get(keyword)
+        if isinstance(children, dict):
+            for name in sorted(children):
+                yield from _property_orders(children[name], (*path, keyword, name))
+    for keyword in ('allOf', 'anyOf', 'oneOf', 'prefixItems', 'items'):
+        children = schema.get(keyword)
+        if isinstance(children, list):
+            for position, child in enumerate(children):
+                yield from _property_orders(child, (*path, keyword, position))
+    for keyword in (
+        'additionalItems',
+        'additionalProperties',
+        'contains',
+        'contentSchema',
+        'else',
+        'if',
+        'items',
+        'not',
+        'propertyNames',
+        'then',
+        'unevaluatedItems',
+        'unevaluatedProperties',
+    ):
+        yield from _property_orders(schema.get(keyword), (*path, keyword))
+
+
+def _structured_property_orders(body: dict[str, Any]) -> Iterator[tuple[tuple[str | int, ...], list[str]]]:
+    response_format = body.get('response_format')
+    if isinstance(response_format, dict) and response_format.get('type') == 'json_schema':
+        definition = response_format.get('json_schema')
+        if isinstance(definition, dict):
+            yield from _property_orders(definition.get('schema'), ('response_format', 'json_schema', 'schema'))
+    tools = body.get('tools')
+    if isinstance(tools, list):
+        for position, tool in enumerate(tools):
+            function = tool.get('function') if isinstance(tool, dict) else None
+            if isinstance(function, dict):
+                yield from _property_orders(function.get('parameters'), ('tools', position, 'function', 'parameters'))
+
+
 @dataclass(frozen=True)
 class Operation:
     owner: str
@@ -59,8 +110,12 @@ class Operation:
         # The provider keys and request body live only in memory. A keyed digest
         # keeps anyone reading the claim from testing candidate prompt text.
         try:
+            canonical = [body, credentials.source.value, credentials.forwarded_provider_keys]
+            property_orders = list(_structured_property_orders(body))
+            if property_orders:
+                canonical.append(property_orders)
             return json.dumps(
-                [body, credentials.source.value, credentials.forwarded_provider_keys],
+                canonical,
                 sort_keys=True,
                 separators=(',', ':'),
                 allow_nan=False,
@@ -137,12 +192,14 @@ class Store:
         if account_deletion_blocks_access(status):
             raise IdempotencyError(403, 'idempotency_owner_unavailable')
 
-    def _read(self, transaction: Any, canonical: bytes | None, *, create: bool = False) -> StoredResponse | None:
+    def _read(
+        self, transaction: Any, canonical: bytes | None, *, environment: str | None = None
+    ) -> StoredResponse | None:
         self._fence(transaction)
         snapshot = self.claim.get(transaction=transaction, timeout=5)
         now = datetime.now(timezone.utc)
         if not snapshot.exists:
-            if not create or canonical is None:
+            if environment is None or canonical is None:
                 raise IdempotencyError(404, 'idempotency_not_found')
             transaction.create(
                 self.claim,
@@ -151,6 +208,7 @@ class Store:
                     'key_version': self.keys.active_version,
                     'claim_token': self.claim_token,
                     'state': 'pending',
+                    'environment': environment,
                     'started_at': now,
                     'expires_at': now + CLAIM_TTL,
                 },
@@ -181,10 +239,10 @@ class Store:
         )
         return StoredResponse(int.from_bytes(plaintext[:2], 'big'), plaintext[2:])
 
-    def claim_or_replay(self, canonical: bytes) -> StoredResponse | None:
+    def claim_or_replay(self, canonical: bytes, environment: str) -> StoredResponse | None:
         run = firestore.transactional(self._read)
         try:
-            return run(self.client.transaction(), canonical, create=True)
+            return run(self.client.transaction(), canonical, environment=environment)
         except AlreadyExists:
             # A concurrently created claim can surface as a failed create precondition.
             return run(self.client.transaction(read_only=True), canonical)

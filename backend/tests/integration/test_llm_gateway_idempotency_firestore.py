@@ -15,7 +15,8 @@ from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
 from database import account_deletion_marker
-from llm_gateway.gateway import idempotency_store
+from llm_gateway.gateway import idempotency, idempotency_store
+from llm_gateway.gateway.accounting import build_accounting_event
 from llm_gateway.gateway.executor import ProviderRegistry
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
 from llm_gateway.gateway.schemas import FailureClass, RetryPolicy
@@ -37,6 +38,7 @@ def db(monkeypatch) -> Iterator[firestore.Client]:
     monkeypatch.setattr(idempotency_store, '_customer_firestore_client', lambda: client)
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'test-gateway-service-token')
     monkeypatch.delenv('LLM_GATEWAY_IDEMPOTENCY_ENABLED', raising=False)
+    monkeypatch.setenv(idempotency.ENVIRONMENT_SETTING, 'prod')
     yield client
     client.close()
 
@@ -114,12 +116,17 @@ def test_replay_and_lookup_use_one_dispatch_across_clients(db, headers, monkeypa
     claims = list(docs(db, headers, idempotency_store.CLAIMS).stream())
     results = list(docs(db, headers, idempotency_store.RESULTS).stream())
     assert context.idempotency_scope == claims[0].id == results[0].id
+    row = build_accounting_event(context, trace.attempts[0]).as_dict()
+    assert row['idempotency_environment'] == 'prod'
+    assert row['idempotency_scope'] == claims[0].id
     claim = claims[0].to_dict()
+    assert claim['environment'] == 'prod'
     result = results[0].to_dict()
     assert set(claim) == {
         'state',
         'fingerprint',
         'key_version',
+        'environment',
         'claim_token',
         'started_at',
         'expires_at',
@@ -239,13 +246,13 @@ def test_claim_expiry_does_not_renew_or_allow_a_stale_settlement(db, headers):
     original = idempotency_store.Store(operation, client=db)
     canonical = b'test-request'
     response = idempotency_store.StoredResponse(200, b'{}')
-    assert original.claim_or_replay(canonical) is None
+    assert original.claim_or_replay(canonical, 'local') is None
     expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
     original.claim.update({'expires_at': expires_at})
     replacement = idempotency_store.Store(operation, client=db)
 
     for invoke in (
-        lambda: replacement.claim_or_replay(canonical),
+        lambda: replacement.claim_or_replay(canonical, 'local'),
         replacement.lookup,
         lambda: original.finish(response),
     ):
@@ -255,7 +262,7 @@ def test_claim_expiry_does_not_renew_or_allow_a_stale_settlement(db, headers):
 
     # The emulator does not run the Firestore TTL sweeper. Model its deletion.
     original.claim.delete()
-    assert replacement.claim_or_replay(canonical) is None
+    assert replacement.claim_or_replay(canonical, 'local') is None
     with pytest.raises(idempotency_store.IdempotencyError, match='idempotency_indeterminate'):
         original.finish(response)
     replacement.finish(response)
@@ -270,7 +277,7 @@ def test_concurrent_fresh_claims_have_one_winner(db, headers):
     def compete(store):
         start.wait()
         try:
-            assert store.claim_or_replay(b'same-request') is None
+            assert store.claim_or_replay(b'same-request', 'local') is None
         except idempotency_store.IdempotencyError as exc:
             assert exc.status == 409
             return exc.code
@@ -331,3 +338,81 @@ def test_rotation_preserves_replay_across_mixed_replicas(db, headers, monkeypatc
         assert client.post(POST, json=BODY, headers=fresh).status_code == 503
         assert client.get(lookup(fresh), headers=fresh).status_code == 503
         assert len(provider.calls) == 2
+
+
+def test_inflight_completion_settles_when_claim_and_lookup_pool_is_full(db, headers, monkeypatch):
+    import asyncio
+
+    entered, provider_release, storage_release = Event(), Event(), Event()
+
+    class HeldProvider(FakeChatCompletionProvider):
+        async def create_chat_completion(self, request, **kwargs):
+            entered.set()
+            assert await asyncio.to_thread(provider_release.wait, 15)
+            return await super().create_chat_completion(request, **kwargs)
+
+    provider = HeldProvider()
+    use_providers(monkeypatch, provider)
+    with TestClient(app) as client, TestClient(app) as other, ThreadPoolExecutor(max_workers=1) as caller:
+        request = caller.submit(client.post, POST, json=BODY, headers=headers)
+        try:
+            assert entered.wait(10)
+            pool = idempotency.gateway_idempotency_executor
+            occupied = [pool.submit(storage_release.wait, 20) for _ in range(16)]
+            try:
+                assert other.get(lookup(headers), headers=headers).json()['error']['code'] == 'idempotency_store_busy'
+                provider_release.set()
+                committed = request.result(timeout=10)
+                assert committed.status_code == 200
+                assert committed.headers['X-Omi-Idempotency-Key'] == headers['Idempotency-Key']
+            finally:
+                storage_release.set()
+                for worker in occupied:
+                    assert worker.result(timeout=2)
+        finally:
+            provider_release.set()
+        assert other.post(POST, json=BODY, headers=headers).content == committed.content
+        assert other.get(lookup(headers), headers=headers).content == committed.content
+    assert len(provider.calls) == 1
+
+
+def test_schema_property_order_conflicts_but_envelope_order_replays(db, headers, monkeypatch):
+    provider = FakeChatCompletionProvider()
+    use_providers(monkeypatch, provider)
+    inner = {'a': {'type': 'string'}, 'b': {'type': 'boolean'}}
+    nested = {'type': 'object', 'properties': inner, 'required': ['a', 'b'], 'additionalProperties': False}
+    properties = {'first': {'type': 'string'}, 'second': nested}
+    schema = {
+        'type': 'object',
+        'properties': properties,
+        'required': ['first', 'second'],
+        'additionalProperties': False,
+    }
+
+    def payload(definition):
+        return {
+            **BODY,
+            'model': 'omi:auto:chat-structured',
+            'response_format': {
+                'type': 'json_schema',
+                'json_schema': {'name': 'ordered_pair', 'strict': True, 'schema': definition},
+            },
+        }
+
+    with TestClient(app) as client:
+        committed = client.post(POST, json=payload(schema), headers=headers)
+        assert committed.status_code == 200
+        reordered_envelope = dict(reversed(list(payload(dict(reversed(list(schema.items())))).items())))
+        assert client.post(POST, json=reordered_envelope, headers=headers).content == committed.content
+        changed = payload({**schema, 'properties': dict(reversed(list(properties.items())))})
+        conflict = client.post(POST, json=changed, headers=headers)
+        assert conflict.status_code == 409
+        assert conflict.json()['error']['code'] == 'idempotency_conflict'
+        changed_nested = payload(
+            {
+                **schema,
+                'properties': {**properties, 'second': {**nested, 'properties': dict(reversed(list(inner.items())))}},
+            }
+        )
+        assert client.post(POST, json=changed_nested, headers=headers).json()['error']['code'] == 'idempotency_conflict'
+    assert len(provider.calls) == 1

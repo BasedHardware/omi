@@ -153,6 +153,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: METRICS_SECRET
+  - name: LLM_GATEWAY_IDEMPOTENCY_ENVIRONMENT
+    value: "prod"
   - name: LLM_GATEWAY_IDEMPOTENCY_CUSTOMER_PROJECT
     value: "based-hardware"
   - name: GOOGLE_CLOUD_PROJECT

@@ -100,9 +100,9 @@ async def create_keyed_chat_completion(
     config: GatewayConfig = Depends(get_gateway_config),
     provider_registry: ProviderRegistry = Depends(get_provider_registry),
 ) -> Response:
-    async def invoke(body: dict[str, Any], key: str, scope: str) -> JSONResponse:
+    async def invoke(body: dict[str, Any], keyed: idempotency.KeyedRequest) -> JSONResponse:
         result = await _create_chat_completion(
-            request, caller, config, provider_registry, request_body=body, keyed_request=(key, scope)
+            request, caller, config, provider_registry, request_body=body, keyed_request=keyed
         )
         # Keyed requests are rejected before entering the streaming branch.
         return cast(JSONResponse, result)
@@ -122,13 +122,13 @@ async def _create_chat_completion(
     provider_registry: ProviderRegistry,
     *,
     request_body: dict[str, Any] | None = None,
-    keyed_request: tuple[str, str] | None = None,
+    keyed_request: idempotency.KeyedRequest | None = None,
 ) -> JSONResponse | StreamingResponse:
     started_at = time_request()
     resolved_route = None
     credential_source = 'unknown'
     is_streaming = False
-    request_id = keyed_request[0] if keyed_request else request_id_for(request)
+    request_id = keyed_request.key if keyed_request else request_id_for(request)
     accounting_context: AccountingContext | None = None
     attempt_trace = AttemptTrace(keyed=keyed_request is not None)
     try:
@@ -145,7 +145,11 @@ async def _create_chat_completion(
             fallback_feature=resolved_route.lane.lane_id,
         )
         if keyed_request:
-            accounting_context = replace(accounting_context, idempotency_scope=keyed_request[1])
+            accounting_context = replace(
+                accounting_context,
+                idempotency_scope=keyed_request.scope,
+                idempotency_environment=keyed_request.environment,
+            )
         proactivity = context_from_request(request, caller, accounting_context)
         if keyed_request and (
             proactivity is not None
