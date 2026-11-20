@@ -18,6 +18,7 @@ import pytest
 
 from database import conversations_v3 as store
 from utils.conversations.v3 import service
+from utils.sync.assignment import assign_in_transaction
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
 UID = 'synthetic'
@@ -451,8 +452,6 @@ async def test_fresh_window_at_a_retained_start_gets_its_own_id(strict, monkeypa
 
 
 def sync_recording(strict, cid, offset, *, candidate=None):
-    from utils.sync.assignment import assign_in_transaction
-
     row = recording(
         cid,
         T0 + timedelta(seconds=offset),
