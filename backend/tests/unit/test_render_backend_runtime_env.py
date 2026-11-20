@@ -826,18 +826,23 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         'backend': {('CONVERSATIONS_V3_LIVE_RECAP_COHORT', 'CONVERSATIONS_V3_LIVE_RECAP_COHORT', '1')},
     }
     prod = _MANIFEST['environments']['prod']
+    assert set(baseline) == set(prod['cloud_run']['services']), 'baseline must name exactly the prod Cloud Run roles'
     for service, names in baseline.items():
         refs = _MODULE['_render_secret_entries'](prod['cloud_run']['services'][service]['secrets'])
         assert {
             (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
             for entry in refs
         } == {(name, name, 'latest') for name in names} | pinned.get(service, set()), service
-    assert set(baseline) == set(prod['cloud_run']['services']), 'every prod Cloud Run role needs an approved secret set'
+    cohort = 'CONVERSATIONS_V3_LIVE_RECAP_COHORT'
     for env_name, env in _MANIFEST['environments'].items():
         for service, spec in env.get('cloud_run', {}).get('services', {}).items():
-            if (env_name, service) != ('prod', 'backend'):
-                assert 'CONVERSATIONS_V3_LIVE_RECAP_COHORT' not in (spec.get('secrets') or {}), (env_name, service)
-                assert 'CONVERSATIONS_V3_LIVE_RECAP_COHORT' not in (spec.get('env') or {}), (env_name, service)
+            # The cohort is a protected mount only: never a literal env value, on any role.
+            assert cohort not in (spec.get('env') or {}), (env_name, service)
+            if (env_name, service) == ('prod', 'backend'):
+                continue
+            # Match the Secret Manager resource as well as the env name, so an alias cannot mount it.
+            for entry in _MODULE['_render_secret_entries'](spec.get('secrets') or {}):
+                assert cohort not in (entry['name'], entry['valueFrom']['secretKeyRef']['name']), (env_name, service)
     backend_env = prod['cloud_run']['services']['backend']['env']
     token = backend_env['PROACTIVITY_V2_POSTHOG_TOKEN']['value']
     assert token.startswith('phc_')
