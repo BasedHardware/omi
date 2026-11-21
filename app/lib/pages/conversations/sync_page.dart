@@ -110,29 +110,36 @@ class WalListItem extends StatelessWidget {
         onPressed: () => syncProvider.syncWal(wal),
       );
     }
-    // No upload can resolve these, so offer removal rather than a chevron that
-    // leads to a detail page with nothing actionable on it. A refusal is not
-    // offered here: the swipe still removes it, after confirmation.
-    if (state == WalSyncDisplayState.corrupted ||
-        state == WalSyncDisplayState.outsideRecoveryWindow ||
-        state == WalSyncDisplayState.unsupportedAudio) {
-      return OmiButton.destructive(
-        label: context.l10n.delete,
-        size: OmiButtonSize.compact,
-        onPressed: () async {
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deleteRecording,
-            message: context.l10n.thisCannotBeUndone,
-            confirmLabel: context.l10n.delete,
-            destructive: true,
-          );
-          if (confirmed) await syncProvider.deleteWal(wal);
-        },
+    // No upload can resolve these, so offer removal, and keep the chevron: the
+    // detail page is where the audio can still be played or exported. A refusal
+    // is not offered Delete here: the swipe still removes it, after confirmation.
+    if (state == WalSyncDisplayState.corrupted || state == WalSyncDisplayState.unsupportedAudio) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          OmiButton.destructive(
+            label: context.l10n.delete,
+            size: OmiButtonSize.compact,
+            onPressed: () async {
+              final confirmed = await showOmiConfirm(
+                context,
+                title: context.l10n.deleteRecording,
+                message: context.l10n.thisCannotBeUndone,
+                confirmLabel: context.l10n.delete,
+                destructive: true,
+              );
+              if (confirmed) await syncProvider.deleteWal(wal);
+            },
+          ),
+          const SizedBox(width: 8),
+          _chevron,
+        ],
       );
     }
-    return FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
+    return _chevron;
   }
+
+  Widget get _chevron => FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
 
   @override
   Widget build(BuildContext context) {
@@ -210,7 +217,10 @@ class WalListItem extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        if (displayState != WalSyncDisplayState.outsideRecoveryWindow)
+                        // Too-old rows carry Download/Delete below, so the trailing is only the chevron.
+                        if (displayState == WalSyncDisplayState.outsideRecoveryWindow)
+                          _chevron
+                        else
                           _trailing(context, syncProvider, hasError),
                       ],
                     ),

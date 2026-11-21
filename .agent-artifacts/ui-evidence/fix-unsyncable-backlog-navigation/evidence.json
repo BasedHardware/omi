@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-unsyncable-rows-chevron.png",
+      "platform": "mobile-ios",
+      "description": "Offline Sync rows: file unavailable, too old, unreadable audio each show a detail chevron; Delete kept",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
