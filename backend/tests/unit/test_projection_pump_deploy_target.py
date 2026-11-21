@@ -215,12 +215,17 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     assert pump['flags'] == integration['flags']
     assert pump['forbidden_env'] == integration['forbidden_env']
     assert pump['service_account'] == integration['service_account']
-    overridden = set(DARK_OVERRIDES) | {'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'}
+    train_pins = {'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'BATCH_PROJECTION_OUTBOX'}
+    overridden = set(DARK_OVERRIDES) | {'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'} | train_pins
     assert set(pump['env']) - set(integration['env']) <= overridden
     for name in set(integration['env']) - overridden:
         assert pump['env'][name] == integration['env'][name], name
     for name, value in DARK_OVERRIDES.items():
         assert pump['env'][name]['value'] == value, name
+    for name in train_pins:
+        assert integration['env'][name]['value'] == 'false', name
+        assert services['backend-sync-backfill']['env'][name]['value'] == 'false', name
+        assert pump['env'][name]['value'] == 'true', name
     assert pump['env']['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED']['value'] == 'false'
 
 
