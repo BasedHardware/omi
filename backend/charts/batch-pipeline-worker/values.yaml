@@ -36,6 +36,9 @@ replicaCount: 1
 # replacement still keeps its node).
 rollout:
   maxUnavailable: 50%
+  # Read-only carrier render. Use helm template --dry-run=server --show-only
+  # templates/primary-only-preview.yaml against the three existing Deployments.
+  primaryOnlyPreview: false
 # Operator-managed L4 (g2-standard-8) pool; never share the live diarizer pool.
 nodeSelector:
   cloud.google.com/gke-nodepool: batch-pipeline-pool
