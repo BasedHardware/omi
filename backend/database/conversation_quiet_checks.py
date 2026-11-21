@@ -24,6 +24,7 @@ from models.conversation_continuity import continuation_timeout
 from config.refactor_modes import serving_for, quiet_empty_exit_enabled
 from config.server_batch import owned, proven_empty
 from config import listen_reconnect
+from models.finalization_owner import python_owns_finalization
 from utils.conversations.lifecycle_clocks import speech_clock
 
 QUIET_CHECK_KIND = 'listen_quiet_check'
@@ -85,6 +86,8 @@ def arm_quiet_check(
     def arm(transaction: Any) -> dict[str, Any] | None:
         row = row_ref.get(transaction=transaction).to_dict() or {}
         job = job_ref.get(transaction=transaction).to_dict() or {}
+        if not python_owns_finalization(row):
+            return None
         if row.get('source') not in QUIET_SOURCES or row.get('status') != 'in_progress':
             return None
         if any(
@@ -199,6 +202,8 @@ def _evaluate_quiet_check(
                 job_ref, {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD, 'updated_at': now}
             )
             return {'status': 'done', 'reason': 'missing_conversation'}
+        if not python_owns_finalization(row):
+            return {'status': 'stale'}
         deadline = quiet_deadline(row, job.get('quiet_timeout_seconds'), uid=job['uid'])
         lease_expiry = jobs_db.recording_session_lease_expiry(
             transaction,

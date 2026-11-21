@@ -53,6 +53,7 @@ from config.conversation_smart_merge import (
 )
 from config.jev_decisions import JEV_MODEL
 from config.merge_before_processing import enabled as merge_before_processing_enabled
+from models.finalization_owner import python_owns_finalization
 from database import conversations as conversations_db
 from database import notifications as notification_db
 from database import smart_merge as smart_merge_db
@@ -411,7 +412,7 @@ def _decide(
 ) -> Optional[_MergePlan]:
     """Ask (or reuse) the decision; a plan only in merge mode at or above the threshold."""
     new_row = conversations_db.get_conversation(uid, conversation_id, read_site=FirestoreReadSite.SMART_MERGE)
-    if not new_row:
+    if not new_row or not python_owns_finalization(new_row):
         return None
     new_row = dict(new_row, id=conversation_id)
     new_segments = _segments(new_row)
@@ -452,7 +453,7 @@ def _decide(
             )
 
     survivor = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
-    if not survivor:
+    if not survivor or not python_owns_finalization(survivor):
         _skip(mode, SkipReason.NO_PREDECESSOR, uid, conversation_id)
         return None
     survivor = dict(survivor, id=survivor_id)

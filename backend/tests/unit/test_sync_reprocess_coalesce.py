@@ -1086,3 +1086,22 @@ def test_later_revision_retains_settle_and_repeat_work_ceilings(state, monkeypat
         reprocess.mark('u', 'c', 'en', now=121 + offset)
     assert rows[key]['due_at'] == 121 + ceiling
     assert rows[key]['effects_only'] is False
+
+
+@pytest.mark.parametrize('claimed', [False, True])
+@pytest.mark.parametrize('engine', ['pending', 'go'])
+def test_python_sync_refuses_foreign_finalization_before_processing(pipeline, monkeypatch, claimed, engine):
+    read = Mock(return_value={'id': 'c', 'finalization_engine': engine, 'finalization_owner_epoch': 1})
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', read)
+    processor = Mock()
+    monkeypatch.setattr(pipeline, 'process_conversation', processor)
+    context = {} if claimed else None
+    token = pipeline.PROCESS_CONTEXT.set(context)
+    try:
+        pipeline._reprocess_conversation_after_update('u', 'c', 'en')
+    finally:
+        pipeline.PROCESS_CONTEXT.reset(token)
+    read.assert_called_once_with('u', 'c')
+    processor.assert_not_called()
+    if claimed:
+        assert context['defer_reason'] == 'finalization_owned_elsewhere'

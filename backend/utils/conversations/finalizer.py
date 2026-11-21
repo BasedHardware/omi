@@ -23,6 +23,7 @@ from config.episodes import episodes_enabled_for
 from config.episode_attach import noop_schedule_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
 
+from models.finalization_owner import python_owns_finalization
 from database import conversations as conversations_db
 from database import conversation_finalization_jobs as finalization_jobs_db
 from database.firestore_read_metrics import FirestoreReadSite
@@ -867,6 +868,9 @@ async def _load_admitted_conversation(
         )
         return ConversationFinalizationDisposition.fenced, None, None
 
+    if not python_owns_finalization(conversation_data):
+        return ConversationFinalizationDisposition.fenced, None, None
+
     if trigger is ProcessingTrigger.SILENT_BACKFILL and conversation_data.get('record_lane_owner'):
         # Historical enrichment must not process a batch-owned row. Preserve
         # that fence, but first retain its deterministic batch obligation.
@@ -894,7 +898,7 @@ async def _load_admitted_conversation(
                 read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
                 include_transcript_decode_status=is_recovery_trigger(trigger),
             )
-            if not conversation_data:
+            if not conversation_data or not python_owns_finalization(conversation_data):
                 return ConversationFinalizationDisposition.fenced, None, None
     else:
         deferred = await run_blocking(

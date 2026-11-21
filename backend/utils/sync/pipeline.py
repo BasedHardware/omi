@@ -58,6 +58,7 @@ from utils.sync import conversation_turn as conversation_turn_lease
 
 from database import conversations as conversations_db
 from database import capture_end as capture_end_db
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 from database.summary_processing import claim_from_snapshot
 from utils.conversations.summary_delivery import (
     repair_fenced,
@@ -1100,10 +1101,15 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         logger.info('event=sync_reprocess_callback outcome=unavailable')
         return sync_result('no_op' if conversation_data and conversation_data.get('deleted') else 'deferred')
 
+    if not python_owns_finalization(conversation_data):
+        return sync_defer(context, FINALIZATION_OWNER_REFUSAL)
+
     if conversation_data.get(bridge_pending.FIELD):
         conversation_id, conversation_data = bridge.resume_pending(uid, conversation_id, conversation_data, context)
         if conversation_data is None:
             return sync_result('deferred')
+        if not python_owns_finalization(conversation_data):
+            return sync_defer(context, FINALIZATION_OWNER_REFUSAL)
 
     if repair_fenced(conversation_data):
         raise SummaryRepairSuperseded(

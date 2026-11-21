@@ -4,6 +4,7 @@ from datetime import datetime
 from collections.abc import Mapping
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
+from models.finalization_owner import python_owns_finalization
 from pydantic.json_schema import SkipJsonSchema
 
 import config.speaker_match_scores as match_scores
@@ -764,6 +765,8 @@ class Conversation(BaseModel):
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
 
+    _python_finalization_owner: bool = PrivateAttr(default=True)
+
     # Read projection of the authoritative finalization-job meeting receipt.
     meeting_treatment_eligible: bool = False
     meeting_treatment_reason: Optional[str] = None
@@ -786,6 +789,7 @@ class Conversation(BaseModel):
             data['transcript_segments'] = normalized_segments
 
         super().__init__(**data)
+        self._python_finalization_owner = python_owns_finalization(data)
         # Update plugins_results based on apps_results
         self.plugins_results = [PluginResult(plugin_id=app.app_id, content=app.content) for app in self.apps_results]
         self.processing_memory_id = self.processing_conversation_id

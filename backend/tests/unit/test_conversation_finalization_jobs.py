@@ -2393,3 +2393,79 @@ def test_parked_budget_requeue_row_is_invisible_to_replay_candidates_until_due(m
         limit=10, firestore_client=client_for({'cursor': {'cutoff': due}})
     )
     assert [candidate['job_id'] for candidate in candidates] == ['job-1']
+
+
+@pytest.mark.parametrize('engine', ['pending', 'go', 'unknown', None])
+def test_python_intent_does_not_write_or_admit_foreign_conversation(engine):
+    transaction = _Transaction()
+    conversation_ref = _conversation({'finalization_engine': engine, 'finalization_owner_epoch': 1})
+
+    def unexpected_admission(_):
+        pytest.fail('foreign row reached the Python admission policy')
+
+    result = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        _Collection({}),
+        'uid-1',
+        conversation_ref.id,
+        False,
+        unexpected_admission,
+        _now(),
+        extra_updates={'external_data': {'calendar_meeting_context': {}}},
+    )
+    assert result['status'] == 'finalization_owned_elsewhere'
+    assert result['job_id'] is None
+    assert transaction.updates == transaction.sets == []
+
+
+@pytest.mark.parametrize('engine', ['go', 'pending'])
+def test_python_cannot_claim_replayed_foreign_job(engine):
+    transaction = _Transaction()
+    job = _Ref(
+        'old-go-job',
+        {
+            'status': 'queued',
+            'dispatch_generation': 1,
+            'finalization_engine': engine,
+            'finalization_owner_epoch': 1,
+        },
+    )
+    result = jobs._claim_finalization_job_txn(transaction, job, 1, False, 60, _now())
+    assert result['status'] == 'finalization_owned_elsewhere'
+    assert transaction.updates == transaction.sets == []
+
+
+def test_python_handed_back_row_is_admitted_but_old_job_is_ignored():
+    row = _conversation({'finalization_engine': 'python', 'finalization_owner_epoch': 4})
+    transaction = _Transaction()
+    result = jobs._create_or_get_finalization_intent_txn(
+        transaction, row, _Collection({}), 'uid-1', row.id, False, _admit_finalization, _now()
+    )
+    assert result['created']
+    assert len(transaction.updates) == len(transaction.sets) == 1
+    old_job = _Ref(
+        'old-go-job',
+        {
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 2,
+            'finalization_engine': 'go',
+            'finalization_owner_epoch': 3,
+        },
+    )
+    assert not jobs._is_current_lease(old_job.data, 1, 2)
+
+
+def test_python_direct_admission_and_orphan_recovery_refuse_foreign_snapshot():
+    row = _conversation({'status': 'processing', 'finalization_engine': 'go', 'finalization_owner_epoch': 1})
+    transaction = _Transaction()
+    assert (
+        jobs.conversations_db.claim_conversation_status_in_txn(
+            row.data, expected_status='processing', claimed_status='completed'
+        )
+        is None
+    )
+    assert not processing_recovery._stamp_processing_admission_if_absent_txn(transaction, row, _now())
+    assert not jobs._renew_processing_lease_txn(transaction, row, _now())
+    assert transaction.updates == transaction.sets == []

@@ -1668,6 +1668,8 @@ FIELD_SITES = {
         ('_evaluate_quiet_check.evaluate', 'status', "'quiet_done'", ('reconcile_after_at', 'status', 'updated_at')),
         ('_evaluate_quiet_check.evaluate', 'status', "'stale'", ('status',)),
         ('_evaluate_quiet_check.evaluate', 'status', "'stale'", ('status',)),
+        # A conversation owned by workerd cannot start Python quiet recovery.
+        ('_evaluate_quiet_check.evaluate', 'status', "'stale'", ('status',)),
         (
             '_evaluate_quiet_check.evaluate',
             'status',

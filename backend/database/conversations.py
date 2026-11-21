@@ -44,6 +44,7 @@ from utils.conversations.llm_input_dedupe import NOTES_OUTPUT_HASH, output_finge
 from database.audio_file_projection import finalize_audio_file_group as _finalize_audio_file_group
 from models.note_claims import claim_references_segment
 from models.client_processing import PROJECTION_FAMILY_FIELDS
+from models.finalization_owner import python_owns_finalization
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
 from models.capture_window_proof import CaptureWindowProof
@@ -1581,6 +1582,8 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
+        if not python_owns_finalization(existing):
+            return False
         if existing.get('arrival_at'):
             write_data['arrival_at'] = existing['arrival_at']
         if expected_capture_group is not None:
@@ -3317,6 +3320,8 @@ def _terminal_family_serving(uid: str) -> bool:
 
 
 def _conversation_claim_matches(current, expected_status, expected_fields=None, *, allow_discarded=False):
+    if not python_owns_finalization(current):
+        return False
     if (current.get('discarded') and not allow_discarded) or current.get('status') != expected_status:
         return False
     return not any(
@@ -5319,6 +5324,8 @@ def complete_sync_processing_hold(
     @firestore.transactional
     def finish(transaction):
         existing = ref.get(transaction=transaction).to_dict() or {}
+        if not python_owns_finalization(existing):
+            return False
         deleting = deletion.get(transaction=transaction)
         deletion_status = normalize_account_deletion_status(
             marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')

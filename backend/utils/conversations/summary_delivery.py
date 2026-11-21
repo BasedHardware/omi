@@ -18,6 +18,7 @@ from utils.conversations import phase_shadow
 from utils.observability.delivery import record_delivery
 
 from prometheus_client import Counter, Gauge, Histogram
+from models.finalization_owner import python_owns_finalization
 from config.refactor_modes import default_on
 from config.summary_guarantee import deadline_seconds
 from config.policy import FirstSummaryPolicy
@@ -340,6 +341,8 @@ def retryable_finalization_owns(row: Row) -> bool:
 
 
 def _refusal(row: Row) -> str | None:
+    if not python_owns_finalization(row):
+        return 'generation_owned'
     if row.get('status') != 'completed' or row.get('deleted') or row.get('discarded'):
         return 'lifecycle'
     if row.get('deferred') or row.get('is_locked') or row.get('processing_state') == 'local_pending':
