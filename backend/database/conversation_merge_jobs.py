@@ -179,74 +179,6 @@ def renew(job_id: str, epoch: int, *, phase: str | None = None, firestore_client
     return commit(client.transaction())
 
 
-def resolve_go_cleanup_source(
-    job_id: str,
-    generation: int,
-    epoch: int,
-    index: int,
-    *,
-    retracted_source: tuple[str, str, str] | None = None,
-    transaction: Any = None,
-) -> tuple[str, str, str, bool] | None:
-    """Resolve or acknowledge a source under the exact sealed Go cleanup lease."""
-    client = client_for(None)
-    ref = client.collection(COLLECTION).document(job_id)
-
-    def resolve(transaction: Any) -> tuple[str, str, str, bool] | None:
-        job = ref.get(transaction=transaction).to_dict() or {}
-        sources = job.get('conversation_ids')
-        if (
-            not owned(job, epoch, _now())
-            or job.get('phase') != 'source_cleanup'
-            or job.get('dispatch_generation') != generation
-            or job.get('go_cleanup_epoch') != epoch
-            or not isinstance(sources, list)
-            or not 0 <= index < len(sources) <= 100
-        ):
-            return None
-        owner, source, target = job.get('uid'), sources[index], job.get('merge_target_id')
-        if not isinstance(owner, str) or not isinstance(source, str) or not isinstance(target, str):
-            return None
-        if source == target or any(not value or '/' in value for value in (owner, source, target)):
-            return None
-        deletion = client.collection('account_deletions').document(owner).get(transaction=transaction)
-        if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
-        ):
-            return None
-        user = client.collection('users').document(owner)
-        for cid in (source, target):
-            if user.collection('deleted_conversations').document(cid).get(transaction=transaction).exists:
-                return None
-        donor = user.collection('conversations').document(source).get(transaction=transaction).to_dict() or {}
-        survivor = user.collection('conversations').document(target).get(transaction=transaction).to_dict() or {}
-        if (
-            not survivor
-            or survivor.get('status') != 'completed'
-            or any(survivor.get(flag) for flag in ('deleted', 'is_deleted', 'discarded', 'is_locked'))
-            or donor.get('status') != 'merging'
-            or any(donor.get(flag) for flag in ('deleted', 'is_deleted', 'is_locked'))
-            or donor.get('merge_job_id') != job_id
-            or donor.get('transcript_corrections_moved_to') != target
-        ):
-            return None
-        prior = job.get('go_cleanup_receipts')
-        receipts = dict(prior) if isinstance(prior, dict) else {}
-        receipt_key = f'source_{index}'
-        receipt = {'generation': generation, 'epoch': epoch, 'source': source, 'target': target}
-        already_retracted = receipts.get(receipt_key) == receipt
-        if retracted_source is not None and retracted_source != (owner, source, target):
-            return None
-        if retracted_source is not None and not already_retracted:
-            receipts[receipt_key] = receipt
-            transaction.update(ref, {'go_cleanup_receipts': receipts})
-        return owner, source, target, already_retracted or retracted_source is not None
-
-    if transaction is not None:
-        return resolve(transaction)
-    return firestore.transactional(resolve)(client.transaction())
-
-
 def finish(job_id: str, epoch: int, *, firestore_client: Any = None) -> bool:
     client = client_for(firestore_client)
     ref = client.collection(COLLECTION).document(job_id)
@@ -317,73 +249,19 @@ def begin_recovery(job_id: str, *, firestore_client: Any = None) -> dict | None:
     return commit(client.transaction())
 
 
-ROLLBACK_CLEANUP_STEPS = frozenset(
-    (
-        'memories',
-        'action_items',
-        'photos',
-        'audio',
-        'vector',
-        'speaker_enrollment',
-        'capture_group',
-        'primary',
-        'quiet_check',
-        'processing_backlog',
-        'corrections',
-        'pipeline_ledger',
-        'proactivity',
-        'children',
-        'search',
-    )
-)
-
-
-def finish_recovery(
-    job_id: str, epoch: int, *, cleanup_steps: set[str] | frozenset[str] = frozenset(), firestore_client: Any = None
-) -> bool:
-    if cleanup_steps != ROLLBACK_CLEANUP_STEPS:
-        return False
+def finish_recovery(job_id: str, epoch: int, *, firestore_client: Any = None) -> bool:
     client = client_for(firestore_client)
     ref = client.collection(COLLECTION).document(job_id)
 
     @firestore.transactional
     def commit(transaction: Any) -> bool:
         row = ref.get(transaction=transaction).to_dict() or {}
-        now = _now()
-        until = row.get('lease_expires_at')
-        if (
-            row.get('kind') != KIND
-            or row.get('status') != 'leased'
-            or row.get('phase') != 'recovering'
-            or row.get('lease_epoch') != epoch
-            or not isinstance(until, datetime)
-            or until <= now
-        ):
+        if row.get('kind') != KIND or row.get('phase') != 'recovering' or row.get('lease_epoch') != epoch:
             return False
-        owner, target = row['uid'], row['merge_target_id']
-        deleting = client.collection('account_deletions').document(owner).get(transaction=transaction)
-        if account_deletion_marker_blocks_access(
-            marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')
-        ):
-            return False
-        if _source(client, owner, target).get(transaction=transaction).exists:
-            # Canonical cleanup may return after an ambiguous document delete.
-            # Source release requires transactional absence of this exact target.
-            return False
-        refs = [_source(client, owner, cid) for cid in row['conversation_ids']]
+        refs = [_source(client, row['uid'], cid) for cid in row['conversation_ids']]
         sources = [source.get(transaction=transaction).to_dict() or {} for source in refs]
-        tombstones = [
-            source.parent.parent.collection('deleted_conversations').document(source.id).get(transaction=transaction)
-            for source in refs
-        ]
-        for source, data, tombstone in zip(refs, sources, tombstones):
-            if (
-                not tombstone.exists
-                and not data.get('deleted')
-                and not data.get('is_deleted')
-                and data.get('status') == 'merging'
-                and data.get('merge_job_id') == job_id
-            ):
+        for source, data in zip(refs, sources):
+            if data.get('status') == 'merging' and data.get('merge_job_id') == job_id:
                 from utils.conversations.terminal_relevance import stamp_terminal_decision
 
                 terminal = {**data, 'status': 'completed'}
@@ -402,7 +280,6 @@ def finish_recovery(
                 status='dead_letter',
                 phase='rolled_back',
                 failure_code='merge_lease_expired',
-                rollback_cleanup_steps=sorted(cleanup_steps),
                 updated_at=_now(),
                 reconcile_after_at=firestore.DELETE_FIELD,
             ),

@@ -24,12 +24,6 @@ def admit(store):
     return jobs.admit(owner, ['a', 'b'], True, firestore_client=client)
 
 
-def finish_clean_rollback(job_id, epoch, *, firestore_client):
-    return jobs.finish_recovery(
-        job_id, epoch, cleanup_steps=jobs.ROLLBACK_CLEANUP_STEPS, firestore_client=firestore_client
-    )
-
-
 def row(store, cid):
     return store[0].rows[('users', store[1], 'conversations', cid)]
 
@@ -96,7 +90,7 @@ def test_expiry_fences_old_worker_and_restores_only_exact_source_bindings(store,
     assert recovery['recovery'] == 'rollback'
     assert not jobs.renew(job['job_id'], 1, firestore_client=store[0])
     row(store, 'b')['merge_job_id'] = 'new-generation'
-    assert finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
+    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
     assert row(store, 'a')['status'] == 'completed'
     assert row(store, 'b')['status'] == 'merging'
     assert row(store, 'b')['merge_job_id'] == 'new-generation'
@@ -107,7 +101,7 @@ def test_crash_before_worker_claim_also_rolls_back_durable_admission(store, monk
     job = admit(store)
     monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
     recovery = jobs.begin_recovery(job['job_id'], firestore_client=store[0])
-    assert finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
+    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
     assert all(row(store, cid)['status'] == 'completed' for cid in ('a', 'b'))
     assert all(row(store, cid)['relevance_decision']['verdict'] == 'keep' for cid in ('a', 'b'))
 
@@ -128,7 +122,7 @@ def test_crash_rollback_preserves_legacy_rule_discard_and_visibility(store, monk
     job = admit(store)
     monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
     recovery = jobs.begin_recovery(job['job_id'], firestore_client=store[0])
-    assert finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
+    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
     assert row(store, 'a')['relevance_decision'] == prior
     assert not visible_conversation(row(store, 'a'))
 
@@ -140,7 +134,7 @@ def test_pretransfer_crash_is_still_safe_to_roll_back(store, monkeypatch):
     monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE + timedelta(seconds=1))
     recovery = jobs.begin_recovery(job['job_id'], firestore_client=store[0])
     assert recovery['recovery'] == 'rollback'
-    assert finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
+    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
     assert all(row(store, cid)['status'] == 'completed' for cid in ('a', 'b'))
 
 
@@ -212,7 +206,7 @@ def test_merge_rollback_retires_old_debt_and_preserves_reopened_owner(store, mon
     row(store, 'b').update(status='in_progress', merge_job_id='new-owner')
     monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
     recovery = jobs.begin_recovery(job['job_id'], firestore_client=client)
-    assert finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=client)
+    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=client)
     assert client.rows[paths[0]]['status'] == 'quiet_done'
     assert client.rows[paths[1]]['status'] == 'waiting_quiet'
 
@@ -229,325 +223,3 @@ def test_semantic_duplicate_hint_without_transfer_receipt_remains_mergeable(stor
     job = admit(store)
     assert job is not None
     assert all(row(store, cid)['merge_job_id'] == job['job_id'] for cid in ('a', 'b'))
-
-
-@pytest.fixture(scope='module')
-def go_retraction_ports():
-    from database import sync_jobs
-    from utils.account_cutover import access
-    from utils.conversations import merge_conversations as merge
-    from utils.conversations import merge_conversations_job as worker
-
-    return sync_jobs, access, merge, worker
-
-
-def test_go_retraction_requires_current_sealed_lease_and_live_target(store, monkeypatch, go_retraction_ports):
-    from unittest.mock import Mock
-
-    sync_jobs, access, merge, worker = go_retraction_ports
-
-    client, owner = store
-    admitted = admit(store)
-    job_id, target = admitted['job_id'], admitted['merge_target_id']
-    assert jobs.claim(job_id, firestore_client=client)
-    jobrow(store, admitted).update(phase='source_cleanup', go_cleanup_epoch=1)
-    client.rows[('users', owner, 'conversations', target)] = {'status': 'completed'}
-    row(store, 'a')['transcript_corrections_moved_to'] = target
-    monkeypatch.setattr(jobs, 'client_for', lambda _client: client)
-    monkeypatch.setattr(access, 'should_skip_background_account_mutation', lambda _owner: False)
-    monkeypatch.setattr(sync_jobs, 'try_acquire_job_run_lock', lambda _key: 'lock')
-    release = Mock()
-    retract = Mock()
-    monkeypatch.setattr(sync_jobs, 'release_job_run_lock', release)
-    monkeypatch.setattr(merge, 'retract_sync_bridge_source', retract)
-
-    assert not worker.retract_go_merge_source(job_id, 1, 2, 0)
-    assert not worker.retract_go_merge_source(job_id, 2, 1, 0)
-    assert not worker.retract_go_merge_source(job_id, 1, 1, 1)
-    retract.assert_not_called()
-    assert worker.retract_go_merge_source(job_id, 1, 1, 0)
-    assert retract.call_args.args == (owner, 'a')
-    assert callable(retract.call_args.kwargs['write_guard'])
-    assert retract.call_count == 1
-    assert row(store, 'a')['merge_job_id'] == job_id
-    assert release.call_count == 4
-    assert jobrow(store, admitted)['go_cleanup_receipts'] == {
-        'source_0': {'generation': 1, 'epoch': 1, 'source': 'a', 'target': target}
-    }
-    assert worker.retract_go_merge_source(job_id, 1, 1, 0)
-    assert retract.call_args.args == (owner, 'a')
-    assert callable(retract.call_args.kwargs['write_guard'])
-    assert retract.call_count == 1
-    jobrow(store, admitted).update(lease_epoch=2, go_cleanup_epoch=2)
-    retract.side_effect = lambda *_args, **_kwargs: row(store, 'a').pop('transcript_corrections_moved_to')
-    assert not worker.retract_go_merge_source(job_id, 1, 2, 0)
-    assert jobrow(store, admitted)['go_cleanup_receipts']['source_0']['epoch'] == 1
-    retract.reset_mock()
-
-    del client.rows[('users', owner, 'conversations', target)]
-    assert not worker.retract_go_merge_source(job_id, 1, 2, 0)
-    retract.assert_not_called()
-
-
-def test_rollback_retains_all_sources_until_provisional_target_is_absent(store, monkeypatch):
-    client, owner = store
-    job = admit(store)
-    monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
-    recovery = jobs.begin_recovery(job['job_id'], firestore_client=client)
-    path = ('users', owner, 'conversations', job['merge_target_id'])
-    client.rows[path] = {'status': 'processing'}
-
-    assert not finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=client)
-    assert all(row(store, cid)['merge_job_id'] == job['job_id'] for cid in ('a', 'b'))
-    assert jobrow(store, job)['phase'] == 'recovering'
-
-    del client.rows[path]
-    deletion_path = ('account_deletions', owner)
-    client.rows[deletion_path] = {'wipe_status': 'pending'}
-    assert not finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=client)
-    assert all(row(store, cid)['status'] == 'merging' for cid in ('a', 'b'))
-    client.rows[deletion_path]['wipe_status'] = 'cancelled'
-    assert finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=client)
-    assert all(row(store, cid)['status'] == 'completed' for cid in ('a', 'b'))
-
-
-def test_rollback_with_absent_target_retries_sibling_cleanup_and_skips_tombstoned_source(
-    store, monkeypatch, go_retraction_ports
-):
-    _, _, merge, worker = go_retraction_ports
-    client, owner = store
-    job = admit(store)
-    target_path = ('users', owner, 'conversations', job['merge_target_id'])
-    client.rows[target_path] = {'status': 'processing'}
-    attempt = []
-
-    def cleanup(uid, target, *, rollback_step):
-        assert (uid, target) == (owner, job['merge_target_id'])
-        attempt.append(target_path in client.rows)
-        client.rows.pop(target_path, None)
-        for step in jobs.ROLLBACK_CLEANUP_STEPS - {'pipeline_ledger'}:
-            rollback_step(step)
-        if len(attempt) == 1:
-            return False
-        rollback_step('pipeline_ledger')
-        return True
-
-    monkeypatch.setattr(merge, 'cleanup_failed_merge_target', cleanup)
-    monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
-
-    assert worker.reconcile(job['job_id'], firestore_client=client) == 'cleanup_pending'
-    assert target_path not in client.rows
-    assert all(row(store, cid)['status'] == 'merging' for cid in ('a', 'b'))
-    assert not jobs.finish_recovery(
-        job['job_id'],
-        jobrow(store, job)['lease_epoch'],
-        cleanup_steps=jobs.ROLLBACK_CLEANUP_STEPS - {'pipeline_ledger'},
-        firestore_client=client,
-    )
-    client.rows[('users', owner, 'deleted_conversations', 'a')] = {'conversation_id': 'a'}
-    monkeypatch.setattr(jobs, '_now', lambda: NOW + 2 * jobs.LEASE)
-
-    assert worker.reconcile(job['job_id'], firestore_client=client) == 'rolled_back'
-    assert attempt == [True, False]
-    assert row(store, 'a')['status'] == 'merging'
-    assert row(store, 'b')['status'] == 'completed'
-    assert jobrow(store, job)['rollback_cleanup_steps'] == sorted(jobs.ROLLBACK_CLEANUP_STEPS)
-
-
-@pytest.mark.parametrize('change', ['tombstone', 'epoch'])
-def test_go_retraction_fences_writes_after_initial_validation(store, monkeypatch, go_retraction_ports, change):
-    from google.cloud import firestore
-
-    sync_jobs, access, merge, worker = go_retraction_ports
-    client, owner = store
-    admitted = admit(store)
-    job_id, target = admitted['job_id'], admitted['merge_target_id']
-    assert jobs.claim(job_id, firestore_client=client)
-    jobrow(store, admitted).update(phase='source_cleanup', go_cleanup_epoch=1)
-    client.rows[('users', owner, 'conversations', target)] = {'status': 'completed'}
-    row(store, 'a')['transcript_corrections_moved_to'] = target
-    monkeypatch.setattr(jobs, 'client_for', lambda _: client)
-    monkeypatch.setattr(access, 'should_skip_background_account_mutation', lambda _: False)
-    monkeypatch.setattr(sync_jobs, 'try_acquire_job_run_lock', lambda _: 'lock')
-    monkeypatch.setattr(sync_jobs, 'release_job_run_lock', lambda *_: None)
-
-    def retract(uid, cid, *, write_guard):
-        if change == 'tombstone':
-            client.rows[('users', owner, 'deleted_conversations', target)] = {'deleted': True}
-        else:
-            jobrow(store, admitted).update(lease_epoch=2, go_cleanup_epoch=2)
-
-        @firestore.transactional
-        def destructive_commit(transaction):
-            write_guard(transaction)
-            transaction.update(
-                client.collection('users').document(uid).collection('conversations').document(cid),
-                {'test_retracted': True},
-            )
-
-        destructive_commit(client.transaction())
-
-    monkeypatch.setattr(merge, 'retract_sync_bridge_source', retract)
-    assert not worker.retract_go_merge_source(job_id, 1, 1, 0)
-    assert 'test_retracted' not in row(store, 'a')
-    assert 'go_cleanup_receipts' not in jobrow(store, admitted)
-
-
-@pytest.fixture
-def sealed_provider_retraction(store, monkeypatch, go_retraction_ports):
-    from database import action_items
-
-    sync_jobs, access, merge, worker = go_retraction_ports
-    client, owner = store
-    admitted = admit(store)
-    job_id, target = admitted['job_id'], admitted['merge_target_id']
-    assert jobs.claim(job_id, firestore_client=client)
-    jobrow(store, admitted).update(phase='source_cleanup', go_cleanup_epoch=1)
-    client.rows[('users', owner, 'conversations', target)] = {'status': 'completed'}
-    row(store, 'a')['transcript_corrections_moved_to'] = target
-    monkeypatch.setattr(jobs, 'client_for', lambda _: client)
-    monkeypatch.setattr(access, 'should_skip_background_account_mutation', lambda _: False)
-    monkeypatch.setattr(sync_jobs, 'try_acquire_job_run_lock', lambda _: 'lock')
-    monkeypatch.setattr(sync_jobs, 'release_job_run_lock', lambda *_: None)
-    monkeypatch.setattr(merge, 'retraction_can_be_skipped', lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(action_items, 'get_action_items_by_conversation', lambda *_: [])
-    monkeypatch.setattr(action_items, 'get_action_item_ids', lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(merge, 'firestore_db', client)
-    return merge, worker, admitted
-
-
-@pytest.mark.parametrize('boundary', ['tasks', 'conversation', 'search'])
-def test_go_retraction_rechecks_claim_before_provider_delete(store, monkeypatch, sealed_provider_retraction, boundary):
-    from unittest.mock import Mock
-
-    from database import action_items, space_store
-
-    merge, worker, admitted = sealed_provider_retraction
-    client, owner = store
-
-    def lose_claim():
-        client.rows[('users', owner, 'deleted_conversations', admitted['merge_target_id'])] = {}
-
-    monkeypatch.setattr(action_items, 'get_action_item_ids', lambda *_args, **_kwargs: ['task-fixture'])
-    step = iter(['tasks', 'conversation'])
-
-    def task_transaction(*_):
-        if next(step) == boundary:
-            lose_claim()
-
-    monkeypatch.setattr(space_store.FirestoreSpaceStore, 'run', task_transaction)
-    task_vectors = Mock()
-    conversation_vector = Mock(side_effect=(lambda *_: lose_claim()) if boundary == 'search' else None)
-    search = Mock()
-    monkeypatch.setattr(merge, 'delete_action_item_vectors_batch', task_vectors)
-    monkeypatch.setattr(merge, 'delete_vector', conversation_vector)
-    monkeypatch.setattr(merge.conversations_db, '_delete_conversation_search_index', search)
-
-    assert not worker.retract_go_merge_source(admitted['job_id'], 1, 1, 0)
-    assert task_vectors.call_count == int(boundary != 'tasks')
-    assert conversation_vector.call_count == int(boundary == 'search')
-    search.assert_not_called()
-    assert 'go_cleanup_receipts' not in jobrow(store, admitted)
-
-
-def test_go_retraction_with_typesense_failure_does_not_receipt(store, monkeypatch, sealed_provider_retraction):
-    from unittest.mock import Mock
-
-    from database import space_store
-    from utils.conversations import typesense_index
-
-    merge, worker, admitted = sealed_provider_retraction
-    job_id = admitted['job_id']
-    _, owner = store
-    monkeypatch.setattr(space_store.FirestoreSpaceStore, 'run', lambda *_: None)
-    monkeypatch.setattr(merge, 'delete_vector', lambda *_: None)
-    monkeypatch.setattr(typesense_index, 'typesense_configured', lambda: True)
-    delete_search = Mock(return_value=False)
-    monkeypatch.setattr(typesense_index, 'delete_conversation_index_doc', delete_search)
-
-    with pytest.raises(RuntimeError, match='search cleanup incomplete'):
-        worker.retract_go_merge_source(job_id, 1, 1, 0)
-    delete_search.assert_called_once_with(owner, 'a')
-    assert 'go_cleanup_receipts' not in jobrow(store, admitted)
-    assert row(store, 'a')['merge_job_id'] == job_id
-
-
-def test_sync_bridge_provider_cleanup_remains_best_effort(monkeypatch, sealed_provider_retraction):
-    from unittest.mock import Mock
-
-    from database import action_items
-    from utils.conversations import typesense_index
-
-    merge, _, admitted = sealed_provider_retraction
-    monkeypatch.setattr(action_items, 'get_action_items_by_conversation', lambda *_: [{'id': 'task-fixture'}])
-    delete_tasks = Mock()
-    monkeypatch.setattr(action_items, 'delete_action_items_for_conversation', delete_tasks)
-    monkeypatch.setattr(merge, 'delete_action_item_vectors_batch', Mock(side_effect=RuntimeError('vector unavailable')))
-    monkeypatch.setattr(merge, 'delete_vector', Mock())
-    monkeypatch.setattr(typesense_index, 'typesense_configured', lambda: True)
-    delete_search = Mock(return_value=False)
-    monkeypatch.setattr(typesense_index, 'delete_conversation_index_doc', delete_search)
-
-    merge.retract_sync_bridge_source(admitted['uid'], 'a')
-    delete_tasks.assert_called_once_with(admitted['uid'], 'a')
-    delete_search.assert_called_once_with(admitted['uid'], 'a')
-
-
-def test_rollback_takeover_retracts_provisional_tasks_and_vectors(store, monkeypatch, go_retraction_ports):
-    from unittest.mock import Mock
-
-    from database import action_items
-
-    _, _, merge, worker = go_retraction_ports
-    client, owner = store
-    job = admit(store)
-    job_id, target = job['job_id'], job['merge_target_id']
-    assert jobs.claim(job_id, firestore_client=client)
-    assert jobs.renew(job_id, 1, phase='target_started', firestore_client=client)
-    target_path = ('users', owner, 'conversations', target)
-    client.rows[target_path] = {'status': 'processing'}
-    tasks = {'pending', 'retired'}
-    vectors = set(tasks)
-    monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
-    monkeypatch.setattr(merge, 'MemoryService', Mock())
-    monkeypatch.setattr(merge.conversations_db, 'delete_conversation_photos', lambda *_: None)
-    monkeypatch.setattr(merge, 'delete_conversation_audio_files', lambda *_: None)
-    monkeypatch.setattr(merge, 'delete_vector', lambda *_: None)
-
-    def task_ids(uid, *, conversation_id):
-        assert (uid, conversation_id) == (owner, target)
-        return sorted(tasks)
-
-    def delete_tasks(uid, conversation_id):
-        assert (uid, conversation_id) == (owner, target)
-        tasks.clear()
-
-    def delete_vectors(uid, ids):
-        assert uid == owner
-        assert set(ids) == tasks
-        vectors.difference_update(ids)
-
-    def delete_target(uid, conversation_id, *, rollback_step):
-        assert (uid, conversation_id) == (owner, target)
-        assert not tasks and not vectors
-        client.rows.pop(target_path)
-        for step in jobs.ROLLBACK_CLEANUP_STEPS - {'memories', 'action_items', 'photos', 'audio', 'vector'}:
-            rollback_step(step)
-
-    monkeypatch.setattr(action_items, 'get_action_item_ids', task_ids)
-    monkeypatch.setattr(action_items, 'delete_action_items_for_conversation', delete_tasks)
-    monkeypatch.setattr(merge, 'delete_action_item_vectors_batch', Mock(side_effect=RuntimeError('vector unavailable')))
-    monkeypatch.setattr(merge.conversations_db, 'delete_conversation', delete_target)
-    assert worker.reconcile(job_id, firestore_client=client) == 'cleanup_pending'
-    assert tasks == vectors == {'pending', 'retired'}
-    assert not jobs.finish_recovery(
-        job_id,
-        jobrow(store, job)['lease_epoch'],
-        cleanup_steps=jobs.ROLLBACK_CLEANUP_STEPS - {'action_items'},
-        firestore_client=client,
-    )
-    monkeypatch.setattr(merge, 'delete_action_item_vectors_batch', delete_vectors)
-    monkeypatch.setattr(jobs, '_now', lambda: NOW + 2 * jobs.LEASE)
-    assert worker.reconcile(job_id, firestore_client=client) == 'rolled_back'
-    assert not tasks and not vectors
-    assert 'action_items' in jobrow(store, job)['rollback_cleanup_steps']

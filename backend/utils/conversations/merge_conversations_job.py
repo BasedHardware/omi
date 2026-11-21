@@ -1,15 +1,11 @@
 """Lifecycle-owned durable merge coordinator; reconciliation survives mode-off."""
 
 import asyncio
-import logging
-from typing import Any, Callable
+from typing import Any
 
-from config.refactor_modes import default_off
 from database import conversation_merge_jobs as store
 from utils.executors import db_executor, lifecycle_executor, run_blocking, start_background_task
 from utils.observability.fallback import record_fallback
-
-logger = logging.getLogger(__name__)
 
 
 class MergeLeaseLost(RuntimeError):
@@ -18,22 +14,6 @@ class MergeLeaseLost(RuntimeError):
 
 def admit(uid: str, conversation_ids: list[str], reprocess: bool, *, firestore_client: Any = None) -> dict | None:
     return store.admit(uid, conversation_ids, reprocess, firestore_client=firestore_client)
-
-
-def schedule(job: dict, add_background_task: Callable[..., Any]) -> None:
-    """Offer the exact admitted generation to the configured transport first."""
-    from utils.cloud_tasks import enqueue_listen_finalization_job, is_listen_finalization_dispatch_configured
-
-    job_id, generation = job['job_id'], job['dispatch_generation']
-    if default_off('EXPLICIT_MERGE_CLOUD_TASKS_ENABLED') and is_listen_finalization_dispatch_configured():
-        try:
-            enqueue_listen_finalization_job(job_id, generation)
-            return
-        except Exception as error:
-            # An ambiguous enqueue may have delivered the task. Only one of
-            # the two transports can claim this durable generation.
-            logger.warning('event=conversation_merge_dispatch outcome=fallback exception_type=%s', type(error).__name__)
-    add_background_task(run, job_id, generation)
 
 
 def checkpoint(job_id: str, epoch: int, phase: str | None = None) -> None:
@@ -107,14 +87,15 @@ def reconcile(job_id: str, *, firestore_client: Any = None) -> str:
     # Never release sources before provisional target retraction succeeds.
     from utils.conversations.merge_conversations import cleanup_failed_merge_target
 
-    completed_steps: set[str] = set()
-    if not cleanup_failed_merge_target(job['uid'], job['merge_target_id'], rollback_step=completed_steps.add):
+    client = store.client_for(firestore_client)
+    target = (
+        client.collection('users').document(job['uid']).collection('conversations').document(job['merge_target_id'])
+    )
+    if target.get().exists and not cleanup_failed_merge_target(job['uid'], job['merge_target_id']):
         return 'cleanup_pending'
     return (
         'rolled_back'
-        if store.finish_recovery(
-            job_id, job['lease_epoch'], cleanup_steps=completed_steps, firestore_client=firestore_client
-        )
+        if store.finish_recovery(job_id, job['lease_epoch'], firestore_client=firestore_client)
         else 'fenced'
     )
 
@@ -140,40 +121,3 @@ def resume_source_cleanup(job: dict) -> bool:
         merge_conversations.delete_merged_source(owner, cid, target)
     dispatch_merge_completed(owner, target, job['conversation_ids'])
     return True
-
-
-def retract_go_merge_source(job_id: str, generation: int, epoch: int, index: int) -> bool:
-    """Reuse authoritative derived-data cleanup while Go retains source custody."""
-    from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
-    from utils.account_cutover.access import should_skip_background_account_mutation
-    from utils.conversations.merge_conversations import retract_sync_bridge_source
-
-    # Serialize duplicate HTTP deliveries across replicas. The durable lease
-    # is rechecked inside the receiver after acquiring this lock.
-    lock_key = f'go-merge-retraction:{job_id}'
-    token = try_acquire_job_run_lock(lock_key)
-    if not token:
-        return False
-    try:
-        source = store.resolve_go_cleanup_source(job_id, generation, epoch, index)
-        if source is None or should_skip_background_account_mutation(source[0]):
-            return False
-        owner, conversation, target, already_retracted = source
-        if already_retracted:
-            return True
-
-        def guard(transaction: Any) -> None:
-            current = store.resolve_go_cleanup_source(job_id, generation, epoch, index, transaction=transaction)
-            if current != source:
-                raise MergeLeaseLost('merge source retraction lost its sealed claim')
-
-        try:
-            retract_sync_bridge_source(owner, conversation, write_guard=guard)
-        except MergeLeaseLost:
-            return False
-        receipt = store.resolve_go_cleanup_source(
-            job_id, generation, epoch, index, retracted_source=(owner, conversation, target)
-        )
-        return receipt == (owner, conversation, target, True)
-    finally:
-        release_job_run_lock(lock_key, token)

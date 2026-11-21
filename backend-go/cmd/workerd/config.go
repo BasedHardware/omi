@@ -129,10 +129,18 @@ func (c *config) readFinalizationAdapters(lookup lookupEnv) error {
 	if err := c.readObjectLake(lookup); err != nil {
 		return err
 	}
-	origin, _ := lookup("WORKER_MERGE_RETRACTION_ORIGIN")
-	if origin == "" {
+	raw, set := lookup("WORKER_MERGE_RETRACTION_ENABLED")
+	if !set {
 		return nil
 	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return errors.New("WORKER_MERGE_RETRACTION_ENABLED must be a boolean")
+	}
+	if !enabled {
+		return nil
+	}
+	origin, _ := lookup("WORKER_MERGE_RETRACTION_ORIGIN")
 	u, err := url.Parse(origin)
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil ||
 		u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.Path != "" && u.Path != "/") {

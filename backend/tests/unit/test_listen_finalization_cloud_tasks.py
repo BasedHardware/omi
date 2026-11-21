@@ -3005,30 +3005,3 @@ async def test_recording_completed_replay_suppresses_fallback_intelligence(monke
     )
     persisted_finalizer.extract_memories.assert_not_called()
     persisted_finalizer.trigger_external_integrations.assert_not_called()
-
-
-def test_go_retraction_route_authenticates_and_accepts_only_opaque_sealed_claim(monkeypatch):
-    route = '/v1/conversation-finalization-jobs/retract-merge-source'
-    audience = 'https://finalization.example.test'
-    invoker = 'workerd-retraction@fixture-project.iam.gserviceaccount.com'
-    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_OIDC_AUDIENCE', audience)
-    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA', invoker)
-    verify = MagicMock(return_value={'email': invoker, 'email_verified': True})
-    retract = MagicMock(return_value=True)
-    monkeypatch.setattr(cloud_tasks.id_token, 'verify_oauth2_token', verify)
-    monkeypatch.setattr(lifecycle_service.merge_jobs, 'retract_go_merge_source', retract)
-    payload = {'job_id': 'merge-synthetic', 'dispatch_generation': 2, 'lease_epoch': 3, 'source_index': 0}
-    with _finalization_task_client() as client:
-        assert client.post(route, json=payload).status_code == 403
-        assert (
-            client.post(route, json={**payload, 'uid': 'synthetic'}, headers=_cloud_tasks_headers()).status_code == 400
-        )
-        assert (
-            client.post(route, json={**payload, 'source_index': False}, headers=_cloud_tasks_headers()).status_code
-            == 400
-        )
-        retract.assert_not_called()
-        response = client.post(route, json=payload, headers=_cloud_tasks_headers())
-    assert response.json() == {'status': 'retracted'}
-    retract.assert_called_once_with('merge-synthetic', 2, 3, 0)
-    assert verify.call_args.kwargs['audience'] == audience

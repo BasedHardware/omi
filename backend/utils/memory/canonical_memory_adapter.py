@@ -2417,7 +2417,6 @@ def replace_conversation_sourced_memories(
     conflict_backoff_seconds: Sequence[float] = _REPLACEMENT_CONFLICT_BACKOFF_SECONDS,
     empty_set_intent: str = "retraction",
     claim_destructive_gate: bool = True,
-    write_guard: Callable[[Any], None] | None = None,
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete canonical memory set.
 
@@ -2440,7 +2439,6 @@ def replace_conversation_sourced_memories(
     Sync-bridge donor retraction passes False: it still retracts rows, but
     fences against a live wipe instead of taking the exclusive account lock.
     """
-    guard_kwargs: dict[str, Any] = {"write_guard": write_guard} if write_guard is not None else {}
     if empty_set_intent not in {"retraction", "extraction"}:
         raise ValueError(f"unknown empty_set_intent: {empty_set_intent!r}")
     client = db_client if db_client is not None else default_db_client
@@ -2629,7 +2627,6 @@ def replace_conversation_sourced_memories(
                 ),
                 require_deletion_gate=bool(not items and claim_destructive_gate),
                 db_client=client,
-                **guard_kwargs,
             )
             break
         except DestructiveOperationInProgress as exc:
@@ -3726,7 +3723,6 @@ def _retract_conversation_sourced_memories_under_gate(
     *,
     db_client: Any = None,
     claim_destructive_gate: bool = True,
-    write_guard: Callable[[Any], None] | None = None,
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete source set with nothing.
 
@@ -3742,7 +3738,6 @@ def _retract_conversation_sourced_memories_under_gate(
     has live items after every bounded round keeps raising, so callers fail
     closed with the conversation and its memories intact.
     """
-    guard_kwargs: dict[str, Any] = {"write_guard": write_guard} if write_guard is not None else {}
     client = db_client if db_client is not None else default_db_client
     last_conflict: Optional[ConversationReplacementConflictError] = None
     for attempt in range(_RETRACT_CONFLICT_ATTEMPTS):
@@ -3756,7 +3751,6 @@ def _retract_conversation_sourced_memories_under_gate(
                 db_client=client,
                 conflict_backoff_seconds=_IMMEDIATE_REPLACEMENT_RETRY_BACKOFF,
                 claim_destructive_gate=claim_destructive_gate,
-                **guard_kwargs,
             )
         except ConversationReplacementConflictError as exc:
             last_conflict = exc
@@ -3791,9 +3785,7 @@ def retract_conversation_sourced_memories(
     *,
     db_client: Any = None,
     claim_destructive_gate: bool = True,
-    write_guard: Callable[[Any], None] | None = None,
 ) -> Dict[str, Any]:
-    guard_kwargs: dict[str, Any] = {"write_guard": write_guard} if write_guard is not None else {}
     client = db_client if db_client is not None else default_db_client
     if not claim_destructive_gate:
         # Sync-bridge derived cleanup: refuse under an active legal hold or
@@ -3804,7 +3796,6 @@ def retract_conversation_sourced_memories(
             conversation_id,
             db_client=client,
             claim_destructive_gate=False,
-            **guard_kwargs,
         )
     with destructive_operation_gate(
         uid,
@@ -3815,7 +3806,6 @@ def retract_conversation_sourced_memories(
             uid,
             conversation_id,
             db_client=client,
-            **guard_kwargs,
         )
 
 

@@ -28,7 +28,7 @@ from typing import (
 from uuid import UUID
 
 from fastapi import HTTPException
-from google.cloud.firestore_v1 import FieldFilter, transactional
+from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
 import database.memories as memories_db
@@ -2683,7 +2683,6 @@ class MemoryService:
         status: MemoryItemStatus,
         *,
         batch_size: int = 100,
-        write_guard: Callable[[Any], None] | None = None,
     ) -> None:
         """Commit bounded idempotent override batches before legacy cleanup."""
         normalized = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
@@ -2692,12 +2691,12 @@ class MemoryService:
         for start in range(0, len(normalized), bounded_batch_size):
             chunk = normalized[start : start + bounded_batch_size]
             batch_factory = getattr(client, "batch", None)
-            if write_guard is None and not callable(batch_factory):
+            if not callable(batch_factory):
                 for memory_id in chunk:
                     self._write_historical_override(uid, memory_id, status)
                 continue
-
-            def stage(batch: Any) -> None:
+            try:
+                batch = cast(Any, batch_factory())
                 for memory_id in chunk:
                     path = f"{MemoryCollections(uid=uid).memory_historical_overrides}/{memory_id}"
                     payload = {
@@ -2713,21 +2712,6 @@ class MemoryService:
                         batch.set(ref, payload, merge=True)
                     except TypeError:
                         batch.set(ref, payload)
-
-            if write_guard is not None:
-
-                @transactional
-                def suppress(transaction: Any) -> None:
-                    write_guard(transaction)
-                    stage(transaction)
-
-                suppress(client.transaction())
-                continue
-
-            try:
-                assert callable(batch_factory)
-                batch = cast(Any, batch_factory())
-                stage(batch)
                 _revalidate_explicit_deletion(uid, db_client=client)
                 batch.commit()
             except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
@@ -4524,9 +4508,7 @@ class MemoryService:
         *,
         on_authoritative_commit: Optional[Callable[[], None]] = None,
         claim_destructive_gate: bool = True,
-        write_guard: Callable[[Any], None] | None = None,
     ) -> Optional[Dict[str, Any]]:
-        guard_kwargs: dict[str, Any] = {"write_guard": write_guard} if write_guard is not None else {}
         coalesce = firestore_read_levers.lever_enabled('ledger_purge_coalesce', uid)
         deferred_ids: List[str] = []
         if coalesce:
@@ -4538,7 +4520,6 @@ class MemoryService:
                     conversation_id,
                     db_client=self.db_client,
                     claim_destructive_gate=claim_destructive_gate,
-                    **guard_kwargs,
                 )
         else:
             result = retract_conversation_sourced_memories(
@@ -4546,7 +4527,6 @@ class MemoryService:
                 conversation_id,
                 db_client=self.db_client,
                 claim_destructive_gate=claim_destructive_gate,
-                **guard_kwargs,
             )
         # Canonical retraction is irreversible even if the historical scan or
         # suppression write below fails. Advance the merge compensation fence
@@ -4570,7 +4550,7 @@ class MemoryService:
             # Historical suppression must commit before the authoritative fence
             # advances. A suppression failure leaves the callback unfired so
             # merge source-deletion does not proceed on a partial retract.
-            self._write_historical_overrides(uid, all_ids, MemoryItemStatus.tombstoned, **guard_kwargs)
+            self._write_historical_overrides(uid, all_ids, MemoryItemStatus.tombstoned)
             if not coalesce:
                 _purge_required_canonical_projections(
                     uid,

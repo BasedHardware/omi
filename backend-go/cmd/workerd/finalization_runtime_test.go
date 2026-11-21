@@ -32,6 +32,7 @@ func TestWorkerdValidatesArchiveAndRetractionComposition(t *testing.T) {
 	env["BUCKET_AUDIO_DERIVED"] = "regional-fixture"
 	env["WORKER_FINALIZATION_ARCHIVE_ENABLED"] = "true"
 	env["BUCKET_PRIVATE_CLOUD_SYNC"] = "private-fixture"
+	env["WORKER_MERGE_RETRACTION_ENABLED"] = "true"
 	env["WORKER_MERGE_RETRACTION_ORIGIN"] = "https://backend.fixture.test"
 	if _, err := readConfig(envLookup(env), false); err == nil {
 		t.Fatal("retraction accepted a missing OIDC audience")
@@ -142,6 +143,34 @@ func TestWorkerdArchiveActivation(t *testing.T) {
 				}
 			} else if cfg.privateArchive != "" || cfg.derivedArchive != "" {
 				t.Fatal("disabled archive populated bucket configuration")
+			}
+		})
+	}
+}
+
+func TestWorkerdMergeRetractionRequiresExplicitOptIn(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, flag, origin     string
+		wantEnabled, wantError bool
+	}{
+		{name: "existing origin alone", origin: "https://backend.fixture.test"},
+		{name: "explicitly disabled", flag: "false", origin: "http://ignored.fixture.test"},
+		{name: "enabled with binding", flag: "true", origin: "https://backend.fixture.test", wantEnabled: true},
+		{name: "enabled without binding", flag: "true", wantError: true},
+		{name: "invalid flag", flag: "invalid", wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := fixtureEnv()
+			env["WORKER_MERGE_RETRACTION_ORIGIN"] = tc.origin
+			env["LISTEN_FINALIZATION_TASKS_OIDC_AUDIENCE"] = "fixture"
+			if tc.flag != "" {
+				env["WORKER_MERGE_RETRACTION_ENABLED"] = tc.flag
+			}
+			cfg, err := readConfig(envLookup(env), false)
+			if (err != nil) != tc.wantError || (cfg.retractionOrigin != "") != tc.wantEnabled {
+				t.Fatalf("retraction origin = %q, config error = %v", cfg.retractionOrigin, err)
 			}
 		})
 	}

@@ -95,9 +95,7 @@ def stop_quiet_check(
     stop(client.transaction())
 
 
-def stop_quiet_check_for_conversation(
-    uid: str, conversation_id: str, *, firestore_client: Any = None, strict: bool = False
-) -> bool:
+def stop_quiet_check_for_conversation(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
     """Retire immediately after a lifecycle commit, fenced against a live reopen.
 
     Read the latest job and conversation together: an old post-commit cleanup
@@ -130,8 +128,6 @@ def stop_quiet_check_for_conversation(
 
         return stop(client.transaction())
     except Exception:
-        if strict:
-            raise
         # Cleanup must not invalidate an already-committed owner transition.
         # Keep the durable index for the independent quiet replay backstop.
         _record_deferred_retirement('stop_quiet_check_for_conversation')

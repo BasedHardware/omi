@@ -441,7 +441,6 @@ def perform_merge_async(
         # 8. Process conversation to generate title, summary, action items, memories, etc.
         # Its created webhook is held until a failure can no longer roll the record back.
         created_webhook_sends: List[Callable[[], None]] = []
-        sealed_action_item_writes: List[Callable[[], None]] = []
         if reprocess or new_conversation.manual_end:
             try:
                 with lifecycle_service.processing_admission_guard(uid, new_conversation_id, rollback_on_failure=False):
@@ -451,7 +450,6 @@ def perform_merge_async(
                         new_conversation,
                         trigger=ProcessingTrigger.MERGE,
                         created_webhook_observer=created_webhook_sends.append,
-                        action_items_observer=sealed_action_item_writes.append,
                     )
             except Exception as e:
                 logger.error(f"Error processing merged conversation: {e}")
@@ -475,10 +473,6 @@ def perform_merge_async(
         ):
             # Undo receipts now name the merged record. Recovery must retain it.
             failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
-            # A rollback can still win before transfer. Do not even submit task
-            # work until the transaction has made this target permanent.
-            for submit_action_items in sealed_action_item_writes:
-                submit_action_items()
 
         # transfer() returns only once committed, so failure handling now keeps the merged
         # record; had it raised, the rollback would have deleted it. Announce it only now.
@@ -964,10 +958,9 @@ def _cancel_open_dated_task_reminders(uid: str, items: List[Dict]) -> None:
             )
 
 
-def retract_sync_bridge_source(uid: str, source_id: str, *, write_guard: Callable[[Any], None] | None = None) -> None:
+def retract_sync_bridge_source(uid: str, source_id: str) -> None:
     """Retract derived data, retaining redirect/audio; propagate failures for retry."""
-    guard_kwargs = {'write_guard': write_guard} if write_guard is not None else {}
-    _delete_conversation_and_related_data(uid, source_id, retain_capture=True, **guard_kwargs)
+    _delete_conversation_and_related_data(uid, source_id, retain_capture=True)
 
 
 def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
@@ -1040,7 +1033,6 @@ def _delete_conversation_and_related_data(
     retain_capture: bool = False,
     purge_sync_sources: bool = True,
     merged_into: Optional[str] = None,
-    write_guard: Callable[[Any], None] | None = None,
 ) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -1072,8 +1064,6 @@ def _delete_conversation_and_related_data(
             retract_kwargs: dict[str, Any] = {}
             if retain_capture:
                 retract_kwargs['claim_destructive_gate'] = False
-            if write_guard is not None:
-                retract_kwargs['write_guard'] = write_guard
             if on_authoritative_retraction is None:
                 memory_service.retract_conversation_memories(uid, conversation_id, **retract_kwargs)
             else:
@@ -1100,30 +1090,7 @@ def _delete_conversation_and_related_data(
         # it on the deletion data message (#5085), so the merge has to send one per
         # open dated task, like the conversation delete path does.
         source_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-        if write_guard is None:
-            action_items_db.delete_action_items_for_conversation(uid, conversation_id)
-        else:
-            from database.space_store import FirestoreSpaceStore
-
-            def retire_source_tasks(tx: Any) -> None:
-                write_guard(tx.transaction)
-                tx.action_items.retire_conversation_documents(conversation_id, active_ids=[])
-
-            def delete_source_tasks(tx: Any) -> None:
-                write_guard(tx.transaction)
-                tx.action_items.delete_conversation_documents(conversation_id)
-
-            task_store = FirestoreSpaceStore(uid, firestore_client=firestore_db)
-            # Authorize the retraction before touching the vector provider.
-            # Retired rows retain their IDs across a failed provider call.
-            task_store.run(retire_source_tasks)
-            task_ids = action_items_db.get_action_item_ids(
-                uid, conversation_id=conversation_id, firestore_client=firestore_db
-            )
-            if task_ids:
-                write_guard(None)
-                delete_action_item_vectors_batch(uid, task_ids)
-            task_store.run(delete_source_tasks)
+        action_items_db.delete_action_items_for_conversation(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting action items for {conversation_id}: {e}")
         if retain_capture:
@@ -1137,7 +1104,7 @@ def _delete_conversation_and_related_data(
         # find_similar_action_items feeds the extraction prompt so the LLM can suppress duplicate
         # tasks, and a deleted task's vector makes a real new task look like a duplicate.
         try:
-            if source_items and write_guard is None:
+            if source_items:
                 delete_action_item_vectors_batch(uid, [item['id'] for item in source_items])
         except Exception as e:
             logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
@@ -1146,14 +1113,8 @@ def _delete_conversation_and_related_data(
         # Sync bridges retain redirect tombstones and original audio: another
         # in-flight worker may still be uploading to that immutable source ID.
         # Propagate errors so the durable ancestry can replay cleanup on retry.
-        if write_guard is not None:
-            write_guard(None)
         delete_vector(uid, conversation_id)
-        if write_guard is not None:
-            write_guard(None)
-            conversations_db._delete_conversation_search_index(uid, conversation_id, strict=True)
-        else:
-            conversations_db._delete_conversation_search_index(uid, conversation_id)
+        conversations_db._delete_conversation_search_index(uid, conversation_id)
         return
 
     try:
@@ -1195,9 +1156,7 @@ def _delete_conversation_and_related_data(
         logger.error(f"Error deleting conversation {conversation_id}: {e}")
 
 
-def cleanup_failed_merge_target(
-    uid: str, merged_conversation_id: str, *, rollback_step: Callable[[str], None] | None = None
-) -> bool:
+def cleanup_failed_merge_target(uid: str, merged_conversation_id: str) -> bool:
     """Retract merged-target memories and remove its artifacts.
 
     Returns True when cleanup completed. Canonical retraction failure aborts
@@ -1216,34 +1175,22 @@ def cleanup_failed_merge_target(
         )
         return False
 
-    def done(step: str) -> None:
-        if rollback_step is not None:
-            rollback_step(step)
-
     try:
-        done('memories')
-        if rollback_step is not None:
-            from database import action_items
-
-            task_ids = action_items.get_action_item_ids(uid, conversation_id=merged_conversation_id)
-            if task_ids:
-                # Keep the Firestore rows as retry identities until vectors are gone.
-                delete_action_item_vectors_batch(uid, task_ids)
-                action_items.delete_action_items_for_conversation(uid, merged_conversation_id)
-            done('action_items')
         conversations_db.delete_conversation_photos(uid, merged_conversation_id)
-        done('photos')
+    except Exception as e:
+        logger.error(f"Error deleting merged conversation photos for {merged_conversation_id}: {e}")
+    try:
         delete_conversation_audio_files(uid, merged_conversation_id)
-        done('audio')
+    except Exception as e:
+        logger.error(f"Error deleting merged conversation audio for {merged_conversation_id}: {e}")
+    try:
         delete_vector(uid, merged_conversation_id)
-        done('vector')
-        if rollback_step is None:
-            conversations_db.delete_conversation(uid, merged_conversation_id)
-        else:
-            conversations_db.delete_conversation(uid, merged_conversation_id, rollback_step=rollback_step)
-    except Exception as error:
-        logger.warning('event=merge_rollback_cleanup outcome=retry exception_type=%s', type(error).__name__)
-        return False
+    except Exception as e:
+        logger.error(f"Error deleting merged conversation vector for {merged_conversation_id}: {e}")
+    try:
+        conversations_db.delete_conversation(uid, merged_conversation_id)
+    except Exception as e:
+        logger.error(f"Error deleting merged conversation {merged_conversation_id}: {e}")
     return True
 
 
@@ -1276,8 +1223,7 @@ def _handle_merge_failure(
     )
     if merged_conversation_id:
         if failure_phase == MergeFailurePhase.BEFORE_SOURCE_DELETION:
-            if not cleanup_failed_merge_target(uid, merged_conversation_id):
-                return
+            cleanup_failed_merge_target(uid, merged_conversation_id)
         else:
             logger.error(
                 "Preserving merged target after source deletion started",

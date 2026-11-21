@@ -414,8 +414,8 @@ def test_serving_intake_notifies_workerd_only_for_current_bound_revision(monkeyp
     from utils.episodes import service
     from utils.sync import worker_client
 
-    monkeypatch.setenv('SYNC_EPISODE_INTAKE_ORIGIN', 'https://workerd.fixture.test')
-    monkeypatch.setenv('WORKER_EPISODE_INTAKE_AUDIENCE', 'fixture-audience')
+    monkeypatch.delenv('SYNC_EPISODE_INTAKE_ORIGIN', raising=False)
+    monkeypatch.delenv('WORKER_EPISODE_INTAKE_AUDIENCE', raising=False)
     monkeypatch.setattr(episode_finalize.client_gate, 'client_seen_cached', lambda _uid: True)
     canonical = Mock(return_value='joined')
     monkeypatch.setattr(service, 'attach_synced_intake', canonical)
@@ -426,12 +426,21 @@ def test_serving_intake_notifies_workerd_only_for_current_bound_revision(monkeyp
     snapshot = snapshot_get.return_value
     snapshot.update_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
     snapshot.to_dict.return_value = {'sync_content_revision': 3}
-    monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
+    firestore_client = Mock(return_value=client)
+    monkeypatch.setattr(_client, 'get_firestore_client', firestore_client)
     token = Mock(return_value='fixture-token')
     monkeypatch.setattr(worker_client, 'identity_token', token)
     request = Mock(return_value=Mock(status_code=200))
     monkeypatch.setattr(httpx, 'post', request)
 
+    assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 3}) == 'joined'
+    canonical.assert_called_once_with(_UID, 'clip', {'source': None, 'sync_content_revision': 3})
+    firestore_client.assert_not_called()
+    token.assert_not_called()
+    request.assert_not_called()
+
+    monkeypatch.setenv('SYNC_EPISODE_INTAKE_ORIGIN', 'https://workerd.fixture.test')
+    monkeypatch.setenv('WORKER_EPISODE_INTAKE_AUDIENCE', 'fixture-audience')
     assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 2}) == 'joined'
     request.assert_not_called()
     assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 3}) == 'joined'

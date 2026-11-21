@@ -35,7 +35,8 @@ Lane B needs to provide a bounded drain and fenced handback API before enabling 
 | `BUCKET_AUDIO_DERIVED` | unset | Optional regional recording bucket used when the archive client is enabled |
 | `BUCKET_OBJECT_LAKE`, `OBJECT_LAKE_KMS_KEY` | unset | Both configure guarded offloaded transcript reads |
 | `OBJECT_LAKE_READ_ENABLED` | true | Disable offloaded transcript reads independently of inline reads |
-| `WORKER_MERGE_RETRACTION_ORIGIN` | unset | HTTPS backend origin, using the configured listen finalization OIDC audience |
+| `WORKER_MERGE_RETRACTION_ENABLED` | false | Provider retraction transport. Keep disabled pending cleanup authorization and the receiver in SCA-3545. |
+| `WORKER_MERGE_RETRACTION_ORIGIN` | unset | Required HTTPS backend origin when provider retraction transport is enabled |
 | `HEALTH_PORT` | 8080 | 1–65535 |
 | `METRICS_PORT` | 9090 | 1–65535, distinct from health |
 | `SHUTDOWN_SECONDS` | 25 | 5–300 seconds |

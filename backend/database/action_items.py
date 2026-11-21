@@ -189,20 +189,14 @@ def _iter_query_pages(
 
 
 def get_action_item_ids(
-    uid: str,
-    *,
-    conversation_id: str | None = None,
-    firestore_client: Any = None,
-    budget: Optional[ListReadBudget] = None,
+    uid: str, *, firestore_client: Any = None, budget: Optional[ListReadBudget] = None
 ) -> List[str]:
-    """Return action item document IDs, including retired rows (IDs-only projection).
+    """Return all action item document IDs for a user (IDs-only projection, no field reads).
 
     Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
     client = firestore_client or get_firestore_client()
     coll = client.collection('users').document(uid).collection(action_items_collection)
     query = coll.select([]).order_by('__name__')
-    if conversation_id is not None:
-        query = query.where(filter=FieldFilter('conversation_id', '==', conversation_id))
     return [doc.id for doc in _iter_query_pages(query, budget=budget)]
 
 

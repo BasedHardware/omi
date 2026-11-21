@@ -853,16 +853,13 @@ def sync_conversation_search_index_public(uid: str, conversation_id: str) -> Non
     _sync_conversation_search_index(uid, conversation_id)
 
 
-def _delete_conversation_search_index(uid: str, conversation_id: str, *, strict: bool = False) -> None:
-    """Remove one conversation from Typesense after a durable delete."""
+def _delete_conversation_search_index(uid: str, conversation_id: str) -> None:
+    """Remove one conversation from Typesense after a durable delete (fail-open)."""
     try:
-        from utils.conversations.typesense_index import delete_conversation_index_doc, typesense_configured
+        from utils.conversations.typesense_index import delete_conversation_index_doc
 
-        if not delete_conversation_index_doc(uid, conversation_id) and strict and typesense_configured():
-            raise RuntimeError('rollback search cleanup incomplete')
+        delete_conversation_index_doc(uid, conversation_id)
     except Exception as exc:
-        if strict:
-            raise
         logger.warning(
             "conversation Typesense delete hook failed uid=%s conversation_id=%s: %s", uid, conversation_id, exc
         )
@@ -2876,61 +2873,47 @@ def delete_pipeline_ledger_row(uid: str, conversation_id: str) -> None:
     db.collection('users').document(uid).collection('pipeline_ledger').document(conversation_id).delete()
 
 
-def delete_conversation(uid, conversation_id, *, rollback_step: Optional[Callable[[str], None]] = None):
-    """Delete a conversation, its subcollections and sibling records.
+def delete_conversation(uid, conversation_id):
+    """Delete a conversation and every subcollection underneath it.
 
-    Rollback records each completed step and propagates otherwise best-effort
-    cleanup failures. Ordinary deletion retains its existing error handling.
+    Firestore does not cascade, and a conversation owns more than ``photos``: the per-provider
+    post-processing transcripts (verbatim segment text), the Hume emotion predictions, and the
+    analytics marker. Purging only photos left those behind as data no query can reach — not even
+    the account-deletion wipe, which walks *existing* documents and never sees a deleted parent.
+    Children are enumerated live, so a subcollection added later is purged too.
     """
-
-    def done(step: str) -> None:
-        if rollback_step is not None:
-            rollback_step(step)
-
     speaker_auto_enroll.retract_conversation(uid, conversation_id, firestore_client=db)
-    done('speaker_enrollment')
     try:
+        # A deleted capture must not stay listed as a member of its event.
         leave_capture_group(uid, conversation_id, sticky=False, close=True, firestore_client=db)
     except Exception:
-        if rollback_step is not None:
-            raise
         logger.warning('capture group cleanup failed before delete conversation=%s', conversation_id)
-    done('capture_group')
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
-    done('primary')
-    if rollback_step is None:
-        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
-    else:
-        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db, strict=True)
-    done('quiet_check')
+    stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
     from config.stt_cap_dispatch import any_execution_admission_enabled
 
     if any_execution_admission_enabled(uid):
         processing_backlog.remove(uid, conversation_id)
-    done('processing_backlog')
+    # Corrections are a sibling owner collection, not a child of the capture.
     user_ref.collection('transcript_corrections').document(conversation_id).delete()
-    done('corrections')
+    # The in-flight ledger is also a sibling; the fence stops new writes but
+    # does not remove the row that already exists.
     delete_pipeline_ledger_row(uid, conversation_id)
-    done('pipeline_ledger')
     invalidate_people_stats_cache(uid)
     from database.proactivity import purge_source_items
 
     purge_source_items(uid=uid, source_kind='conversation', source_id=conversation_id, firestore_client=db)
-    done('proactivity')
-    # Writers that saw a live parent can commit a child just before deletion.
-    # The second sweep removes those children after the parent is fenced.
+    # A shadow metric writer can have read the parent just before deletion and
+    # committed a child after our first enumeration. Its transaction prevents
+    # writes once the parent is gone; this second sweep catches that narrow
+    # pre-delete commit without leaving an orphan under a missing parent.
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
-    done('children')
-    if rollback_step is None:
-        _delete_conversation_search_index(uid, conversation_id)
-    else:
-        _delete_conversation_search_index(uid, conversation_id, strict=True)
-    done('search')
+    _delete_conversation_search_index(uid, conversation_id)
 
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
